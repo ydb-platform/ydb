@@ -45,6 +45,8 @@ public:
     TReplyStatusE WriteToDDiskStatus = TReplyStatus::OK;
     TReplyStatusE ReadFromPBufferStatus = TReplyStatus::OK;
     TReplyStatusE WriteToPBufferStatus = TReplyStatus::OK;
+    TReplyStatusE WriteToManyPBufferStatus = TReplyStatus::OK;
+    TReplyStatusE SyncWithPBufferStatus = TReplyStatus::OK;
 
     // DDiskInstanceGuid reported in an immediate successful connect.
     ui64 DefaultDDiskInstanceGuid = 1;

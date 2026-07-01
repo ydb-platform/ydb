@@ -1259,6 +1259,7 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
             LOG_T(LogPrefix << "ID ERASE/GEN " << errorMessage);
             InputDescriptors.erase(info);
+            (*InputBufferCount)--;
             SendAckWithError(ev->Cookie, errorMessage);
             return;
         }
@@ -1980,6 +1981,7 @@ void TNodeState::HandleCleanup() {
                     << ", Finishing=" << it->second->Finishing.load() << ", Finished=" << it->second->Finished.load()
                 );
                 InputDescriptors.erase(it);
+                (*InputBufferCount)--;
             }
         }
         UnboundInputs.pop();
@@ -1992,6 +1994,7 @@ void TNodeState::HandleCleanup() {
         if (auto it = OutputDescriptors.find(front.first); it != OutputDescriptors.end()) {
             if (!it->second->IsBound) {
                 OutputDescriptors.erase(it);
+                (*OutputBufferCount)++;
             }
         }
         UnboundOutputs.pop();

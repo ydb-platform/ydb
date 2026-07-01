@@ -1,6 +1,9 @@
 #include "uring_context.h"
 
-#include <liburing.h>
+// Must be included AFTER YDB headers because linux/uapi headers pulled by
+// liburing may define macros that clash with project headers.
+#include <ydb/library/uring/liburing_linux.h>
+
 #include <sys/eventfd.h>
 #include <unistd.h>
 

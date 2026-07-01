@@ -3,7 +3,7 @@
 #include "codecs.h"
 #include "helpers.h"
 
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/services/metadata/manager/common.h>
 
 #include <ydb/library/persqueue/topic_parser/counters.h>

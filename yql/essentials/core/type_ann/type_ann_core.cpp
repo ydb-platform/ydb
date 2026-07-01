@@ -3952,13 +3952,24 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        // Named-arguments form: (HybridRank (Tuple positional...) (AsStruct options) [kind customLambda]).
+        // The optional trailing children are a "rank"/"score" marker followed by a custom fusion lambda: the
+        // marker comes first because it selects how the lambda is interpreted -- RankLambda fuses the
+        // per-document rank vector (Int64), ScoreLambda the per-document raw-score vector (Double). See the
+        // SQL frontend, which lifts the lambda out of the named-args struct and prepends the marker.
         TExprNode::TPtr positionalArguments = input;
+        bool hasCustomLambda = false;
+        bool isScoreLambda = false;
         if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
-            if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            if (!EnsureMaxArgsCount(*input, 4, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
             positionalArguments = input->ChildPtr(0);
+            hasCustomLambda = input->ChildrenSize() == 4;  // child 2 = "rank"/"score" marker, child 3 = lambda
+            if (hasCustomLambda) {
+                isScoreLambda = input->Child(2)->IsAtom() && input->Child(2)->Content() == "score";
+            }
         }
 
         if (positionalArguments->ChildrenSize() < 2) {
@@ -3970,6 +3981,52 @@ namespace NTypeAnnImpl {
 
         for (ui32 i = 0; i < positionalArguments->ChildrenSize(); ++i) {
             if (!EnsureComputable(*positionalArguments->Child(i), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        // The custom fusion lambda receives the document's per-branch values as a Dict<Int64, V> (branch
+        // index -> value; a branch the document is absent from has no entry, so $x[i] is NULL) and returns a
+        // numeric fused score (larger = better). For RankLambda the value is the 1-based rank (Int64); for
+        // ScoreLambda it is the raw branch score (Double). The KQP rewrite assembles the dict and applies the
+        // lambda; here we bind the argument type and validate the body up front so misuse fails early.
+        if (hasCustomLambda) {
+            const TStringBuf lambdaName = isScoreLambda ? "ScoreLambda" : "RankLambda";
+            // ConvertToLambda rejects a non-lambda value ("Expected lambda, but got: ...") -- no need to
+            // pre-check input->Child(3)->IsLambda() here.
+            bool isUniversal = false;
+            const auto status = ConvertToLambda(input->ChildRef(3), ctx.Expr, isUniversal, 1, 1);
+            if (status.Level != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
+            if (isUniversal) {
+                // The lambda slot is itself a universal-typed expression (still being inferred); propagate
+                // the universal type to HybridRank instead of forcing Double.
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
+            }
+            const auto keyType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int64);
+            const auto valueType = ctx.Expr.MakeType<TDataExprType>(isScoreLambda ? EDataSlot::Double : EDataSlot::Int64);
+            const auto argType = ctx.Expr.MakeType<TDictExprType>(keyType, valueType);
+            if (!UpdateLambdaAllArgumentsTypes(input->ChildRef(3), {argType}, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            const auto& lambda = input->ChildPtr(3);
+            if (!lambda->GetTypeAnn()) {
+                return IGraphTransformer::TStatus::Repeat;
+            }
+            const auto retType = RemoveOptionalType(lambda->GetTypeAnn());
+            if (retType->GetKind() == ETypeAnnotationKind::Universal) {
+                // The lambda return type is still universal (being inferred); propagate the universal type
+                // to HybridRank instead of forcing Double.
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
+            }
+            if (retType->GetKind() != ETypeAnnotationKind::Data ||
+                !IsDataTypeNumeric(retType->Cast<TDataExprType>()->GetSlot()))
+            {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda->Pos()), TStringBuilder() <<
+                    "HybridRank " << lambdaName << " must return a numeric score, but got " << *lambda->GetTypeAnn()));
                 return IGraphTransformer::TStatus::Error;
             }
         }

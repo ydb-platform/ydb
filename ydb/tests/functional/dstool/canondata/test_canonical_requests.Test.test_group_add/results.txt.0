@@ -1,0 +1,79 @@
+dstool -e <endpoint> --mon-port <mon_port> group add --pool-name dynamic_storage_pool:1 --groups 1 --size-in-units 2
+Exit Status: 0
+===== stdout =====
+┌──────────────┬────────────────────────┬─────────────────┬───────────────────────┬────────────────────────┬───────────────────────┬───────────┐
+│ BoxId:PoolId │ PoolName               │ Affected PDisks │ Static slots on PDisk │ VSlots on PDisk before │ VSlots on PDisk after │ Result    │
+├──────────────┼────────────────────────┼─────────────────┼───────────────────────┼────────────────────────┼───────────────────────┼───────────┤
+│ [1:1]        │ dynamic_storage_pool:1 │ 8               │ 1                     │ 1                      │ 1                     │ unchanged │
+│ [1:1]        │ dynamic_storage_pool:1 │ 8               │ 0                     │ 1                      │ 3                     │ increased │
+└──────────────┴────────────────────────┴─────────────────┴───────────────────────┴────────────────────────┴───────────────────────┴───────────┘
+
+===== grpc_calls =====
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    QueryBaseConfig {
+    }
+  }
+  Command {
+    ReadStoragePool {
+      BoxId: 18446744073709551615
+    }
+  }
+  Rollback: true
+}
+
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    DefineStoragePool {
+      BoxId: 1
+      StoragePoolId: 1
+      Name: "dynamic_storage_pool:1"
+      ErasureSpecies: "block-4-2"
+      Geometry {
+      }
+      VDiskKind: "Default"
+      Kind: "hdd"
+      NumGroups: 2
+      PDiskFilter {
+        Property {
+          Type: ROT
+        }
+        Property {
+          Kind: 0
+        }
+      }
+      ItemConfigGeneration: 1
+      DefaultGroupSizeInUnits: 2
+    }
+  }
+  Command {
+    QueryBaseConfig {
+    }
+  }
+  Command {
+    DefineStoragePool {
+      BoxId: 1
+      StoragePoolId: 1
+      Name: "dynamic_storage_pool:1"
+      ErasureSpecies: "block-4-2"
+      Geometry {
+      }
+      VDiskKind: "Default"
+      Kind: "hdd"
+      NumGroups: 2
+      PDiskFilter {
+        Property {
+          Type: ROT
+        }
+        Property {
+          Kind: 0
+        }
+      }
+      ItemConfigGeneration: 2
+    }
+  }
+}

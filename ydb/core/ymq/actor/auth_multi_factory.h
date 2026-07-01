@@ -154,6 +154,7 @@ protected:
     TString ResourceId_;
     ui32 RequestsToWait_ = 0;
     EActionClass ActionClass_ = EActionClass::QueueSpecified;
+    bool AuthenticateIamToken_ = false;
     TCloudAuthCounters& Counters_;
     TInstant AuthenticateRequestStartTimestamp_;
     TInstant AuthorizeRequestStartTimestamp_;

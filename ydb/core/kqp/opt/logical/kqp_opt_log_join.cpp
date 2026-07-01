@@ -499,7 +499,24 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     size_t rightPrefixSize;
     TMaybeNode<TExprBase> rightPrefixExpr;
 
-    auto prefixLookup = RewriteReadToPrefixLookup(rightReadMatch->Read, ctx, kqpCtx, kqpCtx.Config->GetIdxLookupJoinPointsLimit());
+    auto rightRead = rightReadMatch->Read;
+    if (!kqpCtx.Config->IsAutoIndexSelectionDisabled()) {
+        if (auto maybeRanges = rightRead.Maybe<TKqlReadTableRanges>()) {
+            const auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, maybeRanges.Cast().Table().Path());
+            if (mainTableDesc.Metadata->Kind != NYql::EKikimrTableKind::Olap) {
+                THashSet<TString> rightJoinKeys;
+                for (ui32 i = 0; i < join.JoinKeys().Size(); ++i) {
+                    TString key = TString(join.JoinKeys().Item(i).RightColumn().Value());
+                    rightJoinKeys.insert(key);
+                }
+                if (auto idx = ChooseIndexForLookupJoin(mainTableDesc, rightJoinKeys)) {
+                    rightRead = RedirectReadToIndex(rightRead, *idx, ctx);
+                }
+            }
+        }
+    }
+
+    auto prefixLookup = RewriteReadToPrefixLookup(rightRead, ctx, kqpCtx, kqpCtx.Config->GetIdxLookupJoinPointsLimit());
     if (prefixLookup) {
         lookupTable = prefixLookup->LookupTableName;
         indexName = prefixLookup->IndexName;

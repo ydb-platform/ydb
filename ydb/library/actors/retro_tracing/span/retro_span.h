@@ -66,6 +66,10 @@ public:
     TInstant GetEndTs() const;
 
     void EnableAutoEnd();
+    void EnableActionOnEnd();
+
+protected:
+    virtual void OnEnd();
 
 public:
     static constexpr ui8 DefaultVerbosity = 1;

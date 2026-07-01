@@ -1,6 +1,7 @@
 #include "ic_storage_transport_actor.h"
 
 #include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
 
 #include <ydb/library/actors/util/rope.h>
 
@@ -18,8 +19,6 @@ constexpr TStringBuf DestroyErrorMessage =
 constexpr TStringBuf CantAcquireDataErrorMessage = "can't acquire data";
 constexpr TStringBuf UndeliveryErrorMessage = "Undelivered";
 constexpr TStringBuf SessionBrokenErrorMessage = "Session broken";
-
-////////////////////////////////////////////////////////////////////////////////
 
 template <typename T>
 void SetErrorStatus(
@@ -45,15 +44,6 @@ MakeWritePersistentBuffersResult(
         SetErrorStatus(status, reason, *res->MutableResult());
     }
     return errorResponse;
-}
-
-template <typename T>
-void SetCantAcquireStatus(T& record)
-{
-    SetErrorStatus(
-        NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
-        CantAcquireDataErrorMessage,
-        record);
 }
 
 template <typename TEvent, typename TMap>
@@ -112,6 +102,19 @@ void RejectRequestsForNode(TMap& map, ui32 nodeId, const TActorContext& ctx)
 }
 
 }   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+TActorId CreateTransportActor()
+{
+    auto actor = std::make_unique<TICStorageTransportActor>();
+
+    return TActivationContext::Register(
+        actor.release(),
+        TActorId(),
+        TMailboxType::ReadAsFilled,
+        NKikimr::AppData()->SystemPoolId);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -417,7 +420,7 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
         requestId);
 
     auto errorResponse = MakeWritePersistentBuffersResult(
-        NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
+        NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN,
         CantAcquireDataErrorMessage,
         msg->PersistentBufferIds);
     ctx.Send(MakeHolder<IEventHandle>(
@@ -1287,19 +1290,6 @@ STFUNC(TICStorageTransportActor::StateWork)
                                          << " event: " << ev->ToString());
             break;
     }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TActorId CreateTransportActor()
-{
-    auto actor = std::make_unique<TICStorageTransportActor>();
-
-    return TActivationContext::Register(
-        actor.release(),
-        TActorId(),
-        TMailboxType::ReadAsFilled,
-        NKikimr::AppData()->SystemPoolId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

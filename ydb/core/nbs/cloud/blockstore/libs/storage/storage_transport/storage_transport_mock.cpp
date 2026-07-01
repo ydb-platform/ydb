@@ -1,5 +1,7 @@
 #include "storage_transport_mock.h"
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -117,9 +119,11 @@ NThreading::TFuture<TEvConnectResult> TStorageTransportMock::Connect(
 {
     const auto key = MakeKey(connection);
     ConnectCredentials[key].push_back(connection.Credentials);
+
     if (disconnectCB) {
         StoredDisconnectCBs[key] = std::move(disconnectCB);
     }
+
     if (auto it = PendingConnects.find(key); it != PendingConnects.end()) {
         return it->second.GetFuture();
     }
@@ -160,7 +164,11 @@ NThreading::TFuture<TEvReadResult> TStorageTransportMock::ReadFromDDisk(
     }
 
     TEvReadResult result;
-    result.SetStatus(ReadFromDDiskStatus);
+    if (!data.Acquire()) {
+        SetCantAcquireStatus(result);
+    } else {
+        result.SetStatus(ReadFromDDiskStatus);
+    }
     return NThreading::MakeFuture(std::move(result));
 }
 
@@ -198,11 +206,18 @@ void TStorageTransportMock::WriteToManyPBuffers(
         instruction,
         persistentBufferIds,
         replyTimeout,
-        data,
-        span,
-        callback);
+        data);
 
-    Y_ABORT("WriteToManyPBuffers is not expected in this test");
+    TEvWriteToManyPersistentBuffersResult result;
+    for (const auto& ddiskId: persistentBufferIds) {
+        auto& r = *result.AddResult();
+        r.MutableResult()->SetStatus(WriteToManyPBufferStatus);
+        r.MutablePersistentBufferId()->SetNodeId(ddiskId.GetNodeId());
+        r.MutablePersistentBufferId()->SetPDiskId(ddiskId.GetPDiskId());
+        r.MutablePersistentBufferId()->SetDDiskSlotId(ddiskId.GetDDiskSlotId());
+    }
+
+    callback(std::move(result), std::move(span));
 }
 
 NThreading::TFuture<TEvWriteResult> TStorageTransportMock::WriteToDDisk(
@@ -233,9 +248,16 @@ NThreading::TFuture<TEvSyncResult> TStorageTransportMock::SyncWithPBuffer(
     TVector<ui64> lsns,
     NWilson::TSpan* span)
 {
-    Y_UNUSED(pbufferConnection, ddiskConnection, selectors, lsns, span);
+    Y_UNUSED(pbufferConnection, ddiskConnection, lsns, span);
 
-    Y_ABORT("SyncWithPBuffer is not expected in this test");
+    TEvSyncResult result;
+    result.SetStatus(SyncWithPBufferStatus);
+    for (const auto& selector: selectors) {
+        Y_UNUSED(selector);
+        auto& r = *result.AddSegmentResults();
+        r.SetStatus(SyncWithPBufferStatus);
+    }
+    return NThreading::MakeFuture(std::move(result));
 }
 
 NThreading::TFuture<TEvErasePersistentBufferResult>

@@ -1,8 +1,8 @@
 #include <ydb/core/persqueue/pqtablet/batching/batch_cutter.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
-#include <ydb/library/kafka/kafka_messages_int.h>
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_messages_int.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 

@@ -19,6 +19,7 @@
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/library/services/services.pb.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -65,6 +66,10 @@ public:
 private:
     void StateInit(TAutoPtr<NActors::IEventHandle>& ev);
     STFUNC(StateWork);
+
+    void HandleHttpInfo(
+        NActors::NMon::TEvRemoteHttpInfo::TPtr& ev,
+        const NActors::TActorContext& ctx);
 
     void OnDetach(const NActors::TActorContext& ctx) override;
     void OnTabletDead(

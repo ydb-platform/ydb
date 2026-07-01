@@ -2,7 +2,7 @@
 #include "manager.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/services/scheme_secret/resolver.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/tiering/fetcher.h>
@@ -124,10 +124,10 @@ private:
                     aws.GetAwsSecretAccessKeySecretName()
                 };
 
-                if (NKqp::UseSchemaSecrets(AppDataVerified().FeatureFlags, schemaSecretNames)) {
+                if (NSecret::UseSchemaSecrets(AppDataVerified().FeatureFlags, schemaSecretNames)) {
                     auto userToken = MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{});
 
-                    auto future = NKqp::DescribeSecret(
+                    auto future = NSecret::DescribeSecret(
                         schemaSecretNames,
                         userToken,
                         AppDataVerified().TenantName,

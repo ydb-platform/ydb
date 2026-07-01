@@ -200,6 +200,14 @@ void TOracle::OnHostDisconnected(THostIndex hostIndex, TInstant now)
     Y_UNUSED(hostIndex, now);
 }
 
+void TOracle::OnRequestCancelled(
+    THostIndex hostIndex,
+    EOperation operation,
+    TInstant now)
+{
+    HostStatistics[hostIndex].OnCancelled(now, operation);
+}
+
 THostIndex TOracle::SelectBestPBufferHost(
     THostMask hosts,
     EOperation operation) const
@@ -275,6 +283,11 @@ TDuration TOracle::GetEraseRequestTimeout() const
 EWriteMode TOracle::GetWriteMode() const
 {
     return DefaultWriteMode;
+}
+
+const THostStat& TOracle::GetHostStatistics(THostIndex hostIndex) const
+{
+    return HostStatistics[hostIndex];
 }
 
 TString TOracle::Dump() const

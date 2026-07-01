@@ -8,6 +8,8 @@
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE
+
 namespace NFq {
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateDatabaseRequest::TPtr& ev)
@@ -22,9 +24,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateDatab
     const FederatedQuery::Internal::ComputeDatabaseInternal& request = event.Request;
     const int byteSize = request.ByteSize();
 
-    CPS_LOG_T(MakeLogPrefix(scope, "internal", request.id())
-        << "CreateDatabaseRequest: "
-        << request.DebugString());
+    YDB_LOG_TRACE("Dump logPrefix, createDatabaseRequest",
+        {"logPrefix", MakeLogPrefix(scope, "internal", request.id())},
+        {"createDatabaseRequest", request.DebugString()});
 
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "ModifyDatabase");
     queryBuilder.AddString("scope", scope);
@@ -86,8 +88,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeDat
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const auto byteSize = event.GetByteSize();
 
-    CPS_LOG_T(MakeLogPrefix(scope, "internal", scope)
-        << "DescribeDatabaseRequest");
+    YDB_LOG_TRACE("DescribeDatabaseRequest",
+        {"logPrefix", MakeLogPrefix(scope, "internal", scope)});
 
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DescribeDatabase");
     queryBuilder.AddString("scope", scope);
@@ -146,8 +148,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyDatab
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const auto byteSize = event.GetByteSize();
 
-    CPS_LOG_T(MakeLogPrefix(scope, "internal", scope)
-        << "ModifyDatabaseRequest");
+    YDB_LOG_TRACE("ModifyDatabaseRequest",
+        {"logPrefix", MakeLogPrefix(scope, "internal", scope)});
     
     // only write part
     if (event.LastAccessAt) {

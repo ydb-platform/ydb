@@ -1079,6 +1079,60 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         checkTable("`/Root/.sys/top_queries_by_cpu_time_one_hour`");
     }
 
+    Y_UNIT_TEST(TopQueriesTraceId) {
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.SetAuthToken("root@builtin");
+        TKikimrRunner kikimr(settings);
+
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        const TString traceId = "top-queries-trace-id-42";
+        const TString marker = "top_queries_trace_marker";
+
+        {
+            NYdb::NQuery::TExecuteQuerySettings execSettings;
+            execSettings.TraceId(std::string(traceId));
+
+            auto result = session.ExecuteQuery(Sprintf(R"(--!syntax_v1
+                SELECT 1 AS %s;
+            )", marker.c_str()),
+                NYdb::NQuery::TTxControl::NoTx(), execSettings).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Query stats collection is asynchronous; retry until the marker query
+        // shows up in the top_queries view with the trace id we supplied.
+        bool checked = false;
+        for (ui32 attempt = 0; attempt < 50 && !checked; ++attempt) {
+            auto readSession = client.GetSession().GetValueSync().GetSession();
+            auto result = readSession.ExecuteQuery(Sprintf(R"(--!syntax_v1
+                SELECT QueryText, TraceId
+                FROM `/Root/.sys/top_queries_by_cpu_time_one_minute`
+                WHERE QueryText LIKE "%%%s%%";
+            )", marker.c_str()),
+                NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            NYdb::TResultSetParser parser(result.GetResultSet(0));
+            while (parser.TryNextRow()) {
+                auto trace = parser.ColumnParser("TraceId").GetOptionalUtf8();
+                if (trace.has_value() && *trace == std::string(traceId)) {
+                    checked = true;
+                    break;
+                }
+            }
+
+            if (!checked) {
+                ::Sleep(TDuration::MilliSeconds(200));
+            }
+        }
+
+        UNIT_ASSERT_C(checked, "Query with the supplied trace id not found in top_queries_by_cpu_time_one_minute");
+    }
+
     Y_UNIT_TEST(QueryStatsScan) {
         auto checkTable = [&] (const TStringBuf tableName) {
             auto kikimr = DefaultKikimrRunner();

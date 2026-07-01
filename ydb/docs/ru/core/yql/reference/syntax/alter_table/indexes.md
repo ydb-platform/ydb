@@ -95,7 +95,15 @@ ALTER TABLE `series`
   WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 
-Блум-индекс:
+[JSON-индекс](../../../../dev/json-indexes.md):
+
+```yql
+ALTER TABLE `series`
+  ADD INDEX json_idx GLOBAL USING json
+  ON (metadata);
+```
+
+[Блум-индекс](../../../../dev/bloom-skip-indexes.md):
 
 ```yql
 ALTER TABLE `/Root/Table`
@@ -115,7 +123,6 @@ ALTER TABLE `/Root/Table`
     false_positive_probability = 0.01,
     case_sensitive = true
   );
-```
 
 ## Изменение параметров индекса {#alter-index}
 

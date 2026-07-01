@@ -270,7 +270,7 @@ namespace NActors {
             auto& d = DelayedEvents.emplace_back();
             d.Event = std::move(ev);
             if (Y_UNLIKELY(d.Event->TraceId)) {
-                d.Span = NWilson::TSpan(15 /*max verbosity*/, std::move(d.Event->TraceId), "Interconnect.Delay");
+                d.Span = NActors::TDelayedEventSpan::TUniversal(15 /*max verbosity*/, std::move(d.Event->TraceId), "Interconnect.Delay");
                 // Reparent event to the delay span
                 d.Event->TraceId = d.Span.GetTraceId();
             }

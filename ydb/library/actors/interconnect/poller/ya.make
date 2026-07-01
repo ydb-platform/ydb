@@ -31,7 +31,7 @@ IF (OS_LINUX)
         uring_poller_actor.h
     )
     PEERDIR(
-        contrib/libs/liburing
+        ydb/library/uring
     )
 ENDIF()
 
@@ -46,4 +46,3 @@ PEERDIR(
 )
 
 END()
-

@@ -1,7 +1,6 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/console.pb.h>
 #include <ydb/core/protos/console_base.pb.h>
@@ -13,6 +12,12 @@
 #include <util/generic/hash.h>
 
 #include <memory>
+
+namespace NKikimr {
+// Only used below as a pointer in a factory-function declaration; forward
+// declaration avoids pulling ydb/core/base/blobstorage.h into this header.
+class TTabletStorageInfo;
+}
 
 namespace NKikimr::NConsole {
 

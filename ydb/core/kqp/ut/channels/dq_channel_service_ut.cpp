@@ -186,105 +186,133 @@ public:
     bool Started = false;
 };
 
-Y_UNIT_TEST_SUITE(Channels20) {
+struct TLoadTest {
 
-    void LoadTest(int count, bool local, const TWorkerSettings& producerSettings, const TWorkerSettings& consumerSettings, const TFailureSettings& failureSettings = TFailureSettings{}) {
-
-        TKikimrSettings settings;
-        settings.NodeCount = local ? 1 : 2;
+    virtual void Prepare() {
+        settings.NodeCount = Local ? 1 : 2;
         settings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_CHANNELS, NActors::NLog::EPriority::PRI_TRACE);
         settings.LogSettings->DefaultLogPriority = NActors::NLog::EPriority::PRI_CRIT;
-        TKikimrRunner kikimr(settings);
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        runtime.SetUseRealInterconnect();
+        if (Local) {
+            NodeIndex1 = NodeIndex0;
+        }
+    }
 
-        auto control0 = runtime.AllocateEdgeActor(0);
-        auto control1 = local ? control0 : runtime.AllocateEdgeActor(1);
+    virtual void Init() {
+        Runner = std::make_unique<TKikimrRunner>(settings);
+        Runtime = Runner->GetTestServer().GetRuntime();
+        Runtime->SetUseRealInterconnect();
 
-        std::shared_ptr<TDqChannelService> service0;
-        std::shared_ptr<TDqChannelService> service1;
+        Control0 = Runtime->AllocateEdgeActor(0);
+        Control1 = Local ? Control0 : Runtime->AllocateEdgeActor(1);
 
-        ui32 nodeIndex0 = 0;
-        ui32 nodeIndex1 = local ? 0 : 1;
+        Runtime->Send(MakeChannelServiceActorID(Runtime->GetNodeId(0)), Control0, new TEvPrivate::TEvServiceLookup(), NodeIndex0);
+        auto serviceReply = Runtime->GrabEdgeEvent<TEvPrivate::TEvServiceReply>(Control0)->Release();
+        Service0 = serviceReply->Service;
 
-        runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(0)), control0, new TEvPrivate::TEvServiceLookup(), nodeIndex0);
-        auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(control0)->Release();
-        service0 = serviceReply->Service;
-
-        if (local) {
-            service1 = service0;
+        if (Local) {
+            Service1 = Service0;
         } else {
-            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(1)), control1, new TEvPrivate::TEvServiceLookup(), nodeIndex1);
-            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(control1)->Release();
-            service1 = serviceReply->Service;
+            Runtime->Send(MakeChannelServiceActorID(Runtime->GetNodeId(1)), Control1, new TEvPrivate::TEvServiceLookup(), NodeIndex1);
+            auto serviceReply = Runtime->GrabEdgeEvent<TEvPrivate::TEvServiceReply>(Control1)->Release();
+            Service1 = serviceReply->Service;
         }
+    }
 
-        THashSet<NActors::TActorId> actors;
-
-        std::atomic<int> dataCount = 0;
-        NActors::TTestActorRuntime::TEventObserverHolder dataHolder;
-        if (failureSettings.Data) {
-            dataHolder = runtime.AddObserver<TEvDqCompute::TEvChannelDataV2>([&](TEvDqCompute::TEvChannelDataV2::TPtr& event) {
-                if (dataCount.fetch_add(1) == failureSettings.Data) {
-                    dataCount.fetch_sub(failureSettings.Data);
-                    event.Reset();
-                }
-            });
-        }
-
-        for (auto i = 0; i < count; i ++) {
+    virtual void Start() {
+        for (auto i = 0; i < Count; i ++) {
             auto channelId = i + 1;
             if ((i & 1) == 0) {
-                auto producer = runtime.Register(new TWorkerActor(service0, TEvTestPrivate::ERole::Producer, channelId, producerSettings), nodeIndex0);
-                auto consumer = runtime.Register(new TWorkerActor(service1, TEvTestPrivate::ERole::Consumer, channelId, consumerSettings), nodeIndex1);
-                runtime.Send(consumer, control1, new TEvTestPrivate::TEvStart(producer), nodeIndex1, true);
-                runtime.Send(producer, control0, new TEvTestPrivate::TEvStart(consumer), nodeIndex0, true);
-                actors.insert(producer);
-                actors.insert(consumer);
+                auto producer = Runtime->Register(new TWorkerActor(Service0, TEvTestPrivate::ERole::Producer, channelId, ProducerSettings), NodeIndex0);
+                auto consumer = Runtime->Register(new TWorkerActor(Service1, TEvTestPrivate::ERole::Consumer, channelId, ConsumerSettings), NodeIndex1);
+                Runtime->Send(consumer, Control1, new TEvTestPrivate::TEvStart(producer), NodeIndex1, true);
+                Runtime->Send(producer, Control0, new TEvTestPrivate::TEvStart(consumer), NodeIndex0, true);
+                Actors.insert(producer);
+                Actors.insert(consumer);
             } else {
-                auto producer = runtime.Register(new TWorkerActor(service1, TEvTestPrivate::ERole::Producer, channelId, producerSettings), nodeIndex1);
-                auto consumer = runtime.Register(new TWorkerActor(service0, TEvTestPrivate::ERole::Consumer, channelId, consumerSettings), nodeIndex0);
-                runtime.Send(consumer, control0, new TEvTestPrivate::TEvStart(producer), nodeIndex0, true);
-                runtime.Send(producer, control1, new TEvTestPrivate::TEvStart(consumer), nodeIndex1, true);
-                actors.insert(producer);
-                actors.insert(consumer);
+                auto producer = Runtime->Register(new TWorkerActor(Service1, TEvTestPrivate::ERole::Producer, channelId, ProducerSettings), NodeIndex1);
+                auto consumer = Runtime->Register(new TWorkerActor(Service0, TEvTestPrivate::ERole::Consumer, channelId, ConsumerSettings), NodeIndex0);
+                Runtime->Send(consumer, Control0, new TEvTestPrivate::TEvStart(producer), NodeIndex0, true);
+                Runtime->Send(producer, Control1, new TEvTestPrivate::TEvStart(consumer), NodeIndex1, true);
+                Actors.insert(producer);
+                Actors.insert(consumer);
             }
         }
+    }
 
-        int finishCount[2][2] = {{0, 0}, {0, 0}};
-        int errorCount = 0;
+    virtual void Wait() {
         try {
-            for (auto i = 0; i < count; i++) {
-                auto msg0 = runtime.GrabEdgeEvent<TEvTestPrivate::TEvFinished>(control0, TDuration::Seconds(10));
-                actors.erase(msg0->Sender);
-                finishCount[nodeIndex0][msg0->Get()->Role]++;
-                errorCount += msg0->Get()->Error;
-                auto msg1 = runtime.GrabEdgeEvent<TEvTestPrivate::TEvFinished>(control1, TDuration::Seconds(10));
-                actors.erase(msg1->Sender);
-                finishCount[nodeIndex1][msg1->Get()->Role]++;
-                errorCount += msg1->Get()->Error;
+            for (auto i = 0; i < Count; i++) {
+                auto msg0 = Runtime->GrabEdgeEvent<TEvTestPrivate::TEvFinished>(Control0, TDuration::Seconds(10));
+                Actors.erase(msg0->Sender);
+                FinishCount[NodeIndex0][msg0->Get()->Role]++;
+                ErrorCount += msg0->Get()->Error;
+                auto msg1 = Runtime->GrabEdgeEvent<TEvTestPrivate::TEvFinished>(Control1, TDuration::Seconds(10));
+                Actors.erase(msg1->Sender);
+                FinishCount[NodeIndex1][msg1->Get()->Role]++;
+                ErrorCount += msg1->Get()->Error;
             }
         } catch (NActors::TEmptyEventQueueException&) {
-            if (!actors.empty()) {
+            if (!Actors.empty()) {
                 TStringBuilder builder;
                 builder << "NOT FINISHED ACTORS ";
-                for (auto actorId : actors) {
+                for (auto actorId : Actors) {
                     builder << ' ' << actorId;
                 }
                 UNIT_ASSERT_C(false, builder);
             }
         }
+    }
 
-        if (local) {
-            UNIT_ASSERT_VALUES_EQUAL(finishCount[0][TEvTestPrivate::ERole::Producer], count);
-            UNIT_ASSERT_VALUES_EQUAL(finishCount[0][TEvTestPrivate::ERole::Consumer], count);
+    virtual void Check() {
+        if (Local) {
+            UNIT_ASSERT_VALUES_EQUAL(FinishCount[0][TEvTestPrivate::ERole::Producer], Count);
+            UNIT_ASSERT_VALUES_EQUAL(FinishCount[0][TEvTestPrivate::ERole::Consumer], Count);
         } else {
-            UNIT_ASSERT_VALUES_EQUAL(finishCount[0][TEvTestPrivate::ERole::Producer], (count + 1) / 2);
-            UNIT_ASSERT_VALUES_EQUAL(finishCount[0][TEvTestPrivate::ERole::Consumer], count / 2);
-            UNIT_ASSERT_VALUES_EQUAL(finishCount[1][TEvTestPrivate::ERole::Producer], count / 2);
-            UNIT_ASSERT_VALUES_EQUAL(finishCount[1][TEvTestPrivate::ERole::Consumer], (count + 1) / 2);
+            UNIT_ASSERT_VALUES_EQUAL(FinishCount[0][TEvTestPrivate::ERole::Producer], (Count + 1) / 2);
+            UNIT_ASSERT_VALUES_EQUAL(FinishCount[0][TEvTestPrivate::ERole::Consumer], Count / 2);
+            UNIT_ASSERT_VALUES_EQUAL(FinishCount[1][TEvTestPrivate::ERole::Producer], Count / 2);
+            UNIT_ASSERT_VALUES_EQUAL(FinishCount[1][TEvTestPrivate::ERole::Consumer], (Count + 1) / 2);
         }
-        UNIT_ASSERT_VALUES_EQUAL(errorCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(ErrorCount, 0);
+    }
+
+    virtual void Run() {
+        Prepare();
+        Init();
+        Start();
+        Wait();
+        Check();
+    }
+
+    int Count = 1;
+    bool Local = true;
+    ui32 NodeIndex0 = 0;
+    ui32 NodeIndex1 = 1;
+    TKikimrSettings settings;
+    std::unique_ptr<TKikimrRunner> Runner;
+    NActors::TTestActorRuntime* Runtime;
+    std::shared_ptr<TDqChannelService> Service0;
+    std::shared_ptr<TDqChannelService> Service1;
+    NActors::TActorId Control0;
+    NActors::TActorId Control1;
+    TWorkerSettings ProducerSettings;
+    TWorkerSettings ConsumerSettings;
+    THashSet<NActors::TActorId> Actors;
+    int ErrorCount = 0;
+    int FinishCount[2][2] = {{0, 0}, {0, 0}};
+};
+
+Y_UNIT_TEST_SUITE(Channels20) {
+
+    void LoadTest(int count, bool local, const TWorkerSettings& producerSettings, const TWorkerSettings& consumerSettings, const TFailureSettings& = TFailureSettings{}) {
+        TLoadTest test;
+
+        test.Count = count;
+        test.Local = local;
+        test.ProducerSettings = producerSettings;
+        test.ConsumerSettings = consumerSettings;
+
+        test.Run();
     }
 
     void LoadTest(int count, bool local, const TWorkerSettings& settings = TWorkerSettings{}, const TFailureSettings& failureSettings = TFailureSettings{}) {

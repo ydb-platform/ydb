@@ -748,7 +748,6 @@ public:
         queryProto.SetType(GetPhyQueryType(*querySettings.Type));
 
         AFL_ENSURE(Config->GetEnableOltpSink());
-        queryProto.SetEnableOltpSink(Config->GetEnableOltpSink());
         queryProto.SetEnableOlapSink(Config->GetEnableOlapSink());
         queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
         queryProto.SetLangVer(Config->GetDefaultLangVer());

@@ -1367,14 +1367,7 @@ bool CheckDisabledWriteToUniqIndex(const TExprBase& write, const NYql::TKikimrTa
 
 bool ValidateBatchOperation(const NYql::TKikimrTableDescription& tableData, const TExprBase& expr, TExprContext& ctx, TKqpOptimizeContext& kqpCtx)
 {
-    const bool allowBatchUpdates = kqpCtx.Config->GetEnableOltpSink();
     const bool enabledIndexStreamWrite = kqpCtx.Config->GetEnableIndexStreamWrite();
-
-    if (!allowBatchUpdates) {
-        const TString err = "BATCH operations are not supported at the current time.";
-        ctx.AddError(YqlIssue(ctx.GetPosition(expr.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));
-        return false;
-    }
 
     for (const auto& index : tableData.Metadata->Indexes) {
         if (!NBatchOperations::IsIndexSupported(index.Type, enabledIndexStreamWrite)) {

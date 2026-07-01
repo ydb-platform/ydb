@@ -613,8 +613,7 @@ Y_UNIT_TEST_SUITE(TSessionsWithRealTransport)
         auto executor = MakeExecutor();
         auto dbg = MakeDirectBlockGroup(
             executor,
-            std::make_unique<TStorageTransportMock>(),
-            100);
+            std::make_unique<TStorageTransportMock>());
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -660,7 +659,7 @@ Y_UNIT_TEST_SUITE(TSessionsWithRealTransport)
         auto transport = std::make_unique<TStorageTransportMock>();
         transport->WriteToManyPBufferStatus =
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -740,7 +739,7 @@ Y_UNIT_TEST_SUITE(TSessionsWithRealTransport)
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
 
         auto executor = MakeExecutor();
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -803,8 +802,7 @@ Y_UNIT_TEST_SUITE(TSessionsWithRealTransport)
         auto executor = MakeExecutor();
         auto dbg = MakeDirectBlockGroup(
             executor,
-            std::make_unique<TStorageTransportMock>(),
-            100);
+            std::make_unique<TStorageTransportMock>());
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);

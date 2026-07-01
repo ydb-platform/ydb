@@ -24,15 +24,6 @@ TVChunkConfig MakeTestVChunkConfig()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TVector<ui64> GetLsns(const TVector<TPBufferSegment>& segments)
-{
-    TVector<ui64> lsns;
-    for (const auto& segment: segments) {
-        lsns.push_back(segment.Lsn);
-    }
-    return lsns;
-}
-
 THostMask MakePrimaryHosts()
 {
     return THostMask::MakeAll(3);
@@ -518,9 +509,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // number of write operations.
         eraseHints = dirtyMap.MakeEraseHint(2);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0:123[10..19],124[20..29];"
-            "H1:123[10..19],124[20..29];"
-            "H2:123[10..19],124[20..29];",
+            "H0:0:123,0:124;"
+            "H1:0:123,0:124;"
+            "H2:0:123,0:124;",
             eraseHints.DebugPrint());
 
         // After getting erase hints, we should not get it once again
@@ -535,9 +526,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap.EraseFinished(THostIndex{2}, {}, {123, 124});
 
         eraseHints = dirtyMap.MakeEraseHint(2);
-        UNIT_ASSERT_VALUES_EQUAL(
-            "H2:123[10..19],124[20..29];",
-            eraseHints.DebugPrint());
+        UNIT_ASSERT_VALUES_EQUAL("H2:0:123,0:124;", eraseHints.DebugPrint());
 
         // Should still have two inflight items
         UNIT_ASSERT_VALUES_EQUAL(2, dirtyMap.GetInflightCount());
@@ -696,20 +685,20 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Finish flushes
         for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap.FlushFinished(route, GetLsns(hint.Segments), {});
+            dirtyMap.FlushFinished(route, MakeLsnVector(hint.Segments), {});
         }
 
         // Erase hints
         auto eraseHints = dirtyMap.MakeEraseHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H1:123[10..19];"
-            "H2:123[10..19];"
-            "H3:123[10..19];",
+            "H1:0:123;"
+            "H2:0:123;"
+            "H3:0:123;",
             eraseHints.DebugPrint());
 
         // Finish erasing
         for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap.EraseFinished(host, GetLsns(hint.Segments), {});
+            dirtyMap.EraseFinished(host, MakeLsnVector(hint.Segments), {});
         }
     }
 
@@ -750,20 +739,20 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Finish flushes
         for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap.FlushFinished(route, GetLsns(hint.Segments), {});
+            dirtyMap.FlushFinished(route, MakeLsnVector(hint.Segments), {});
         }
 
         // Erase hints
         auto eraseHints = dirtyMap.MakeEraseHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H1:123[10..19];"
-            "H2:123[10..19];"
-            "H3:123[10..19];",
+            "H1:0:123;"
+            "H2:0:123;"
+            "H3:0:123;",
             eraseHints.DebugPrint());
 
         // Finish erasing
         for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap.EraseFinished(host, GetLsns(hint.Segments), {});
+            dirtyMap.EraseFinished(host, MakeLsnVector(hint.Segments), {});
         }
     }
 
@@ -813,20 +802,20 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Finish flushes
         for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap.FlushFinished(route, GetLsns(hint.Segments), {});
+            dirtyMap.FlushFinished(route, MakeLsnVector(hint.Segments), {});
         }
 
         // Erase hints
         auto eraseHints = dirtyMap.MakeEraseHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H2:123[10..19];"
-            "H3:123[10..19];"
-            "H4:123[10..19];",
+            "H2:0:123;"
+            "H3:0:123;"
+            "H4:0:123;",
             eraseHints.DebugPrint());
 
         // Finish erasing
         for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap.EraseFinished(host, GetLsns(hint.Segments), {});
+            dirtyMap.EraseFinished(host, MakeLsnVector(hint.Segments), {});
         }
     }
 
@@ -871,19 +860,19 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Finish flushes
         for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap.FlushFinished(route, GetLsns(hint.Segments), {});
+            dirtyMap.FlushFinished(route, MakeLsnVector(hint.Segments), {});
         }
 
         // Erase hints
         auto eraseHints = dirtyMap.MakeEraseHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H1:123[10..19];"
-            "H2:123[10..19];",
+            "H1:0:123;"
+            "H2:0:123;",
             eraseHints.DebugPrint());
 
         // Finish erasing
         for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap.EraseFinished(host, GetLsns(hint.Segments), {});
+            dirtyMap.EraseFinished(host, MakeLsnVector(hint.Segments), {});
         }
 
         // Should remove inflight items
@@ -969,7 +958,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             TBlockRange64::WithLength(95, 10),
             requested,
             confirmed);
-        // Range over write watermark. Should not be flushed.
+        // Range over write watermark. Should be flushed only to healthy DDisks.
         dirtyMap.RegisterInflightWrite(125, TBlockRange64::WithLength(100, 10));
         dirtyMap.WriteFinished(
             125,
@@ -979,8 +968,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         auto flushHint = dirtyMap.MakeFlushHint(3);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0->H0:123[10..19],124[95..104];"
-            "H1->H1:123[10..19],124[95..104];"
+            "H0->H0:123[10..19],124[95..104],125[100..109];"
+            "H1->H1:123[10..19],124[95..104],125[100..109];"
             "H2->H2:123[10..19],124[95..104];",
             flushHint.DebugPrint());
     }
@@ -1003,7 +992,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto flushHint = dirtyMap.MakeFlushHint(1);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
         for (const auto& [route, flush]: flushHint.GetAllHints()) {
-            dirtyMap.FlushFinished(route, {GetLsns(flush.Segments)}, {});
+            dirtyMap.FlushFinished(route, {MakeLsnVector(flush.Segments)}, {});
         }
 
         // Lock pbuffer
@@ -1215,9 +1204,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         auto eraseHints = dirtyMap.MakeEraseHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0:123[0..99];"
-            "H1:123[0..99];"
-            "H2:123[0..99];",
+            "H0:0:123;"
+            "H1:0:123;"
+            "H2:0:123;",
             eraseHints.DebugPrint());
 
         dirtyMap.EraseFinished(THostIndex{0}, {123}, {});
@@ -1707,6 +1696,161 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(
             "200{[H0,H1,H2][10..50][0..40]};",
             readHint1.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadFromDDiskDuringPendingWrite)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        // Register a pending write (no PBuffer acknowledgement yet).
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
+
+        // A read during pending write should see DDisk data (Lsn=0),
+        // not the unacknowledged PBuffer data.
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "0{[H0,H1,H2][10..19][0..9]};",
+            readHint.DebugPrint());
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap.GetInflightCount());
+
+        // Complete the write. Now reads should see PBuffer data.
+        dirtyMap.WriteFinished(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
+
+        readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "123{[H0,H1,H2][10..19][0..9]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadFromPBufferDuringPendingWriteWithExistingInflight)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        // First write completes normally.
+        dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 10));
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 10),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
+
+        // Second write overlaps and is pending.
+        dirtyMap.RegisterInflightWrite(200, TBlockRange64::WithLength(10, 10));
+
+        // Actually, the pending write (Lsn=200) overlaps the completed one
+        // (Lsn=100) — the latest Lsn wins, and since Lsn 200 is in
+        // PBufferPendingWrite state, it returns PBuffer read.
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "100{[H0,H1,H2][10..19][0..9]};",
+            readHint.DebugPrint());
+
+        // Complete the second write.
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(10, 10),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
+
+        readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "200{[H0,H1,H2][10..19][0..9]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldEraseDisabledHostsAutomatically)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        const THostMask requested = MakePrimaryHosts();
+        const THostMask confirmed = MakePrimaryHosts();
+
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
+        dirtyMap.WriteFinished(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            requested,
+            confirmed);
+
+        // Flush all hosts.
+        auto flushHint = dirtyMap.MakeFlushHint(1);
+        for (const auto& [route, hint]: flushHint.GetAllHints()) {
+            dirtyMap.FlushFinished(route, MakeLsnVector(hint.Segments), {});
+        }
+
+        // Disable host 0 before erase.
+        vchunkConfig.DisableHost(0);
+        dirtyMap.UpdateConfig(vchunkConfig);
+
+        // Erase hints should only include enabled hosts.
+        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H1:0:123;"
+            "H2:0:123;",
+            eraseHints.DebugPrint());
+
+        // Finish erasing on enabled hosts.
+        for (const auto& [host, hint]: eraseHints.GetAllHints()) {
+            dirtyMap.EraseFinished(host, MakeLsnVector(hint.Segments), {});
+        }
+
+        // The disabled host's erase was auto-confirmed, so inflight should be
+        // clear.
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
+    }
+
+    Y_UNIT_TEST(ShouldHandleSafeBarrierWithPendingWrite)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        // No writes yet — no barrier.
+        UNIT_ASSERT(!dirtyMap.GetSafeBarrierForErase().has_value());
+
+        // Pending write holds the barrier from the moment of registration.
+        dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(100, *dirtyMap.GetSafeBarrierForErase());
+
+        // Second pending write — barrier stays at 100.
+        dirtyMap.RegisterInflightWrite(200, TBlockRange64::WithLength(20, 10));
+        UNIT_ASSERT_VALUES_EQUAL(100, *dirtyMap.GetSafeBarrierForErase());
+
+        // Completing write 100 with sub-quorum drops it.
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 10),
+            MakePrimaryHosts(),
+            MakeHostMask(true, true, false, false, false));
+        UNIT_ASSERT_VALUES_EQUAL(200, *dirtyMap.GetSafeBarrierForErase());
+
+        // Completing write 200 with quorum keeps it until erased.
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(20, 10),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
+        UNIT_ASSERT_VALUES_EQUAL(200, *dirtyMap.GetSafeBarrierForErase());
     }
 }
 

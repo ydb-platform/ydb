@@ -16906,7 +16906,6 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
     Y_UNIT_TEST(BackupReturnsOperationIdArrowFormat) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableBackupService(true);
-        config.MutableFeatureFlags()->SetEnableArrowResultSetFormat(true);
 
         TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableBackupService(true));

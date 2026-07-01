@@ -154,6 +154,10 @@ void TSchemeShard::Handle(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev, co
     Execute(CreateTxCreateSetColumnConstraint(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvSetColumnConstraint::TEvGetRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxGetSetColumnConstraint(ev), ctx);
+}
+
 void TSchemeShard::Handle(TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     TIndexBuildId operationId = TIndexBuildId(record.GetId());

@@ -21,6 +21,8 @@
 #include <util/generic/utility.h>
 #include <util/random/random.h>
 
+#include <algorithm>
+
 namespace NKikimr {
 
 namespace {
@@ -39,7 +41,9 @@ public:
         const TString& database = {},
         bool isSystemUser = false,
         TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing(),
-        TMaybe<NACLib::TDiffACL> tableAclDiff = Nothing())
+        TMaybe<NACLib::TDiffACL> tableAclDiff = Nothing(),
+        TVector<NKikimrSchemeOp::TIndexDescription> tableIndexes = {},
+        TVector<NKikimrSchemeOp::TSequenceDescription> tableSequences = {})
         : PathComponents(std::move(pathComponents))
         , Columns(std::move(columns))
         , KeyColumns(std::move(keyColumns))
@@ -49,6 +53,8 @@ public:
         , IsSystemUser(isSystemUser)
         , PartitioningPolicy(std::move(partitioningPolicy))
         , TableAclDiff(std::move(tableAclDiff))
+        , TableIndexes(std::move(tableIndexes))
+        , TableSequences(std::move(tableSequences))
         , LogPrefix("Table " + TableName() + " updater. ")
     {
         Y_ABORT_UNLESS(!PathComponents.empty());
@@ -109,7 +115,7 @@ public:
             auto* modifyScheme = request->Record.MutableTransaction()->MutableModifyScheme();
             modifyScheme->SetWorkingDir(CanonizePath(pathComponents));
             LOG_DEBUG_S(*TlsActivationContext, LogService, 
-                LogPrefix << "Created " << NKikimrSchemeOp::EOperationType_Name(OperationType) << " transaction for path: " << modifyScheme->GetWorkingDir() << "/" << TableName());
+                LogPrefix << "Created " << NKikimrSchemeOp::EOperationType_Name(operationType) << " transaction for path: " << modifyScheme->GetWorkingDir() << "/" << TableName());
 
             modifyScheme->SetOperationType(operationType);
             modifyScheme->SetInternal(true);
@@ -120,8 +126,18 @@ public:
 
         switch (OperationType) {
             case NKikimrSchemeOp::ESchemeOpCreateTable: {
-                auto& modifyScheme = *getModifyScheme(NKikimrSchemeOp::ESchemeOpCreateTable);
-                BuildCreateTable(modifyScheme);
+                TableCreateAttempted = true;
+                const bool useIndexedTable = !TableSequences.empty() || !TableIndexes.empty();
+                auto& modifyScheme = *getModifyScheme(useIndexedTable
+                    ? NKikimrSchemeOp::ESchemeOpCreateIndexedTable
+                    : NKikimrSchemeOp::ESchemeOpCreateTable);
+
+                if (useIndexedTable) {
+                    auto& indexedTable = *modifyScheme.MutableCreateIndexedTable();
+                    BuildCreateIndexedTable(indexedTable);
+                } else {
+                    BuildCreateTable(modifyScheme);
+                }
 
                 if (TableAclDiff) {
                     BuildModifyACL(modifyScheme);
@@ -146,7 +162,24 @@ public:
         Send(MakeTxProxyID(), std::move(request));
     }
 
-    void RunTableModification(const THashMap<ui32, TSysTables::TTableColumnInfo>& existingColumns, TIntrusivePtr<TSecurityObject> securityObject) {
+    void RunTableModification(
+        const THashMap<ui32, TSysTables::TTableColumnInfo>& existingColumns,
+        TIntrusivePtr<TSecurityObject> securityObject,
+        const TVector<NKikimrSchemeOp::TIndexDescription>& existingIndexes,
+        const TVector<NKikimrSchemeOp::TSequenceDescription>& existingSequences)
+    {
+        if (!TableCreateAttempted && (!TableIndexes.empty() || !TableSequences.empty())) {
+            Fail("Table already exists; index and sequence upgrade is not supported");
+            return;
+        }
+
+        if (!TableIndexes.empty() || !TableSequences.empty()) {
+            if (!HasRequestedIndexedSchema(existingIndexes, existingSequences)) {
+                Fail("Existing table schema does not match requested indexes or sequences");
+                return;
+            }
+        }
+
         ExcludeExistingColumns(existingColumns);
         bool aclChanged = false;
 
@@ -219,7 +252,7 @@ public:
             case EStatus::Ok:
                 LOG_DEBUG_S(*TlsActivationContext, LogService,
                     LogPrefix << "Table already exists, number of columns: " << result.Columns.size() << ", has SecurityObject: " << (result.SecurityObject ? "true" : "false"));
-                RunTableModification(result.Columns, result.SecurityObject);
+                RunTableModification(result.Columns, result.SecurityObject, result.Indexes, result.Sequences);
                 break;
         }
     }
@@ -233,8 +266,10 @@ public:
                 [[fallthrough]];
             case NTxProxy::TResultStatus::ExecAlready:
                 if (ssStatus == NKikimrScheme::EStatus::StatusSuccess || ssStatus == NKikimrScheme::EStatus::StatusAlreadyExists) {
-                    if (PartialModification) {
-                        // Apply next modification
+                    if ((ssStatus == NKikimrScheme::EStatus::StatusAlreadyExists
+                            && (!TableIndexes.empty() || !TableSequences.empty()))
+                        || PartialModification)
+                    {
                         FallBack();
                     } else {
                         Success(ev);
@@ -378,8 +413,204 @@ public:
         return PathComponents.back();
     }
 
+    bool HasRequestedIndexedSchema(
+        const TVector<NKikimrSchemeOp::TIndexDescription>& existingIndexes,
+        const TVector<NKikimrSchemeOp::TSequenceDescription>& existingSequences) const
+    {
+        if (TableIndexes.empty() && TableSequences.empty()) {
+            return true;
+        }
+
+        for (const auto& requiredIndex : TableIndexes) {
+            const auto it = std::find_if(existingIndexes.begin(), existingIndexes.end(),
+                [&](const NKikimrSchemeOp::TIndexDescription& index) {
+                    return index.GetName() == requiredIndex.GetName();
+                });
+            if (it == existingIndexes.end() || !IndexDefinitionsMatch(requiredIndex, *it)) {
+                return false;
+            }
+        }
+
+        for (const auto& requiredSequence : TableSequences) {
+            const auto it = std::find_if(existingSequences.begin(), existingSequences.end(),
+                [&](const NKikimrSchemeOp::TSequenceDescription& sequence) {
+                    return sequence.GetName() == requiredSequence.GetName();
+                });
+            if (it == existingSequences.end() || !SequenceDefinitionsMatch(requiredSequence, *it)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
 private:
-    void BuildTableOperation(NKikimrSchemeOp::TTableDescription& tableDesc) const {
+    template <typename TRepeated>
+    static bool RepeatedStringFieldsEqual(const TRepeated& left, const TRepeated& right)
+    {
+        if (left.size() != right.size()) {
+            return false;
+        }
+        for (int i = 0; i < left.size(); ++i) {
+            if (left.Get(i) != right.Get(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static bool IndexDefinitionsMatch(
+        const NKikimrSchemeOp::TIndexDescription& required,
+        const NKikimrSchemeOp::TIndexDescription& existing)
+    {
+        if (required.GetType() != existing.GetType()) {
+            return false;
+        }
+        if (required.HasState() && required.GetState() != existing.GetState()) {
+            return false;
+        }
+        if (!RepeatedStringFieldsEqual(required.GetKeyColumnNames(), existing.GetKeyColumnNames())) {
+            return false;
+        }
+        if (!RepeatedStringFieldsEqual(required.GetDataColumnNames(), existing.GetDataColumnNames())) {
+            return false;
+        }
+        if (required.GetSpecializedIndexDescriptionCase() != existing.GetSpecializedIndexDescriptionCase()) {
+            if (required.GetSpecializedIndexDescriptionCase()
+                != NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET)
+            {
+                return false;
+            }
+        } else {
+            switch (required.GetSpecializedIndexDescriptionCase()) {
+                case NKikimrSchemeOp::TIndexDescription::kVectorIndexKmeansTreeDescription:
+                    if (required.GetVectorIndexKmeansTreeDescription().SerializeAsString()
+                        != existing.GetVectorIndexKmeansTreeDescription().SerializeAsString())
+                    {
+                        return false;
+                    }
+                    break;
+                case NKikimrSchemeOp::TIndexDescription::kFulltextIndexDescription:
+                    if (required.GetFulltextIndexDescription().SerializeAsString()
+                        != existing.GetFulltextIndexDescription().SerializeAsString())
+                    {
+                        return false;
+                    }
+                    break;
+                case NKikimrSchemeOp::TIndexDescription::kBloomFilterDescription:
+                    if (required.GetBloomFilterDescription().SerializeAsString()
+                        != existing.GetBloomFilterDescription().SerializeAsString())
+                    {
+                        return false;
+                    }
+                    break;
+                case NKikimrSchemeOp::TIndexDescription::kBloomNGrammFilterDescription:
+                    if (required.GetBloomNGrammFilterDescription().SerializeAsString()
+                        != existing.GetBloomNGrammFilterDescription().SerializeAsString())
+                    {
+                        return false;
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        if (!required.GetIndexImplTableDescriptions().empty()) {
+            if (required.GetIndexImplTableDescriptions().size()
+                != existing.GetIndexImplTableDescriptions().size())
+            {
+                return false;
+            }
+            for (int i = 0; i < required.GetIndexImplTableDescriptions().size(); ++i) {
+                if (required.GetIndexImplTableDescriptions(i).SerializeAsString()
+                    != existing.GetIndexImplTableDescriptions(i).SerializeAsString())
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    static bool SequenceDefinitionsMatch(
+        const NKikimrSchemeOp::TSequenceDescription& required,
+        const NKikimrSchemeOp::TSequenceDescription& existing)
+    {
+#define REQUIRE_MATCHING_SEQUENCE_FIELD(field) \
+        if (required.Has##field() && required.Get##field() != existing.Get##field()) { \
+            return false; \
+        }
+
+        REQUIRE_MATCHING_SEQUENCE_FIELD(MinValue);
+        REQUIRE_MATCHING_SEQUENCE_FIELD(MaxValue);
+        REQUIRE_MATCHING_SEQUENCE_FIELD(StartValue);
+        REQUIRE_MATCHING_SEQUENCE_FIELD(Cache);
+        REQUIRE_MATCHING_SEQUENCE_FIELD(Increment);
+        REQUIRE_MATCHING_SEQUENCE_FIELD(Cycle);
+        REQUIRE_MATCHING_SEQUENCE_FIELD(DataType);
+        REQUIRE_MATCHING_SEQUENCE_FIELD(Restart);
+
+#undef REQUIRE_MATCHING_SEQUENCE_FIELD
+
+        return true;
+    }
+
+    static NKikimrSchemeOp::TIndexCreationConfig ToIndexCreationConfig(
+        const NKikimrSchemeOp::TIndexDescription& index)
+    {
+        NKikimrSchemeOp::TIndexCreationConfig config;
+        config.SetName(index.GetName());
+        config.SetType(index.GetType());
+        if (index.HasState()) {
+            config.SetState(index.GetState());
+        }
+        config.MutableKeyColumnNames()->Assign(
+            index.GetKeyColumnNames().begin(), index.GetKeyColumnNames().end());
+        config.MutableDataColumnNames()->Assign(
+            index.GetDataColumnNames().begin(), index.GetDataColumnNames().end());
+        config.MutableIndexImplTableDescriptions()->Assign(
+            index.GetIndexImplTableDescriptions().begin(),
+            index.GetIndexImplTableDescriptions().end());
+
+        switch (index.GetSpecializedIndexDescriptionCase()) {
+            case NKikimrSchemeOp::TIndexDescription::kVectorIndexKmeansTreeDescription:
+                *config.MutableVectorIndexKmeansTreeDescription() =
+                    index.GetVectorIndexKmeansTreeDescription();
+                break;
+            case NKikimrSchemeOp::TIndexDescription::kFulltextIndexDescription:
+                *config.MutableFulltextIndexDescription() = index.GetFulltextIndexDescription();
+                break;
+            case NKikimrSchemeOp::TIndexDescription::kBloomFilterDescription:
+                *config.MutableBloomFilterDescription() = index.GetBloomFilterDescription();
+                break;
+            case NKikimrSchemeOp::TIndexDescription::kBloomNGrammFilterDescription:
+                *config.MutableBloomNGrammFilterDescription() =
+                    index.GetBloomNGrammFilterDescription();
+                break;
+            default:
+                break;
+        }
+
+        return config;
+    }
+
+    void BuildCreateIndexedTable(NKikimrSchemeOp::TIndexedTableCreationConfig& indexedTable) const {
+        auto& tableDesc = *indexedTable.MutableTableDescription();
+        BuildTableOperation(tableDesc, false);
+        tableDesc.MutableKeyColumnNames()->Assign(KeyColumns.begin(), KeyColumns.end());
+
+        for (const auto& index : TableIndexes) {
+            *indexedTable.AddIndexDescription() = ToIndexCreationConfig(index);
+        }
+
+        for (const auto& sequence : TableSequences) {
+            *indexedTable.AddSequenceDescription() = sequence;
+        }
+    }
+
+    void BuildTableOperation(NKikimrSchemeOp::TTableDescription& tableDesc, bool includeTableIndexes = true) const {
         tableDesc.SetName(TableName());
         tableDesc.MutableColumns()->Assign(Columns.begin(), Columns.end());
 
@@ -389,6 +620,10 @@ private:
 
         if (PartitioningPolicy) {
             *tableDesc.MutablePartitionConfig()->MutablePartitioningPolicy() = *PartitioningPolicy;
+        }
+
+        if (includeTableIndexes && !TableIndexes.empty()) {
+            tableDesc.MutableTableIndexes()->Assign(TableIndexes.begin(), TableIndexes.end());
         }
     }
 
@@ -400,7 +635,7 @@ private:
     }
 
     void BuildAlterTable(NKikimrSchemeOp::TModifyScheme& modifyScheme) const {
-        BuildTableOperation(*modifyScheme.MutableAlterTable());
+        BuildTableOperation(*modifyScheme.MutableAlterTable(), false);
     }
 
     void BuildModifyACL(NKikimrSchemeOp::TModifyScheme& modifyScheme) const {
@@ -479,7 +714,10 @@ private:
     bool IsSystemUser = false;
     const TMaybe<NKikimrSchemeOp::TPartitioningPolicy> PartitioningPolicy;
     const TMaybe<NACLib::TDiffACL> TableAclDiff;
+    const TVector<NKikimrSchemeOp::TIndexDescription> TableIndexes;
+    const TVector<NKikimrSchemeOp::TSequenceDescription> TableSequences;
     NKikimrSchemeOp::EOperationType OperationType = NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable;
+    bool TableCreateAttempted = false;
     bool PartialModification = false;
     NActors::TActorId Owner;
     NActors::TActorId SchemePipeActorId;
@@ -537,6 +775,12 @@ NKikimrSchemeOp::TTTLSettings TMultiTableCreator::TtlCol(const TString& columnNa
     return settings;
 }
 
+NKikimrSchemeOp::TPartitioningPolicy TMultiTableCreator::AutoPartitioningByLoadPolicy() {
+    NKikimrSchemeOp::TPartitioningPolicy policy;
+    policy.MutableSplitByLoadSettings()->SetEnabled(true);
+    return policy;
+}
+
 TMultiTableCreator::TMultiTableCreator(std::vector<NActors::IActor*> tableCreators)
     : TableCreators(std::move(tableCreators))
 {}
@@ -583,11 +827,14 @@ NActors::IActor* CreateTableCreator(
     const TString& database,
     bool isSystemUser,
     TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy,
-    TMaybe<NACLib::TDiffACL> tableAclDiff)
+    TMaybe<NACLib::TDiffACL> tableAclDiff,
+    TVector<NKikimrSchemeOp::TIndexDescription> tableIndexes,
+    TVector<NKikimrSchemeOp::TSequenceDescription> tableSequences)
 {
     return new TTableCreator(std::move(pathComponents), std::move(columns),
         std::move(keyColumns), logService, std::move(ttlSettings), database,
-        isSystemUser, std::move(partitioningPolicy), std::move(tableAclDiff));
+        isSystemUser, std::move(partitioningPolicy), std::move(tableAclDiff),
+        std::move(tableIndexes), std::move(tableSequences));
 }
 
 } // namespace NKikimr

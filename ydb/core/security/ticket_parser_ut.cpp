@@ -1532,6 +1532,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         AuthorizationRetryError<NKikimr::TNebiusAccessServiceMock>();
     }
 
+    Y_UNIT_TEST(NebiusAuthorizationWithBulkRetryError) {
+        AuthorizationRetryError<NKikimr::TNebiusAccessServiceMock, true>();
+    }
+
     template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
     void AuthorizationRetryErrorImmediately() {
         using namespace Tests;
@@ -1623,6 +1627,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
     Y_UNIT_TEST(NebiusAuthorizationRetryErrorImmediately) {
         AuthorizationRetryErrorImmediately<NKikimr::TNebiusAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(NebiusAuthorizationWithBulkRetryErrorImmediately) {
+        AuthorizationRetryErrorImmediately<NKikimr::TNebiusAccessServiceMock, true>();
     }
 
     Y_UNIT_TEST(AuthenticationUnsupported) {
@@ -2054,6 +2062,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         Authorization<NKikimr::TNebiusAccessServiceMock>();
     }
 
+    Y_UNIT_TEST(NebiusAuthorizationWithBulk) {
+        Authorization<NKikimr::TNebiusAccessServiceMock, true>();
+    }
+
     template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
     void AuthorizationWithRequiredPermissions() {
         using namespace Tests;
@@ -2133,6 +2145,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
     Y_UNIT_TEST(NebiusAuthorizationWithRequiredPermissions) {
         AuthorizationWithRequiredPermissions<NKikimr::TNebiusAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(NebiusAuthorizationWithRequiredPermissionsWithBulk) {
+        AuthorizationWithRequiredPermissions<NKikimr::TNebiusAccessServiceMock, true>();
     }
 
     template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
@@ -2393,6 +2409,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         AuthorizationUnavailable<NKikimr::TNebiusAccessServiceMock>();
     }
 
+    Y_UNIT_TEST(NebiusAuthorizationWithBulkUnavailable) {
+        AuthorizationUnavailable<NKikimr::TNebiusAccessServiceMock, true>();
+    }
+
     template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
     void AuthorizationModify() {
         using namespace Tests;
@@ -2471,6 +2491,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
     Y_UNIT_TEST(NebiusAuthorizationModify) {
         AuthorizationModify<NKikimr::TNebiusAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(NebiusAuthorizationWithBulkModify) {
+        AuthorizationModify<NKikimr::TNebiusAccessServiceMock, true>();
     }
 
     Y_UNIT_TEST(CanProperHandleErrorWithEmptyMessage) {
@@ -2672,6 +2696,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
     Y_UNIT_TEST(XUserIPHeaderIsSetInTicketParserNebiusAuthorization) {
         AuthorizationWithPeerName<NKikimr::TNebiusAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(XUserIPHeaderIsSetInTicketParserNebiusAuthorizationWithBulk) {
+        AuthorizationWithPeerName<NKikimr::TNebiusAccessServiceMock, true>();
     }
 
     THolder<TEvTicketParser::TEvAuthorizeTicketResult> RunPeernameQuery(

@@ -4,8 +4,6 @@ SRCS(
     common.cpp
 )
 
-STYLE_CPP()
-
 PEERDIR(
     ydb/core/kqp/rm_service
     ydb/core/kqp/ut/common

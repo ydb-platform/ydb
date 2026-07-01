@@ -13,11 +13,18 @@ logger = logging.getLogger(__name__)
 
 
 class WorkloadManagerWorkload:
-    def __init__(self, driver, endpoint):
-        self.driver = driver
-        self.endpoint = endpoint
+    def __init__(self, fixture):
+        self.fixture = fixture
         self.table_name = "/Root/simple_reader_table"
         self.batch_size = 1000
+
+    @property
+    def driver(self):
+        return self.fixture.driver
+
+    @property
+    def endpoint(self):
+        return self.fixture.endpoint
 
     def create_resource_pool(self):
         self.execute_query("""
@@ -124,7 +131,7 @@ class TestWorkloadManagerMixedCluster(MixedClusterFixture):
         if min(self.versions) < (25, 1, 4):
             pytest.skip("Test is not supported for this cluster version")
 
-        workload = WorkloadManagerWorkload(self.driver, self.endpoint)
+        workload = WorkloadManagerWorkload(self)
         workload.create_resource_pool()
         workload.validate_resource_pool()
         workload.alter_resource_pool()
@@ -145,7 +152,7 @@ class TestWorkloadManagerRestartToAnotherVersion(RestartToAnotherVersionFixture)
         if min(self.versions) < (25, 1, 4):
             pytest.skip("Test is not supported for this cluster version")
 
-        workload = WorkloadManagerWorkload(self.driver, self.endpoint)
+        workload = WorkloadManagerWorkload(self)
         workload.create_resource_pool()
         workload.validate_resource_pool()
         workload.create_resource_pool_classifier()
@@ -180,7 +187,7 @@ class TestWorkloadManagerTabletTransfer(RollingUpgradeAndDowngradeFixture):
         if min(self.versions) < (25, 1, 4):
             pytest.skip("Test is not supported for this cluster version")
 
-        workload = WorkloadManagerWorkload(self.driver, self.endpoint)
+        workload = WorkloadManagerWorkload(self)
         workload.create_resource_pool()
         workload.validate_resource_pool()
         workload.create_resource_pool_classifier()

@@ -740,6 +740,221 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
         }
     } // Y_UNIT_TEST(EnableSplitMerge)
 
+    Y_UNIT_TEST(SplitByMinPartitionCount) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        // create topic w/t split-merge with 2 partitions
+        CreateTopic(runtime, env, ++txId, 2, false);
+        auto topic = DescribeTopic(runtime);
+        // expect: total 2, active 2
+        UNIT_ASSERT_VALUES_EQUAL(2  , topic.GetPartitions().size());
+
+        // try to change partition strategy to splittable with 3 min partitions - should fail since topic was non-splittable before and we don't allow to increase min partition count and enable split/merge simultaneously
+        ModifyTopic(runtime, env, ++txId, [&](auto& scheme) {
+            {
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMaxPartitionCount(100);
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMinPartitionCount(3);
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+            }
+        }, {{TEvSchemeShard::EStatus::StatusInvalidParameter}});
+
+        // change partition strategy to splittable
+        ModifyTopic(runtime, env, ++txId, [&](auto& scheme) {
+            {
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+            }
+        });
+
+        const unsigned char b0[] = {0xA};
+        TString boundary0((char*)b0, sizeof(b0));
+
+        // try increase min partition count to 5 and split - should fail since topic was non-splittable before and we don't allow to increase min partition count and enable split/merge simultaneously
+        ModifyTopic(runtime, env, ++txId, [&](auto& scheme) {
+            {
+                auto* split = scheme.AddSplit();
+                split->SetPartition(0);
+                split->SetSplitBoundary(boundary0);
+
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMaxPartitionCount(100);
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMinPartitionCount(5);
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+            }
+        }, {{TEvSchemeShard::EStatus::StatusInvalidParameter}});
+
+        // split first partition - hence 3 active partitions
+        SplitPartition(runtime, env, txId, 0, boundary0);
+        topic = DescribeTopic(runtime);
+        Cerr << "====================== Topic Before ======================" << Endl << topic.DebugString() << Endl << Flush;
+        // expect: total 4, 3 active
+        UNIT_ASSERT_VALUES_EQUAL(4, topic.GetPartitions().size());
+
+        // increase min partition count to 9
+        ModifyTopic(runtime, env, ++txId, [&](auto& scheme) {
+            {
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMaxPartitionCount(100);
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMinPartitionCount(10);
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+            }
+        });
+
+        topic = DescribeTopic(runtime);
+        Cerr << "====================== Topic Modified ======================" << Endl << topic.DebugString() << Endl << Flush;
+        // expect: total 18, active 10
+        UNIT_ASSERT_VALUES_EQUAL(18, topic.GetPartitions().size());
+        for (const auto& p : topic.GetPartitions()) {
+            Cerr <<  ">>>>> Verify partition " << p.GetPartitionId() << Endl << Flush;
+            UNIT_ASSERT(p.HasKeyRange());
+
+            switch(p.GetPartitionId()) {
+                case 0:
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::ETopicPartitionStatus::Inactive), static_cast<int>(p.GetStatus()));
+                    UNIT_ASSERT(p.GetChildPartitionIds().size() == 2);
+                    UNIT_ASSERT_VALUES_EQUAL(TVector<i32>(p.GetChildPartitionIds().cbegin(), p.GetChildPartitionIds().cend()), TVector<i32>({2, 3}));
+                    UNIT_ASSERT(p.GetParentPartitionIds().empty());
+                    break;
+                case 1:
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::ETopicPartitionStatus::Inactive), static_cast<int>(p.GetStatus()));
+                    UNIT_ASSERT(p.GetChildPartitionIds().size() == 2);
+                    UNIT_ASSERT_VALUES_EQUAL(TVector<i32>(p.GetChildPartitionIds().cbegin(), p.GetChildPartitionIds().cend()), TVector<i32>({8, 9}));
+                    UNIT_ASSERT(p.GetParentPartitionIds().empty());
+                    break;
+                case 2:
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::ETopicPartitionStatus::Inactive), static_cast<int>(p.GetStatus()));
+                    UNIT_ASSERT(p.GetChildPartitionIds().size() == 2);
+                    UNIT_ASSERT_VALUES_EQUAL(TVector<i32>(p.GetChildPartitionIds().cbegin(), p.GetChildPartitionIds().cend()), TVector<i32>({6, 7}));
+                    UNIT_ASSERT(p.GetParentPartitionIds().size() == 1);
+                    UNIT_ASSERT_VALUES_EQUAL(TVector<i32>(p.GetParentPartitionIds().cbegin(), p.GetParentPartitionIds().cend()), TVector<i32>({0}));
+                    break;
+                case 3:
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::ETopicPartitionStatus::Inactive), static_cast<int>(p.GetStatus()));
+                    UNIT_ASSERT(p.GetChildPartitionIds().size() == 2);
+                    UNIT_ASSERT_VALUES_EQUAL(TVector<i32>(p.GetChildPartitionIds().cbegin(), p.GetChildPartitionIds().cend()), TVector<i32>({4, 5}));
+                    UNIT_ASSERT(p.GetParentPartitionIds().size() == 1);
+                    UNIT_ASSERT_VALUES_EQUAL(TVector<i32>(p.GetParentPartitionIds().cbegin(), p.GetParentPartitionIds().cend()), TVector<i32>({0}));
+                    break;
+                case 4:
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::ETopicPartitionStatus::Inactive), static_cast<int>(p.GetStatus()));
+                    UNIT_ASSERT(p.GetChildPartitionIds().size() == 2);
+                    UNIT_ASSERT_VALUES_EQUAL(TVector<i32>(p.GetChildPartitionIds().cbegin(), p.GetChildPartitionIds().cend()), TVector<i32>({10, 11}));
+                    UNIT_ASSERT(p.GetParentPartitionIds().size() == 1);
+                    UNIT_ASSERT_VALUES_EQUAL(TVector<i32>(p.GetParentPartitionIds().cbegin(), p.GetParentPartitionIds().cend()), TVector<i32>({3}));
+                    break;
+                case 5:
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::ETopicPartitionStatus::Inactive), static_cast<int>(p.GetStatus()));
+                    UNIT_ASSERT(p.GetChildPartitionIds().size() == 2);
+                    UNIT_ASSERT_VALUES_EQUAL(TVector<i32>(p.GetChildPartitionIds().cbegin(), p.GetChildPartitionIds().cend()), TVector<i32>({12, 13}));
+                    UNIT_ASSERT(p.GetParentPartitionIds().size() == 1);
+                    UNIT_ASSERT_VALUES_EQUAL(TVector<i32>(p.GetParentPartitionIds().cbegin(), p.GetParentPartitionIds().cend()), TVector<i32>({3}));
+                    break;
+                case 6:
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::ETopicPartitionStatus::Inactive), static_cast<int>(p.GetStatus()));
+                    UNIT_ASSERT(p.GetChildPartitionIds().size() == 2);
+                    UNIT_ASSERT_VALUES_EQUAL(TVector<i32>(p.GetChildPartitionIds().cbegin(), p.GetChildPartitionIds().cend()), TVector<i32>({14, 15}));
+                    UNIT_ASSERT(p.GetParentPartitionIds().size() == 1);
+                    UNIT_ASSERT_VALUES_EQUAL(TVector<i32>(p.GetParentPartitionIds().cbegin(), p.GetParentPartitionIds().cend()), TVector<i32>({2}));
+                    break;
+                case 7:
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::ETopicPartitionStatus::Inactive), static_cast<int>(p.GetStatus()));
+                    UNIT_ASSERT(p.GetChildPartitionIds().size() == 2);
+                    UNIT_ASSERT_VALUES_EQUAL(TVector<i32>(p.GetChildPartitionIds().cbegin(), p.GetChildPartitionIds().cend()), TVector<i32>({16, 17}));
+                    UNIT_ASSERT(p.GetParentPartitionIds().size() == 1);
+                    UNIT_ASSERT_VALUES_EQUAL(TVector<i32>(p.GetParentPartitionIds().cbegin(), p.GetParentPartitionIds().cend()), TVector<i32>({2}));
+                    break;
+                case 8:
+                case 9:
+                case 10:
+                case 11:
+                case 12:
+                case 13:
+                case 14:
+                case 15:
+                case 16:
+                case 17:
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::ETopicPartitionStatus::Active), static_cast<int>(p.GetStatus()));
+                    break;
+                default:
+                    UNIT_ASSERT_C(false, "Unexpected partition id " << p.GetPartitionId());
+            }
+        }
+
+        // try to change to 1 min partitions
+        ModifyTopic(runtime, env, ++txId, [&](auto& scheme) {
+            {
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMaxPartitionCount(100);
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMinPartitionCount(1);
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+            }
+        });
+        topic = DescribeTopic(runtime);
+        // expect: total 18, active 10  - no change in partitons number since reducing min active partitions does not merge exisitng partitions now
+        UNIT_ASSERT_VALUES_EQUAL(18, topic.GetPartitions().size());
+
+        // try to split and change to 20 min partitions - should fail since we don't allow splitting and increasing min count at the same time
+        ModifyTopic(runtime, env, ++txId, [&](auto& scheme) {
+            {
+                auto* split = scheme.AddSplit();
+                split->SetPartition(5);
+                split->SetSplitBoundary(boundary0);
+
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMaxPartitionCount(100);
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMinPartitionCount(20);
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+            }
+        }, {{TEvSchemeShard::EStatus::StatusInvalidParameter}});
+
+    } // Y_UNIT_TEST(SplitByMinPartitionCount)
+
+    Y_UNIT_TEST(SplitByMinPartitionCountWithTwoIter) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        // create topic with split-merge with 1 partitions
+        CreateTopic(runtime, env, ++txId, 1);
+
+        // increase min partition count to 5 - should cause double splitting loop inside
+        ModifyTopic(runtime, env, ++txId, [&](auto& scheme) {
+            {
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMaxPartitionCount(100);
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMinPartitionCount(5);
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+            }
+        });
+
+        auto topic = DescribeTopic(runtime);
+        Cerr << "====================== Topic Modified ======================" << Endl << topic.DebugString() << Endl << Flush;
+        // expect: total 9, active 5
+        UNIT_ASSERT_VALUES_EQUAL(9, topic.GetPartitions().size());
+        for (const auto& p : topic.GetPartitions()) {
+            Cerr <<  ">>>>> Verify partition " << p.GetPartitionId() << Endl << Flush;
+            switch(p.GetPartitionId()) {
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::ETopicPartitionStatus::Inactive), static_cast<int>(p.GetStatus()));
+                    UNIT_ASSERT(p.GetChildPartitionIds().size() == 2);
+                    break;
+                case 4:
+                case 5:
+                case 6:
+                case 7:
+                case 8:
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::ETopicPartitionStatus::Active), static_cast<int>(p.GetStatus()));
+                    break;
+                default:
+                    UNIT_ASSERT_C(false, "Unexpected partition id " << p.GetPartitionId());
+            }
+        }
+
+    } // Y_UNIT_TEST(SplitByMinPartitionCountWithTwoIter)
+
 } // Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest)
 
 Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {

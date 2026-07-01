@@ -1726,8 +1726,7 @@ namespace NKikimr {
                 if (freeLogoBlobsSpace == 0 || freeBlocksSpace == 0 || freeBarriersSpace == 0) {
                     return;
                 }
-                auto ev = LocalSyncDataQueue.front();
-                LocalSyncDataQueue.pop();
+                TEvLocalSyncData::TPtr ev = LocalSyncDataQueue.front();
 
                 freeLogoBlobsSpace -= Min(freeLogoBlobsSpace, ev->Get()->LogoBlobsSize);
                 freeBlocksSpace -= Min(freeBlocksSpace, ev->Get()->BlocksSize);
@@ -1736,6 +1735,8 @@ namespace NKikimr {
                 processedSize += ev->Get()->LogoBlobsSize + ev->Get()->BlocksSize + ev->Get()->BarriersSize;
 
                 ProcessLocalSyncData(ev, ctx);
+
+                LocalSyncDataQueue.pop();
             }
 
             if (!LocalSyncDataQueue.empty() && !ProcessLocalSyncDataQueueScheduled) {
@@ -2488,6 +2489,14 @@ namespace NKikimr {
                                 TABLER() {
                                     TABLED() {str << "VDiskIncarnationGuid";}
                                     TABLED() {str << Db->GetVDiskIncarnationGuid(true);}
+                                }
+                                TABLER() {
+                                    TABLED() {str << "SyncLogMaxDiskAmount";}
+                                    TABLED() {str << Config->SyncLogMaxDiskAmount;}
+                                }
+                                TABLER() {
+                                    TABLED() {str << "SyncLogMaxMemAmount";}
+                                    TABLED() {str << Config->SyncLogMaxMemAmount;}
                                 }
 
                                 if (PDiskCtx && PDiskCtx->Dsk) {

@@ -5,6 +5,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/stream/null.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
+
 using namespace NKikimr;
 
 #define STR Cnull
@@ -38,7 +40,7 @@ private:
     void Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev, const TActorContext &ctx) {
         Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::ERROR, "Status=%s",
                NKikimrProto::EReplyStatus_Name(ev->Get()->Record.GetStatus()).data());
-        LOG_NOTICE(ctx, NActorsServices::TEST, " TEvVPut failed successfully");
+        YDB_LOG_NOTICE_CTX(ctx, "TEvVPut failed successfully");
         AtomicIncrement(Conf->SuccessCount);
         Conf->SignalDoneEvent();
         Die(ctx);

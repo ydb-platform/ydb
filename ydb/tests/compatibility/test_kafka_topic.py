@@ -10,15 +10,22 @@ from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, Rollin
 
 
 class Workload:
-    def __init__(self, driver, endpoint):
-        self.driver = driver
-        self.endpoint = endpoint
+    def __init__(self, fixture):
+        self.fixture = fixture
         self.id = f"{uuid.uuid1()}".replace("-", "_")
         self.topic_name = f"source_topic_{self.id}"
         self.message_count = 0
         self.processed_message_count = 0
         self.consumers = 1
         self.restart_interval = 10
+
+    @property
+    def driver(self):
+        return self.fixture.driver
+
+    @property
+    def endpoint(self):
+        return self.fixture.endpoint
 
     def get_command(self, subcmds: list[str]) -> list[str]:
         return (
@@ -120,7 +127,7 @@ class TestKafkaTopicMixedClusterFixture(MixedClusterFixture):
         yield from self.setup_cluster()
 
     def test_workload(self):
-        utils = Workload(self.driver, self.endpoint)
+        utils = Workload(self)
 
         utils.create_topic()
 
@@ -137,7 +144,7 @@ class TestKafkaTopicRollingUpdate(RollingUpgradeAndDowngradeFixture):
         yield from self.setup_cluster()
 
     def test_workload(self):
-        utils = Workload(self.driver, self.endpoint)
+        utils = Workload(self)
 
         utils.create_topic()
 
@@ -160,7 +167,7 @@ class TestKafkaTopicRestartToAnotherVersion(RestartToAnotherVersionFixture):
         yield from self.setup_cluster()
 
     def test_workload(self):
-        utils = Workload(self.driver, self.endpoint)
+        utils = Workload(self)
 
         utils.create_topic()
         if self.current_binary_paths_index != 0:

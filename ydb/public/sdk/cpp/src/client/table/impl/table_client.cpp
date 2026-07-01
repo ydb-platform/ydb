@@ -1158,6 +1158,10 @@ void TTableClient::TImpl::DeleteSession(TKqpSessionCommon* sessionImpl) {
     delete sessionImpl;
 }
 
+void TTableClient::TImpl::PessimizeNode(std::uint64_t nodeId) {
+    DbDriverState_->EndpointPool.BanNodeId(nodeId);
+}
+
 ui32 TTableClient::TImpl::GetSessionRetryLimit() const {
     return Settings_.SessionPoolSettings_.RetryLimit_;
 }
@@ -1420,6 +1424,9 @@ void TTableClient::TImpl::SetTxSettings(const TTxSettings& txSettings, Ydb::Tabl
             break;
         case TTxSettings::TS_SNAPSHOT_RW:
             proto->mutable_snapshot_read_write();
+            break;
+        case TTxSettings::TS_STRICT_SERIALIZABLE_RW:
+            proto->mutable_strict_serializable_read_write();
             break;
         default:
             throw TContractViolation("Unexpected transaction mode.");

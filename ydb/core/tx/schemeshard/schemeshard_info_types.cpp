@@ -819,8 +819,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         alterData->TableDescriptionFull->SetUniqueIndexKeySize(op.GetUniqueIndexKeySize());
     }
 
-    if (op.HasIndexImplType()) {
-        alterData->TableDescriptionFull->SetIndexImplType(op.GetIndexImplType());
+    if (op.HasTableType()) {
+        alterData->TableDescriptionFull->SetTableType(op.GetTableType());
     }
 
     if (source) {

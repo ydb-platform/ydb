@@ -2149,6 +2149,23 @@ void TPartition::Handle(TEvPQ::TEvUpdateReadMetrics::TPtr& ev, const TActorConte
     UsersInfoStorage->SetLastReadMetricsUpdateTime(ctx.Now());
 }
 
+void TPartition::Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const TActorContext& ctx) {
+    Y_UNUSED(ctx);
+    const auto* event = ev->Get();
+    TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE] += event->CPUUsage;
+
+    if (!UsersInfoStorage) {
+        return;
+    }
+
+    auto userInfo = UsersInfoStorage.Get()->GetIfExists(event->User);
+    if (!userInfo) {
+        return;
+    }
+
+    userInfo->ConsumerBatchProcessorCPUUsage += event->CPUUsage;
+}
+
 void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->IsInternal) {
         CompacterPartitionRequestInflight = false;
@@ -2229,6 +2246,14 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             continue;
         }
         bool haveChanges = false;
+
+        if (userInfo.ConsumerBatchProcessorCPUUsage) {
+            auto& counter = userInfo.LabeledCounters->GetCounters()[METRIC_CONSUMER_BATCH_PROCESSOR_CPU_USAGE];
+            counter.Set(counter.Get() + userInfo.ConsumerBatchProcessorCPUUsage);
+            userInfo.ConsumerBatchProcessorCPUUsage = 0;
+            haveChanges = true;
+        }
+
         const auto snapshot = CreateSnapshot(userInfo);
 
         auto ts = snapshot.LastCommittedMessage.WriteTimestamp.MilliSeconds();
@@ -4376,7 +4401,9 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         auto counter = createSession ? COUNTER_PQ_CREATE_SESSION_OK : (dropSession ? COUNTER_PQ_DELETE_SESSION_OK : COUNTER_PQ_SET_CLIENT_OFFSET_OK);
         TabletCounters.Cumulative()[counter].Increment(1);
         auto *userInfoFull = UsersInfoStorage->GetIfExists(userInfo.User);
-        if (userInfoFull && userInfo.Offset > userInfoFull->GetReadOffset()) {
+        if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET &&
+                userInfoFull && userInfo.Offset > userInfoFull->GetReadOffset() &&
+                userInfoFull->WriteTimestamp > TInstant::Zero()) {
             auto timestamps = GetTime(*userInfoFull, userInfo.Offset);
             userInfoFull->UpdateReadOffset(userInfo.Offset - 1, timestamps.first, timestamps.second, ctx.Now(), true);
         }

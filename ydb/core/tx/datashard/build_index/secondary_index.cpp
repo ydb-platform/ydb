@@ -8,6 +8,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
@@ -667,7 +668,11 @@ private:
 
         ui64 val = static_cast<ui64>(ev->Get()->Value);
         if (seqCol.BitReverse) {
-            val = ReverseBits(val);
+            // The bit-reverse flag is set only for __ydb_row_id; apply the shared row-id layout (spread
+            // bucket in the high bits, dense counter in the low bits) so backfilled values match those
+            // produced by the online-insert sequencer (kqp_sequencer_actor.cpp). The spread keeps writes
+            // to the unique index / posting / docs tables distributed instead of hot-spotting on a tail.
+            val = NTableIndex::NFulltext::RowIdFromSeq(val);
         }
         seqCol.Buffer.push_back(val);
 

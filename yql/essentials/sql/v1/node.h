@@ -1502,6 +1502,8 @@ struct TTopicConsumerSettings {
     TNodePtr MaxProcessingAttempts;
     TNodePtr DeadLetterPolicy;
     TNodePtr DeadLetterQueue;
+    TNodePtr ReceiveMessageWaitTime;
+    TNodePtr ReceiveMessageDelay;
 };
 
 struct TTopicConsumerDescription {

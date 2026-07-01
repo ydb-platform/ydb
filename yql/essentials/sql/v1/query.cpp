@@ -2041,6 +2041,8 @@ TNullable<TNodePtr> CreateConsumerDesc(TContext& ctx, const TTopicConsumerDescri
     settings = setValue(settings, desc.Settings.MaxProcessingAttempts, "max_processing_attempts");
     settings = setValue(settings, desc.Settings.DeadLetterPolicy, "dead_letter_policy");
     settings = setValue(settings, desc.Settings.DeadLetterQueue, "dead_letter_queue");
+    settings = setValue(settings, desc.Settings.ReceiveMessageWaitTime, "receive_message_wait_time");
+    settings = setValue(settings, desc.Settings.ReceiveMessageDelay, "receive_message_delay");
 
     return node.Y(
         node.Q(node.Y(node.Q("name"), BuildQuotedAtom(desc.Name.Pos, desc.Name.Name))),

@@ -609,7 +609,7 @@ void TLocalLeaderElection::SendSessionEvents() {
     YDB_LOG_DEBUG("Going to send session events, RpcResponses",
         {"logPrefix", LogPrefix},
         {"pendingRpcResponses", PendingRpcResponses},
-        {"#_RpcResponses.size", RpcResponses.size()});
+        {"rpcResponses", RpcResponses.size()});
 
     while (PendingRpcResponses > 0 && !RpcResponses.empty()) {
         SendSessionEvent(std::move(RpcResponses.front()));
@@ -790,7 +790,7 @@ void TLocalLeaderElection::ProcessCreateSemaphoreResult(const TRpcOut& message) 
     if (!IsTableCreated(status)) {
         YDB_LOG_ERROR("Semaphore creating error",
             {"logPrefix", LogPrefix},
-            {"#_status.GetIssues().ToOneLineString", status.GetIssues().ToOneLineString()});
+            {"issues", status.GetIssues().ToOneLineString()});
         Metrics.Errors->Inc();
         ResetState();
         return;
@@ -820,7 +820,7 @@ void TLocalLeaderElection::ProcessAcquireSemaphoreResult(const TRpcOut& message)
     if (!status.IsSuccess()) {
         YDB_LOG_ERROR("Failed to acquire semaphore",
             {"logPrefix", LogPrefix},
-            {"#_status.GetIssues().ToOneLineString", status.GetIssues().ToOneLineString()});
+            {"issues", status.GetIssues().ToOneLineString()});
         Metrics.Errors->Inc();
         ResetState();
         return;
@@ -853,7 +853,7 @@ void TLocalLeaderElection::ProcessDescribeSemaphoreResult(const TRpcOut& message
     if (!status.IsSuccess()) {
         YDB_LOG_ERROR("Semaphore describe fail",
             {"logPrefix", LogPrefix},
-            {"#_status.GetIssues", status.GetIssues()});
+            {"issues", status.GetIssues()});
         Metrics.Errors->Inc();
         ResetState();
         return;
@@ -893,7 +893,7 @@ void TLocalLeaderElection::ProcessDescribeSemaphoreResult(const TRpcOut& message
             {"logPrefix", LogPrefix},
             {"parentId", ParentId},
             {"id", id},
-            {"#_LeaderActorId.GetOrElse(TActorId())", LeaderActorId.GetOrElse(TActorId())});
+            {"leaderActorId", LeaderActorId.GetOrElse(TActorId())});
         TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(id, generation));
         Metrics.LeaderChanged->Inc();
     }

@@ -338,7 +338,7 @@ void TActorCoordinator::UpdateKnownRowDispatchers(NActors::TActorId actorId, boo
 
     YDB_LOG_TRACE("Add new row dispatcher to map (state",
         {"logPrefix", LogPrefix},
-        {"#_static_cast<int>(nodeState)", static_cast<int>(nodeState)});
+        {"nodeState", static_cast<int>(nodeState)});
     RowDispatchers.emplace(actorId, TRowDispatcherInfo{true, nodeState, isLocal});
     UpdateGlobalState();
 
@@ -368,12 +368,12 @@ void TActorCoordinator::UpdateInterconnectSessions(const NActors::TActorId& inte
 void TActorCoordinator::Handle(NActors::TEvents::TEvPing::TPtr& ev) {
     YDB_LOG_TRACE("TEvPing received",
         {"logPrefix", LogPrefix},
-        {"#_ev->Sender", ev->Sender});
+        {"sender", ev->Sender});
     UpdateInterconnectSessions(ev->InterconnectSession);
     UpdateKnownRowDispatchers(ev->Sender, false);
     YDB_LOG_TRACE("Send TEvPong",
         {"logPrefix", LogPrefix},
-        {"#_ev->Sender", ev->Sender});
+        {"sender", ev->Sender});
     Send(ev->Sender, new NActors::TEvents::TEvPong(), IEventHandle::FlagTrackDelivery);
 }
 
@@ -404,16 +404,16 @@ void TActorCoordinator::PrintInternalState() {
     auto str = GetInternalState();
     auto buf = TStringBuf(str);
     for (ui64 offset = 0; offset < buf.size(); offset += PrintStateToLogSplitSize) {
-        YDB_LOG_DEBUG("Dump logPrefix, #_buf.SubString(offset, PrintStateToLogSplitSize)",
+        YDB_LOG_DEBUG("Dump logPrefix, state",
             {"logPrefix", LogPrefix},
-            {"#_buf.SubString(offset, PrintStateToLogSplitSize)", buf.SubString(offset, PrintStateToLogSplitSize)});
+            {"state", buf.SubString(offset, PrintStateToLogSplitSize)});
     }
 }
 
 void TActorCoordinator::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
     YDB_LOG_DEBUG("EvNodeConnected",
         {"logPrefix", LogPrefix},
-        {"#_ev->Get()->NodeId", ev->Get()->NodeId});
+        {"nodeId", ev->Get()->NodeId});
     // Dont set Connected = true.
     // Wait TEvPing from row dispatchers.
 }
@@ -421,7 +421,7 @@ void TActorCoordinator::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr&
 void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     YDB_LOG_DEBUG("TEvNodeDisconnected, node id",
         {"logPrefix", LogPrefix},
-        {"#_ev->Get()->NodeId", ev->Get()->NodeId});
+        {"nodeId", ev->Get()->NodeId});
 
     for (auto& [actorId, info] : RowDispatchers) {
         if (ev->Get()->NodeId != actorId.NodeId()) {
@@ -471,7 +471,7 @@ void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
     YDB_LOG_DEBUG("New leader SelfId",
         {"logPrefix", LogPrefix},
-        {"#_ev->Get()->CoordinatorActorId", ev->Get()->CoordinatorActorId},
+        {"coordinatorActorId", ev->Get()->CoordinatorActorId},
         {"selfId", SelfId()});
     Metrics.LeaderChanged->Inc();
 
@@ -541,8 +541,8 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
     TStringStream str;
     YDB_LOG_INFO("TEvCoordinatorRequest",
         {"logPrefix", LogPrefix},
-        {"#_ev->Sender", ev->Sender},
-        {"#_source.GetTopicPath", source.GetTopicPath()},
+        {"sender", ev->Sender},
+        {"topicPath", source.GetTopicPath()},
         {"partIds", JoinSeq(", ", ev->Get()->Record.GetPartitionIds())});
     Metrics.IncomingRequests->Inc();
 
@@ -628,7 +628,7 @@ void TActorCoordinator::Handle(TEvPrivate::TEvPrintState::TPtr&) {
 
 void TActorCoordinator::Handle(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult::TPtr& ev) {
     if (!ev->Get()->Success) {
-        YDB_LOG_ERROR("Failed to get TEvLookupResult, try later.",
+        YDB_LOG_ERROR("Failed to get TEvLookupResult, try later",
             {"logPrefix", LogPrefix});
         ScheduleNodeInfoRequest();
         return;
@@ -655,7 +655,7 @@ void TActorCoordinator::Handle(TEvPrivate::TEvListNodes::TPtr&) {
 }
 
 void TActorCoordinator::Handle(TEvPrivate::TEvRebalancing::TPtr&) {
-    YDB_LOG_DEBUG("Rebalancing.",
+    YDB_LOG_DEBUG("Rebalancing",
         {"logPrefix", LogPrefix});
     RebalancingScheduled = false;
 
@@ -669,11 +669,11 @@ void TActorCoordinator::Handle(TEvPrivate::TEvRebalancing::TPtr&) {
         for (auto& [actorId, info] : RowDispatchers) {
             YDB_LOG_DEBUG("Node state connected partitions count",
                 {"logPrefix", LogPrefix},
-                {"#_actorId.NodeId", actorId.NodeId()},
+                {"nodeId", actorId.NodeId()},
                 {"actorId", actorId},
-                {"#_num_0", (info.State == ENodeState::Initializing ? "Initializing" : "Started")},
-                {"#_info.Connected", info.Connected},
-                {"#_info.Locations.size", info.Locations.size()});
+                {"state", (info.State == ENodeState::Initializing ? "Initializing" : "Started")},
+                {"connected", info.Connected},
+                {"locations", info.Locations.size()});
         }
     };
 

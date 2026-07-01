@@ -233,9 +233,9 @@ void TLeaderElection::Bootstrap() {
         {"logPrefix", LogPrefix},
         {"coordinatorId", CoordinatorId},
         {"tenantId", TenantId},
-        {"#_Config.GetLocalMode", Config.GetLocalMode()},
+        {"localMode", Config.GetLocalMode()},
         {"coordinationNodePath", CoordinationNodePath},
-        {"#_Config.GetDatabase().GetEndpoint", Config.GetDatabase().GetEndpoint()});
+        {"endpoint", Config.GetDatabase().GetEndpoint()});
     if (Config.GetLocalMode()) {
         TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(CoordinatorId, 0));
         return;
@@ -347,7 +347,7 @@ void TLeaderElection::Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev) {
     if (!IsTableCreated(ev->Get()->Result)) {
         YDB_LOG_ERROR("Schema creation error",
             {"logPrefix", LogPrefix},
-            {"#_ev->Get()->Result.GetIssues", ev->Get()->Result.GetIssues()});
+            {"issues", ev->Get()->Result.GetIssues()});
         Metrics.Errors->Inc();
         ResetState();
         return;
@@ -363,7 +363,7 @@ void TLeaderElection::Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev) {
     if (!result.IsSuccess()) {
         YDB_LOG_ERROR("CreateSession failed",
             {"logPrefix", LogPrefix},
-            {"#_result.GetIssues", result.GetIssues()});
+            {"issues", result.GetIssues()});
         Metrics.Errors->Inc();
         ResetState();
         return;
@@ -379,7 +379,7 @@ void TLeaderElection::Handle(TEvPrivate::TEvCreateSemaphoreResult::TPtr& ev) {
     if (!IsTableCreated(result)) {
         YDB_LOG_ERROR("Semaphore creating error",
             {"logPrefix", LogPrefix},
-            {"#_result.GetIssues", result.GetIssues()});
+            {"issues", result.GetIssues()});
         Metrics.Errors->Inc();
         ResetState();
         return;
@@ -397,7 +397,7 @@ void TLeaderElection::Handle(TEvPrivate::TEvAcquireSemaphoreResult::TPtr& ev) {
     if (!result.IsSuccess()) {
         YDB_LOG_ERROR("Failed to acquire semaphore",
             {"logPrefix", LogPrefix},
-            {"#_result.GetIssues", result.GetIssues()});
+            {"issues", result.GetIssues()});
         Metrics.Errors->Inc();
         ResetState();
         return;
@@ -471,7 +471,7 @@ void TLeaderElection::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
     if (!result.IsSuccess()) {
         YDB_LOG_ERROR("Semaphore describe fail",
             {"logPrefix", LogPrefix},
-            {"#_result.GetIssues", result.GetIssues()});
+            {"issues", result.GetIssues()});
         Metrics.Errors->Inc();
         ResetState();
         return;
@@ -503,7 +503,7 @@ void TLeaderElection::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
             {"logPrefix", LogPrefix},
             {"parentId", ParentId},
             {"id", id},
-            {"#_LeaderActorId.GetOrElse(TActorId())", LeaderActorId.GetOrElse(TActorId())});
+            {"leaderActorId", LeaderActorId.GetOrElse(TActorId())});
         TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(id, generation));
         Metrics.LeaderChanged->Inc();
     }

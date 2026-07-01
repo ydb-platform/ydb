@@ -422,7 +422,7 @@ public:
             YDB_LOG_TRACE("Add rows to client without processing",
                 {"logPrefix", LogPrefix},
                 {"numberRows", numberRows},
-                {"#_Consumer_->GetClientId", Consumer_->GetClientId()});
+                {"clientId", Consumer_->GetClientId()});
             for (ui64 rowId = 0; rowId < numberRows; ++rowId) {
                 NYql::NUdf::TUnboxedValue value = NYql::NUdf::TUnboxedValuePod{rowId};
                 Consumer_->OnData(&value);

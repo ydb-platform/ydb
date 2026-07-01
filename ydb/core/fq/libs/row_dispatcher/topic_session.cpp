@@ -460,7 +460,7 @@ void TTopicSession::Bootstrap() {
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " [" + TopicPathPartition + "] ";
     YDB_LOG_INFO("Bootstrap, Timeout sec",
         {"logPrefix", LogPrefix},
-        {"#_Config.GetTimeoutBeforeStartSession", Config.GetTimeoutBeforeStartSession()});
+        {"timeout", Config.GetTimeoutBeforeStartSession()});
     Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
     Schedule(TDuration::Seconds(GetEventByTimerPeriodSec), new NFq::TEvPrivate::TEvGetEventByTimerEvent());
 }
@@ -543,7 +543,7 @@ NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings(const T
         {"topicPathPartition", TopicPathPartition},
         {"minTime", minTime},
         {"bufferSize", BufferSize},
-        {"#_Config.GetConsumerMode", Config.GetConsumerMode()});
+        {"consumerMode", Config.GetConsumerMode()});
 
     auto settings = NYdb::NTopic::TReadSessionSettings()
         .TraceId(LogPrefix)
@@ -617,7 +617,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&) {
         {"topicPathPartition", TopicPathPartition},
         {"startingMessageTimestamp", StartingMessageTimestamp},
         {"bufferSize", BufferSize},
-        {"#_Config.GetConsumerMode", Config.GetConsumerMode()});
+        {"consumerMode", Config.GetConsumerMode()});
     RefreshParsers();
     StopReadSession();
     CreateTopicSession();
@@ -626,13 +626,13 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&) {
 void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
     YDB_LOG_TRACE("TEvGetNextBatch",
         {"logPrefix", LogPrefix},
-        {"#_ev->Sender", ev->Sender});
+        {"sender", ev->Sender});
     Metrics.InFlyAsyncInputData->Set(0);
     auto it = Clients.find(ev->Sender);
     if (it == Clients.end()) {
         YDB_LOG_ERROR("Wrong client, sender",
             {"logPrefix", LogPrefix},
-            {"#_ev->Sender", ev->Sender});
+            {"sender", ev->Sender});
         return;
     }
     SendData(*it->second);
@@ -719,7 +719,7 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TSessionClose
     YDB_LOG_DEBUG("Dump logPrefix, message, #_ev.DebugString",
         {"logPrefix", LogPrefix},
         {"message", message},
-        {"#_ev.DebugString", ev.DebugString()});
+        {"ev", ev.DebugString()});
 
     Self.ThrowFatalError(TStatus::Fail(
         NYql::NDq::YdbStatusToDqStatus(static_cast<Ydb::StatusIds::StatusCode>(ev.GetStatus())),
@@ -802,9 +802,9 @@ void TTopicSession::SendData(TClientsInfo& info) {
     if (!info.NextMessageOffset) {
         YDB_LOG_ERROR("Try SendData() without NextMessageOffset, unread DataArrivedSent",
             {"logPrefix", LogPrefix},
-            {"#_info.ReadActorId", info.ReadActorId},
-            {"#_info.QueuedBytes", info.QueuedBytes},
-            {"#_info.DataArrivedSent", info.DataArrivedSent});
+            {"readActorId", info.ReadActorId},
+            {"queuedBytes", info.QueuedBytes},
+            {"dataArrivedSent", info.DataArrivedSent});
         return;
     }
 
@@ -840,8 +840,8 @@ void TTopicSession::SendData(TClientsInfo& info) {
         }
         YDB_LOG_TRACE("SendData to batch size",
             {"logPrefix", LogPrefix},
-            {"#_info.ReadActorId", info.ReadActorId},
-            {"#_event->Record.MessagesSize", event->Record.MessagesSize()});
+            {"readActorId", info.ReadActorId},
+            {"messagesSize", event->Record.MessagesSize()});
         Send(RowDispatcherActorId, event.release());
     } while(!buffer.empty());
 
@@ -859,8 +859,8 @@ void TTopicSession::SendData(TClientsInfo& info) {
 void TTopicSession::StartClientSession(TClientsInfo& info) {
     YDB_LOG_TRACE("StartClientSession, read actor id offset",
         {"logPrefix", LogPrefix},
-        {"#_info.ReadActorId", info.ReadActorId},
-        {"#_info.GetNextMessageOffset", info.GetNextMessageOffset()});
+        {"readActorId", info.ReadActorId},
+        {"getNextMessageOffset", info.GetNextMessageOffset()});
     if (ReadSession) {
         auto offset = info.GetNextMessageOffset();
         if (offset && offset <= LastMessageOffset) {
@@ -889,7 +889,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     const auto& source = ev->Get()->Record.GetSource();
     YDB_LOG_INFO("New client: read actor id watermark",
         {"logPrefix", LogPrefix},
-        {"#_ev->Sender", ev->Sender},
+        {"sender", ev->Sender},
         {"predicate", source.GetPredicate()},
         {"expr", source.GetWatermarkExpr()},
         {"offset", offset});
@@ -934,15 +934,15 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
     YDB_LOG_DEBUG("TEvStopSession from topicPath clients count",
         {"logPrefix", LogPrefix},
-        {"#_ev->Sender", ev->Sender},
-        {"#_ev->Get()->Record.GetSource().GetTopicPath", ev->Get()->Record.GetSource().GetTopicPath()},
-        {"#_Clients.size", Clients.size()});
+        {"sender", ev->Sender},
+        {"topicPath", ev->Get()->Record.GetSource().GetTopicPath()},
+        {"clientsSize", Clients.size()});
 
     auto it = Clients.find(ev->Sender);
     if (it == Clients.end()) {
         YDB_LOG_WARN("Ignore TEvStopSession from no client",
             {"logPrefix", LogPrefix},
-            {"#_ev->Sender", ev->Sender});
+            {"sender", ev->Sender});
         return;
     }
     auto& info = *it->second;
@@ -989,7 +989,7 @@ void TTopicSession::RestartSessionIfOldestClient(const TClientsInfo& info) {
     }
     YDB_LOG_INFO("Client (on StopSession) has less offset than others clients stop (restart) topic session",
         {"logPrefix", LogPrefix},
-        {"#_info.NextMessageOffset", info.NextMessageOffset},
+        {"nextMessageOffset", info.NextMessageOffset},
         {"minMessageOffset", minMessageOffset});
     Metrics.RestartSessionByOffsets->Inc();
     ++RestartSessionByOffsets;
@@ -1056,7 +1056,7 @@ void TTopicSession::SendDataArrived(TClientsInfo& info) {
     info.DataArrivedSent = true;
     YDB_LOG_TRACE("Send TEvNewDataArrived",
         {"logPrefix", LogPrefix},
-        {"#_info.ReadActorId", info.ReadActorId});
+        {"readActorId", info.ReadActorId});
     Metrics.InFlyAsyncInputData->Set(1);
     auto event = std::make_unique<TEvRowDispatcher::TEvNewDataArrived>();
     event->Record.SetPartitionId(PartitionId);
@@ -1147,7 +1147,7 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
         YDB_LOG_INFO("Different consumer, expected actual send error",
             {"logPrefix", LogPrefix},
             {"consumerName", ConsumerName},
-            {"#_source.GetConsumerName", source.GetConsumerName()});
+            {"sourceConsumerName", source.GetConsumerName()});
         SendSessionError(ev->Sender, TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Use the same consumer in all queries via RD (current consumer " << ConsumerName << ")"), false);
         return false;
     }
@@ -1156,7 +1156,7 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
         YDB_LOG_INFO("Different skip json errors mode, expected actual send error",
             {"logPrefix", LogPrefix},
             {"skipJsonErrors", SkipJsonErrors},
-            {"#_source.GetSkipJsonErrors", source.GetSkipJsonErrors()});
+            {"sourceSkipJsonErrors", source.GetSkipJsonErrors()});
         SendSessionError(ev->Sender, TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Use the same skip json errors settings in all queries via RD (current mode " << SkipJsonErrors << ")"), false);
         return false;
     }

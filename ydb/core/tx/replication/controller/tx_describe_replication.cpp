@@ -11,6 +11,8 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TTargetDescriber: public TActorBootstrapped<TTargetDescriber> {
@@ -20,11 +22,14 @@ class TTargetDescriber: public TActorBootstrapped<TTargetDescriber> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"logPrefix", LogPrefix},
+            {"ev", ev->Get()->ToString()});
 
         if (!Targets.contains(ev->Cookie)) {
-            LOG_W("Unknown describe response"
-                << ": cookie# " << ev->Cookie);
+            YDB_LOG_WARN("Unknown describe response",
+                {"logPrefix", LogPrefix},
+                {"cookie", ev->Cookie});
             return;
         }
 
@@ -32,24 +37,27 @@ class TTargetDescriber: public TActorBootstrapped<TTargetDescriber> {
         const auto& path = Targets.at(id);
 
         if (Result.contains(id)) {
-            LOG_W("Duplicate describe response"
-                << ": id# " << id
-                << ", path# " << path);
+            YDB_LOG_WARN("Duplicate describe response",
+                {"logPrefix", LogPrefix},
+                {"id", id},
+                {"path", path});
             return;
         }
 
         auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
-            LOG_D("Describe succeeded"
-                << ": id# " << id
-                << ", path# " << path);
+            YDB_LOG_DEBUG("Describe succeeded",
+                {"logPrefix", LogPrefix},
+                {"id", id},
+                {"path", path});
             Result.emplace(id, std::move(result));
         } else {
-            LOG_E("Describe failed"
-                << ": id# " << id
-                << ", path# " << path
-                << ", status# " << result.GetStatus()
-                << ", issues# " << result.GetIssues().ToOneLineString());
+            YDB_LOG_ERROR("Describe failed",
+                {"logPrefix", LogPrefix},
+                {"id", id},
+                {"path", path},
+                {"status", result.GetStatus()},
+                {"issues", result.GetIssues().ToOneLineString()});
             Result.emplace(id, std::nullopt);
         }
 
@@ -144,7 +152,9 @@ public:
     }
 
     bool ExecutePub(TTransactionContext&, const TActorContext& ctx) {
-        CLOG_D(ctx, "Execute: " << PubEv->Get()->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
+            {"logPrefix", LogPrefix},
+            {"execute", PubEv->Get()->ToString()});
 
         const auto& record = PubEv->Get()->Record;
         const auto pathId = TPathId::FromProto(record.GetPathId());
@@ -175,7 +185,9 @@ public:
     }
 
     bool ExecutePriv(TTransactionContext&, const TActorContext& ctx) {
-        CLOG_D(ctx, "Execute: " << PrivEv->Get()->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
+            {"logPrefix", LogPrefix},
+            {"execute", PrivEv->Get()->ToString()});
 
         const auto rid = PrivEv->Get()->ReplicationId;
 
@@ -301,7 +313,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "Complete",
+            {"logPrefix", LogPrefix});
 
         if (Result) {
             ctx.Send(Sender, Result.Release());

@@ -1,5 +1,7 @@
 #include "controller_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TController::TTxWorkerError: public TTxBase {
@@ -19,35 +21,40 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute"
-            << ": workerId# " << WorkerId
-            << ", error# " << Error);
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"logPrefix", LogPrefix},
+            {"workerId", WorkerId},
+            {"error", Error});
 
         auto replication = Self->Find(WorkerId.ReplicationId());
         if (!replication) {
-            CLOG_W(ctx, "Unknown replication"
-                << ": rid# " << WorkerId.ReplicationId());
+            YDB_LOG_WARN_CTX(ctx, "Unknown replication",
+                {"logPrefix", LogPrefix},
+                {"rid", WorkerId.ReplicationId()});
             return true;
         }
 
         if (replication->GetState() == TReplication::EState::Removing) {
-            CLOG_W(ctx, "Replication is being removed"
-                << ": rid# " << WorkerId.ReplicationId());
+            YDB_LOG_WARN_CTX(ctx, "Replication is being removed",
+                {"logPrefix", LogPrefix},
+                {"rid", WorkerId.ReplicationId()});
             return true;
         }
 
         auto* target = replication->FindTarget(WorkerId.TargetId());
         if (!target) {
-            CLOG_W(ctx, "Unknown target"
-                << ": rid# " << WorkerId.ReplicationId()
-                << ", tid# " << WorkerId.TargetId());
+            YDB_LOG_WARN_CTX(ctx, "Unknown target",
+                {"logPrefix", LogPrefix},
+                {"rid", WorkerId.ReplicationId()},
+                {"tid", WorkerId.TargetId()});
             return true;
         }
 
-        CLOG_E(ctx, "Worker error"
-            << ": rid# " << WorkerId.ReplicationId()
-            << ", tid# " << WorkerId.TargetId()
-            << ", error# " << Error);
+        YDB_LOG_ERROR_CTX(ctx, "Worker error",
+            {"logPrefix", LogPrefix},
+            {"rid", WorkerId.ReplicationId()},
+            {"tid", WorkerId.TargetId()},
+            {"error", Error});
 
         target->SetDstState(TReplication::EDstState::Error);
         target->SetIssue(Error);
@@ -69,7 +76,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "Complete",
+            {"logPrefix", LogPrefix});
     }
 
 }; // TTxWorkerError

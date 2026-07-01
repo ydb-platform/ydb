@@ -1,5 +1,7 @@
 #include "controller_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TController::TTxAlterReplication: public TTxBase {
@@ -19,7 +21,9 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
+            {"logPrefix", LogPrefix},
+            {"execute", Ev->Get()->ToString()});
 
         auto& record = Ev->Get()->Record;
         Result = MakeHolder<TEvController::TEvAlterReplicationResult>();
@@ -30,8 +34,9 @@ public:
         Replication = Self->Find(pathId);
 
         if (!Replication) {
-            CLOG_W(ctx, "Cannot alter unknown replication"
-                << ": pathId# " << pathId);
+            YDB_LOG_WARN_CTX(ctx, "Cannot alter unknown replication",
+                {"logPrefix", LogPrefix},
+                {"pathId", pathId});
 
             Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::UNKNOWN);
             return true;
@@ -127,9 +132,10 @@ public:
         }
 
         if (alter) {
-            CLOG_N(ctx, "Alter replication"
-                << ": rid# " << Replication->GetId()
-                << ", pathId# " << pathId);
+            YDB_LOG_NOTICE_CTX(ctx, "Alter replication",
+                {"logPrefix", LogPrefix},
+                {"rid", Replication->GetId()},
+                {"pathId", pathId});
         } else {
             Replication.Reset();
         }
@@ -138,7 +144,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "Complete",
+            {"logPrefix", LogPrefix});
 
         if (Result) {
             ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);

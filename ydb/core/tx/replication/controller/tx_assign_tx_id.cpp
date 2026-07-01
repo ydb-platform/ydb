@@ -2,6 +2,8 @@
 
 #include <variant>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TController::TTxAssignTxId: public TTxBase {
@@ -70,10 +72,11 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute"
-            << ": pending# " << Self->PendingTxId.size()
-            << ", assigned# " << Self->AssignedTxIds.size()
-            << ", allocated# " << Self->AllocatedTxIds.size());
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"logPrefix", LogPrefix},
+            {"pending", Self->PendingTxId.size()},
+            {"assigned", Self->AssignedTxIds.size()},
+            {"allocated", Self->AllocatedTxIds.size()});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -135,11 +138,12 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete"
-            << ": pending# " << Self->PendingTxId.size()
-            << ", assigned# " << Self->AssignedTxIds.size()
-            << ", allocated# " << Self->AllocatedTxIds.size()
-            << ", exhausted# " << TxIdsExhausted);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete",
+            {"logPrefix", LogPrefix},
+            {"pending", Self->PendingTxId.size()},
+            {"assigned", Self->AssignedTxIds.size()},
+            {"allocated", Self->AllocatedTxIds.size()},
+            {"exhausted", TxIdsExhausted});
 
         Self->TabletCounters->Simple()[COUNTER_PENDING_VERSIONS] = Self->PendingTxId.size();
         Self->TabletCounters->Simple()[COUNTER_ALLOCATED_TX_IDS] = Self->AllocatedTxIds.size();
@@ -171,7 +175,9 @@ void TController::RunTxAssignTxId(const TActorContext& ctx) {
 }
 
 void TController::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"logPrefix", LogPrefix},
+        {"ev", ev->Get()->ToString()});
 
     std::copy(ev->Get()->TxIds.begin(), ev->Get()->TxIds.end(), std::back_inserter(AllocatedTxIds));
     AllocateTxIdInFlight = false;

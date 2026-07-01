@@ -1,5 +1,7 @@
 #include "controller_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TController::TTxDropDstResult: public TTxBase {
@@ -18,44 +20,51 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
+            {"logPrefix", LogPrefix},
+            {"execute", Ev->Get()->ToString()});
 
         const auto rid = Ev->Get()->ReplicationId;
         const auto tid = Ev->Get()->TargetId;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            CLOG_W(ctx, "Unknown replication"
-                << ": rid# " << rid);
+            YDB_LOG_WARN_CTX(ctx, "Unknown replication",
+                {"logPrefix", LogPrefix},
+                {"rid", rid});
             return true;
         }
 
         auto* target = Replication->FindTarget(tid);
         if (!target) {
-            CLOG_W(ctx, "Unknown target"
-                << ": rid# " << rid
-                << ", tid# " << tid);
+            YDB_LOG_WARN_CTX(ctx, "Unknown target",
+                {"logPrefix", LogPrefix},
+                {"rid", rid},
+                {"tid", tid});
             return true;
         }
 
         if (target->GetDstState() != TReplication::EDstState::Removing) {
-            CLOG_W(ctx, "Dst state mismatch"
-                << ": rid# " << rid
-                << ", tid# " << tid
-                << ", state# " << target->GetDstState());
+            YDB_LOG_WARN_CTX(ctx, "Dst state mismatch",
+                {"logPrefix", LogPrefix},
+                {"rid", rid},
+                {"tid", tid},
+                {"state", target->GetDstState()});
             return true;
         }
 
         if (Ev->Get()->IsSuccess()) {
-            CLOG_N(ctx, "Target dst dropped"
-                << ": rid# " << rid
-                << ", tid# " << tid);
+            YDB_LOG_NOTICE_CTX(ctx, "Target dst dropped",
+                {"logPrefix", LogPrefix},
+                {"rid", rid},
+                {"tid", tid});
         } else {
-            CLOG_E(ctx, "Drop dst error"
-                << ": rid# " << rid
-                << ", tid# " << tid
-                << ", " << NKikimrScheme::EStatus_Name(Ev->Get()->Status)
-                << ", " << Ev->Get()->Error);
+            YDB_LOG_ERROR_CTX(ctx, "Drop dst error",
+                {"logPrefix", LogPrefix},
+                {"rid", rid},
+                {"tid", tid},
+                {"status", NKikimrScheme::EStatus_Name(Ev->Get()->Status)},
+                {"error", Ev->Get()->Error});
         }
 
         NIceDb::TNiceDb db(txc.DB);
@@ -70,7 +79,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "Complete",
+            {"logPrefix", LogPrefix});
 
         if (Replication) {
             Replication->Progress(ctx);

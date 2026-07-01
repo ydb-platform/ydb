@@ -7,6 +7,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TTenantResolver: public TActorBootstrapped<TTenantResolver> {
@@ -29,22 +31,26 @@ class TTenantResolver: public TActorBootstrapped<TTenantResolver> {
         Y_ABORT_UNLESS(response->ResultSet.size() == 1);
         const auto& entry = response->ResultSet.front();
 
-        LOG_T("Handle " << ev->Get()->ToString()
-            << ": entry# " << entry.ToString());
+        YDB_LOG_TRACE("Handle",
+            {"logPrefix", LogPrefix},
+            {"ev", ev->Get()->ToString()},
+            {"entry", entry});
 
         switch (entry.Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
         default:
-            LOG_W("Unexpected status"
-                << ": entry# " << entry.ToString());
+            YDB_LOG_WARN("Unexpected status",
+                {"logPrefix", LogPrefix},
+                {"entry", entry});
             return Reply(false);
         }
 
         if (!DomainKey) {
             if (!entry.DomainInfo) {
-                LOG_E("Empty domain info"
-                    << ": entry# " << entry.ToString());
+                YDB_LOG_ERROR("Empty domain info",
+                    {"logPrefix", LogPrefix},
+                    {"entry", entry});
                 return Reply(false);
             }
 

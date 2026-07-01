@@ -1038,12 +1038,11 @@ private:
     bool HasTableEffects(const TExprList& effectsList) const {
         for (const TExprBase& effect : effectsList) {
             if (auto maybeSinkEffect = effect.Maybe<TKqpSinkEffect>()) {
-                const auto dqSink = GetStageSink(maybeSinkEffect.Cast());
-                if (!dqSink) {
-                    // TODO: process output transforms
-                    continue;
-                }
-                auto dataSink = TCoDataSink(dqSink.Cast().DataSink().Ptr());
+                // Both TDqSink and TDqTransform derive from TDqOutputAnnotationBase,
+                // so the DataSink is read from the base uniformly for sinks and transforms.
+                const auto output = GetStageOutput(maybeSinkEffect.Cast());
+                AFL_ENSURE(output);
+                auto dataSink = TCoDataSink(output.Cast().DataSink().Ptr());
                 if (dataSink.Category() == YdbProviderName || dataSink.Category() == KikimrProviderName) {
                     return true;
                 }

@@ -416,7 +416,6 @@ public:
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
-    virtual TVector<std::reference_wrapper<TExpression>> GetComplexExpressions();
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual bool PropagateNameConstraints() override;
     virtual TPlanAliases::TAliasMap ComputeAliases() override;

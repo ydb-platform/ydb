@@ -3513,6 +3513,17 @@ namespace NSchemeShardUT_Private {
         return TestSetColumnConstraint(runtime, txId, schemeShard, dbName, tablePath, notNullColumns, "", false);
     }
 
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraintWithoutSettings(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        ui64 schemeShard,
+        const TString& dbName,
+        const TString& tablePath,
+        const TVector<TString>& notNullColumns)
+    {
+        return TestSetColumnConstraint(runtime, txId, schemeShard, dbName, tablePath, notNullColumns, "", true);
+    }
+
     NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(
         TTestActorRuntime& runtime,
         ui64 txId,
@@ -3523,18 +3534,6 @@ namespace NSchemeShardUT_Private {
         const TString& userSID)
     {
         return TestSetColumnConstraint(runtime, txId, schemeShard, dbName, tablePath, notNullColumns, userSID, false);
-    }
-
-    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(
-        TTestActorRuntime& runtime,
-        ui64 txId,
-        ui64 schemeShard,
-        const TString& dbName,
-        const TString& tablePath,
-        const TVector<TString>& notNullColumns,
-        bool skipSettings)
-    {
-        return TestSetColumnConstraint(runtime, txId, schemeShard, dbName, tablePath, notNullColumns, "", skipSettings);
     }
 
     void AsyncSetColumnConstraint(

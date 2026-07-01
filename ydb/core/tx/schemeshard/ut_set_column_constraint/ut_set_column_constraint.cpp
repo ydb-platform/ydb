@@ -272,13 +272,12 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         ui64 txId = 100;
 
-        auto response = TestSetColumnConstraint(
+        auto response = TestSetColumnConstraintWithoutSettings(
             runtime, ++txId,
             TTestTxConfig::SchemeShard,
             "/MyRoot",
             "skip",
-            {"skip"},
-            true);
+            {"skip"});
 
         Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
 

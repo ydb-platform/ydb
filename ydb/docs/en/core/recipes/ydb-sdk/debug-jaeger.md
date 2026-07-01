@@ -16,25 +16,25 @@ Below are examples of code for enabling tracing in Jaeger in different {{ ydb-sh
 
       ```go
       package main
-  
+
       import (
           "context"
           "time"
-  
+
           "github.com/opentracing/opentracing-go"
           jaegerConfig "github.com/uber/jaeger-client-go/config"
-  
+
           "github.com/ydb-platform/ydb-go-sdk/v3"
           "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-  
+
           tracing "github.com/ydb-platform/ydb-go-sdk-opentracing"
       )
-  
+
       const (
           tracerURL   = "localhost:5775"
           serviceName = "ydb-go-sdk"
       )
-  
+
       func main() {
           tracer, closer, err := jaegerConfig.Configuration{
               ServiceName: serviceName,
@@ -51,15 +51,15 @@ Below are examples of code for enabling tracing in Jaeger in different {{ ydb-sh
           if err != nil {
               panic(err)
           }
-  
+
           defer closer.Close()
-  
+
           // set global tracer of this application
           opentracing.SetGlobalTracer(tracer)
-  
+
           span, ctx := opentracing.StartSpanFromContext(context.Background(), "client")
           defer span.Finish()
-  
+
           db, err := ydb.Open(ctx,
               os.Getenv("YDB_CONNECTION_STRING"),
               tracing.WithTraces(tracing.WithDetails(trace.DetailsAll)),
@@ -76,26 +76,26 @@ Below are examples of code for enabling tracing in Jaeger in different {{ ydb-sh
 
       ```go
       package main
-  
+
       import (
           "context"
           "database/sql"
           "time"
-  
+
           "github.com/opentracing/opentracing-go"
           jaegerConfig "github.com/uber/jaeger-client-go/config"
-  
+
           "github.com/ydb-platform/ydb-go-sdk/v3"
           "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-  
+
           tracing "github.com/ydb-platform/ydb-go-sdk-opentracing"
       )
-  
+
       const (
           tracerURL   = "localhost:5775"
           serviceName = "ydb-go-sdk"
       )
-  
+
       func main() {
           tracer, closer, err := jaegerConfig.Configuration{
               ServiceName: serviceName,
@@ -112,15 +112,15 @@ Below are examples of code for enabling tracing in Jaeger in different {{ ydb-sh
           if err != nil {
               panic(err)
           }
-  
+
           defer closer.Close()
-  
+
           // set global tracer of this application
           opentracing.SetGlobalTracer(tracer)
-  
+
           span, ctx := opentracing.StartSpanFromContext(context.Background(), "client")
           defer span.Finish()
-  
+
           nativeDriver, err := ydb.Open(ctx,
               os.Getenv("YDB_CONNECTION_STRING"),
               tracing.WithTraces(tracing.WithDetails(trace.DetailsAll)),
@@ -129,12 +129,12 @@ Below are examples of code for enabling tracing in Jaeger in different {{ ydb-sh
               panic(err)
           }
           defer nativeDriver.Close(ctx)
-  
+
           connector, err := ydb.Connector(nativeDriver)
           if err != nil {
               panic(err)
           }
-  
+
           db := sql.OpenDB(connector)
           defer db.Close()
           ...
@@ -162,6 +162,8 @@ Below are examples of code for enabling tracing in Jaeger in different {{ ydb-sh
 - Rust
 
   Feature not supported
+
+  Use the [`tracing`](https://docs.rs/tracing) ecosystem and OpenTelemetry export ([#268](https://github.com/ydb-platform/ydb-rs-sdk/issues/268)).
 
 - PHP
 

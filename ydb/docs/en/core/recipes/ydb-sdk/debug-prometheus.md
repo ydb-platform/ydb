@@ -97,12 +97,10 @@ Below are examples of the code for enabling metrics in Prometheus in different {
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
-- Python
+- Rust
 
-  This functionality is not currently supported.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-- Python
-
-  This functionality is not currently supported.
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#267](https://github.com/ydb-platform/ydb-rs-sdk/issues/267)
 
 {% endlist %}

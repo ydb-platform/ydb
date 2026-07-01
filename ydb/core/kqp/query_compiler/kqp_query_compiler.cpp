@@ -1829,10 +1829,8 @@ private:
         return columnToOrder;
     }
 
-    // The parsed shape of the write stream input row (one StructType from the stage
-    // program). Immutable value-object produced by DetermineInputRowFormat.
+    // The parsed shape of the write stream input row (one StructType from the stage program)
     struct TSinkInputShape {
-        // Input columns of the write stream (the updated columns in StructOfRows case).
         TVector<TStringBuf> Columns;
         // True for INPUT_ROW_FORMAT_STRUCT_OF_ROWS (UPDATE WHERE with new/old structs).
         bool IsStructOfNewAndOldValues = false;
@@ -1869,8 +1867,6 @@ private:
         }
     }
 
-    // Decides INPUT_ROW_FORMAT and returns the parsed input shape.
-    // Invariant: STRUCT_OF_ROWS implies stream-write enabled and mode == update_conditional.
     TSinkInputShape DetermineInputRowFormat(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, const TDqPhyStage& stage) {
         const auto* structType = GetSeqItemType(stage.Program().Ref().GetTypeAnn())->Cast<TStructExprType>();
         YQL_ENSURE(structType);
@@ -1922,8 +1918,7 @@ private:
         return shape;
     }
 
-    // DEFAULT columns that are processed locally (shards DefaultColumnsCount feature),
-    // both by id and by name.
+    // DEFAULT columns that are processed at datashard
     struct TLocalDefaultColumns {
         THashSet<ui32> Ids;
         THashSet<TStringBuf> Names;
@@ -1954,8 +1949,6 @@ private:
         THashSet<size_t> AffectedKeys;
     };
 
-    // Determines which secondary indexes are affected by the write and which of
-    // them have their key columns changed.
     TAffectedIndexes ComputeAffectedIndexes(const TKqpTableSinkSettings& settings, const TKikimrTableMetadataPtr& tableMeta,
             const THashSet<TStringBuf>& columnsSet, const THashSet<TStringBuf>& mainKeyColumnsSet) {
         const auto mode = settings.Mode().StringValue();
@@ -1996,8 +1989,7 @@ private:
         return result;
     }
 
-    // Whether old row values must be read before the write (for index maintenance
-    // or to satisfy RETURNING).
+    // Whether old row values must be read before the write (for index maintenance or to satisfy RETURNING).
     bool ComputeNeedOldValues(const TKqpTableSinkSettings& settings, const TKikimrTableMetadataPtr& tableMeta,
             const std::vector<size_t>& affectedIndexes, const THashSet<TStringBuf>& columnsSet, const THashSet<TStringBuf>& mainKeyColumnsSet,
             const THashSet<TStringBuf>& localDefaultColumns) {
@@ -2038,13 +2030,14 @@ private:
             return false;
         });
 
+        // Need to lookup missing columns from RETURNING, including default columns
+        // that were injected into the input (those are not genuine user input).
         const bool returningNeedsLookup = std::any_of(settings.ReturningColumns().begin(), settings.ReturningColumns().end(), [&](const auto& columnName) {
-            // Need to lookup missing columns from RETURNING, including default columns
-            // that were injected into the input (those are not genuine user input).
             return !columnsSet.contains(columnName.StringValue()) || localDefaultColumns.contains(columnName.StringValue());
         });
 
-        const bool returningNeedsExistenceCheck = !settings.ReturningColumns().Empty() // Need to check if row exists for RETURNING
+        // Need to check if row exists for RETURNING
+        const bool returningNeedsExistenceCheck = !settings.ReturningColumns().Empty()
             && (mode == "update" || mode == "delete");
 
         return indexNeedsOldValues || returningNeedsLookup || returningNeedsExistenceCheck;
@@ -2323,7 +2316,6 @@ private:
                 FillColumnProto(columnName, columnMeta, keyColumnProto);
             }
 
-            // FIXME: Should be unified but it needs refactoring
             if (indexDescription.Type == TIndexDescription::EType::GlobalSync ||
                 indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
                 FillSyncIndexSettings(indexDescription, implTable, indexSettings, tablesMap, shape.Columns, lookupColumns, localDefaultColumns);

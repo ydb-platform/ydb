@@ -28,6 +28,8 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DATASHARD_BACKUP
+
 namespace NKikimr {
 namespace NYndx {
 
@@ -181,9 +183,9 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
     void Handle(TEvYtWrapper::TEvNodeExistsResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvYtWrapper::TEvNodeExistsResponse"
-            << ": self# " << SelfId()
-            << ", result# " << ToString(result));
+        YDB_LOG_DEBUG("[Export] [yt] Handle TEvYtWrapper::TEvNodeExistsResponse",
+            {"self", SelfId()},
+            {"result", ToString(result)});
 
         if (!CheckResult(result, TStringBuf("NodeExists"))) {
             return;
@@ -220,9 +222,9 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
     void Handle(TEvYtWrapper::TEvCreateNodeResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvYtWrapper::TEvCreateNodeResponse"
-            << ": self# " << SelfId()
-            << ", result# " << ToString(result));
+        YDB_LOG_DEBUG("[Export] [yt] Handle TEvYtWrapper::TEvCreateNodeResponse",
+            {"self", SelfId()},
+            {"result", ToString(result)});
 
         if (!CheckResult(result, TStringBuf("CreateNode"))) {
             return;
@@ -234,9 +236,9 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
     void Handle(TEvYtWrapper::TEvGetNodeResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvYtWrapper::TEvGetNodeResponse"
-            << ": self# " << SelfId()
-            << ", result# " << ToString(result));
+        YDB_LOG_DEBUG("[Export] [yt] Handle TEvYtWrapper::TEvGetNodeResponse",
+            {"self", SelfId()},
+            {"result", ToString(result)});
 
         if (!CheckResult(result, TStringBuf("GetNode"))) {
             return;
@@ -252,9 +254,9 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
     void Handle(TEvYtWrapper::TEvCreateTableWriterResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvYtWrapper::TEvCreateTableWriterResponse"
-            << ": self# " << SelfId()
-            << ", result# " << ToString(result));
+        YDB_LOG_DEBUG("[Export] [yt] Handle TEvYtWrapper::TEvCreateTableWriterResponse",
+            {"self", SelfId()},
+            {"result", ToString(result)});
 
         if (!CheckResult(result, TStringBuf("CreateTableWriter"))) {
             return;
@@ -267,9 +269,9 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
     void Handle(TEvYtWrapper::TEvGetNameTableResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvYtWrapper::TEvGetNameTableResponse"
-            << ": self# " << SelfId()
-            << ", result# " << ToString(result));
+        YDB_LOG_DEBUG("[Export] [yt] Handle TEvYtWrapper::TEvGetNameTableResponse",
+            {"self", SelfId()},
+            {"result", ToString(result)});
 
         if (!CheckResult(result, TStringBuf("GetNameTable"))) {
             return;
@@ -286,9 +288,9 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
     }
 
     void Handle(TEvExportScan::TEvReady::TPtr& ev) {
-        EXPORT_LOG_D("Handle TEvExportScan::TEvReady"
-            << ": self# " << SelfId()
-            << ", sender# " << ev->Sender);
+        YDB_LOG_DEBUG("[Export] [yt] Handle TEvExportScan::TEvReady",
+            {"self", SelfId()},
+            {"sender", ev->Sender});
 
         Scanner = ev->Sender;
 
@@ -302,16 +304,16 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
     }
 
     void Handle(TEvBuffer::TPtr& ev) {
-        EXPORT_LOG_D("Handle TEvExportScan::TEvBuffer"
-            << ": self# " << SelfId()
-            << ", sender# " << ev->Sender
-            << ", msg# " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("[Export] [yt] Handle TEvExportScan::TEvBuffer",
+            {"self", SelfId()},
+            {"sender", ev->Sender},
+            {"msg", ev->Get()->ToString()});
 
         if (ev->Sender != Scanner) {
-            EXPORT_LOG_W("Received buffer from unknown scanner"
-                << ": self# " << SelfId()
-                << ", sender# " << ev->Sender
-                << ", scanner# " << Scanner);
+            YDB_LOG_WARN("[Export] [yt] Received buffer from unknown scanner",
+                {"self", SelfId()},
+                {"sender", ev->Sender},
+                {"scanner", Scanner});
             return;
         }
 
@@ -322,9 +324,9 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
     void Handle(TEvYtWrapper::TEvWriteTableResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvYtWrapper::TEvWriteTableResponse"
-            << ": self# " << SelfId()
-            << ", result# " << ToString(result));
+        YDB_LOG_DEBUG("[Export] [yt] Handle TEvYtWrapper::TEvWriteTableResponse",
+            {"self", SelfId()},
+            {"result", ToString(result)});
 
         if (!CheckResult(result, TStringBuf("WriteTable"))) {
             return;
@@ -343,9 +345,10 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
             return true;
         }
 
-        EXPORT_LOG_E("Error at '" << marker << "'"
-            << ": self# " << SelfId()
-            << ", error# " << ToString(result));
+        YDB_LOG_ERROR("[Export] [yt] Error",
+            {"marker", marker},
+            {"self", SelfId()},
+            {"error", ToString(result)});
         RetryOrFinish(result);
 
         return false;
@@ -360,10 +363,10 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
     }
 
     void Finish(bool success = true, const TString& error = TString()) {
-        EXPORT_LOG_I("Finish"
-            << ": self# " << SelfId()
-            << ", success# " << success
-            << ", error# " << error);
+        YDB_LOG_INFO("[Export] [yt] Finish",
+            {"self", SelfId()},
+            {"success", success},
+            {"error", error});
 
         if (!success) {
             Error = error;
@@ -392,10 +395,6 @@ public:
         return NKikimrServices::TActivity::EXPORT_YT_UPLOADER_ACTOR;
     }
 
-    static constexpr TStringBuf LogPrefix() {
-        return "yt"sv;
-    }
-
     explicit TYtUploader(
             const TTableColumns& columns,
             const TString& serverName,
@@ -414,9 +413,9 @@ public:
     }
 
     void Bootstrap() {
-        EXPORT_LOG_D("Bootstrap"
-            << ": self# " << SelfId()
-            << ", attempt# " << Attempt);
+        YDB_LOG_DEBUG("[Export] [yt] Bootstrap",
+            {"self", SelfId()},
+            {"attempt", Attempt});
 
         Become(&TThis::StateWork);
 

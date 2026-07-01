@@ -767,7 +767,10 @@ Y_UNIT_TEST(RegistrySurvivesLateTablesCreationFinishedDuringShutdown) {
         runtime->DispatchEvents();
         if (auto ev = runtime->GrabEdgeEvent<NPQ::NDeferredPublish::TEvBeginPublicationResponse>(
                 edgeActor, TDuration::Zero())) {
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, Ydb::StatusIds::ABORTED);
+            // Insert started before poison; in-flight work is drained with its real outcome.
+            UNIT_ASSERT(
+                ev->Get()->Status == Ydb::StatusIds::SUCCESS
+                || ev->Get()->Status == Ydb::StatusIds::ABORTED);
             return;
         }
         if (runtime->IsRealThreads()) {

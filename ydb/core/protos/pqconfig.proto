@@ -792,6 +792,8 @@ message TBatchHeader {
     }
     optional uint32 Format = 7; //for EPayloadFormat
     optional bool HasKinesis = 8;
+    optional uint32 ClientBlobCount = 9; // physical ClientBlob count; Count is offset span
+    optional uint64 OffsetDelta = 10;
 }
 
 message TUserInfo {

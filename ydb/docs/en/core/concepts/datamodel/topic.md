@@ -1,191 +1,214 @@
 # Topic
 
-A topic in {{ ydb-short-name }} is an entity for storing unstructured messages and delivering them to multiple subscribers. Basically, a topic is a named set of messages.
+A topic in {{ ydb-short-name }} is an entity for storing unstructured messages, designed to deliver them to multiple subscribers. In fact, a topic is a named set of messages.
 
-A producer app writes messages to a topic. Consumer apps are independent of each other, they receive and read messages from the topic in the order they were written there. Topics implement the [publish-subscribe](https://en.wikipedia.org/wiki/Publish–subscribe_pattern) architectural pattern.
+A writer application writes messages to a topic. Reader applications are independent of each other; they receive, or "read", messages from the topic in the order they were written. The topic implements the [publisher-subscriber](https://en.wikipedia.org/wiki/Publish%E2%80%93subscribe_pattern) architectural pattern.
 
-{{ ydb-short-name }} topics have the following properties:
+The {{ ydb-short-name }} topic has the following properties:
 
-* At-least-once delivery guarantees when messages are read by subscribers.
-* Exactly-once delivery guarantees when publishing messages (to ensure there are no duplicate messages).
-* [FIFO](https://en.wikipedia.org/wiki/Message_queue) message processing guarantees for messages published with the same [source ID](#producer-id).
-* Message delivery bandwidth scaling for messages published with different sequence IDs.
+* At-least-once guarantees when reading messages by subscribers.
+* Exactly-once guarantees when publishing messages (message deduplication).
+* Guarantees of sequential message processing ([FIFO](https://en.wikipedia.org/wiki/Message_queue)) for messages published with the same [source identifier](#producer-id).
+* Scaling of message throughput for messages published with different sequence identifiers.
 
 ## Messages {#message}
 
-Data is transferred as message streams. A message is the minimum atomic unit of user information. A message consists of a body, attributes, and additional system properties. The content of a message is an array of bytes which is not interpreted by {{ydb-short-name}} in any way.
+Data is transmitted as message streams. A message is the smallest indivisible unit of user information. Messages consist of a body and attributes, as well as additional system properties. The content of messages is a set of bytes that is not interpreted by {{ ydb-short-name }} in any way.
 
-Messages may contain user-defined attributes in "key-value" format. They are returned along with the message body when reading the message. User-defined attributes let the consumer decide whether it should process the message without unpacking the message body. Message attributes are set when initializing a write session. This means that all messages written within a single write session will have the same attributes when reading them.
+Messages can contain user attributes in the "key-value" format. They are returned together with the message body when reading. User attributes allow the reader to decide whether to process the message without unpacking the message body. Message attributes are set when initializing a write session. This means that all messages written within a single write session will have the same attributes when read.
 
 ## Partitioning {#partitioning}
 
-To enable horizontal scaling, a topic is divided into `partitions` that are units of parallelism. Each partition has a limited throughput. The recommended write speed is 1 MBps.
+For horizontal scaling, a topic is divided into separate elements, *partitions*, which are units of parallelism. Each partition has a limited throughput; the recommended write speed is up to 1 MB/s.
 
 {% note info %}
 
-As of now, you can only reduce the number of partitions in a topic by deleting and recreating a topic with a smaller number of partitions.
+Currently, reducing the number of partitions in a topic is only supported by deleting and recreating the topic with fewer partitions.
 
 {% endnote %}
 
-Partitions can be:
+There are two types of partitions:
 
- - **Active.** By default, all partitions are active. Both read and write operations are allowed on an active partition.
- - **Inactive.** An inactive partition is read-only. A partition becomes inactive after splitting for [autopartitioning](#autopartitioning). It is automatically deleted once all messages are removed due to the expiration of the retention period.
+- **Active.** All partitions by default; both writing and reading are possible.
+- **Inactive.** Only reading is possible from them. Inactive partitions appear after a partition split when [auto-partitioning](#autopartitioning) is enabled. Inactive partitions are automatically deleted when all messages from such a partition have been deleted after the retention period expires.
 
 ### Offset {#offset}
 
-All messages within a partition have a unique sequence number called an `offset`. An offset monotonically increases as new messages are written.
+All messages within a partition have a unique sequence number called `offset` (offset). The offset increases monotonically as new messages are written.
 
-## Autopartitioning {#autopartitioning}
+## Auto-partitioning {#autopartitioning}
 
-Total topic throughput is determined by the number of partitions in the topic and the throughput of each partition. The number of partitions and the throughput of each partition are set at the time of topic creation. If the maximum required write speed for a topic is unknown at the creation time, autopartitioning allows the topic to be scaled automatically. If autopartitioning is enabled for a topic, the number of partitions will increase automatically as the write speed increases (see [Autopartitioning Strategies](#autopartitioning_strategies)).
+The number of topic partitions and their throughput are set when creating the topic and determine the total write throughput of the topic. If the maximum required write speed to the topic is unknown at creation time or will change over time, you can use auto-partitioning to dynamically scale the topic. If auto-partitioning up is enabled on the topic, the number of partitions in such a topic automatically increases as the write speed grows (see [Auto-partitioning modes](#autopartitioning_modes) for details).
 
 ### Guarantees {#autopartitioning_guarantee}
 
-1. The SDK and server provide an exactly-once guarantee in the case of writing during a partition split. This means that any message will be written either to the parent partition or to one of the child partitions but never to both simultaneously. Additionally, a message cannot be written to the same partition multiple times.
-2. The SDK and server maintain the reading order. Data is read from the parent partition first, followed by the child partitions.
-3. As a result, the exactly-once writing guarantee and the reading order guarantee are preserved for a specific [producer identifier](#producer-id).
+1. The SDK and server provide exactly-once write guarantees in case of partition splits. This means that any message will be written either to the parent partition or to one of the child partitions. A message cannot be written to both the parent and child partitions simultaneously. Moreover, a message cannot be written to a single partition multiple times.
+2. The SDK and server ensure the order of reading. First, data will be read from parent partitions, and only then from child partitions.
+3. Thus, the guarantees of exactly-once write and read order continue to hold for a specific [source identifier (producer-id)](#producer-id).
 
-### Autopartitioning Strategies {#autopartitioning_strategies}
+### Auto-partitioning modes {#autopartitioning_modes}
 
-The following autopartitioning strategies are available for any topic:
+The following auto-partitioning modes are available for any topic.
 
-#### DISABLED
+#### Disabled (DISABLED)
 
-Autopartitioning is disabled for this topic. The number of partitions remains constant, and there is no automatic scaling.
+Auto-partitioning is disabled. In this case, the number of partitions remains unchanged and automatic scaling does not occur.
 
-The initial number of partitions is set during topic creation. If the partition count is manually adjusted, new partitions are added. Both previously existing and new partitions are active.
+The initial number of partitions is specified when creating a topic. When manually changing the number of partitions in this mode, new partitions are added. All previously existing partitions remain active.
 
-#### UP
+#### Increase (UP)
 
-Upwards autopartitioning is enabled for this topic. This means that if the write speed to the topic increases, the number of partitions will automatically increase. However, if the write speed decreases, the number of partitions remains unchanged.
+Auto-partitioning is enabled on the topic in the 'up' direction, meaning that when the write speed increases, the number of partitions increases. When the write speed decreases, the number of partitions remains unchanged.
 
-The partition count increase algorithm works as follows: if the write speed for a partition exceeds a defined threshold (as a percentage of the maximum write speed for that partition) during a specified period, the partition is split into two child partitions. The original partition becomes inactive, allowing only read operations. When the retention period expires, and all messages in the original partition are deleted, the partition itself is also deleted. The two new child partitions become active, allowing both read and write operations.
+The algorithm for increasing the number of partitions: if within a specified time the write speed to a partition exceeds the specified threshold (as a percentage of the maximum write speed to the partition), that partition is split into two. The original partition becomes inactive and data can only be read from it. When the message retention period for that partition expires and all messages are deleted, the partition itself is also deleted. Two new child partitions become active, and both reading and writing are possible in them.
 
-#### PAUSED
+#### Pause (PAUSED)
 
-Autopartitioning is paused for this topic, meaning that the number of partitions does not increase automatically. If needed, you can re-enable autopartitioning for this topic.
+Auto-partitioning on the topic is paused. Automatic increase in the number of partitions does not occur. If necessary, you can re-enable the partition increase mode.
 
-Examples of YQL queries for switching between different autopartitioning strategies can be found [here](../../yql/reference/syntax/alter-topic.md#autopartitioning).
+Examples of YQL queries for switching a topic to different auto-partitioning modes can be found [here](../../yql/reference/syntax/alter-topic.md#autopartitioning).
 
-### Autopartitioning Constraints {#autopartitioning_constraints}
+### Limitations {#autopartitioning_constraints}
 
-The following constraints apply when using autopartitioning:
+The following limitations apply when using auto-partitioning:
 
-1. Once autopartitioning is enabled for a topic, it cannot be stopped, only paused.
-2. When autopartitioning is enabled for a topic, it is impossible to read from or write to it using the [Kafka API](../../reference/kafka-api/index.md).
-3. Autopartitioning can only be enabled on topics that use the reserved capacity mode.
+1. If auto-partitioning is enabled on a topic, it cannot be disabled, only paused.
+2. If auto-partitioning is enabled on a topic, writing to or reading from such a topic via the [Kafka API protocol](../../reference/kafka-api/index.md) is not possible.
+3. Auto-partitioning cannot be enabled on a topic with the storage mode by location.
 
-## Message Sources {#producer-id}
+## Sources {#producer-id}
 
-Messages are ordered using the `producer_id`. The order of written messages is maintained within `producer_id`.
+A source identifier, `producer_id`, is a way to order a set of messages. The order of written messages is preserved within `producer_id`.
 
-When used for the first time, a `producer_id` is linked to a topic's [partition](#partitioning) using the round-robin algorithm and all messages with `producer_id` get into the same partition. The link is removed if there are no new messages using this producer ID for 14 days.
+On first use, the source identifier `producer_id` is bound to a [partition](#partitioning) of the topic using a round-robin algorithm, and all messages with this `producer_id` end up in the same partition. The binding is removed if no new messages using this source identifier appear within 14 days.
 
 {% note warning %}
 
-The recommended maximum number of `producer_id` pairs is up to 100 thousand per partition in the last 14 days.
+The recommended maximum number of `producer_id` is up to 100,000 per partition over the last 14 days. For reference, this is approximately 5 new `producer_id` per minute around the clock.
 
 {% endnote %}
 
-{% cut "Why and When the Message Processing Order Is Important" %}
+### When Message Processing Order Matters
 
-### When the Message Processing Order Is Important
+Consider a financial application whose task is to calculate the user's account balance and allow or deny debiting funds.
 
-Let's consider a finance application that calculates the balance on a user's account and permits or prohibits debiting the funds.
-
-For such tasks, you can use a [message queue](https://en.wikipedia.org/wiki/Message_queue). When you top up your account, debit funds, or make a purchase, a message with the account ID, amount, and transaction type is registered in the queue. The application processes incoming messages and calculates the balance.
+To solve such problems, you can use a [message queue](https://en.wikipedia.org/wiki/Message_queue). When a deposit, withdrawal, or purchase is made, a message with the account ID, amount, and operation type is written to the queue. The application processes incoming messages and calculates the balance.
 
 ![basic-design](../../_assets/example-basic-design.svg)
 
-To accurately calculate the balance, the message processing order is crucial. If a user first tops up their account and then makes a purchase, messages with details about these transactions must be processed by the app in the same order. Otherwise, there may be an error in the business logic and the app will reject the purchase as a result of insufficient funds. There are guaranteed delivery order mechanisms, but they cannot ensure a message order within a single queue on an arbitrary data amount.
+For correct balance calculation, the order of message processing is important. If a user first deposits funds and then makes a purchase, the messages with information about these operations must be processed by the application in the same sequence. Otherwise, a business logic error may occur, and, for example, the application will reject the purchase due to insufficient funds. Message queues have mechanisms for guaranteed delivery order, but they cannot ensure the order of messages within a single queue for arbitrary data volumes.
 
-When several application instances read messages from a stream, a message about account top-ups can be received by one instance and a message about debiting by another. In this case, there's no guaranteed instance with accurate balance information. To avoid this issue, you can, for example, save data in the DBMS, share information between application instances, and implement a distributed cache.
+When multiple application instances read messages from a stream, one instance may receive the deposit message and another the withdrawal message. In this case, there is no instance that is guaranteed to have correct balance information. To solve this problem, you can store data in a DBMS, exchange information between application instances, build a distributed cache, and so on.
 
-{{ ydb-short-name }} can write data so that messages from a single source are delivered to the same application instance. Each source writes messages with its own unique `producer_id`, and a sequence number (`seqno`) is used to prevent duplicate processing. {{ ydb-short-name }} routes all messages with the same `producer_id` to the same partition. When reading from a topic, each reader instance handles its own subset of partitions, eliminating the need for synchronization between instances. For example, this approach could allow all transactions from a given account to be processed by the application instance associated with it.
+In {{ ydb-short-name }}, you can write data so that messages from one source arrive at the same application instance. To do this, messages from each source are written with their unique source identifiers (`producer_id`), and a message sequence number from the source (`seqno`) is used to protect against duplicates. In {{ ydb-short-name }}, messages with the same `producer_id` end up in the same partition. When reading from a topic, each reader instance serves its own subset of partitions, thus eliminating the need for synchronization between instances. For example, using this approach, you can ensure that messages about transactions for the same account always end up in the same partition and are processed by the application instance associated with that partition.
 
-Below is an example when all transactions on accounts with even IDs are transferred to the first instance of the application, and with odd ones — to the second.
+Below is an example where all transactions for accounts with even identifiers are sent to the first application instance, and those with odd identifiers to the second.
 
 ![topic-design](../../_assets/example-topic-design.svg)
 
-### When the Processing Order Is Not Important {#no-dedup}
+### If the processing order is not important {#no-dedup}
 
-For some tasks, the message processing order is not critical. For example, it's sometimes important to simply deliver data that will then be ordered by the storage system.
+For some tasks, the order of message processing is not critical. For example, sometimes it is important just to deliver the data, and the storage system will handle ordering.
 
-For such tasks, the "no-deduplication" mode can be used. In this scenario, [`producer_id`](#producer-id) isn't specified in the write session setup, and [`sequence numbers`](#seqno) aren't used for messages. The no-deduplication mode offers better performance and requires fewer server resources; however, there is no message ordering or deduplication on the server side. This means that a message sent to the server multiple times (for example, due to network instability or a writer process crash) may be written to the topic multiple times.
+For such cases, you can use a simplified write mode called "write without deduplication". In this mode, you do not need to specify message source identifiers ( [`producer_id`](#producer-id) ) and message sequence numbers — [`sequence number`](#seqno). Write without deduplication is faster and consumes fewer server resources, but message ordering and deduplication do not occur on the server. This means that if you send the same message again (for example, after a crash and subsequent restart of the writing process), it may be written more than once.
 
-{% endcut %}
+## Message sequence numbers {#seqno}
 
-## Message Sequence Numbers {#seqno}
+All messages from a single source have a sequence number, [`sequence number`](#seqno), used for deduplication. The message sequence number must monotonically increase within the pair `topic`, `source`. When the server receives a message with a sequence number less than or equal to the maximum recorded for the pair `topic`, `source`, the message will be skipped as a duplicate. Gaps in the sequence of message numbers are allowed. Message sequence numbers must be unique only within the pair `topic`, `source`.
 
-All messages from the same source have a [`sequence number`](#seqno) used for their deduplication. A message sequence number should monotonically increase within a `topic`, `source` pair. If the server receives a message whose sequence number is less than or equal to the maximum number written for the `topic`, `source` pair, the message will be skipped as a duplicate. Some sequence numbers in the sequence may be skipped. Message sequence numbers must be unique within the `topic`, `source` pair.
+Not used if the [write mode without deduplication](#no-dedup) is selected.
 
-Sequence numbers are not used if [no-deduplication mode](#no-dedup) is enabled.
+### Examples of message sequence numbers {#seqno-examples}
 
-### Sample Message Sequence Numbers {#seqno-examples}
+| Type | Example | Description |
+| --- | --- | --- |
+| File | Offset of transmitted data from the beginning of the file | You cannot delete rows from the beginning of the file, as this will lead to either skipping part of the data, resulting in duplicates, or losing part of the data. |
+| Database table | Auto-increment record identifier |  |
 
-| Type     | Example | Description                                                                                                                        |
-|----------| --- |------------------------------------------------------------------------------------------------------------------------------------|
-| File     | Offset of transferred data from the beginning of a file | You can't delete lines from the beginning of a file, since this will lead to skipping some data as duplicates or losing some data. |
-| DB table | Auto-increment record ID | |
+## Message retention period {#retention-time}
 
-## Message Retention Period {#retention-time}
+Each topic has a defined message retention period. After the retention period expires, messages are automatically deleted.
+The exception is data that has not yet been acknowledged by an ["important"](#important-consumer) reader — it will be stored until the reader processes it.
+If there is a reader with an explicitly specified [availability time](#availability-period-consumer), the retention period of unprocessed messages is extended to the specified value.
 
-The message retention period is set for each topic. After it expires, messages are automatically deleted. An exception is data that hasn't been committed by an [important](#important-consumer) consumer: this data will be stored until it's read.
+## Data compression {#message-codec}
 
-## Data Compression {#message-codec}
+When transmitting, the writer application indicates that the message can be compressed using one of the supported codecs. The codec name is passed during writing and stored with the message, and is also returned on reading. Message compression is performed individually for each message; batch compression is not supported. Data compression and decompression operations are performed on the reader and writer application side.
 
-When transferring data, the producer app indicates that a message can be compressed using one of the supported codecs. The codec name is passed while writing a message, saved along with it, and returned when reading the message. Compression applies to each individual message, no batch message compression is supported. Data is compressed and decompressed on the producer and consumer apps' end.
+The list of supported codecs is explicitly specified in each topic. Attempting to write data to a topic with an unsupported codec will result in a write error.
 
-Supported codecs are explicitly listed in each topic. When making an attempt to write data to a topic with a codec that is not supported, a write error occurs.
+| Codec | Description |
+| --- | --- |
+| `raw` | No compression. |
+| `gzip` | Compression using the [gzip](https://en.wikipedia.org/wiki/Gzip) algorithm. |
 
-| Codec  | Description                                             |
-|--------|---------------------------------------------------------|
-| `raw`  | No compression.                                         |
-| `gzip` | [Gzip](https://en.wikipedia.org/wiki/Gzip) compression. |
 {% if audience != "external" %}
-| `lzop` | [lzop](https://en.wikipedia.org/wiki/Lzop) compression. |
+
+| `lzop` | Compression using the [lzop](https://en.wikipedia.org/wiki/Lzop) algorithm. |
+
 {% endif %}
-| `zstd` | [zstd](https://en.wikipedia.org/wiki/Zstd) compression. |
 
-## Consumer {#consumer}
+| `zstd` | Compression using the [zstd](https://en.wikipedia.org/wiki/Zstd) algorithm. |
 
-A consumer is a named entity that reads data from a topic. A consumer contains committed consumer offsets for each topic read on their behalf.
+## Reader {#consumer}
 
-### Consumer Offset {#consumer-offset}
+A reader is a named entity for reading data from a topic. The reader contains read positions confirmed by the reader for each topic read on its behalf.
 
-A consumer offset is a saved [offset](#offset) of a consumer by each topic partition. It's saved by a consumer after sending commits of the data read. When a new read session is established, messages are delivered to the consumer starting with the saved consumer offset. This lets users avoid saving the consumer offset on their end.
+A read session is a client connection to a topic for receiving messages on behalf of a reader. Read sessions work through the Topic API. One reader can establish multiple read sessions: in this case, topic partitions are distributed among these sessions. To work with read sessions, it is recommended to use the {{ ydb-short-name }} SDK (see [Working with topics](../../reference/ydb-sdk/topic.md)).
 
-### Important Consumer {#important-consumer}
+### Read position {#consumer-offset}
 
-A consumer may be flagged as "important". This flag indicates that messages in a topic won't be removed until the consumer reads and confirms them. You can set this flag for most critical consumers that need to handle all data even if there's a long idle time.
+A read position is the saved [offset](#offset) of the reader for each topic partition. The read position is saved by the reader after sending an acknowledgment of the read data. When a new read session is established, messages are delivered to the reader starting from the saved read position. This allows users to avoid storing the read position on their side.
+
+### Read limit from a single partition {#partition-max-in-flight-bytes}
+
+The `partition_max_in_flight_bytes` parameter can be set when creating a read session.
+
+This parameter sets the upper limit of in-flight data — the amount of data for a single partition that has already been sent by the server in read responses but not yet confirmed by a commit of the offset.
+
+- `0` — no separate in-flight limit per partition is applied;
+- positive value — when the limit is reached, the server temporarily stops delivering new batches for this partition until the client commits and reduces in-flight.
+
+A value that is too small, with slow processing or infrequent commits, may cause read pauses on the partition. In such a case, increase the limit or commit more often.
+
+### Important reader {#important-consumer}
+
+A reader can have the "important" attribute. The presence of this attribute means that messages in the topic will not be deleted until the reader reads and acknowledges them. This attribute can be set for the most critical readers that must process all data even during long downtime.
 
 {% note warning %}
 
-As a long timeout of an important consumer may result in full use of all available free space by unread messages, be sure to monitor important consumers' data read lags.
+Since a long downtime of an important reader can lead to all available storage space being used by unread messages, it is necessary to monitor the read lag of important readers.
 
 {% endnote %}
 
-## Topic Protocols {#topic-protocols}
+### Message availability time for the reader {#availability-period-consumer}
 
-To work with topics, the {{ ydb-short-name }} SDK is used (see also [Reference](../../reference/ydb-sdk/topic.md)).
+A reader can be assigned a time period of availability during which messages from the topic that it has not yet processed will be available to it.
 
-Kafka API version 3.4.0 is also supported with some restrictions (see [Work with Kafka API](../../reference/kafka-api/index.md)).
+This option allows you to extend the message retention time in a topic from the [retention time](#retention-time) up to the specified availability time if the reader does not acknowledge processing.
+Unlike the ["important"](#important-consumer) reader flag, this parameter limits the maximum age of messages that will be stored in the topic.
+If the option is not set or all readers acknowledge processing without a large delay (less than the topic's [retention time](#retention-time)), the data will be deleted according to the usual rules.
 
-## Transactions with Topics {#topic-transactions}
+## Protocols for working with topics {#topic-protocols}
+
+The {{ ydb-short-name }} SDK is used for working with topics (see [Working with topics](../../reference/ydb-sdk/topic.md)).
+
+The Kafka API protocol version 3.4.0 is also partially supported (see [Working with Kafka API](../../reference/kafka-api/index.md)).
+
+## Transactions involving topics {#topic-transactions}
 
 {{ ydb-short-name }} supports working with topics within [transactions](../transactions.md).
 
-### Read from a Topic Within a Transaction {#topic-transactions-read}
+### Transactional reading from a topic {#topic-transactions-read}
 
-Topic data does not change during a read operation. Therefore, within transactional reads from a topic, only the offset commit is a true transactional operation. The postponed offset commit occurs automatically at the transaction commit, and the SDK handles this transparently for the user.
+Data in topics is not modified when reading from a topic. Therefore, when reading from a topic within a transaction, the only transactional operation is changing the offset. When reading transactionally via the SDK, offsets are not committed. Deferred offset commit occurs automatically when the transaction is committed; the SDK hides this from the user.
 
-### Write into a Topic Within a Transaction {#topic-transactions-write}
+### Transactional writing to a topic {#topic-transactions-write}
 
-During transactional writes to a topic, data is stored outside the partition until the transaction is committed. At the transaction commit, the data is published to the partition and appended to the end of the partition with sequential offsets. Changes made within the transaction are not visible in transactions with topics in {{ ydb-short-name }}.
+When writing transactionally to a topic, data is stored outside the partition until commit, and then published (becomes visible) at the moment of transaction commit. The data will be added to the end of the partition at sequential offsets. Visibility of own changes in topics within transactions involving topics is not supported.
 
-### Topic Transaction Constraints {#topic-transactions-constraints}
+### Limitations when working with topics in a transaction {#topic-transactions-constraints}
 
-There are no additional constraints when working with topics within a transaction. It is possible to write large amounts of data to a topic, write to multiple partitions, and read with multiple consumers.
+Transactions do not impose additional restrictions on working with topics. Within a transaction, you can write large amounts of data to a topic, write to multiple partitions, and read with multiple consumers.
 
-However, it is recommended to consider that data is published only at transaction commit. Therefore, if a transaction is long-running, the data will become visible only after a significant delay.
+Nevertheless, it is recommended to choose the transaction mode taking into account the specifics of transactional work with topics: data is published at the moment of transaction commit. That is, if the transaction is long-running, the data will become visible only after a significant amount of time.

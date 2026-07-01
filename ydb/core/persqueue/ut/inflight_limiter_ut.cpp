@@ -234,7 +234,8 @@ Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 100);
         UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 1);
         UNIT_ASSERT(!controller.IsMemoryLimitReached());
-        UNIT_ASSERT_VALUES_EQUAL(controller.Layout[0], 2);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout[0].Offset, 2);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout[0].Size, 100);
     }
 
     Y_UNIT_TEST(TestAddWithLargeSize) {
@@ -256,7 +257,8 @@ Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
         UNIT_ASSERT(controller.IsMemoryLimitReached());
         UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 1024);
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 103424);
-        UNIT_ASSERT_VALUES_EQUAL(controller.Layout[0], 0);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout[0].Offset, 0);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout[0].Size, 100);
         
         for (ui64 i = 1; i <= 1024; ++i) {
             controller.Remove(i);
@@ -276,7 +278,8 @@ Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
         UNIT_ASSERT(!controller.IsMemoryLimitReached());
         UNIT_ASSERT(controller.Layout.size() == 1014);
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 101376);
-        UNIT_ASSERT_VALUES_EQUAL(controller.Layout[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout[0].Offset, 1);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout[0].Size, 100);
         
         for (ui64 i = 1; i <= 1024; ++i) {
             controller.Remove(i);
@@ -297,7 +300,8 @@ Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
         UNIT_ASSERT(controller.Layout.size() == 1024);
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 102400);
         for (ui64 i = 0; i < 1024; ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(controller.Layout[i], i);
+            UNIT_ASSERT_VALUES_EQUAL(controller.Layout[i].Offset, i);
+            UNIT_ASSERT_VALUES_EQUAL(controller.Layout[i].Size, 100);
         }
         
         for (ui64 i = 1; i <= 1024; ++i) {
@@ -318,16 +322,43 @@ Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
         controller.Add(2, 1);
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 1000002);
         UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 1024);
-        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.back(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.back().Offset, 2);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.back().Size, 998979);
 
         controller.Add(3, 1);
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 1000003);
         UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 1024);
-        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.back(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.back().Offset, 3);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.back().Size, 998980);
     
         controller.Remove(4);
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 0);
         UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 0);
+    }
+
+    Y_UNIT_TEST(TestOverflowIsPinnedToLastOffsetAfterLayoutSaturation) {
+        TInFlightController controller(1000);
+
+        controller.Add(1, 1000001);
+        UNIT_ASSERT(controller.IsMemoryLimitReached());
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), controller.MAX_LAYOUT_COUNT);
+
+        controller.Add(2, 1);
+        controller.Add(3, 1);
+
+        controller.Remove(2);
+
+        UNIT_ASSERT(controller.IsMemoryLimitReached());
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.front().Offset, 3);
+        UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 998980);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.front().Size, 998980);
+
+        controller.Remove(4);
+
+        UNIT_ASSERT(!controller.IsMemoryLimitReached());
+        UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 0);
+        UNIT_ASSERT(controller.Layout.empty());
     }
 
     Y_UNIT_TEST(SlidingWindowTest) {

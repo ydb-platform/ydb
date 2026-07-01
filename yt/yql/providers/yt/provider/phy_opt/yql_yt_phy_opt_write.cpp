@@ -950,4 +950,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Materialize(TExprBase n
         .Done();
 }
 
-}  // namespace NYql
+} // namespace NYql

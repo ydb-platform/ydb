@@ -14,6 +14,7 @@ void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColu
     struct TTableMeta {
         TString TableName;
         THashMap<ui32, TString> ColumnNameByTag;
+        THashMap<ui32, TString> ColumnTypeByTag;
     };
 
     THashMap<TPathId, TTableMeta> tableMetaByPathId;
@@ -47,6 +48,7 @@ void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColu
 
             tableMetaByPathId[pathId].TableName = table;
             tableMetaByPathId[pathId].ColumnNameByTag[req.ColumnTag.value()] = column;
+            tableMetaByPathId[pathId].ColumnTypeByTag[req.ColumnTag.value()] = columnsMeta[column].Type;
         }
     }
 
@@ -72,6 +74,7 @@ void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColu
             auto meta = tableMetaByPathId[stat.Req.PathId];
             auto columnName = meta.ColumnNameByTag[stat.Req.ColumnTag.value()];
             auto& columnStatistics = columnStatisticsByTableName[meta.TableName].Data[columnName];
+            columnStatistics.Type = meta.ColumnTypeByTag[stat.Req.ColumnTag.value()];
             if (stat.CountMinSketch.CountMin) {
                 columnStatistics.CountMinSketch = std::move(stat.CountMinSketch.CountMin);
             }

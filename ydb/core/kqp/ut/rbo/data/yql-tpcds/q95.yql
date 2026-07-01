@@ -6,7 +6,7 @@ PRAGMA AnsiImplicitCrossJoin;
 
 $ws_wh = (
     SELECT
-        ws1.ws_order_number,
+        ws1.ws_order_number AS ws_order_number,
         ws1.ws_warehouse_sk AS wh1,
         ws2.ws_warehouse_sk AS wh2
     FROM

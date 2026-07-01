@@ -1245,4 +1245,4 @@ TOneShotContextSwitchGuard::TOneShotContextSwitchGuard(TContextSwitchHandler out
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} //namespace NYT::NConcurrency
+} // namespace NYT::NConcurrency

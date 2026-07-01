@@ -7,11 +7,15 @@
 #include <ydb/core/blobstorage/bridge/proxy/bridge_proxy.h>
 #include <ydb/core/blob_depot/agent/agent.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
+
 using namespace NKikimr;
 using namespace NStorage;
 
 TActorId TNodeWarden::StartEjectedProxy(ui32 groupId) {
-    STLOG(PRI_DEBUG, BS_NODE, NW10, "StartErrorProxy", (GroupId, groupId));
+    YDB_LOG_DEBUG("StartErrorProxy",
+        {"marker", "NW10"},
+        {"groupId", groupId});
     return Register(CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
 }
 
@@ -30,10 +34,11 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
         return DsProxyPerPoolCounters->GetPoolCounters(info->GetStoragePoolName(), info->GetDeviceType());
     };
 
-    STLOG(PRI_DEBUG, BS_NODE, NW12, "StartLocalProxy",
-        (GroupId, groupId),
-        (HasGroupInfo, static_cast<bool>(group.Info)),
-        (GroupInfoGeneration, group.Info ? std::make_optional(group.Info->GroupGeneration) : std::nullopt));
+    YDB_LOG_DEBUG("StartLocalProxy",
+        {"marker", "NW12"},
+        {"groupId", groupId},
+        {"hasGroupInfo", static_cast<bool>(group.Info)},
+        {"groupInfoGeneration", group.Info ? std::make_optional(group.Info->GroupGeneration) : std::nullopt});
 
     if (EnableProxyMock) {
         // create mock proxy
@@ -117,7 +122,9 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
 }
 
 void TNodeWarden::StartVirtualGroupAgent(ui32 groupId) {
-    STLOG(PRI_DEBUG, BS_NODE, NW40, "StartVirtualGroupProxy", (GroupId, groupId));
+    YDB_LOG_DEBUG("StartVirtualGroupProxy",
+        {"marker", "NW40"},
+        {"groupId", groupId});
 
     TActorSystem *as = TActivationContext::ActorSystem();
     TGroupRecord& group = Groups[groupId];
@@ -133,7 +140,11 @@ void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
     const ui32 id = groupId.GetRaw();
 
     const bool noGroup = EjectedGroups.count(id);
-    STLOG(PRI_DEBUG, BS_NODE, NW46, "HandleForwarded", (GroupId, id), (EnableProxyMock, EnableProxyMock), (NoGroup, noGroup));
+    YDB_LOG_DEBUG("HandleForwarded",
+        {"marker", "NW46"},
+        {"groupId", id},
+        {"enableProxyMock", EnableProxyMock},
+        {"noGroup", noGroup});
 
     if (id == Max<ui32>()) {
         // invalid group; proxy for this group is created at start

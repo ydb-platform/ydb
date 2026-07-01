@@ -1,7 +1,5 @@
 /* syntax version 1 */
 /* postgres can not */
-/* custom error: type diff: String!=Double */
-/* FIXME(YQL-20234): support Null type */
 $t = (
     SELECT
         *
@@ -46,7 +44,7 @@ $p = (
     PROCESS $p
 );
 
---select FormatType(TypeOf($p));
+-- select FormatType(TypeOf($p));
 SELECT
     *
 FROM

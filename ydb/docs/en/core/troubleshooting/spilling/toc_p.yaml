@@ -1,6 +1,4 @@
 items:
-- name: Can not run operation
-  href: can-not-run-operation.md
 - name: Permission denied
   href: permission-denied.md
 - name: Spilling Service not started

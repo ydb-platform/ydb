@@ -27,11 +27,11 @@ function onDataShardInfoLoaded(data) {
                   <tbody class="ds-info">
                     <tr class="ds-info">
                       <td class="ds-info">Path</td>
-                      <td class="ds-info"><a href="../viewer/#page=schema&path=${table.Path}">${table.Path}</a></td>
+                      <td class="ds-info"><a href="${makeMonUrl(`/viewer/#page=schema&path=${table.Path}`)}">${table.Path}</a></td>
                     </tr>
                     <tr class="ds-info">
                       <td class="ds-info">PathId</td>
-                      <td class="ds-info"><a href="app?TabletID=${info.SchemeShard}&Page=PathInfo&PathId=${table.PathId}">${table.PathId}</a></td>
+                      <td class="ds-info"><a href="${makeTabletDevUiUrl(`TabletID=${info.SchemeShard}&Page=PathInfo&PathId=${table.PathId}`)}">${table.PathId}</a></td>
                     </tr>
                     <tr class="ds-info">
                       <td class="ds-info">LocalId</td>
@@ -96,17 +96,17 @@ function onDataShardInfoLoaded(data) {
         $('#main-title').text('DataShard ' + TabletId + ' (' + path + ')');
     }
 
-    $('#tablet-info-schemeshard').html('<a href="../tablets?TabletID=' + info.SchemeShard
+    $('#tablet-info-schemeshard').html('<a href="' + makeMonUrl('/tablets?TabletID=' + info.SchemeShard)
                                        + '">' + info.SchemeShard + '</a>');
-    $('#tablet-info-mediator').html('<a href="../tablets?TabletID=' + info.Mediator
+    $('#tablet-info-mediator').html('<a href="' + makeMonUrl('/tablets?TabletID=' + info.Mediator)
                                     + '">' + info.Mediator + '</a>');
     $('#tablet-info-generation').text(info.Generation);
     $('#tablet-info-role').text(info.IsFollower ? 'Follower' : 'Leader');
     $('#tablet-info-follower-id').text(info.FollowerId);
     $('#tablet-info-state').text(info.State + (info.IsActive ? ' (active)' : ' (inactive)'));
     $('#tablet-info-shared-blobs').text(info.HasSharedBlobs);
-    $('#tablet-info-change-sender').html('<a href="app?TabletID=' + TabletId + '&page=change-sender">Viewer</a>');
-    $('#tablet-info-volatile-txs').html(`<a href="app?TabletID=${TabletId}&page=volatile-txs">Viewer</a>`);
+    $('#tablet-info-change-sender').html(`<a href="${makeTabletDevUiUrl(`TabletID=${TabletId}&page=change-sender`)}">Viewer</a>`);
+    $('#tablet-info-volatile-txs').html(`<a href="${makeTabletDevUiUrl(`TabletID=${TabletId}&page=volatile-txs`)}">Viewer</a>`);
 
     var activities = data.Activities;
     if (activities) {
@@ -177,7 +177,7 @@ function loadDataShardInfo() {
         return;
 
     DataShardInfoState.loadingInfo = true;
-    var url = '../cms/api/datashard/json/getinfo?tabletid=' + TabletId + '&followerid=' + FollowerId;
+    var url = makeMonUrl('/cms/api/datashard/json/getinfo?tabletid=' + TabletId + '&followerid=' + FollowerId);
     $.get(url).done(onDataShardInfoLoaded).fail(onDataShardInfoFailed);
 }
 

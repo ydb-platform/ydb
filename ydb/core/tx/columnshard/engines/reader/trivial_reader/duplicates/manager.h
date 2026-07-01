@@ -41,6 +41,32 @@ private:
     TFiltersStore FiltersStore;
     std::shared_ptr<TAtomicCounter> AbortionFlag;
 
+    static constexpr ui32 MaxInflightExecutors = 1;
+    ui32 InflightExecutors = 0;
+
+    static constexpr ui32 MaxInflightFilterRequests = 3;
+    ui32 InflightFilterRequests = 0;
+    std::deque<TEvRequestFilter::TPtr> PendingFilterRequests;
+
+    void TryStartPendingFilterRequest();
+    void HandleFilterRequestImpl(TEvRequestFilter::TPtr& ev);
+    void OnFilterRequestCompleted();
+
+    struct TPendingExecutor {
+        std::shared_ptr<TBuildFilterTaskExecutor> Executor;
+        TBuildFilterContext Context;
+
+        TPendingExecutor(std::shared_ptr<TBuildFilterTaskExecutor>&& executor, TBuildFilterContext&& context)
+            : Executor(std::move(executor))
+            , Context(std::move(context))
+        {
+        }
+    };
+
+    std::deque<TPendingExecutor> PendingExecutors;
+
+    void TryStartPendingExecutor();
+
 private:
     static NArrow::NMerger::TCursor GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId);
     static std::shared_ptr<TPortionStore> MakePortionsIndex(const std::deque<std::shared_ptr<TPortionInfo>>& portions);

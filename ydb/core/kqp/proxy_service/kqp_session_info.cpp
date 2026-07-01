@@ -117,6 +117,12 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
             proto->SetWmExitTime(WmState->GetExitTime().MicroSeconds());
         }
     }
+
+    if (fieldsMap.NeedField(VSessions::TraceId::ColumnId)) { // 21
+        if (State == TKqpSessionInfo::EXECUTING && !TraceId.empty()) {
+            proto->SetTraceId(TraceId);
+        }
+    }
 }
 
 }  // namespace NKikimr::NKqp

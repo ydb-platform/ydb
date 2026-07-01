@@ -928,9 +928,11 @@ int run_container_get_index(const run_container_t *container, uint16_t x) {
         return -1;
     }
 }
+#define CROARING_ENABLE_AVX512_RUN_CONTAINER_CARDINALITY 0
 
 #if defined(CROARING_IS_X64) && CROARING_COMPILER_SUPPORTS_AVX512
 
+#if CROARING_ENABLE_AVX512_RUN_CONTAINER_CARDINALITY
 CROARING_TARGET_AVX512
 CROARING_ALLOW_UNALIGNED
 /* Get the cardinality of `run'. Requires an actual computation. */
@@ -957,6 +959,7 @@ static inline int _avx512_run_container_cardinality(
 }
 
 CROARING_UNTARGET_AVX512
+#endif  // CROARING_ENABLE_AVX512_RUN_CONTAINER_CARDINALITY
 
 CROARING_TARGET_AVX2
 CROARING_ALLOW_UNALIGNED
@@ -1049,7 +1052,6 @@ static inline int _scalar_run_container_cardinality(
 
 int run_container_cardinality(const run_container_t *run) {
     // Empirically AVX-512 is not always faster than AVX2
-#define CROARING_ENABLE_AVX512_RUN_CONTAINER_CARDINALITY 0
 #if CROARING_COMPILER_SUPPORTS_AVX512 && \
     CROARING_ENABLE_AVX512_RUN_CONTAINER_CARDINALITY
     if (croaring_hardware_support() & ROARING_SUPPORTS_AVX512) {

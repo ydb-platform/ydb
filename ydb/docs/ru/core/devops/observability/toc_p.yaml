@@ -3,6 +3,8 @@ items:
   href: monitoring.md
 - name: Логирование
   href: logging.md
+- name: Минидампы
+  href: minidumps.md
 - name: Системные представления
   href: system-views.md
 - name: Трассировка

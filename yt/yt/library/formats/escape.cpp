@@ -226,12 +226,12 @@ void EscapeAndWrite(
     }
 }
 
-TString Escape(
+std::string Escape(
     TStringBuf string,
     const TEscapeTable& escapeTable)
 {
     if (escapeTable.EscapingSymbol) {
-        TString result;
+        std::string result;
         // In worst case result length will be twice the original length.
         result.reserve(2 * string.length());
         auto* begin = string.begin();
@@ -241,14 +241,14 @@ TString Escape(
             next = escapeTable.FindNext(begin, end);
             result.append(begin, next);
             if (next != end) {
-                result.append(escapeTable.EscapingSymbol);
-                result.append(EscapeForward[static_cast<ui8>(*next)]);
+                result.push_back(escapeTable.EscapingSymbol);
+                result.push_back(EscapeForward[static_cast<ui8>(*next)]);
                 ++next;
             }
         }
         return result;
     } else {
-        return TString(string);
+        return std::string(string);
     }
 }
 

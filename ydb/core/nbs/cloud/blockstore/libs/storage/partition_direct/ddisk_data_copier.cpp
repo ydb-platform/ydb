@@ -44,15 +44,15 @@ struct TDDiskDataCopier::TCopyRangeRequestState
 
 TDDiskDataCopier::TDDiskDataCopier(
     NActors::TActorSystem* actorSystem,
+    IPartitionDirectService* partitionDirectService,
     const TVChunkConfig& vChunkConfig,
-    IPartitionDirectServicePtr partitionDirectService,
     IDirectBlockGroupPtr directBlockGroup,
     TBlocksDirtyMap* dirtyMap,
     THostIndex destination)
     : ActorSystem(actorSystem)
+    , PartitionDirectService(partitionDirectService)
     , VChunkConfig(vChunkConfig)
     , VolumeConfig(partitionDirectService->GetVolumeConfig())
-    , PartitionDirectService(std::move(partitionDirectService))
     , DirectBlockGroup(std::move(directBlockGroup))
     , Destination(destination)
     , DirtyMap(dirtyMap)
@@ -62,7 +62,7 @@ TDDiskDataCopier::TDDiskDataCopier(
               .DiskId = VolumeConfig->DiskId,
               .Destination = static_cast<int>(Destination)}}
 {
-    Y_ASSERT(Destination < VChunkConfig.DDiskHosts.HostCount());
+    Y_ASSERT(Destination < VChunkConfig.GetHostCount());
 }
 
 TFuture<TDDiskDataCopier::EResult> TDDiskDataCopier::Start()
@@ -205,7 +205,7 @@ void TDDiskDataCopier::OnRangeRead(
     }
 
     auto writeFuture = DirectBlockGroup->WriteBlocksToDDisk(
-        VChunkConfig.VChunkIndex,
+        VChunkConfig.GetVChunkIndex(),
         Destination,
         copyRangeState->Range,
         copyRangeState->GetSgList(),

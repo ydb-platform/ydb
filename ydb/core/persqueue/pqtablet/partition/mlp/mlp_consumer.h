@@ -166,6 +166,7 @@ public:
 private:
     NMonitoring::TDynamicCounters::TCounterPtr InflightCommittedCount;
     NMonitoring::TDynamicCounters::TCounterPtr InflightLockedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr InflightMessageGroupCount;
     NMonitoring::TDynamicCounters::TCounterPtr InflightDelayedCount;
     NMonitoring::TDynamicCounters::TCounterPtr InflightUnlockedCount;
     NMonitoring::TDynamicCounters::TCounterPtr InflightScheduledToDLQCount;

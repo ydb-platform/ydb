@@ -67,6 +67,7 @@ bool IsCreate(ETxType t) {
         case TxCreateSolomonVolume:
         case TxCreateRtmrVolume:
         case TxCreateTableIndex:
+        case TxCreateLocalIndex:
         case TxFillIndex:
         case TxCreateCdcStream:
         case TxCreateSequence:
@@ -83,6 +84,7 @@ bool IsCreate(ETxType t) {
         case TxCreateSysView:
         case TxCreateLongIncrementalRestoreOp:
         case TxCreateLongIncrementalBackupOp:
+        case TxCreateFullBackupOp:
         case TxCreateSecret:
         case TxCreateStreamingQuery:
             return true; // IsCreate
@@ -107,6 +109,7 @@ bool IsCreate(ETxType t) {
         case TxForceDropSubDomain:
         case TxForceDropExtSubDomain:
         case TxDropTableIndex:
+        case TxDropLocalIndex:
         case TxDropSolomonVolume:
         case TxRmDir:
         case TxFinalizeBuildIndex:
@@ -135,6 +138,7 @@ bool IsCreate(ETxType t) {
         case TxAlterTable:
         case TxAlterOlapStore:
         case TxAlterColumnTable:
+        case TxAlterLocalIndex:
         case TxModifyACL:
         case TxSplitTablePartition:
         case TxMergeTablePartition:
@@ -172,6 +176,7 @@ bool IsCreate(ETxType t) {
             return false; // IsCreate
         case TxMoveTable:
         case TxMoveTableIndex:
+        case TxMoveLocalIndex:
         case TxMoveSequence:
             return true; // IsCreate
         case TxRotateCdcStream:
@@ -202,6 +207,7 @@ bool IsDrop(ETxType t) {
         case TxForceDropSubDomain:
         case TxForceDropExtSubDomain:
         case TxDropTableIndex:
+        case TxDropLocalIndex:
         case TxDropSolomonVolume:
         case TxRmDir:
         case TxDropCdcStream:
@@ -238,6 +244,7 @@ bool IsDrop(ETxType t) {
         case TxCreateSolomonVolume:
         case TxCreateRtmrVolume:
         case TxCreateTableIndex:
+        case TxCreateLocalIndex:
         case TxFillIndex:
         case TxCreateCdcStream:
         case TxCreateCdcStreamAtTable:
@@ -266,6 +273,7 @@ bool IsDrop(ETxType t) {
         case TxCreateSysView:
         case TxCreateLongIncrementalRestoreOp:
         case TxCreateLongIncrementalBackupOp:
+        case TxCreateFullBackupOp:
         case TxCreateSecret:
         case TxCreateStreamingQuery:
             return false; // IsDrop
@@ -273,6 +281,7 @@ bool IsDrop(ETxType t) {
         case TxAlterTable:
         case TxAlterOlapStore:
         case TxAlterColumnTable:
+        case TxAlterLocalIndex:
         case TxModifyACL:
         case TxSplitTablePartition:
         case TxMergeTablePartition:
@@ -312,6 +321,7 @@ bool IsDrop(ETxType t) {
             return false; // IsDrop
         case TxMoveTable:
         case TxMoveTableIndex:
+        case TxMoveLocalIndex:
         case TxMoveSequence:
             return false; // IsDrop
         case TxTruncateTable:
@@ -351,6 +361,7 @@ bool CanDeleteParts(ETxType t) {
         case TxDropBackupCollection:
             return true; // CanDeleteParts
         case TxDropTableIndex:
+        case TxDropLocalIndex:
         case TxRmDir:
         case TxFinalizeBuildIndex:
         case TxDropExternalTable:
@@ -360,6 +371,7 @@ bool CanDeleteParts(ETxType t) {
         case TxDropSysView:
         case TxCreateLongIncrementalRestoreOp:
         case TxCreateLongIncrementalBackupOp:
+        case TxCreateFullBackupOp:
         case TxDropStreamingQuery:
             return false; // CanDeleteParts
         case TxMkDir:
@@ -377,6 +389,7 @@ bool CanDeleteParts(ETxType t) {
         case TxCreateSolomonVolume:
         case TxCreateRtmrVolume:
         case TxCreateTableIndex:
+        case TxCreateLocalIndex:
         case TxCreateCdcStream:
         case TxCreateCdcStreamAtTable:
         case TxCreateCdcStreamAtTableWithInitialScan:
@@ -424,12 +437,14 @@ bool CanDeleteParts(ETxType t) {
         case TxAlterUserAttributes:
         case TxFillIndex:
         case TxAlterTableIndex:
+        case TxAlterLocalIndex:
         case TxAlterSolomonVolume:
         case TxAlterCdcStream:
         case TxAlterCdcStreamAtTable:
         case TxAlterCdcStreamAtTableDropSnapshot:
         case TxMoveTable:
         case TxMoveTableIndex:
+        case TxMoveLocalIndex:
         case TxMoveSequence:
         case TxAlterSequence:
         case TxAlterReplication:
@@ -588,6 +603,7 @@ ETxType ConvertToTxType(NKikimrSchemeOp::EOperationType opType) {
         // Fan out to TxChangePathState sub-ops; the wrapper type is never persisted.
         case NKikimrSchemeOp::ESchemeOpIncrementalRestoreLockTargets: return TxChangePathState;
         case NKikimrSchemeOp::ESchemeOpIncrementalRestoreUnlockTargets: return TxChangePathState;
+        case NKikimrSchemeOp::ESchemeOpCreateFullBackupOp: return TxCreateFullBackupOp;
 
         // no matching tx-type
         case NKikimrSchemeOp::ESchemeOpBackupBackupCollection:

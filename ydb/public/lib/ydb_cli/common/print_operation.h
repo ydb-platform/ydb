@@ -46,12 +46,19 @@ void PrintOperationsList(const NOperation::TOperationsList<NYdb::NQuery::TScript
 void PrintOperation(const NYdb::NBackup::TIncrementalBackupResponse& operation, EDataFormat format);
 void PrintOperationsList(const NOperation::TOperationsList<NYdb::NBackup::TIncrementalBackupResponse>& operations, EDataFormat format);
 
+// Full backup
+void PrintOperation(const NYdb::NBackup::TFullBackupResponse& operation, EDataFormat format);
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NBackup::TFullBackupResponse>& operations, EDataFormat format);
+
 // Incremental restore
 void PrintOperation(const NYdb::NBackup::TBackupCollectionRestoreResponse& operation, EDataFormat format);
 void PrintOperationsList(const NOperation::TOperationsList<NYdb::NBackup::TBackupCollectionRestoreResponse>& operations, EDataFormat format);
 
 void PrintOperation(const NYdb::NTable::TCompactionOperation& operation, EDataFormat format);
 void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TCompactionOperation>& operations, EDataFormat format);
+
+void PrintOperation(const NYdb::NTable::TAnalyzeOperation& operation, EDataFormat format);
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TAnalyzeOperation>& operations, EDataFormat format);
 
 }
 }

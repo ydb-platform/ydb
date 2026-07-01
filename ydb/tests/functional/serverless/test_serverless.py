@@ -547,7 +547,7 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
             rows = [BulkUpsertRow((now + datetime.timedelta(microseconds=dt))) for dt in range(i * bulk_size, (i + 1) * bulk_size)]
             try:
                 driver.table_client.bulk_upsert(path, rows, column_types)
-            except ydb.issues.Overloaded:
+            except ydb.issues.Unavailable:
                 described = ydb_cluster.client.describe(database, '')
                 logger.debug('database state when oveloaded: %s', described)
                 assert described.PathDescription.DomainDescription.DomainState.DiskQuotaExceeded, 'database did not move into DiskQuotaExceeded state'
@@ -556,7 +556,7 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
             assert False, 'database did not move into Overloaded state'
 
         logger.info("Upsert data whith SQL")
-        with pytest.raises(ydb.issues.Overloaded, match=r'.*Column shard.*is overloaded.*'):
+        with pytest.raises(ydb.issues.Unavailable, match=r'.*Column shard.*is overloaded.*'):
             qpool.execute_with_retries(
                 "UPSERT INTO `{}` (ts, value_string) VALUES(Timestamp('2020-01-01T00:00:00.000000Z'), 'xxx')".format(path),
                 retry_settings=RetrySettings(max_retries=0))
@@ -573,17 +573,29 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
             assert False, 'database did not move out of DiskQuotaExceeded state'
 
 
-def test_discovery(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
-    def list_endpoints(database):
-        logger.debug("List endpoints of %s", database)
-        resolver = ydb.DiscoveryEndpointsResolver(ydb.DriverConfig(ydb_endpoint, database))
-        result = resolver.resolve()
-        if result is not None:
-            return result.endpoints
-        return result
+def list_endpoints(endpoint, database):
+    logger.debug("List endpoints of %s", database)
+    driver_config = ydb.DriverConfig(endpoint, database)
+    with ydb.Driver(driver_config) as driver:
+        driver.wait(120)
+    resolver = ydb.DiscoveryEndpointsResolver(driver_config)
+    result = resolver.resolve()
+    if result is not None:
+        return result.endpoints
+    return result
 
-    hostel_db_endpoints = list_endpoints(ydb_hostel_db)
-    serverless_db_endpoints = list_endpoints(ydb_serverless_db)
+
+def test_discovery(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
+    hostel_db_endpoints = None
+    serverless_db_endpoints = None
+    for _ in range(60):
+        hostel_db_endpoints = list_endpoints(ydb_endpoint, ydb_hostel_db)
+        serverless_db_endpoints = list_endpoints(ydb_endpoint, ydb_serverless_db)
+        if None in [hostel_db_endpoints, serverless_db_endpoints]:
+            break
+        if len(hostel_db_endpoints) == len(serverless_db_endpoints):
+            break
+        time.sleep(1)
 
     assert_that(hostel_db_endpoints, not_none())
     assert_that(serverless_db_endpoints, not_none())
@@ -640,26 +652,22 @@ def alter_database_serverless_compute_resources_mode(cluster, database_path, ser
 
 
 def test_discovery_exclusive_nodes(ydb_hostel_db, ydb_serverless_db_with_exclusive_nodes, ydb_endpoint, ydb_cluster):
-    def list_endpoints(database):
-        logger.debug("List endpoints of %s", database)
-
-        driver_config = ydb.DriverConfig(ydb_endpoint, database)
-        with ydb.Driver(driver_config) as driver:
-            driver.wait(120)
-
-        resolver = ydb.DiscoveryEndpointsResolver(driver_config)
-        result = resolver.resolve()
-        if result is not None:
-            return result.endpoints
-        return result
-
     alter_database_serverless_compute_resources_mode(
         ydb_cluster,
         ydb_serverless_db_with_exclusive_nodes,
         "EServerlessComputeResourcesModeShared"
     )
-    serverless_db_shared_endpoints = list_endpoints(ydb_serverless_db_with_exclusive_nodes)
-    hostel_db_endpoints = list_endpoints(ydb_hostel_db)
+
+    hostel_db_endpoints = None
+    serverless_db_shared_endpoints = None
+    for _ in range(60):
+        hostel_db_endpoints = list_endpoints(ydb_endpoint, ydb_hostel_db)
+        serverless_db_shared_endpoints = list_endpoints(ydb_endpoint, ydb_serverless_db_with_exclusive_nodes)
+        if None in [hostel_db_endpoints, serverless_db_shared_endpoints]:
+            break
+        if len(hostel_db_endpoints) == len(serverless_db_shared_endpoints):
+            break
+        time.sleep(1)
 
     assert_that(hostel_db_endpoints, not_none())
     assert_that(serverless_db_shared_endpoints, not_none())
@@ -670,7 +678,7 @@ def test_discovery_exclusive_nodes(ydb_hostel_db, ydb_serverless_db_with_exclusi
         ydb_serverless_db_with_exclusive_nodes,
         "EServerlessComputeResourcesModeExclusive"
     )
-    serverless_db_exclusive_endpoints = list_endpoints(ydb_serverless_db_with_exclusive_nodes)
+    serverless_db_exclusive_endpoints = list_endpoints(ydb_endpoint, ydb_serverless_db_with_exclusive_nodes)
 
     assert_that(serverless_db_exclusive_endpoints, not_none())
     assert_that(serverless_db_exclusive_endpoints, only_contains(not_(is_in(serverless_db_shared_endpoints))))

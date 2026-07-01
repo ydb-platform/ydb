@@ -92,6 +92,7 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
     KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::KAFKA_PROXY, NActors::NLog::PRI_TRACE);
     KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
     KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_DESCRIBER, NActors::NLog::PRI_TRACE);
+    KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_SCHEMA, NActors::NLog::PRI_TRACE);
     KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_FETCH_REQUEST, NActors::NLog::PRI_TRACE);
     KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NActors::NLog::PRI_TRACE);
     KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
@@ -195,7 +196,12 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
     {
         // Access Server Mock
         grpc::ServerBuilder builder;
-        builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
+        builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials());
+        if (!KikimrServer->GetRuntime()->GetAppData().FeatureFlags.GetEnableAccessServiceV2Interface()) {
+            builder.RegisterService(&accessServiceMock);
+        }
+        // We should always register v2 because BulkAuth uses V2 AS even with V1
+        builder.RegisterService(&accessServiceMockV2);
         AccessServer = builder.BuildAndStart();
     }
 }

@@ -28,6 +28,7 @@ struct TFmrCoordinatorSettings {
     TDuration TimeToSleepBetweenCheckWorkerStatusRequests = TDuration::Seconds(1);
     TDuration SessionInactivityTimeout = TDuration::Minutes(30);
     TDuration HealthCheckInterval = TDuration::Seconds(1);
+    bool RequireFmrJob = false;
 
     TFmrCoordinatorSettings();
 };

@@ -53,6 +53,10 @@ protected:
     }
 
 public:
+    const std::shared_ptr<TGranuleMeta>& GetGranuleMeta() const {
+        return GranuleMeta;
+    }
+
     TCompactColumnEngineChanges(
         std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionInfo::TConstPtr>& portions, const TSaverContext& saverContext);
     ~TCompactColumnEngineChanges();

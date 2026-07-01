@@ -111,8 +111,8 @@ struct TCorsConfig
     : public NYTree::TYsonStruct
 {
     bool DisableCorsCheck;
-    std::vector<TString> HostAllowList;
-    std::vector<TString> HostSuffixAllowList;
+    std::vector<std::string> HostAllowList;
+    std::vector<std::string> HostSuffixAllowList;
 
     REGISTER_YSON_STRUCT(TCorsConfig);
 

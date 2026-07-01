@@ -37,6 +37,9 @@ public:
     struct TDirectBlockGroup
     {
         TString DiskId;
+        ui64 TabletId = 0;
+        ui32 Generation = 0;
+        size_t DirectBlockGroupIndex = 0;
     };
 
     struct TVChunk

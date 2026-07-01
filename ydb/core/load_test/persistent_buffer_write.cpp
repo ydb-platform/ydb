@@ -155,8 +155,7 @@ public:
         DDiskSlotId = ddiskId.GetDDiskSlotId();
         DDiskServiceId = MakeBlobStoragePersistentBufferId(DDiskNodeId, DDiskPDiskId, DDiskSlotId);
 
-        Credentials.TabletId = Tag ? Tag : 1;
-        Credentials.Generation = 1;
+        Credentials = NDDisk::TQueryCredentials::ToPersistentBuffer(Tag ? Tag : 1, 1, std::nullopt);
 
         FillRatio = cmd.GetFillRatio();
         Y_ABORT_UNLESS(FillRatio <= 100, "FillRatio percentage should be less than or equal to 100");
@@ -346,8 +345,10 @@ public:
                     Report->Size += it.second;
                 }
                 auto msg = std::make_unique<NDDisk::TEvReadPersistentBuffer>();
-                NDDisk::TQueryCredentials creds = Credentials;
-                creds.FromPersistentBuffer = true;
+                auto creds = NDDisk::TQueryCredentials::ForInternal(
+                    Credentials.TabletId,
+                    Credentials.Generation,
+                    Credentials.DDiskInstanceGuid);
                 creds.Serialize(msg->Record.MutableCredentials());
                 msg->Record.SetLsn(it.first);
                 msg->Record.SetGeneration(Credentials.Generation);

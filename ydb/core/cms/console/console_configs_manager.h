@@ -29,6 +29,13 @@ using NTabletFlatExecutor::TTransactionContext;
 
 class TConsole;
 
+// Converts the unknown/deprecated field maps collected during YAML config validation
+// into the persisted/served proto snapshot. Deprecated fields get Deprecated=true.
+void BuildYamlConfigUnknownFields(
+    const TMap<TString, std::pair<TString, TString>>& unknownFields,
+    const TMap<TString, std::pair<TString, TString>>& deprecatedFields,
+    NKikimrConsole::TYamlConfigUnknownFields& out);
+
 class TConfigsManager : public TActorBootstrapped<TConfigsManager> {
 private:
 
@@ -350,6 +357,9 @@ private:
     TString ClusterName;
     ui32 YamlVersion = 0;
     TString MainYamlConfig;
+    // Unknown/deprecated fields of MainYamlConfig, cached from the moment the config was uploaded
+    // (computed during ValidateMainConfig, persisted in Schema::YamlConfig::UnknownFields).
+    NKikimrConsole::TYamlConfigUnknownFields MainYamlConfigUnknownFields;
     THashMap<TString, TDatabaseYamlConfig> DatabaseYamlConfigs;
     bool YamlDropped = false;
     bool YamlReadOnly = true;

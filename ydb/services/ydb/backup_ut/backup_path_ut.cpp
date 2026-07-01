@@ -428,6 +428,67 @@ void ExportWholeDatabaseImpl(TBackupTestFixture& f, bool isOlap) {
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>
+void ExportWholeDatabaseByExplicitRootItemImpl(TBackupTestFixture& f, bool isOlap) {
+    TBackupTraits<TExportSettings> traits;
+    const TString prefix = traits.FilePrefix();
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
+
+    {
+        auto exportSettings = traits.MakeExportSettings(f, "");
+        exportSettings
+            .AppendItem(typename TExportSettings::TItem{.Src = "/Root"});
+        auto res = traits.Export(f, exportSettings);
+        f.WaitOpSuccess(res);
+
+        traits.ValidateFileList(f, {
+            prefix + "metadata.json",
+            prefix + "SchemaMapping/metadata.json",
+            prefix + "SchemaMapping/mapping.json",
+            prefix + "RecursiveFolderProcessing/Table0/metadata.json",
+            prefix + "RecursiveFolderProcessing/Table0/scheme.pb",
+            prefix + "RecursiveFolderProcessing/Table0/permissions.pb",
+            prefix + "RecursiveFolderProcessing/Table0/data_00.csv",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/metadata.json",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/scheme.pb",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/permissions.pb",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/data_00.csv",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv",
+
+            prefix + "metadata.json.sha256",
+            prefix + "SchemaMapping/metadata.json.sha256",
+            prefix + "SchemaMapping/mapping.json.sha256",
+            prefix + "RecursiveFolderProcessing/Table0/metadata.json.sha256",
+            prefix + "RecursiveFolderProcessing/Table0/scheme.pb.sha256",
+            prefix + "RecursiveFolderProcessing/Table0/permissions.pb.sha256",
+            prefix + "RecursiveFolderProcessing/Table0/data_00.csv.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/metadata.json.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/scheme.pb.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/permissions.pb.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/data_00.csv.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv.sha256",
+        });
+    }
+
+    {
+        auto importSettings = traits.MakeImportSettings(f, "/Root/RestorePrefix");
+        auto res = traits.Import(f, importSettings);
+        f.WaitOpSuccess(res);
+
+        f.ValidateHasYdbPaths({
+            TBackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/Table0", isOlap),
+            TBackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/Table1", isOlap),
+            TBackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2", isOlap),
+        });
+    }
+}
+
+template <typename TExportSettings, typename TBackupTestFixture>
 void ExportWithCommonSourcePathImpl(TBackupTestFixture& f, bool isOlap) {
     TBackupTraits<TExportSettings> traits;
     const TString prefix = traits.FilePrefix();
@@ -1445,7 +1506,7 @@ void ParallelBackupWholeDatabaseImpl(TBackupTestFixture& f, bool /*isOlap*/) {
 
         // Wait
         for (auto& backupOp : parallelBackups) {
-            f.WaitOpSuccess(backupOp.GetValueSync());
+            f.WaitOpSuccess(backupOp.GetValueSync(), {}, TDuration::Minutes(5));
         }
 
         // Forget
@@ -1695,6 +1756,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
     Y_UNIT_TEST(ExportWholeDatabase) {
         ExportWholeDatabaseImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
+    Y_UNIT_TEST(ExportWholeDatabaseByExplicitRootItem) {
+        ExportWholeDatabaseByExplicitRootItemImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
+    }
     Y_UNIT_TEST(ExportWithCommonSourcePath) {
         ExportWithCommonSourcePathImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
@@ -1748,6 +1812,10 @@ Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
 Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
     Y_UNIT_TEST_TWIN(ExportWholeDatabase, IsOlap) {
         ExportWholeDatabaseImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
+    }
+
+    Y_UNIT_TEST_TWIN(ExportWholeDatabaseByExplicitRootItem, IsOlap) {
+        ExportWholeDatabaseByExplicitRootItemImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }
 
     Y_UNIT_TEST_TWIN(ExportWholeDatabaseWithEncryption, IsOlap) {

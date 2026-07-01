@@ -2027,7 +2027,6 @@ join/pushdown_filter_over_inner_with_strict_udf
 key_filter/between_with_key_filter
 action/action_eval_cluster_use
 action/action_udf_args
-optimizers/yql-3455_filter_sorted
 pg_catalog/system_columns
 select/table_funcs_spec
 select/type_assert
@@ -2585,7 +2584,6 @@ expr/tagged_runtime
 expr/with_optional_args
 column_order/insert_with_desc_sort_and_native_types
 column_order/join_nosimple
-in/in_ansi_join
 compute_range/decimal
 compute_range/huge_in
 compute_range/multiply_limit_for_single_key

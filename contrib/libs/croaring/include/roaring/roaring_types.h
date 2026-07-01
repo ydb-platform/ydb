@@ -1,5 +1,11 @@
 /*
-  Typedefs used by various components
+    Shared type definitions used across the CRoaring public API and internal
+    components.
+
+    This file centralizes common typedefs and small structs that are referenced
+    by multiple headers, including iterator callback signatures, roaring array
+    metadata, statistics structures, and compatibility types used to bridge the
+    C and C++ builds.
 */
 
 #ifndef ROARING_TYPES_H

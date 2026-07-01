@@ -614,8 +614,9 @@ public:
 
     void RecordThrottling(TDuration throttleDuration) override
     {
-        ThrottlingTime_.store(ThrottlingTime_.load(std::memory_order::acquire) +
-            throttleDuration, std::memory_order::release);
+        ThrottlingTime_.store(
+            ThrottlingTime_.load(std::memory_order::acquire) + throttleDuration,
+            std::memory_order::release);
         if (auto executionTime = ExecutionTime_.load(std::memory_order::acquire)) {
             ExecutionTime_.store(*executionTime - throttleDuration, std::memory_order::release);
         }
@@ -740,17 +741,8 @@ private:
     bool Cancelable_ = false;
     TSingleShotCallbackList<void(const TError&)> CanceledList_;
 
-    struct TInstantSentinel
-    {
-        static constexpr auto Sentinel = TInstant::Zero();
-    };
-    using TSentinelOptionalInstant = TSentinelOptional<TInstant, TInstantSentinel>;
-
-    struct TDurationSentinel
-    {
-        static constexpr auto Sentinel = TDuration::Max();
-    };
-    using TSentinelOptionalDuration = TSentinelOptional<TDuration, TDurationSentinel>;
+    YT_DEFINE_SENTINEL_OPTIONAL(TSentinelOptionalInstant, TInstant, TInstant::Zero());
+    YT_DEFINE_SENTINEL_OPTIONAL(TSentinelOptionalDuration, TDuration, TDuration::Max());
 
     const TInstant ArriveInstant_;
     std::atomic<TSentinelOptionalInstant> RunInstant_;
@@ -1055,7 +1047,7 @@ private:
         ExecutionTime_.store(executionTime, std::memory_order::release);
 
         auto totalTime = replyInstant - ArriveInstant_;
-        TotalTime_.store(replyInstant - ArriveInstant_, std::memory_order::release);
+        TotalTime_.store(totalTime, std::memory_order::release);
 
         MethodPerformanceCounters_->ExecutionTimeCounter.Record(executionTime);
         MethodPerformanceCounters_->TotalTimeCounter.Record(totalTime);

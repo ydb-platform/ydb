@@ -4,14 +4,17 @@
 
 #include <library/cpp/streams/brotli/brotli.h>
 
+#include <util/stream/mem.h>
+
 namespace NYT::NCompression {
 namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <typename TCompressStream>
-TString Compress(TString data)
+std::string Compress(const std::string& data)
 {
+    // TODO(babenko): migrate to std::string
     TString compressed;
     TStringOutput output(compressed);
     TCompressStream compressStream(&output, 11);
@@ -22,23 +25,23 @@ TString Compress(TString data)
 }
 
 template <typename TDecompressStream>
-TString Decompress(TString data)
+std::string Decompress(const std::string& data)
 {
-    TStringInput input(data);
+    TMemoryInput input(data);
     TDecompressStream decompressStream(&input);
     return decompressStream.ReadAll();
 }
 
 template <typename TCompressStream, typename TDecompressStream>
-void TestCase(const TString& s)
+void TestCase(const std::string& s)
 {
     EXPECT_EQ(s, Decompress<TDecompressStream>(Compress<TCompressStream>(s)));
 }
 
-TString GenerateRandomString(size_t size)
+std::string GenerateRandomString(size_t size)
 {
     TRandomGenerator generator(42);
-    TString result;
+    std::string result;
     result.reserve(size + sizeof(ui64));
     while (result.size() < size) {
         ui64 value = generator.Generate<ui64>();
@@ -64,16 +67,16 @@ TEST(TBrotliStreamTest, SeveralStreams)
 
 TEST(TBrotliStreamTest, IncompleteStream)
 {
-    TString manyAs(64 * 1024, 'a');
+    std::string manyAs(64 * 1024, 'a');
     auto compressed = Compress<TBrotliCompress>(manyAs);
-    TString truncated(compressed.data(), compressed.size() - 1);
+    std::string truncated(compressed.data(), compressed.size() - 1);
     EXPECT_THROW(Decompress<TBrotliDecompress>(truncated), std::exception);
 }
 
 TEST(TBrotliStreamTest, 64KB)
 {
-    auto manyAs = TString(64 * 1024, 'a');
-    TString str("Hello from the Matrix!@#% How are you?}{\n\t\a");
+    auto manyAs = std::string(64 * 1024, 'a');
+    std::string str("Hello from the Matrix!@#% How are you?}{\n\t\a");
     TestCase<TBrotliCompress, TBrotliDecompress>(manyAs + str + manyAs);
 }
 

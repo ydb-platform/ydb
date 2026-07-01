@@ -16,6 +16,7 @@ NActors::IActor* CreateReadProxy(
     const NActors::TActorId& tablet,
     const ui32 tabletGeneration,
     const TDirectReadKey& directReadKey,
-    const NKikimrClient::TPersQueueRequest& request);
+    const NKikimrClient::TPersQueueRequest& request,
+    const NActors::TActorId& batchProcessorActor);
 
 }

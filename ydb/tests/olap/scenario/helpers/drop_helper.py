@@ -83,3 +83,18 @@ class DropExternalDataSource(DropObject):
     @override
     def _type(self) -> str:
         return 'external data source'
+
+
+class DropSecret(DropObject):
+    """Class of requests to delete a secret.
+
+    See {ScenarioTestHelper.execute_scheme_query}.
+
+    Example:
+        sth = ScenarioTestHelper(ctx)
+        sth.execute_scheme_query(DropSecret('my_secret'))
+    """
+
+    @override
+    def _type(self) -> str:
+        return 'secret'

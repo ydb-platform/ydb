@@ -52,7 +52,7 @@ public:
                 auto guard = Guard(state.Alloc);
                 Y_ENSURE(batch.values.size() == state.Args.size());
                 for (ui32 i = 0; i < batch.values.size(); ++i) {
-                    state.Args[i] = state.HolderFactory.CreateArrowBlock(arrow::Datum(batch.values[i]));
+                    state.Args[i] = state.HolderFactory.CreateArrowBlock(arrow::Datum(batch.values[i]), NYql::EDatumValidationMode::None);
                 }
 
                 const auto& ret = Callable_.Run(&state.ValueBuilder, state.Args.data());

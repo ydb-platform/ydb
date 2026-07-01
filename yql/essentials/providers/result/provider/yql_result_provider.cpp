@@ -1175,8 +1175,8 @@ public:
                             }
                         }
 
-                        if (Config_->Types.OrderedColumns && res.Data().Ref().IsCallable("AssumeColumnOrder")) {
-                            if (!HasSetting(res.Settings().Ref(), "freezeColumns")) {
+                        if (Config_->Types.DeriveColumnOrder && res.Data().Ref().IsCallable("AssumeColumnOrder")) {
+                            if (Config_->Types.OrderedColumns && !HasSetting(res.Settings().Ref(), "freezeColumns")) {
                                 auto dataOrder = Config_->Types.LookupColumnOrder(res.Data().Ref());
                                 YQL_ENSURE(dataOrder);
 

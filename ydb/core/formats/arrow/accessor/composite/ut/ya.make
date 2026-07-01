@@ -6,9 +6,9 @@ PEERDIR(
     ydb/core/formats/arrow/accessor/sparsed
     ydb/core/formats/arrow/accessor/plain
     ydb/core/formats/arrow
+    ydb/core/formats/arrow/filter
     yql/essentials/public/udf/service/stub
     yql/essentials/sql/pg_dummy
-    ydb/core/formats/arrow
 )
 
 YQL_LAST_ABI_VERSION()

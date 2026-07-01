@@ -44,9 +44,9 @@ class RSInfo {
         return `
             <tr id="ds-out-rs-row-${this.key}">
                 <td><a href="#page=ds-op&op=${info.TxId}" onclick="showOp(${info.TxId})">${info.TxId}</a></td>
-                <td><a href="app?TabletID=${info.Origin}">${info.Origin}</a></td>
-                <td><a href="app?TabletID=${info.Source}">${info.Source}</a></td>
-                <td><a href="app?TabletID=${info.Destination}">${info.Destination}</a></td>
+                <td><a href="${makeTabletDevUiUrl(`TabletID=${info.Origin}`)}">${info.Origin}</a></td>
+                <td><a href="${makeTabletDevUiUrl(`TabletID=${info.Source}`)}">${info.Source}</a></td>
+                <td><a href="${makeTabletDevUiUrl(`TabletID=${info.Destination}`)}">${info.Destination}</a></td>
                 <td>${info.SeqNo}</td>
             </tr>
         `;
@@ -73,9 +73,9 @@ class RSAckInfo {
         return `
             <tr id="ds-out-rs-ack-row-${this.key}">
                 <td><a href="#page=ds-op&op=${info.TxId}" onclick="showOp(${info.TxId})">${info.TxId}</a></td>
-                <td><a href="app?TabletID=${info.Origin}">${info.Origin}</a></td>
-                <td><a href="app?TabletID=${info.Source}">${info.Source}</a></td>
-                <td><a href="app?TabletID=${info.Destination}">${info.Destination}</a></td>
+                <td><a href="${makeTabletDevUiUrl(`TabletID=${info.Origin}`)}">${info.Origin}</a></td>
+                <td><a href="${makeTabletDevUiUrl(`TabletID=${info.Source}`)}">${info.Source}</a></td>
+                <td><a href="${makeTabletDevUiUrl(`TabletID=${info.Destination}`)}">${info.Destination}</a></td>
                 <td>${info.SeqNo}</td>
             </tr>
         `;
@@ -103,7 +103,7 @@ class RSExpectationInfo {
             <tr id="ds-rs-expectation-row-${this.key}">
                 <td>${info.TxId}</td>
                 <td>${info.Step}</td>
-                <td><a href="app?TabletID=${info.Source}">${info.Source}</a></td>
+                <td><a href="${makeTabletDevUiUrl(`TabletID=${info.Source}`)}">${info.Source}</a></td>
             </tr>
         `;
     }
@@ -128,7 +128,7 @@ class RSPipeInfo {
     _makeTrHtml(info) {
         return `
             <tr id="ds-rs-pipe-row-${this.key}">
-                <td><a href="app?TabletID=${info.Destination}">${info.Destination}</a></td>
+                <td><a href="${makeTabletDevUiUrl(`TabletID=${info.Destination}`)}">${info.Destination}</a></td>
                 <td>${info.OutReadSets}</td>
                 <td>${info.Subscribed}</td>
             </tr>
@@ -302,7 +302,7 @@ function loadReadSets() {
         return;
 
     ReadSetsState.loading = true;
-    var url = '../cms/api/datashard/json/getrsinfo?tabletid=' + TabletId;
+    var url = makeMonUrl('/cms/api/datashard/json/getrsinfo?tabletid=' + TabletId);
     $.get(url).done(onReadSetsLoaded).fail(onReadSetsFailed);
 }
 

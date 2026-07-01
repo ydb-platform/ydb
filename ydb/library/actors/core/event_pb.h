@@ -7,6 +7,7 @@
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/arena.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <util/generic/bitops.h>
 #include <util/generic/deque.h>
 #include <util/system/context.h>
 #include <util/system/filemap.h>
@@ -169,7 +170,7 @@ namespace NActors {
     ui32 CalculateSerializedHeaderSizeImpl(const TVector<TRope> &payload);
     std::optional<TRope> SerializeToRopeImpl(const google::protobuf::MessageLite& msg, const TVector<TRope>& payload, IRcBufAllocator* allocator);
     ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, ssize_t recordSize);
-    TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, ssize_t recordSize, size_t payloadAlignment = 0);
+    TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, ssize_t recordSize, size_t payloadAlignment = 0, size_t payloadHeaderSize = 0);
 
     template <typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType, typename TRecHolder>
     class TEventPBBase: public TEventBase<TEv, TEventType> , public TRecHolder {
@@ -270,17 +271,29 @@ namespace NActors {
         }
 
         TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {
+            constexpr size_t payloadAlignment = TEv::GetPayloadAlignment();
+            constexpr size_t payloadHeaderSize = TEv::GetPayloadHeaderSize();
+            static_assert(payloadAlignment == 0 || IsPowerOf2(payloadAlignment),
+                "GetPayloadAlignment() must be zero or a power of two");
+            static_assert(payloadAlignment == 0 || payloadHeaderSize % payloadAlignment == 0,
+                "GetPayloadHeaderSize() must be a multiple of GetPayloadAlignment()");
             allowExternalDataChannel = allowExternalDataChannel && static_cast<const TEv&>(*this).AllowExternalDataChannel();
             return CreateSerializationInfoImpl(0, allowExternalDataChannel, GetPayload(),
                 allowExternalDataChannel ? Record.ByteSize() : 0,
-                static_cast<const TEv&>(*this).GetPayloadAlignment());
+                payloadAlignment, payloadHeaderSize);
         }
 
         bool AllowExternalDataChannel() const {
             return TotalPayloadSize >= 4096;
         }
 
-        size_t GetPayloadAlignment() const {
+        static constexpr size_t GetPayloadAlignment() {
+            return 0;
+        }
+
+        // Size of an optional header reserved in the payload buffer right before each payload (see GetPayloadWithHeader).
+        // Must be a multiple of GetPayloadAlignment() when alignment is requested.
+        static constexpr size_t GetPayloadHeaderSize() {
             return 0;
         }
 
@@ -296,6 +309,47 @@ namespace NActors {
         const TRope& GetPayload(ui32 id) const {
             Y_ENSURE(id < Payload.size());
             return Payload[id];
+        }
+
+        // Returns an owning TRcBuf covering [header | payload] in contiguous memory, where the leading
+        // GetPayloadHeaderSize() bytes are reserved (uninitialized) header space, immediately followed by the
+        // payload bytes. When alignment is requested, the header start is aligned to GetPayloadAlignment().
+        // GetPayload(id) keeps returning the payload-only rope.
+        //
+        // Fast (zero-copy) path: taken when the payload is a single contiguous chunk that still has enough safe
+        // headroom in front (>= GetPayloadHeaderSize()) at the required alignment - the case for an
+        // interconnect-received payload (see CreateSerializationInfo). Safe headroom means the chunk either
+        // privately owns the space or, for cookie-bearing backends, currently owns its front edge, so a
+        // shared-but-front buffer can also take this path. Otherwise an aligned buffer is allocated and the
+        // payload is copied after the header. Intended to be called at most once per payload id: the fast path
+        // consumes the reserved headroom (via cookies); a second call on the same id takes the fallback path.
+        // Write the header through the returned buffer's
+        // UnsafeGetContiguousSpanMut()/UnsafeGetDataMut() (these bypass copy-on-write; the header region lies
+        // outside every payload's bytes, so this is safe even when the backend is shared).
+        TRcBuf GetPayloadWithHeader(ui32 id) {
+            Y_ENSURE(id < Payload.size());
+            constexpr size_t headerSize = TEv::GetPayloadHeaderSize();
+            constexpr size_t alignment = TEv::GetPayloadAlignment();
+            TRope& rope = Payload[id];
+            const size_t payloadSize = rope.GetSize();
+
+            if (payloadSize && rope.IsContiguous()) {
+                const TRcBuf& chunk = rope.Begin().GetChunk();
+                if (chunk.Headroom() >= headerSize) {
+                    const char* headerStart = chunk.GetData() - headerSize;
+                    const bool aligned = alignment == 0 ||
+                        (reinterpret_cast<uintptr_t>(headerStart) & (alignment - 1)) == 0;
+                    if (aligned) {
+                        return chunk.ExpandFront(headerSize);
+                    }
+                }
+            }
+
+            TRcBuf buffer = TRcBuf::UninitializedAligned(headerSize + payloadSize, alignment);
+            if (payloadSize) {
+                rope.Begin().ExtractPlainDataAndAdvance(buffer.UnsafeGetDataMut() + headerSize, payloadSize);
+            }
+            return buffer;
         }
 
         const TVector<TRope>& GetPayload() const {
@@ -472,10 +526,16 @@ namespace NActors {
         }
 
         TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {
+            constexpr size_t payloadAlignment = TEv::GetPayloadAlignment();
+            constexpr size_t payloadHeaderSize = TEv::GetPayloadHeaderSize();
+            static_assert(payloadAlignment == 0 || IsPowerOf2(payloadAlignment),
+                "GetPayloadAlignment() must be zero or a power of two");
+            static_assert(payloadAlignment == 0 || payloadHeaderSize % payloadAlignment == 0,
+                "GetPayloadHeaderSize() must be a multiple of GetPayloadAlignment()");
             allowExternalDataChannel = allowExternalDataChannel && static_cast<const TEv&>(*this).AllowExternalDataChannel();
             return CreateSerializationInfoImpl(PreSerializedData.size(), allowExternalDataChannel, TBase::GetPayload(),
                 allowExternalDataChannel ? Record.ByteSize() : 0,
-                static_cast<const TEv&>(*this).GetPayloadAlignment());
+                payloadAlignment, payloadHeaderSize);
         }
     };
 

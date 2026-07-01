@@ -164,11 +164,13 @@ namespace NKikimr::NBsController {
                 }
 
                 ui32 numPhysicalGroups = 0;
-                for (auto [begin, end] = StoragePoolGroups.Get().equal_range(group->StoragePoolId); begin != end; ++begin) {
-                    if (const TGroupInfo *poolGroup = Groups.Find(begin->second)) {
+                const auto& storagePoolGroups = StoragePoolGroups.Get();
+                for (auto it = storagePoolGroups.lower_bound({group->StoragePoolId, Min<TGroupId>()});
+                        it != storagePoolGroups.end() && it->first == group->StoragePoolId; ++it) {
+                    if (const TGroupInfo *poolGroup = Groups.Find(it->second)) {
                         numPhysicalGroups += poolGroup->IsPhysicalGroup();
                     } else {
-                        throw TExGroupNotFound(begin->second.GetRawId())
+                        throw TExGroupNotFound(it->second.GetRawId())
                             << TErrorParams::BoxId(std::get<0>(group->StoragePoolId))
                             << TErrorParams::StoragePoolId(std::get<1>(group->StoragePoolId));
                     }

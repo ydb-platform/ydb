@@ -172,7 +172,7 @@ TUnversionedOwningRow YsonToSchemafulRow(
 {
     auto nameTable = TNameTable::FromSchema(tableSchema);
 
-    auto rowParts = ConvertTo<THashMap<TString, INodePtr>>(TYsonString(yson, ysonType));
+    auto rowParts = ConvertTo<THashMap<std::string, INodePtr>>(TYsonString(yson, ysonType));
 
     TUnversionedOwningRowBuilder rowBuilder;
     auto validateAndAddValue = [&rowBuilder, &validateValues] (const TUnversionedValue& value, const TColumnSchema& column) {
@@ -393,7 +393,7 @@ TUnversionedOwningRow YsonToKey(TStringBuf yson)
     return keyBuilder.FinishRow();
 }
 
-TString KeyToYson(TUnversionedRow row)
+std::string KeyToYson(TUnversionedRow row)
 {
     return ConvertToYsonString(row, EYsonFormat::Text).ToString();
 }
@@ -767,7 +767,7 @@ void FromUnversionedValue(TIP6Address* value, TUnversionedValue unversionedValue
         *value = TIP6Address();
         return;
     }
-    auto strValue = FromUnversionedValue<TString>(unversionedValue);
+    auto strValue = FromUnversionedValue<std::string>(unversionedValue);
     *value = TIP6Address::FromString(strValue);
 }
 
@@ -851,7 +851,8 @@ void UnversionedValueToProtobufImpl(
     TProtobufString wireBytes;
     StringOutputStream outputStream(&wireBytes);
     TProtobufWriterOptions options;
-    options.UnknownYsonFieldModeResolver = TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(EUnknownYsonFieldsMode::Keep);
+    options.UnknownYsonFieldModeResolver = TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(
+        EUnknownYsonFieldsMode::Keep);
     auto protobufWriter = CreateProtobufWriter(&outputStream, type, options);
     ParseYsonStringBuffer(
         unversionedValue.AsStringBuf(),
@@ -1028,7 +1029,12 @@ void UnversionedValueToListImpl(
         {
             FlushElement();
             WireBytes_.clear();
-            Underlying_ = CreateProtobufWriter(&OutputStream_, Type_);
+
+            TProtobufWriterOptions options;
+            options.UnknownYsonFieldModeResolver = TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(
+                EUnknownYsonFieldsMode::Keep);
+
+            Underlying_ = CreateProtobufWriter(&OutputStream_, Type_, options);
         }
 
         void FlushElement()
@@ -1199,7 +1205,7 @@ void MapToUnversionedValueImpl(
 }
 
 void UnversionedValueToMapImpl(
-    std::function<google::protobuf::Message*(TString)> appender,
+    std::function<google::protobuf::Message*(std::string)> appender,
     const TProtobufMessageType* type,
     TUnversionedValue unversionedValue)
 {
@@ -1217,7 +1223,7 @@ void UnversionedValueToMapImpl(
     {
     public:
         TConsumer(
-            std::function<google::protobuf::Message*(TString)> appender,
+            std::function<google::protobuf::Message*(std::string)> appender,
             const TProtobufMessageType* type)
             : Appender_(std::move(appender))
             , Type_(type)
@@ -1338,7 +1344,12 @@ void UnversionedValueToMapImpl(
             FlushElement();
             WireBytes_.clear();
             Key_ = std::string(key);
-            Underlying_ = CreateProtobufWriter(&OutputStream_, Type_);
+
+            TProtobufWriterOptions options;
+            options.UnknownYsonFieldModeResolver = TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(
+                EUnknownYsonFieldsMode::Keep);
+
+            Underlying_ = CreateProtobufWriter(&OutputStream_, Type_, options);
         }
 
         void FlushElement()
@@ -1363,7 +1374,7 @@ void UnversionedValueToMapImpl(
 }
 
 void UnversionedValueToMapImpl(
-    std::function<void(TString, TUnversionedValue)> appender,
+    std::function<void(std::string, TUnversionedValue)> appender,
     TUnversionedValue unversionedValue)
 {
     if (unversionedValue.Type == EValueType::Null) {
@@ -1379,7 +1390,7 @@ void UnversionedValueToMapImpl(
         : public TYsonConsumerBase
     {
     public:
-        explicit TConsumer(std::function<void(TString, TUnversionedValue)> appender)
+        explicit TConsumer(std::function<void(std::string, TUnversionedValue)> appender)
             : Appender_(std::move(appender))
         { }
 
@@ -1443,7 +1454,7 @@ void UnversionedValueToMapImpl(
             if (PendingKey_) {
                 THROW_ERROR_EXCEPTION("Previous map item value is missing");
             }
-            PendingKey_ = TString(key);
+            PendingKey_ = std::string(key);
         }
 
         void OnEndMap() override
@@ -1466,10 +1477,10 @@ void UnversionedValueToMapImpl(
         }
 
     private:
-        const std::function<void(TString, TUnversionedValue)> Appender_;
+        const std::function<void(std::string, TUnversionedValue)> Appender_;
 
         bool InMap_ = false;
-        std::optional<TString> PendingKey_;
+        std::optional<std::string> PendingKey_;
 
         void EnsureInMap() const
         {

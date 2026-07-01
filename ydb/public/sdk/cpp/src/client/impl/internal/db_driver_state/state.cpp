@@ -164,8 +164,8 @@ TDbDriverStateTracker::TDbDriverStateTracker(IInternalClient* client)
 {}
 
 TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
-    std::string database,
-    std::string discoveryEndpoint,
+    const std::string& database,
+    const std::string& discoveryEndpoint,
     EDiscoveryMode discoveryMode,
     const TSslCredentials& sslCredentials,
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
@@ -174,8 +174,9 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
     if (credentialsProviderFactory) {
         clientIdentity = credentialsProviderFactory->GetClientIdentity();
     }
-    Quote(database);
-    const TStateKey key{database, discoveryEndpoint, clientIdentity, discoveryMode, sslCredentials};
+    std::string quotedDatabase = database;
+    Quote(quotedDatabase);
+    const TStateKey key{quotedDatabase, discoveryEndpoint, clientIdentity, discoveryMode, sslCredentials};
     {
         std::shared_lock lock(Lock_);
         auto state = States_.find(key);
@@ -218,7 +219,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
             };
             strongState = std::shared_ptr<TDbDriverState>(
                 new TDbDriverState(
-                    database,
+                    quotedDatabase,
                     discoveryEndpoint,
                     discoveryMode,
                     sslCredentials,

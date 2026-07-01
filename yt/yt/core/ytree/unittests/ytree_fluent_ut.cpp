@@ -185,7 +185,7 @@ TEST(TYTreeFluentMapTest, Items)
     StrictMock<TMockYsonConsumer> mock;
     InSequence dummy;
 
-    auto node = ConvertToNode(TYsonString(TString("{bar = 10}")));
+    auto node = ConvertToNode(TYsonString(std::string("{bar = 10}")));
 
     EXPECT_CALL(mock, OnBeginMap());
     EXPECT_CALL(mock, OnKeyedItem("bar"));
@@ -273,7 +273,7 @@ TEST(TYTreeFluentListTest, Items)
     StrictMock<TMockYsonConsumer> mock;
     InSequence dummy;
 
-    auto node = ConvertToNode(TYsonString(TString("[10; 20; 30]")));
+    auto node = ConvertToNode(TYsonString(std::string("[10; 20; 30]")));
 
     EXPECT_CALL(mock, OnBeginList());
     EXPECT_CALL(mock, OnListItem());

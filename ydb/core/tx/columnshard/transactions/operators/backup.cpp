@@ -22,7 +22,15 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
     }
     auto schema = owner.TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(
         NKikimr::NOlap::TSnapshot{ txBody.GetBackupTask().GetSnapshotStep(), txBody.GetBackupTask().GetSnapshotTxId() });
-    auto columns = schema->GetIndexInfo().GetColumns();
+    const auto& indexInfo = schema->GetIndexInfo();
+    const auto& columnsMap = indexInfo.GetColumns();
+    std::vector<NOlap::TNameTypeInfo> columns;
+    columns.reserve(columnsMap.size());
+    for (const ui32 columnId : indexInfo.GetColumnIds(false)) {
+        auto it = columnsMap.find(columnId);
+        AFL_VERIFY(it != columnsMap.end())("column_id", columnId);
+        columns.emplace_back(it->second);
+    }
     ExportTask = std::make_shared<NOlap::NExport::TExportTask>(id.DetachResult(), columns, txBody.GetBackupTask(), GetTxId());
     NOlap::NBackground::TTask task(::ToString(ExportTask->GetIdentifier().GetSchemeShardLocalPathId().GetRawValue()),
         std::make_shared<NOlap::NBackground::TFakeStatusChannel>(), ExportTask);
@@ -104,12 +112,22 @@ bool TBackupTransactionOperator::ExecuteOnAbort(TColumnShard& owner, NTabletFlat
         auto control = ExportTask->BuildAbortControl();
         TxAbort = owner.GetBackgroundSessionsManager()->TxApplyControl(control);
     }
+    if (!TxAbort) {
+        return true;
+    }
     return TxAbort->Execute(txc, NActors::TActivationContext::AsActorContext());
 }
 
-bool TBackupTransactionOperator::CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& ctx) {
+bool TBackupTransactionOperator::CompleteOnAbort(TColumnShard& owner, const TActorContext& ctx) {
     if (TxAbort) {
         TxAbort->Complete(ctx);
+    }
+    for (TActorId subscriber : NotifySubscribers) {
+        auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
+        auto& opResult = *event->Record.MutableOpResult();
+        opResult.SetSuccess(false);
+        opResult.SetExplain("Cancelled");
+        ctx.Send(subscriber, event.Release(), 0, 0);
     }
     return true;
 }

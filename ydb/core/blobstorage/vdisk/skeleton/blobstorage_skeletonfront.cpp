@@ -19,6 +19,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_server.h>
 
+#include <ydb/core/retro_tracing_impl/spans/lazy_retro_span.h>
 #include <ydb/core/util/light.h>
 #include <ydb/core/util/max_tracker.h>
 #include <ydb/core/util/queue_inplace.h>
@@ -106,7 +107,7 @@ namespace NKikimr {
             NKikimrBlobStorage::EVDiskQueueId ExtQueueId;
             NBackpressure::TQueueClientId ClientId;
             TActorId ActorId;
-            NWilson::TSpan Span;
+            TLazyRetroSpan Span;
             std::shared_ptr<TVDiskSkeletonTrace> Trace;
             ui64 InternalMessageId;
 
@@ -127,7 +128,9 @@ namespace NKikimr {
                 , Trace(std::move(trace))
                 , InternalMessageId(internalMessageId)
             {
-                Span.Attribute("QueueName", std::move(name));
+                if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                    wilsonSpan->Attribute("QueueName", std::move(name));
+                }
                 Ev->TraceId = Span.GetTraceId();
             }
         };

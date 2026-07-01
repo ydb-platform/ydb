@@ -19,12 +19,12 @@ SRCS(
     localdb_ut.cpp
     logoblob_ut.cpp
     memory_stats_ut.cpp
+    mon_auth_ut.cpp
     path_ut.cpp
     state_storage_follower_ids_ut.cpp
     statestorage_guardian_impl_ut.cpp
     statestorage_ut.cpp
     table_index_ut.cpp
-    json_index_ut.cpp
 )
 
 END()

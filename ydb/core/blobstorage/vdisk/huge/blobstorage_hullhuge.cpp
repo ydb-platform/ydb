@@ -14,6 +14,7 @@
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
+#include <ydb/core/retro_tracing_impl/spans/lazy_retro_span.h>
 #include <ydb/library/actors/wilson/wilson_with_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -177,7 +178,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         ui64 WriteId;
         TDiskPart DiskAddr;
         static void *Cookie;
-        NWilson::TSpan Span;
+        TLazyRetroSpan Span;
 
         friend class TActorBootstrapped<THullHugeBlobWriter>;
 
@@ -210,10 +211,12 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                 "Writer: bootstrap: id# %s storedBlobSize# %u writtenSize# %u blobId# %s wId# %" PRIu64,
                 HugeSlot.ToString().data(), storedBlobSize, writtenSize, Item->LogoBlobId.ToString().data(), WriteId));
-            Span && Span.Event("Send_TEvChunkWrite", {{"ChunkId", chunkId}, {"Offset", offset}, {"WrittenSize", writtenSize}});
+            if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                wilsonSpan->Event("Send_TEvChunkWrite", {{"ChunkId", chunkId}, {"Offset", offset}, {"WrittenSize", writtenSize}});
+            }
             auto ev = std::make_unique<NPDisk::TEvChunkWrite>(HugeKeeperCtx->PDiskCtx->Dsk->Owner,
                         HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, chunkId, offset,
-                        partsPtr, Cookie, true, GetWritePriority(), false);
+                        partsPtr, Cookie, true, GetWritePriority(), Item->WriteSource, false);
             if (AppData()->FeatureFlags.GetEnableBlobIdInSectorChecksum()) {
                 ev->BlobId = Item->LogoBlobId;
             }
@@ -230,13 +233,18 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             if (ev->Get()->Status == NKikimrProto::OK) {
                 Span.EndOk();
             } else {
-                Span.EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(ev->Get()->Status));
+                if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                    wilsonSpan->EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(ev->Get()->Status));
+                } else if (TNamedSpan* retroSpan = Span.GetRetroSpanPtr()) {
+                    retroSpan->EndError();
+                }
             }
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
             ctx.Send(NotifyID, new TEvHullHugeWritten(HugeSlot));
             ctx.Send(HugeKeeperCtx->SkeletonId, new TEvHullLogHugeBlob(WriteId, Item->LogoBlobId, Item->Ingress,
                 DiskAddr, Item->IgnoreBlock, Item->IssueKeepFlag, Item->SenderId, Item->Cookie, Item->HandleClass,
-                std::move(Item->Result), &Item->ExtraBlockChecks, Item->RewriteBlob), 0, 0, Span.GetTraceId());
+                std::move(Item->Result), &Item->ExtraBlockChecks, Item->WriteSource, Item->RewriteBlob), 0, 0,
+                Span.GetTraceId());
             LOG_DEBUG(ctx, BS_HULLHUGE,
                       VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                             "Writer: finish: id# %s diskAddr# %s",
@@ -276,8 +284,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             , DiskAddr()
             , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.HugeBlobKeeper.Write")
         {
-            if (Span) {
-                Span.Attribute("blob_id", Item->LogoBlobId.ToString());
+            if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                wilsonSpan->Attribute("blob_id", Item->LogoBlobId.ToString());
             }
         }
     };
@@ -293,7 +301,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         ui64 Lsn;
         std::shared_ptr<THullHugeKeeperPersState> Pers;
         ui32 ChunkId = 0;
-        NWilson::TSpan Span;
+        TLazyRetroSpan Span;
         ui32 SlotSize;
 
         friend class TActorBootstrapped<THullHugeBlobChunkAllocator>;
@@ -346,7 +354,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
             ctx.Send(HugeKeeperCtx->LoggerId, new NPDisk::TEvLog(HugeKeeperCtx->PDiskCtx->Dsk->Owner,
                 HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureHugeBlobAllocChunk,
-                commitRecord, data, TLsnSeg(Lsn, Lsn), nullptr));
+                commitRecord, data, TLsnSeg(Lsn, Lsn), nullptr, TWriteSource::HugeKeeperAllocChunk, NPDisk::TEvLog::TCallback()));
 
             // commit changes to the persistent state at once
             const ui64 prevLsn = std::exchange(Pers->LogPos.ChunkAllocationLsn, Lsn);
@@ -432,7 +440,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             // send log message
             ctx.Send(HugeKeeperCtx->LoggerId, new NPDisk::TEvLog(HugeKeeperCtx->PDiskCtx->Dsk->Owner,
                 HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureHugeBlobFreeChunk,
-                commitRecord, data, TLsnSeg(Lsn, Lsn), nullptr));
+                commitRecord, data, TLsnSeg(Lsn, Lsn), nullptr, TWriteSource::HugeKeeperFreeChunk, NPDisk::TEvLog::TCallback()));
             TThis::Become(&TThis::StateFunc);
         }
 
@@ -496,7 +504,9 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             TLsnSeg seg(EntryPointLsn, EntryPointLsn);
             ctx.Send(HugeKeeperCtx->LoggerId,
                     new NPDisk::TEvLog(HugeKeeperCtx->PDiskCtx->Dsk->Owner, HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound,
-                        TLogSignature::SignatureHugeBlobEntryPoint, commitRecord, TRcBuf(Serialized), seg, nullptr)); //FIXME(innokentii): wrapping
+                        TLogSignature::SignatureHugeBlobEntryPoint, commitRecord, TRcBuf(Serialized), seg, nullptr,
+                        TWriteSource::HugeKeeperEntryPoint,
+                        NPDisk::TEvLog::TCallback())); //FIXME(innokentii): wrapping
             TThis::Become(&TThis::StateFunc);
         }
 

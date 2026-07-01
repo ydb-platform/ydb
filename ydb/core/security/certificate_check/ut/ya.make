@@ -12,6 +12,8 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    cert_auth_processor_ut.cpp
+    cert_auth_utils_ut.cpp
     cert_check_ut.cpp
     cert_utils_ut.cpp
 )

@@ -72,14 +72,15 @@ protected:
                 return false;
             }
 
+            const TStringBuf exportKind = backup.HasFSSettings() ? "FS"sv : "S3"sv;
             if (auto* exportFactory = appData->DataShardExportFactory) {
                 std::shared_ptr<IExport>(exportFactory->CreateExportToS3(backup, columns)).swap(exp);
                 if (!exp) {
-                    Abort(op, ctx, "Failed to create S3 export");
+                    Abort(op, ctx, TStringBuilder() << "Failed to create " << exportKind << " export");
                     return false;
                 }
             } else {
-                Abort(op, ctx, "Exports to S3 are disabled");
+                Abort(op, ctx, TStringBuilder() << "Exports to " << exportKind << " are disabled");
                 return false;
             }
         } else {

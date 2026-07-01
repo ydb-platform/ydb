@@ -1,10 +1,12 @@
 LIBRARY()
 
 SRCS(
+    ddisk_helpers.cpp
     ic_storage_transport_actor.cpp
     ic_storage_transport_events.cpp
     ic_storage_transport.cpp
     storage_transport.cpp
+    storage_transport_mock.cpp
 )
 
 PEERDIR(

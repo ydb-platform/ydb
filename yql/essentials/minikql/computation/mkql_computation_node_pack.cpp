@@ -1467,11 +1467,12 @@ void TValuePackerTransport<Fast>::UnpackBatchBlocks(TChunkedBuffer&& buf, const 
                     const TType* itemType = IsLegacyBlock_ ? static_cast<const TStructType*>(Type_)->GetMemberType(i) : static_cast<const TMultiType*>(Type_)->GetElementType(i);
                     return holderFactory.CreateArrowBlock(
                         ConvertScalar(
-                            static_cast<const TBlockType*>(itemType)->GetItemType(), item, ArrowPool_));
+                            static_cast<const TBlockType*>(itemType)->GetItemType(), item, ArrowPool_),
+                        NYql::DefaultDatumValidationMode);
                 }
-                return holderFactory.CreateArrowBlock(array);
+                return holderFactory.CreateArrowBlock(array, NYql::DefaultDatumValidationMode);
             }
-            return holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(len)));
+            return holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(len)), NYql::DefaultDatumValidationMode);
         };
 
         if (IsLegacyBlock_) {

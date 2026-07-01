@@ -2,8 +2,8 @@
 
 #include "cube.h"
 #include "tag_registry.h"
-#include "sensor.h"
 
+#include <yt/yt/library/profiling/sensor_impl.h>
 #include <yt/yt/library/profiling/tag.h>
 #include <yt/yt/library/profiling/solomon/sensor_dump.pb.h>
 

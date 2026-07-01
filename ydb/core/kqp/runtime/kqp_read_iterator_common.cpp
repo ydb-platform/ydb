@@ -74,7 +74,7 @@ TDuration TIteratorReadBackoffSettings::CalcShardDelay(size_t attempt, bool allo
         delay = Min(delay, MaxRetryDelay);
     }
 
-    delay *= (1 - UnsertaintyRatio * RandomNumber<double>());
+    delay *= (1 - UncertaintyRatio * RandomNumber<double>());
 
     return delay;
 }

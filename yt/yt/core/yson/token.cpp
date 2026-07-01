@@ -50,9 +50,9 @@ char TokenTypeToChar(ETokenType type)
     }
 }
 
-TString TokenTypeToString(ETokenType type)
+std::string TokenTypeToString(ETokenType type)
 {
-    return TString(1, TokenTypeToChar(type));
+    return std::string(1, TokenTypeToChar(type));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -72,6 +72,7 @@ SRCS(
     concurrency/fiber.cpp
     concurrency/fiber_manager.cpp
     concurrency/fls.cpp
+    concurrency/helpers.cpp
     concurrency/invoker_alarm.cpp
     concurrency/invoker_queue.cpp
     concurrency/lease_manager.cpp
@@ -82,7 +83,6 @@ SRCS(
     concurrency/pooled_execution_stack.cpp
     concurrency/pollable_detail.cpp
     concurrency/prioritized_invoker.cpp
-    concurrency/profiling_helpers.cpp
     concurrency/propagating_storage.cpp
     concurrency/quantized_executor.cpp
     concurrency/scheduler_thread.cpp
@@ -421,6 +421,7 @@ RECURSE(
 IF (NOT OPENSOURCE AND OS_LINUX)
     RECURSE(
         benchmarks
+        actions/benchmarks
         concurrency/benchmarks
         bus/benchmarks
         ypath/benchmarks

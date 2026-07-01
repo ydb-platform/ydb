@@ -1,7 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
 /* custom error: Expected data or optional of data, but got: Null */
-/* FIXME(YQL-20234): support Null type */
 
 $t = SELECT * FROM AS_TABLE([
     <|key: 1, a: null, b: 1.0|>,

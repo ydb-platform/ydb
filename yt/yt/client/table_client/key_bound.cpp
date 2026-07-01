@@ -315,7 +315,7 @@ void Deserialize(TOwningKeyBound& keyBound, const NYTree::INodePtr& node)
                 relationNode->GetType());
         }
 
-        auto relation = relationNode->GetValue<TString>();
+        auto relation = relationNode->GetValue<std::string>();
         auto [isInclusive, isUpper] = NDetail::RelationToIsUpperAndIsInclusive(relation);
 
         TUnversionedOwningRow row;

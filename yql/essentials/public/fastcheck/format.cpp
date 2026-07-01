@@ -32,6 +32,8 @@ TString ReplaceHidden(TStringBuf input) {
             res << "\xe2\x80\xa2";
         } else if (c == '\t') {
             res << "\xe2\x86\x92";
+        } else if (c == '\n') {
+            res << "\xe2\x86\xb5\n";
         } else {
             res << c;
         }

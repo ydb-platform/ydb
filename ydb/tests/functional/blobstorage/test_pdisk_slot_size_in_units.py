@@ -217,6 +217,7 @@ class TestPDiskSlotSizeInUnits(object):
     def test_change_pdisk_slot_size_in_units(self):
         initial_total_size = retry_assertions(self.check_sysview_populated)
 
+        self.change_group_size_in_units(new_size=2, group_id=self.groups[1].GroupId)
         self.change_pdisk_slot_size_in_units(slot_size_in_units=2)
         self.change_group_size_in_units(new_size=4, group_id=self.groups[1].GroupId)
 

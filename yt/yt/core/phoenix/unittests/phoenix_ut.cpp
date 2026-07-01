@@ -13,6 +13,8 @@
 
 #include <library/cpp/testing/gtest_extensions/assertions.h>
 
+#include <util/stream/mem.h>
+
 namespace NYT::NPhoenix {
 namespace {
 
@@ -25,8 +27,9 @@ using NYT::Load;
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-TString Serialize(const T& value, int version = 0)
+std::string Serialize(const T& value, int version = 0)
 {
+    // TODO(babenko): migrate to std::string
     TString buffer;
     TStringOutput output(buffer);
     TSaveContext context(&output, version);
@@ -36,8 +39,9 @@ TString Serialize(const T& value, int version = 0)
 }
 
 template <class F>
-TString MakeBuffer(F&& func)
+std::string MakeBuffer(F&& func)
 {
+    // TODO(babenko): migrate to std::string
     TString buffer;
     TStringOutput output(buffer);
     TSaveContext context(&output);
@@ -47,10 +51,10 @@ TString MakeBuffer(F&& func)
 }
 
 template <class T>
-T Deserialize(const TString& buffer, int version = 0)
+T Deserialize(const std::string& buffer, int version = 0)
 {
     T value;
-    TStringInput input(buffer);
+    TMemoryInput input(buffer);
     TLoadContext context(&input);
     context.SetVersion(version);
     context.ConfigureDump(ESerializationDumpMode::Content);
@@ -59,9 +63,9 @@ T Deserialize(const TString& buffer, int version = 0)
 }
 
 template <class T>
-void InplaceDeserialize(const TIntrusivePtr<T>& value, const TString& buffer, int version = 0)
+void InplaceDeserialize(const TIntrusivePtr<T>& value, const std::string& buffer, int version = 0)
 {
-    TStringInput input(buffer);
+    TMemoryInput input(buffer);
     TLoadContext context(&input);
     context.SetVersion(version);
     context.ConfigureDump(ESerializationDumpMode::Content);
@@ -544,7 +548,7 @@ TEST(TPhoenixTest, AfterLoad)
 {
     using namespace NAfterLoad;
 
-    auto s = Deserialize<S>(TString());
+    auto s = Deserialize<S>(std::string());
     EXPECT_TRUE(s.AfterLoadInvoked);
 }
 
@@ -719,9 +723,9 @@ TEST(TPhoenixTest, AddFieldAfterDeletedField)
 
 TEST(TPhoenixTest, YsonDumpablePair)
 {
-    TPair<TString, double> p{.First = "hello", .Second = 3.14};
+    TPair<std::string, double> p{.First = "hello", .Second = 3.14};
     auto ysonStr = ConvertToYsonString(p);
-    auto canonicalYsonStr = TYsonString(TString("{First=hello;Second=3.14}"));
+    auto canonicalYsonStr = TYsonString(std::string("{First=hello;Second=3.14}"));
     EXPECT_TRUE(AreNodesEqual(ConvertToNode(ysonStr), ConvertToNode(canonicalYsonStr)));
 }
 
@@ -729,7 +733,7 @@ TEST(TPhoenixTest, YsonDumpablePoint)
 {
     TPoint p(123, 456);
     auto ysonStr = ConvertToYsonString(p);
-    auto canonicalYsonStr = TYsonString(TString("{X_=123;Y_=456}"));
+    auto canonicalYsonStr = TYsonString(std::string("{X_=123;Y_=456}"));
     EXPECT_TRUE(AreNodesEqual(ConvertToNode(ysonStr), ConvertToNode(canonicalYsonStr)));
 }
 
@@ -739,7 +743,7 @@ TEST(TPhoenixTest, YsonDumpableDerived)
     s.A = 123;
     s.B = 456;
     auto ysonStr = ConvertToYsonString(s);
-    auto canonicalYsonStr = TYsonString(TString("{A=123;B=456}"));
+    auto canonicalYsonStr = TYsonString(std::string("{A=123;B=456}"));
     EXPECT_TRUE(AreNodesEqual(ConvertToNode(ysonStr), ConvertToNode(canonicalYsonStr)));
 }
 
@@ -920,11 +924,11 @@ TEST(TPhoenixTest, SaveLoadVirtualField)
 
 TEST(TPhoenixTest, Pair)
 {
-    TPair<TString, double> p1{.First = "hello", .Second = 3.14};
+    TPair<std::string, double> p1{.First = "hello", .Second = 3.14};
 
     auto buffer = Serialize(p1);
 
-    auto p2 = Deserialize<TPair<TString, double>>(buffer);
+    auto p2 = Deserialize<TPair<std::string, double>>(buffer);
     EXPECT_EQ(p1, p2);
 }
 

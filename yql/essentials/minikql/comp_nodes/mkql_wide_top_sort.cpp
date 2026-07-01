@@ -6,7 +6,9 @@
 #include <yql/essentials/minikql/computation/presort.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/defs.h>
+#include <yql/essentials/public/udf/udf_log.h>
 #include <yql/essentials/utils/cast.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -89,21 +91,44 @@ using TStorage = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedV
 using TStorageDeque = std::deque<TStorage, TMKQLAllocator<TStorage, EMemorySubPool::Temporary>>;
 
 struct TSpilledData {
-    using TPtr = TSpilledData*;
+    using TPtr = std::shared_ptr<TSpilledData>;
 
-    TSpilledData(std::unique_ptr<TWideUnboxedValuesSpillerAdapter>&& spiller)
-        : Spiller(std::move(spiller))
-    {
+    TSpilledData() = default;
+
+    void Open(ISpiller::TPtr spiller, const TMultiType* tupleMultiType, size_t packSize) {
+        MKQL_ENSURE(IsEmpty(), "SpilledData must be empty to Open");
+        Spiller = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, tupleMultiType, packSize);
+        RowCount = 0;
+        AsyncWriteOperation = std::nullopt;
+        AsyncReadOperation = std::nullopt;
+        IsFinished = false;
+        Sealed = false;
     }
 
     TAsyncWriteOperation Write(NUdf::TUnboxedValue* item, size_t size) {
+        MKQL_ENSURE(Spiller, "SpilledData must be opened to Write");
+        MKQL_ENSURE(!Sealed, "SpilledData must not be sealed to Write");
+        ++RowCount;
         AsyncWriteOperation = Spiller->WriteWideItem({item, size});
         return AsyncWriteOperation;
     }
 
     TAsyncWriteOperation FinishWrite() {
+        MKQL_ENSURE(Spiller, "SpilledData must be opened to FinishWrite");
+        MKQL_ENSURE(!Sealed, "SpilledData must not be sealed to FinishWrite");
         AsyncWriteOperation = Spiller->FinishWriting();
         return AsyncWriteOperation;
+    }
+
+    void CompleteAsyncWrite() {
+        MKQL_ENSURE(AsyncWriteOperation.has_value() && AsyncWriteOperation->HasValue(),
+                    "No completed async write operation");
+        Spiller->AsyncWriteCompleted(AsyncWriteOperation->ExtractValue());
+        AsyncWriteOperation = std::nullopt;
+    }
+
+    void Seal() {
+        Sealed = true;
     }
 
     TAsyncReadOperation Read(TStorage& buffer, const TComputationContext& ctx) {
@@ -123,11 +148,39 @@ struct TSpilledData {
         return AsyncReadOperation;
     }
 
-    bool Empty() const {
-        return IsFinished;
+    void Reset() {
+        Spiller.reset();
+        RowCount = 0;
+        AsyncWriteOperation = std::nullopt;
+        AsyncReadOperation = std::nullopt;
+        IsFinished = false;
+        Sealed = false;
     }
 
+    bool IsEmpty() const {
+        return !Spiller;
+    }
+    bool IsSealed() const {
+        return Sealed;
+    }
+    bool IsReadFinished() const {
+        return IsFinished;
+    }
+    size_t GetRowCount() const {
+        return RowCount;
+    }
+
+    bool HasPendingWrite() const {
+        return AsyncWriteOperation.has_value();
+    }
+    bool IsWriteReady() const {
+        return AsyncWriteOperation.has_value() && AsyncWriteOperation->HasValue();
+    }
+
+private:
     std::unique_ptr<TWideUnboxedValuesSpillerAdapter> Spiller;
+    size_t RowCount = 0;
+    bool Sealed = false;
     TAsyncWriteOperation AsyncWriteOperation = std::nullopt;
     TAsyncReadOperation AsyncReadOperation = std::nullopt;
     bool IsFinished = false;
@@ -148,7 +201,7 @@ public:
         TSpilledData::TPtr spilledData,
         size_t dataWidth,
         const TComputationContext* ctx)
-        : SpilledData(spilledData)
+        : SpilledData(std::move(spilledData))
         , LessFunc(lessFunc)
         , Width_(dataWidth)
         , Ctx(ctx)
@@ -158,24 +211,29 @@ public:
 
     EFetchResult Read() {
         if (!HasValue) {
+            MKQL_ENSURE(SpilledData, "Spilled iterator data is null");
+            MKQL_ENSURE(Ctx, "Spilled iterator context is null");
             if (SpilledData->Read(Data, *Ctx)) {
                 return EFetchResult::Yield;
             }
-            if (SpilledData->Empty()) {
+            if (SpilledData->IsReadFinished()) {
                 return EFetchResult::Finish;
             }
+            HasValue = true;
         }
-        HasValue = true;
         return EFetchResult::One;
     }
 
     bool CheckForInit() {
-        Read();
-        return HasValue;
+        if (HasValue || IsFinished()) {
+            return true;
+        }
+        EFetchResult result = Read();
+        return result != EFetchResult::Yield;
     }
 
     bool IsFinished() const {
-        return SpilledData->Empty();
+        return SpilledData->IsReadFinished();
     }
 
     bool operator<(const TSpilledUnboxedValuesIterator& item) const {
@@ -188,6 +246,7 @@ public:
 
     TStorage Pop() {
         auto data(std::move(Data));
+        Data.resize(Width_);
         HasValue = false;
         Read();
         return data;
@@ -660,19 +719,73 @@ private:
     enum class EOperatingMode {
         InMemory,
         Spilling,
+        MergeSpilled,
         ProcessSpilled
     };
 
+    enum class ESpillReason {
+        None,
+        YellowZone,
+        FinalFlush,
+        Exception,
+    };
+
+    TString SpillReasonName(ESpillReason r) {
+        switch (r) {
+            case ESpillReason::None:
+                return "None";
+            case ESpillReason::YellowZone:
+                return "YellowZone";
+            case ESpillReason::FinalFlush:
+                return "FinalFlush";
+            case ESpillReason::Exception:
+                return "Exception";
+        }
+        return "Unknown";
+    }
+
+    bool HasPlaceholder() const {
+        return SpillReason != ESpillReason::Exception;
+    }
+
+    struct TMergeState {
+        TSpilledData::TPtr Target;
+        std::vector<TSpilledUnboxedValuesIterator> Iterators;
+        bool HeapBuilt = false;
+        bool FinishWriteInProgress = false;
+    };
+
     void ResetFields() {
-        auto pos = Storage.size();
-        Storage.insert(Storage.end(), Indexes.size(), {});
+        const size_t newRowCount = Storage.size() / Indexes.size() + 1;
+
+        try {
+            if (Full.capacity() < newRowCount) {
+                Full.reserve(newRowCount);
+            }
+            Storage.insert(Storage.end(), Indexes.size(), {});
+        } catch (TMemoryLimitExceededException) {
+            if (CanSpill()) {
+                SpillReason = ESpillReason::Exception;
+                SwitchMode(EOperatingMode::Spilling);
+                return;
+            }
+            throw;
+        }
+
+        const auto pos = Storage.size() - Indexes.size();
         auto ptr = Pointer = Storage.data() + pos;
         std::for_each(Indexes.cbegin(), Indexes.cend(), [&](ui32 index) { Fields[index] = static_cast<NUdf::TUnboxedValue*>(ptr++); });
+
+        if (CanSpill() && !HasMemoryForProcessing() && HasEnoughRowsToSpill()) {
+            SpillReason = ESpillReason::YellowZone;
+            SwitchMode(EOperatingMode::Spilling);
+        }
     }
 
 public:
     TSpillingSupportState(TMemoryUsageInfo* memInfo, const bool* directons, size_t keyWidth, const TCompareFunc& compare,
-                          const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx, NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent)
+                          const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx,
+                          bool allowSpilling, NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent)
         : TBase(memInfo)
         , Indexes(indexes)
         , Directions(directons, directons + keyWidth)
@@ -680,17 +793,19 @@ public:
         , Fields(Indexes.size(), nullptr)
         , TupleMultiType(tupleMultiType)
         , Ctx(ctx)
-        , Logger(logger)
+        , AllowSpilling(allowSpilling)
+        , Logger(std::move(logger))
         , LogComponent(logComponent)
     {
-        if (Ctx.SpillerFactory) {
+        if (AllowSpilling && Ctx.SpillerFactory) {
             Spiller = Ctx.SpillerFactory->CreateSpiller();
         }
+        UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << (const void*)this << "# Sort state initialized, allowSpilling=" << AllowSpilling);
         ResetFields();
     }
 
     bool IsReadyToContinue() {
-        switch (GetMode()) {
+        switch (Mode) {
             case EOperatingMode::InMemory:
                 return true;
             case EOperatingMode::Spilling: {
@@ -698,29 +813,45 @@ public:
                     return false;
                 }
                 ResetFields();
-                auto nextMode = (IsReadFromChannelFinished() ? EOperatingMode::ProcessSpilled : EOperatingMode::InMemory);
-
-                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << (nextMode == EOperatingMode::ProcessSpilled ? "Switching to ProcessSpilled" : "Switching to Memory mode"));
-
-                SwitchMode(nextMode);
+                if (ActiveSpill) {
+                    return IsReadyToContinue();
+                }
+                SwitchMode(ChooseNextMode());
+                return IsReadyToContinue();
+            }
+            case EOperatingMode::MergeSpilled: {
+                if (!MergeStep()) {
+                    return false;
+                }
+                SwitchMode(ChooseNextMode());
                 return IsReadyToContinue();
             }
             case EOperatingMode::ProcessSpilled: {
                 if (SpilledUnboxedValuesIterators.empty()) {
                     return true;
                 }
-                for (auto& spilledUnboxedValuesIterator : SpilledUnboxedValuesIterators) {
-                    if (!spilledUnboxedValuesIterator.CheckForInit()) {
-                        return false;
+                bool allReady = true;
+                for (auto& it : SpilledUnboxedValuesIterators) {
+                    if (!it.CheckForInit()) {
+                        allReady = false;
                     }
                 }
-                return true;
+                return allReady;
             }
         }
     }
 
     bool IsFinished() const {
-        return IsReadFromChannelFinished() && SpilledUnboxedValuesIterators.empty();
+        if (!IsReadFromChannelFinished()) {
+            return false;
+        }
+        if (Mode == EOperatingMode::Spilling || Mode == EOperatingMode::MergeSpilled) {
+            return false;
+        }
+        if (Mode == EOperatingMode::ProcessSpilled) {
+            return SpilledUnboxedValuesIterators.empty();
+        }
+        return SealedStates.empty();
     }
 
     NUdf::TUnboxedValue* const* GetFields() const {
@@ -729,21 +860,13 @@ public:
 
     void Put() {
         ResetFields();
-        if (Ctx.SpillerFactory && !HasMemoryForProcessing()) {
-            const auto used = TlsAllocState->GetUsed();
-            const auto limit = TlsAllocState->GetLimit();
-
-            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << "Yellow zone reached " << (used * 100 / limit) << "%=" << used << "/" << limit);
-            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "Switching Memory mode to Spilling");
-
-            SwitchMode(EOperatingMode::Spilling);
-        }
     }
 
     bool Seal() {
-        if (SpilledStates.empty()) {
+        if (SealedStates.empty() && !ActiveSpill) {
             SealInMemory();
         } else {
+            SpillReason = ESpillReason::FinalFlush;
             SwitchMode(EOperatingMode::Spilling);
         }
         return IsReadyToContinue();
@@ -755,55 +878,98 @@ public:
         }
 
         if (SpilledUnboxedValuesIterators.empty()) {
-            // No spilled data
             return ExtractInMemory();
         }
 
-        if (!IsHeapBuilt) {
-            std::make_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
-            IsHeapBuilt = true;
-        } else {
-            std::push_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
+        auto end = std::remove_if(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end(),
+                                  [](const TSpilledUnboxedValuesIterator& it) { return it.IsFinished(); });
+        SpilledUnboxedValuesIterators.erase(end, SpilledUnboxedValuesIterators.end());
+        if (SpilledUnboxedValuesIterators.empty()) {
+            return nullptr;
         }
 
-        std::pop_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
-        auto& currentIt = SpilledUnboxedValuesIterators.back();
-        Storage = currentIt.Pop();
-        if (currentIt.IsFinished()) {
-            SpilledUnboxedValuesIterators.pop_back();
-        }
+        auto minIt = std::min_element(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end(),
+                                      [](const TSpilledUnboxedValuesIterator& a, const TSpilledUnboxedValuesIterator& b) { return b < a; });
+        Storage = minIt->Pop();
         return Storage.data();
     }
 
 private:
-    EOperatingMode GetMode() const {
-        return Mode;
+    bool CanSpill() const {
+        return AllowSpilling && Ctx.SpillerFactory;
+    }
+
+    bool HasEnoughRowsToSpill() const {
+        return Storage.size() / Indexes.size() >= MinSpillBatchRows;
     }
 
     bool HasMemoryForProcessing() const {
-        // We decided to turn off spilling in Sort nodes for now
-        // Because in current benchmarks we don't have huge amount of data to sort
-        // return !TlsAllocState->IsMemoryYellowZoneEnabled();
-        return true;
+        return !TlsAllocState->IsMemoryYellowZoneEnabled();
     }
 
     bool IsReadFromChannelFinished() const {
         return InputStatus == EFetchResult::Finish;
     }
 
+    EOperatingMode ChooseNextMode() const {
+        MKQL_ENSURE(Mode == EOperatingMode::Spilling || Mode == EOperatingMode::MergeSpilled,
+                    "ChooseNextMode called from unexpected mode: " << ModeName(Mode));
+        MKQL_ENSURE(!ActiveSpill, "ChooseNextMode called with active spill still in progress");
+        MKQL_ENSURE(!Merge, "ChooseNextMode called with active merge still in progress");
+        if (SealedStates.size() >= MaxSealedStates) {
+            return EOperatingMode::MergeSpilled;
+        } else if (IsReadFromChannelFinished()) {
+            return EOperatingMode::ProcessSpilled;
+        } else {
+            return EOperatingMode::InMemory;
+        }
+    }
+
+    static const char* ModeName(EOperatingMode m) {
+        switch (m) {
+            case EOperatingMode::InMemory:
+                return "InMemory";
+            case EOperatingMode::Spilling:
+                return "Spilling";
+            case EOperatingMode::MergeSpilled:
+                return "MergeSpilled";
+            case EOperatingMode::ProcessSpilled:
+                return "ProcessSpilled";
+        }
+        return "Unknown";
+    }
+
     void SwitchMode(EOperatingMode mode) {
+        const size_t rowsInMemory = Indexes.size() > 0 ? Storage.size() / Indexes.size() : 0;
+        // clang-format off
+        UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder()
+            << (const void*)this << "# SwitchMode "
+            << ModeName(Mode) << " -> " << ModeName(mode)
+            << " | reason=" << SpillReasonName(SpillReason)
+            << " memUsed=" << TlsAllocState->GetUsed()
+            << " memLimit=" << TlsAllocState->GetLimit()
+            << " yellowZone=" << (TlsAllocState->IsMemoryYellowZoneEnabled() ? "yes" : "no")
+            << " maxLimitReached=" << (TlsAllocState->GetMaximumLimitValueReached() ? "yes" : "no")
+            << " rowsInMemory=" << rowsInMemory
+            << " lastSpilledRows=" << LastSpilledRows
+            << " sealedStates=" << SealedStates.size() << "\n");
+        // clang-format on
         switch (mode) {
             case EOperatingMode::InMemory:
                 break;
             case EOperatingMode::Spilling: {
-                const size_t PACK_SIZE = 5_MB;
-                SpilledStates.emplace_back(std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, TupleMultiType, PACK_SIZE));
+                ActiveSpill = std::make_shared<TSpilledData>();
+                ActiveSpill->Open(Spiller, TupleMultiType, PackSize);
+                break;
+            }
+            case EOperatingMode::MergeSpilled: {
+                StartMerge();
                 break;
             }
             case EOperatingMode::ProcessSpilled: {
-                SpilledUnboxedValuesIterators.reserve(SpilledStates.size());
-                for (auto& state : SpilledStates) {
-                    SpilledUnboxedValuesIterators.emplace_back(LessFunc, &state, Indexes.size(), &Ctx);
+                SpilledUnboxedValuesIterators.clear();
+                for (auto& state : SealedStates) {
+                    SpilledUnboxedValuesIterators.emplace_back(LessFunc, state, Indexes.size(), &Ctx);
                 }
                 break;
             }
@@ -811,37 +977,159 @@ private:
         Mode = mode;
     }
 
+    void SealActiveSpill() {
+        ActiveSpill->Seal();
+        SealedStates.push_back(std::move(ActiveSpill));
+        TStorage().swap(Storage);
+        Full.clear();
+        Full.shrink_to_fit();
+    }
+
     bool SpillState() {
-        MKQL_ENSURE(!SpilledStates.empty(), "At least one Spiller must be created to spill data in Sort operation.");
-        auto& lastSpilledState = SpilledStates.back();
-        if (lastSpilledState.AsyncWriteOperation.has_value()) {
-            if (!lastSpilledState.AsyncWriteOperation->HasValue()) {
+        MKQL_ENSURE(ActiveSpill, "No active spill");
+        if (ActiveSpill->HasPendingWrite()) {
+            if (!ActiveSpill->IsWriteReady()) {
                 return false;
             }
-            lastSpilledState.Spiller->AsyncWriteCompleted(lastSpilledState.AsyncWriteOperation->ExtractValue());
-            lastSpilledState.AsyncWriteOperation = std::nullopt;
+            ActiveSpill->CompleteAsyncWrite();
+            if (IsFinishWriteInProgress) {
+                IsFinishWriteInProgress = false;
+                SealActiveSpill();
+                return true;
+            }
         } else {
             SealInMemory();
+            LastSpilledRows = Full.size();
             if (Full.empty()) {
-                // Nothing to spill
-                SpilledStates.pop_back();
+                ActiveSpill.reset();
                 return true;
             }
         }
 
         while (auto extract = ExtractInMemory()) {
-            auto writeOp = lastSpilledState.Write(extract, Indexes.size());
+            auto writeOp = ActiveSpill->Write(extract, Indexes.size());
             if (writeOp) {
                 return false;
             }
         }
 
-        auto writeFinishOp = lastSpilledState.FinishWrite();
+        auto writeFinishOp = ActiveSpill->FinishWrite();
         if (writeFinishOp) {
+            IsFinishWriteInProgress = true;
             return false;
         }
-        Storage.resize(0);
+        SealActiveSpill();
         return true;
+    }
+
+    std::pair<size_t, size_t> FindTwoSmallestSealed() const {
+        MKQL_ENSURE(SealedStates.size() >= 2, "Need at least 2 sealed states to merge");
+        size_t min1 = 0, min2 = 1;
+        if (SealedStates[min2]->GetRowCount() < SealedStates[min1]->GetRowCount()) {
+            std::swap(min1, min2);
+        }
+        for (size_t i = 2; i < SealedStates.size(); ++i) {
+            if (SealedStates[i]->GetRowCount() < SealedStates[min2]->GetRowCount()) {
+                min2 = i;
+                if (SealedStates[min2]->GetRowCount() < SealedStates[min1]->GetRowCount()) {
+                    std::swap(min1, min2);
+                }
+            }
+        }
+        return {min1, min2};
+    }
+
+    void StartMerge() {
+        auto [src1, src2] = FindTwoSmallestSealed();
+
+        Merge.emplace();
+        Merge->Target = std::make_shared<TSpilledData>();
+        Merge->Target->Open(Spiller, TupleMultiType, PackSize);
+
+        Merge->Iterators.reserve(2);
+        Merge->Iterators.emplace_back(LessFunc, SealedStates[src1], Indexes.size(), &Ctx);
+        Merge->Iterators.emplace_back(LessFunc, SealedStates[src2], Indexes.size(), &Ctx);
+
+        // Remove sources from SealedStates (remove larger index first to preserve smaller)
+        size_t first = std::min(src1, src2);
+        size_t second = std::max(src1, src2);
+        SealedStates.erase(SealedStates.begin() + second);
+        SealedStates.erase(SealedStates.begin() + first);
+    }
+
+    bool MergeStep() {
+        MKQL_ENSURE(Merge, "No active merge");
+        auto& target = *Merge->Target;
+
+        if (target.HasPendingWrite()) {
+            if (!target.IsWriteReady()) {
+                return false;
+            }
+            target.CompleteAsyncWrite();
+            if (Merge->FinishWriteInProgress) {
+                Merge->FinishWriteInProgress = false;
+                FinishMerge();
+                return true;
+            }
+        }
+
+        {
+            bool allReady = true;
+            for (auto& it : Merge->Iterators) {
+                if (!it.CheckForInit()) {
+                    allReady = false;
+                }
+            }
+            if (!allReady) {
+                return false;
+            }
+        }
+
+        if (!Merge->HeapBuilt) {
+            auto end = std::remove_if(Merge->Iterators.begin(), Merge->Iterators.end(),
+                                      [](const TSpilledUnboxedValuesIterator& it) { return it.IsFinished(); });
+            Merge->Iterators.erase(end, Merge->Iterators.end());
+            std::make_heap(Merge->Iterators.begin(), Merge->Iterators.end());
+            Merge->HeapBuilt = true;
+        }
+
+        while (!Merge->Iterators.empty()) {
+            std::pop_heap(Merge->Iterators.begin(), Merge->Iterators.end());
+            auto& currentIt = Merge->Iterators.back();
+            auto row = currentIt.Pop();
+            bool iteratorFinished = currentIt.IsFinished();
+            bool iteratorReady = !iteratorFinished && currentIt.CheckForInit();
+
+            if (iteratorFinished) {
+                Merge->Iterators.pop_back();
+            } else if (iteratorReady) {
+                std::push_heap(Merge->Iterators.begin(), Merge->Iterators.end());
+            } else {
+                Merge->HeapBuilt = false;
+            }
+
+            auto writeOp = target.Write(row.data(), Indexes.size());
+            if (writeOp) {
+                return false;
+            }
+            if (!iteratorReady && !iteratorFinished) {
+                return false;
+            }
+        }
+
+        auto writeFinishOp = target.FinishWrite();
+        if (writeFinishOp) {
+            Merge->FinishWriteInProgress = true;
+            return false;
+        }
+        FinishMerge();
+        return true;
+    }
+
+    void FinishMerge() {
+        Merge->Target->Seal();
+        SealedStates.push_back(std::move(Merge->Target));
+        Merge.reset();
     }
 
     NUdf::TUnboxedValue* ExtractInMemory() {
@@ -855,14 +1143,14 @@ private:
     }
 
     void SealInMemory() {
-        // Remove placeholder for new data
-        Storage.resize(Storage.size() - Indexes.size());
-
-        Full.reserve(Storage.size() / Indexes.size());
+        if (HasPlaceholder()) {
+            MKQL_ENSURE(Storage.size() >= Indexes.size(), "Cannot drop placeholder: Storage too small");
+            Storage.resize(Storage.size() - Indexes.size());
+        }
+        Full.clear();
         for (auto it = Storage.begin(); it != Storage.end(); it += Indexes.size()) {
             Full.emplace_back(&*it);
         }
-
         std::sort(Full.rbegin(), Full.rend(), LessFunc);
     }
 
@@ -875,17 +1163,25 @@ private:
     const std::vector<bool> Directions;
     const std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)> LessFunc;
     TStorage Storage;
-    TPointers Free, Full;
+    TPointers Full;
     TFields Fields;
     TMultiType* TupleMultiType;
     const TComputationContext& Ctx;
-    std::vector<TSpilledData> SpilledStates;
+    const bool AllowSpilling;
+    const NUdf::TLoggerPtr Logger;
+    const NUdf::TLogComponentId LogComponent;
+    static constexpr size_t PackSize = 1_MB;
+    static constexpr size_t MaxSealedStates = 64;
+    static constexpr size_t MinSpillBatchRows = 1024;
+    std::vector<TSpilledData::TPtr> SealedStates;
+    TSpilledData::TPtr ActiveSpill;
     EOperatingMode Mode = EOperatingMode::InMemory;
     std::vector<TSpilledUnboxedValuesIterator> SpilledUnboxedValuesIterators;
     ISpiller::TPtr Spiller = nullptr;
-    bool IsHeapBuilt = false;
-    const NYql::NUdf::TLoggerPtr Logger;
-    const NYql::NUdf::TLogComponentId LogComponent;
+    bool IsFinishWriteInProgress = false;
+    ESpillReason SpillReason = ESpillReason::None;
+    std::optional<TMergeState> Merge;
+    size_t LastSpilledRows = 0;
 };
 
 class TWideSortWrapper: public TStatefulWideFlowCodegeneratorNode<TWideSortWrapper>
@@ -898,7 +1194,7 @@ class TWideSortWrapper: public TStatefulWideFlowCodegeneratorNode<TWideSortWrapp
 
 public:
     TWideSortWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationNodePtrVector&& directions, std::vector<TKeyInfo>&& keys,
-                     std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations, TMultiType* tupleMultiType)
+                     std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations, TMultiType* tupleMultiType, bool allowSpilling)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
         , Flow(flow)
         , Directions(std::move(directions))
@@ -906,6 +1202,7 @@ public:
         , Indexes(std::move(indexes))
         , Representations(std::move(representations))
         , TupleMultiType(tupleMultiType)
+        , AllowSpilling(allowSpilling)
     {
         for (const auto& x : Keys) {
             if (x.Compare || x.PresortType) {
@@ -955,7 +1252,8 @@ public:
                 return EFetchResult::One;
             }
 
-            return ptr->IsFinished() ? EFetchResult::Finish : EFetchResult::Yield;
+            auto finished = ptr->IsFinished();
+            return finished ? EFetchResult::Finish : EFetchResult::Yield;
         }
 
         MKQL_ENSURE(false, "Unreachable");
@@ -1121,12 +1419,11 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state, const bool* directions) const {
         NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
-        NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("WideSort");
-        UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
+        NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("Sort");
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), TMyValueCompare(Keys), Indexes, TupleMultiType, ctx, logger, logComponent);
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), TMyValueCompare(Keys), Indexes, TupleMultiType, ctx, AllowSpilling, std::move(logger), logComponent);
 #else
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, TupleMultiType, ctx, logger, logComponent);
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, TupleMultiType, ctx, AllowSpilling, std::move(logger), logComponent);
 #endif
     }
 
@@ -1143,6 +1440,7 @@ private:
     const std::vector<EValueRepresentation> Representations;
     TKeyTypes KeyTypes;
     TMultiType* const TupleMultiType;
+    const bool AllowSpilling;
     bool HasComplexType = false;
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -1237,13 +1535,15 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
     auto index = 1U - offset;
     std::generate(directions.begin(), directions.end(), [&]() { return LocateNode(ctx.NodeLocator, callable, ++ ++index); });
 
+    const bool allowSpilling = HasSpillingFlag(callable);
+
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
         if constexpr (HasCount) {
             return new TWideTopWrapper<Sort>(ctx.Mutables, wide, count, std::move(directions), std::move(keys),
                                              std::move(indexes), std::move(representations));
         } else {
             return new TWideSortWrapper(ctx.Mutables, wide, std::move(directions), std::move(keys),
-                                        std::move(indexes), std::move(representations), tupleMultiType);
+                                        std::move(indexes), std::move(representations), tupleMultiType, allowSpilling);
         }
     }
 

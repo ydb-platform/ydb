@@ -47,6 +47,7 @@ const std::unordered_map<TString, TPqMetadataField> PqMetaFields = {
     {"message_group_id", TPqMetadataField(EMetaFieldType::String)},
     {"seq_no", TPqMetadataField(EMetaFieldType::Uint64)},
     {"user_attributes", TPqMetadataField(EMetaFieldType::DictStringString)},
+    {"cluster", TPqMetadataField(EMetaFieldType::String)},
 };
 
 } // anonymous namespace

@@ -41,6 +41,7 @@ public:
     bool IsEmpty();
 
 private:
+    // TODO(babenko): migrate to std::string
     TString ValueString_;
     TStringOutput Output_;
     const std::unique_ptr<NYson::IFlushableYsonConsumer> Writer_;

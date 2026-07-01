@@ -301,6 +301,7 @@ private:
     {
         auto openBuckets = std::exchange(OpenBuckets_, {});
 
+        // TODO(babenko): migrate to std::string
         TVector<TString> currentBucketPaths;
         TFsPath{RootPath_ + "/" + BucketsDirName}.ListNames(currentBucketPaths);
         for (const auto& fileName : currentBucketPaths) {
@@ -337,7 +338,7 @@ private:
         }
     }
 
-    TString GetBucketPath(const std::string& fileName) const
+    std::string GetBucketPath(const std::string& fileName) const
     {
         return RootPath_ + "/" + BucketsDirName + "/" + fileName;
     }

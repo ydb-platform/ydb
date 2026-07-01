@@ -69,6 +69,37 @@ private:
     EStatus Status = EStatus::STATUS_CODE_UNSPECIFIED;
 };
 
+enum class EPermission {
+    READ_TOPIC /* "ReadTopic" */,
+    WRITE_TOPIC /* "WriteTopic" */,
+    READ_AS_CONSUMER /* "ReadAsConsumer" */,
+    MODIFY_PERMISSIONS /* "ModifyPermissions" */,
+    CREATE_RESOURCES /* "CreateResources" */,
+    MODIFY_RESOURCES /* "ModifyResources" */,
+    LIST_RESOURCES /* "ListResources" */,
+    CREATE_READ_RULES /* "CreateReadRules" */,
+    DESCRIBE_RESOURCES /* "DescribeResources" */,
+};
+
+struct TPermission {
+    using TSelf = TPermission;
+
+    FLUENT_SETTING_VECTOR(EPermission, PermissionNames);
+    FLUENT_SETTING(TString, Subject);
+
+    // Subject type and name used only in describe
+    FLUENT_SETTING_OPTIONAL(TString, SubjectType);
+    // Printable subject name
+    FLUENT_SETTING_OPTIONAL(TString, SubjectName);
+};
+
+struct TReadRule {
+    TString TopicPath;
+    TString ConsumerPath;
+    // Cluster name for mirror_to_cluster mode, or "all_original" for all_original mode.
+    TString MirrorToCluster;
+};
+
 struct TObjectDescriptionBase {
     explicit TObjectDescriptionBase(const TString& path)
         : Path(path)
@@ -77,6 +108,8 @@ struct TObjectDescriptionBase {
 
     TString Path;
     THashMap<TString, TString> Metadata; // Arbitrary key-value pairs.
+    TVector<TPermission> Permissions;
+    TVector<TPermission> EffectivePermissions;
 };
 
 struct TAccountDescription : public TObjectDescriptionBase {
@@ -95,14 +128,13 @@ struct TTopicDescription : public TObjectDescriptionBase {
     using TObjectDescriptionBase::TObjectDescriptionBase;
 
     size_t PartitionsCount = 0;
-
-    // TODO: If you need other properties, add them.
+    TVector<TReadRule> ReadRules;
 };
 
 struct TConsumerDescription : public TObjectDescriptionBase {
     using TObjectDescriptionBase::TObjectDescriptionBase;
 
-    // TODO: If you need other properties, add them.
+    TVector<TReadRule> ReadRules;
 };
 
 struct TDescribePathResult {
@@ -244,17 +276,6 @@ enum class ELimitsMode {
     NOTIFY /* "notify" */,
 };
 
-enum class EPermission {
-    READ_TOPIC /* "ReadTopic" */,
-    WRITE_TOPIC /* "WriteTopic" */,
-    READ_AS_CONSUMER /* "ReadAsConsumer" */,
-    MODIFY_PERMISSIONS /* "ModifyPermissions" */,
-    CREATE_RESOURCES /* "CreateResources" */,
-    MODIFY_RESOURCES /* "ModifyResources" */,
-    LIST_RESOURCES /* "ListResources" */,
-    CREATE_READ_RULES /* "CreateReadRules" */,
-    DESCRIBE_RESOURCES /* "DescribeResources" */,
-};
 
 struct TExtraSettings {
     TExtraSettings& AddExtraSetting(const TString& name, const TString& value) {
@@ -348,17 +369,6 @@ struct TCreateReadRuleOptions {
     FLUENT_SETTING(TString, MirrorToCluster);
 };
 
-struct TPermission {
-    using TSelf = TPermission;
-
-    FLUENT_SETTING_VECTOR(EPermission, PermissionNames);
-    FLUENT_SETTING(TString, Subject);
-
-    // Subject type and name used only in describe
-    FLUENT_SETTING_OPTIONAL(TString, SubjectType);
-    // Printable subject name
-    FLUENT_SETTING_OPTIONAL(TString, SubjectName);
-};
 
 struct TGrantPermissionsOptions {
     using TSelf = TGrantPermissionsOptions;

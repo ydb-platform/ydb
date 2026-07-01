@@ -28,7 +28,7 @@ public:
     TListener(
         SOCKET serverSocket,
         const TNetworkAddress& address,
-        const TString& name,
+        const std::string& name,
         IPollerPtr poller,
         IPollerPtr acceptor)
         : Name_(name)
@@ -151,7 +151,7 @@ public:
     }
 
 private:
-    const TString Name_;
+    const std::string Name_;
     const TNetworkAddress Address_;
     const SOCKET ServerSocket_;
     const IPollerPtr Poller_;

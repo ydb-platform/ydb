@@ -16,6 +16,8 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
     TDeque<TPathId> Paths;
 
     TDeque<TPathId> Tables;
+    TDeque<TPathId> ColumnTables;
+    TDeque<std::tuple<TShardIdx, TPathId, TTxId>> SharedShards;
     TDeque<std::pair<TPathId, TTxId>> TableSnapshots;
     TDeque<std::pair<TPathId, TTxId>> LongLocks;
     TDeque<TPathId> Unlocks;
@@ -52,7 +54,14 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
 
     TDeque<ui64> IncrementalBackups;
 
+    // Full-backup control op ids to flush on Apply(); same shape as IncrementalBackups.
+    TDeque<ui64> FullBackups;
+
     TDeque<TPathId> StreamingQueries;
+
+    TDeque<TPathId> ExternalDataSources;
+    TDeque<TPathId> ExternalTables;
+    TDeque<TPathId> ResourcePools;
 
     //PQ part
     TDeque<std::tuple<TPathId, TShardIdx, TTopicTabletInfo::TTopicPartitionInfo>> PersQueue;
@@ -80,6 +89,14 @@ public:
 
     void PersistTable(const TPathId& pathId) {
         Tables.push_back(pathId);
+    }
+
+    void PersistColumnTable(const TPathId& pathId) {
+        ColumnTables.push_back(pathId);
+    }
+
+    void PersistSharedShard(const TShardIdx& shardIdx, const TPathId& pathId, TTxId txId = InvalidTxId) {
+        SharedShards.emplace_back(shardIdx, pathId, txId);
     }
 
     void PersistTableSnapshot(const TPathId& pathId, TTxId snapshotTxId) {
@@ -166,8 +183,24 @@ public:
         IncrementalBackups.emplace_back(id);
     }
 
+    void PersistFullBackupOp(ui64 id) {
+        FullBackups.emplace_back(id);
+    }
+
     void PersistStreamingQuery(const TPathId& pathId) {
         StreamingQueries.emplace_back(pathId);
+    }
+
+    void PersistExternalDataSource(const TPathId& pathId) {
+        ExternalDataSources.emplace_back(pathId);
+    }
+
+    void PersistExternalTable(const TPathId& pathId) {
+        ExternalTables.emplace_back(pathId);
+    }
+
+    void PersistResourcePool(const TPathId& pathId) {
+        ResourcePools.emplace_back(pathId);
     }
 
     void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);

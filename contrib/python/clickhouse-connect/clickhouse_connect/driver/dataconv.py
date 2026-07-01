@@ -1,40 +1,40 @@
 import array
-
-from datetime import datetime, date, tzinfo
+from collections.abc import Sequence
+from datetime import date, datetime, tzinfo
 from ipaddress import IPv4Address
-from typing import Sequence, Optional, Any
+from typing import Any
 from uuid import UUID, SafeUUID
 
-from clickhouse_connect.driver import tzutil
-from clickhouse_connect.driver.common import int_size
+from clickhouse_connect.driver import options, tzutil
+from clickhouse_connect.driver.common import int_size, must_swap, write_array
 from clickhouse_connect.driver.errors import NONE_IN_NULLABLE_COLUMN
 from clickhouse_connect.driver.types import ByteSource
-from clickhouse_connect.driver import options
-
 
 MONTH_DAYS = (0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365)
 MONTH_DAYS_LEAP = (0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366)
 
 
 def read_ipv4_col(source: ByteSource, num_rows: int):
-    column = source.read_array('I', num_rows)
+    column = source.read_array("I", num_rows)
     fast_ip_v4 = IPv4Address.__new__
     new_col = []
     app = new_col.append
     for x in column:
         ipv4 = fast_ip_v4(IPv4Address)
-        ipv4._ip = x  # pylint: disable=protected-access
+        ipv4._ip = x
         app(ipv4)
     return new_col
 
 
-def read_datetime_col(source: ByteSource, num_rows: int, tz_info: Optional[tzinfo]):
-    src_array = source.read_array('I', num_rows)
+def read_datetime_col(source: ByteSource, num_rows: int, tz_info: tzinfo | None):
+    src_array = source.read_array("I", num_rows)
     if tz_info is None:
-        fts = tzutil.utcfromtimestamp
-        return [fts(ts) for ts in src_array]
-    fts = datetime.fromtimestamp
-    return [fts(ts, tz_info) for ts in src_array]
+        return [tzutil.utcfromtimestamp(ts) for ts in src_array]
+    elif tzutil.is_utc_timezone(tz_info):
+        return [tzutil.utc_equivalent_tzaware_datetime(ts, 0, tz_info) for ts in src_array]
+    else:
+        fts = datetime.fromtimestamp
+        return [fts(ts, tz_info) for ts in src_array]
 
 
 def epoch_days_to_date(days: int) -> date:
@@ -53,17 +53,52 @@ def epoch_days_to_date(days: int) -> date:
 
 
 def read_date_col(source: ByteSource, num_rows: int):
-    column = source.read_array('H', num_rows)
+    column = source.read_array("H", num_rows)
     return [epoch_days_to_date(x) for x in column]
 
 
 def read_date32_col(source: ByteSource, num_rows: int):
-    column = source.read_array('l' if int_size == 2 else 'i', num_rows)
+    column = source.read_array("l" if int_size == 2 else "i", num_rows)
     return [epoch_days_to_date(x) for x in column]
 
 
+def read_datetime64_naive_col(column: Sequence, prec: int, tz: tzinfo | None = None):
+    """Read DateTime64 column using epoch arithmetic, for naive UTC or UTC-equivalent timezones.
+
+    When tz is None, the result is naive. When tz is a UTC-equivalent timezone, the
+    same arithmetic path is used and the tz is attached to the constructed datetime.
+    """
+    result = []
+    for ticks in column:
+        seconds, fractional_ticks = divmod(ticks, prec)
+        microseconds = (fractional_ticks * 1000000) // prec
+        if tz is None:
+            dt = tzutil.utcfromtimestamp_with_microseconds(seconds, microseconds)
+        else:
+            dt = tzutil.utc_equivalent_tzaware_datetime(seconds, microseconds, tz)
+        result.append(dt)
+    return result
+
+
+def read_datetime64_tz_col(column: Sequence, prec: int, tz_info: tzinfo):
+    """Read DateTime64 column with non-UTC timezone conversion.
+
+    Constructs datetime objects with the specified timezone and microseconds.
+    """
+    result = []
+    dt_from = datetime.fromtimestamp
+    for ticks in column:
+        seconds, fractional_ticks = divmod(ticks, prec)
+        microseconds = (fractional_ticks * 1000000) // prec
+        v = dt_from(seconds, tz_info)
+        if microseconds != 0:
+            v = v.replace(microsecond=microseconds)
+        result.append(v)
+    return result
+
+
 def read_uuid_col(source: ByteSource, num_rows: int):
-    v = source.read_array('Q', num_rows * 2)
+    v = source.read_array("Q", num_rows * 2)
     empty_uuid = UUID(int=0)
     new_uuid = UUID.__new__
     unsafe = SafeUUID.unsafe
@@ -77,8 +112,8 @@ def read_uuid_col(source: ByteSource, num_rows: int):
             app(empty_uuid)
         else:
             fast_uuid = new_uuid(UUID)
-            oset(fast_uuid, 'int', int_value)
-            oset(fast_uuid, 'is_safe', unsafe)
+            oset(fast_uuid, "int", int_value)
+            oset(fast_uuid, "is_safe", unsafe)
             app(fast_uuid)
     return column
 
@@ -111,10 +146,10 @@ def to_numpy_array(column: Sequence):
 
 
 def pivot(data: Sequence[Sequence], start_row: int, end_row: int) -> Sequence[Sequence]:
-    return tuple(zip(*data[start_row: end_row]))
+    return tuple(zip(*data[start_row:end_row]))
 
 
-def write_str_col(column: Sequence, nullable: bool, encoding: Optional[str], dest: bytearray) -> int:
+def write_str_col(column: Sequence, nullable: bool, encoding: str | None, dest: bytearray) -> int:
     app = dest.append
     for x in column:
         if not x:
@@ -128,7 +163,7 @@ def write_str_col(column: Sequence, nullable: bool, encoding: Optional[str], des
                 x = bytes(x)
             sz = len(x)
             while True:
-                b = sz & 0x7f
+                b = sz & 0x7F
                 sz >>= 7
                 if sz == 0:
                     app(b)
@@ -136,3 +171,34 @@ def write_str_col(column: Sequence, nullable: bool, encoding: Optional[str], des
                 app(0x80 | b)
             dest += x
     return 0
+
+
+def write_native_col(code: str, column: Sequence, dest: bytearray, col_name: object = None) -> int:
+    """
+    Pure Python fallback for write_native_col.
+    Delegates to write_array which uses struct.pack.
+    """
+    write_array(code, column, dest, col_name)
+    return 0
+
+
+def build_map_columns(column: Sequence, dest: bytearray):
+    """
+    Pure Python fallback for build_map_columns.
+    Flattens dicts into keys/values lists and writes UInt64 offsets into dest.
+    """
+    offsets = array.array("Q")
+    total = 0
+    for v in column:
+        total += len(v)
+        offsets.append(total)
+    if must_swap:
+        offsets.byteswap()
+    dest += offsets.tobytes()
+    keys = []
+    values = []
+    for v in column:
+        for k, val in v.items():
+            keys.append(k)
+            values.append(val)
+    return keys, values

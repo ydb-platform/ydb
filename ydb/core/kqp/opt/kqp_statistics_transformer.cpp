@@ -193,6 +193,22 @@ void InferStatisticsForKqpTable(
     double byteSize = tableData.Metadata->DataSize;
     int nAttrs = tableData.Metadata->Columns.size();
 
+    // Correct for zeros in statistics response:
+    // - If RecordsCount is zero but DataSize is not (sometimes the statistics returns this):
+    //  - Set NRows = DataSize / nAttrs / 10
+    // - If both are still zero - assign them to constants
+    // FIXME: In the second case we should check whether the basic statistics have been collected from the table
+
+    if (nRows == 0 && byteSize != 0) {
+        nRows = byteSize / nAttrs / 10.0;
+    }
+
+    if (nRows == 0 || byteSize == 0) {
+        nRows = 1000.0;
+        byteSize = 100000.0;
+    }
+
+
     auto keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(tableData.Metadata->KeyColumnNames));
     auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, nRows, nAttrs, byteSize, 0.0, keyColumns);
     if (typeCtx->ColumnStatisticsByTableName.contains(path.StringValue())) {
@@ -657,7 +673,7 @@ public:
                     value = TExprBase(listPtr->ChildPtr(2)->ChildPtr(1));
                 }
                 if (OlapCompSigns.contains(compSign)) {
-                    resSelectivity = this->ComputeInequalitySelectivity(member, value, OlapCompStrToEInequalityPredicate[compSign], false);
+                    resSelectivity = this->ComputeInequalitySelectivity(member, value, false, OlapCompStrToEInequalityPredicate[compSign]);
                 } else if (compSign == "eq") {
                     resSelectivity = this->ComputeEqualitySelectivity(member, value, false);
                 } else if (compSign == "neq") {
@@ -825,7 +841,7 @@ double EstimateRowSize(const TStructExprType& rowType, const TString& format, co
     }
 
     if (result == 0.0) {
-        result = 1000.0;
+        result = 100.0;
     }
 
     if (format != "parquet" && !decoded) {
@@ -1558,6 +1574,9 @@ bool TKqpStatisticsTransformer::BeforeLambdas(const TExprNode::TPtr& input, TExp
     }
     else if (TCoAggregateMergeFinalize::Match(input.Get())) {
         InferStatisticsForAggregateMergeFinalize(input, KqpStats);
+    }
+    else if (TCoWideCombiner::Match(input.Get())) {
+        InferStatisticsForCombiner(input, KqpStats);
     }
     else if (TCoAsList::Match(input.Get())) {
         InferStatisticsForAsList(input, KqpStats);

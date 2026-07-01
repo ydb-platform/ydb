@@ -276,6 +276,7 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP BACKUP COLLECTION";
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFullBackupOp:
         return "BACKUP";
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
@@ -673,6 +674,11 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupIncrementalBackupCollection().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFullBackupOp:
+        // The aggregator does not carry a target name in its proto; its
+        // WorkingDir already points at the backup-collection path.
+        result.emplace_back(tx.GetWorkingDir());
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));

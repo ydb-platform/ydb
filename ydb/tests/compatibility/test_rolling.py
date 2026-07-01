@@ -16,10 +16,7 @@ class TestRolling(RollingUpgradeAndDowngradeFixture):
             pytest.skip("Only available since 25-1, because of enable_column_store flag")
 
         yield from self.setup_cluster(
-            extra_feature_flags={
-                "enable_column_store": True,
-            },
-
+            extra_feature_flags=["enable_column_store"],
             column_shard_config={
                 "disabled_on_scheme_shard": False,
             },

@@ -1,3 +1,4 @@
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/aclib/aclib.h>
 
 #include "auth.h"
@@ -65,6 +66,14 @@ bool IsAdministrator(const TAppData* appData, const TString& userTokenSerialized
 
 bool IsAdministrator(const TAppData* appData, const NACLib::TUserToken* userToken) {
     return IsTokenAllowed(userToken, appData->AdministrationAllowedSIDs);
+}
+
+bool IsStrictDatabaseOnlyToken(const TAppData* appData, const TString& userTokenSerialized) {
+    const auto& securityConfig = appData->DomainsConfig.GetSecurityConfig();
+    return IsTokenAllowed(userTokenSerialized, securityConfig.GetDatabaseAllowedSIDs())
+        && !IsTokenAllowed(userTokenSerialized, securityConfig.GetViewerAllowedSIDs())
+        && !IsTokenAllowed(userTokenSerialized, securityConfig.GetMonitoringAllowedSIDs())
+        && !IsTokenAllowed(userTokenSerialized, securityConfig.GetAdministrationAllowedSIDs());
 }
 
 bool IsDatabaseAdministrator(const NACLib::TUserToken* userToken, const NACLib::TSID& databaseOwner) {

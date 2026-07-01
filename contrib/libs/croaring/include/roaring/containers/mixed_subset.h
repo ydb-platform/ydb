@@ -1,6 +1,12 @@
 /*
  * mixed_subset.h
  *
+ * This header declares subset-checking routines between different Roaring
+ * container types. These helpers are used when two containers do not share the
+ * same representation and a direct type-specific subset predicate is needed.
+ *
+ * Each function answers whether all values from one container are contained in
+ * another, across combinations of array, bitset, and run containers.
  */
 
 #ifndef CONTAINERS_MIXED_SUBSET_H_

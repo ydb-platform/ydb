@@ -5,7 +5,6 @@ INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/ya_cpp.make.inc)
 SRCS(
     guid.cpp
     source_location.cpp
-    thread_name.cpp
 )
 
 PEERDIR(

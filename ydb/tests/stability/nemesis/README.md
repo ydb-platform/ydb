@@ -175,6 +175,47 @@ out["MyCustomNemesis"] = {
 }
 ```
 
+### Parameterized Planners
+
+A nemesis entry may declare a `params` schema. When present, the UI replaces the simple toggle with a "Run" button that opens a modal asking the user for parameter values; those values are sent to `POST /api/schedule` and used to rebuild the planner before the schedule is enabled. Planners that do not declare `params` keep the default behaviour.
+
+Schema format (each item is a field rendered in the UI):
+
+```python
+{
+    "name": "nodes_per_step",       # kwarg passed to the planner factory
+    "label": "Nodes per step",      # human-readable label in the UI
+    "type": "int",                  # "int" | "float" | "bool" | "string"
+    "default": 2,                   # initial value shown in the modal
+    "min": 1, "max": 64,            # optional, used for number inputs
+    "description": "How many nodes to restart per tick",  # optional tooltip
+}
+```
+
+The factory must accept `params` (a `dict[str, Any] | None`); the catalog auto-detects this via `inspect.signature` for backwards compatibility with factories that only take `nemesis_type_key`.
+
+Example — `ClusterRollingRestartNemesis`:
+
+```python
+out["ClusterRollingRestartNemesis"] = {
+    "runner": ClusterRollingRestartNemesis(),
+    "schedule": 600,
+    "ui_group": "Node",
+    "planner_factory": lambda key, params=None: RollingRestartNemesisPlanner(**(params or {})),
+    "params": [
+        {"name": "nodes_per_step",    "label": "Nodes per step",      "type": "int",  "default": 2,     "min": 1},
+        {"name": "use_storage_nodes", "label": "Use storage nodes",   "type": "bool", "default": False},
+        {"name": "node_downtime_sec", "label": "Node downtime (sec)", "type": "int",  "default": 60,    "min": 1},
+    ],
+}
+```
+
+Parameters of `RollingRestartNemesisPlanner`:
+
+- `nodes_per_step` (`int`, default `2`) — how many cluster nodes are restarted within one scheduled tick.
+- `use_storage_nodes` (`bool`, default `False`) — when `True`, the planner targets storage nodes; when `False`, compute nodes.
+- `node_downtime_sec` (`int`, default `60`) — how long the agent keeps each node stopped before starting it back via systemd. Forwarded to the agent as `duration` in the dispatch payload.
+
 ### Adding a Liveness Check
 
 Liveness checks run on the orchestrator and verify cluster-wide health:

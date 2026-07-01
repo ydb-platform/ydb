@@ -8,6 +8,7 @@ croaring = CMakeNinjaNixProject(
         "cpp/roaring/*.hh",
     ],
     disable_includes=[
+        "stdfil.h",
         "sys/byteorder.h",
     ],
     addincl_global={

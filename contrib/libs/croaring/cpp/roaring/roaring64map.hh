@@ -1260,7 +1260,7 @@ class Roaring64Map {
      * For advanced users only. This function is unsafe. You must ensure that
      * the provided buffer is 32-byte aligned.
      */
-    static const Roaring64Map frozenView(const char *buf) {
+    static Roaring64Map frozenView(const char *buf) {
         // We do not check that buf is 32-byte aligned. Caller is responsible.
         // size of bitmap buffer and key
         const size_t metadata_size = sizeof(size_t) + sizeof(uint32_t);
@@ -1287,8 +1287,8 @@ class Roaring64Map {
             buf += sizeof(uint32_t);
 
             // read map value Roaring
-            const Roaring read = Roaring::frozenView(buf, len);
-            result.emplaceOrInsert(key, read);
+            Roaring read = Roaring::frozenView(buf, len);
+            result.emplaceOrInsert(key, std::move(read));
 
             // forward buffer past the last Roaring Bitmap
             buf += len;
@@ -1300,7 +1300,7 @@ class Roaring64Map {
      * For advanced users only. This function is unsafe in the sense that
      * that it may trigger unaligned memory access. Use with caution.
      */
-    static const Roaring64Map portableDeserializeFrozen(const char *buf) {
+    static Roaring64Map portableDeserializeFrozen(const char *buf) {
         Roaring64Map result;
         // get map size
         uint64_t map_size;

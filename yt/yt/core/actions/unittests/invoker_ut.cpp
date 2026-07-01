@@ -94,7 +94,7 @@ TEST(TSyncInvokerTest, SleepyFiber)
 
     auto completionFlag = NewPromise<void>();
 
-    std::vector<TString> events;
+    std::vector<std::string> events;
 
     auto actionA = [&] {
         events.push_back("A started");
@@ -137,7 +137,7 @@ TEST(TSyncInvokerTest, SleepyFiber)
     WaitForFast(AllSucceeded(std::vector<TFuture<void>>{asyncA, asyncC}))
         .ThrowOnError();
 
-    std::vector<TString> expectedEvents{
+    std::vector<std::string> expectedEvents{
         "A started", "B started", "B out", "C started", "D started", "D finished", "C finished", "B in", "B finished", "A finished",
     };
 
@@ -149,7 +149,7 @@ TEST(TSyncInvokerTest, SleepyFiber)
 //! Returns the aggregated summary of all duration-like time series with sensor name #sensorName within #sensorDump.
 const NProfiling::NProto::TSummaryDuration& GetSummaryDuration(
     const NProfiling::NProto::TSensorDump& sensorDump,
-    const TString& sensorName)
+    const std::string& sensorName)
 {
     for (const auto& cube : sensorDump.cubes()) {
         if (cube.name() == sensorName) {

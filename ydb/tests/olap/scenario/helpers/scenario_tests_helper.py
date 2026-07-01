@@ -744,6 +744,7 @@ class ScenarioTestHelper:
         import ydb.tests.olap.scenario.helpers.drop_helper as dh
 
         root_path = self.get_full_path(folder)
+        secret_type = getattr(ydb.SchemeEntryType, 'SECRET', None)
         for e in self.list_path(path, folder):
             if e.is_any_table():
                 self.execute_scheme_query(dh.DropTable(os.path.join(folder, e.name)), retries=5)
@@ -751,10 +752,14 @@ class ScenarioTestHelper:
                 self.execute_scheme_query(dh.DropTableStore(os.path.join(folder, e.name)), retries=5)
             elif e.is_external_data_source():
                 self.execute_scheme_query(dh.DropExternalDataSource(os.path.join(folder, e.name)), retries=5)
+            elif secret_type is not None and e.type == secret_type:
+                self.execute_scheme_query(dh.DropSecret(os.path.join(folder, e.name)), retries=5)
             elif e.is_directory():
                 self._run_with_expected_status(
                     lambda: YdbCluster.get_ydb_driver().scheme_client.remove_directory(os.path.join(root_path, e.name)),
                     ydb.StatusCode.SUCCESS,
+                    ydb.StatusCode.SCHEME_ERROR,
+                    n_retries=10,
                 )
             else:
                 pytest.fail(f'Cannot remove type {repr(e.type)} for path {os.path.join(root_path, e.name)}')

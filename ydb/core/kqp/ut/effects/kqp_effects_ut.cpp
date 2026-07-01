@@ -476,8 +476,12 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(DeletePkPrefixWithIndex) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(DeletePkPrefixWithIndex, UseIndexStreamWrite) {
+        auto app = NKikimrConfig::TAppConfig();
+        app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseIndexStreamWrite);
+
+        TKikimrRunner kikimr(app);
+
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

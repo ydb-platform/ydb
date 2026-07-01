@@ -434,7 +434,7 @@ bool ISource::SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hin
     Y_UNUSED(pos);
     Y_UNUSED(contextHints);
     if (hints) {
-        ctx.Error() << "Explicit hints are only supported for table sources";
+        ctx.Error() << "Hint '" << hints.begin()->first << "' requires a table";
         return false;
     }
     return true;

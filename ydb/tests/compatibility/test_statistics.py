@@ -4,6 +4,7 @@ import logging
 import pytest
 import random
 import threading
+import time
 
 import requests
 
@@ -25,22 +26,18 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
         )
 
     def write_data(self):
-        driver = self.create_driver()
-        try:
-            with ydb.QuerySessionPool(driver) as session_pool:
-                for _ in range(10):
-                    random_key = random.randint(1, 1000)
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for _ in range(10):
+                random_key = random.randint(1, 1000)
 
-                    def operation(session, key=random_key):
-                        session.transaction().execute(
-                            f"""
-                            UPSERT INTO {TABLE_NAME} (key, value) VALUES ({key}, 'Hello, YDB {key}!')
-                            """,
-                            commit_tx=True
-                        )
-                    session_pool.retry_operation_sync(operation)
-        finally:
-            driver.stop()
+                def operation(session, key=random_key):
+                    session.transaction().execute(
+                        f"""
+                        UPSERT INTO {TABLE_NAME} (key, value) VALUES ({key}, 'Hello, YDB {key}!')
+                        """,
+                        commit_tx=True
+                    )
+                session_pool.retry_operation_sync(operation)
 
     def read_data(self):
         queries = [
@@ -59,16 +56,12 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
             f"SELECT value FROM {TABLE_NAME} WHERE key > 800 AND key <= 1000;",
         ]
 
-        driver = self.create_driver()
-        try:
-            with ydb.QuerySessionPool(driver) as session_pool:
-                for _ in range(10):
-                    for query in queries:
-                        def operation(session, q=query):
-                            session.transaction().execute(q, commit_tx=True)
-                        session_pool.retry_operation_sync(operation)
-        finally:
-            driver.stop()
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for _ in range(10):
+                for query in queries:
+                    def operation(session, q=query):
+                        session.transaction().execute(q, commit_tx=True)
+                    session_pool.retry_operation_sync(operation)
 
     def generate_tli(self):
         errors = []
@@ -138,9 +131,7 @@ class TestStatisticsFollowersRollingUpdate(RollingUpgradeAndDowngradeFixture):
             pytest.skip("Only available since 25-1")
 
         yield from self.setup_cluster(
-            extra_feature_flags={
-                "enable_follower_stats": True
-            }
+            extra_feature_flags=["enable_follower_stats"]
         )
 
     def write_data(self):
@@ -266,12 +257,15 @@ class TestBaseStatisticsRollingUpdate(RollingUpgradeAndDowngradeFixture):
 class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        if min(self.versions) < (25, 4):
-            pytest.skip("Only available since 26-1")
+        if min(self.versions) < (26, 3):
+            pytest.skip("Only available since 26-3")
 
         yield from self.setup_cluster(
             tenant_db="mydb",
-            extra_feature_flags={"enable_column_statistics": True},
+            extra_feature_flags=[
+                "enable_column_statistics",
+                "enable_analyze_long_running_operation",
+            ],
             additional_log_configs={
                 'STATISTICS': LogLevels.DEBUG,
             },
@@ -361,10 +355,57 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
             else:
                 logger.info(f'ANALYZE {table_name} successful')
 
+        def check_background_operations():
+            """Check for background ANALYZE operations using operation client."""
+            # Try to list operations - this tests the background operation functionality
+            request = ydb._apis.ydb_operation.ListOperationsRequest(kind="analyze")
+            list_result = self.driver(request, ydb._apis.OperationService.Stub, "ListOperations")
+            operations = getattr(list_result, "operations", [])
+            logger.info(f"Found {len(operations)} background operations")
+
+            # Check if any analyze operations are present - they should be in the list
+            analyze_operations_found = False
+            for op in operations:
+                if hasattr(op, 'metadata') and hasattr(op.metadata, 'state'):
+                    logger.info(f"Operation {op.id}: state={op.metadata.state}, progress={op.metadata.progress}")
+                    # Check if this is an analyze operation by looking at metadata structure
+                    if hasattr(op.metadata, 'paths') or hasattr(op.metadata, 'done_paths'):
+                        analyze_operations_found = True
+                        logger.info(f"Found ANALYZE operation {op.id} with state={op.metadata.state}")
+
+            # Assert that ANALYZE operations are present in the background operations list
+            assert analyze_operations_found, \
+                "ANALYZE operation must be present in background operations list after ANALYZE command"
+            logger.info("✓ ANALYZE operation successfully found in background operations list")
+
+        supports_analyze_lro = max(self.versions) >= (26, 3)
+        new_binary_path = self.all_binary_paths[1]
+
+        def all_nodes_on_binary(binary_path):
+            all_units = list(self.cluster.nodes.values()) + list(self.cluster.slots.values())
+            return all(unit.binary_path == binary_path for unit in all_units)
+
         for _ in self.roll():
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 for table in self.tables:
                     try_analyze(session_pool, table)
+                    if not supports_analyze_lro or not all_nodes_on_binary(new_binary_path):
+                        continue
+                    # Check for background operations after each ANALYZE
+                    max_retries = 5
+                    retry_delay = 2  # seconds
+                    for attempt in range(max_retries):
+                        try:
+                            check_background_operations()
+                            break
+                        except AssertionError:
+                            if attempt == max_retries - 1:
+                                # Last attempt failed, re-raise the error
+                                raise
+                            logger.warning(f"Background operations check failed (attempt {attempt + 1}/{max_retries}), retrying...")
+                            time.sleep(retry_delay)
+                    # Give some time for background operations to progress
+                    time.sleep(1)
 
         # check that ANALYZE was successful at least once
         expected_count = len([i for i in range(ROW_COUNT) if int(i / 10) < 10])

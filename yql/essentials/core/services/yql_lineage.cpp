@@ -19,6 +19,7 @@ namespace {
 
 enum class ETransformsType {
     Copy,
+    Math,
     None
 };
 
@@ -596,6 +597,9 @@ private:
                 case ETransformsType::Copy:
                     writer.OnStringScalar("Copy");
                     break;
+                case ETransformsType::Math:
+                    writer.OnStringScalar("Math");
+                    break;
                 default:
                     writer.OnEntity();
             }
@@ -648,8 +652,22 @@ private:
         writer.OnEndMap();
     }
 
+    static bool IsMathCallable(const TExprNode& node) {
+        if (node.IsCallable({"+", "-", "*", "/", "%",
+                             "Add", "Sub", "Mul", "Div", "Mod",
+                             "Plus", "Minus", "Abs", "Increment", "Decrement",
+                             "BitAnd", "BitOr", "BitXor", "BitNot", "ShiftLeft", "ShiftRight", "CountBits"})) {
+            return true;
+        }
+        return node.IsCallable("Apply") && node.Head().IsCallable("Udf") &&
+               node.Head().Head().Content().StartsWith("Math.");
+    }
+
     static TFieldLineage ReplaceTransforms(const TFieldLineage& src, ETransformsType newTransforms) {
-        return {.Field = src.Field, .InputIndex = src.InputIndex, .Transforms = (src.Transforms == ETransformsType::Copy && newTransforms == ETransformsType::Copy) ? newTransforms : ETransformsType::None};
+        const ETransformsType result = (newTransforms == ETransformsType::Copy)
+                                           ? src.Transforms
+                                           : newTransforms;
+        return {.Field = src.Field, .InputIndex = src.InputIndex, .Transforms = result};
     }
 
     static TFieldLineageSet ReplaceTransforms(const TFieldLineageSet& src, ETransformsType newTransforms, IAllocator* allocator) {
@@ -982,6 +1000,8 @@ private:
 
                 if (root->IsCallable("Member") && &root->Head() == &arg) {
                     newTransforms = ETransformsType::Copy;
+                } else if (IsMathCallable(*root)) {
+                    newTransforms = ETransformsType::Math;
                 }
 
                 MergeLineageFromUsedFields(expr, arg, innerLineage, res, true, flattenColumns, newTransforms);

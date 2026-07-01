@@ -146,7 +146,8 @@ public:
 
     void CommitTransaction(
         TMutationId& mutationId,
-        const TTransactionId& transactionId) override;
+        const TTransactionId& transactionId,
+        const TCommitTransactionOptions& options = {}) override;
 
     // Operations
 
@@ -408,6 +409,9 @@ public:
         const TTransactionId& transactionId,
         const TVector<TRichYPath>& paths,
         const TGetTablePartitionsOptions& options = {}) override;
+
+    void CheckClusterLiveness(
+        const TCheckClusterLivenessOptions& options = {}) override;
 
     ui64 GenerateTimestamp() override;
 

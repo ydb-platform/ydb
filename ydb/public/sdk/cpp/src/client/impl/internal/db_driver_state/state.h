@@ -99,8 +99,8 @@ class TDbDriverStateTracker {
 public:
     TDbDriverStateTracker(IInternalClient* client);
     TDbDriverState::TPtr GetDriverState(
-        std::string database,
-        std::string DiscoveryEndpoint,
+        const std::string& database,
+        const std::string& discoveryEndpoint,
         EDiscoveryMode discoveryMode,
         const TSslCredentials& sslCredentials,
         std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory

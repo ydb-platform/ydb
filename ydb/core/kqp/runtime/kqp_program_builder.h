@@ -69,6 +69,9 @@ public:
     TRuntimeNode KqpIndexLookupJoin(const TRuntimeNode& input, const TString& joinType, const TString& leftLabel, const TString& rightLabel);
 
     TRuntimeNode FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings, TRuntimeNode mode);
+
+    // input: List/Flow/Stream<T> -> same container of Tuple<Uint64, T> with a 1-based rank.
+    TRuntimeNode KqpStreamEnumerate(TRuntimeNode input);
 };
 
 } // namespace NMiniKQL

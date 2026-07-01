@@ -24,15 +24,14 @@ namespace NYql::NFmr {
 struct TVanillaInfo {
     TStaticVanillaPeerTrackerSettings Tracker;
     ui16 TdsPort = 8002;
+    ui32 TdsMinIndex = 1;
 
     void Save(IOutputStream* s) const {
-        ::Save(s, Tracker);
-        ::Save(s, TdsPort);
+        ::SaveMany(s, Tracker, TdsPort, TdsMinIndex);
     }
 
     void Load(IInputStream* s) {
-        ::Load(s, Tracker);
-        ::Load(s, TdsPort);
+        ::LoadMany(s, Tracker, TdsPort, TdsMinIndex);
     }
 };
 
@@ -81,6 +80,12 @@ public:
         Discovery_ = std::move(discovery);
     }
 
+    // Set a live ITableDataService directly — bypasses HTTP, for fully intraprocess use.
+    // Not serialized — only valid for in-process job execution.
+    void SetDirectTableDataService(ITableDataService::TPtr tds) {
+        DirectTableDataService_ = std::move(tds);
+    }
+
     // Set vanilla TDS info for separate-process jobs: the binary resolves TDS
     // nodes via ListJobs instead of reading a local file.
     void SetVanillaInfo(TVanillaInfo info) {
@@ -115,6 +120,10 @@ protected:
 
     void ChangeMkqlIOSpecIfNeeded() override;
 
+    bool NeedWriteStats() override {
+        return false;
+    }
+
 private:
     void FillQueueFromSingleInputTable(ui64 tableIndex);
     void FillQueueFromInputTablesUnordered();
@@ -140,6 +149,10 @@ private:
 
     // Non-serialized: set only for in-process execution via SetTableDataServiceDiscovery.
     ITableDataServiceDiscovery::TPtr Discovery_;
+    // Non-serialized: direct in-process TDS, bypasses HTTP; set via SetDirectTableDataService.
+    ITableDataService::TPtr DirectTableDataService_;
+    // Non-serialized: owns the static peer tracker created for subprocess vanilla TDS discovery.
+    std::unique_ptr<IVanillaPeerTracker> VanillaPeerTracker_;
 
     TFmrRawTableQueue::TPtr UnionInputTablesQueue_; // Queue which represents union of all input streams
     TFmrRawTableQueueReader::TPtr QueueReader_;

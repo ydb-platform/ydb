@@ -136,6 +136,10 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndex
                     result.emplace_back(indexTable, &index);
                     break;
                 }
+                case TIndexDescription::EType::GlobalFulltextCompact:
+                case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+                case TIndexDescription::EType::GlobalJsonCompact:
+                    Y_ENSURE(false, "Not implemented");
                 case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
                     if (index.KeyColumns.size() == 1) {
                         YQL_ENSURE(implTable->Next && !implTable->Next->Next);

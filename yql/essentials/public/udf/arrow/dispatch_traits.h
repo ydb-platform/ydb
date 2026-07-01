@@ -9,6 +9,16 @@
 namespace NYql::NUdf {
 
 template <typename TTraits, typename... TArgs>
+std::unique_ptr<typename TTraits::TResult> MakeVariantArrowTraitsImpl(bool isOptional, TVector<std::unique_ptr<typename TTraits::TResult>>&& children, const TType* type, TArgs&&... args) {
+    Y_ENSURE(!isOptional, "Optional<Variant> must go through external-optional wrapper");
+    if constexpr (TTraits::PassType) {
+        return std::make_unique<typename TTraits::TVariant>(std::move(children), type, std::forward<TArgs>(args)...);
+    } else {
+        return std::make_unique<typename TTraits::TVariant>(std::move(children), std::forward<TArgs>(args)...);
+    }
+}
+
+template <typename TTraits, typename... TArgs>
 std::unique_ptr<typename TTraits::TResult> MakeTupleArrowTraitsImpl(bool isOptional, TVector<std::unique_ptr<typename TTraits::TResult>>&& children, const TType* type, TArgs&&... args) {
     if (isOptional) {
         if constexpr (TTraits::PassType) {
@@ -143,6 +153,26 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
         }
 
         return MakeTupleArrowTraitsImpl<TTraits>(isOptional, std::move(children), type, std::forward<TArgs>(args)...);
+    }
+
+    TVariantTypeInspector typeVariant(typeInfoHelper, type);
+    if (typeVariant) {
+        const TType* underlying = SkipTaggedType(typeInfoHelper, typeVariant.GetUnderlyingType());
+        TStructTypeInspector typeStructUnderlying(typeInfoHelper, underlying);
+        TTupleTypeInspector typeTupleUnderlying(typeInfoHelper, underlying);
+        const ui32 altCount = typeStructUnderlying ? typeStructUnderlying.GetMembersCount() : typeTupleUnderlying.GetElementsCount();
+        TVector<std::unique_ptr<typename TTraits::TResult>> children;
+        children.reserve(altCount);
+        for (ui32 i = 0; i < altCount; ++i) {
+            const TType* altType = typeStructUnderlying
+                                       ? typeStructUnderlying.GetMemberType(i)
+                                       : typeTupleUnderlying.GetElementType(i);
+            children.emplace_back(DispatchByArrowTraits<TTraits>(
+                typeInfoHelper,
+                SkipTaggedType(typeInfoHelper, altType),
+                pgBuilder, args...));
+        }
+        return MakeVariantArrowTraitsImpl<TTraits>(isOptional, std::move(children), type, std::forward<TArgs>(args)...);
     }
 
     TDataTypeInspector typeData(typeInfoHelper, type);

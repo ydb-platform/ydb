@@ -761,11 +761,11 @@ def check_signature_compatible(subject: type, protocol: type, attrname: str) -> 
         ]
 
         # Remove the "self" parameter from the protocol arguments to match
-        if protocol_type == "instance":
+        if protocol_type == "instance" and protocol_args:
             protocol_args.pop(0)
 
         # Remove the "self" parameter from the subject arguments to match
-        if subject_type == "instance":
+        if subject_type == "instance" and subject_args:
             subject_args.pop(0)
 
         for protocol_arg, subject_arg in zip_longest(protocol_args, subject_args):

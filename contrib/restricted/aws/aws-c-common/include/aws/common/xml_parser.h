@@ -65,6 +65,16 @@ AWS_COMMON_API
 int aws_xml_node_as_body(struct aws_xml_node *node, struct aws_byte_cursor *out_body);
 
 /**
+ * Writes the contents of the body of node unescaped into out_body. out_body is an output parameter in this case. Upon
+ * success, out_body will contain the body of the node. out_body must either have space for new data or be resizable.
+ */
+AWS_COMMON_API
+int aws_xml_node_as_body_unescaped(
+    struct aws_allocator *allocator,
+    struct aws_xml_node *node,
+    struct aws_byte_buf *out_body);
+
+/**
  * Traverse node and invoke on_node_encountered when a nested node is encountered.
  */
 AWS_COMMON_API
@@ -90,6 +100,16 @@ size_t aws_xml_node_get_num_attributes(const struct aws_xml_node *node);
  */
 AWS_COMMON_API
 struct aws_xml_attribute aws_xml_node_get_attribute(const struct aws_xml_node *node, size_t attribute_index);
+
+/*
+ * Helper that removes escaping within xml strings. ex. replaces &quot; with ".
+ *
+ */
+AWS_COMMON_API
+int aws_byte_buf_append_unescaped_xml(
+    struct aws_allocator *allocator,
+    struct aws_byte_cursor data,
+    struct aws_byte_buf *out);
 
 AWS_EXTERN_C_END
 AWS_POP_SANE_WARNING_LEVEL

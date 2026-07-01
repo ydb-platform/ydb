@@ -2,16 +2,13 @@
 
 import ipaddress
 import socket
-from typing import Dict, List, Optional, Tuple, Union
 
 from .types import AddrInfoType
 
 
 def addr_to_addr_infos(
-    addr: Optional[
-        Union[Tuple[str, int, int, int], Tuple[str, int, int], Tuple[str, int]]
-    ],
-) -> Optional[List[AddrInfoType]]:
+    addr: tuple[str, int, int, int] | tuple[str, int, int] | tuple[str, int] | None,
+) -> list[AddrInfoType] | None:
     """Convert an address tuple to a list of addr_info tuples."""
     if addr is None:
         return None
@@ -35,7 +32,7 @@ def addr_to_addr_infos(
 
 
 def pop_addr_infos_interleave(
-    addr_infos: List[AddrInfoType], interleave: Optional[int] = None
+    addr_infos: list[AddrInfoType], interleave: int | None = None
 ) -> None:
     """
     Pop addr_info from the list of addr_infos by family up to interleave times.
@@ -43,10 +40,10 @@ def pop_addr_infos_interleave(
     The interleave parameter is used to know how many addr_infos for
     each family should be popped of the top of the list.
     """
-    seen: Dict[int, int] = {}
+    seen: dict[int, int] = {}
     if interleave is None:
         interleave = 1
-    to_remove: List[AddrInfoType] = []
+    to_remove: list[AddrInfoType] = []
     for addr_info in addr_infos:
         family = addr_info[0]
         if family not in seen:
@@ -59,17 +56,15 @@ def pop_addr_infos_interleave(
 
 
 def _addr_tuple_to_ip_address(
-    addr: Union[Tuple[str, int], Tuple[str, int, int, int]],
-) -> Union[
-    Tuple[ipaddress.IPv4Address, int], Tuple[ipaddress.IPv6Address, int, int, int]
-]:
+    addr: tuple[str, int] | tuple[str, int, int, int],
+) -> tuple[ipaddress.IPv4Address, int] | tuple[ipaddress.IPv6Address, int, int, int]:
     """Convert an address tuple to an IPv4Address."""
     return (ipaddress.ip_address(addr[0]), *addr[1:])
 
 
 def remove_addr_infos(
-    addr_infos: List[AddrInfoType],
-    addr: Union[Tuple[str, int], Tuple[str, int, int, int]],
+    addr_infos: list[AddrInfoType],
+    addr: tuple[str, int] | tuple[str, int, int, int],
 ) -> None:
     """
     Remove an address from the list of addr_infos.
@@ -77,7 +72,7 @@ def remove_addr_infos(
     The addr value is typically the return value of
     sock.getpeername().
     """
-    bad_addrs_infos: List[AddrInfoType] = []
+    bad_addrs_infos: list[AddrInfoType] = []
     for addr_info in addr_infos:
         if addr_info[-1] == addr:
             bad_addrs_infos.append(addr_info)

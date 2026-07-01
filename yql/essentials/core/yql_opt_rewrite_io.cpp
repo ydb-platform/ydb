@@ -19,6 +19,11 @@ IGraphTransformer::TStatus RewriteIO(const TExprNode::TPtr& input, TExprNode::TP
                 auto datasource = types.DataSourceMap.FindPtr(dataSourceName);
                 YQL_ENSURE(datasource);
                 return (*datasource)->RewriteIO(node, ctx);
+            } else if (child->IsCallable(MaterializeName)) {
+                auto dataSinkName = child->Child(1)->Child(0)->Content();
+                auto datasink = types.DataSinkMap.FindPtr(dataSinkName);
+                YQL_ENSURE(datasink);
+                return (*datasink)->RewriteIO(node, ctx);
             }
         } else if (node->IsCallable(WriteName)) {
             auto dataSinkName = node->Child(1)->Child(0)->Content();

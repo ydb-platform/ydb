@@ -56,7 +56,7 @@ class TStructuredLogFormatter
 public:
     TStructuredLogFormatter(
         ELogFormat format,
-        THashMap<TString, NYTree::INodePtr> commonFields,
+        THashMap<std::string, NYTree::INodePtr> commonFields,
         bool enableSourceLocation = false,
         bool enableSystemFields = true,
         bool enableHostField = false,
@@ -67,7 +67,7 @@ public:
 
 private:
     const ELogFormat Format_;
-    const THashMap<TString, NYTree::INodePtr> CommonFields_;
+    const THashMap<std::string, NYTree::INodePtr> CommonFields_;
     const bool EnableSystemFields_;
     const bool EnableHostField_;
     const NJson::TJsonFormatConfigPtr JsonFormat_;

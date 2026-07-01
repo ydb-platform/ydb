@@ -111,17 +111,19 @@ void array_container_offset(const array_container_t *c, container_t **loc,
     if (loc && lo_cap) {
         lo = array_container_create_given_capacity(lo_cap);
         for (int i = 0; i < lo_cap; ++i) {
-            array_container_add(lo, c->array[i] + offset);
+            lo->array[i] = c->array[i] + offset;
         }
+        lo->cardinality = lo_cap;
         *loc = (container_t *)lo;
     }
 
     hi_cap = c->cardinality - lo_cap;
     if (hic && hi_cap) {
         hi = array_container_create_given_capacity(hi_cap);
-        for (int i = lo_cap; i < c->cardinality; ++i) {
-            array_container_add(hi, c->array[i] + offset);
+        for (int i = 0; i < hi_cap; ++i) {
+            hi->array[i] = c->array[lo_cap + i] + offset;
         }
+        hi->cardinality = hi_cap;
         *hic = (container_t *)hi;
     }
 }

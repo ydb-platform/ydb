@@ -109,4 +109,4 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
 #undef HNDL
 }
 
-}  // namespace NYql
+} // namespace NYql

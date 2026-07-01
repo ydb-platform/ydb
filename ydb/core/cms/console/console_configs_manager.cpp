@@ -75,10 +75,33 @@ void TConfigsManager::ReplaceMainConfigMetadata(const TString &config, bool forc
     }
 }
 
+void BuildYamlConfigUnknownFields(
+    const TMap<TString, std::pair<TString, TString>>& unknownFields,
+    const TMap<TString, std::pair<TString, TString>>& deprecatedFields,
+    NKikimrConsole::TYamlConfigUnknownFields& out)
+{
+    out.Clear();
+    for (const auto& [path, info] : unknownFields) {
+        auto *f = out.AddFields();
+        f->SetPath(path);
+        f->SetName(info.first);
+        f->SetProto(info.second);
+        f->SetDeprecated(false);
+    }
+    for (const auto& [path, info] : deprecatedFields) {
+        auto *f = out.AddFields();
+        f->SetPath(path);
+        f->SetName(info.first);
+        f->SetProto(info.second);
+        f->SetDeprecated(true);
+    }
+}
+
 void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
     try {
+        // Re-applying an unchanged body with the same version is silently accepted
+        // (idempotent fast path)
         if (opCtx.UpdatedConfig != MainYamlConfig || YamlDropped) {
-            auto tree = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
             if (ClusterName != opCtx.Cluster) {
                 ythrow yexception() << "ClusterName mismatch"
                     << " expected " << ClusterName
@@ -91,32 +114,64 @@ void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
                     << " but got " << opCtx.Version;
             }
 
-            TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> unknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
+            auto tree = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
 
+            // Collect unknown/deprecated fields per editable location so the UI can point at
+            // (and tint the parents of) the exact place a field lives in the document, including
+            // fields nested inside selector_config entries. Paths mirror the editable YAML:
+            // "/config/..." for the base config and "/selector_config/<i>/config/..." for the
+            // i-th selector. This is best-effort and must never reject a config -- acceptance is
+            // decided solely by the resolved-doc validation below.
+            const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
+            auto collectBlock = [&](const NFyaml::TNodeRef& configNode, const TString& prefix) {
+                auto collector = MakeSimpleShared<NYamlConfig::TBasicUnknownFieldsCollector>(prefix);
+                try {
+                    NYamlConfig::YamlToProto(configNode, true, true, collector);
+                } catch (const std::exception&) {
+                    // A partial selector fragment may not transform standalone; ignore.
+                }
+                for (const auto& [path, info] : collector->GetUnknownKeys()) {
+                    // Reserved (deprecated) paths are config-content-relative; strip the
+                    // location prefix ("/<prefix>") before matching.
+                    const TString leafPath = path.substr(prefix.size() + 1);
+                    if (deprecatedPaths.contains(leafPath)) {
+                        opCtx.DeprecatedFields[path] = info;
+                    } else {
+                        opCtx.UnknownFields[path] = info;
+                    }
+                }
+            };
+
+            try {
+                auto root = tree.Root().Map();
+                if (root.Has("config")) {
+                    collectBlock(root.at("config"), "config");
+                }
+                if (root.Has("selector_config")) {
+                    auto selectors = root.at("selector_config").Sequence();
+                    for (size_t i = 0; i < selectors.size(); ++i) {
+                        auto item = selectors.at(static_cast<int>(i)).Map();
+                        if (item.Has("config")) {
+                            collectBlock(item.at("config"),
+                                TStringBuilder() << "selector_config/" << i << "/config");
+                        }
+                    }
+                }
+            } catch (const std::exception&) {
+                // Best-effort field collection; never blocks config acceptance.
+            }
+
+            // Validate the fully resolved configuration. This decides accept/reject.
             std::vector<TString> errors;
             NYamlConfig::ResolveUniqueDocs(
                 tree,
                 [&](NYamlConfig::TDocumentConfig&& config) {
-                    auto cfg = NYamlConfig::YamlToProto(
-                        config.second,
-                        true,
-                        true,
-                        unknownFieldsCollector);
+                    auto cfg = NYamlConfig::YamlToProto(config.second, true, true);
                     NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateConfig(cfg, errors);
                     if (result == NKikimr::NConfig::EValidationResult::Error) {
                         ythrow yexception() << errors.front();
                     }
                 });
-
-            const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
-
-            for (const auto& [path, info] : unknownFieldsCollector->GetUnknownKeys()) {
-                if (deprecatedPaths.contains(path)) {
-                    opCtx.DeprecatedFields[path] = info;
-                } else {
-                    opCtx.UnknownFields[path] = info;
-                }
-            }
         }
     } catch (const yexception &e) {
         opCtx.Error = e.what();
@@ -138,7 +193,12 @@ void TConfigsManager::ReplaceDatabaseConfigMetadata(const TString &config, bool 
         if (!force) {
             opCtx.Version = metadata.Version.value_or(0);
         } else {
-            opCtx.Version = YamlVersion;
+            ui32 currentVersion = 0;
+            if (auto it = DatabaseYamlConfigs.find(opCtx.TargetDatabase); it != DatabaseYamlConfigs.end())
+            {
+                currentVersion = it->second.Version;
+            }
+            opCtx.Version = currentVersion;
         }
 
         opCtx.UpdatedConfig = NYamlConfig::ReplaceMetadata(config, NYamlConfig::TDatabaseMetadata{
@@ -153,10 +213,22 @@ void TConfigsManager::ReplaceDatabaseConfigMetadata(const TString &config, bool 
 void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opCtx) {
     try {
         TString currentConfig;
+        ui32 currentVersion = 0;
+
         if (auto it = DatabaseYamlConfigs.find(opCtx.TargetDatabase); it != DatabaseYamlConfigs.end()) {
             currentConfig = it->second.Config;
+            currentVersion = it->second.Version;
         }
+
+        // Re-applying an unchanged body with the same version is silently accepted
+        // (idempotent fast path)
         if (opCtx.UpdatedConfig != currentConfig) {
+            if (opCtx.Version != currentVersion) {
+                ythrow yexception() << "Version mismatch"
+                    << " expected " << currentVersion
+                    << " but got " << opCtx.Version;
+            }
+
             auto databaseTree = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
             auto databaseConfig = NYamlConfig::ParseConfig(databaseTree);
 
@@ -530,6 +602,14 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
         // ignore this as deprecated
         // now used only for disabling new config layout for older console
         YamlDropped = false;
+
+        // Restore the unknown-fields snapshot cached at upload time (no re-validation).
+        MainYamlConfigUnknownFields.Clear();
+        const TString serializedUnknownFields =
+            yamlConfigRowset.template GetValueOrDefault<Schema::YamlConfig::UnknownFields>(TString());
+        if (serializedUnknownFields) {
+            Y_PROTOBUF_SUPPRESS_NODISCARD MainYamlConfigUnknownFields.ParseFromString(serializedUnknownFields);
+        }
     }
 
     while (!databaseYamlConfigRowset.EndOfSet()) {

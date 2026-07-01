@@ -18,8 +18,8 @@ bool TRestoreTransactionOperator::DoParse(TColumnShard& owner, const TString& da
     auto schema = owner.TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema();
     const auto& columns = schema->GetIndexInfo().GetColumns();
     const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(txBody.GetRestoreTask().GetTableId());
-    ImportTask = std::make_shared<NOlap::NImport::TImportTask>(schemeShardLocalPathId,
-        TVector<NOlap::TNameTypeInfo>{ columns.begin(), columns.end() }, txBody.GetRestoreTask(), schema->GetVersion(), GetTxId());
+    ImportTask =
+        std::make_shared<NOlap::NImport::TImportTask>(schemeShardLocalPathId, columns, txBody.GetRestoreTask(), schema->GetVersion(), GetTxId());
     NOlap::NBackground::TTask task(
         ::ToString(schemeShardLocalPathId.GetRawValue()), std::make_shared<NOlap::NBackground::TFakeStatusChannel>(), ImportTask);
     if (!owner.GetBackgroundSessionsManager()->HasTask(task)) {
@@ -102,6 +102,9 @@ bool TRestoreTransactionOperator::ExecuteOnAbort(TColumnShard& owner, NTabletFla
         auto control = ImportTask->BuildAbortControl();
         TxAbort = owner.GetBackgroundSessionsManager()->TxApplyControl(control);
     }
+    if (!TxAbort) {
+        return true;
+    }
     return TxAbort->Execute(txc, NActors::TActivationContext::AsActorContext());
 }
 
@@ -109,9 +112,16 @@ TString TRestoreTransactionOperator::DoDebugString() const {
     return "RESTORE";
 }
 
-bool TRestoreTransactionOperator::CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& ctx) {
+bool TRestoreTransactionOperator::CompleteOnAbort(TColumnShard& owner, const TActorContext& ctx) {
     if (TxAbort) {
         TxAbort->Complete(ctx);
+    }
+    for (TActorId subscriber : NotifySubscribers) {
+        auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
+        auto& opResult = *event->Record.MutableOpResult();
+        opResult.SetSuccess(false);
+        opResult.SetExplain("Cancelled");
+        ctx.Send(subscriber, event.Release(), 0, 0);
     }
     return true;
 }

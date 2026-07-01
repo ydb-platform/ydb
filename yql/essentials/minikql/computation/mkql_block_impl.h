@@ -27,12 +27,12 @@ std::vector<arrow::ValueDescr> ToValueDescr(const TVector<TType*>& types);
 std::vector<arrow::compute::InputType> ConvertToInputTypes(const TVector<TType*>& argTypes);
 arrow::compute::OutputType ConvertToOutputType(TType* output);
 
-NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, uint64_t count);
+NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, uint64_t count, NYql::EDatumValidationMode validationMode = NYql::DefaultDatumValidationMode);
 
 class TBlockFuncNode: public TMutableComputationNode<TBlockFuncNode> {
 public:
     TBlockFuncNode(TComputationMutables& mutables,
-                   NYql::NUdf::EValidateDatumMode validateDatumMode,
+                   NYql::EDatumValidationMode validateDatumMode,
                    TStringBuf name,
                    TComputationNodePtrVector&& argsNodes,
                    const TVector<TType*>& argsTypes,
@@ -86,7 +86,7 @@ private:
     std::unique_ptr<IArrowKernelComputationNode> PrepareArrowKernelComputationNode(TComputationContext& ctx) const final;
 
 private:
-    NYql::NUdf::EValidateDatumMode ValidateDatumMode_ = NYql::NUdf::EValidateDatumMode::None;
+    NYql::EDatumValidationMode ValidateDatumMode_ = NYql::EDatumValidationMode::None;
     const ui32 StateIndex_;
     const TComputationNodePtrVector ArgsNodes_;
     const std::vector<arrow::ValueDescr> ArgsValuesDescr_;

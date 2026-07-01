@@ -11,7 +11,7 @@ namespace {
 
 TEST(TDefaultMapTest, Common)
 {
-    TDefaultMap<THashMap<int, TString>> defaultMap("Hello");
+    TDefaultMap<THashMap<int, std::string>> defaultMap("Hello");
     EXPECT_EQ(defaultMap[1], "Hello");
     defaultMap[1].append(", World");
     EXPECT_EQ(defaultMap[1], "Hello, World");

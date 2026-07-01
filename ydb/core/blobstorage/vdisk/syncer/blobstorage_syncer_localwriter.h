@@ -28,6 +28,10 @@ namespace NKikimr {
 
         TFreshBatch Extracted;      // upacked Data that is ready to be applied to Hull
 
+        ui64 LogoBlobsSize = 0;
+        ui64 BlocksSize = 0;
+        ui64 BarriersSize = 0;
+
         TEvLocalSyncData(const TVDiskID &vdisk, const TSyncState &syncState, const TString &data);
         TEvLocalSyncData() = default;
 
@@ -41,6 +45,8 @@ namespace NKikimr {
         size_t ByteSize() const {
             return sizeof(TVDiskID) + sizeof(TSyncState) + sizeof(ui32) + Data.size();
         }
+
+        void CalculateSizesFromData();
 
     protected:
         // for every key leave only one merged memRec
@@ -85,6 +91,7 @@ namespace NKikimr {
     // CreateLocalSyncDataCutter
     ///////////////////////////////////////////////////////////////////////////////////////////////
     IActor* CreateLocalSyncDataCutter(const TIntrusivePtr<TVDiskConfig>& vconfig, const TIntrusivePtr<TVDiskContext>& vctx,
-        const TActorId& skeletonId, const TActorId& parentId, std::unique_ptr<TEvLocalSyncData> ev);
+        const TActorId& skeletonId, const TActorId& parentId, std::unique_ptr<TEvLocalSyncData> ev,
+        const TSyncState& oldSyncState);
 
 } // NKikimr

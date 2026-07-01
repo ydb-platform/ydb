@@ -266,6 +266,21 @@ loop_parse_if_eight_digits(char const *&p, char const *const pend,
             p)); // in rare cases, this will overflow, but that's ok
     p += 8;
   }
+  // Consume a remaining 4-7 digit run in a single SWAR step instead of
+  // byte-by-byte (reuses the existing 4-digit helpers). The parsed result is
+  // identical either way. Gated to clang: on gcc the extra 4-digit check
+  // regresses inputs whose remainder is shorter than 4 digits (it becomes pure
+  // overhead there); clang does not show that.
+#if defined(__clang__)
+  if ((pend - p) >= 4) {
+    uint32_t const val4 = read4_to_u32(p);
+    if (is_made_of_four_digits_fast(val4)) {
+      i = i * 10000 +
+          parse_four_digits_unrolled(val4); // may overflow, that's ok
+      p += 4;
+    }
+  }
+#endif
 }
 
 enum class parse_error {
@@ -315,10 +330,17 @@ report_parse_error(UC const *p, parse_error error) {
 
 // Assuming that you use no more than 19 digits, this will
 // parse an ASCII string.
+//
+// store_spans is a *runtime* flag (not a template parameter, deliberately: a
+// template would create a second instantiation of this whole function and the
+// extra icache pressure wipes out the gain). When false, the integer/fraction
+// spans (read only by the rare digit_comp slow path) are not materialized,
+// which keeps the fat parsed_number_string_t off the hot path. The caller
+// re-parses with store_spans=true if the slow path is actually reached.
 template <bool basic_json_fmt, typename UC>
 fastfloat_really_inline FASTFLOAT_CONSTEXPR20 parsed_number_string_t<UC>
-parse_number_string(UC const *p, UC const *pend,
-                    parse_options_t<UC> options) noexcept {
+parse_number_string(UC const *p, UC const *pend, parse_options_t<UC> options,
+                    bool store_spans = true) noexcept {
   chars_format const fmt = detail::adjust_for_feature_macros(options.format);
   UC const decimal_point = options.decimal_point;
 
@@ -354,17 +376,42 @@ parse_number_string(UC const *p, UC const *pend,
 
   uint64_t i = 0; // an unsigned int avoids signed overflows (which are bad)
 
-  while ((p != pend) && is_integer(*p)) {
-    // a multiplication by 10 is cheaper than an arbitrary integer
-    // multiplication
-    i = 10 * i +
-        uint64_t(*p -
-                 UC('0')); // might overflow, we will handle the overflow later
+  // Straight-line unroll of the integer-part scan: most integer parts are
+  // 1-5 digits, so peeling the first iterations eliminates the loop back-edge
+  // for the common case. Semantics are identical to the original `while` loop:
+  // i = 10*i + digit, advancing p.
+  if ((p != pend) && is_integer(*p)) {
+    i = uint64_t(*p - UC('0'));
     ++p;
+    if ((p != pend) && is_integer(*p)) {
+      i = 10 * i + uint64_t(*p - UC('0'));
+      ++p;
+      if ((p != pend) && is_integer(*p)) {
+        i = 10 * i + uint64_t(*p - UC('0'));
+        ++p;
+        if ((p != pend) && is_integer(*p)) {
+          i = 10 * i + uint64_t(*p - UC('0'));
+          ++p;
+          if ((p != pend) && is_integer(*p)) {
+            i = 10 * i + uint64_t(*p - UC('0'));
+            ++p;
+            while ((p != pend) && is_integer(*p)) {
+              // a multiplication by 10 is cheaper than an arbitrary integer
+              // multiplication
+              i = 10 * i +
+                  uint64_t(*p - UC('0')); // might overflow, handled later
+              ++p;
+            }
+          }
+        }
+      }
+    }
   }
   UC const *const end_of_integer_part = p;
   int64_t digit_count = int64_t(end_of_integer_part - start_digits);
-  answer.integer = span<UC const>(start_digits, size_t(digit_count));
+  if (store_spans) {
+    answer.integer = span<UC const>(start_digits, size_t(digit_count));
+  }
   FASTFLOAT_IF_CONSTEXPR17(basic_json_fmt) {
     // at least 1 digit in integer part, without leading zeros
     if (digit_count == 0) {
@@ -391,7 +438,9 @@ parse_number_string(UC const *p, UC const *pend,
       i = i * 10 + digit; // in rare cases, this will overflow, but that's ok
     }
     exponent = before - p;
-    answer.fraction = span<UC const>(before, size_t(p - before));
+    if (store_spans) {
+      answer.fraction = span<UC const>(before, size_t(p - before));
+    }
     digit_count -= exponent;
   }
   FASTFLOAT_IF_CONSTEXPR17(basic_json_fmt) {
@@ -476,29 +525,35 @@ parse_number_string(UC const *p, UC const *pend,
 
     if (digit_count > 19) {
       answer.too_many_digits = true;
-      // Let us start again, this time, avoiding overflows.
-      // We don't need to call if is_integer, since we use the
-      // pre-tokenized spans from above.
-      i = 0;
-      p = answer.integer.ptr;
-      UC const *int_end = p + answer.integer.len();
-      uint64_t const minimal_nineteen_digit_integer{1000000000000000000};
-      while ((i < minimal_nineteen_digit_integer) && (p != int_end)) {
-        i = i * 10 + uint64_t(*p - UC('0'));
-        ++p;
-      }
-      if (i >= minimal_nineteen_digit_integer) { // We have a big integer
-        exponent = end_of_integer_part - p + exp_number;
-      } else { // We have a value with a fractional component.
-        p = answer.fraction.ptr;
-        UC const *frac_end = p + answer.fraction.len();
-        while ((i < minimal_nineteen_digit_integer) && (p != frac_end)) {
+      // The truncation recompute below reads the integer/fraction spans. When
+      // store_spans is false we didn't materialize them, so just flag
+      // too_many_digits; the caller re-parses with store_spans=true to obtain
+      // the corrected mantissa/exponent before taking the slow path.
+      if (store_spans) {
+        // Let us start again, this time, avoiding overflows.
+        // We don't need to call if is_integer, since we use the
+        // pre-tokenized spans from above.
+        i = 0;
+        p = answer.integer.ptr;
+        UC const *int_end = p + answer.integer.len();
+        uint64_t const minimal_nineteen_digit_integer{1000000000000000000};
+        while ((i < minimal_nineteen_digit_integer) && (p != int_end)) {
           i = i * 10 + uint64_t(*p - UC('0'));
           ++p;
         }
-        exponent = answer.fraction.ptr - p + exp_number;
+        if (i >= minimal_nineteen_digit_integer) { // We have a big integer
+          exponent = end_of_integer_part - p + exp_number;
+        } else { // We have a value with a fractional component.
+          p = answer.fraction.ptr;
+          UC const *frac_end = p + answer.fraction.len();
+          while ((i < minimal_nineteen_digit_integer) && (p != frac_end)) {
+            i = i * 10 + uint64_t(*p - UC('0'));
+            ++p;
+          }
+          exponent = answer.fraction.ptr - p + exp_number;
+        }
+        // We have now corrected both exponent and i, to a truncated value
       }
-      // We have now corrected both exponent and i, to a truncated value
     }
   }
   answer.exponent = exponent;

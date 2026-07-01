@@ -63,6 +63,15 @@ public:
     void Visit(const TExprNode& node, const TExprNode* parent) {
         auto [it, inserted] = Visited_.emplace(&node, TUsage{});
         if (node.GetTypeAnn()->HasStaticLinear()) {
+            auto scope = node.GetDependencyScope();
+            if (scope && parent) {
+                auto scopeParent = parent->GetDependencyScope();
+                if (scopeParent && scopeParent->first != scope->first) {
+                    AddScopeError(node.Pos(), parent->Pos());
+                    return;
+                }
+            }
+
             if (node.GetTypeAnn()->IsLinear()) {
                 it->second.resize(1);
                 if (it->second[0]) {
@@ -209,6 +218,14 @@ private:
         auto main = TIssue(Ctx_.GetPosition(linear), "The linear value has already been used");
         main.AddSubIssue(first);
         main.AddSubIssue(second);
+        Ctx_.AddError(main);
+    }
+
+    void AddScopeError(TPositionHandle produced, TPositionHandle parent) {
+        HasErrors_ = true;
+        auto inner = MakeIntrusive<TIssue>(Ctx_.GetPosition(produced), "Linear value is produced here");
+        auto main = TIssue(Ctx_.GetPosition(parent), "The linear value changed lambda scope");
+        main.AddSubIssue(inner);
         Ctx_.AddError(main);
     }
 

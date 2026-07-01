@@ -7,6 +7,7 @@ ENV(YDB_DSTOOL_BINARY="ydb/apps/dstool/ydb-dstool")
 PY_SRCS (
     common.py
     helpers.py
+    vhost_user_blk_client.py
 )
 TEST_SRCS(
     test_nbs.py

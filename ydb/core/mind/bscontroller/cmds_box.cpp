@@ -190,20 +190,18 @@ namespace NKikimr::NBsController {
             storagePools.insert(std::move(node));
 
             // process storage pool to group mapping
-            for (;;) {
-                auto node = storagePoolGroups.extract(origin);
-                if (node.empty()) {
-                    break;
-                }
+            for (auto it = storagePoolGroups.lower_bound({origin, Min<TGroupId>()});
+                    it != storagePoolGroups.end() && it->first == origin; ) {
+                auto node = storagePoolGroups.extract(it++);
 
                 // update storage pool id mapping in group itself
-                TGroupInfo *group = Groups.FindForUpdate(node.mapped());
+                TGroupInfo *group = Groups.FindForUpdate(node.value().second);
                 Y_ABORT_UNLESS(group);
                 Y_ABORT_UNLESS(group->StoragePoolId == origin);
                 group->StoragePoolId = target;
 
                 // update the key and insert item back into map
-                node.key() = target;
+                node.value().first = target;
                 storagePoolGroups.insert(std::move(node));
             }
         }
@@ -278,6 +276,7 @@ namespace NKikimr::NBsController {
             if (slot->Group) {
                 auto *m = VSlots.FindForUpdate(slot->VSlotId);
                 m->VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                m->OnlyPhantomsRemain = false;
                 m->IsReady = false;
                 TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
                 GroupFailureModelChanged.insert(slot->Group->ID);
@@ -302,6 +301,7 @@ namespace NKikimr::NBsController {
                 if (slot->Group) {
                     auto *m = VSlots.FindForUpdate(slot->VSlotId);
                     m->VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                    m->OnlyPhantomsRemain = false;
                     m->IsReady = false;
                     TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
                     GroupFailureModelChanged.insert(slot->Group->ID);
@@ -328,6 +328,7 @@ namespace NKikimr::NBsController {
             if (slot->Group) {
                 auto *m = VSlots.FindForUpdate(slot->VSlotId);
                 m->VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                m->OnlyPhantomsRemain = false;
                 m->IsReady = false;
                 TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
                 GroupFailureModelChanged.insert(slot->Group->ID);

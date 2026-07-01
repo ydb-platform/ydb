@@ -8,6 +8,7 @@
 #include <yql/essentials/public/udf/arrow/block_item_comparator.h>
 #include <yql/essentials/public/udf/arrow/block_item_hasher.h>
 #include <yql/essentials/public/udf/arrow/dispatch_traits.h>
+#include <yql/essentials/public/udf/arrow/dense_union.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
@@ -1645,6 +1646,36 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
         return true;
     }
 
+    if (unpacked->IsVariant()) {
+        auto variantType = AS_TYPE(TVariantType, unpacked);
+        const ui32 alternativesCount = variantType->GetAlternativesCount();
+        if (alternativesCount > NYql::NUdf::DenseUnionMaxAlternativesCount) {
+            if (onFail) {
+                onFail(unpacked);
+            }
+            return false;
+        }
+        auto innerType = variantType->GetUnderlyingType();
+        const bool isStruct = innerType->IsStruct();
+        auto* asStruct = isStruct ? AS_TYPE(TStructType, innerType) : nullptr;
+        auto* asTuple = isStruct ? nullptr : AS_TYPE(TTupleType, innerType);
+        std::vector<std::shared_ptr<arrow::Field>> fields;
+        fields.reserve(alternativesCount);
+        for (ui32 i = 0; i < alternativesCount; ++i) {
+            auto* altType = SkipTaggedType(isStruct ? asStruct->GetMemberType(i) : asTuple->GetElementType(i));
+            std::shared_ptr<arrow::DataType> childType;
+            if (!ConvertArrowTypeImpl(altType, childType, onFail, output)) {
+                return false;
+            }
+            TString fieldName = isStruct
+                                    ? TString(asStruct->GetMemberName(i))
+                                    : "field_" + ToString(i);
+            fields.emplace_back(std::make_shared<arrow::Field>(fieldName, childType, altType->IsOptional()));
+        }
+        type = arrow::dense_union(fields);
+        return true;
+    }
+
     if (unpacked->IsPg()) {
         auto pgType = AS_TYPE(TPgType, unpacked);
         const auto& desc = NYql::NPg::LookupType(pgType->GetTypeId());
@@ -2579,6 +2610,25 @@ size_t CalcMaxBlockItemSize(const TType* type) {
         return result;
     }
 
+    if (type->IsVariant()) {
+        auto variantType = AS_TYPE(TVariantType, type);
+        auto innerType = variantType->GetUnderlyingType();
+        size_t result = 0;
+        if (innerType->IsStruct()) {
+            auto structType = AS_TYPE(TStructType, innerType);
+            for (ui32 i = 0; i < structType->GetMembersCount(); i++) {
+                result = std::max(result, CalcMaxBlockItemSize(structType->GetMemberType(i)));
+            }
+        } else {
+            MKQL_ENSURE(innerType->IsTuple(), "Variant underlying type must be Struct or Tuple");
+            auto tupleType = AS_TYPE(TTupleType, innerType);
+            for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+                result = std::max(result, CalcMaxBlockItemSize(tupleType->GetElementType(i)));
+            }
+        }
+        return result;
+    }
+
     if (type->IsPg()) {
         auto pgType = AS_TYPE(TPgType, type);
         const auto& desc = NYql::NPg::LookupType(pgType->GetTypeId());
@@ -2668,6 +2718,7 @@ struct TComparatorTraits {
     using TResult = NUdf::IBlockItemComparator;
     template <bool Nullable>
     using TTuple = NUdf::TTupleBlockItemComparator<Nullable>;
+    using TVariant = NUdf::TVariantBlockItemComparator;
     template <typename T, bool Nullable>
     using TFixedSize = NUdf::TFixedSizeBlockItemComparator<T, Nullable>;
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
@@ -2709,6 +2760,7 @@ struct THasherTraits {
     using TResult = NUdf::IBlockItemHasher;
     template <bool Nullable>
     using TTuple = NUdf::TTupleBlockItemHasher<Nullable>;
+    using TVariant = NUdf::TVariantBlockItemHasher;
     template <typename T, bool Nullable>
     using TFixedSize = NUdf::TFixedSizeBlockItemHasher<T, Nullable>;
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>

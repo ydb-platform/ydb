@@ -38,6 +38,9 @@ enum class EIndexType {
     GlobalFulltextPlain,
     GlobalFulltextRelevance,
     GlobalJson,
+    LocalBloomFilter,
+    LocalBloomNgramFilter,
+    LocalMinMax,
 
     Unknown = std::numeric_limits<int>::max()
 };
@@ -47,6 +50,15 @@ enum class ECompactState {
     InProgress = 1,
     Done = 2,
     Cancelled = 3,
+};
+
+enum class EAnalyzeState {
+    Unspecified = 0,
+    Enqueued = 1,
+    InProgress = 2,
+    Done = 3,
+    Cancelled = 4,
+    Failed = 5,
 };
 
 enum class EChangefeedMode {

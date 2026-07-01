@@ -3063,9 +3063,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             }
             switch (*status) {
             case Ydb::Monitoring::StatusFlag::GREEN:
-            case Ydb::Monitoring::StatusFlag::YELLOW:
             default:
                 return Ydb::Monitoring::SelfCheck::GOOD;
+            case Ydb::Monitoring::StatusFlag::YELLOW:
             case Ydb::Monitoring::StatusFlag::BLUE:
                 return Ydb::Monitoring::SelfCheck::DEGRADED;
             case Ydb::Monitoring::StatusFlag::ORANGE:

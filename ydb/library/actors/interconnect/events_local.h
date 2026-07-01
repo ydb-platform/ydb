@@ -191,14 +191,26 @@ namespace NActors {
             HANDSHAKE_FAIL_SESSION_MISMATCH,
         };
 
-        TEvHandshakeFail(EnumHandshakeFail temporary, TString explanation)
+        enum class EReason {
+            Unspecified,
+            RemoteNodeDoesNotKnowLocalNode,
+        };
+
+        TEvHandshakeFail(EnumHandshakeFail temporary, TString explanation, TString peerHostName = {},
+                         TString peerError = {}, EReason reason = EReason::Unspecified)
             : Temporary(temporary)
             , Explanation(std::move(explanation))
+            , PeerHostName(std::move(peerHostName))
+            , PeerError(std::move(peerError))
+            , Reason(reason)
         {
         }
 
         const EnumHandshakeFail Temporary;
         const TString Explanation;
+        const TString PeerHostName;
+        const TString PeerError;
+        const EReason Reason;
     };
 
     struct TEvKick: public TEventLocal<TEvKick, ui32(ENetwork::Kick)> {

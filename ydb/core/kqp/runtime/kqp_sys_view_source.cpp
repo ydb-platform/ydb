@@ -13,6 +13,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/dq.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -178,14 +179,30 @@ private:
     void Handle(TEvKqpCompute::TEvScanError::TPtr& ev) {
         auto& msg = ev->Get()->Record;
         TIssues issues;
-        Ydb::StatusIds::StatusCode status = msg.GetStatus();
+        const Ydb::StatusIds::StatusCode status = msg.GetStatus();
         IssuesFromMessage(msg.GetIssues(), issues);
+
+        if (status == Ydb::StatusIds::SUCCESS) {
+            ScanWarnings.AddIssues(issues);
+            LOG_W("Got partial compile cache scan warning: " << issues.ToOneLineString());
+            return;
+        }
 
         LOG_E("Got scan error, status: " << Ydb::StatusIds::StatusCode_Name(status)
             << ", issues: " << issues.ToOneLineString());
 
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues,
             NYql::NDq::YdbStatusToDqStatus(status, NYql::NDq::EStatusCompatibilityLevel::WithUnauthorized)));
+    }
+
+    void MaybeForwardScanWarnings() {
+        if (ScanWarningsSent || ScanWarnings.Empty()) {
+            return;
+        }
+        ScanWarningsSent = true;
+        LOG_W("Forwarding compile cache scan warnings to compute: " << ScanWarnings.ToOneLineString());
+        Send(ComputeActorId, new NYql::NDq::IDqComputeActorAsyncInput::TEvAsyncInputError(
+            InputIndex, ScanWarnings, NYql::NDqProto::StatusIds::UNSPECIFIED));
     }
 
     // IDqComputeActorAsyncInput implementation
@@ -238,6 +255,10 @@ private:
 
         finished = ScanFinished && BufferedRows.empty();
 
+        if (finished) {
+            MaybeForwardScanWarnings();
+        }
+
         // Request more data if we still have room and scan is not finished
         if (!ScanFinished && ScanActorId) {
             Send(ScanActorId, new TEvKqpCompute::TEvScanDataAck(BufferSize));
@@ -279,6 +300,8 @@ private:
 
     TDeque<TOwnedCellVec> BufferedRows;
     bool ScanFinished = false;
+    NYql::TIssues ScanWarnings;
+    bool ScanWarningsSent = false;
 
     TDqAsyncStats IngressStats;
 

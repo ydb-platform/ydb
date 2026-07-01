@@ -14,7 +14,7 @@
 
 __project__ = 'kubernetes'
 # The version is auto-updated. Please do not edit.
-__version__ = "35.0.0"
+__version__ = "36.0.2"
 
 from . import client
 from . import config
@@ -23,3 +23,4 @@ from . import watch
 from . import stream
 from . import utils
 from . import leaderelection
+from . import informer

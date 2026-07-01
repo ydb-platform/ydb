@@ -52,7 +52,7 @@ using namespace NLogging;
 
 TEST(TParseUrlTest, Simple)
 {
-    TString example = "https://user@google.com:12345/a/b/c?foo=bar&zog=%20";
+    std::string example = "https://user@google.com:12345/a/b/c?foo=bar&zog=%20";
     auto url = ParseUrl(example);
 
     ASSERT_EQ(url.Protocol, TStringBuf("https"));
@@ -69,7 +69,7 @@ TEST(TParseUrlTest, Simple)
 
 TEST(TParseUrlTest, IPv4)
 {
-    TString example = "https://1.2.3.4:12345/";
+    std::string example = "https://1.2.3.4:12345/";
     auto url = ParseUrl(example);
 
     ASSERT_EQ(url.Host, TStringBuf("1.2.3.4"));
@@ -78,7 +78,7 @@ TEST(TParseUrlTest, IPv4)
 
 TEST(TParseUrlTest, IPv6)
 {
-    TString example = "https://[::1]:12345/";
+    std::string example = "https://[::1]:12345/";
     auto url = ParseUrl(example);
 
     ASSERT_EQ(url.Host, TStringBuf("::1"));
@@ -89,7 +89,7 @@ TEST(TParseUrlTest, IPv6)
 
 TEST(TParseCookiesTest, ParseCookie)
 {
-    TString cookieString = "yandexuid=706216621492423338; yandex_login=prime; _ym_d=1529669659; Cookie_check=1; _ym_isad=1;some_cookie_name= some_cookie_value ; abracadabra=";
+    std::string cookieString = "yandexuid=706216621492423338; yandex_login=prime; _ym_d=1529669659; Cookie_check=1; _ym_isad=1;some_cookie_name= some_cookie_value ; abracadabra=";
     auto cookie = ParseCookies(cookieString);
 
     ASSERT_EQ("706216621492423338", cookie.at("yandexuid"));
@@ -137,11 +137,12 @@ TEST(THeadersTest, HeaderCaseIsIrrelevant)
     ASSERT_EQ(std::string("F"), headers->GetOrThrow("x-test"));
     ASSERT_EQ(std::string("F"), headers->GetOrThrow("X-Test"));
 
+    // TODO(babenko): migrate to std::string
     TString buffer;
     TStringOutput output(buffer);
     headers->WriteTo(&output);
 
-    TString expected = "x-tEsT: F\r\n";
+    std::string expected = "x-tEsT: F\r\n";
     ASSERT_EQ(expected, buffer);
 }
 
@@ -158,8 +159,8 @@ TEST(THeadersTest, MessedUpHeaderValuesAreNotAllowed)
 struct TFakeConnection
     : public IConnection
 {
-    TString Input;
-    TString Output;
+    std::string Input;
+    std::string Output;
 
     TConnectionId GetId() const override
     {
@@ -186,14 +187,14 @@ struct TFakeConnection
 
     TFuture<void> Write(const TSharedRef& ref) override
     {
-        Output += TString(ref.Begin(), ref.Size());
+        Output += std::string(ref.Begin(), ref.Size());
         return OKFuture;
     }
 
     TFuture<void> WriteV(const TSharedRefArray& refs) override
     {
         for (const auto& ref : refs) {
-            Output += TString(ref.Begin(), ref.Size());
+            Output += std::string(ref.Begin(), ref.Size());
         }
         return OKFuture;
     }
@@ -282,17 +283,17 @@ void FinishBody(THttpOutput* out)
 
 void WriteChunk(THttpOutput* out, TStringBuf chunk)
 {
-    WaitFor(out->Write(TSharedRef::FromString(TString(chunk)))).ThrowOnError();
+    WaitFor(out->Write(TSharedRef::FromString(std::string(chunk)))).ThrowOnError();
 }
 
 void WriteBody(THttpOutput* out, TStringBuf body)
 {
-    WaitFor(out->WriteBody(TSharedRef::FromString(TString(body)))).ThrowOnError();
+    WaitFor(out->WriteBody(TSharedRef::FromString(std::string(body)))).ThrowOnError();
 }
 
 TEST(THttpOutputTest, Full)
 {
-    using TTestCase = std::tuple<EMessageType, TString, std::function<void(THttpOutput*)>>;
+    using TTestCase = std::tuple<EMessageType, std::string, std::function<void(THttpOutput*)>>;
     std::vector<TTestCase> table = {
         TTestCase{
             EMessageType::Request,
@@ -433,7 +434,7 @@ TEST(THttpOutputTest, LargeResponse)
 #endif
 
     constexpr ui64 Size = (SizeGib << 30) + 1;
-    const auto body = TString(Size, 'x');
+    const auto body = std::string(Size, 'x');
 
     struct TLargeFakeConnection
         : public TFakeConnection
@@ -444,7 +445,7 @@ TEST(THttpOutputTest, LargeResponse)
                 if (ref.Size() == Size) {
                     LargeRef = ref;
                 } else {
-                    Output += TString(ref.Begin(), ref.Size());
+                    Output += std::string(ref.Begin(), ref.Size());
                 }
             }
             return OKFuture;
@@ -492,7 +493,7 @@ void ExpectBodyEnd(THttpInput* in)
 
 TEST(THttpInputTest, Simple)
 {
-    using TTestCase = std::tuple<EMessageType, std::optional<EMethod>, TString, std::function<void(THttpInput*)>>;
+    using TTestCase = std::tuple<EMessageType, std::optional<EMethod>, std::string, std::function<void(THttpInput*)>>;
     std::vector<TTestCase> table = {
         TTestCase{
             EMessageType::Response,
@@ -565,9 +566,9 @@ TEST(THttpInputTest, Simple)
                 EXPECT_EQ(in->GetUrl().Path, TStringBuf("/"));
                 auto headers = in->GetHeaders();
 
-                ASSERT_EQ(TString("test"), headers->GetOrThrow("X-Foo"));
-                ASSERT_EQ(TString("test-test-test"), headers->GetOrThrow("X-Foo0"));
-                ASSERT_EQ(TString("test-test-test"), headers->GetOrThrow("X-FooFooFoo"));
+                ASSERT_EQ(std::string("test"), headers->GetOrThrow("X-Foo"));
+                ASSERT_EQ(std::string("test-test-test"), headers->GetOrThrow("X-Foo0"));
+                ASSERT_EQ(std::string("test-test-test"), headers->GetOrThrow("X-FooFooFoo"));
                 ASSERT_EQ((std::vector<std::string>{"test0", "test1", "test2"}), ToVector(headers->GetAll("X-FooFoo")));
                 ExpectBodyEnd(in);
             }
@@ -604,7 +605,7 @@ TEST(THttpInputTest, Simple)
                 EXPECT_EQ(in->GetUrl().Path, TStringBuf("/chunked_w_trailing_headers"));
 
                 auto headers = in->GetHeaders();
-                ASSERT_EQ(TString("test"), headers->GetOrThrow("X-Foo"));
+                ASSERT_EQ(std::string("test"), headers->GetOrThrow("X-Foo"));
 
                 ASSERT_THROW(in->GetTrailers(), TErrorException);
 
@@ -614,8 +615,8 @@ TEST(THttpInputTest, Simple)
                 ExpectBodyEnd(in);
 
                 auto trailers = in->GetTrailers();
-                ASSERT_EQ(TString("*"), trailers->GetOrThrow("Vary"));
-                ASSERT_EQ(TString("text/plain"), trailers->GetOrThrow("Content-Type"));
+                ASSERT_EQ(std::string("*"), trailers->GetOrThrow("Vary"));
+                ASSERT_EQ(std::string("text/plain"), trailers->GetOrThrow("Content-Type"));
             }
         },
         TTestCase{
@@ -661,7 +662,7 @@ protected:
     IClientPtr Client;
 
     NTesting::TPortHolder TestPort;
-    TString TestUrl;
+    std::string TestUrl;
 
 private:
     void SetupServer(const NHttp::TServerConfigPtr& config)
@@ -799,9 +800,9 @@ public:
     }
 };
 
-TString ReadAll(const IAsyncZeroCopyInputStreamPtr& in)
+std::string ReadAll(const IAsyncZeroCopyInputStreamPtr& in)
 {
-    TString buf;
+    std::string buf;
     while (true) {
         auto data = WaitFor(in->Read()).ValueOrThrow();
         if (data.Size() == 0) {
@@ -827,7 +828,7 @@ TEST_P(THttpServerTest, TransferSmallBody)
     ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
 
     auto rspBody = ReadAll(rsp);
-    ASSERT_EQ(TString(reqBody.Begin(), reqBody.Size()), rspBody);
+    ASSERT_EQ(std::string(reqBody.Begin(), reqBody.Size()), rspBody);
 
     Server->Stop();
     Sleep(TDuration::MilliSeconds(10));
@@ -848,7 +849,7 @@ TEST_P(THttpServerTest, TransferSmallBodyUsingStreaming)
     ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
 
     auto rspBody = ReadAll(rsp);
-    ASSERT_EQ(TString(reqBody.Begin(), reqBody.Size()), rspBody);
+    ASSERT_EQ(std::string(reqBody.Begin(), reqBody.Size()), rspBody);
 
     Server->Stop();
     Sleep(TDuration::MilliSeconds(10));
@@ -907,7 +908,7 @@ public:
         WaitFor(rsp->Close()).ThrowOnError();
     }
 
-    std::vector<std::pair<TString, TString>> ReplyHeaders, ExpectedHeaders;
+    std::vector<std::pair<std::string, std::string>> ReplyHeaders, ExpectedHeaders;
 };
 
 TEST_P(THttpServerTest, HeadersTest)
@@ -1098,7 +1099,7 @@ public:
 #endif
 
         rsp->SetStatus(EStatusCode::OK);
-        auto data = TSharedRef::FromString(TString(1024, 'f'));
+        auto data = TSharedRef::FromString(std::string(1024, 'f'));
         for (int i = 0; i < BodySizeKib; i++) {
             WaitFor(rsp->Write(data))
                 .ThrowOnError();
@@ -1342,8 +1343,8 @@ TEST_P(THttpServerTest, ReuseConnections)
 
         auto rsp1Body = ReadAll(rsp1);
         auto rsp2Body = ReadAll(rsp2);
-        ASSERT_EQ(TString(reqBody.Begin(), reqBody.Size()), rsp1Body);
-        ASSERT_EQ(TString(reqBody.Begin(), reqBody.Size()), rsp2Body);
+        ASSERT_EQ(std::string(reqBody.Begin(), reqBody.Size()), rsp1Body);
+        ASSERT_EQ(std::string(reqBody.Begin(), reqBody.Size()), rsp2Body);
     }
 }
 
@@ -1379,7 +1380,7 @@ TEST_P(THttpServerTest, DropConnectionsByTimeout)
         ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
 
         auto rspBody = ReadAll(rsp);
-        ASSERT_EQ(TString(reqBody.Begin(), reqBody.Size()), rspBody);
+        ASSERT_EQ(std::string(reqBody.Begin(), reqBody.Size()), rspBody);
     }
 }
 
@@ -1553,7 +1554,7 @@ TEST_W(TCompressionTest, Roundtrip)
             continue;
         }
 
-        TString payload;
+        std::string payload;
         for (size_t i = 0; i < Size; i++) {
             payload.push_back('a' + RandomNumber<size_t>(26));
         }
@@ -1579,7 +1580,7 @@ TEST_W(TCompressionTest, Roundtrip)
         }();
 
         auto decompressedPayload = [&] {
-            TString decompressedPayload;
+            std::string decompressedPayload;
             TStringInput compressedStream(compressedPayload);
             auto asyncCompressedStream = CreateAsyncAdapter(static_cast<IInputStream*>(&compressedStream), GetCurrentInvoker());
             auto asyncZeroCopyCompressedStream = CreateZeroCopyAdapter(asyncCompressedStream, 1_KB);

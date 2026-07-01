@@ -5,3 +5,6 @@ cryptography
 {% endblock %}
 
 {% block current_version %}41.0.6{% endblock %}
+
+{% block patch_source %}
+{% endblock %}

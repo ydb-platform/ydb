@@ -71,6 +71,7 @@ ui64 ComputeOptimalClusters(ui64 levels, ui64 searchWidth, ui64 rowCount, double
 double ComputeEfficiencyScore(ui64 levels, ui64 clusters, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector);
 
 void AutoSelectKMeansSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 rowCount, bool isPrefixed = false);
+ui32 ComputeAdaptiveK(ui64 prefixRowCount, ui32 levels, ui32 overlapClusters, ui32 maxClusters);
 bool AutoSelectVectorSettings(Ydb::Table::VectorIndexSettings& settings, const TStringBuf& embedding);
 bool NeedsVectorSettingsAutoSelect(const Ydb::Table::VectorIndexSettings& settings);
 

@@ -58,7 +58,7 @@ bool TLogFormatterBase::IsSourceLocationEnabled() const
 
 TStructuredLogFormatter::TStructuredLogFormatter(
     ELogFormat format,
-    THashMap<TString, INodePtr> commonFields,
+    THashMap<std::string, INodePtr> commonFields,
     bool enableSourceLocation,
     bool enableSystemFields,
     bool enableHostField,

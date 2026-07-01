@@ -6,6 +6,7 @@ LIBRARY()
         )
         SRCS(
             s3_windows_stub.cpp
+            s3_router_stub.cpp
         )
     ELSE()
         SRCS(
@@ -14,6 +15,7 @@ LIBRARY()
             s3_scan.cpp
             s3_upload.cpp
             s3_write.cpp
+            s3_router.cpp
         )
     ENDIF()
 
@@ -53,6 +55,8 @@ LIBRARY()
         recommissioner.cpp
         recommissioner.h
         s3.h
+        s3_router.h
+        s3_router_events.h
         space_monitor.cpp
         space_monitor.h
         testing.cpp
@@ -70,6 +74,7 @@ LIBRARY()
         ydb/core/tablet_flat
         ydb/core/protos
         ydb/core/wrappers
+        ydb/library/actors/http
     )
 
     GENERATE_ENUM_SERIALIZATION(schema.h)

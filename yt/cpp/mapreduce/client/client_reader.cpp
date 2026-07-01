@@ -7,6 +7,7 @@
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 #include <yt/cpp/mapreduce/common/retry_request.h>
+#include <yt/cpp/mapreduce/common/trace_context.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
@@ -50,7 +51,10 @@ TClientReader::TClientReader(
     , Format_(format)
     , Options_(options)
     , ReadTransaction_(nullptr)
+    , TraceContext_(NTracing::CreateTraceContext("TClientReader", context.Config))
 {
+    NTracing::TCurrentTraceContextGuard guard(TraceContext_->Ptr);
+
     if (options.CreateTransaction_) {
         Y_ABORT_UNLESS(transactionPinger, "Internal error: transactionPinger is null");
         ReadTransaction_ = std::make_unique<TPingableTransaction>(
@@ -83,6 +87,8 @@ bool TClientReader::Retry(
     const TMaybe<ui64>& rowIndex,
     const std::exception_ptr& error)
 {
+    NTracing::TCurrentTraceContextGuard guard(TraceContext_->Ptr);
+
     // We always stop retries if reader is aborted
     if (IAbortableInputStream::IsAbortedError(error)) {
         std::rethrow_exception(error);
@@ -148,6 +154,8 @@ bool TClientReader::IsAborted() const
 
 size_t TClientReader::DoRead(void* buf, size_t len)
 {
+    NTracing::TCurrentTraceContextGuard guard(TraceContext_->Ptr);
+
     EnsureInitialized();
     return Input_->Read(buf, len);
 }
@@ -180,6 +188,8 @@ void TClientReader::TransformYPath()
 
 void TClientReader::CreateRequest(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex)
 {
+    NTracing::TCurrentTraceContextGuard guard(TraceContext_->Ptr);
+
     if (!CurrentRequestRetryPolicy_) {
         CurrentRequestRetryPolicy_ = ClientRetryPolicy_->CreatePolicyForGenericRequest();
     }

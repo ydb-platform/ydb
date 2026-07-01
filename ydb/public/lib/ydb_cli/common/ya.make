@@ -25,6 +25,7 @@ SRCS(
     interruptable.cpp
     lazy_driver.cpp
     local_paths.cpp
+    markdown.cpp
     normalize_path.cpp
     parameter_stream.cpp
     parameters.cpp
@@ -37,6 +38,8 @@ SRCS(
     progress_indication.cpp
     query_stats.cpp
     query_utils.cpp
+    scheme_query_utils.cpp
+    tx_mode_utils.cpp
     recursive_list.cpp
     recursive_remove.cpp
     retry_func.cpp
@@ -45,6 +48,7 @@ SRCS(
     scheme_printers.cpp
     sys.cpp
     tabbed_table.cpp
+    utf8_utils.cpp
     waiting_bar.cpp
     ydb_path.cpp
     ydb_updater.cpp

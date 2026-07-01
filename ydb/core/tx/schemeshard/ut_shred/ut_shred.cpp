@@ -182,7 +182,11 @@ Y_UNIT_TEST_SUITE(TenantShredTest) {
         ui64 tenantSchemeShard = CreateTestExtSubdomain(runtime, env, &txId, "Database1", {.Table = true});
 
         // block CollectGarbage requests to suspend Vacuum
-        TBlockEvents<TEvBlobStorage::TEvCollectGarbage> collectGarbageReqs(runtime);
+        TBlockEvents<TEvBlobStorage::TEvCollectGarbage> collectGarbageReqs(runtime, [&] (const TEvBlobStorage::TEvCollectGarbage::TPtr& ev) {
+            // Blocking TEvBlobStorage::TEvCollectGarbage sent by FLAT_EXECUTOR before all TEvTablet::TEvFollowerGcApplied events consumed
+            // forces GC logic to hang in WaitTabletGC state with GcWaitFor > 0 and causes the test to timeout
+            return runtime.FindActorName(ev->Sender) != "FLAT_EXECUTOR";
+        });
 
         runtime.SendToPipe(tenantSchemeShard, sender, new TEvSchemeShard::TEvTenantShredRequest(2), 0, GetPipeConfigWithRetries());
         runtime.WaitFor("collect garbage", [&collectGarbageReqs]{ return collectGarbageReqs.size() >= 1; });
@@ -190,7 +194,7 @@ Y_UNIT_TEST_SUITE(TenantShredTest) {
         // request with previous generation should not be responded
         runtime.SendToPipe(tenantSchemeShard, sender, new TEvSchemeShard::TEvTenantShredRequest(1), 0, GetPipeConfigWithRetries());
         TAutoPtr<IEventHandle> handle;
-        auto* response1 = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvTenantShredResponse>(handle, TDuration::Seconds(20));
+        auto* response1 = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvTenantShredResponse>(handle, TDuration::Seconds(3));
         UNIT_ASSERT_C(!response1, "Unexpected EvTenantShredResponse");
 
         // EvTenantShredResponse should be sent after unblocking and finishing Vacuum
@@ -200,9 +204,6 @@ Y_UNIT_TEST_SUITE(TenantShredTest) {
                 return false;
             }
             TEventHandle<TEvSchemeShard::TEvTenantShredResponse>* response = reinterpret_cast<TEventHandle<TEvSchemeShard::TEvTenantShredResponse>*>(&ev);
-            if (response->Get()->Record.GetGeneration() != 2) {
-                return false;
-            }
             UNIT_ASSERT_EQUAL_C(response->Get()->Record.GetGeneration(), 2, response->Get()->Record.GetGeneration());
             UNIT_ASSERT_EQUAL_C(response->Get()->Record.GetStatus(), NKikimrScheme::TEvTenantShredResponse::COMPLETED, static_cast<ui32>(response->Get()->Record.GetStatus()));
             return true;
@@ -210,7 +211,7 @@ Y_UNIT_TEST_SUITE(TenantShredTest) {
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(checkTenantShredResponseGen2, 1));
         runtime.SendToPipe(tenantSchemeShard, sender, new TEvSchemeShard::TEvTenantShredRequest(2), 0, GetPipeConfigWithRetries());
-        runtime.DispatchEvents(options);
+        UNIT_ASSERT(runtime.DispatchEvents(options, TDuration::Seconds(30)));
     }
 
     Y_UNIT_TEST(SendPreviousGenerationLastGenerationCompleted) {

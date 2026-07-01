@@ -139,7 +139,7 @@ protected:
         if (upload.Attempt < Settings.number_of_retries() && NWrappers::ShouldRetry(error)) {
             Retry(upload);
         } else {
-            Fail(TStringBuilder() << upload.Path << ". S3 error: " << error.GetMessage());
+            Fail(TStringBuilder() << upload.Path << ". " << LogPrefix() << " error: " << error.GetMessage());
         }
     }
 
@@ -170,6 +170,11 @@ protected:
     void PassAway() override {
         this->Send(StorageOperator, new TEvents::TEvPoisonPill());
         IActor::PassAway();
+    }
+
+public:
+    static constexpr TStringBuf LogPrefix() {
+        return NBackup::NFieldsWrappers::GetStorageName<TSettings>();
     }
 
 private:

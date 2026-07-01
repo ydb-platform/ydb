@@ -691,4 +691,5 @@ message TEvShrinkStoragePoolReply {
 
 message TEvShrinkStoragePoolDone {
     optional string StoragePool = 1;
+    repeated uint32 GroupsToRemove = 2;
 }

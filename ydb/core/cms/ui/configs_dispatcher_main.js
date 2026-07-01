@@ -55,6 +55,12 @@ function main() {
         $("#copy-resolved-yaml-config").click(function() {
             copyToClipboard(codeMirrorResolved.getValue());
         });
+
+        // Highlight unknown/deprecated fields of the resolved config (inlined by the server).
+        if (typeof unknownFields !== 'undefined') {
+            highlightUnknownFields(codeMirrorResolved,
+                document.getElementById('resolved-unknown-fields-list'), unknownFields);
+        }
     });
 
     $("#host-ref").text("YDB Developer UI - " + window.location.hostname);

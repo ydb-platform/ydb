@@ -324,7 +324,7 @@ TMaybeNode<TYtSection> UpdateSectionWithFilters(TYtSection section, const TVecto
         .Done();
 }
 
-} //namespace
+} // namespace
 
 TMaybeNode<TYtSection> UpdateSectionWithSettings(TExprBase world, TYtSection section, TYtDSink dataSink, TYqlRowSpecInfo::TPtr outRowSpec, bool keepSortness, bool allowWorldDeps, bool allowMaterialize,
     TSyncMap& syncList, const TYtState::TPtr& state, TExprContext& ctx)
@@ -826,9 +826,6 @@ NNodes::TMaybeNode<NNodes::TExprBase> FuseMapToMapReduce(NNodes::TExprBase node,
             continue;
         }
         if (!path.Ranges().Maybe<TCoVoid>()) {
-            continue;
-        }
-        if (!path.QLFilter().Maybe<TCoVoid>()) {
             continue;
         }
 

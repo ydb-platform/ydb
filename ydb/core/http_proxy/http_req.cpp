@@ -1,6 +1,7 @@
 #include "http_req.h"
 
 #include "auth_factory.h"
+#include "sqs_xml/params.h"
 #include "utils.h"
 
 #include <ydb/library/actors/http/http_proxy.h>
@@ -83,13 +84,25 @@ namespace NKikimr::NHttpProxy {
         if (DatabasePath == "/") {
            DatabasePath = "";
         }
-        auto params = TCgiParameters(Request->URL.After('?'));
-        if (auto it = params.Find("folderId"); it != params.end()) {
+        CgiParameters = TCgiParameters(Request->URL.After('?'));
+        if (auto it = CgiParameters.Find("folderId"); it != CgiParameters.end()) {
             FolderId = it->second;
         }
 
         //TODO: find out databaseId
         ParseHeaders(Request->Headers);
+
+        if (Request->Method == "POST" && RawContentType == "application/x-www-form-urlencoded" && !Request->Body.empty()) {
+            CgiParameters = TCgiParameters(Request->Body);
+        }
+
+        if (MethodName.empty() && ContentType == MIME_XML && !Request->Body.empty()) {
+            auto it = CgiParameters.Find("Action");
+            if (it != CgiParameters.end()) {
+                ApiVersion = "AmazonSQS";
+                MethodName = it->second;
+            }
+        }
     }
 
     THolder<NKikimr::NSQS::TAwsRequestSignV4> THttpRequestContext::GetSignature() {
@@ -190,7 +203,12 @@ namespace NKikimr::NHttpProxy {
                 ApiVersion = parts.size() > 0 ? parts[0] : "";
                 MethodName = parts.size() > 1 ? parts[1] : "";
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_CONTENT_TYPE_HEADER)) {
-                ContentType = mimeByStr(header.second);
+                RawContentType = StripString(TStringBuf(header.second).Before(';'));
+                if (AsciiEqualsIgnoreCase(RawContentType, "application/x-www-form-urlencoded")) {
+                    ContentType = MIME_XML;
+                } else {
+                    ContentType = mimeByStr(header.second);
+                }
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_DATE_HEADER)) {
             }
         }

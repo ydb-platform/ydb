@@ -4,6 +4,7 @@
 #include "compaction.h"
 #include "execute.h"
 #include "select.h"
+#include "wait_background_processes.h"
 #include "variator.h"
 
 namespace NKikimr::NKqp::Variator {
@@ -23,7 +24,8 @@ namespace {
         {"ONE_COMPACTION", []() { return std::make_shared<TOneCompactionCommand>(); }},
         {"ONE_ACTUALIZATION", []() { return std::make_shared<TOneActualizationCommand>(); }},
         {"CHECK_COUNTER", []() { return std::make_shared<TCheckCounterCommand>(); }},
-        {"RESTART_TABLETS", []() { return std::make_shared<TRestartTabletsCommand>(); }}
+        {"RESTART_TABLETS", []() { return std::make_shared<TRestartTabletsCommand>(); }},
+        {"WAIT_BACKGROUND_PROCESSES", []() { return std::make_shared<TWaitBackgroundProcessesCommand>(); }}
     };
 
     std::pair<TString, TString> ParseCommandString(const TString& command) {

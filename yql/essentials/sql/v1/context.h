@@ -6,6 +6,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/public/issue/yql_warning.h>
+#include <yql/essentials/core/langver/feature.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/cluster_mapping.h>
 
@@ -57,6 +58,7 @@ struct TScopedState: public TThrRefBase {
     bool WarnUntypedStringLiterals = false;
     bool SimplePgByDefault = false;
     TNamedNodesMap NamedNodes;
+    THashSet<std::pair</*prefix=*/TString, /*pragma=*/TString>> ActivePragmas;
 
     struct TLocal {
         TVector<std::pair<TString, TDeferredAtom>> UsedClusters;
@@ -283,17 +285,9 @@ public:
         }
     }
 
-    bool IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion featureVer) const;
+    bool IsAvailable(const NYql::TFeature& feature) const;
 
-    bool EnsureBackwardCompatibleFeatureAvailable(
-        TPosition position,
-        TStringBuf feature,
-        NYql::TLangVersion version);
-
-    bool EnsureFeatureNotExpired(
-        TPosition position,
-        TStringBuf feature,
-        NYql::TLangVersion version);
+    bool EnsureAvailable(TPosition position, const NYql::TFeature& feature);
 
 private:
     IOutputStream& MakeIssue(
@@ -439,7 +433,6 @@ public:
         EFlattenAndAggrExprsPersistence::Disable;
     bool DisableLegacyNotNull = false;
     bool DebugPositions = false;
-    bool StrictWarningAsError = true;
     bool WindowNewPipeline = true;
     bool YqlSelectAllowUnnamedGroupByExpr = false;
     TMaybe<bool> DirectRowDependsOn;

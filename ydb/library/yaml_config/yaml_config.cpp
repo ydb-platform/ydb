@@ -5,7 +5,9 @@
 #include <ydb/core/base/appdata.h>
 
 #include <library/cpp/protobuf/json/json2proto.h>
+#include <library/cpp/protobuf/json/util.h>
 
+#include <ydb/core/config/protos/marker.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/config/validation/validators.h>
 
@@ -40,7 +42,8 @@ void ResolveAndParseYamlConfig(
     NKikimrConfig::TAppConfig& appConfig,
     std::optional<TString> databaseYamlConfig,
     TString* resolvedYamlConfig,
-    TString* resolvedJsonConfig)
+    TString* resolvedJsonConfig,
+    TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> unknownFieldsCollector)
 {
     TStringStream resolvedJsonConfigStream;
     bool hasMetadata = false;
@@ -90,7 +93,7 @@ void ResolveAndParseYamlConfig(
         appConfig.SetYamlConfigEnabled(true);
     }
 
-    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(true), appConfig, true, /*phase=*/ nullptr, /*relaxed=*/ true);
+    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(true, std::move(unknownFieldsCollector)), appConfig, true, /*phase=*/ nullptr, /*relaxed=*/ true);
 }
 
 void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to) {

@@ -88,6 +88,7 @@ struct TSetup {
         , StatsRegistry(CreateDefaultStatsRegistry())
         , RuntimeSettings(NYql::MakeRuntimeSettingsMutable())
     {
+        RuntimeSettings->DatumValidation.Set(NYql::DefaultDatumTestValidationMode);
         NodeFactory = nodeFactory;
         FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         if (!modules.empty()) {

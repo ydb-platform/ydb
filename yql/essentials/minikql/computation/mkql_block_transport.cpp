@@ -3,7 +3,11 @@
 
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/public/udf/arrow/dense_union.h>
 #include <yql/essentials/public/udf/arrow/dispatch_traits.h>
+
+#include <util/generic/algorithm.h>
+#include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -21,7 +25,7 @@ TChunkedBuffer MakeChunkedBufferAndUntrack(const std::shared_ptr<const arrow::Bu
 class TOwnedArrowBuffer: public arrow::Buffer {
 public:
     TOwnedArrowBuffer(TStringBuf span, const std::shared_ptr<const void>& owner)
-        : arrow::Buffer(reinterpret_cast<const uint8_t*>(span.data()), span.size())
+        : arrow::Buffer(reinterpret_cast<const ui8*>(span.data()), span.size())
         , Owner_(owner)
     {
     }
@@ -121,8 +125,8 @@ std::shared_ptr<arrow::Buffer> LoadBuffer(TChunkedBuffer& source, TMaybe<ui64> s
     }
 
     auto result = AllocateResizableBuffer(toAppend, NYql::NUdf::GetYqlMemoryPool());
-    ARROW_OK(result->Resize((int64_t)toAppend));
-    uint8_t* dst = result->mutable_data();
+    ARROW_OK(result->Resize((i64)toAppend));
+    ui8* dst = result->mutable_data();
     while (toAppend) {
         const TChunkedBuffer::TChunk& front = source.Front();
         TStringBuf buf = front.Buf;
@@ -191,7 +195,6 @@ public:
     }
 
     std::shared_ptr<arrow::ArrayData> LoadArray(TChunkedBuffer& src, ui64 blockLen, TMaybe<size_t> offset) final {
-        YQL_ENSURE(blockLen > 0, "Should be handled earlier");
         std::shared_ptr<arrow::Buffer> nulls;
         i64 nullsCount = 0;
         if (IsNullable()) {
@@ -419,16 +422,16 @@ private:
     }
 
     void StoreTrimmedArray(const arrow::ArrayData& data, TChunkedBuffer& dst) const {
-        const int64_t desiredOffset = data.offset % 8;
-        const int64_t offsetsLength = data.length + 1 + desiredOffset;
-        const int64_t offsetsSize = sizeof(TOffset) * offsetsLength;
+        const i64 desiredOffset = data.offset % 8;
+        const i64 offsetsLength = data.length + 1 + desiredOffset;
+        const i64 offsetsSize = sizeof(TOffset) * offsetsLength;
 
         auto trimmedOffsetBuffer = NUdf::AllocateResizableBuffer(offsetsSize, Pool_);
         ARROW_OK(trimmedOffsetBuffer->Resize(offsetsSize, false));
         TOffset* trimmedOffsetBufferData = reinterpret_cast<TOffset*>(trimmedOffsetBuffer->mutable_data());
 
         const TOffset* offsetData = data.GetValues<TOffset>(1) - desiredOffset;
-        for (int64_t i = 0; i < offsetsLength; ++i) {
+        for (i64 i = 0; i < offsetsLength; ++i) {
             trimmedOffsetBufferData[i] = offsetData[i] - offsetData[0];
         }
 
@@ -897,10 +900,180 @@ private:
     TFixedSizeBlockDeserializer<sizeof(NYql::NUdf::TTimezoneId), false> TzDeserialiser_;
 };
 
+class TVariantBlockSerializer final: public TBlockSerializerBase {
+    using TBase = TBlockSerializerBase;
+
+public:
+    TVariantBlockSerializer(TVector<std::unique_ptr<IBlockSerializer>>&& children, const TBlockSerializerParams& params)
+        : TBase(params)
+        , Children_(std::move(children))
+    {
+    }
+
+    size_t ArrayMetadataCount() const final {
+        size_t result = OffsetMetadataCount();
+        result += 2 * Children_.size();
+        for (const auto& child : Children_) {
+            result += child->ArrayMetadataCount();
+        }
+        return result;
+    }
+
+    void StoreMetadata(const arrow::ArrayData& data, const IBlockSerializer::TMetadataSink& metaSink) const final {
+        MKQL_ENSURE(ShouldSerializeOffset_, "Serialization without offset is not supported. "
+                                            "Please migrate to the serializer version that uses explicit offset serialization.");
+        metaSink(data.offset % 8);
+        const auto usage = NYql::NUdf::CalculateDenseUnionChildrenUsage(data);
+        for (size_t childIndex = 0; childIndex < Children_.size(); ++childIndex) {
+            metaSink(usage[childIndex].Offset);
+            metaSink(usage[childIndex].Length);
+        }
+        for (size_t childIndex = 0; childIndex < Children_.size(); ++childIndex) {
+            auto childView = NYql::NUdf::DeepSlice(*data.child_data[childIndex],
+                                                   usage[childIndex].Offset,
+                                                   usage[childIndex].Length);
+            Children_[childIndex]->StoreMetadata(*childView, metaSink);
+        }
+    }
+
+    void StoreArray(const arrow::ArrayData& data, TChunkedBuffer& dst) const final {
+        const auto* typeCodesBuf = data.buffers[1].get();
+        YQL_ENSURE(typeCodesBuf, "type_codes buffer is null");
+        const char* typeCodesData = reinterpret_cast<const char*>(typeCodesBuf->data()) + data.offset * sizeof(i8);
+        dst.Append(MakeChunkedBufferAndUntrack(data.buffers[1], typeCodesData, static_cast<ui64>(data.length) * sizeof(i8)));
+
+        const auto* valueOffsetsBuf = data.buffers[2].get();
+        YQL_ENSURE(valueOffsetsBuf, "value_offsets buffer is null");
+        const char* valueOffsetsData = reinterpret_cast<const char*>(valueOffsetsBuf->data()) + data.offset * sizeof(i32);
+        dst.Append(MakeChunkedBufferAndUntrack(data.buffers[2], valueOffsetsData, static_cast<ui64>(data.length) * sizeof(i32)));
+
+        const auto usage = NYql::NUdf::CalculateDenseUnionChildrenUsage(data);
+        for (size_t childIndex = 0; childIndex < Children_.size(); ++childIndex) {
+            auto childView = NYql::NUdf::DeepSlice(*data.child_data[childIndex],
+                                                   usage[childIndex].Offset,
+                                                   usage[childIndex].Length);
+            Children_[childIndex]->StoreArray(*childView, dst);
+        }
+    }
+
+private:
+    const TVector<std::unique_ptr<IBlockSerializer>> Children_;
+};
+
+class TVariantBlockDeserializer final: public TBlockDeserializerBase {
+    using TBase = TBlockDeserializerBase;
+
+public:
+    explicit TVariantBlockDeserializer(TVector<std::unique_ptr<TBlockDeserializerBase>>&& children, const TBlockSerializerParams& params)
+        : TBase(params)
+        , Children_(std::move(children))
+        , Pool_(params.Pool())
+    {
+    }
+
+private:
+    void DoLoadMetadata(const TMetadataSource& metaSource) final {
+        ChildrenUsage_.resize(Children_.size());
+        for (size_t childIndex = 0; childIndex < Children_.size(); ++childIndex) {
+            ChildrenUsage_[childIndex].Offset = metaSource();
+            ChildrenUsage_[childIndex].Length = metaSource();
+        }
+        for (const auto& child : Children_) {
+            child->LoadMetadata(metaSource);
+        }
+    }
+
+    bool IsNullable() const final {
+        return false;
+    }
+
+    // Actually we create at most one element for the first child, others have 0.
+    // And then all |blockLen| elements are reffered to that single child element.
+    std::shared_ptr<arrow::ArrayData> DoMakeDefaultValue(
+        const std::shared_ptr<arrow::Buffer>& nulls,
+        i64 nullsCount,
+        ui64 blockLen,
+        TMaybe<size_t> /*offset*/) const final {
+        Y_UNUSED(nulls, nullsCount, "DenseUnion has no validity bitmap");
+        auto typeCodesBuf = MakeZeroBuffer(blockLen * sizeof(i8));
+        auto valueOffsetsBuf = MakeZeroBuffer(blockLen * sizeof(i32));
+        TVector<std::shared_ptr<arrow::ArrayData>> childData;
+        childData.reserve(Children_.size());
+        for (size_t childIndex = 0; childIndex < Children_.size(); ++childIndex) {
+            ui64 childLen = (childIndex == 0) ? std::min<ui64>(1, blockLen) : 0;
+            childData.emplace_back(Children_[childIndex]->MakeDefaultValue(childLen, TMaybe<size_t>(0)));
+        }
+        return arrow::ArrayData::Make(
+            ArrowType_, blockLen,
+            {nullptr, typeCodesBuf, valueOffsetsBuf},
+            std::move(childData),
+            /*null_count=*/0, /*offset=*/0);
+    }
+
+    std::shared_ptr<arrow::ArrayData> DoLoadArray(
+        TChunkedBuffer& src,
+        const std::shared_ptr<arrow::Buffer>& nulls,
+        i64 nullsCount,
+        ui64 blockLen,
+        TMaybe<size_t> offset) final {
+        Y_UNUSED(nulls, nullsCount);
+        YQL_ENSURE(ChildrenUsage_.size() == Children_.size(), "Variant children metadata not loaded");
+        auto typeCodesBuf = LoadBuffer(src, blockLen * sizeof(i8));
+        auto valueOffsetsBuf = LoadBuffer(src, blockLen * sizeof(i32));
+
+        const bool needsOffsetAdjust = AnyOf(ChildrenUsage_, [](const NYql::NUdf::TDenseUnionChildUsage& usage) {
+            return usage.Offset > 0;
+        });
+
+        if (needsOffsetAdjust) {
+            auto mutableValueOffsets = NYql::NUdf::CopyBuffer(*valueOffsetsBuf, 0, blockLen * sizeof(i32), Pool_);
+            auto* destOffsets = reinterpret_cast<i32*>(mutableValueOffsets->mutable_data());
+            NYql::NUdf::AdjustDenseUnionValueOffsets(
+                TArrayRef<i32>(destOffsets, blockLen),
+                TArrayRef<const i8>(reinterpret_cast<const i8*>(typeCodesBuf->data()), blockLen),
+                ChildrenUsage_);
+            valueOffsetsBuf = std::move(mutableValueOffsets);
+        }
+
+        TVector<std::shared_ptr<arrow::ArrayData>> childData;
+        childData.reserve(Children_.size());
+        for (size_t childIndex = 0; childIndex < Children_.size(); ++childIndex) {
+            childData.emplace_back(Children_[childIndex]->LoadArray(src, ChildrenUsage_[childIndex].Length, GetOffset(offset)));
+        }
+
+        return arrow::ArrayData::Make(
+            ArrowType_, blockLen,
+            {nullptr, typeCodesBuf, valueOffsetsBuf},
+            std::move(childData),
+            /*null_count=*/0, /*offset=*/0);
+    }
+
+    void DoResetMetadata() final {
+        ChildrenUsage_.clear();
+        for (const auto& child : Children_) {
+            child->ResetMetadata();
+        }
+    }
+
+    void SetArrowType(const std::shared_ptr<arrow::DataType>& type) final {
+        ArrowType_ = type;
+        YQL_ENSURE(type->num_fields() == static_cast<int>(Children_.size()),
+                   "Variant child count mismatch: " << Children_.size() << " != " << type->num_fields());
+        for (size_t childIndex = 0; childIndex < Children_.size(); ++childIndex) {
+            Children_[childIndex]->SetArrowType(type->field(static_cast<int>(childIndex))->type());
+        }
+    }
+
+    const TVector<std::unique_ptr<TBlockDeserializerBase>> Children_;
+    arrow::MemoryPool* Pool_;
+    TVector<NYql::NUdf::TDenseUnionChildUsage> ChildrenUsage_;
+};
+
 struct TSerializerTraits {
     using TResult = IBlockSerializer;
     template <bool Nullable>
     using TTuple = TTupleBlockSerializer<Nullable>;
+    using TVariant = TVariantBlockSerializer;
     template <typename T, bool Nullable>
     using TFixedSize = TFixedSizeBlockSerializer<sizeof(T), Nullable>;
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
@@ -947,6 +1120,7 @@ struct TDeserializerTraits {
     using TResult = TBlockDeserializerBase;
     template <bool Nullable>
     using TTuple = TTupleBlockDeserializer<Nullable>;
+    using TVariant = TVariantBlockDeserializer;
     template <typename T, bool Nullable>
     using TFixedSize = TFixedSizeBlockDeserializer<sizeof(T), Nullable>;
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>

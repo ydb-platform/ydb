@@ -64,6 +64,8 @@ struct THttpRequestContext {
     NYdb::TDriver* Driver;
     std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
 
+    TCgiParameters CgiParameters;
+
     TString ServiceAccountId;
     TString RequestId;
     TString DiscoveryEndpoint;
@@ -76,6 +78,7 @@ struct THttpRequestContext {
     TString SourceAddress;
     TString MethodName; // used once
     TString ApiVersion; // used once
+    TString RawContentType;
     MimeTypes ContentType{MIME_UNKNOWN};
     TString IamToken;
     TString SecurityToken;
@@ -115,14 +118,6 @@ public:
         return Method;
     }
 
-    enum TRequestState {
-        StateIdle,
-        StateAuthentication,
-        StateAuthorization,
-        StateListEndpoints,
-        StateGrpcRequest,
-        StateFinished
-    };
 protected:
     TString Method;
     TProtoCall ProtoCall;
@@ -142,7 +137,7 @@ public:
         THolder<NKikimr::NSQS::TAwsRequestSignV4> signature
     ) const = 0;
 
-    virtual THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const = 0;
+    virtual THttpResponseData MakeError(const THttpRequestContext& httpContext, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const = 0;
 
     virtual bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const = 0;
 };
@@ -155,10 +150,6 @@ public:
 const THttpControllerRegistry& GetHttpControllerRegistry();
 
 class THttpRequestProcessors {
-public:
-    using TService = Ydb::DataStreams::V1::DataStreamsService;
-    using TServiceConnection = NYdbGrpc::TServiceConnection<TService>;
-
 public:
     THttpRequestProcessors(const NKikimrConfig::TServerlessProxyConfig& config);
 

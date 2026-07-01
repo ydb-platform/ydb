@@ -10,6 +10,8 @@
 
 #include <yt/yt/core/misc/serialize.h>
 
+#include <util/stream/mem.h>
+
 namespace NYT::NYson {
 namespace {
 
@@ -28,7 +30,7 @@ TYPED_TEST_SUITE(TYsonTypedTest, TYsonStringTypes);
 
 TYPED_TEST(TYsonTypedTest, GetYPath)
 {
-    TString yson = "{key=value; submap={ other_key=other_value; }}";
+    std::string yson = "{key=value; submap={ other_key=other_value; }}";
     auto node = NYT::NYTree::ConvertToNode(TypeParam(yson));
 
     EXPECT_EQ("/submap/other_key", node->AsMap()->GetChildOrThrow("submap")->AsMap()->GetChildOrThrow("other_key")->GetPath());
@@ -92,7 +94,7 @@ TYPED_TEST(TYsonTypedTest, RemoveNodeByYPathInvalid)
 
 TYPED_TEST(TYsonTypedTest, ConvertToNode)
 {
-    TString yson = "{key=value; other_key=10}";
+    std::string yson = "{key=value; other_key=10}";
     auto node = NYT::NYTree::ConvertToNode(TypeParam(yson));
 
     ASSERT_NO_THROW(node->AsMap());
@@ -106,10 +108,10 @@ TYPED_TEST(TYsonTypedTest, ConvertToNode)
 
     child = node->AsMap()->FindChild("key");
     for (auto format : TEnumTraits<EYsonFormat>::GetDomainValues()) {
-        EXPECT_EQ("value", ConvertTo<TString>(child));
-        EXPECT_EQ("value", ConvertTo<TString>(ConvertToYsonString(child, format)));
+        EXPECT_EQ("value", ConvertTo<std::string>(child));
+        EXPECT_EQ("value", ConvertTo<std::string>(ConvertToYsonString(child, format)));
     }
-    EXPECT_EQ(ConvertTo<TString>(ConvertToYsonString(child)), "value");
+    EXPECT_EQ(ConvertTo<std::string>(ConvertToYsonString(child)), "value");
 
     child = node->AsMap()->FindChild("other_key");
     for (auto format : TEnumTraits<EYsonFormat>::GetDomainValues()) {
@@ -120,7 +122,7 @@ TYPED_TEST(TYsonTypedTest, ConvertToNode)
 
 TYPED_TEST(TYsonTypedTest, ListFragment)
 {
-    TString yson = "{a=b};{c=d}";
+    std::string yson = "{a=b};{c=d}";
     NYT::NYTree::INodePtr node;
 
     node = NYT::NYTree::ConvertToNode(TypeParam(yson, EYsonType::ListFragment));
@@ -131,8 +133,8 @@ TYPED_TEST(TYsonTypedTest, ListFragment)
 
 TYPED_TEST(TYsonTypedTest, ConvertFromStream)
 {
-    TString yson = "{key=value}";
-    TStringInput ysonStream(yson);
+    std::string yson = "{key=value}";
+    TMemoryInput ysonStream(yson);
 
     auto node = ConvertToNode(&ysonStream);
     ASSERT_NO_THROW(node->AsMap());
@@ -444,7 +446,7 @@ TEST(TYsonStringMergerTest, BinaryYsonStrings)
         {element0YsonStringBuf, element1YsonStringBuf},
         EYsonFormat::Text);
 
-    auto expectedYsonString = TYsonString{R"({"first_key"={a=1};"second_key"=)" + TString{element1YsonStringBuf.AsStringBuf()} + ";}"};
+    auto expectedYsonString = TYsonString{R"({"first_key"={a=1};"second_key"=)" + std::string{element1YsonStringBuf.AsStringBuf()} + ";}"};
     EXPECT_EQ(mergedYsonString.AsStringBuf(), expectedYsonString.AsStringBuf());
 
     auto node = ConvertToNode(mergedYsonString);
@@ -473,6 +475,7 @@ class TYsonStringSerializationTest
 TEST_P(TYsonStringSerializationTest, Do)
 {
     auto str = GetParam();
+    // TODO(babenko): migrate to std::string
     TString buffer;
     TStringOutput output(buffer);
     TStreamSaveContext saveContext(&output);

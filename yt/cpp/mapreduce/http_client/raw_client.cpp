@@ -337,11 +337,12 @@ void THttpRawClient::AbortTransaction(
 
 void THttpRawClient::CommitTransaction(
     TMutationId& mutationId,
-    const TTransactionId& transactionId)
+    const TTransactionId& transactionId,
+    const TCommitTransactionOptions& options)
 {
     THttpHeader header("POST", "commit_tx");
     header.AddMutationId();
-    header.MergeParameters(NRawClient::SerializeParamsForCommitTransaction(transactionId));
+    header.MergeParameters(NRawClient::SerializeParamsForCommitTransaction(transactionId, options));
     RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
@@ -1193,6 +1194,15 @@ TMultiTablePartitions THttpRawClient::GetTablePartitions(
     TMultiTablePartitions result;
     Deserialize(result, NodeFromYsonString(responseInfo->GetResponse()));
     return result;
+}
+
+void THttpRawClient::CheckClusterLiveness(
+    const TCheckClusterLivenessOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "check_cluster_liveness");
+    header.MergeParameters(NRawClient::SerializeParamsForCheckClusterLiveness(options));
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 ui64 THttpRawClient::GenerateTimestamp()

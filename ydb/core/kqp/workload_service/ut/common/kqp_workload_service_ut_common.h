@@ -89,6 +89,7 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(i32, QueueSize, -1);
     FLUENT_SETTING_DEFAULT(TDuration, QueryCancelAfter, FUTURE_WAIT_TIMEOUT);
     FLUENT_SETTING_DEFAULT(double, QueryMemoryLimitPercentPerNode, -1);
+    FLUENT_SETTING_DEFAULT(double, TotalMemoryLimitPercentPerNode, -1);
     FLUENT_SETTING_DEFAULT(double, DatabaseLoadCpuThreshold, -1);
 
     FLUENT_SETTING_DEFAULT(bool, WorkSafeWithGlobalObjects, true);

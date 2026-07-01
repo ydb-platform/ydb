@@ -163,6 +163,12 @@ public:
     TMaybe<NUdf::TSourcePosition> GetNotConsumedLinear() final {
         return Graph->GetNotConsumedLinear();
     }
+    bool GetFlushingMode() const final {
+        return Graph->GetFlushingMode();
+    }
+    void SetFlushingMode(bool value) final {
+        Graph->SetFlushingMode(value);
+    }
 private:
     IComputationPattern::TPtr Pattern;
     THolder<IComputationGraph> Graph;

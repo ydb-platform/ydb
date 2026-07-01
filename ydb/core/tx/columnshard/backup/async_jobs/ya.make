@@ -13,6 +13,7 @@ SRCS(
 PEERDIR(
     ydb/core/formats/arrow
     ydb/library/actors/core
+    ydb/library/signals
     ydb/core/tx/datashard
 )
 

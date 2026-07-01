@@ -1,11 +1,52 @@
 #include <ydb/mvp/oidc_proxy/mvp.h>
 #include <ydb/mvp/core/mvp_test_runtime.h>
+#include <ydb/mvp/core/utils.h>
 
+#include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/folder/path.h>
+#include <util/stream/file.h>
+
+#include <yaml-cpp/yaml.h>
 
 using namespace NMVP::NOIDC;
 
+namespace {
+
+NMvp::NOidcProxy::TOidcProxyAppConfig ParseConfig(const TString& yaml) {
+    YAML::Node node = YAML::Load(yaml);
+    NMvp::NOidcProxy::TOidcProxyAppConfig appConfig;
+    NMVP::MergeYamlNodeToProto(node, appConfig);
+    return appConfig;
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(TMvpOidcProxyConfigValidation) {
+    Y_UNIT_TEST(ExampleConfigsParse) {
+        const TFsPath examplesPath = TFsPath(ArcadiaFromCurrentLocation(__SOURCE_FILE__, "examples"));
+        UNIT_ASSERT_C(examplesPath.IsDirectory(), "Examples directory not found: " << examplesPath.GetPath());
+        TVector<TString> fileNames;
+        examplesPath.ListNames(fileNames);
+        int parsedFiles = 0;
+
+        for (const TString& fileName : fileNames) {
+            if (!fileName.EndsWith(".yaml")) {
+                continue;
+            }
+
+            const TFsPath filePath = examplesPath / fileName;
+            UNIT_ASSERT_NO_EXCEPTION_C(
+                ParseConfig(TFileInput(filePath.GetPath()).ReadAll()),
+                "Failed to parse " << filePath.GetPath()
+            );
+            ++parsedFiles;
+        }
+
+        UNIT_ASSERT_C(parsedFiles > 0, "No .yaml example configs found in " << examplesPath.GetPath());
+    }
+
     Y_UNIT_TEST(SessionServiceTokenNameRequired) {
         TTempFileHandle tmpYaml = MakeTestFile(R"(
 generic:

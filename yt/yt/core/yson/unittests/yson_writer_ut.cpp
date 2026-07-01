@@ -9,6 +9,8 @@
 #include <yt/yt/core/ytree/ephemeral_node_factory.h>
 #include <yt/yt/core/ytree/tree_builder.h>
 
+#include <util/stream/mem.h>
+
 #include <util/string/escape.h>
 
 namespace NYT::NYson {
@@ -55,8 +57,8 @@ protected:
 
 TEST_F(TYsonWriterTest, String)
 {
-    TString value = "YSON";
-    TEST_SCALAR(value, String)
+    std::string value = "YSON";
+    TEST_SCALAR(TStringBuf(value), String)
 }
 
 TEST_F(TYsonWriterTest, Int64)
@@ -198,7 +200,7 @@ TEST_F(TYsonWriterTest, MapWithAttributes)
 
 TEST_F(TYsonWriterTest, UtfString)
 {
-    const TString utfString("строка ютф и специальные символы - \n \t \b");
+    const std::string utfString("строка ютф и специальные символы - \n \t \b");
     TStringStream output;
     TYsonWriter writer(
         &output,
@@ -216,14 +218,14 @@ TEST_F(TYsonWriterTest, Escaping)
     TStringStream outputStream;
     TYsonWriter writer(&outputStream, EYsonFormat::Text);
 
-    TString input;
+    std::string input;
     for (int i = 0; i < 256; ++i) {
         input.push_back(char(i));
     }
 
     writer.OnStringScalar(input);
 
-    TString output =
+    std::string output =
         "\"\\0\\1\\2\\3\\4\\5\\6\\7\\x08\\t\\n\\x0B\\x0C\\r\\x0E\\x0F"
         "\\x10\\x11\\x12\\x13\\x14\\x15\\x16\\x17\\x18\\x19\\x1A\\x1B"
         "\\x1C\\x1D\\x1E\\x1F !\\\"#$%&'()*+,-./0123456789:;<=>?@ABCD"
@@ -248,14 +250,14 @@ TEST_F(TYsonWriterTest, ConvertToYson)
     TStringStream outputStream;
     TYsonWriter writer(&outputStream, EYsonFormat::Text);
 
-    TString input;
+    std::string input;
     for (int i = 0; i < 256; ++i) {
         input.push_back(char(i));
     }
 
     writer.OnStringScalar(input);
 
-    TString output =
+    std::string output =
         "\"\\0\\1\\2\\3\\4\\5\\6\\7\\x08\\t\\n\\x0B\\x0C\\r\\x0E\\x0F"
         "\\x10\\x11\\x12\\x13\\x14\\x15\\x16\\x17\\x18\\x19\\x1A\\x1B"
         "\\x1C\\x1D\\x1E\\x1F !\\\"#$%&'()*+,-./0123456789:;<=>?@ABCD"
@@ -379,7 +381,7 @@ TEST(TYsonFragmentWriterTest, NewLinesInList)
     writer.OnListItem();
         writer.OnStringScalar("bbb");
 
-    TString output =
+    std::string output =
         "200;\n"
         "{\"key\"=42;\"yek\"=24;\"list\"=[];};\n"
         "\"aaa\";\n"
@@ -398,7 +400,7 @@ TEST(TYsonFragmentWriterTest, BinaryList)
     writer.OnListItem();
         writer.OnStringScalar("aaa");
 
-    TString output =
+    std::string output =
         "\x2\x90\x3;"
         "\x1\x6""aaa;";
 
@@ -428,7 +430,7 @@ TEST(TYsonFragmentWriterTest, NewLinesInMap)
     writer.OnKeyedItem("c");
         writer.OnStringScalar("word");
 
-    TString output =
+    std::string output =
         "\"a\"=100;\n"
         "\"b\"=[{\"key\"=42;\"yek\"=24;};-1;];\n"
         "\"c\"=\"word\";\n";
@@ -449,7 +451,7 @@ TEST(TYsonFragmentWriterTest, NoFirstIndent)
     writer.OnKeyedItem("a2");
         writer.OnInt64Scalar(0);
 
-    TString output =
+    std::string output =
         "\"a1\" = {\n"
         "    \"key\" = 42;\n"
         "};\n"
@@ -462,14 +464,14 @@ TEST(TYsonFragmentWriterTest, NoFirstIndent)
 
 TEST(TYsonTreeBuilderTest, MaxListSize)
 {
-    TString input =
+    std::string input =
         "\"a1\" = {\n"
         "    \"key\" = 42;\n"
         "};\n";
 
     auto builder = NYTree::CreateBuilderFromFactory(NYTree::GetEphemeralNodeFactory(), /*treeSizeLimit*/ 0);
     builder->BeginTree();
-    TStringStream stream(input);
+    TMemoryInput stream(input);
     EXPECT_THROW(ParseYson(TYsonInput(&stream), builder.get()), std::exception);
 }
 

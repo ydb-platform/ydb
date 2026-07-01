@@ -42,6 +42,7 @@ private:
     };
 
     void EnqueueTaskNoLock(TTimePoint executeAt, TPostTaskCb&& task);
+    void RunPeriodicTask(std::shared_ptr<TPeriodicCb> periodicCb, TDeadline::Duration period);
     void SchedulePeriodic(std::shared_ptr<TPeriodicCb> periodicCb, TDeadline::Duration period);
     std::optional<TTimePoint> DrainReadyTasks(std::vector<TPostTaskCb>& ready);
     void WorkerLoop();

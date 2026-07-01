@@ -107,4 +107,22 @@ Therefore, while distributed locking through such mechanisms cannot guarantee th
   }
   ```
 
+- Java
+
+  ```java
+  CoordinationClient client = CoordinationClient.newClient(transport);
+  client.createNode(nodePath).join().expectSuccess();
+
+  try (CoordinationSession session = client.createSession(nodePath)) {
+      session.connect().join().expectSuccess();
+      SemaphoreLease lease = session.acquireEphemeralSemaphore(semaphoreName, true, Duration.ofMinutes(5))
+              .join().getValue();
+      try {
+          // exclusive access to the resource
+      } finally {
+          lease.release().join();
+      }
+  }
+  ```
+
 {% endlist %}

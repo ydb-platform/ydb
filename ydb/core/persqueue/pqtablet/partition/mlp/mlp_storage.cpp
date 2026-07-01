@@ -265,6 +265,7 @@ bool TStorage::Purge(ui64 endOffset) {
     Metrics.UnprocessedMessageCount = 0;
     Metrics.LockedMessageCount = 0;
     Metrics.LockedMessageGroupCount = 0;
+    Metrics.InflightMessageGroupCount = 0;
     Metrics.DelayedMessageCount = 0;
     Metrics.CommittedMessageCount = 0;
     Metrics.DeadlineExpiredMessageCount = 0;
@@ -564,6 +565,8 @@ void TStorage::UpdateMessageGroupToNextMessage(ui64 offset, const TMessage& mess
         MessageGroups.Groups.erase(messageGroupIterator);
         MessageGroups.LockedMessageGroupsId.erase(message.MessageGroupIdHash);
         MessageGroups.UnlockedMessageGroupsId.erase(message.MessageGroupIdHash);
+        AFL_ENSURE(Metrics.InflightMessageGroupCount > 0);
+        --Metrics.InflightMessageGroupCount;
         return;
     }
     ptr->FirstOffset = *nextOffset;
@@ -650,6 +653,7 @@ void TStorage::UpdateMessageGroupForNewMessage(ui64 offset, TMessage& message) {
     TSingleMessageGroupIdInfo& group = it->second;
     group.Size++;
     if (firstMessageInGroup) {
+        ++Metrics.InflightMessageGroupCount;
         group.FirstOffset = offset;
         firstReadableMessageInGroup = TrackMessageStatusInLockedGroups(message); // may be false on snapshot restore
     } else {
@@ -729,7 +733,7 @@ void TStorage::RemoveMessageFromSlowZone(ui64 offset) {
     RemoveMessageFromSlowZone(it);
 }
 
-bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay) {
+bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay, ui64 logicalMessageCount) {
     AFL_ENSURE(offset >= GetLastOffset())("l", offset)("r", GetLastOffset());
 
     while (!Messages.empty() && offset > GetLastOffset()) {
@@ -780,8 +784,10 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
         auto removedByRetention = writeTimestampDelta <= retentionDeadlineDelta.value();
         // The message will be deleted by retention policy. Skip it.
         if (removedByRetention && Messages.empty()) {
-            ++Metrics.TotalDeletedByRetentionMessageCount;
-            Batch.AddNewMessage(offset);
+            Metrics.TotalDeletedByRetentionMessageCount += logicalMessageCount;
+            for (ui64 i = 0; i < logicalMessageCount; ++i) {
+                Batch.AddNewMessage(offset + i);
+            }
             return true;
         }
     }
@@ -807,6 +813,24 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
         Batch.AddChange(offset);
     } else {
         ++Metrics.UnprocessedMessageCount;
+    }
+
+    for (ui64 i = 1; i < logicalMessageCount; ++i) {
+        const ui64 tailOffset = offset + i;
+        Messages.emplace_back(TMessageData{
+            .Status = static_cast<ui32>(EMessageStatus::Committed),
+            .ProcessingCount = 0,
+            .DeadlineDelta = 0,
+            .HasMessageGroupId = false,
+            .MessageGroupIdHash = 0,
+            .WriteTimestampDelta = ui32(writeTimestampDelta),
+            .LockingTimestampMilliSecondsDelta = 0,
+            .LockingTimestampSign = 0,
+        });
+        Batch.AddNewMessage(tailOffset);
+        Batch.AddChange(tailOffset);
+        ++Metrics.InflightMessageCount;
+        ++Metrics.CommittedMessageCount;
     }
 
     return true;
@@ -1033,8 +1057,8 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, const TInstant deadline) {
     message.DeadlineDelta = NormalizeDeadline(deadline);
     if (message.ProcessingCount < MAX_PROCESSING_COUNT) {
         ++message.ProcessingCount;
-        Metrics.MessageLocks.IncrementFor(message.ProcessingCount);
     }
+    Metrics.MessageLocks.IncrementFor(message.ProcessingCount);
 
     SetMessageLockingTime(message, now, BaseDeadline);
 
@@ -1355,6 +1379,7 @@ TString TStorage::DebugString() const {
         << "Unprocessed: " << Metrics.UnprocessedMessageCount << ", "
         << "Locked: " << Metrics.LockedMessageCount << ", "
         << "LockedGroups: " << Metrics.LockedMessageGroupCount << ", "
+        << "InflightGroups: " << Metrics.InflightMessageGroupCount << ", "
         << "Committed: " << Metrics.CommittedMessageCount << ", "
         << "DLQ: " << Metrics.DLQMessageCount
         << "}";
@@ -1522,6 +1547,7 @@ void TStorage::InitMetrics() {
     }
 
     Metrics.InflightMessageCount = Messages.size() + SlowMessages.size();
+    Metrics.InflightMessageGroupCount = KeepMessageOrder ? MessageGroups.Groups.size() : 0;
 }
 
 void TStorage::TMessageGroups::Clear() {

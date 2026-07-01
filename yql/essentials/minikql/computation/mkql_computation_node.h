@@ -130,6 +130,10 @@ struct TComputationContext: public TComputationContextLLVM {
     TMaybe<NUdf::TSourcePosition>& NotConsumedLinear;
     const NYql::TRuntimeSettings& RuntimeSettings;
 
+    // If computation node receives Yield fetch status and
+    // FlushingMode is set, then the node must flush its accumulated buffers
+    bool FlushingMode = false;
+
     TComputationContext(const THolderFactory& holderFactory,
                         const NUdf::IValueBuilder* builder,
                         const TComputationOptsFull& opts,
@@ -340,6 +344,8 @@ public:
     virtual TString SaveGraphState() = 0;
     virtual void LoadGraphState(TStringBuf state) = 0;
     virtual TMaybe<NUdf::TSourcePosition> GetNotConsumedLinear() = 0;
+    virtual bool GetFlushingMode() const = 0;
+    virtual void SetFlushingMode(bool value) = 0;
 };
 
 class TNodeFactory;

@@ -89,7 +89,7 @@ Y_UNIT_TEST(ScalarNullRightOperand) {
     // Test with scalar null right operand
     TestAndKernel(
         TVector<TMaybe<bool>>{Nothing(), true, false, Nothing()},
-        TMaybe<bool>{Nothing()},
+        TMaybe<bool>{},
         TVector<TMaybe<bool>>{Nothing(), Nothing(), false, Nothing()});
 }
 
@@ -128,7 +128,7 @@ Y_UNIT_TEST(ScalarFalseLeftOperand) {
 Y_UNIT_TEST(ScalarNullLeftOperand) {
     // Test with scalar null left operand
     TestAndKernel(
-        TMaybe<bool>{Nothing()},
+        TMaybe<bool>{},
         TVector<bool>{true, false, true, false},
         TVector<TMaybe<bool>>{Nothing(), false, Nothing(), false});
 }
@@ -183,7 +183,7 @@ Y_UNIT_TEST(ScalarNullRightOperand) {
     // Test with scalar null right operand
     TestOrKernel(
         TVector<TMaybe<bool>>{Nothing(), true, false, Nothing()},
-        TMaybe<bool>{Nothing()},
+        TMaybe<bool>{},
         TVector<TMaybe<bool>>{Nothing(), true, Nothing(), Nothing()});
 }
 
@@ -222,7 +222,7 @@ Y_UNIT_TEST(ScalarFalseLeftOperand) {
 Y_UNIT_TEST(ScalarNullLeftOperand) {
     // Test with scalar null left operand
     TestOrKernel(
-        TMaybe<bool>{Nothing()},
+        TMaybe<bool>{},
         TVector<bool>{true, false, true, false},
         TVector<TMaybe<bool>>{true, Nothing(), true, Nothing()});
 }
@@ -277,7 +277,7 @@ Y_UNIT_TEST(ScalarNullRightOperand) {
     // Test with scalar null right operand
     TestXorKernel(
         TVector<TMaybe<bool>>{Nothing(), true, false, Nothing()},
-        TMaybe<bool>{Nothing()},
+        TMaybe<bool>{},
         TVector<TMaybe<bool>>{Nothing(), Nothing(), Nothing(), Nothing()});
 }
 
@@ -316,7 +316,7 @@ Y_UNIT_TEST(ScalarFalseLeftOperand) {
 Y_UNIT_TEST(ScalarNullLeftOperand) {
     // Test with scalar null left operand
     TestXorKernel(
-        TMaybe<bool>{Nothing()},
+        TMaybe<bool>{},
         TVector<bool>{true, false, true, false},
         TVector<TMaybe<bool>>{Nothing(), Nothing(), Nothing(), Nothing()});
 }

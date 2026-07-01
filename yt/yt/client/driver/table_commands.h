@@ -354,7 +354,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString Query;
+    std::string Query;
     NYTree::IMapNodePtr PlaceholderValues;
     bool EnableStatistics = false;
 
@@ -378,7 +378,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString Query;
+    std::string Query;
 
     void DoExecute(ICommandContextPtr context) override;
 };

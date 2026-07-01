@@ -11,14 +11,21 @@ logger = logging.getLogger(__name__)
 
 
 class Workload:
-    def __init__(self, driver, endpoint):
-        self.driver = driver
-        self.endpoint = endpoint
+    def __init__(self, fixture):
+        self.fixture = fixture
         self.id = f"{uuid.uuid1()}".replace("-", "_")
         self.table_name = f"target_table_{self.id}"
         self.topic_name = f"source_topic_{self.id}"
         self.transfer_name = f"transfer_{self.id}"
         self.message_count = 0
+
+    @property
+    def driver(self):
+        return self.fixture.driver
+
+    @property
+    def endpoint(self):
+        return self.fixture.endpoint
 
     def create_table(self, mode):
         with ydb.QuerySessionPool(self.driver) as session_pool:
@@ -118,10 +125,10 @@ class TestTransferRollingUpdate(RollingUpgradeAndDowngradeFixture):
         #
         yield from self.setup_cluster(
             # # Some feature flags can be passed. And other KikimrConfigGenerator options
-            extra_feature_flags={
-                "enable_column_store": True,
-                "enable_topic_transfer": True,
-            }
+            extra_feature_flags=[
+                "enable_column_store",
+                "enable_topic_transfer",
+            ]
         )
 
     @pytest.mark.parametrize("store, local", [
@@ -130,7 +137,7 @@ class TestTransferRollingUpdate(RollingUpgradeAndDowngradeFixture):
         ("row", True),
     ])
     def test_transfer(self, store, local):
-        utils = Workload(self.driver, self.endpoint)
+        utils = Workload(self)
 
         #
         # 1. Fill table with data

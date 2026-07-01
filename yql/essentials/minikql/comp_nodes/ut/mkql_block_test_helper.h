@@ -181,7 +181,21 @@ public:
         }
     }
 
+    template <typename F>
+    void WithScopedFuzzers(F&& f, size_t iterations = ManyIterations) {
+        for (size_t i = 0; i < iterations; i++) {
+            Y_DEFER {
+                ClearFuzzers();
+            };
+            f();
+        }
+    }
+
 private:
+    void ClearFuzzers() {
+        FuzzerHolder_.ClearFuzzers();
+    }
+
     IComputationNode* WrapMaterializeBlockStream(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
     TComputationNodeFactory GetNodeTestFactory();

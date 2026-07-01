@@ -497,15 +497,6 @@ public:
             Used = allocated;
             Limit = limit;
             Usage = Limit ? 100.0 * Used / Limit : 0;
-            if (Usage >= 95) {
-                DiskSpace = std::max(DiskSpace, NKikimrViewer::EFlag::Red);
-            } else if (Usage >= 90) {
-                DiskSpace = std::max(DiskSpace, NKikimrViewer::EFlag::Orange);
-            } else if (Usage >= 85) {
-                DiskSpace = std::max(DiskSpace, NKikimrViewer::EFlag::Yellow);
-            } else {
-                DiskSpace = std::max(DiskSpace, NKikimrViewer::EFlag::Green);
-            }
         }
 
         void CalcCapacityMetrics() {
@@ -737,6 +728,7 @@ public:
         { EGroupFields::MaxNormalizedOccupancy, TFieldsType().set(+EGroupFields::NodeId) },
         { EGroupFields::MaxVDiskRawUsage, TFieldsType().set(+EGroupFields::NodeId) },
         { EGroupFields::CapacityAlert, TFieldsType().set(+EGroupFields::NodeId) },
+        { EGroupFields::AllocationUnits, TFieldsType().set(+EGroupFields::PoolName) },
     };
 
     bool FieldsNeeded(TFieldsType fields) const {
@@ -2657,6 +2649,7 @@ public:
         storageGroupProperties["MaxVDiskSlotUsage"]["description"] = "max VDisk.VDiskSlotUsage across VDisks in this group";
         storageGroupProperties["MaxNormalizedOccupancy"]["description"] = "max VDisk.NormalizedOccupancy across VDisks in this group";
         storageGroupProperties["MaxVDiskRawUsage"]["description"] = "max VDisk.RawUsage across VDisks in this group";
+        storageGroupProperties["CapacityAlert"]["description"] = "worst VDisk.CapacityAlert in this group";
         return node;
     }
 };

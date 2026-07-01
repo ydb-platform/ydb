@@ -67,13 +67,15 @@ TConsumerDescription TTopicSdkTestSetup::DescribeConsumer(const std::string& nam
 
 void TTopicSdkTestSetup::Write(const std::string& message, std::uint32_t partitionId,
                                const std::optional<std::string> producer,
-                               std::optional<std::uint64_t> seqNo) {
-    Write(GetTopicPath(), message, partitionId, producer, seqNo);
+                               std::optional<std::uint64_t> seqNo,
+                               NYdb::NTopic::ECodec codec) {
+    Write(GetTopicPath(), message, partitionId, producer, seqNo, codec);
 }
 
 void TTopicSdkTestSetup::Write(const std::string& topic, const std::string& message, std::uint32_t partitionId,
                                const std::optional<std::string> producer,
-                               std::optional<std::uint64_t> seqNo) {
+                               std::optional<std::uint64_t> seqNo,
+                               NYdb::NTopic::ECodec codec) {
     TTopicClient client(*Driver);
 
     TWriteSessionSettings settings;
@@ -84,6 +86,7 @@ void TTopicSdkTestSetup::Write(const std::string& topic, const std::string& mess
         settings.ProducerId(producer.value())
             .MessageGroupId(producer.value());
     }
+    settings.Codec(codec);
     auto session = client.CreateSimpleBlockingWriteSession(settings);
 
     UNIT_ASSERT(session->Write(message, seqNo));

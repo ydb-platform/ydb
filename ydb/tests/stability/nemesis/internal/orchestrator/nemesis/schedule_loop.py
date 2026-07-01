@@ -232,6 +232,7 @@ class OrchestratorNemesisSchedule:
         hosts = self._get_hosts()
         cmds = self._chaos_store.plan_scheduled_tick(process_type, hosts)
         if not cmds:
+            logger.info("Planner %s produced no commands this tick (hosts=%d)", process_type, len(hosts))
             return
         logger.info("Running %d dispatch(es) for %s", len(cmds), process_type)
         with ThreadPoolExecutor(max_workers=min(len(cmds), 10)) as executor:
@@ -257,5 +258,8 @@ class OrchestratorNemesisSchedule:
         while True:
             if self.should_stop_loop(process_type):
                 break
-            self._run_planned_tick(process_type)
+            try:
+                self._run_planned_tick(process_type)
+            except Exception:
+                logger.exception("Scheduled tick for %s raised", process_type)
             time.sleep(sleep_s)

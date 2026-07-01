@@ -8,7 +8,10 @@
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/library/actors/core/subsystems/stats.h>
 #include <ydb/library/services/services.pb.h>
+
+#include <cmath>
 
 namespace NKikimr::NKqp {
 
@@ -131,6 +134,19 @@ ui32 TStagePredictor::GetUsableThreads() {
     return Max<ui32>(1, *userPoolSize);
 }
 
+ui32 TStagePredictor::GetPossibleMaxLimitThreads() {
+    const ui32 usableThreads = GetUsableThreads();
+    if (HasAppData() && TlsActivationContext && TlsActivationContext->ActorSystem()) {
+        TExecutorPoolState poolState;
+        GetActorSystemStats().GetExecutorPoolState(AppData()->UserPoolId, poolState);
+        if (poolState.PossibleMaxLimit > 0) {
+            return Max(usableThreads, static_cast<ui32>(std::ceil(poolState.PossibleMaxLimit)));
+        }
+    }
+
+    return usableThreads;
+}
+
 ui32 TStagePredictor::CalcTasksOptimalCount(const ui32 availableThreadsCount, const std::optional<ui32> previousStageTasksCount) const {
     ui32 result = 0;
     if (!LevelDataPrediction || *LevelDataPrediction == 0) {
@@ -139,7 +155,7 @@ ui32 TStagePredictor::CalcTasksOptimalCount(const ui32 availableThreadsCount, co
     } else {
         result = (availableThreadsCount - previousStageTasksCount.value_or(0) * 0.25) * (InputDataPrediction / *LevelDataPrediction);
     }
-    if (previousStageTasksCount) {
+    if (previousStageTasksCount && *previousStageTasksCount > 0) {
         result = std::min<ui32>(result, *previousStageTasksCount);
     }
     return std::max<ui32>(1, result);

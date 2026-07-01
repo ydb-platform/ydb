@@ -1,4 +1,5 @@
 #include "kmeans_helper.h"
+#include <ydb/core/base/kmeans_clusters.h>
 #include "../datashard_impl.h"
 #include "../range_ops.h"
 #include "../scan_common.h"
@@ -81,7 +82,10 @@ protected:
     TBufferData* PrefixBuf = nullptr;
 
     ui32 Dimensions = 0;
-    const ui32 K = 0;
+    ui32 K = 0;
+    const ui32 MaxClusters = 0;
+    const bool Adaptive = false;
+    const ui32 AdaptiveLevels = 0;
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
     const ui32 OverlapClusters = 0;
@@ -136,6 +140,9 @@ public:
         , Uploader(request.GetDatabaseName(), request.GetScanSettings())
         , Dimensions(request.GetSettings().vector_dimension())
         , K(request.GetK())
+        , MaxClusters(request.GetK())
+        , Adaptive(request.GetAdaptive())
+        , AdaptiveLevels(request.GetLevels() ? request.GetLevels() : 1)
         , OverlapClusters(request.GetOverlapClusters() ? request.GetOverlapClusters() : 1)
         , OverlapRatio(request.GetOverlapRatio())
         , ScanSettings(request.GetScanSettings())
@@ -408,8 +415,9 @@ protected:
     }
 
     void StartNewPrefix() {
-        Parent = Child + K;
+        Parent = Child + MaxClusters;
         Child = Parent + 1;
+        K = MaxClusters;
         State = EState::SAMPLE;
         Lead.To(Prefix.GetCells(), NTable::ESeek::Upper); // seek to (prefix, inf)
         Prefix = {};
@@ -470,11 +478,18 @@ protected:
     {
         if (State == EState::SAMPLE) {
             State = EState::KMEANS;
+            const ui64 prefixRowCount = Sampler.GetTotalSeen();
             auto rows = Sampler.Finish().second;
             if (rows.size() == 0) {
                 // We don't need to do anything,
                 // because this datashard doesn't have valid embeddings for this prefix
                 return true;
+            }
+            if (Adaptive && prefixRowCount > 0) {
+                K = ::NKikimr::NKMeans::ComputeAdaptiveK(prefixRowCount, AdaptiveLevels, OverlapClusters, MaxClusters);
+            }
+            if (rows.size() > K) {
+                rows.resize(K);
             }
             if (rows.size() < K) {
                 // if this datashard have less than K valid embeddings for this parent

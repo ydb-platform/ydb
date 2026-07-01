@@ -32,6 +32,9 @@ struct TFmrServices: public TYtBaseServices {
     IVanillaExternalPeerTrackerPtr PeerTracker;
     TMaybe<TString> VanillaRemoteId; // "cluster/operationId" for progress RemoteId, set when using vanilla peer tracker
     TVanillaFmrCoordinatorClientSettings VanillaCoordinatorClientSettings;
+    TMaybe<TString> YtServerForUpload;
+    TString FmrJobBinaryPath;
+    TString FmrJobBinaryMd5;
     TString TableDataServiceDiscoveryFilePath;
     IYtJobService::TPtr YtJobService;
     IYtCoordinatorService::TPtr YtCoordinatorService;
@@ -53,6 +56,9 @@ struct TFmrYtGatewaySettings {
     TDuration CoordinatorPingInterval = TDuration::Seconds(5);
     ui64 MaxDirectPullBytes = 100 * 1024; // 100 KB
     ui64 MaxDirectPullRows = 1000;
+    // True when FMR runs fully in-process (embedded mode, no real YT cluster).
+    // In this mode user files are passed directly as local paths rather than uploaded to YT.
+    bool Local = false;
 };
 
 IYtGateway::TPtr CreateYtFmrGateway(

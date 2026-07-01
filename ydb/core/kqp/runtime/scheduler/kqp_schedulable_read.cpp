@@ -25,7 +25,7 @@ TSchedulableRead::TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query)
     AvailableQuotaMs = MaxQuotaMs;
     LastRefill = TMonotonic::Now();
 
-    LOG_T("TSchedulableRead MaxQuotaMs: " << MaxQuotaMs);
+    LOG_T("TSchedulableRead [" << uintptr_t(this) << "] MaxQuotaMs: " << MaxQuotaMs);
 
     YQL_ENSURE(MaxQuotaMs <= 1000);
 }
@@ -34,7 +34,7 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
     // TODO: support update of the pool's read quota on AddOrUpdatePool().
     auto expectedQuotaMs = std::min(expectedQuota.MilliSeconds(), MaxQuotaMs);
 
-    LOG_T("TSchedulableRead ExpectedQuotaMs: " << expectedQuotaMs);
+    LOG_T("TSchedulableRead [" << uintptr_t(this) << "] ExpectedQuotaMs: " << expectedQuotaMs);
 
     // Refill quota
     if (const auto now = TMonotonic::Now(); Y_LIKELY(now >= LastRefill)) {
@@ -43,16 +43,17 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
         LastRefill = now;
     }
 
-    LOG_T("TSchedulableRead AvailableQuotaMs: " << AvailableQuotaMs);
+    LOG_T("TSchedulableRead [" << uintptr_t(this) << "] AvailableQuotaMs: " << AvailableQuotaMs);
 
     if (AvailableQuotaMs <= 0 || !TryIncreaseUsage()) {
         return false;
     }
 
+    FairShareRetryCount = 0;
     AvailableQuotaMs -= expectedQuotaMs;
     ReservedQuotaMs = expectedQuotaMs;
 
-    LOG_T("TSchedulableRead ReservedQuotaMs: " << ReservedQuotaMs);
+    LOG_T("TSchedulableRead [" << uintptr_t(this) << "] ReservedQuotaMs: " << ReservedQuotaMs);
 
     return true;
 }
@@ -66,33 +67,53 @@ void TSchedulableRead::ReturnQuota(NHPTimer::STime elapsedCycles) {
     AvailableQuotaMs = std::min<i64>(MaxQuotaMs, AvailableQuotaMs + ReservedQuotaMs - ms);
     ReservedQuotaMs = 0;
 
-    LOG_T("TSchedulableRead ReturnedQuotaMs: " << ms);
-    LOG_T("TSchedulableRead AvailableQuotaMs: " << AvailableQuotaMs);
+    LOG_T("TSchedulableRead [" << uintptr_t(this) << "] ReturnedQuotaMs: " << ms);
+    LOG_T("TSchedulableRead [" << uintptr_t(this) << "] AvailableQuotaMs: " << AvailableQuotaMs);
 
     DecreaseUsage(TDuration::MilliSeconds(ms), READ_DEFAULT);
 }
 
-TDuration TSchedulableRead::EstimateQuotaDelay(TDuration expectedQuota) const {
-    Y_ASSERT(QuotaPerSecond != 0);
+bool TSchedulableRead::HasAvailableQuota() {
+    // Refill quota (same accounting as TryConsumeQuota), but do not reserve and do
+    // not call TryIncreaseUsage(): this is a pure availability peek.
+    if (const auto now = TMonotonic::Now(); Y_LIKELY(now >= LastRefill)) {
+        auto elapsedMs = (now - LastRefill).MilliSeconds();
+        AvailableQuotaMs = std::min<i64>(MaxQuotaMs, AvailableQuotaMs + (elapsedMs * QuotaPerSecond));
+        LastRefill = now;
+    }
 
-    auto expectedQuotaMs = std::min(expectedQuota.MilliSeconds(), MaxQuotaMs);
+    return AvailableQuotaMs > 0;
+}
+
+TDuration TSchedulableRead::EstimateQuotaDelay(TDuration expectedQuota) const {
+    const auto expectedQuotaMs = std::min(expectedQuota.MilliSeconds(), MaxQuotaMs);
 
     if (AvailableQuotaMs >= static_cast<i64>(expectedQuotaMs)) {
-        // Quota available, but TryIncreaseUsage() failed (fair-share exhausted)
-        return TDuration::MilliSeconds(10) + RandomDuration(TDuration::MilliSeconds(1));
+        // Quota is available, but TryIncreaseUsage() failed (fair-share exhausted) -
+        // retry using exponential delays.
+        const auto maxRetries = std::bit_width(expectedQuotaMs) - 1;
+        if (FairShareRetryCount >= maxRetries) {
+            return expectedQuota + RandomDuration(TDuration::MilliSeconds(expectedQuotaMs >> 2)); // jitter +0..25% of expected quota
+        }
+        return TDuration::MilliSeconds(1 << FairShareRetryCount++);
     }
 
     // Quota deficit — calculate refill time
     i64 deficitMs = static_cast<i64>(expectedQuotaMs) - AvailableQuotaMs;
-    ui64 waitMs = static_cast<ui64>(std::ceil(deficitMs / QuotaPerSecond));
-    auto delay = TDuration::MilliSeconds(std::max<ui64>(waitMs, 1));
+    ui64 waitMs = static_cast<ui64>(std::ceil(deficitMs / QuotaPerSecond)); // since QuotaPerSecond is double it's safe to divide by zero
+    waitMs = std::max<ui64>(waitMs, 1);
 
-    return delay;
+    // TODO: use some meaningful value for max delay - now it's magical delay of 1 minute.
+    waitMs = std::min<ui64>(waitMs, TDuration::Minutes(1).MilliSeconds());
+
+    return TDuration::MilliSeconds(waitMs);
 }
 
 TSchedulableReadFactory::TSchedulableReadFactory(TComputeSchedulerPtr scheduler)
     : Scheduler(std::move(scheduler))
-{}
+{
+    Y_ENSURE(Scheduler);
+}
 
 TSchedulableReadPtr TSchedulableReadFactory::Get(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const {
     const auto databaseAndPoolId = std::make_pair(databaseId, poolId);

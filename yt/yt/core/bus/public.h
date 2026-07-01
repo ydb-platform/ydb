@@ -59,8 +59,8 @@ DEFINE_ENUM(EVerificationMode,
     ((Full)     (2))    // Verifies peer's certificate with the CA as well as peer's host name against the certificate.
 );
 
-extern const TString DefaultNetworkName;
-extern const TString LocalNetworkName;
+extern const std::string DefaultNetworkName;
+extern const std::string LocalNetworkName;
 
 ////////////////////////////////////////////////////////////////////////////////
 

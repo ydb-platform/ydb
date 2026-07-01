@@ -183,7 +183,7 @@ Y_UNIT_TEST_LLVM(TestSubStreamFetchAfterFinish) {
                                    [&](TRuntimeNode, TRuntimeNode group) { return WrapWithFetchAfterFinish(pb, group); }));
 
     const auto graph = setup.BuildGraph(stream);
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector{1U, 1U, 2U, 2U});
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector{1U, 1U, 2U, 2U});
 }
 
 Y_UNIT_TEST_LLVM(TestEmpty) {

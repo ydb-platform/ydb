@@ -61,20 +61,43 @@ NEMESIS_TYPES: dict[str, dict[str, Any]] = all_nemesis_type_entries()
 # ---------------------------------------------------------------------------
 
 
+def build_planner(key: str, params: dict[str, Any] | None = None) -> NemesisPlannerBase:
+    """Build a single planner for ``key``, optionally with user-supplied ``params``.
+
+    Resolution order:
+        1. ``planner_factory(key, params=...)`` if it accepts ``params``;
+           else ``planner_factory(key)`` (params silently ignored).
+        2. ``planner_cls(**params)`` if ``params`` non-empty, else ``planner_cls()``.
+        3. ``DefaultRandomHostPlanner(nemesis_type=key)``.
+    """
+    import inspect
+
+    spec = NEMESIS_TYPES.get(key)
+    if spec is None:
+        return DefaultRandomHostPlanner(nemesis_type=key)
+
+    params = params or {}
+    planner_factory = spec.get("planner_factory")
+    if planner_factory is not None:
+        try:
+            sig = inspect.signature(planner_factory)
+            if "params" in sig.parameters or any(
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+            ):
+                return planner_factory(key, params=params)
+        except (TypeError, ValueError):
+            pass
+        return planner_factory(key)
+
+    cls: Type[NemesisPlannerBase] | None = spec.get("planner_cls")
+    if cls is not None:
+        return cls(**params) if params else cls()
+    return DefaultRandomHostPlanner(nemesis_type=key)
+
+
 def build_all_planners() -> dict[str, NemesisPlannerBase]:
-    """Planner per registered type: planner_factory(key), planner_cls(), or DefaultRandomHostPlanner."""
-    merged: dict[str, NemesisPlannerBase] = {}
-    for key, spec in NEMESIS_TYPES.items():
-        planner_factory = spec.get("planner_factory")
-        if planner_factory is not None:
-            merged[key] = planner_factory(key)
-            continue
-        cls: Type[NemesisPlannerBase] | None = spec.get("planner_cls")
-        if cls is not None:
-            merged[key] = cls()
-        else:
-            merged[key] = DefaultRandomHostPlanner(nemesis_type=key)
-    return merged
+    """Planner per registered type using default parameters."""
+    return {key: build_planner(key) for key in NEMESIS_TYPES.keys()}
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +122,7 @@ def nemesis_types_flat_for_api() -> list[dict[str, Any]]:
                 "name": name,
                 "description": description,
                 "schedule": int(definition.get("schedule") or 60),
+                "params": list(definition.get("params") or []),
             }
         )
     return result
@@ -124,6 +148,7 @@ def nemesis_types_grouped_for_api() -> dict[str, Any]:
                 "name": name,
                 "description": description,
                 "schedule": int(definition.get("schedule") or 60),
+                "params": list(definition.get("params") or []),
             }
         )
 

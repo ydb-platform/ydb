@@ -56,7 +56,7 @@ jobs:
             echo "Matrix after adding linux-amd: $MATRIX"
           fi
           if [ "${{ inputs.build-linux-arm }}" == "true" ]; then
-            MATRIX=$(echo $MATRIX | jq -c --arg binary "$BINARY" '.include += [{"os": "linux-arm", "runner": "ubuntu-latest", "shell": "bash", "binary": $binary, "platform": "DEFAULT-LINUX-AARCH64"}]')
+            MATRIX=$(echo $MATRIX | jq -c --arg binary "$BINARY" '.include += [{"os": "linux-arm", "runner": "ubuntu-24.04-arm", "shell": "bash", "binary": $binary, "platform": "DEFAULT-LINUX-AARCH64"}]')
             echo "Matrix after adding linux-arm: $MATRIX"
           fi
           if [ "${{ inputs.build-darwin-amd }}" == "true" ]; then

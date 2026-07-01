@@ -26,6 +26,7 @@ using TCoreTiling = Tiling<NArrow::TSimpleRow, TPortionInfo>;
 struct TPlannerSettings {
     TTilingSettings TilingSettings;
     ui64 PortionExpectedSize = 4ULL * 1024 * 1024;
+    ui32 CompactionThreads = 2;
 
     void SerializeToProto(NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TTilingOptimizer& proto) const {
         NJson::TJsonValue json(NJson::JSON_MAP);
@@ -39,13 +40,14 @@ struct TPlannerSettings {
         json["accumulator_compaction_bytes"] = TilingSettings.AccumulatorSettings.Compaction.Bytes;
         json["accumulator_trigger_portions"] = TilingSettings.AccumulatorSettings.Trigger.Portions;
         json["accumulator_trigger_bytes"] = TilingSettings.AccumulatorSettings.Trigger.Bytes;
-        json["accumulator_overload_portions"] = TilingSettings.AccumulatorSettings.Overload.Portions;
-        json["accumulator_overload_bytes"] = TilingSettings.AccumulatorSettings.Overload.Bytes;
+        json["accumulator_overload_portions"] = TilingSettings.AccumulatorSettings.OverloadPortions;
         json["middle_level_trigger_height"] = TilingSettings.MiddleLevelSettings.TriggerHeight;
         json["middle_level_overload_height"] = TilingSettings.MiddleLevelSettings.OverloadHeight;
         json["aging_enabled"] = TilingSettings.AgingSettings.Enabled;
         json["aging_promote_time_seconds"] = TilingSettings.AgingSettings.PromoteTime.Seconds();
         json["aging_max_portion_promotion"] = TilingSettings.AgingSettings.MaxPortionPromotion;
+        json["compaction_threads"] = CompactionThreads;
+        json["enable_compatibility_mode"] = TilingSettings.EnableCompatibilityMode;
         proto.SetJson(NJson::WriteJson(json, /*formatOutput=*/false));
     }
 
@@ -123,12 +125,7 @@ struct TPlannerSettings {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: accumulator_overload_portions must be an unsigned integer");
                 }
-                TilingSettings.AccumulatorSettings.Overload.Portions = value.GetUInteger();
-            } else if (name == "accumulator_overload_bytes") {
-                if (!value.IsUInteger()) {
-                    return TConclusionStatus::Fail("tiling-core: accumulator_overload_bytes must be an unsigned integer");
-                }
-                TilingSettings.AccumulatorSettings.Overload.Bytes = value.GetUInteger();
+                TilingSettings.AccumulatorSettings.OverloadPortions = value.GetUInteger();
             } else if (name == "middle_level_trigger_height") {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: middle_level_trigger_height must be an unsigned integer");
@@ -154,6 +151,20 @@ struct TPlannerSettings {
                     return TConclusionStatus::Fail("tiling-core: aging_max_portion_promotion must be an unsigned integer");
                 }
                 TilingSettings.AgingSettings.MaxPortionPromotion = value.GetUInteger();
+            } else if (name == "compaction_threads") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling-core: compaction_threads must be an unsigned integer");
+                }
+                const ui64 threads = value.GetUInteger();
+                if (threads < 1) {
+                    return TConclusionStatus::Fail("tiling-core: compaction_threads must be at least 1");
+                }
+                CompactionThreads = static_cast<ui32>(threads);
+            } else if (name == "enable_compatibility_mode") {
+                if (!value.IsBoolean()) {
+                    return TConclusionStatus::Fail("tiling-core: enable_compatibility_mode must be boolean");
+                }
+                TilingSettings.EnableCompatibilityMode = value.GetBoolean();
             } else {
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "tiling_core_unknown_setting_ignored")("setting", name);
             }
@@ -173,29 +184,44 @@ private:
     TCoreTiling Core;
     std::shared_ptr<IStoragesManager> StoragesManager;
     ui64 PortionExpectedSize;
+    ui32 CompactionThreads;
 
 protected:
     void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
-        Core.ModifyPortions(
-            std::vector<TPortionInfo::TConstPtr>(add.begin(), add.end()), std::vector<TPortionInfo::TConstPtr>(remove.begin(), remove.end()));
+        Core.ModifyPortions(add, std::vector<TPortionInfo::TConstPtr>(remove.begin(), remove.end()));
     }
 
-    std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
+    bool DoUsesPullCompactionScheduling() const override {
+        return true;
+    }
+
+    ui32 DoGetMaxCompactionInflight() const override {
+        return CompactionThreads;
+    }
+
+    std::shared_ptr<TColumnEngineChanges> DoGetNextOptimizationTask(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const override {
         const auto isLocked = [dataLocksManager](TPortionInfo::TConstPtr p) -> bool {
             return dataLocksManager && dataLocksManager->IsLocked(*p, NDataLocks::ELockCategory::Compaction).has_value();
         };
 
-        const auto tasks = Core.GetOptimizationTasks(isLocked);
-        if (tasks.empty()) {
-            return {};
+        const auto task = Core.GetNextOptimizationTask(isLocked);
+        if (!task) {
+            return nullptr;
         }
 
-        const auto& task = tasks.front();
-        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, task.Portions, TSaverContext(StoragesManager));
-        result->SetTargetCompactionLevel(task.TargetLevel);
+        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, task->Portions, TSaverContext(StoragesManager));
+        result->SetTargetCompactionLevel(task->TargetLevel);
         result->SetPortionExpectedSize(PortionExpectedSize);
-        return { result };
+        return result;
+    }
+
+    std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
+        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const override {
+        if (auto task = DoGetNextOptimizationTask(granule, dataLocksManager)) {
+            return { std::move(task) };
+        }
+        return {};
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {
@@ -203,11 +229,11 @@ protected:
     }
 
     bool DoIsOverloaded() const override {
-        return Core.DoGetUsefulMetric().IsCritical();
+        return Core.IsOverloaded();
     }
 
     void DoActualize(const TInstant currentInstant) override {
-        Core.PromoteExpiredPortions(currentInstant);
+        Core.DoActualize(currentInstant);
     }
 
     NArrow::NMerger::TIntervalPositions GetBucketPositions() const override {
@@ -226,6 +252,7 @@ public:
         , Core(MakeCoreSettings(settings), Counters)
         , StoragesManager(storagesManager)
         , PortionExpectedSize(settings.PortionExpectedSize)
+        , CompactionThreads(settings.CompactionThreads)
     {
         AFL_VERIFY(StoragesManager);
     }

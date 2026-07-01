@@ -8,11 +8,13 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_graph_saveload.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NMiniKQL {
 namespace {
+
 TIntrusivePtr<IRandomProvider> CreateRandomProvider() {
     return CreateDeterministicRandomProvider(1);
 }
@@ -64,23 +66,18 @@ THolder<IComputationGraph> BuildGraph(
     const TTestInputData& input) {
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
-    const auto structType = pgmBuilder.NewStructType({{"time", pgmBuilder.NewDataType(NUdf::EDataSlot::Int64)},
-                                                      {"key", pgmBuilder.NewDataType(NUdf::EDataSlot::String)},
-                                                      {"sum", pgmBuilder.NewDataType(NUdf::EDataSlot::Uint32)},
-                                                      {"part", pgmBuilder.NewDataType(NUdf::EDataSlot::String)}});
+    using TRowStruct = NTest::TStructType<
+        NTest::TStructMember<"key", TStringBuf>,
+        NTest::TStructMember<"part", TStringBuf>,
+        NTest::TStructMember<"sum", ui32>,
+        NTest::TStructMember<"time", i64>>;
 
-    TVector<TRuntimeNode> items;
-    for (size_t i = 0; i < input.size(); ++i) {
-        const auto& [time, key, sum, part] = input[i];
-        items.push_back(pgmBuilder.NewStruct({
-            {"time", pgmBuilder.NewDataLiteral(time)},
-            {"key", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(key)},
-            {"sum", pgmBuilder.NewDataLiteral(sum)},
-            {"part", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(part)},
-        }));
+    TVector<TRowStruct> rowItems;
+    for (const auto& [time, key, sum, part] : input) {
+        rowItems.push_back(TRowStruct{{{TStringBuf(key)}, {TStringBuf(part)}, {sum}, {time}}});
     }
 
-    const auto list = pgmBuilder.NewList(structType, std::move(items));
+    const auto list = NTest::ConvertValueToLiteralNode(pgmBuilder, rowItems);
     auto inputFlow = pgmBuilder.ToFlow(list);
     auto pgmReturn = pgmBuilder.MatchRecognizeCore(
         inputFlow,
@@ -90,12 +87,12 @@ THolder<IComputationGraph> BuildGraph(
         {},
         {"key"sv},
         {[&](TRuntimeNode /*measureInputDataArg*/, TRuntimeNode /*matchedVarsArg*/) {
-            return pgmBuilder.NewDataLiteral<ui32>(56);
+            return NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(56));
         }},
         {{NYql::NMatchRecognize::TRowPatternFactor{"A", 3, 3, false, false, false}}},
         {"A"sv},
         {[&](TRuntimeNode /*inputDataArg*/, TRuntimeNode /*matchedVarsArg*/, TRuntimeNode /*currentRowIndexArg*/) {
-            return pgmBuilder.NewDataLiteral<bool>(true);
+            return NTest::ConvertValueToLiteralNode(pgmBuilder, bool(true));
         }},
         streamingMode,
         {NYql::NMatchRecognize::EAfterMatchSkipTo::NextRow, ""},
@@ -123,7 +120,6 @@ void TestWithSaveLoadImpl(bool streamingMode) {
     auto value = graph1->GetValue();
 
     UNIT_ASSERT(!value.IsFinish() && value);
-    auto v = value.GetElement(0).Get<ui32>();
 
     TString graphState = graph1->SaveGraphState();
 
@@ -136,8 +132,7 @@ void TestWithSaveLoadImpl(bool streamingMode) {
 
     value = graph2->GetValue();
     UNIT_ASSERT(!value.IsFinish() && value);
-    v = value.GetElement(0).Get<ui32>();
-    UNIT_ASSERT_VALUES_EQUAL(56, v);
+    AssertUnboxedValueElementEqual(value.GetElement(0), ui32(56));
 }
 
 Y_UNIT_TEST(StreamingMode) {

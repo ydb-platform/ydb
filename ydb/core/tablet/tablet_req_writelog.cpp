@@ -136,8 +136,8 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
     }
 
     void SendToBS(const TLogoBlobID &id, const TString &buffer, const TActorContext &ctx,
-            NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic,
-            NWilson::TTraceId traceId, bool isZeroEntry) {
+             NKikimrBlobStorage::EPutHandleClass handleClass,
+                  TEvBlobStorage::TEvPut::ETactic tactic, TWriteSource writeSource, NWilson::TTraceId traceId, bool isZeroEntry) {
         Y_ABORT_UNLESS(id.TabletID() == Info->TabletID);
         const TTabletChannelInfo *channelInfo = Info->ChannelInfo(id.Channel());
         Y_ABORT_UNLESS(channelInfo);
@@ -154,6 +154,7 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
                 .Deadline = TInstant::Max(),
                 .HandleClass = handleClass,
                 .Tactic = tactic,
+                .WriteSource = writeSource,
                 .IsZeroEntry = isZeroEntry,
                 .ExternalRelevanceWatcher = Relevance,
             }), cookie, std::move(traceId));
@@ -196,7 +197,8 @@ public:
                 innerTraceId = res.first->second.GetTraceId();
             }
 
-            SendToBS(ref.Id, ref.Buffer, ctx, handleClass, ref.Tactic ? *ref.Tactic : CommitTactic, std::move(innerTraceId), false);
+            SendToBS(ref.Id, ref.Buffer, ctx, handleClass, ref.Tactic ? *ref.Tactic : CommitTactic,
+                TWriteSource::WriteLogReference, std::move(innerTraceId), false);
         }
 
         const TLogoBlobID actualLogEntryId = TLogoBlobID(
@@ -216,7 +218,8 @@ public:
             traceId = std::move(res.first->second.GetTraceId());
         }
 
-        SendToBS(actualLogEntryId, logEntryBuffer, ctx, NKikimrBlobStorage::TabletLog, CommitTactic, std::move(traceId),
+        SendToBS(actualLogEntryId, logEntryBuffer, ctx, NKikimrBlobStorage::TabletLog, CommitTactic,
+            TWriteSource::WriteLogEntry, std::move(traceId),
             IsZeroEntry);
 
         RepliesToWait = References.size() + 1;

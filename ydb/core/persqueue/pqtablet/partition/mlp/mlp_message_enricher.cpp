@@ -111,10 +111,8 @@ void TMessageEnricherActor::ProcessQueue() {
         }
 
         auto firstOffset = reply.Messages.front().Offset;
-        auto lastOffset = Queue.back().Messages.back().Offset;
-        auto count = lastOffset - firstOffset + 1;
-        LOG_D("Fetching from offset " << firstOffset << " count " << count << " from " << TabletId);
-        SendToPQTablet(MakeEvPQRead(ConsumerName, PartitionId, firstOffset, count));
+        LOG_D("Fetching from offset " << firstOffset << " from " << TabletId);
+        SendToPQTablet(MakeEvPQRead(ConsumerName, PartitionId, firstOffset, 1));
 
         return;
     }

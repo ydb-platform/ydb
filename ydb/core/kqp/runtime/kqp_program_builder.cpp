@@ -414,5 +414,40 @@ TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TKqpProgramBuilder::KqpStreamEnumerate(TRuntimeNode input)
+{
+    const auto inputType = input.GetStaticType();
+
+    TType* itemType = nullptr;
+    enum class EKind { List, Flow, Stream } kind;
+    if (inputType->IsList()) {
+        itemType = static_cast<const TListType*>(inputType)->GetItemType();
+        kind = EKind::List;
+    } else if (inputType->IsFlow()) {
+        itemType = static_cast<const TFlowType*>(inputType)->GetItemType();
+        kind = EKind::Flow;
+    } else if (inputType->IsStream()) {
+        itemType = static_cast<const TStreamType*>(inputType)->GetItemType();
+        kind = EKind::Stream;
+    } else {
+        MKQL_ENSURE(false, "KqpStreamEnumerate: expected list, flow or stream input");
+    }
+
+    auto rankType = TDataType::Create(NUdf::TDataType<ui64>::Id, Env);
+    std::array<TType*, 2> pairElems = {{ rankType, itemType }};
+    auto pairType = TTupleType::Create(pairElems.size(), pairElems.data(), Env);
+
+    TType* resultType = nullptr;
+    switch (kind) {
+        case EKind::List:   resultType = TListType::Create(pairType, Env); break;
+        case EKind::Flow:   resultType = TFlowType::Create(pairType, Env); break;
+        case EKind::Stream: resultType = TStreamType::Create(pairType, Env); break;
+    }
+
+    TCallableBuilder callableBuilder(Env, __func__, resultType);
+    callableBuilder.Add(input);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr

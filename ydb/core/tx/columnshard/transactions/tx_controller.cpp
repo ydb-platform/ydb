@@ -302,6 +302,7 @@ TTxController::EPlanResult TTxController::PlanTx(const ui64 planStep, const ui64
         if (txInfo.MaxStep != Max<ui64>()) {
             DeadlineQueue.erase(TPlanQueueItem(txInfo.MaxStep, txId));
         }
+        it->second->OnPlanStep(Owner, planStep, txc);
         return EPlanResult::Planned;
     } else {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TX)("event", "skip_plan_tx_plan_step_is_not_zero")("tx_id", txId)("plan_step", txInfo.PlanStep)(

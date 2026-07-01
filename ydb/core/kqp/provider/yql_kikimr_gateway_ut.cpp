@@ -173,6 +173,7 @@ void TestDropObjectCommon(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGatew
 void TestCreateExternalDataSource(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& path) {
     TCreateObjectSettings settings("EXTERNAL_DATA_SOURCE", path, {
         {"source_type", "ObjectStorage"},
+        {"location", "my-bucket"},
         {"auth_method", "NONE"},
         {"installation", "cloud"}
     });
@@ -182,7 +183,7 @@ void TestCreateExternalDataSource(TTestActorRuntime& runtime, TIntrusivePtr<IKik
     UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
     UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetSourceType(), "ObjectStorage");
     UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetInstallation(), "cloud");
-    UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetLocation(), "");
+    UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetLocation(), "my-bucket");
     UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetName(), SplitPath(path).back());
     UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo->Description.GetAuth().HasNone());
 }
@@ -244,7 +245,7 @@ void TestCreateResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGat
 void TestAlterResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& poolId) {
     TCreateObjectSettings settings("RESOURCE_POOL", poolId, {
         {"concurrent_query_limit", "20"},
-        {"query_memory_limit_percent_per_node", "80.5"}
+        {"total_memory_limit_percent_per_node", "80.5"}
     }, {
         "queue_size"
     });
@@ -256,7 +257,7 @@ void TestAlterResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGate
     UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
     UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
     UNIT_ASSERT_VALUES_EQUAL(properties.at("queue_size"), "-1");
-    UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_percent_per_node"), "80.5");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("total_memory_limit_percent_per_node"), "80.5");
 }
 
 void TestDropResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& poolId) {

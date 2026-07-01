@@ -76,7 +76,7 @@ std::shared_ptr<TSkiffSchema> GetOptionalChild(const std::shared_ptr<TSkiffSchem
 
 struct TSkiffStructField
 {
-    TString Name;
+    std::string Name;
     std::shared_ptr<TSkiffSchema> Type;
 };
 
@@ -316,7 +316,7 @@ std::vector<std::optional<TTypePair>> MatchStructTypes(
             ThrowBadWireType(EWireType::Tuple, skiffSchema->GetWireType());
         }
 
-        THashMap<TString, int> skiffNameToIndex;
+        THashMap<std::string, int> skiffNameToIndex;
         std::vector<TSkiffStructField> skiffFields;
         {
             const auto& children = skiffSchema->GetChildren();

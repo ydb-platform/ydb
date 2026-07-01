@@ -104,6 +104,7 @@ static void FillColumns(
         }
         colDescr->SetId(cinfo.Id);
         colDescr->SetNotNull(cinfo.NotNull);
+        colDescr->SetSetNotNullInProgress(cinfo.SetNotNullInProgress);
 
         if (cinfo.Family != 0) {
             colDescr->SetFamily(cinfo.Family);
@@ -197,6 +198,35 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
         return TPathElement::EPathSubType::EPathSubTypeEmpty;
     }
 
+    // Local indexes have no impl tables, so resolve their subtype early.
+    // Global indexes fall through to the logic below that inspects impl table children.
+    if (path.Base()->IsTableIndex()) {
+        const auto& pathId = path.Base()->PathId;
+        if (auto it = Self->Indexes.find(pathId); it != Self->Indexes.end()) {
+            auto indexInfo = it->second;
+            switch (indexInfo->Type) {
+                case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                    return TPathElement::EPathSubType::EPathSubTypeLocalBloomFilterIndex;
+                case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                    return TPathElement::EPathSubType::EPathSubTypeLocalBloomNgramFilterIndex;
+                case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+                    return TPathElement::EPathSubType::EPathSubTypeLocalMinMaxIndex;
+                case NKikimrSchemeOp::EIndexTypeInvalid:
+                case NKikimrSchemeOp::EIndexTypeGlobal:
+                case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+                case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+                case NKikimrSchemeOp::EIndexTypeGlobalJson:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+                case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                    break;
+            }
+        }
+    }
+
     if (path.IsCommonSensePath()) {
         return TPathElement::EPathSubType::EPathSubTypeEmpty;
     }
@@ -219,8 +249,11 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
                 return TPathElement::EPathSubType::EPathSubTypeVectorKmeansTreeIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
                 return TPathElement::EPathSubType::EPathSubTypeFulltextIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
                 return TPathElement::EPathSubType::EPathSubTypeJsonIndexImplTable;
             default:
                 Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexInfo->Type));
@@ -279,6 +312,19 @@ void TPathDescriber::DescribeChildren(const TPath& path) {
             TPathElement::TPtr childEl = *childElPtr;
             if (childEl->Dropped() || childEl->IsMigrated()) {
                 continue;
+            }
+            if (pathEl->IsColumnTable() && childEl->IsSystemDirectory()) {
+                // .sys directory is not included in the children listing
+                continue;
+            }
+            // Filter out local index children when EnableLocalIndexAsSchemeObject is disabled
+            if (pathEl->IsColumnTable() && childEl->IsTableIndex()) {
+                const auto* indexInfo = Self->Indexes.FindPtr(childId);
+                if (indexInfo && *indexInfo &&
+                    TTableIndexInfo::IsLocalIndex((*indexInfo)->Type) &&
+                    !AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
+                    continue;
+                }
             }
             auto entry = pathDescription->AddChildren();
 
@@ -612,6 +658,8 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
     }
 
     description->SetIsRestore(tableInfo->IsRestore);
+
+    DescribeChildren(TPath::Init(pathId, Self));
 }
 
 void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr pathEl) {
@@ -1496,19 +1544,36 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeLocalMinMax:
             // no specialized index description
             Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+            // JSON indexes carry a fulltext description only when rowid mode (__ydb_row_id as doc_id)
+            // is enabled; otherwise there is no specialized index description.
+            if (const auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexInfo->SpecializedIndexDescription)) {
+                *entry.MutableFulltextIndexDescription() = *ft;
+            } else {
+                Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+            }
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             *entry.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
             *entry.MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
             break;
-        default:
-            Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexInfo->Type));
+        case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+            *entry.MutableBloomFilterDescription() = std::get<NKikimrSchemeOp::TBloomFilter>(indexInfo->SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+            *entry.MutableBloomNGrammFilterDescription() = std::get<NKikimrSchemeOp::TBloomNGrammFilter>(indexInfo->SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeInvalid:
             break;
     }
 }

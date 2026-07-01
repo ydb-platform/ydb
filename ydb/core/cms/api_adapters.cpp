@@ -375,6 +375,10 @@ class TPermissionResponseProcessor
 protected:
     using TBase = TPermissionResponseProcessor<TDerived, TEvRequest>;
 
+    // Soft warnings collected during request processing that should be returned
+    // to the client alongside the successful response.
+    TVector<TString> Warnings;
+
 public:
     using TAdapterActor<TDerived, TEvRequest, TEvCms::TEvMaintenanceTaskResponse>::TAdapterActor;
 
@@ -451,6 +455,12 @@ public:
             for (const auto& action : request.Request.GetActions()) {
                 ConvertAction(action, *GetActionGroupState(result)->add_action_states());
             }
+        }
+
+        for (const auto& warning : Warnings) {
+            auto& issue = *response->Record.AddIssues();
+            issue.set_severity(NYql::TSeverityIds::S_WARNING);
+            issue.set_message(warning);
         }
 
         this->Reply(std::move(response));
@@ -530,18 +540,20 @@ class TCreateMaintenanceTask
             return false;
         }
 
+        const ui32 actionGroupCount = request.action_groups().size();
         for (const auto& group : request.action_groups()) {
-            if (group.actions().size() < 1) {
+            const ui32 actionCount = group.actions().size();
+            if (actionCount < 1) {
                 Reply(Ydb::StatusIds::BAD_REQUEST, "Empty actions");
                 return false;
             }
 
-            if (!GetCmsState()->EnableSingleCompositeActionGroup && group.actions().size() > 1) {
+            if (!GetCmsState()->EnableSingleCompositeActionGroup && actionCount > 1) {
                 Reply(Ydb::StatusIds::UNSUPPORTED, "Feature flag EnableSingleCompositeActionGroup is off");
                 return false;
             }
 
-            if (request.action_groups().size() > 1 && group.actions().size() > 1) {
+            if (actionGroupCount > 1 && actionCount > 1) {
                 Reply(Ydb::StatusIds::UNSUPPORTED, TStringBuilder()
                     << "A task can have either a single composite action group or many action groups"
                     << " with only one action");
@@ -552,6 +564,23 @@ class TCreateMaintenanceTask
                 if (!ValidateAction(action)) {
                     return false;
                 }
+            }
+        }
+
+        const ui32 maxInflightActions = request.task_options().max_inflight_actions();
+        if (maxInflightActions > 0) {
+            const bool hasSingleCompositeActionGroup = actionGroupCount == 1
+                && request.action_groups(0).actions().size() > 1;
+            if (hasSingleCompositeActionGroup) {
+                Warnings.emplace_back(
+                    "max_inflight_actions is not applicable to a single composite action group:"
+                    " actions within one group are granted atomically");
+            }
+            if (actionGroupCount < maxInflightActions) {
+                Warnings.emplace_back(
+                    TStringBuilder()
+                    << "max_inflight_actions is greater than the number of action groups: "
+                    << maxInflightActions << " > " << actionGroupCount);
             }
         }
 
@@ -634,6 +663,10 @@ class TCreateMaintenanceTask
         HasSingleCompositeActionGroup = request.action_groups().size() == 1 
                                         && request.action_groups(0).actions().size() > 1;
         cmsRequest.SetPartialPermissionAllowed(!HasSingleCompositeActionGroup);
+
+        if (opts.max_inflight_actions() > 0) {
+            cmsRequest.SetMaxPermissionCount(opts.max_inflight_actions());
+        }
 
         for (const auto& group : request.action_groups()) {
             Y_ABORT_UNLESS(HasSingleCompositeActionGroup || group.actions().size() == 1);

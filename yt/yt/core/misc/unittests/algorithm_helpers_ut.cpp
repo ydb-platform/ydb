@@ -35,7 +35,7 @@ std::reverse_iterator<TIter> BinarySearchReverse(
 TEST(TAlgorithmHelpersTest, BinarySearch)
 {
     {
-        std::vector<TString> v;
+        std::vector<std::string> v;
         auto it = NYT::LowerBound(v.begin(), v.end(), "test");
         EXPECT_EQ(it, v.end());
     }

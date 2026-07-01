@@ -34,6 +34,7 @@ namespace NYdb::NConsoleClient {
             {NYdb::NTopic::ECodec::GZIP, "GZIP codec. Data is compressed with GZIP compression algorithm."},
             {NYdb::NTopic::ECodec::LZOP, "LZOP codec. Data is compressed with LZOP compression algorithm."},
             {NYdb::NTopic::ECodec::ZSTD, "ZSTD codec. Data is compressed with ZSTD compression algorithm."},
+            {NYdb::NTopic::ECodec::KAFKA_BATCH, "Kafka batch codec. Messages are packed into Kafka record batches."},
         };
 
         THashMap<TString, NYdb::NTopic::ECodec> ExistingCodecs = {
@@ -41,6 +42,7 @@ namespace NYdb::NConsoleClient {
             std::pair<TString, NYdb::NTopic::ECodec>("gzip", NYdb::NTopic::ECodec::GZIP),
             std::pair<TString, NYdb::NTopic::ECodec>("lzop", NYdb::NTopic::ECodec::LZOP),
             std::pair<TString, NYdb::NTopic::ECodec>("zstd", NYdb::NTopic::ECodec::ZSTD),
+            std::pair<TString, NYdb::NTopic::ECodec>("kafka-batch", NYdb::NTopic::ECodec::KAFKA_BATCH),
         };
 
         TVector<ui32> ExistingMetricsLevels = {2, 3};
@@ -1037,9 +1039,12 @@ namespace NYdb::NConsoleClient {
                            });
 
         // TODO(shmel1k@): improve help.
-        config.Opts->AddLongOption('c', "consumer", "Consumer name. If not set, then you need to specify partitions through --partitions to read without consumer")
+        config.Opts->AddLongOption('c', "consumer", "Consumer name. If omitted, use --partitions to target specific partitions, or --no-consumer to read all partitions without a consumer.")
             .Optional()
             .StoreResult(&Consumer_);
+        config.Opts->AddLongOption("no-consumer", "Allows to read all partitions without setting specific partition ids and without consumer.")
+            .Optional()
+            .StoreTrue(&ReadWithoutConsumer_);
 
         config.Opts->AddLongOption('f', "file", "File to write data to. In not specified, data is written to the standard output.")
             .Optional()
@@ -1048,7 +1053,7 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .DefaultValue(DefaultIdleTimeout)
             .StoreResult(&IdleTimeout_);
-        config.Opts->AddLongOption("commit", "Commit messages after successful read")
+        config.Opts->AddLongOption("commit", "Commit messages after successful read.")
             .Optional()
             .DefaultValue(false)
             .StoreResult(&Commit_);
@@ -1065,11 +1070,11 @@ namespace NYdb::NConsoleClient {
             .RequiredArgument("TIMESTAMP")
             .Optional()
             .Handler(TimestampOptionHandler(&Timestamp_));
-        config.Opts->AddLongOption("partition-ids", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partition-ids 0,1,10\"")
+        config.Opts->AddLongOption("partition-ids", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partition-ids 0,1,10\".")
             .Optional()
             .Hidden()
             .GetOpt().SplitHandler(&PartitionIds_, ',');
-        config.Opts->AddLongOption("partitions", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partitions 0,1,10\"")
+        config.Opts->AddLongOption("partitions", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partitions 0,1,10\".")
             .Optional()
             .GetOpt().SplitHandler(&PartitionIds_, ',');
         config.Opts->AddLongOption("start-offset", "Offset to start reading from. If not specified, messages are read from the last commit point for the chosen consumer.\nExactly one partition id should be specified with the '--partitions' option.")
@@ -1166,9 +1171,12 @@ namespace NYdb::NConsoleClient {
             throw TMisuseException() << "--limit 0 is not allowed for " << MessagingFormat << " format. Please provide a non-negative --limit.";
         }
 
-        // validate partitions ids are specified, if no consumer is provided. no-consumer mode will be used.
-        if (!Consumer_ && !PartitionIds_) {
-            throw TMisuseException() << "Please specify either --consumer or --partitions to read without consumer";
+        // validate partitions ids are specified, if no consumer is provided or user explicitly set no-consumer. no-consumer mode will be used.
+        if (Consumer_ && ReadWithoutConsumer_) {
+            throw TMisuseException() << "It is not allowed to specify both --consumer and --no-consumer at the same time";
+        }
+        if (!Consumer_ && !PartitionIds_ && !ReadWithoutConsumer_) {
+            throw TMisuseException() << "Please specify either --consumer or --partitions or explicitly set --no-consumer to read without consumer";
         }
 
         if (Offset_ && !(PartitionIds_.size() == 1)) {

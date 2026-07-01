@@ -1543,7 +1543,7 @@ static void art_node_print_type(art_ref_t ref) {
     }
 }
 
-void art_node_printf(const art_t *art, art_ref_t ref, uint8_t depth) {
+static void art_node_printf(const art_t *art, art_ref_t ref, uint8_t depth) {
     if (art_is_leaf(ref)) {
         printf("{ type: Leaf, key: ");
         art_leaf_t *leaf = (art_leaf_t *)art_deref(art, ref);

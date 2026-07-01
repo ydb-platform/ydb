@@ -22,9 +22,10 @@
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/actorid.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
 #include <ydb/core/persqueue/events/internal/protos/events.pb.h>
@@ -239,6 +240,9 @@ struct TEvPQ {
         EvMLPGetRuntimeAttributesRequest,
         EvMLPGetRuntimeAttributesResponse,
         EvRewindCommitResult,
+        EvConsumerBatchProcessorMetrics,
+        EvProcessBatchRead,
+        EvProcessBatchReadResult,
         EvEnd,
     };
 
@@ -277,6 +281,7 @@ struct TEvPQ {
         struct TMsg {
             TString SourceId;
             ui64 SeqNo;
+            std::optional<ui64> MaxSeqNo; // for batch msgs
             ui16 PartNo;
             ui16 TotalParts;
             ui32 TotalSize;
@@ -300,6 +305,9 @@ struct TEvPQ {
 
             std::optional<TString> MessageDeduplicationId;
             TMessageExternalDeduplicationInfo ExternalDeduplicationInfo;
+            ui32 LogicalMessageCount = 1;
+            bool IsBatch = false;
+            std::vector<std::pair<TString, ui64>> PartitionKeys;
         };
 
         TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo, EWriteExternalDeduplicationStatus externalDeduplicationStatus)
@@ -334,7 +342,7 @@ struct TEvPQ {
 
     struct TEvRead : public TEventLocal<TEvRead, EvRead> {
         TEvRead(const ui64 cookie, const ui64 offset, ui64 lastOffset, const ui16 partNo, const ui32 count,
-                const TString& sessionId, const TString& clientId, const ui32 timeout, const ui32 size,
+                const TString& sessionId, const TString& clientId, const ui32 timeout, const ui32 size, const bool readToBlobEnd,
                 const ui32 maxTimeLagMs, const ui64 readTimestampMs, const TString& clientDC,
                 bool externalOperation, const TActorId& pipeClient, const TActorId& replyTo = {})
             : Cookie(cookie)
@@ -345,6 +353,7 @@ struct TEvPQ {
             , ClientId(clientId)
             , Timeout(timeout)
             , Size(size)
+            , ReadToBlobEnd(readToBlobEnd)
             , MaxTimeLagMs(maxTimeLagMs)
             , ReadTimestampMs(readTimestampMs)
             , ClientDC(clientDC)
@@ -362,6 +371,7 @@ struct TEvPQ {
         TString ClientId;
         ui32 Timeout;
         ui32 Size;
+        bool ReadToBlobEnd;
         ui32 MaxTimeLagMs;
         ui64 ReadTimestampMs;
         TString ClientDC;
@@ -768,6 +778,23 @@ struct TEvPQ {
 
         TString ClientId;
         TDuration InFlightLimitReachedDuration;
+    };
+
+    struct TEvConsumerBatchProcessorMetrics : TEventLocal<TEvConsumerBatchProcessorMetrics, EvConsumerBatchProcessorMetrics> {
+        TEvConsumerBatchProcessorMetrics(ui32 partitionId, const TString& user, ui64 cpuUsage)
+            : PartitionId(partitionId)
+            , User(user)
+            , CPUUsage(cpuUsage)
+        {
+        }
+
+        ui32 GetPartitionId() const {
+            return PartitionId;
+        }
+
+        ui32 PartitionId;
+        TString User;
+        ui64 CPUUsage;
     };
 
     struct TEvUpdateAvailableSize : TEventLocal<TEvUpdateAvailableSize, EvUpdateAvailableSize> {
@@ -1838,12 +1865,14 @@ struct TEvPQ {
     };
 
     struct TEvRewindCommitResult: public TEventLocal<TEvRewindCommitResult, EvRewindCommitResult> {
-        explicit TEvRewindCommitResult(NYdb::TStatus status)
+        explicit TEvRewindCommitResult(NYdb::TStatus status, ui64 endOffset)
             : Status(std::move(status))
+            , EndOffset(endOffset)
         {
         }
 
         NYdb::TStatus Status;
+        ui64 EndOffset;
     };
 };
 

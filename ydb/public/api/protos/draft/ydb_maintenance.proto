@@ -98,6 +98,17 @@ message MaintenanceTaskOptions {
     bool dry_run = 4;
     // Priority of the task. Lower value indicates higher priority.
     int32 priority = 5 [(value) = "[-100; 100]"];
+    // Maximum number of actions that may be in the PERFORMED state simultaneously
+    // for this task. CMS will not issue new locks beyond this limit; remaining
+    // actions stay in PENDING until clients call CompleteAction on already
+    // performed ones. 0 means unlimited (default behavior).
+    // Note: this option is honored only when actions can be granted
+    // independently — i.e. when the task contains more than one action_group
+    // or its single action_group contains exactly one action. For a task that
+    // consists of a single action_group with multiple actions (a "composite"
+    // group) actions within the group are granted atomically (all or nothing)
+    // and the cap is ignored — CMS will emit a warning in this case.
+    uint32 max_inflight_actions = 6;
 }
 
 // Used to describe the scope of a single action.

@@ -392,6 +392,15 @@ namespace {
         return TWarmupTestEnv{kikimr, runtime, isThreadLocked, 0, params.NodeCount, params.UserSids, expectedUniqueCount};
     }
 
+    TVector<ui32> CollectNodeIds(TWarmupTestEnv& env) {
+        TVector<ui32> nodeIds;
+        nodeIds.reserve(env.NodeCount);
+        for (ui32 i = 0; i < env.NodeCount; ++i) {
+            nodeIds.push_back(env.Runtime.GetNodeId(i));
+        }
+        return nodeIds;
+    }
+
     TEvKqpWarmupComplete::TPtr RunWarmup(TWarmupTestEnv& env, const TKqpWarmupConfig& config,
             TDuration timeout, bool waitBootstrap = false) {
         auto warmupEdge = env.Runtime.AllocateEdgeActor(env.NodeId);
@@ -404,7 +413,8 @@ namespace {
             env.Runtime.DispatchEvents(opts, TDuration::Seconds(1));
         }
 
-        env.Runtime.Send(new IEventHandle(warmupActorId, warmupEdge, new TEvStartWarmup(env.NodeCount)), env.NodeId);
+        env.Runtime.Send(new IEventHandle(warmupActorId, warmupEdge,
+            new TEvStartWarmup(env.NodeCount, CollectNodeIds(env))), env.NodeId);
         return env.Runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(warmupEdge, timeout);
     }
 
@@ -440,6 +450,60 @@ namespace {
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
             UNIT_ASSERT_C(stats.compilation().from_cache(),
                 "Query for user " << userSid << " should be served from cache, but was recompiled");
+        }
+    }
+
+    NYdb::NQuery::TExecuteQueryResult ExecuteQueryQueryApi(
+        TKikimrRunner& kikimr, NYdb::NQuery::TSession& session,
+        const TString& query, bool isThreadLocked)
+    {
+        auto impl = [&] {
+            auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                .StatsMode(NYdb::NQuery::EStatsMode::Basic);
+            return session.ExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+                settings).ExtractValueSync();
+        };
+        return isThreadLocked ? kikimr.RunCall(impl) : impl();
+    }
+
+    void FillCacheQueryApi(TKikimrRunner& kikimr, NYdb::NQuery::TSession& session,
+        const TVector<TString>& userSids, bool isThreadLocked)
+    {
+        ui32 key = 0;
+        for (const auto& userSid : userSids) {
+            TString query = TStringBuilder()
+                << "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = "
+                << key++ << " /* qapi */;";
+
+            auto result = ExecuteQueryQueryApi(kikimr, session, query, isThreadLocked);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
+                "Query API populate failed for user " << userSid << ": "
+                << result.GetIssues().ToString());
+        }
+    }
+
+    void VerifyQueriesServedFromCacheQueryApi(TKikimrRunner& kikimr, NYdb::NQuery::TSession& session,
+        const TVector<TString>& userSids, bool isThreadLocked)
+    {
+        ui32 key = 0;
+        for (const auto& userSid : userSids) {
+            TString query = TStringBuilder()
+                << "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = "
+                << key++ << " /* qapi */;";
+
+            auto result = ExecuteQueryQueryApi(kikimr, session, query, isThreadLocked);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
+                "Query API verify failed for user " << userSid << ": "
+                << result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(result.GetStats().has_value(),
+                "Query API verify must have stats, user " << userSid);
+            const auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_C(stats.compilation().from_cache(),
+                "Query API verify: query for user " << userSid
+                << " should be served from cache, but was recompiled");
         }
     }
 
@@ -534,33 +598,10 @@ namespace {
             UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
             UNIT_ASSERT_C(warmupComplete->Get()->Success,
                 "Warmup should succeed with empty cache: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->Message.Contains("No queries to warm up"),
+                "Message should indicate empty cache: " << warmupComplete->Get()->Message);
             UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesLoaded, 0,
                 "No entries should be loaded from empty cache");
-        }
-
-        Y_UNIT_TEST(WarmupSingleNodeSkips) {
-            TWarmupTestParams params;
-            params.NodeCount = 1;
-            params.UserSids = {"user0"};
-            params.FillImplicitParams = false;
-
-            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
-            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
-
-            TKqpWarmupConfig warmupActorConfig;
-            warmupActorConfig.SoftDeadline = TDuration::Seconds(5);
-            warmupActorConfig.HardDeadline = TDuration::Seconds(10);
-
-            auto warmupComplete = RunWarmup(env, warmupActorConfig,
-                warmupActorConfig.HardDeadline + TDuration::Seconds(1));
-
-            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
-            UNIT_ASSERT_C(warmupComplete->Get()->Success,
-                "Warmup should succeed (skip): " << warmupComplete->Get()->Message);
-            UNIT_ASSERT_C(warmupComplete->Get()->Message.Contains("single node"),
-                "Message should indicate single node skip: " << warmupComplete->Get()->Message);
-            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesLoaded, 0,
-                "No entries loaded when skipping for single node");
         }
 
         Y_UNIT_TEST(WarmupRespectsMaxQueriesToLoad) {
@@ -789,7 +830,7 @@ namespace {
             }
 
             env.Runtime.Send(new IEventHandle(warmupActorId, warmupEdge,
-                new TEvStartWarmup(env.NodeCount)), env.NodeId);
+                new TEvStartWarmup(env.NodeCount, CollectNodeIds(env))), env.NodeId);
             auto warmupComplete = env.Runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(
                 warmupEdge, warmupActorConfig.HardDeadline + TDuration::Seconds(5));
 
@@ -833,7 +874,7 @@ namespace {
             }
 
             env.Runtime.Send(new IEventHandle(warmupActorId, warmupEdge,
-                new TEvStartWarmup(env.NodeCount)), env.NodeId);
+                new TEvStartWarmup(env.NodeCount, CollectNodeIds(env))), env.NodeId);
             auto warmupComplete = env.Runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(
                 warmupEdge, warmupActorConfig.HardDeadline + TDuration::Seconds(1));
 
@@ -925,12 +966,14 @@ namespace {
             const auto sysviewObserver = env.Runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesRequest>(
                 [&](TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
                     auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
+                    response->Record.SetNodeId(ev->Cookie);
                     response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
                     NYql::TIssue issue("Compile cache is not available for this database");
                     NYql::TIssues issues;
                     issues.AddIssue(std::move(issue));
                     NYql::IssuesToMessage(issues, response->Record.MutableIssues());
                     env.Runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release()));
+                    ev.Reset();
                 });
 
             TKqpWarmupConfig warmupActorConfig;
@@ -948,6 +991,7 @@ namespace {
         }
 
         Y_UNIT_TEST(WarmupUnavailableSysview) {
+            // All peers UNAVAILABLE: warmup fails AND PeerScanWarnings bumps once per failing peer.
             TWarmupTestParams params;
             params.UseRealThreads = false;
             params.UserSids = {"user0"};
@@ -956,18 +1000,25 @@ namespace {
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
             TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
 
+            NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+            const i64 warningsBefore = counters.CompileCacheViewPeerScanWarnings->Val();
+
+            // The warmup actor spawns two concurrent actors that both query .sys/compile_cache_queries,
+            // generating TEvListQueryCacheQueriesRequest: TFetchCacheActor and TFetchTruncatedCountActor.
+            // Intercept them both.
             std::atomic<ui32> sysviewRequestCount{0};
             const auto sysviewObserver = env.Runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesRequest>(
                 [&](TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
-                    if (sysviewRequestCount++ == 0) {
-                        auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
-                        response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
-                        NYql::TIssue issue("Compile cache is not available");
-                        NYql::TIssues issues;
-                        issues.AddIssue(std::move(issue));
-                        NYql::IssuesToMessage(issues, response->Record.MutableIssues());
-                        env.Runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release()));
-                    }
+                    sysviewRequestCount++;
+                    auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
+                    response->Record.SetNodeId(ev->Cookie);
+                    response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
+                    NYql::TIssue issue("Compile cache is not available");
+                    NYql::TIssues issues;
+                    issues.AddIssue(std::move(issue));
+                    NYql::IssuesToMessage(issues, response->Record.MutableIssues());
+                    env.Runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release()));
+                    ev.Reset();
                 });
 
             TKqpWarmupConfig warmupActorConfig;
@@ -982,8 +1033,21 @@ namespace {
                 "Warmup should fail when sysview is unavailable: " << warmupComplete->Get()->Message);
             UNIT_ASSERT_C(warmupComplete->Get()->Message.Contains("Fetch failed"),
                 "Message should indicate fetch failure: " << warmupComplete->Get()->Message);
-            UNIT_ASSERT_C(sysviewRequestCount.load() >= 1,
+
+            // Truncated-count fetch is async — drain it so its SkipCurrentNode
+            // events land before we compare counter to intercept count.
+            env.Runtime.SimulateSleep(TDuration::Seconds(1));
+
+            const ui32 intercepted = sysviewRequestCount.load();
+            UNIT_ASSERT_C(intercepted >= 1,
                 "At least one sysview request should have been intercepted");
+
+            const i64 warningsAfter = counters.CompileCacheViewPeerScanWarnings->Val();
+            const i64 delta = warningsAfter - warningsBefore;
+            UNIT_ASSERT_VALUES_EQUAL_C(delta, static_cast<i64>(intercepted),
+                "CompileCacheView/PeerScanWarnings must increment exactly once per failing"
+                " peer scan event (intercepted=" << intercepted << ", delta=" << delta
+                << ", before=" << warningsBefore << ", after=" << warningsAfter << ")");
         }
         Y_UNIT_TEST(WarmupPgSyntaxQueriesSkipped) {
             TWarmupTestParams params;
@@ -1285,6 +1349,200 @@ namespace {
                 TParamsBuilder().AddParam("$key").OptionalUint32(1).Build().Build());
             verifyFromCache(implicitQuery,
                 TParamsBuilder().AddParam("$implKey").Uint32(1).Build().Build());
+        }
+
+        Y_UNIT_TEST(ObservationWindowHitsAreAttributedToWarmup) {
+            TWarmupTestParams params;
+            params.UserSids = {"user0"};
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+            const i64 hitsBeforeWarmup = counters.WarmupHitsInWindow->Val();
+            const i64 savedMsBeforeWarmup = counters.WarmupSavedCompileMs->Val();
+
+            TKqpWarmupConfig warmupActorConfig;
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup must complete");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup must succeed: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded > 0,
+                "Warmup must populate at least one entry");
+
+            VerifyQueriesServedFromCache(kikimr, env.UserSids, env.IsThreadLocked);
+
+            const i64 hitsAfterFirstClientRound = counters.WarmupHitsInWindow->Val();
+            const i64 savedMsAfterFirstClientRound = counters.WarmupSavedCompileMs->Val();
+
+            UNIT_ASSERT_C(hitsAfterFirstClientRound > hitsBeforeWarmup,
+                "First client request hitting a warmup entry must increment WarmupHitsInWindow"
+                << " (was " << hitsBeforeWarmup << ", now " << hitsAfterFirstClientRound << ")");
+            UNIT_ASSERT_C(savedMsAfterFirstClientRound >= savedMsBeforeWarmup,
+                "WarmupSavedCompileMs must be non-decreasing"
+                << " (was " << savedMsBeforeWarmup << ", now " << savedMsAfterFirstClientRound << ")");
+
+            VerifyQueriesServedFromCache(kikimr, env.UserSids, env.IsThreadLocked);
+
+            const i64 hitsAfterSecondClientRound = counters.WarmupHitsInWindow->Val();
+            UNIT_ASSERT_VALUES_EQUAL_C(hitsAfterSecondClientRound, hitsAfterFirstClientRound,
+                "Repeated client hits on the same warmup uid must not be counted again");
+        }
+
+        Y_UNIT_TEST(ObservationWindowHitsAreAttributedToWarmupQueryApi) {
+            TWarmupTestParams params;
+            params.UserSids = {"user0"};
+            params.FillCache = false;
+            params.FillImplicitParams = false;
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            const bool isThreadLocked = !params.UseRealThreads;
+            GrantPermissions(kikimr, "/Root/KeyValue", params.UserSids, isThreadLocked);
+
+            NYdb::TDriver pinnedDriver(NYdb::TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
+                .SetAuthToken(params.UserSids[0] + "@builtin")
+                .SetDiscoveryMode(NYdb::EDiscoveryMode::Off));
+            NYdb::NQuery::TQueryClient pinnedClient(pinnedDriver);
+            auto pinnedSession = pinnedClient.GetSession().GetValueSync().GetSession();
+
+            FillCacheQueryApi(kikimr, pinnedSession, params.UserSids, isThreadLocked);
+
+            // Cache is filled via Query API, not PrepareWarmupTest, so build env manually.
+            auto& runtime = *kikimr.GetTestServer().GetRuntime();
+            TWarmupTestEnv env{kikimr, runtime, isThreadLocked, 0,
+                params.NodeCount, params.UserSids, 0};
+
+            NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+            const i64 hitsBeforeWarmup = counters.WarmupHitsInWindow->Val();
+            const i64 savedMsBeforeWarmup = counters.WarmupSavedCompileMs->Val();
+
+            TKqpWarmupConfig warmupActorConfig;
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup must complete");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup must succeed: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded > 0,
+                "Warmup must populate at least one Query API entry");
+
+            VerifyQueriesServedFromCacheQueryApi(kikimr, pinnedSession,
+                env.UserSids, env.IsThreadLocked);
+
+            const i64 hitsAfterFirstClientRound = counters.WarmupHitsInWindow->Val();
+            const i64 savedMsAfterFirstClientRound = counters.WarmupSavedCompileMs->Val();
+
+            UNIT_ASSERT_C(hitsAfterFirstClientRound > hitsBeforeWarmup,
+                "[QueryAPI] First client request hitting a warmup entry must increment "
+                "WarmupHitsInWindow (was " << hitsBeforeWarmup
+                << ", now " << hitsAfterFirstClientRound << ")");
+            UNIT_ASSERT_C(savedMsAfterFirstClientRound >= savedMsBeforeWarmup,
+                "[QueryAPI] WarmupSavedCompileMs must be non-decreasing (was "
+                << savedMsBeforeWarmup << ", now " << savedMsAfterFirstClientRound << ")");
+
+            VerifyQueriesServedFromCacheQueryApi(kikimr, pinnedSession,
+                env.UserSids, env.IsThreadLocked);
+
+            const i64 hitsAfterSecondClientRound = counters.WarmupHitsInWindow->Val();
+            UNIT_ASSERT_VALUES_EQUAL_C(hitsAfterSecondClientRound, hitsAfterFirstClientRound,
+                "[QueryAPI] Repeated client hits on the same warmup uid must not be counted again");
+
+            pinnedDriver.Stop(true);
+        }
+
+        Y_UNIT_TEST(ObservationWindowCountsMissesOnly) {
+            TWarmupTestParams params;
+            params.UserSids = {"user0"};
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+            TKqpWarmupConfig warmupActorConfig;
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup must complete");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success, warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded > 0,
+                "Warmup must populate at least one entry so the window can open");
+
+            const i64 missesBeforeFreshQuery = counters.WarmupMissesInWindow->Val();
+
+            // Constant Key=4242 is outside the set used by PrepareWarmupTest.
+            const TString freshQuery =
+                "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = 4242";
+            auto result = ExecuteQueryWithCache(kikimr, "user0", freshQuery, env.IsThreadLocked);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
+                "Fresh query must succeed: " << result.GetIssues().ToString());
+
+            const i64 missesAfterFreshQuery = counters.WarmupMissesInWindow->Val();
+            UNIT_ASSERT_C(missesAfterFreshQuery > missesBeforeFreshQuery,
+                "A cache miss inside the observation window must bump WarmupMissesInWindow"
+                << " (was " << missesBeforeFreshQuery << ", now " << missesAfterFreshQuery << ")");
+        }
+
+        Y_UNIT_TEST(ObservationWindowDoesNotOpenWithoutWarmupInserts) {
+            TWarmupTestParams params;
+            params.UserSids = {"user0"};
+            params.FillCache = false;
+            params.FillImplicitParams = false;
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+            TKqpWarmupConfig warmupActorConfig;
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
+            UNIT_ASSERT_C(warmupComplete, "Warmup must complete");
+            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesLoaded, 0,
+                "No entries expected in empty-cache scenario");
+
+            const i64 hitsBefore = counters.WarmupHitsInWindow->Val();
+            const i64 missesBefore = counters.WarmupMissesInWindow->Val();
+            const i64 savedMsBefore = counters.WarmupSavedCompileMs->Val();
+
+            const TString anyQuery =
+                "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = 7";
+            auto result = ExecuteQueryWithCache(kikimr, "user0", anyQuery, env.IsThreadLocked);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
+                result.GetIssues().ToString());
+
+            UNIT_ASSERT_VALUES_EQUAL_C(counters.WarmupHitsInWindow->Val(), hitsBefore,
+                "WarmupHitsInWindow must not change when window is not open");
+            UNIT_ASSERT_VALUES_EQUAL_C(counters.WarmupMissesInWindow->Val(), missesBefore,
+                "WarmupMissesInWindow must not change when window is not open");
+            UNIT_ASSERT_VALUES_EQUAL_C(counters.WarmupSavedCompileMs->Val(), savedMsBefore,
+                "WarmupSavedCompileMs must not change when window is not open");
+        }
+
+        Y_UNIT_TEST(CompileCacheViewPeerScanWarningsCounterClean) {
+            // Sanity check: when every peer responds cleanly, the counter must NOT move.
+            TWarmupTestParams params;
+            params.UserSids = {"user0"};
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+            const i64 warningsBefore = counters.CompileCacheViewPeerScanWarnings->Val();
+
+            TKqpWarmupConfig warmupActorConfig;
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup must succeed: " << warmupComplete->Get()->Message);
+
+            const i64 warningsAfter = counters.CompileCacheViewPeerScanWarnings->Val();
+            UNIT_ASSERT_VALUES_EQUAL_C(warningsAfter, warningsBefore,
+                "CompileCacheView/PeerScanWarnings must stay flat on clean scan"
+                << " (before=" << warningsBefore << ", after=" << warningsAfter << ")");
         }
 
     } // Y_UNIT_TEST_SUITE(KqpWarmup)

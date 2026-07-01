@@ -1,7 +1,5 @@
 /* syntax version 1 */
 /* postgres can not */
-/* custom error: Mismatch type argument #2, type diff: Optional<Void!=Unit> */
-/* FIXME(YQL-20234): support Null type */
 $t = (
     SELECT
         *
@@ -24,7 +22,7 @@ $p = (
     PROCESS $p
 );
 
---select FormatType(TypeOf($p));
+-- select FormatType(TypeOf($p));
 SELECT
     *
 FROM
@@ -46,7 +44,7 @@ $p = (
     PROCESS $p
 );
 
---select FormatType(TypeOf($p));
+-- select FormatType(TypeOf($p));
 SELECT
     *
 FROM

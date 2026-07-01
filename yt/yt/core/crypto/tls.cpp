@@ -291,8 +291,8 @@ public:
 
         SSL_set_bio(Ssl_.get(), InputBIO_, OutputBIO_);
 
-        InputBuffer_ = TSharedMutableRef::Allocate<TTlsBufferTag>(TlsBufferSize);
-        OutputBuffer_ = TSharedMutableRef::Allocate<TTlsBufferTag>(TlsBufferSize);
+        InputBuffer_ = TSharedMutableRef::Allocate<TTlsBufferTag>(TlsBufferSize, {.InitializeStorage = false});
+        OutputBuffer_ = TSharedMutableRef::Allocate<TTlsBufferTag>(TlsBufferSize, {.InitializeStorage = false});
     }
 
     void SetHost(const std::string& host)

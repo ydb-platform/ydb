@@ -215,7 +215,7 @@ public:
     // So use-after-free won't occur.
     TUnversionedValue operator()(TUnversionedValue sourceValue)
     {
-        TMemoryInput input(sourceValue.Data.String, sourceValue.Length);
+        TMemoryInput input(sourceValue.AsStringBuf());
         TYsonPullParser parser(&input, EYsonType::Node);
         TYsonPullParserCursor cursor(&parser);
 

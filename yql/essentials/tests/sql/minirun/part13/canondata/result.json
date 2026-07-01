@@ -1471,6 +1471,20 @@
             "uri": "https://{canondata_backend}/1871002/12af85b5b27eccd0e3391513f34ad8082ac84843/resource.tar.gz#test.test_select_yql-window_pg_tutorial_2-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-with_cte_fibonacci-default.txt-Debug]": [
+        {
+            "checksum": "c858c1a908bde8300f95ba40341fd2b6",
+            "size": 1110,
+            "uri": "https://{canondata_backend}/1899731/673744737828e32b359455b3e8e016d21afb099a/resource.tar.gz#test.test_select_yql-with_cte_fibonacci-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-with_cte_fibonacci-default.txt-Results]": [
+        {
+            "checksum": "4c447cf7d535325c60206b21b8a84e82",
+            "size": 1127,
+            "uri": "https://{canondata_backend}/1903885/5a6e3150ae22687a49e1e93bc8bbd60f7152b379/resource.tar.gz#test.test_select_yql-with_cte_fibonacci-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[seq_mode-shared_named_expr-default.txt-Debug]": [
         {
             "checksum": "6de9752b20a85eb7d5c4b1508dfd607d",

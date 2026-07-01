@@ -453,7 +453,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
     }
 
     Y_UNIT_TEST(TDeleteWhereTakesLocksWithUniqueIndex) {
-        TReadCommittedTakesLocks tester(R"(DELETE FROM `/Root/Test2` WHERE Name == "Paul")", 2, 4, 2);
+        TReadCommittedTakesLocks tester(R"(DELETE FROM `/Root/Test2` WHERE Name == "Paul")", 1, 4, 2);
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
         tester.Execute();
@@ -489,6 +489,46 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
 
     Y_UNIT_TEST(TInsertTakesLocksWithUniqueIndex) {
         TReadCommittedTakesLocks tester(R"(INSERT INTO `/Root/Test2` (Group, Name, Comment) VALUES (1u, "Unknown", "Inserted"))", 1, 4, 2);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TMultiStatementsDifferentTables) {
+        TReadCommittedTakesLocks tester(R"(
+            INSERT INTO `/Root/Test2` (Group, Name, Comment) VALUES (1u, "Unknown", "Inserted");
+            INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (1u, "Unknown", "Inserted");
+            )", 1 + 0, 4 + 2, 2 + 1);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TMultiStatementsUpdateInsert) {
+        TReadCommittedTakesLocks tester(R"(
+            UPDATE `/Root/Test` SET Comment = "Updated" WHERE Name == "Paul";
+            INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (2u, "New", "Inserted");
+            )", 1 + 0, 1 + 1 + 1, 2 + 1);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TMultiStatementsSameTable) {
+        TReadCommittedTakesLocks tester(R"(
+            INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (1u, "First", "Inserted");
+            INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (2u, "Second", "Inserted");
+            )", 0 + 0, 1 + 1 + 1, 1 + 1);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TMultiStatementsInsertAndSelect) {
+        TReadCommittedTakesLocks tester(R"(
+            INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (5u, "ToSelect", "BeforeSelect");
+            SELECT * FROM `/Root/Test` WHERE Group == 5u ORDER BY Name;
+            )", 0 + 1, 1 + 1, 1 + 0);
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
         tester.Execute();

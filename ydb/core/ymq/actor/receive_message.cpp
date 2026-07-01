@@ -170,7 +170,6 @@ private:
             .WaitTime = WaitTime_,
             .ProcessingTimeout = GetVisibilityTimeout(),
             .MaxNumberOfMessage = static_cast<ui32>(MaxMessagesCount_),
-            .UncompressMessages = true,
             .SkipMessageGroups = std::move(LockedMessageGroups_),
         };
         Register(NPQ::NMLP::CreateReader(SelfId(), std::move(settings)));

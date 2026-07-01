@@ -23,6 +23,7 @@ PEERDIR(
     contrib/libs/re2
     contrib/libs/xxhash
     contrib/libs/zlib
+    contrib/libs/zstd
     contrib/restricted/abseil-cpp-tstring
     library/cpp/resource
 )
@@ -36,6 +37,7 @@ ADDINCL(
     contrib/libs/grpc/third_party/address_sorting/include
     contrib/libs/grpc/third_party/upb
     contrib/libs/xxhash
+    contrib/libs/zstd/include
 )
 
 NO_COMPILER_WARNINGS()

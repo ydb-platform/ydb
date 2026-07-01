@@ -138,7 +138,7 @@ void FormatValue(
     const TReplicationCard& replicationCard,
     TStringBuf /*spec*/,
     std::optional<TReplicationProgressProjection> replicationProgressProjection = std::nullopt);
-TString ToString(
+std::string ToString(
     const TReplicationCard& replicationCard,
     std::optional<TReplicationProgressProjection> replicationProgressProjection = std::nullopt);
 
@@ -172,6 +172,9 @@ void CanonizeReplicationProgress(TReplicationProgress* progress);
 
 NTransactionClient::TTimestamp GetReplicationProgressMinTimestamp(const TReplicationProgress& progress);
 NTransactionClient::TTimestamp GetReplicationProgressMaxTimestamp(const TReplicationProgress& progress);
+std::pair<NTransactionClient::TTimestamp, NTransactionClient::TTimestamp> GetReplicationProgressMinMaxTimestamp(
+    const TReplicationProgress& progress);
+
 NTransactionClient::TTimestamp GetReplicationCardProgressMinTimestamp(
     const TReplicationCard& replicationCard,
     NTableClient::TLegacyKey lower,

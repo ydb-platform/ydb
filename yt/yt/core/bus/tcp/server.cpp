@@ -316,7 +316,7 @@ protected:
         }
     }
 
-    void BindSocket(const TNetworkAddress& address, const TString& errorMessage)
+    void BindSocket(const TNetworkAddress& address, const std::string& errorMessage)
     {
         for (int attempt = 1; attempt <= Config_->BindRetryCount; ++attempt) {
             try {
@@ -414,7 +414,7 @@ private:
             if (Config_->UnixDomainSocketPath) {
                 // NB(gritukan): Unix domain socket path cannot be longer than 108 symbols, so let's try to shorten it.
                 // TODO(babenko): switch to std::string
-                netAddress = TNetworkAddress::CreateUnixDomainSocketAddress(NFS::GetShortestPath(TString(*Config_->UnixDomainSocketPath)));
+                netAddress = TNetworkAddress::CreateUnixDomainSocketAddress(NFS::GetShortestPath(std::string(*Config_->UnixDomainSocketPath)));
             } else {
                 netAddress = GetLocalBusAddress(*Config_->Port);
             }

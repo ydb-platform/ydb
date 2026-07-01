@@ -201,7 +201,7 @@ class ServerBuilder {
   }
 
   /// Set the support status for compression algorithms. All algorithms are
-  /// enabled by default.
+  /// enabled by default except zstd.
   ///
   /// Incoming calls compressed with an unsupported algorithm will fail with
   /// \a GRPC_STATUS_UNIMPLEMENTED.

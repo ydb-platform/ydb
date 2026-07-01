@@ -47,6 +47,22 @@ void TEmaCounter<T, WindowCount>::Update(T newCount, TInstant newTimestamp)
     }
 }
 
+
+template <typename T, int WindowCount>
+    requires std::is_arithmetic_v<T>
+void TEmaCounter<T, WindowCount>::Scale(double scaleFactor)
+{
+    if (!LastTimestamp) {
+        return;
+    }
+
+    Count *= scaleFactor;
+
+    for (auto& windowRate : WindowRates) {
+        windowRate *= scaleFactor;
+    }
+}
+
 template <typename T, int WindowCount>
     requires std::is_arithmetic_v<T>
 void TEmaCounter<T, WindowCount>::Merge(const TEmaCounter<T, WindowCount>& other, TInstant currentTimestamp)

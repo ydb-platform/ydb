@@ -38,12 +38,12 @@ Y_UNIT_TEST_LLVM(TestInner) {
 
         using TOutRow = std::tuple<TString, TString>;
 
-        NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
-                                                                          {"B", "X"},
-                                                                          {"B", "Y"},
-                                                                          {"C", "X"},
-                                                                          {"C", "Y"},
-                                                                      });
+        AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
+                                                              {"B", "X"},
+                                                              {"B", "Y"},
+                                                              {"C", "X"},
+                                                              {"C", "Y"},
+                                                          });
     }
 }
 
@@ -78,13 +78,13 @@ Y_UNIT_TEST_LLVM(TestLeft) {
 
         using TOutRow = std::tuple<TString, TMaybe<TString>>;
 
-        NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
-                                                                          {"A", TMaybe<TString>{}},
-                                                                          {"B", TMaybe<TString>{"X"}},
-                                                                          {"B", TMaybe<TString>{"Y"}},
-                                                                          {"C", TMaybe<TString>{"X"}},
-                                                                          {"C", TMaybe<TString>{"Y"}},
-                                                                      });
+        AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
+                                                              {"A", {}},
+                                                              {"B", TString("X")},
+                                                              {"B", TString("Y")},
+                                                              {"C", TString("X")},
+                                                              {"C", TString("Y")},
+                                                          });
     }
 }
 
@@ -119,13 +119,13 @@ Y_UNIT_TEST_LLVM(TestRight) {
 
         using TOutRow = std::tuple<TMaybe<TString>, TString>;
 
-        NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
-                                                                          {TMaybe<TString>{"B"}, "X"},
-                                                                          {TMaybe<TString>{"B"}, "Y"},
-                                                                          {TMaybe<TString>{"C"}, "X"},
-                                                                          {TMaybe<TString>{"C"}, "Y"},
-                                                                          {TMaybe<TString>{}, "Z"},
-                                                                      });
+        AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
+                                                              {TString("B"), "X"},
+                                                              {TString("B"), "Y"},
+                                                              {TString("C"), "X"},
+                                                              {TString("C"), "Y"},
+                                                              {{}, "Z"},
+                                                          });
     }
 }
 
@@ -159,14 +159,14 @@ Y_UNIT_TEST_LLVM(TestFull) {
 
     using TOutRow = std::tuple<TMaybe<TString>, TMaybe<TString>>;
 
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
-                                                                      {TMaybe<TString>{"A"}, TMaybe<TString>{}},
-                                                                      {TMaybe<TString>{"B"}, TMaybe<TString>{"X"}},
-                                                                      {TMaybe<TString>{"B"}, TMaybe<TString>{"Y"}},
-                                                                      {TMaybe<TString>{"C"}, TMaybe<TString>{"X"}},
-                                                                      {TMaybe<TString>{"C"}, TMaybe<TString>{"Y"}},
-                                                                      {TMaybe<TString>{}, TMaybe<TString>{"Z"}},
-                                                                  });
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
+                                                          {TString("A"), {}},
+                                                          {TString("B"), TString("X")},
+                                                          {TString("B"), TString("Y")},
+                                                          {TString("C"), TString("X")},
+                                                          {TString("C"), TString("Y")},
+                                                          {{}, TString("Z")},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestInnerFlat) {
@@ -212,22 +212,22 @@ Y_UNIT_TEST_LLVM(TestInnerFlat) {
 
     using TOutRow = std::tuple<TString, TString>;
 
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
-                                                                      {"A", "A"},
-                                                                      {"B", "B"},
-                                                                      {"C", "C"},
-                                                                      {"D", "D"},
-                                                                      {"B", "H"},
-                                                                      {"C", "G"},
-                                                                      {"D", "F"},
-                                                                      {"H", "B"},
-                                                                      {"G", "C"},
-                                                                      {"F", "D"},
-                                                                      {"H", "H"},
-                                                                      {"G", "G"},
-                                                                      {"F", "F"},
-                                                                      {"E", "E"},
-                                                                  });
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
+                                                          {"A", "A"},
+                                                          {"B", "B"},
+                                                          {"C", "C"},
+                                                          {"D", "D"},
+                                                          {"B", "H"},
+                                                          {"C", "G"},
+                                                          {"D", "F"},
+                                                          {"H", "B"},
+                                                          {"G", "C"},
+                                                          {"F", "D"},
+                                                          {"H", "H"},
+                                                          {"G", "G"},
+                                                          {"F", "F"},
+                                                          {"E", "E"},
+                                                      });
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest)
 

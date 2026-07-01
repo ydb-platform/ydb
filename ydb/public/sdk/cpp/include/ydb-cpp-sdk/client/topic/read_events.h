@@ -63,7 +63,7 @@ struct TPartitionSessionControl: public TPartitionSession {
     virtual void Commit(uint64_t startOffset, uint64_t endOffset) = 0;
 
     //! Confirm partition session creation from TStartPartitionSessionEvent.
-    virtual void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) = 0;
+    virtual void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset, std::optional<uint64_t> maxOffset = std::nullopt) = 0;
 
     //! Confirm partition session destruction from TStopPartitionSessionEvent.
     virtual void ConfirmDestroy() = 0;
@@ -91,14 +91,15 @@ struct TReadSessionEvent {
     struct TDataReceivedEvent: public TPartitionSessionAccessor, public TPrintable<TDataReceivedEvent> {
         struct TMessageInformation {
             TMessageInformation(uint64_t offset,
-                                std::string producerId,
+                                std::string_view producerId,
                                 uint64_t seqNo,
                                 TInstant createTime,
                                 TInstant writeTime,
                                 TWriteSessionMeta::TPtr meta,
                                 TMessageMeta::TPtr messageMeta,
                                 uint64_t uncompressedSize,
-                                std::string messageGroupId);
+                                std::string messageGroupId,
+                                uint64_t logicalMessageCount = 1);
             uint64_t Offset;
             std::string ProducerId;
             uint64_t SeqNo;
@@ -108,6 +109,7 @@ struct TReadSessionEvent {
             TMessageMeta::TPtr MessageMeta;
             uint64_t UncompressedSize;
             std::string MessageGroupId;
+            uint64_t LogicalMessageCount;
         };
 
         class TMessageBase: public TPrintable<TMessageBase> {
@@ -123,6 +125,9 @@ struct TReadSessionEvent {
 
             //! Message offset.
             uint64_t GetOffset() const;
+
+            //! Number of logical messages covered by this message.
+            uint64_t GetLogicalMessageCount() const;
 
             //! Producer id.
             const std::string& GetProducerId() const;
@@ -291,7 +296,7 @@ struct TReadSessionEvent {
         //! Confirm partition session creation.
         //! This signals that user is ready to receive data from this partition session.
         //! If maybe is empty then no rewinding
-        void Confirm(std::optional<uint64_t> readOffset = std::nullopt, std::optional<uint64_t> commitOffset = std::nullopt);
+        void Confirm(std::optional<uint64_t> readOffset = std::nullopt, std::optional<uint64_t> commitOffset = std::nullopt, std::optional<uint64_t> maxOffset = std::nullopt);
 
     private:
         uint64_t CommittedOffset;

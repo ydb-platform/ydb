@@ -1095,18 +1095,22 @@ public:
                 continue;
             }
 
-            auto polyArgs = ParsePolyArgs(NYT::NodeFromYsonString(meta->PolyArgs));
             IPolyArgs::TArgs args;
             if (f->UserType && f->UserType->GetKind() == ETypeAnnotationKind::Tuple) {
                 auto topTupleType = f->UserType->Cast<TTupleExprType>();
                 if (topTupleType->GetSize() >= 1 && topTupleType->GetItems()[0]->GetKind() == ETypeAnnotationKind::Tuple) {
                     auto argsTupleType = topTupleType->GetItems()[0]->Cast<TTupleExprType>();
+                    if (argsTupleType->HasUniversal()) {
+                        continue;
+                    }
+
                     for (ui32 i = 0; i < argsTupleType->GetSize(); ++i) {
                         args["T" + ToString(i)] = NYT::NodeFromYsonString(TypeWriter_(argsTupleType->GetItems()[i]));
                     }
                 }
             }
 
+            auto polyArgs = ParsePolyArgs(NYT::NodeFromYsonString(meta->PolyArgs));
             auto result = polyArgs->Match(args, f->LangVer);
             if (result.Error) {
                 TStringBuilder builder;

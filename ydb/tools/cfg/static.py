@@ -354,8 +354,216 @@ class StaticConfigGenerator(object):
         return self.__cluster_details.get_service("column_shard_config")
 
     @property
+    def scan_grouped_memory_limiter_config(self):
+        return self.__cluster_details.get_service("scan_grouped_memory_limiter_config")
+
+    @property
+    def composite_conveyor_config(self):
+        return self.__cluster_details.get_service("composite_conveyor_config")
+
+    @property
+    def comp_disk_limiter_config(self):
+        return self.__cluster_details.get_service("comp_disk_limiter_config")
+
+    @property
     def data_shard_config(self):
         return self.__cluster_details.get_service("data_shard_config")
+
+    @property
+    def monitoring_config(self):
+        return self.__cluster_details.get_service("monitoring_config")
+
+    @property
+    def restarts_count_config(self):
+        return self.__cluster_details.get_service("restarts_count_config")
+
+    @property
+    def drive_model_config(self):
+        return self.__cluster_details.get_service("drive_model_config")
+
+    @property
+    def memory_log_config(self):
+        return self.__cluster_details.get_service("memory_log_config")
+
+    @property
+    def dynamic_node_config(self):
+        return self.__cluster_details.get_service("dynamic_node_config")
+
+    @property
+    def tenant_pool_config(self):
+        return self.__cluster_details.get_service("tenant_pool_config")
+
+    @property
+    def tenant_slot_broker_config(self):
+        return self.__cluster_details.get_service("tenant_slot_broker_config")
+
+    @property
+    def configs_dispatcher_config(self):
+        return self.__cluster_details.get_service("configs_dispatcher_config")
+
+    @property
+    def node_broker_config(self):
+        return self.__cluster_details.get_service("node_broker_config")
+
+    @property
+    def shared_cache_config(self):
+        return self.__cluster_details.get_service("shared_cache_config")
+
+    @property
+    def allocator_config(self):
+        return self.__cluster_details.get_service("allocator_config")
+
+    @property
+    def net_classifier_distributable_config(self):
+        return self.__cluster_details.get_service("net_classifier_distributable_config")
+
+    @property
+    def graph_config(self):
+        return self.__cluster_details.get_service("graph_config")
+
+    @property
+    def compaction_config(self):
+        return self.__cluster_details.get_service("compaction_config")
+
+    @property
+    def scheme_shard_config(self):
+        return self.__cluster_details.get_service("scheme_shard_config")
+
+    @property
+    def public_http_config(self):
+        return self.__cluster_details.get_service("public_http_config")
+
+    @property
+    def metadata_provider_config(self):
+        return self.__cluster_details.get_service("metadata_provider_config")
+
+    @property
+    def background_tasks_config(self):
+        return self.__cluster_details.get_service("background_tasks_config")
+
+    @property
+    def external_index_config(self):
+        return self.__cluster_details.get_service("external_index_config")
+
+    @property
+    def scan_conveyor_config(self):
+        return self.__cluster_details.get_service("scan_conveyor_config")
+
+    @property
+    def local_pg_wire_config(self):
+        return self.__cluster_details.get_service("local_pg_wire_config")
+
+    @property
+    def aws_compatibility_config(self):
+        return self.__cluster_details.get_service("aws_compatibility_config")
+
+    @property
+    def comp_conveyor_config(self):
+        return self.__cluster_details.get_service("comp_conveyor_config")
+
+    @property
+    def insert_conveyor_config(self):
+        return self.__cluster_details.get_service("insert_conveyor_config")
+
+    @property
+    def background_cleaning_config(self):
+        return self.__cluster_details.get_service("background_cleaning_config")
+
+    @property
+    def blob_cache_config(self):
+        return self.__cluster_details.get_service("blob_cache_config")
+
+    @property
+    def metadata_cache_config(self):
+        return self.__cluster_details.get_service("metadata_cache_config")
+
+    @property
+    def replication_config(self):
+        return self.__cluster_details.get_service("replication_config")
+
+    @property
+    def shutdown_config(self):
+        return self.__cluster_details.get_service("shutdown_config")
+
+    @property
+    def comp_priorities_config(self):
+        return self.__cluster_details.get_service("comp_priorities_config")
+
+    @property
+    def self_management_config(self):
+        return self.__cluster_details.get_service("self_management_config")
+
+    @property
+    def data_integrity_trails_config(self):
+        return self.__cluster_details.get_service("data_integrity_trails_config")
+
+    @property
+    def data_erasure_config(self):
+        return self.__cluster_details.get_service("data_erasure_config")
+
+    @property
+    def health_check_config(self):
+        return self.__cluster_details.get_service("health_check_config")
+
+    @property
+    def workload_manager_config(self):
+        return self.__cluster_details.get_service("workload_manager_config")
+
+    @property
+    def bridge_config(self):
+        return self.__cluster_details.get_service("bridge_config")
+
+    @property
+    def comp_grouped_memory_limiter_config(self):
+        return self.__cluster_details.get_service("comp_grouped_memory_limiter_config")
+
+    @property
+    def blockstore_config(self):
+        return self.__cluster_details.get_service("blockstore_config")
+
+    @property
+    def portions_metadata_cache(self):
+        return self.__cluster_details.get_service("portions_metadata_cache")
+
+    @property
+    def column_data_cache(self):
+        return self.__cluster_details.get_service("column_data_cache")
+
+    @property
+    def deduplication_grouped_memory_limiter_config(self):
+        return self.__cluster_details.get_service("deduplication_grouped_memory_limiter_config")
+
+    @property
+    def statistics_config(self):
+        return self.__cluster_details.get_service("statistics_config")
+
+    @property
+    def metrics_config(self):
+        return self.__cluster_details.get_service("metrics_config")
+
+    @property
+    def aws_client_config(self):
+        return self.__cluster_details.get_service("aws_client_config")
+
+    @property
+    def recovery_shard_config(self):
+        return self.__cluster_details.get_service("recovery_shard_config")
+
+    @property
+    def cluster_diagnostics_config(self):
+        return self.__cluster_details.get_service("cluster_diagnostics_config")
+
+    @property
+    def nbs_config(self):
+        return self.__cluster_details.get_service("nbs_config")
+
+    @property
+    def tli_config(self):
+        return self.__cluster_details.get_service("tli_config")
+
+    @property
+    def long_tx_service_config(self):
+        return self.__cluster_details.get_service("long_tx_service_config")
 
     @property
     def hive_config(self):
@@ -522,8 +730,164 @@ class StaticConfigGenerator(object):
         if self.column_shard_config:
             normalized_config["column_shard_config"] = self.column_shard_config
 
+        if self.scan_grouped_memory_limiter_config:
+            normalized_config["scan_grouped_memory_limiter_config"] = self.scan_grouped_memory_limiter_config
+
+        if self.composite_conveyor_config:
+            normalized_config["composite_conveyor_config"] = self.composite_conveyor_config
+
+        if self.comp_disk_limiter_config:
+            normalized_config["comp_disk_limiter_config"] = self.comp_disk_limiter_config
+
         if self.data_shard_config:
             normalized_config["data_shard_config"] = self.data_shard_config
+
+        if self.monitoring_config:
+            normalized_config["monitoring_config"] = self.monitoring_config
+
+        if self.restarts_count_config:
+            normalized_config["restarts_count_config"] = self.restarts_count_config
+
+        if self.drive_model_config:
+            normalized_config["drive_model_config"] = self.drive_model_config
+
+        if self.memory_log_config:
+            normalized_config["memory_log_config"] = self.memory_log_config
+
+        if self.dynamic_node_config:
+            normalized_config["dynamic_node_config"] = self.dynamic_node_config
+
+        if self.tenant_pool_config:
+            normalized_config["tenant_pool_config"] = self.tenant_pool_config
+
+        if self.tenant_slot_broker_config:
+            normalized_config["tenant_slot_broker_config"] = self.tenant_slot_broker_config
+
+        if self.configs_dispatcher_config:
+            normalized_config["configs_dispatcher_config"] = self.configs_dispatcher_config
+
+        if self.node_broker_config:
+            normalized_config["node_broker_config"] = self.node_broker_config
+
+        if self.shared_cache_config:
+            normalized_config["shared_cache_config"] = self.shared_cache_config
+
+        if self.allocator_config:
+            normalized_config["allocator_config"] = self.allocator_config
+
+        if self.net_classifier_distributable_config:
+            normalized_config["net_classifier_distributable_config"] = self.net_classifier_distributable_config
+
+        if self.graph_config:
+            normalized_config["graph_config"] = self.graph_config
+
+        if self.compaction_config:
+            normalized_config["compaction_config"] = self.compaction_config
+
+        if self.scheme_shard_config:
+            normalized_config["scheme_shard_config"] = self.scheme_shard_config
+
+        if self.public_http_config:
+            normalized_config["public_http_config"] = self.public_http_config
+
+        if self.metadata_provider_config:
+            normalized_config["metadata_provider_config"] = self.metadata_provider_config
+
+        if self.background_tasks_config:
+            normalized_config["background_tasks_config"] = self.background_tasks_config
+
+        if self.external_index_config:
+            normalized_config["external_index_config"] = self.external_index_config
+
+        if self.scan_conveyor_config:
+            normalized_config["scan_conveyor_config"] = self.scan_conveyor_config
+
+        if self.local_pg_wire_config:
+            normalized_config["local_pg_wire_config"] = self.local_pg_wire_config
+
+        if self.aws_compatibility_config:
+            normalized_config["aws_compatibility_config"] = self.aws_compatibility_config
+
+        if self.comp_conveyor_config:
+            normalized_config["comp_conveyor_config"] = self.comp_conveyor_config
+
+        if self.insert_conveyor_config:
+            normalized_config["insert_conveyor_config"] = self.insert_conveyor_config
+
+        if self.background_cleaning_config:
+            normalized_config["background_cleaning_config"] = self.background_cleaning_config
+
+        if self.blob_cache_config:
+            normalized_config["blob_cache_config"] = self.blob_cache_config
+
+        if self.metadata_cache_config:
+            normalized_config["metadata_cache_config"] = self.metadata_cache_config
+
+        if self.replication_config:
+            normalized_config["replication_config"] = self.replication_config
+
+        if self.shutdown_config:
+            normalized_config["shutdown_config"] = self.shutdown_config
+
+        if self.comp_priorities_config:
+            normalized_config["comp_priorities_config"] = self.comp_priorities_config
+
+        if self.self_management_config:
+            normalized_config["self_management_config"] = self.self_management_config
+
+        if self.data_integrity_trails_config:
+            normalized_config["data_integrity_trails_config"] = self.data_integrity_trails_config
+
+        if self.data_erasure_config:
+            normalized_config["data_erasure_config"] = self.data_erasure_config
+
+        if self.health_check_config:
+            normalized_config["health_check_config"] = self.health_check_config
+
+        if self.workload_manager_config:
+            normalized_config["workload_manager_config"] = self.workload_manager_config
+
+        if self.bridge_config:
+            normalized_config["bridge_config"] = self.bridge_config
+
+        if self.comp_grouped_memory_limiter_config:
+            normalized_config["comp_grouped_memory_limiter_config"] = self.comp_grouped_memory_limiter_config
+
+        if self.blockstore_config:
+            normalized_config["blockstore_config"] = self.blockstore_config
+
+        if self.portions_metadata_cache:
+            normalized_config["portions_metadata_cache"] = self.portions_metadata_cache
+
+        if self.column_data_cache:
+            normalized_config["column_data_cache"] = self.column_data_cache
+
+        if self.deduplication_grouped_memory_limiter_config:
+            normalized_config["deduplication_grouped_memory_limiter_config"] = self.deduplication_grouped_memory_limiter_config
+
+        if self.statistics_config:
+            normalized_config["statistics_config"] = self.statistics_config
+
+        if self.metrics_config:
+            normalized_config["metrics_config"] = self.metrics_config
+
+        if self.aws_client_config:
+            normalized_config["aws_client_config"] = self.aws_client_config
+
+        if self.recovery_shard_config:
+            normalized_config["recovery_shard_config"] = self.recovery_shard_config
+
+        if self.cluster_diagnostics_config:
+            normalized_config["cluster_diagnostics_config"] = self.cluster_diagnostics_config
+
+        if self.nbs_config:
+            normalized_config["nbs_config"] = self.nbs_config
+
+        if self.tli_config:
+            normalized_config["tli_config"] = self.tli_config
+
+        if self.long_tx_service_config:
+            normalized_config["long_tx_service_config"] = self.long_tx_service_config
 
         if self.__cluster_details.client_certificate_authorization is not None:
             normalized_config["client_certificate_authorization"] = self.__cluster_details.client_certificate_authorization

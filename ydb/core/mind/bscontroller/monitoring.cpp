@@ -1353,8 +1353,8 @@ void TBlobStorageController::RenderGroupsInStoragePool(IOutputStream &out, const
             out << "Groups in storage pool " << name << " (" << std::get<0>(id) << ", " << std::get<1>(id) << ")";
         }
         RenderGroupTable(out, [&] {
-            auto range = StoragePoolGroups.equal_range(id);
-            for (auto it = range.first; it != range.second; ++it) {
+            for (auto it = StoragePoolGroups.lower_bound({id, Min<TGroupId>()});
+                    it != StoragePoolGroups.end() && it->first == id; ++it) {
                 if (TGroupInfo *group = FindGroup(it->second)) {
                     RenderGroupRow(out, *group);
                 }

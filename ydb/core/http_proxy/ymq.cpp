@@ -91,7 +91,6 @@ namespace NKikimr::NHttpProxy {
             }
 
             void SendGrpcRequestNoDriver(const TActorContext& ctx) {
-                RequestState = TProcessorBase::TRequestState::StateGrpcRequest;
                 LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
                               "sending grpc request to '" << HttpContext.DiscoveryEndpoint <<
                               "' database: '" << HttpContext.DatabasePath <<
@@ -102,6 +101,7 @@ namespace NKikimr::NHttpProxy {
                     {NYmq::V1::USER_SID, UserSid},
                     {NYmq::V1::REQUEST_ID, HttpContext.RequestId},
                     {NYmq::V1::SECURITY_TOKEN, HttpContext.SecurityToken},
+                    {NYmq::V1::SOURCE_ADDRESS, HttpContext.SourceAddress},
                 };
                 RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(
                         std::move(Request),
@@ -155,10 +155,10 @@ namespace NKikimr::NHttpProxy {
                 const auto [errorName, httpCode] = MapToException(status, Method, issueCode);
 
                 ReplyToHttpContext({
-                    .HttpCode = httpCode,
+                    .HttpCode = static_cast<ui32>(httpCode),
                     .ContentType = HttpContext.ContentType,
                     .Message = errorName,
-                    .Body = NSQS::Serialize(HttpContext.ContentType, {
+                    .Body = NSQS::Serialize(HttpContext, {
                         .StatusCode = errorName,
                         .ErrorText = errorText,
                     })
@@ -180,7 +180,7 @@ namespace NKikimr::NHttpProxy {
                     .HttpCode = httpStatusCode,
                     .ContentType = HttpContext.ContentType,
                     .Message = ymqStatusCode,
-                    .Body = NSQS::Serialize(HttpContext.ContentType, {
+                    .Body = NSQS::Serialize(HttpContext, {
                         .StatusCode = ymqStatusCode,
                         .ErrorText = errorText,
                     })
@@ -192,6 +192,14 @@ namespace NKikimr::NHttpProxy {
             }
 
             void DoMetering(const THttpResponseData& data, THolder<THashMap<TString, TString>>&& queueTags, const TActorContext& ctx) {
+                if (IamAuthFailed_) {
+                    LOG_SP_DEBUG_S(
+                        ctx,
+                        NKikimrServices::HTTP_PROXY,
+                        TStringBuilder() << "Skip metering event due to IAM auth failure."
+                    );
+                    return;
+                }
                 if (HttpContext.ServiceConfig.GetHttpConfig().GetYandexCloudMode()) {
                     // Send request attributes to the metering actor
                     auto reportRequestAttributes = MakeHolder<::NKikimr::NSQS::TSqsEvents::TEvReportProcessedRequestAttributes>();
@@ -251,7 +259,7 @@ namespace NKikimr::NHttpProxy {
                         .HttpCode = 200,
                         .ContentType = HttpContext.ContentType,
                         .Message = "",
-                        .Body = NSQS::Serialize(HttpContext.ContentType, *ev->Get()->Message)
+                        .Body = NSQS::Serialize(HttpContext, *ev->Get()->Message)
                     },
                         std::move(ev->Get()->QueueTags)
                     );
@@ -332,6 +340,7 @@ namespace NKikimr::NHttpProxy {
                         << " ErrorCode: " << ev->Get()->Error->ErrorCode
                         << " Message: " << ev->Get()->Error->Message
                     );
+                    IamAuthFailed_ = true;
                     ReplyWithError(
                         ctx,
                         ev->Get()->Error->HttpStatusCode,
@@ -346,7 +355,7 @@ namespace NKikimr::NHttpProxy {
                 PoolId = ctx.SelfID.PoolID();
                 StartTime = ctx.Now();
                 try {
-                    NSQS::Deserialize<TProtoRequest>(HttpContext.ContentType, Request, HttpContext.Request->Body);
+                    NSQS::Deserialize<TProtoRequest>(HttpContext, Request);
                     auto queueUrl = QueueUrlExtractor(Request);
                     if (!queueUrl.empty()) {
                         auto cloudIdAndResourceId = NKikimr::NYmq::CloudIdAndResourceIdFromQueueUrl(queueUrl);
@@ -422,20 +431,19 @@ namespace NKikimr::NHttpProxy {
 
         private:
             TInstant StartTime;
-            typename TProcessorBase::TRequestState RequestState = TProcessorBase::TRequestState::StateIdle;
             TProtoRequest Request;
             TDuration RequestTimeout = TDuration::Seconds(60);
             ui32 PoolId;
             THttpRequestContext HttpContext;
             THolder<NKikimr::NSQS::TAwsRequestSignV4> Signature;
             NThreading::TFuture<TProtoResponse> RpcFuture;
-            THolder<NThreading::TFuture<void>> DiscoveryFuture;
             TProtoCall ProtoCall;
             TString Method;
             std::function<TString(TProtoRequest&)> QueueUrlExtractor;
             TRetryCounter RetryCounter;
             TActorId AuthActor;
             bool InputCountersReported = false;
+            bool IamAuthFailed_ = false;
             TString FolderId;
             TString CloudId;
             TString ResourceId;
@@ -498,13 +506,13 @@ namespace NKikimr::NHttpProxy {
 
             }
 
-            THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
+            THttpResponseData MakeError(const THttpRequestContext& httpContext, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
                 const auto [errorName, httpCode] = MapToException(Status, "", issueCode);
                 return {
-                    .HttpCode = httpCode,
-                    .ContentType = contentType,
+                    .HttpCode = static_cast<ui32>(httpCode),
+                    .ContentType = httpContext.ContentType,
                     .Message = errorName,
-                    .Body = NSQS::Serialize(contentType, NSQS::TErrorResponse{
+                    .Body = NSQS::Serialize(httpContext, NSQS::TErrorResponse{
                         .StatusCode = errorName,
                         .ErrorText = TString(message),
                     })

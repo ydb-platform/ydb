@@ -139,8 +139,6 @@ private:
 
     void ProceedPartition(const ui32 partition, const NActors::TActorContext& ctx);
 
-    //void InitCheckACL(const TActorContext& ctx);
-
     void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx);
     void MakeAndSendInitResponse(const TMaybe<ui64>& maxSeqNo, const TActorContext& ctx);
 
@@ -214,7 +212,6 @@ private:
     std::optional<ui32> ExpectedGeneration;
     std::optional<ui64> InitialSeqNo;
 
-    bool PartitionFound = false;
     // 'SourceId' is called 'MessageGroupId' since gRPC data plane API v1
     TString SourceId; // TODO: Replace with 'MessageGroupId' everywhere
     bool UseDeduplication = true;

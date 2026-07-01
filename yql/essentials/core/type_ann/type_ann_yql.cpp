@@ -1,5 +1,8 @@
 #include "type_ann_yql.h"
 
+#include "type_ann_columnorder.h"
+#include "type_ann_list.h"
+
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_module_helpers.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -31,7 +34,7 @@ namespace {
     )
     ```
 
-    Indexes are refered to "group_exprs" entries.
+    Indexes are referred to "group_exprs" entries.
 */
 
 template <class T>
@@ -89,6 +92,33 @@ TVector<ui32> GroupingSetsSortedNotNullIndexes(const TExprNode& groupingSets) {
     return indexes;
 }
 
+bool IsEmptyGroupingSetPresent(const TExprNode& groupingSets) {
+    for (const auto& component : groupingSets.Children()) {
+        bool hasEmptySet = AnyOf(component->Children(), [](const auto& set) {
+            return set->ChildrenSize() == 0;
+        });
+
+        if (!hasEmptySet) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool IsOptionalAggregation(const TExprNode::TPtr& options) {
+    TExprNode::TPtr groupSets = GetSetting(*options, "group_sets");
+    TExprNode::TPtr groupBy = GetSetting(*options, "group_by");
+    if (!groupBy) {
+        groupBy = GetSetting(*options, "group_exprs");
+    }
+
+    const bool hasGroupingKey = groupBy && 0 < groupBy->Tail().ChildrenSize();
+    const bool hasEmptyGroupingSet = groupSets && IsEmptyGroupingSetPresent(groupSets->Tail());
+
+    return !(hasGroupingKey && !hasEmptyGroupingSet);
+}
+
 TMaybe<IGraphTransformer::TStatus> TryFinishYqlTypeSlot(
     const TExprNode::TPtr& slot,
     const TExprNode::TPtr& input,
@@ -130,6 +160,195 @@ TMaybe<IGraphTransformer::TStatus> TryFinishYqlTypeSlot(
     return Nothing();
 }
 
+void ForEachConjunct(
+    const TExprNode::TPtr& predicate,
+    std::invocable<const TExprNode::TPtr&> auto f)
+{
+    if (!predicate->IsCallable("And")) {
+        f(predicate);
+        return;
+    }
+
+    for (const auto& child : predicate->Children()) {
+        ForEachConjunct(child, f);
+    }
+}
+
+TMaybe<std::pair<TExprNode::TPtr, TExprNode::TPtr>>
+TryGetImplicitUsingEquality(const TExprNode::TPtr& conjunct) {
+    if (!conjunct->IsCallable("==")) {
+        return Nothing();
+    }
+
+    const auto& lhs = conjunct->ChildPtr(0);
+    const auto& rhs = conjunct->ChildPtr(1);
+    if (!lhs->IsCallable("YqlColumnRef") ||
+        !rhs->IsCallable("YqlColumnRef"))
+    {
+        return Nothing();
+    }
+
+    if (lhs->ChildrenSize() != 2 || rhs->ChildrenSize() != 2) {
+        return Nothing();
+    }
+
+    if (lhs->Tail().Content() != rhs->Tail().Content()) {
+        return Nothing();
+    }
+
+    return std::make_pair(lhs, rhs);
+}
+
+TVector<std::pair<TExprNode::TPtr, TExprNode::TPtr>>
+GetImplicitUsingEqualities(const TExprNode::TPtr& predicate) {
+    TVector<std::pair<TExprNode::TPtr, TExprNode::TPtr>> equalities;
+    ForEachConjunct(predicate, [&](const TExprNode::TPtr& conjunct) {
+        if (const auto eq = TryGetImplicitUsingEquality(conjunct)) {
+            equalities.emplace_back(*eq);
+        }
+    });
+    return equalities;
+}
+
+TMaybe<ui32> FindAliasIndex(
+    const TInputs& inputs,
+    const TVector<ui32>& indexes,
+    TStringBuf alias)
+{
+    for (ui32 idx : indexes) {
+        if (!inputs[idx].Alias.empty() && inputs[idx].Alias == alias) {
+            return idx;
+        }
+    }
+
+    return Nothing();
+}
+
+TString GetCorrelationAlias(const TExprNode::TPtr& ref) {
+    YQL_ENSURE(ref->IsCallable("YqlColumnRef"));
+    YQL_ENSURE(ref->ChildrenSize() == 2);
+    return TString(ref->Head().Content());
+}
+
+IGraphTransformer::TStatus ResolveInputs(
+    const TInputs& inputs,
+    const TVector<ui32>& lhsIndexes,
+    const TVector<ui32>& rhsIndexes,
+    TExprNode::TPtr& lhsRef,
+    ui32& lhsIdx,
+    TExprNode::TPtr& rhsRef,
+    ui32& rhsIdx,
+    TExtContext& ctx)
+{
+    const TString lhsAlias = GetCorrelationAlias(lhsRef);
+    const TString rhsAlias = GetCorrelationAlias(rhsRef);
+
+    auto lhsInLhs = FindAliasIndex(inputs, lhsIndexes, lhsAlias);
+    auto rhsInRhs = FindAliasIndex(inputs, rhsIndexes, rhsAlias);
+    if (lhsInLhs && rhsInRhs) {
+        lhsIdx = *lhsInLhs;
+        rhsIdx = *rhsInRhs;
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    auto lhsInRhs = FindAliasIndex(inputs, rhsIndexes, lhsAlias);
+    auto rhsInLhs = FindAliasIndex(inputs, lhsIndexes, rhsAlias);
+    if (lhsInRhs && rhsInLhs) {
+        std::swap(lhsRef, rhsRef);
+        lhsIdx = *rhsInLhs;
+        rhsIdx = *lhsInRhs;
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (!lhsInLhs) {
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(lhsRef->Pos()),
+            TStringBuilder() << "Unknown correlation: " << lhsAlias));
+    }
+
+    if (!rhsInRhs) {
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(rhsRef->Pos()),
+            TStringBuilder() << "Unknown correlation: " << rhsAlias));
+    }
+
+    return IGraphTransformer::TStatus::Error;
+}
+
+IGraphTransformer::TStatus TryToFindItemI(
+    TPositionHandle position,
+    const TInput& input,
+    TStringBuf name,
+    ui32& index,
+    TExtContext& ctx)
+{
+    auto maybe = input.Type->FindItemI(name, /*isVirtual=*/nullptr);
+    if (!maybe) {
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(position),
+            TStringBuilder()
+                << "Unknown column: " << name
+                << " in correlation name: " << input.Alias));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    index = *maybe;
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus TryToUsingEntry(
+    TExprNode::TPtr lhsRef,
+    TExprNode::TPtr rhsRef,
+    const TInputs& groupInputs,
+    const TVector<ui32>& lhsIndexes,
+    const TVector<ui32>& rhsIndexes,
+    std::pair<TString, TString>& entry,
+    TExtContext& ctx)
+{
+    ui32 lhsIdx = 0;
+    ui32 rhsIdx = 0;
+    if (auto status = ResolveInputs(
+            groupInputs,
+            lhsIndexes,
+            rhsIndexes,
+            lhsRef, lhsIdx,
+            rhsRef, rhsIdx,
+            ctx);
+        status != IGraphTransformer::TStatus::Ok)
+    {
+        return status;
+    }
+
+    const TStringBuf lhsName = lhsRef->Tail().Content();
+    const TStringBuf rhsName = rhsRef->Tail().Content();
+
+    auto lhsInput = groupInputs[lhsIdx];
+    auto rhsInput = groupInputs[rhsIdx];
+
+    ui32 rhsPos;
+    if (auto status = TryToFindItemI(rhsRef->Pos(), rhsInput, rhsName, rhsPos, ctx);
+        status != IGraphTransformer::TStatus::Ok)
+    {
+        return status;
+    }
+
+    ui32 lhsPos;
+    if (auto status = TryToFindItemI(lhsRef->Pos(), lhsInput, lhsName, lhsPos, ctx);
+        status != IGraphTransformer::TStatus::Ok)
+    {
+        return status;
+    }
+
+    const auto& lhsItems = lhsInput.Type->GetItems();
+    const auto& rhsItems = rhsInput.Type->GetItems();
+
+    entry = std::make_pair(
+        MakeAliasedColumn(lhsInput.Alias, lhsItems[lhsPos]->GetName()),
+        MakeAliasedColumn(rhsInput.Alias, rhsItems[rhsPos]->GetName()));
+
+    return IGraphTransformer::TStatus::Ok;
+}
+
 } // namespace
 
 IGraphTransformer::TStatus PromoteYqlAggOptions(
@@ -141,12 +360,7 @@ IGraphTransformer::TStatus PromoteYqlAggOptions(
         return IGraphTransformer::TStatus::Ok;
     }
 
-    TExprNode::TPtr groupBy = GetSetting(*options, "group_by");
-    if (!groupBy) {
-        groupBy = GetSetting(*options, "group_exprs");
-    }
-
-    if (groupBy && 0 < groupBy->Tail().ChildrenSize()) {
+    if (!IsOptionalAggregation(options)) {
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -161,11 +375,11 @@ IGraphTransformer::TStatus PromoteYqlAggOptions(
         }
 
         TExprNode::TPtr options = node->ChildPtr(1);
-        if (GetSetting(*options, "nokey")) {
+        if (GetSetting(*options, "as_optional")) {
             return node;
         }
 
-        options = AddSetting(*options, node->Pos(), "nokey", /*value=*/nullptr, ctx);
+        options = AddSetting(*options, node->Pos(), "as_optional", /*value=*/nullptr, ctx);
         return ctx.ChangeChild(*node, 1, std::move(options));
     }, ctx.Expr, settings);
 
@@ -209,6 +423,68 @@ TVector<TExprNode::TPtr> InferYqlGroupRefTypes(
     }
 
     return types;
+}
+
+IGraphTransformer::TStatus InferYqlImplicitUsingJoinColumns(
+    const TExprNode::TPtr& predicate,
+    const TInputs& groupInputs,
+    const TVector<ui32>& lhsIndexes,
+    const TVector<ui32>& rhsIndexes,
+    TVector<std::pair<TString, TString>>& implicitUsing,
+    TExtContext& ctx)
+{
+    auto equalities = GetImplicitUsingEqualities(predicate);
+
+    implicitUsing.clear();
+    implicitUsing.reserve(equalities.size());
+
+    for (auto [lhsRef, rhsRef] : equalities) {
+        std::pair<TString, TString> entry;
+        if (auto status = TryToUsingEntry(
+                std::move(lhsRef), std::move(rhsRef),
+                groupInputs, lhsIndexes, rhsIndexes,
+                entry, ctx);
+            status != IGraphTransformer::TStatus::Ok)
+        {
+            return status;
+        }
+
+        implicitUsing.emplace_back(std::move(entry));
+    }
+
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus InferYqlInferUnionType(
+    TPositionHandle pos,
+    const TExprNode::TListType& children,
+    TColumnOrder& resultColumnOrder,
+    const TStructExprType*& resultStructType,
+    TExtContext& ctx,
+    bool& areColumnsOrdered,
+    bool& isUniversal)
+{
+    YQL_ENSURE(resultColumnOrder.Size() == 0);
+    areColumnsOrdered = false;
+
+    auto status = InferUnionType(
+        pos, children, resultStructType, ctx, /* areHashesChecked = */ false, isUniversal);
+
+    if (status != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+
+    if (isUniversal) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    auto order = InferOrderForUnionAll(resultStructType, children, ctx.Types);
+    if (order) {
+        resultColumnOrder = *order;
+        areColumnsOrdered = true;
+    }
+
+    return status;
 }
 
 IGraphTransformer::TStatus YqlAggFactoryWrapper(
@@ -341,7 +617,7 @@ IGraphTransformer::TStatus YqlAggWrapper(
             if (!EnsureTupleSize(*setting, 1, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
-        } else if (content == "nokey") {
+        } else if (content == "as_optional") {
             if (!EnsureTupleSize(*setting, 1, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -392,20 +668,11 @@ IGraphTransformer::TStatus YqlAggWrapper(
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!isDefault && GetSetting(*settings, "nokey")) {
+    if (!isDefault && GetSetting(*settings, "as_optional")) {
         // clang-format off
         result = ctx.Expr.Builder(input->Pos())
-            .Callable("MatchType")
+            .Callable("AsOptionalType")
                 .Add(0, result)
-                .Atom(1, "Optional")
-                .Lambda(2)
-                    .Set(result)
-                .Seal()
-                .Lambda(3)
-                    .Callable("OptionalType")
-                        .Add(0, result)
-                    .Seal()
-                .Seal()
             .Seal()
             .Build();
         // clang-format on

@@ -18,7 +18,6 @@
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_meta_extractor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor_base.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
-#include <ydb/library/yql/providers/pq/common/pq_partition_key.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/utils/log/log.h>
@@ -290,7 +289,6 @@ private:
     ui64 CpuMicrosec = 0;
     // Set on both Parent (cumulative) and Children (separate)
 
-    using TPartitionKey = ::NPq::TPartitionKey;
     THashMap<ui64, ui64> NextOffsetFromRD;
     // Set on Children
     struct TClusterState {
@@ -1735,7 +1733,7 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvCheckPartitionCountResult::TPtr& ev
         if (!Clusters[clusterIndex].Info.Name.empty()) {
             message << " (on cluster \"" << Clusters[clusterIndex].Info.Name << "\")";
         }
-        message << " is changed from " << Clusters[clusterIndex].PartitionsCount << " to " << partitionsCount 
+        message << " is changed from " << Clusters[clusterIndex].PartitionsCount << " to " << partitionsCount
             << ". You need to restart (alter with text or drop / create) query to read all partitions.";
         SRC_LOG_E(message);
         TIssue issue(message);

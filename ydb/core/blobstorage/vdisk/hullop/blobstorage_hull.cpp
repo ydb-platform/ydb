@@ -710,6 +710,18 @@ namespace NKikimr {
         Y_VERIFY_S(curLsn == seg.Last + 1, HullDs->HullCtx->VCtx->VDiskLogPrefix);
     }
 
+    void THull::AddLocalSyncDataInFlight(ui64 logoBlobsSize, ui64 blocksSize, ui64 barriersSize) {
+        LogoBlobSyncDataSizeInFlight += logoBlobsSize;
+        BlockSyncDataSizeInFlight += blocksSize;
+        BarrierSyncDataSizeInFlight += barriersSize;
+    }
+
+    void THull::RemoveLocalSyncDataInFlight(ui64 logoBlobsSize, ui64 blocksSize, ui64 barriersSize) {
+        LogoBlobSyncDataSizeInFlight -= logoBlobsSize;
+        BlockSyncDataSizeInFlight -= blocksSize;
+        BarrierSyncDataSizeInFlight -= barriersSize;
+    }
+
     ///////////////// GET SNAPSHOT //////////////////////////////////////////////
     THullDsSnap THull::GetSnapshot() const {
         return HullDs->GetSnapshot(Fields->ActorSystem);

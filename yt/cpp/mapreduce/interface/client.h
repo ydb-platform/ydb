@@ -578,6 +578,15 @@ public:
     virtual const TNode::TMapType& GetDynamicConfiguration(const TString& configProfile);
 
     ///
+    /// @brief Check cluster liveness.
+    ///
+    /// Throws if any requested liveness check fails. At least one check must be requested.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#check_cluster_liveness)
+    virtual void CheckClusterLiveness(
+        const TCheckClusterLivenessOptions& options = TCheckClusterLivenessOptions()) = 0;
+
+    ///
     /// @brief Suspend operation.
     ///
     /// Jobs will be aborted.

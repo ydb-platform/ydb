@@ -2,6 +2,8 @@
 
 #include <library/cpp/svnversion/svnversion.h>
 
+#include <algorithm>
+
 namespace NYT::NYTProf {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -11,9 +13,9 @@ TBuildInfo TBuildInfo::GetDefault()
     TBuildInfo buildInfo;
 
     buildInfo.BuildType = YTPROF_BUILD_TYPE;
-    buildInfo.BuildType.to_lower(); // no shouting
+    std::transform(buildInfo.BuildType.begin(), buildInfo.BuildType.end(), buildInfo.BuildType.begin(), ::tolower);
 
-    if (GetVCS() == TString{"arc"}) {
+    if (GetVCS() == std::string_view{"arc"}) {
         buildInfo.ArcRevision = GetProgramCommitId();
         buildInfo.ArcLastChangeNum = GetArcadiaLastChangeNum();
     }

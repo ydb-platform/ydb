@@ -1404,6 +1404,24 @@ class TestProtocol:
             f"few positional arguments"
         )
 
+    def test_subject_method_no_positional_params(self) -> None:
+        class ZeroArg:
+            def __call__(self) -> None:
+                return None
+
+        class MyProtocol(Protocol):
+            def meth(self, x: str) -> None:
+                pass
+
+        class Foo:
+            meth = ZeroArg()
+
+        pytest.raises(TypeCheckError, check_type, Foo(), MyProtocol).match(
+            f"^{qualified_name(Foo)} is not compatible with the "
+            f"{MyProtocol.__qualname__} protocol because its 'meth' method has too "
+            f"few positional arguments"
+        )
+
     def test_no_varargs(self) -> None:
         class MyProtocol(Protocol):
             def meth(self, *args: Any) -> None:

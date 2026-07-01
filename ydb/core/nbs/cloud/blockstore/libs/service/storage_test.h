@@ -46,6 +46,13 @@ public:
     {
         Y_UNUSED(cfg);
     }
+
+    ui64 LsnGenerator = 0;
+
+    ui64 GenerateLsn() override
+    {
+        return ++LsnGenerator;
+    }
 };
 
 struct TTestStorage: public IStorage

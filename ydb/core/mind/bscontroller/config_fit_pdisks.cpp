@@ -99,7 +99,20 @@ namespace NKikimr {
                     }
                 }
                 // run ExtractConfig as the very last step
+                const ui32 oldSlotSizeInUnits = pdiskInfo->SlotSizeInUnits;
                 pdiskInfo->ExtractConfig(defaultMaxSlots);
+                if (pdiskInfo->SlotSizeInUnits != oldSlotSizeInUnits) {
+                    ui32 numActiveSlots = 0;
+                    for (const auto& [vslotId, vslot] : pdiskInfo->VSlotsOnPDisk) {
+                        if (vslot->IsBeingDeleted()) {
+                            continue;
+                        }
+                        const TBlobStorageController::TGroupInfo *group = state.Groups.Find(vslot->GroupId);
+                        Y_ABORT_UNLESS(group);
+                        numActiveSlots += TPDiskConfig::GetOwnerWeight(group->GroupSizeInUnits, pdiskInfo->SlotSizeInUnits);
+                    }
+                    pdiskInfo->NumActiveSlots = numActiveSlots;
+                }
             }
         }
 

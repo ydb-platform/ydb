@@ -230,6 +230,9 @@ JsonEnum2Field(const NJson::TJsonValue& json,
         const auto value = json.GetInteger();
         enumFieldValue = enumField->FindValueByNumber(value);
         if (!enumFieldValue) {
+            if (config.AllowUnknownEnumValues) {
+                return;
+            }
             ythrow yexception() << "Invalid integer value of JSON enum field: " << value << ".";
         }
     } else if (json.IsString()) {
@@ -246,9 +249,15 @@ JsonEnum2Field(const NJson::TJsonValue& json,
             }
         }
         if (!enumFieldValue) {
+            if (config.AllowUnknownEnumValues) {
+                return;
+            }
             ythrow yexception() << "Invalid string value of JSON enum field: " << TStringBuf(value).Head(100) << ".";
         }
     } else {
+        if (config.AllowUnknownEnumValues) {
+            return;
+        }
         ythrow yexception() << "Invalid type of JSON enum field: not an integer/string.";
     }
 
@@ -257,6 +266,27 @@ JsonEnum2Field(const NJson::TJsonValue& json,
     } else {
         reflection->SetEnum(&proto, &field, enumFieldValue);
     }
+}
+
+static bool HasFieldValue(const NJson::TJsonValue& json, TStringBuf key) {
+    const auto t = json[key].GetType();
+    return t != NJson::JSON_UNDEFINED && t != NJson::JSON_NULL;
+}
+
+static TString ResolveFieldNameInJson(const NJson::TJsonValue& json,
+                                       const google::protobuf::FieldDescriptor& field,
+                                       const NProtobufJson::TJson2ProtoConfig& config) {
+    TString name = GetFieldName(field, config);
+    if (!config.AllowFieldNameAliases || HasFieldValue(json, name)) {
+        return name;
+    }
+    if (const TString jsonName = TString(field.json_name()); !jsonName.empty() && jsonName != name && HasFieldValue(json, jsonName)) {
+        return jsonName;
+    }
+    if (const TString fieldName = TString(field.name()); !fieldName.empty() && fieldName != name && HasFieldValue(json, fieldName)) {
+        return fieldName;
+    }
+    return name;
 }
 
 static void
@@ -274,7 +304,7 @@ Json2SingleField(const NJson::TJsonValue& json,
     TString nameHolder;
     TStringBuf name;
     if (!isMapValue) {
-        nameHolder = GetFieldName(field, config);
+        nameHolder = ResolveFieldNameInJson(json, field, config);
         name = nameHolder;
         const NJson::TJsonValue& fieldJson = json[name];
         if (auto fieldJsonType = fieldJson.GetType(); fieldJsonType == NJson::JSON_UNDEFINED || fieldJsonType == NJson::JSON_NULL) {
@@ -430,7 +460,7 @@ Json2RepeatedField(const NJson::TJsonValue& json,
                    const NProtobufJson::TJson2ProtoConfig& config) {
     using namespace google::protobuf;
 
-    TString name = GetFieldName(field, config);
+    TString name = ResolveFieldNameInJson(json, field, config);
 
     const NJson::TJsonValue& fieldJson = json[name];
     if (fieldJson.GetType() == NJson::JSON_UNDEFINED || fieldJson.GetType() == NJson::JSON_NULL)
@@ -441,15 +471,18 @@ Json2RepeatedField(const NJson::TJsonValue& json,
     }
 
     bool isMap = fieldJson.GetType() == NJson::JSON_MAP;
+    bool treatObjectAsSingleElement = false;
     if (isMap) {
-        if (!config.MapAsObject) {
+        if (!field.is_map() && !fieldJson.GetMap().empty() && config.VectorizeObjects) {
+            treatObjectAsSingleElement = true;
+        } else if (!config.MapAsObject) {
             ythrow yexception() << "Map as object representation is not allowed, field: " << field.name();
         } else if (!field.is_map() && !fieldJson.GetMap().empty()) {
             ythrow yexception() << "Field " << field.name() << " is not a map.";
         }
     }
 
-    if (fieldJson.GetType() != NJson::JSON_ARRAY && !config.MapAsObject && !config.VectorizeScalars && !config.ValueVectorizer) {
+    if (fieldJson.GetType() != NJson::JSON_ARRAY && !config.MapAsObject && !config.VectorizeScalars && !config.ValueVectorizer && !treatObjectAsSingleElement) {
         ythrow yexception() << "JSON field doesn't represent an array for "
                             << name
                             << "(actual type is "
@@ -459,7 +492,12 @@ Json2RepeatedField(const NJson::TJsonValue& json,
     const Reflection* reflection = proto.GetReflection();
     Y_ASSERT(!!reflection);
 
-    if (isMap) {
+    if (treatObjectAsSingleElement) {
+        if (config.ReplaceRepeatedFields) {
+            reflection->ClearField(&proto, &field);
+        }
+        Json2RepeatedFieldValue(fieldJson, proto, field, config, reflection);
+    } else if (isMap) {
         const THashMap<TString, NJson::TJsonValue>& jsonMap = fieldJson.GetMap();
         for (const auto& x : jsonMap) {
             const TString& key = x.first;
@@ -588,6 +626,14 @@ namespace NProtobufJson {
             for (int f = 0, endF = descriptor->field_count(); f < endF; ++f) {
                 const google::protobuf::FieldDescriptor* field = descriptor->field(f);
                 knownFields[GetFieldName(*field, config)] = 1;
+                if (config.AllowFieldNameAliases) {
+                    if (const TString jsonName = TString(field->json_name()); !jsonName.empty()) {
+                        knownFields[jsonName] = 1;
+                    }
+                    if (const TString fieldName = TString(field->name()); !fieldName.empty()) {
+                        knownFields[fieldName] = 1;
+                    }
+                }
             }
             for (const auto& f : json.GetMap()) {
                 const bool isFieldKnown = knownFields.contains(f.first);

@@ -8,6 +8,7 @@ SRCS(
     kqp_full_text_source.cpp
     kqp_sys_view_source.cpp
     kqp_fulltext_analyze.cpp
+    kqp_stream_enumerate.cpp
     kqp_program_builder.cpp
     kqp_read_actor.cpp
     kqp_read_iterator_common.cpp
@@ -27,6 +28,8 @@ SRCS(
     kqp_stream_lock_worker.cpp
     kqp_stream_lock_worker.h
     kqp_transport.cpp
+    kqp_vector_index_levels_cache.cpp
+    kqp_vector_index_levels_cache.h
     kqp_vector_actor.cpp
     kqp_write_actor_settings.cpp
     kqp_write_actor.cpp
@@ -46,14 +49,17 @@ PEERDIR(
     library/cpp/threading/hot_swap
     ydb/core/actorlib_impl
     ydb/core/base
+    ydb/library/json_index
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
     ydb/core/kqp/common
     ydb/core/kqp/common/buffer
+    ydb/core/mon
     ydb/core/persqueue/events
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/tx/scheme_board
     ydb/core/ydb_convert
     ydb/library/aclib
     ydb/library/yql/dq/actors

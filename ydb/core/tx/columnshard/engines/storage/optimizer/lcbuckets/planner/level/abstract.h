@@ -9,6 +9,7 @@
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
 #include <functional>
+#include <optional>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 

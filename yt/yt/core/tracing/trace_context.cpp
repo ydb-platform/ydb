@@ -247,7 +247,7 @@ TTraceContext::TTraceContext(
     , SpanName_(spanName)
     , RequestId_(ParentContext_ ? ParentContext_->GetRequestId() : TRequestId{})
     , TargetEndpoint_(ParentContext_ ? ParentContext_->GetTargetEndpoint() : std::nullopt)
-    , LoggingTag_(ParentContext_ ? ParentContext_->GetLoggingTag() : TString{})
+    , LoggingTag_(ParentContext_ ? ParentContext_->GetLoggingTag() : std::string{})
     , StartTime_(startTime.value_or(GetCpuInstant()))
     , LeakDeadline_(StartTime_ + NDetail::TraceContextDefaultLeakDurationThreshold.load(std::memory_order::relaxed))
     , Baggage_(ParentContext_ ? ParentContext_->GetBaggage() : TYsonString{})
@@ -707,7 +707,7 @@ TTraceContextPtr TTraceContext::NewChildFromRpc(
         traceContext->SetBaggage(TYsonString(ext.baggage()));
     }
     if (ext.has_target_endpoint()) {
-        traceContext->SetTargetEndpoint(FromProto<TString>(ext.target_endpoint()));
+        traceContext->SetTargetEndpoint(FromProto<std::string>(ext.target_endpoint()));
     }
     return traceContext;
 }
@@ -745,13 +745,6 @@ bool IsCurrentTraceContextRecorded()
     return context && context->IsRecorded();
 }
 
-//! Do not rename, change the signature, or drop Y_NO_INLINE.
-//! Used in devtools/gdb/yt_fibers_printer.py.
-Y_NO_INLINE TTraceContext* TryGetTraceContextFromPropagatingStorage(const NConcurrency::TPropagatingStorage& storage)
-{
-    auto result = storage.Find<TTraceContextPtr>();
-    return result ? result->Get() : nullptr;
-}
 
 void SetTraceContextDefaultLeakDurationThreshold(TDuration threshold)
 {

@@ -11,12 +11,18 @@ struct TSqlSessionSettings {
     // every HandleLine and re-created on the next turn.
     TLazyDriver::TPtr SqlLazyDriver;
 
+    // Lazy driver dedicated to interactive transactions: a Query service
+    // session opened on BEGIN lives on this driver until COMMIT/ROLLBACK
+    // (or an error that closes the transaction).
+    TLazyDriver::TPtr SqlTxLazyDriver;
+
     // Lazy driver used by the YQL completer for schema lookups; must be set,
     // since SQL session always enables YQL completion.
     TLazyDriver::TPtr CompleterLazyDriver;
 
     TString Database;
     bool EnableAiInteractive = false;
+    bool EnableInteractiveTransactions = false;
 };
 
 ISessionRunner::TPtr CreateSqlSessionRunner(const TSqlSessionSettings& settings);

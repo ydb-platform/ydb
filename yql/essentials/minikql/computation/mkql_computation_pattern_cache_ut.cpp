@@ -1,5 +1,7 @@
 #include "library/cpp/threading/local_executor/local_executor.h"
 #include "yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h"
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
@@ -69,7 +71,7 @@ TRuntimeNode CreateFlow(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
         std::vector<const TRuntimeNode> arr;
         arr.reserve(vecSize);
         for (ui64 i = 0; i < vecSize; ++i) {
-            arr.push_back(pb.NewDataLiteral<ui64>((i + 124515) % 6740234));
+            arr.push_back(NTest::ConvertValueToLiteralNode(pb, ui64((i + 124515) % 6740234)));
         }
         TArrayRef<const TRuntimeNode> arrRef(std::move(arr));
         return pb.ToFlow(pb.AsList(arrRef));
@@ -86,8 +88,8 @@ TRuntimeNode CreateFilter<false>(TProgramBuilder& pb, size_t vecSize, TCallable*
 
     auto handler = [&](TRuntimeNode node) -> TRuntimeNode {
         return pb.AggrEquals(
-            pb.Mod(node, pb.NewOptional(pb.NewDataLiteral<ui64>(128))),
-            pb.NewOptional(pb.NewDataLiteral<ui64>(0)));
+            pb.Mod(node, NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(128))),
+            NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(0)));
     };
     return pb.Filter(flow, handler);
 }
@@ -99,8 +101,8 @@ TRuntimeNode CreateFilter<true>(TProgramBuilder& pb, size_t vecSize, TCallable* 
 
     auto handler = [&](TRuntimeNode::TList node) -> TRuntimeNode {
         return pb.AggrEquals(
-            pb.Mod(node.front(), pb.NewOptional(pb.NewDataLiteral<ui64>(128))),
-            pb.NewOptional(pb.NewDataLiteral<ui64>(0)));
+            pb.Mod(node.front(), NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(128))),
+            NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(0)));
     };
     return pb.NarrowMap(
         pb.WideFilter(
@@ -120,8 +122,8 @@ TRuntimeNode CreateMap<false>(TProgramBuilder& pb, size_t vecSize, TCallable* li
 
     auto handler = [&](TRuntimeNode node) -> TRuntimeNode {
         return pb.AggrEquals(
-            pb.Mod(node, pb.NewOptional(pb.NewDataLiteral<ui64>(128))),
-            pb.NewOptional(pb.NewDataLiteral<ui64>(0)));
+            pb.Mod(node, NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(128))),
+            NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(0)));
     };
     return pb.Map(flow, handler);
 }
@@ -133,8 +135,8 @@ TRuntimeNode CreateMap<true>(TProgramBuilder& pb, size_t vecSize, TCallable* lis
 
     auto handler = [&](TRuntimeNode::TList node) -> TRuntimeNode::TList {
         return {pb.AggrEquals(
-            pb.Mod(node.front(), pb.NewOptional(pb.NewDataLiteral<ui64>(128))),
-            pb.NewOptional(pb.NewDataLiteral<ui64>(0)))};
+            pb.Mod(node.front(), NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(128))),
+            NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(0)))};
     };
     return pb.NarrowMap(
         pb.WideMap(
@@ -153,12 +155,12 @@ TRuntimeNode CreateCondense<false>(TProgramBuilder& pb, size_t vecSize, TCallabl
     auto flow = CreateFlow(pb, vecSize, list);
 
     auto switcherHandler = [&](TRuntimeNode, TRuntimeNode) -> TRuntimeNode {
-        return pb.NewDataLiteral<bool>(false);
+        return NTest::ConvertValueToLiteralNode(pb, false);
     };
     auto updateHandler = [&](TRuntimeNode item, TRuntimeNode state) -> TRuntimeNode {
         return pb.Add(item, state);
     };
-    TRuntimeNode state = pb.NewDataLiteral<ui64>(0);
+    TRuntimeNode state = NTest::ConvertValueToLiteralNode(pb, ui64(0));
     return pb.Condense(flow, state, switcherHandler, updateHandler);
 }
 
@@ -167,7 +169,6 @@ TRuntimeNode CreateCondense<true>(TProgramBuilder& pb, size_t vecSize, TCallable
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
-    TRuntimeNode state = pb.NewDataLiteral<ui64>(0);
     return pb.NarrowMap(
         pb.WideCondense1(
             /* stream */
@@ -176,7 +177,7 @@ TRuntimeNode CreateCondense<true>(TProgramBuilder& pb, size_t vecSize, TCallable
             /* init */
             [&](TRuntimeNode::TList item) -> TRuntimeNode::TList { return {item}; },
             /* switcher */
-            [&](TRuntimeNode::TList, TRuntimeNode::TList) -> TRuntimeNode { return pb.NewDataLiteral<bool>(false); },
+            [&](TRuntimeNode::TList, TRuntimeNode::TList) -> TRuntimeNode { return NTest::ConvertValueToLiteralNode(pb, false); },
             /* handler */
             [&](TRuntimeNode::TList item, TRuntimeNode::TList state) -> TRuntimeNode::TList { return {pb.Add(item.front(), state.front())}; }),
         [&](TRuntimeNode::TList items) -> TRuntimeNode { return items.front(); });
@@ -196,8 +197,8 @@ TRuntimeNode CreateChopper<false>(TProgramBuilder& pb, size_t vecSize, TCallable
         [&](TRuntimeNode item) -> TRuntimeNode { return item; },
         /* groupSwitch */
         [&](TRuntimeNode key, TRuntimeNode /*item*/) -> TRuntimeNode { return pb.AggrEquals(
-                                                                           pb.Mod(key, pb.NewOptional(pb.NewDataLiteral<ui64>(128))),
-                                                                           pb.NewOptional(pb.NewDataLiteral<ui64>(0))); },
+                                                                           pb.Mod(key, NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(128))),
+                                                                           NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(0))); },
         /* groupHandler */
         [&](TRuntimeNode, TRuntimeNode list) -> TRuntimeNode { return list; });
 };
@@ -217,8 +218,8 @@ TRuntimeNode CreateChopper<true>(TProgramBuilder& pb, size_t vecSize, TCallable*
             /* groupSwitch */
             [&](TRuntimeNode::TList key, TRuntimeNode::TList /*item*/) -> TRuntimeNode {
                 return pb.AggrEquals(
-                    pb.Mod(key.front(), pb.NewOptional(pb.NewDataLiteral<ui64>(128))),
-                    pb.NewOptional(pb.NewDataLiteral<ui64>(0)));
+                    pb.Mod(key.front(), NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(128))),
+                    NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(0)));
             },
             /* groupHandler */
             [&](TRuntimeNode::TList, TRuntimeNode input) { return pb.WideMap(input, [](TRuntimeNode::TList items) { return items; }); }),
@@ -237,7 +238,7 @@ TRuntimeNode CreateCombine<false>(TProgramBuilder& pb, size_t vecSize, TCallable
         /* stream */
         flow,
         /* keyExtractor */
-        [&](TRuntimeNode /*item*/) -> TRuntimeNode { return pb.NewDataLiteral<ui64>(0); },
+        [&](TRuntimeNode /*item*/) -> TRuntimeNode { return NTest::ConvertValueToLiteralNode(pb, ui64(0)); },
         /* init */
         [&](TRuntimeNode /* key */, TRuntimeNode item) -> TRuntimeNode { return item; },
         /* update */
@@ -261,7 +262,7 @@ TRuntimeNode CreateCombine<true>(TProgramBuilder& pb, size_t vecSize, TCallable*
             /* memlimit */
             64 << 20,
             /* keyExtractor */
-            [&](TRuntimeNode::TList /*item*/) -> TRuntimeNode::TList { return {pb.NewDataLiteral<ui64>(0)}; },
+            [&](TRuntimeNode::TList /*item*/) -> TRuntimeNode::TList { return {NTest::ConvertValueToLiteralNode(pb, ui64(0))}; },
             /* init */
             [&](TRuntimeNode::TList /* key */, TRuntimeNode::TList item) -> TRuntimeNode::TList { return {item}; },
             /* update */
@@ -325,7 +326,7 @@ TRuntimeNode CreateSkip(TProgramBuilder& pb, size_t vecSize, TCallable* list = n
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
-    auto count = pb.NewDataLiteral<ui64>(500);
+    auto count = NTest::ConvertValueToLiteralNode(pb, ui64(500));
     if (Wide) {
         return pb.NarrowMap(
             pb.Skip(
@@ -375,7 +376,7 @@ TRuntimeNode CreateSqueezeToSortedDict(TProgramBuilder& pb, size_t vecSize, TCal
                          [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }),
             /*all*/ false,
             /*keySelector*/ [&](TRuntimeNode::TList item) { return item.front(); },
-            /*payloadSelector*/ [&](TRuntimeNode::TList) { return WithPayload ? pb.NewDataLiteral<ui64>(0) : pb.NewVoid(); }),
+            /*payloadSelector*/ [&](TRuntimeNode::TList) { return WithPayload ? NTest::ConvertValueToLiteralNode(pb, ui64(0)) : NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}); }),
         [&](TRuntimeNode item) { return pb.DictKeys(item); });
 }
 
@@ -383,26 +384,19 @@ TRuntimeNode CreateMapJoin(TProgramBuilder& pb, size_t vecSize, TCallable* list 
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
-    const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                            pb.NewDataType(NUdf::TDataType<ui64>::Id)});
-
     const auto list1 = pb.Map(flow, [&](TRuntimeNode item) {
-        return pb.NewTuple({pb.Mod(item, pb.NewDataLiteral<ui64>(1000)), pb.NewDataLiteral<ui32>(1)});
+        return pb.NewTuple({pb.Mod(item, NTest::ConvertValueToLiteralNode(pb, ui64(1000))), NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     });
 
-    const auto list2 = pb.NewList(tupleType, {
-                                                 pb.NewTuple({pb.NewDataLiteral<ui32>(1), pb.NewDataLiteral<ui64>(3 * 1000)}),
-                                                 pb.NewTuple({pb.NewDataLiteral<ui32>(2), pb.NewDataLiteral<ui64>(4 * 1000)}),
-                                                 pb.NewTuple({pb.NewDataLiteral<ui32>(3), pb.NewDataLiteral<ui64>(5 * 1000)}),
-                                             });
+    const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, ui64>>{{1, 3000}, {2, 4000}, {3, 5000}});
 
     const auto dict = pb.ToSortedDict(list2, false,
                                       [&](TRuntimeNode item) { return pb.Nth(item, 0); },
                                       [&](TRuntimeNode item) { return pb.NewTuple({pb.Nth(item, 1U)}); });
 
     const auto resultType = pb.NewFlowType(pb.NewMultiType({
-        pb.NewDataType(NUdf::TDataType<char*>::Id),
-        pb.NewDataType(NUdf::TDataType<char*>::Id),
+        NTest::ConvertToMinikqlType<TStringBuf>(pb),
+        NTest::ConvertToMinikqlType<TStringBuf>(pb),
     }));
 
     return pb.Map(
@@ -442,7 +436,7 @@ void ParallelProgTest(T f, bool useLLVM, ui64 testResult, size_t vecSize = 10'00
 
     TProgramBuilder pb(typeEnv, *functionRegistry);
 
-    const auto listType = pb.NewListType(pb.NewDataType(NUdf::TDataType<ui64>::Id));
+    const auto listType = NTest::ConvertToMinikqlType<TVector<ui64>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
     TRuntimeNode progReturn;
     with_lock (alloc) {
@@ -580,7 +574,7 @@ Y_UNIT_TEST(Smoke) {
 
         TRuntimeNode progReturn;
         with_lock (alloc) {
-            progReturn = pb.NewDataLiteral<NYql::NUdf::EDataSlot::String>("qwerty");
+            progReturn = NTest::ConvertValueToLiteralNode(pb, TStringBuf("qwerty"));
         }
 
         TExploringNodeVisitor explorer;
@@ -621,7 +615,7 @@ Y_UNIT_TEST(Smoke) {
 
         auto graph = entry->Pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider, &graphAlloc.Ref()));
         auto value = graph->GetValue();
-        UNIT_ASSERT_EQUAL(NYql::NUdf::TStringRef("qwerty"), value.AsStringRef());
+        AssertUnboxedValueElementEqual(value, TStringBuf("qwerty"));
     }
 }
 
@@ -653,8 +647,8 @@ Y_UNIT_TEST(AddPerf) {
     auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
 
     TProgramBuilder pb(typeEnv, *functionRegistry);
-    auto prog1 = pb.NewDataLiteral<ui64>(123591592ULL);
-    auto prog2 = pb.NewDataLiteral<ui64>(323591592ULL);
+    auto prog1 = NTest::ConvertValueToLiteralNode(pb, ui64(123591592ULL));
+    auto prog2 = NTest::ConvertValueToLiteralNode(pb, ui64(323591592ULL));
     auto progReturn = pb.Add(prog1, prog2);
 
     TExploringNodeVisitor explorer;
@@ -725,7 +719,7 @@ Y_UNIT_TEST_TWIN(FilterPerf, Wide) {
     TProgramBuilder pb(typeEnv, *functionRegistry);
     const ui64 vecSize = 100'000;
     Cerr << "vecSize: " << vecSize << Endl;
-    const auto listType = pb.NewListType(pb.NewDataType(NUdf::TDataType<ui64>::Id));
+    const auto listType = NTest::ConvertToMinikqlType<TVector<ui64>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
     auto progReturn = CreateFilter<Wide>(pb, vecSize, list);
 

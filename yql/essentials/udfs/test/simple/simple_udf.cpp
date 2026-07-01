@@ -103,6 +103,13 @@ SIMPLE_UDF(TSleep, ui64(ui64)) {
     return TUnboxedValuePod(static_cast<ui64>(0));
 }
 
+SIMPLE_UDF(TSecureParamLength, ui32(char*)) {
+    TStringRef secureParamValue;
+    auto paramKey = args[0].AsStringRef();
+    Y_ENSURE(valueBuilder->GetSecureParam(paramKey, secureParamValue));
+    return TUnboxedValuePod(secureParamValue.Size());
+}
+
 using TComplexReturnTypeSignature = TDict<char*, ui32>(char*);
 SIMPLE_UDF(TComplexReturnType, TComplexReturnTypeSignature) {
     const TStringBuf s = args[0].AsStringRef();
@@ -335,6 +342,7 @@ SIMPLE_MODULE(TSimpleUdfModule,
               TConst,
               TConcat,
               TRepeat,
+              TSecureParamLength,
               TSleep,
               TComplexReturnType,
               TNamedArgs,

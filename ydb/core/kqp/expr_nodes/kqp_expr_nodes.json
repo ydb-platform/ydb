@@ -848,6 +848,14 @@
             ]
         },
         {
+            "Name": "TKqpStreamEnumerate",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpStreamEnumerate"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TKqpOpRead",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpOpRead"},
@@ -887,7 +895,7 @@
             "Match": {"Type": "Callable", "Name": "KqpOpMapElementLambda"},
             "Children": [
                 {"Index": 2, "Name": "Lambda", "Type": "TCoLambda"},
-                {"Index": 3, "Name": "ForceOptional", "Type": "TCoAtom", "Optional": "true"}
+                {"Index": 3, "Name": "ForceOptional", "Type": "TCoAtom"}
             ]
         },
         {
@@ -950,12 +958,13 @@
             ]
         },
         {
-            "Name": "TKqpOpUnionAll",
+            "Name": "TKqpOpSetOp",
             "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "KqpOpUnionAll"},
+            "Match": {"Type": "Callable", "Name": "KqpOpSetOp"},
             "Children": [
                 {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
-                {"Index": 1, "Name": "RightInput", "Type": "TExprBase"}
+                {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},
+                {"Index": 2, "Name": "SetOp", "Type": "TCoAtom"}
             ]
         },
         {
@@ -993,13 +1002,21 @@
             ]
         },
         {
+            "Name": "TKqpOpReplaceAlias",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpReplaceAlias"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Alias", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKqpOpRoot",
             "Base": "TCallable",
             "Match" : {"Type": "Callable", "Name": "KqpOpRoot"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
-                {"Index": 1, "Name": "ColumnOrder", "Type": "TCoAtomList"},
-                {"Index": 2, "Name": "PgSyntax", "Type": "TCoAtom"}
+                {"Index": 1, "Name": "ColumnOrder", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -1009,7 +1026,8 @@
             "Children": [
                 {"Index": 0, "Name": "OriginalColName", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "AggregationFunction", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "ResultColName", "Type": "TCoAtom"}
+                {"Index": 2, "Name": "ResultColName", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Distinct", "Type": "TCoAtom", "Optional": true}
             ]
         },
         {
@@ -1041,25 +1059,17 @@
             "Match" : {"Type": "Callable", "Name": "KqpExprSublink"}
         },
         {
-            "Name": "TKqpBooleanSublink",
-            "Base": "TKqpSublinkBase",
-            "Match" : {"Type": "CallableBase"},
-            "Children" : [
-                {"Index": 1, "Name": "ReturnPgBool", "Type": "TCoAtom"}
-            ]
-        },
-        {
             "Name": "TKqpExistsSublink",
-            "Base": "TKqpBooleanSublink",
+            "Base": "TKqpSublinkBase",
             "Match" : {"Type": "Callable", "Name": "KqpExistsSublink"}
         },
         {
             "Name": "TKqpInSublink",
-            "Base": "TKqpBooleanSublink",
+            "Base": "TKqpSublinkBase",
             "Match" : {"Type": "Callable", "Name": "KqpInSublink"},
             "Children" : [
-                {"Index": 2, "Name": "OuterType", "Type": "TExprBase"},
-                {"Index": 3, "Name": "InLambda", "Type": "TExprBase"}
+                {"Index": 1, "Name": "OuterType", "Type": "TExprBase"},
+                {"Index": 2, "Name": "InLambda", "Type": "TExprBase"}
             ]
         },
         {

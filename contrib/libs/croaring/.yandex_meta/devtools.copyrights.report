@@ -81,6 +81,17 @@ BELONGS ya.make
     Files with this license:
         src/isadetection.c [6:15]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 4fc7666fde6d510eb0a3147f6c37a351
+BELONGS ya.make
+    License text:
+        (c) 2016-... The CRoaring authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.md [84:84]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 7679e942759de26f76fdd9b1cb62d060
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.

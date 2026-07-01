@@ -397,6 +397,14 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesTruncated;
     ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesEmptyQueryType;
 
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileCacheViewPeerScanWarnings;
+
+    // Accumulate only during a short window after first non-warmup client
+    // compile -- attribute warmup impact on cold-start traffic.
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupHitsInWindow;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupMissesInWindow;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupSavedCompileMs;
+
     // Compile computation pattern service
     ::NMonitoring::TDynamicCounters::TCounterPtr CompiledComputationPatterns;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileComputationPatternsQueueSize;

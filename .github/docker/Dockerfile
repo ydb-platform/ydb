@@ -43,6 +43,8 @@ RUN apt-get update  \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /ydb_data && mkdir -p /ydb_certs
+RUN mkdir -p /ydb_data/cluster/kikimr_configs \
+    && touch /ydb_data/cluster/kikimr_configs/config.yaml
 
 COPY main/.github/docker/files/ /
 COPY --from=builder \

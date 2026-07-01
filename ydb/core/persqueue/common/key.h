@@ -142,9 +142,14 @@ private:
 std::pair<TKeyPrefix, TKeyPrefix> MakeKeyPrefixRange(TKeyPrefix::EType type, const TPartitionId& partition);
 
 // {char type; ui32 partition; ui64 offset; ui16 partNo; ui32 count, ui16 internalPartsCount}
+// optional: _<offsetDelta 10 chars>
+// optional suffix byte: Head ('|'), FastWrite ('?'), or legacy '\0'
+// Serialized size is KeySize() or KeySizeWithOffsetDelta(), optionally +1 for suffix.
 // offset, partNo - index of first rec
 // count - diff of last record offset and first record offset in blob
 // internalPartsCount - number of internal parts
+// offsetDelta (ui32, 10 decimal digits, same as count) - optional extension; absent in legacy keys;
+// means that all offsets in this blob are between offset and offset + offsetDelta
 // A4|A5B1B2C1C2C3|D1 - Offset A, partNo 5, count 2, internalPartsCount 3
 // ^    ^   ^ ^
 // internalparts
@@ -161,19 +166,22 @@ public:
                         const ui64 offset,
                         const ui16 partNo,
                         const ui32 count,
-                        const ui16 internalPartsCount);
+                        const ui16 internalPartsCount,
+                        const TMaybe<ui32>& offsetDelta = Nothing());
     static TKey ForHead(EType type,
                         const TPartitionId& partition,
                         const ui64 offset,
                         const ui16 partNo,
                         const ui32 count,
-                        const ui16 internalPartsCount);
+                        const ui16 internalPartsCount,
+                        const TMaybe<ui32>& offsetDelta = Nothing());
     static TKey ForFastWrite(EType type,
                              const TPartitionId& partition,
                              const ui64 offset,
                              const ui16 partNo,
                              const ui32 count,
-                             const ui16 internalPartsCount);
+                             const ui16 internalPartsCount,
+                             const TMaybe<ui32>& offsetDelta = Nothing());
 
     static TKey FromString(const TString& s) { return {s}; }
     static TKey FromString(const TString& s, const TPartitionId& partition);
@@ -188,7 +196,7 @@ public:
     {}
 
     TKey(const TKey& key)
-        : TKey(key.GetType(), key.GetPartition(), key.Offset, key.PartNo, key.Count, key.InternalPartsCount, key.GetSuffix())
+        : TKey(key.GetType(), key.GetPartition(), key.Offset, key.PartNo, key.Count, key.InternalPartsCount, key.GetSuffix(), key.GetOffsetDelta())
     {
     }
 
@@ -196,57 +204,91 @@ public:
     {}
 
     void SetOffset(const ui64 offset) {
-        AFL_ENSURE(Size() == KeySize() + HasSuffix());
+        EnsureValidBodySize();
         Offset = offset;
         memcpy(PtrOffset(), Sprintf("%.20" PRIu64, offset).data(), 20);
     }
 
     ui64 GetOffset() const {
-        AFL_ENSURE(Size() == KeySize() + HasSuffix());
+        EnsureValidBodySize();
         return Offset;
     }
 
     void SetCount(const ui32 count) {
-        AFL_ENSURE(Size() == KeySize() + HasSuffix());
+        EnsureValidBodySize();
         Count = count;
         memcpy(PtrCount(), Sprintf("%.10" PRIu32, count).data(), 10);
     }
 
     ui32 GetCount() const {
-        AFL_ENSURE(Size() == KeySize() + HasSuffix());
+        EnsureValidBodySize();
         return Count;
     }
 
     void SetPartNo(const ui16 partNo) {
-        AFL_ENSURE(Size() == KeySize() + HasSuffix());
+        EnsureValidBodySize();
         PartNo = partNo;
         memcpy(PtrPartNo(), Sprintf("%.5" PRIu16, partNo).data(), 5);
     }
 
     ui16 GetPartNo() const {
-        AFL_ENSURE(Size() == KeySize() + HasSuffix());
+        EnsureValidBodySize();
         return PartNo;
     }
 
     void SetInternalPartsCount(const ui16 internalPartsCount) {
-        AFL_ENSURE(Size() == KeySize() + HasSuffix());
+        EnsureValidBodySize();
         InternalPartsCount = internalPartsCount;
         memcpy(PtrInternalPartsCount(), Sprintf("%.5" PRIu16, internalPartsCount).data(), 5);
     }
 
     ui16 GetInternalPartsCount() const {
-        AFL_ENSURE(Size() == KeySize() + HasSuffix());
+        EnsureValidBodySize();
         return InternalPartsCount;
     }
 
+    void SetOffsetDelta(const TMaybe<ui32>& offsetDelta) {
+        EnsureValidBodySize();
+        OffsetDelta = offsetDelta;
+        const TMaybe<char> suffix = GetSuffix();
+        const ui32 bodySize = offsetDelta.Defined() ? KeySizeWithOffsetDelta() : KeySize();
+        Resize(bodySize + suffix.Defined());
+        if (offsetDelta.Defined()) {
+            Data()[KeySize()] = '_';
+            memcpy(PtrOffsetDelta(), Sprintf("%.10" PRIu32, *offsetDelta).data(), 10);
+        }
+        if (suffix.Defined()) {
+            Data()[bodySize] = *suffix;
+        }
+    }
+
+    void SetOffsetDelta(ui64 offsetDelta) {
+        AFL_ENSURE(offsetDelta <= Max<ui32>());
+        SetOffsetDelta(TMaybe<ui32>(static_cast<ui32>(offsetDelta)));
+    }
+
+    TMaybe<ui32> GetOffsetDelta() const {
+        EnsureValidBodySize();
+        return OffsetDelta;
+    }
+
+    bool HasOffsetDelta() const {
+        return GetBodySize() == KeySizeWithOffsetDelta();
+    }
+
     bool HasSuffix() const {
-        return Size() == KeySize() + 1;
+        return GetSuffix().Defined();
     }
 
     TMaybe<char> GetSuffix() const
     {
-        if (HasSuffix()) {
-            return Data()[KeySize()];
+        const bool canHaveSuffix = Size() == KeySize() + 1 || Size() == KeySizeWithOffsetDelta() + 1;
+        if (!canHaveSuffix) {
+            return Nothing();
+        }
+        const char last = Data()[Size() - 1];
+        if (last == ESuffix::Head || last == ESuffix::FastWrite) {
+            return last;
         }
         return Nothing();
     }
@@ -257,6 +299,21 @@ public:
     static constexpr ui32 KeySize() {
         return UnmarkedSize() + 1 + 20 + 1 + 5 + 1 + 10 + 1 + 5;
         //p<partition 10 chars>_<offset 20 chars>_<part number 5 chars>_<count 10 chars>_<internalPartsCount count 5 chars>
+    }
+
+    static constexpr ui32 OffsetDeltaFieldSize() {
+        return 1 + 10;
+    }
+
+    static constexpr ui32 KeySizeWithOffsetDelta() {
+        return KeySize() + OffsetDeltaFieldSize();
+    }
+
+    static bool IsValidSerializedSize(const size_t size) {
+        return size == KeySize()
+            || size == KeySize() + 1
+            || size == KeySizeWithOffsetDelta()
+            || size == KeySizeWithOffsetDelta() + 1;
     }
 
     bool operator==(const TKey& key) const
@@ -283,12 +340,26 @@ public:
     void SetBody();
 
 private:
-    TKey(EType type, const TPartitionId& partition, const ui64 offset, const ui16 partNo, const ui32 count, const ui16 internalPartsCount, const TMaybe<char> suffix)
+    ui32 GetBodySize() const {
+        return HasSuffix() || HasLegacyEmptySuffix() ? Size() - 1 : Size();
+    }
+
+    bool HasLegacyEmptySuffix() const {
+        return Size() == KeySize() + 1 && Data()[Size() - 1] == '\0';
+    }
+
+    void EnsureValidBodySize() const {
+        const ui32 bodySize = GetBodySize();
+        AFL_ENSURE(bodySize == KeySize() || bodySize == KeySizeWithOffsetDelta());
+    }
+
+    TKey(EType type, const TPartitionId& partition, const ui64 offset, const ui16 partNo, const ui32 count, const ui16 internalPartsCount, const TMaybe<char> suffix, const TMaybe<ui32> offsetDelta = Nothing())
         : TKeyPrefix(type, partition)
         , Offset(offset)
         , Count(count)
         , PartNo(partNo)
         , InternalPartsCount(internalPartsCount)
+        , OffsetDelta(offsetDelta)
     {
         Resize(KeySize());
         *(PtrOffset() - 1) = *(PtrCount() - 1) = *(PtrPartNo() - 1) = *(PtrInternalPartsCount() - 1) = '_';
@@ -296,13 +367,15 @@ private:
         SetPartNo(partNo);
         SetCount(count);
         SetInternalPartsCount(InternalPartsCount);
+        SetOffsetDelta(offsetDelta);
         SetSuffix(suffix);
     }
 
     TKey(const TString& data)
     {
         Assign(data.data(), data.size());
-        AFL_ENSURE(data.size() == KeySize() + HasSuffix());
+        const ui32 bodySize = GetBodySize();
+        AFL_ENSURE(bodySize == KeySize() || bodySize == KeySizeWithOffsetDelta());
         AFL_ENSURE(*(PtrOffset() - 1) == '_');
         AFL_ENSURE(*(PtrCount() - 1) == '_');
         AFL_ENSURE(*(PtrPartNo() - 1) == '_');
@@ -313,17 +386,26 @@ private:
         ParseCount();
         ParsePartNo();
         ParseInternalPartsCount();
+
+        if (bodySize == KeySizeWithOffsetDelta()) {
+            AFL_ENSURE(Data()[KeySize()] == '_');
+            OffsetDelta = FromString<ui32>(TStringBuf{PtrOffsetDelta(), 10});
+        } else {
+            OffsetDelta = Nothing();
+        }
     }
 
     char* PtrOffset() { return Data() + UnmarkedSize() + 1; }
     char* PtrPartNo() { return PtrOffset() + 20 + 1; }
     char* PtrCount() { return PtrPartNo() + 5 + 1; }
     char* PtrInternalPartsCount() { return PtrCount() + 10 + 1; }
+    char* PtrOffsetDelta() { return Data() + KeySize() + 1; }
 
     const char* PtrOffset() const { return Data() + UnmarkedSize() + 1; }
     const char* PtrPartNo() const { return PtrOffset() + 20 + 1; }
     const char* PtrCount() const { return PtrPartNo() + 5 + 1; }
     const char* PtrInternalPartsCount() const { return PtrCount() + 10 + 1; }
+    const char* PtrOffsetDelta() const { return Data() + KeySize() + 1; }
 
     void ParseOffset()
     {
@@ -347,9 +429,10 @@ private:
 
     void SetSuffix(TMaybe<char> suffix)
     {
-        Resize(KeySize() + suffix.Defined());
+        const ui32 bodySize = HasOffsetDelta() ? KeySizeWithOffsetDelta() : KeySize();
+        Resize(bodySize + suffix.Defined());
         if (suffix.Defined()) {
-            Data()[KeySize()] = *suffix;
+            Data()[bodySize] = *suffix;
         }
     }
 
@@ -357,12 +440,13 @@ private:
     ui32 Count;
     ui16 PartNo;
     ui16 InternalPartsCount;
+    TMaybe<ui32> OffsetDelta;
 };
 
 inline
 bool TKey::IsHead() const
 {
-    return HasSuffix() && (Data()[KeySize()] == '|');
+    return GetSuffix() == ESuffix::Head;
 }
 
 inline

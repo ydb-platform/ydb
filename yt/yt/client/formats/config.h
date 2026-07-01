@@ -111,7 +111,7 @@ struct TDsvFormatConfigBase
     char KeyValueSeparator;
 
     // Only supported for tabular data
-    std::optional<TString> LinePrefix;
+    std::optional<std::string> LinePrefix;
 
     REGISTER_YSON_STRUCT(TDsvFormatConfigBase);
 
@@ -186,7 +186,7 @@ struct TSchemafulDsvFormatConfig
     std::optional<std::vector<std::string>> Columns;
 
     EMissingSchemafulDsvValueMode MissingValueMode;
-    TString MissingValueSentinel;
+    std::string MissingValueSentinel;
 
     std::optional<bool> EnableColumnNamesHeader;
 
@@ -259,7 +259,7 @@ struct TProtobufTypeConfig
 {
     EProtobufType ProtoType;
     std::vector<TProtobufColumnConfigPtr> Fields;
-    std::optional<TString> EnumerationName;
+    std::optional<std::string> EnumerationName;
 
     REGISTER_YSON_STRUCT(TProtobufTypeConfig);
 
@@ -271,7 +271,7 @@ DEFINE_REFCOUNTED_TYPE(TProtobufTypeConfig)
 struct TProtobufColumnConfig
     : public NYTree::TYsonStruct
 {
-    TString Name;
+    std::string Name;
     std::optional<ui64> FieldNumber;
     bool Repeated;
     bool Packed;
@@ -280,7 +280,7 @@ struct TProtobufColumnConfig
 
     std::optional<EProtobufType> ProtoType;
     std::vector<TProtobufColumnConfigPtr> Fields;
-    std::optional<TString> EnumerationName;
+    std::optional<std::string> EnumerationName;
     EProtobufEnumWritingMode EnumWritingMode;
 
     REGISTER_YSON_STRUCT(TProtobufColumnConfig);
@@ -314,7 +314,7 @@ DEFINE_ENUM(ENestedMessagesMode,
 struct TProtobufFormatConfig
     : public NYTree::TYsonStruct
 {
-    TString FileDescriptorSet; // deprecated
+    std::string FileDescriptorSet; // deprecated
     std::vector<int> FileIndices; // deprecated
     std::vector<int> MessageIndices; // deprecated
     bool EnumsAsStrings; // deprecated
@@ -323,8 +323,8 @@ struct TProtobufFormatConfig
     std::vector<TProtobufTableConfigPtr> Tables;
     NYTree::IMapNodePtr Enumerations;
 
-    std::optional<TString> FileDescriptorSetText;
-    std::vector<TString> TypeNames;
+    std::optional<std::string> FileDescriptorSetText;
+    std::vector<std::string> TypeNames;
 
     EComplexTypeMode ComplexTypeMode;
     EDecimalMode DecimalMode;

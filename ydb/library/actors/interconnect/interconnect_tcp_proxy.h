@@ -137,7 +137,7 @@ namespace NActors {
                 cFunc(EvPassAwayIfNeeded, HandlePassAwayIfNeeded)                               \
                 hFunc(TEvSubscribeForConnection, Handle);                                       \
                 hFunc(TEvReportConnection, Handle);                                             \
-                cFunc(EvRdmaPendingHandshake, HandleRdmaDelayedHandshake)                       \
+                fFunc(EvRdmaPendingHandshake, HandleRdmaDelayedHandshake)                       \
                 default:                                                                        \
                     Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);                       \
             }                                                                                   \
@@ -201,6 +201,10 @@ namespace NActors {
             if (CurrentStateFunc() == &TThis::HoldByError) {
                 InErrorState = true;
             } else if (CurrentStateFunc() == &TThis::StateWork || CurrentStateFunc() == &TThis::PendingActivation) {
+                if (InErrorState) {
+                    LastErrorStateLogAt = TInstant::Zero();
+                    ErrorStateLogSuppressed = 0;
+                }
                 InErrorState = false;
             }
         }
@@ -368,7 +372,17 @@ namespace NActors {
         void HandleHandshakeStatus(TEvHandshakeDone::TPtr& ev);
         void HandleHandshakeStatus(TEvHandshakeFail::TPtr& ev);
 
-        void TransitToErrorState(TString Explanation, bool updateErrorLog = true);
+        void TransitToErrorState(TString explanation, bool updateErrorLog = true, const TEvHandshakeFail* handshakeFail = nullptr);
+        TString FormatRemoteNodeForLog(const TEvHandshakeFail& handshakeFail) const;
+        TString FormatHandshakeFailNotice(TStringBuf explanation, const TEvHandshakeFail& handshakeFail) const;
+        enum class EHandshakeStatusDirection {
+            Incoming,
+            Outgoing,
+        };
+        void LogHandshakeStatusNotice(TStringBuf marker, EHandshakeStatusDirection direction, const TEvHandshakeFail& handshakeFail) const;
+        void AppendSuppressedErrorStateLogs(TStringBuilder& stream, ui64 globalSuppressed, ui64 perPeerSuppressed) const;
+        void AppendHandshakeFailDebugInfo(TStringBuilder& stream, TStringBuf marker, TStringBuf rawReason,
+            TStringBuf extraDebugInfo = {}) const;
         void WakeupFromErrorState(TEvents::TEvWakeup::TPtr& ev);
         void Disconnect();
 
@@ -400,6 +414,7 @@ namespace NActors {
         }
 
         TString TechnicalPeerHostName;
+        ui16 TechnicalPeerPort = 0;
 
         std::shared_ptr<IInterconnectMetrics> Metrics;
 
@@ -414,7 +429,13 @@ namespace NActors {
         void ScheduleCleanupEventQueue();
         void HandleCleanupEventQueue();
         void CleanupEventQueue();
-        void HandleRdmaDelayedHandshake();
+        void HandleRdmaDelayedHandshake(STATEFN_SIG);
+        TDuration GetNextRdmaRetryDelay() const;
+        TDuration GetMaxRdmaRetryDelay() const;
+        void RegisterRdmaSuccess();
+        void RegisterRdmaFailure();
+        void ScheduleDelayedRdmaHandshake();
+        void SetRdmaRetryWatchdogPending(bool pending);
 
         // hold all events before connection is established
         struct TPendingSessionEvent {
@@ -543,9 +564,17 @@ namespace NActors {
         TDuration HoldByErrorWakeupDuration = TDuration::Zero();
         TEvents::TEvWakeup* HoldByErrorWakeupCookie;
 
+        TInstant LastErrorStateLogAt;
+        ui64 ErrorStateLogSuppressed = 0;
+
         THolder<TProgramInfo> RemoteProgramInfo;
         NInterconnect::TSecureSocketContext::TPtr SecureContext;
         TDuration DelayedRdmaHandshakeTimeout;
+        bool RdmaRetryWatchdogPending = false;
+        ui64 RdmaRetryWatchdogCookie = 0;
+        ui32 ConsecutiveRdmaFailures = 0;
+        TInstant LastRdmaSuccessAt;
+        TInstant LastRdmaFailureAt;
 
         void Handle(TEvGetSecureSocket::TPtr ev) {
             auto socket = MakeIntrusive<NInterconnect::TSecureSocket>(*ev->Get()->Socket, SecureContext);

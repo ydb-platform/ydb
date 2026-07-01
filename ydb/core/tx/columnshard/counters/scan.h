@@ -164,6 +164,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr RecordsDeniedByHeader;
     NMonitoring::TDynamicCounters::TCounterPtr DictionaryOnlyOptimizationCount;
     NMonitoring::TDynamicCounters::TCounterPtr DistinctLimitSyncPointInvocations;
+    NMonitoring::TDynamicCounters::TCounterPtr PredicateFilterInvocations;
+    NMonitoring::TDynamicCounters::TCounterPtr EarlyInFlightReleaseCount;
     std::shared_ptr<TSubColumnCounters> SubColumnCounters;
     std::shared_ptr<TDuplicateFilteringCounters> DuplicateFilteringCounters;
     std::shared_ptr<TSimpleDuplicateFilteringCounters> SimpleDuplicateFilteringCounters;
@@ -218,6 +220,14 @@ public:
 
     void OnDistinctLimitSyncPointInvocation() const {
         DistinctLimitSyncPointInvocations->Add(1);
+    }
+
+    void OnPredicateFilterInvocation() const {
+        PredicateFilterInvocations->Add(1);
+    }
+
+    void OnEarlyInFlightRelease() const {
+        EarlyInFlightReleaseCount->Add(1);
     }
 
     NMonitoring::TDynamicCounters::TCounterPtr AcceptedByIndex;

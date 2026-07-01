@@ -583,7 +583,7 @@ STATEFN(TCreateQueueSchemaActorV2::CreateComponentsState) {
         hFunc(TSqsEvents::TEvExecuted, OnExecuted);
         hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, OnDescribeSchemeResult);
         hFunc(NKesus::TEvKesus::TEvAddQuoterResourceResult, HandleAddQuoterResource);
-        hFunc(NPQ::NSchema::TEvCreateTopicResponse, Handle);
+        hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
         cFunc(TEvPoisonPill::EventType, PassAway);
     }
 }
@@ -666,7 +666,7 @@ void TCreateQueueSchemaActorV2::Step() {
     CreateComponents();
 }
 
-void TCreateQueueSchemaActorV2::Handle(NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev) {
+void TCreateQueueSchemaActorV2::Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
     const auto& response = *ev->Get();
     if (response.Status == Ydb::StatusIds::SUCCESS) {
         Step();

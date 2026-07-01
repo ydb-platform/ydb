@@ -6,6 +6,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_stats_registry.h>
 #include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 
 #include <yt/cpp/mapreduce/interface/io.h>
 
@@ -146,6 +147,10 @@ public:
         IsTableContent_ = true;
     }
 
+    void SetDatumValidationMode(EDatumValidationMode mode) {
+        DatumValidationMode_ = mode;
+    }
+
     void SetInputBlockRepresentation(EBlockRepresentation type) {
         InputBlockRepresentation_ = type;
     }
@@ -166,6 +171,7 @@ public:
     bool UseBlockInput_ = false;
     bool UseBlockOutput_ = false;
     bool IsTableContent_ = false;
+    EDatumValidationMode DatumValidationMode_ = DefaultDatumValidationMode;
     TString OptLLVM_;
     TSystemFields SystemFields_;
 

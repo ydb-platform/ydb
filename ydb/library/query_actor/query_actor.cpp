@@ -34,6 +34,14 @@ TIssues IssuesFromProtoMessage(const TProto& message) {
     return issues;
 }
 
+NYql::TIssues AddRootIssue(const TString& message, const NYql::TIssues& issues) {
+    NYql::TIssue rootIssue(message);
+    for (const auto& issue : issues) {
+        rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+    }
+    return {rootIssue};
+}
+
 } // anonymous namespace
 
 //// TTxControl
@@ -160,7 +168,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvCreateSessionResult::TPtr& ev) {
         Y_ABORT_UNLESS(Finished || RunningQuery || IsStreamingMode);
     } else {
         LOG_W("Failed to create session: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
-        Finish(ev->Get()->Status, std::move(ev->Get()->Issues));
+        Finish(ev->Get()->Status, AddRootIssue("Failed to create new session", ev->Get()->Issues));
     }
 }
 
@@ -192,7 +200,7 @@ void TQueryBase::RunQuery() {
     }
 }
 
-void TQueryBase::RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params, TTxControl txControl) {
+void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxControl txControl) {
     using TExecuteDataQueryRequest = TGrpcRequestOperationCall<Table::ExecuteDataQueryRequest, Table::ExecuteDataQueryResponse>;
 
     Y_ABORT_UNLESS(!RunningQuery);
@@ -202,7 +210,7 @@ void TQueryBase::RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params, 
 
     Table::ExecuteDataQueryRequest request;
     request.set_session_id(SessionId);
-    request.mutable_query()->set_yql_text(sql);
+    *request.mutable_query()->mutable_yql_text() = std::move(sql);
     request.mutable_query_cache_policy()->set_keep_in_cache(true);
 
     if (params) {
@@ -266,7 +274,7 @@ void TQueryBase::CallOnQueryResult() {
 
 //// TQueryBase stream query operations
 
-void TQueryBase::RunStreamQuery(const TString& sql, NYdb::TParamsBuilder* params, ui64 channelBufferSize) {
+void TQueryBase::RunStreamQuery(TString sql, NYdb::TParamsBuilder* params, ui64 channelBufferSize) {
     using TExecuteStreamQueryRequest = TGrpcRequestNoOperationCall<Table::ExecuteScanQueryRequest, Table::ExecuteScanQueryPartialResponse>;
 
     Y_ABORT_UNLESS(!RunningQuery);
@@ -274,7 +282,7 @@ void TQueryBase::RunStreamQuery(const TString& sql, NYdb::TParamsBuilder* params
 
     Table::ExecuteScanQueryRequest request;
     request.set_mode(Table::ExecuteScanQueryRequest::MODE_EXEC);
-    request.mutable_query()->set_yql_text(sql);
+    *request.mutable_query()->mutable_yql_text() = std::move(sql);
 
     if (params) {
         *request.mutable_parameters() = NYdb::TProtoAccessor::GetProtoMap(params->Build());
@@ -295,6 +303,13 @@ void TQueryBase::ReadNextStreamPart() {
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev) {
+    if (Finished) {
+        // Next TEvStreamQueryResultPart can be already in the mailbox (added by
+        // the StreamQueryProcessor callback) after we called Finish() to cancel the query.
+        // In this case we are not interested in processing it anymore.
+        return;
+    }
+
     Y_ABORT_UNLESS(RunningQuery);
     Y_ABORT_UNLESS(StreamQueryProcessor);
     NumberRequests++;
@@ -305,6 +320,10 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev)
     if (ev->Get()->Status != StatusIds::SUCCESS) {
         Finish(ev->Get()->Status, std::move(ev->Get()->Issues));
         return;
+    }
+
+    if (ForwardStreamIssuesOnSuccess && !ev->Get()->Issues.Empty()) {
+        AccumulatedStreamIssues.AddIssues(ev->Get()->Issues);
     }
 
     if (ev->Get()->ResultSet.rows_size()) {
@@ -354,13 +373,15 @@ void TQueryBase::FinishStreamRequest() {
 //// TQueryBase finish operations
 
 void TQueryBase::Finish() {
-    Finish(StatusIds::SUCCESS, TIssues());
+    if (ForwardStreamIssuesOnSuccess) {
+        Finish(StatusIds::SUCCESS, std::move(AccumulatedStreamIssues));
+    } else {
+        Finish(StatusIds::SUCCESS, TIssues());
+    }
 }
 
 void TQueryBase::Finish(StatusIds::StatusCode status, const TString& message, bool rollbackOnError) {
-    TIssues issues;
-    issues.AddIssue(message);
-    Finish(status, std::move(issues), rollbackOnError);
+    Finish(status, {TIssue(message)}, rollbackOnError);
 }
 
 void TQueryBase::Finish(StatusIds::StatusCode status, TIssues&& issues, bool rollbackOnError) {

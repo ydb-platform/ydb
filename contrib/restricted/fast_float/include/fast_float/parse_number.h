@@ -289,6 +289,23 @@ from_chars_advanced(parsed_number_string_t<UC> &pns, T &value) noexcept {
   return answer;
 }
 
+// Slow path: re-parse materializing the integer/fraction spans the hot no-span
+// parse skipped, then run the full algorithm. The two callers reach it only
+// through a fastfloat_unlikely branch, so the optimizer keeps this re-parse off
+// the hot path on its own (no function-level noinline needed).
+// from_chars_advanced already handles both the too_many_digits disambiguation
+// and the am.power2<0 digit_comp recompute, so both slow branches collapse to
+// one helper call.
+template <typename T, typename UC>
+FASTFLOAT_CONSTEXPR20 from_chars_result_t<UC>
+parse_number_slow_path(UC const *first, UC const *last, T &value,
+                       parse_options_t<UC> options, bool bjf) noexcept {
+  parsed_number_string_t<UC> pns =
+      bjf ? parse_number_string<true, UC>(first, last, options, true)
+          : parse_number_string<false, UC>(first, last, options, true);
+  return from_chars_advanced(pns, value);
+}
+
 template <typename T, typename UC>
 fastfloat_really_inline FASTFLOAT_CONSTEXPR20 from_chars_result_t<UC>
 from_chars_float_advanced(UC const *first, UC const *last, T &value,
@@ -312,10 +329,15 @@ from_chars_float_advanced(UC const *first, UC const *last, T &value,
     answer.ptr = first;
     return answer;
   }
+  bool const bjf = uint64_t(fmt & detail::basic_json_fmt) != 0;
+
+  // Fast path: parse WITHOUT materializing the integer/fraction spans (read
+  // only by the rare slow paths). Skipping their stores keeps the fat
+  // parsed_number_string_t off the hot path. store_spans is a runtime argument,
+  // so this reuses the single parse_number_string instantiation.
   parsed_number_string_t<UC> pns =
-      uint64_t(fmt & detail::basic_json_fmt)
-          ? parse_number_string<true, UC>(first, last, options)
-          : parse_number_string<false, UC>(first, last, options);
+      bjf ? parse_number_string<true, UC>(first, last, options, false)
+          : parse_number_string<false, UC>(first, last, options, false);
   if (!pns.valid) {
     if (uint64_t(fmt & chars_format::no_infnan)) {
       answer.ec = std::errc::invalid_argument;
@@ -326,8 +348,47 @@ from_chars_float_advanced(UC const *first, UC const *last, T &value,
     }
   }
 
-  // call overload that takes parsed_number_string_t directly.
-  return from_chars_advanced(pns, value);
+  // Slow path A (rare): > 19 significant digits. The no-span parse left the
+  // mantissa un-truncated and skipped the span-based recompute; the cold helper
+  // re-parses with spans and runs the full algorithm.
+  //
+// We have to disable -Wc++20-extensions for the [[unlikely]] attribute
+// See comment for @jwakely at
+// https://github.com/fastfloat/fast_float/pull/387#discussion_r3366943539
+// This is unfortunate.
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wc++20-extensions"
+#endif
+  if fastfloat_unlikely (pns.too_many_digits) {
+    return parse_number_slow_path<T, UC>(first, last, value, options, bjf);
+  }
+  answer.ec = std::errc(); // be optimistic
+  answer.ptr = pns.lastmatch;
+
+  if (clinger_fast_path_impl(pns.mantissa, pns.exponent, pns.negative, value)) {
+    return answer;
+  }
+
+  adjusted_mantissa am =
+      compute_float<binary_format<T>>(pns.exponent, pns.mantissa);
+  // Slow path B (rare): Eisel-Lemire could not resolve; digit_comp needs the
+  // integer/fraction spans. Route to the cold helper (clinger there is a
+  // dead-effect since it already failed here; the cold re-parse + digit_comp
+  // via from_chars_advanced reproduces this branch).
+  if fastfloat_unlikely (am.power2 < 0) {
+    return parse_number_slow_path<T, UC>(first, last, value, options, bjf);
+  }
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+  to_float(pns.negative, am, value);
+  // Test for over/underflow.
+  if ((pns.mantissa != 0 && am.mantissa == 0 && am.power2 == 0) ||
+      am.power2 == binary_format<T>::infinite_power()) {
+    answer.ec = std::errc::result_out_of_range;
+  }
+  return answer;
 }
 
 template <typename T, typename UC, typename>

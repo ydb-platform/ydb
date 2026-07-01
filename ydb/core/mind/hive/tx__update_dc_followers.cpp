@@ -38,7 +38,8 @@ public:
                         continue;
                     }
                     TFollowerTabletInfo& follower = tablet->AsLeader().AddFollower(group);
-                    follower.NodeFilter.AllowedDataCenters = {op.DataCenter};
+                    follower.NodeFilter.AllowedDataCenters.Clear();
+                    follower.NodeFilter.AllowedDataCenters.AddDataCenter(op.DataCenter);
                     follower.Statistics.SetLastAliveTimestamp(TlsActivationContext->Now().MilliSeconds());
                     db.Table<Schema::TabletFollowerTablet>().Key(op.TabletId.first, follower.Id).Update(
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(follower.FollowerGroup.Id),

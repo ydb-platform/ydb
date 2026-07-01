@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yt/yt/library/tvm/public.h>
+
 #include <library/cpp/yt/memory/ref_counted.h>
 
 #include <util/generic/hash_set.h>
@@ -12,11 +14,6 @@ namespace NYT::NAuth {
 DECLARE_REFCOUNTED_STRUCT(TTvmServiceConfig)
 DECLARE_REFCOUNTED_STRUCT(ITvmService)
 DECLARE_REFCOUNTED_STRUCT(IDynamicTvmService)
-
-////////////////////////////////////////////////////////////////////////////////
-
-using TUid = ui64;
-using TTvmId = ui64;
 
 ////////////////////////////////////////////////////////////////////////////////
 

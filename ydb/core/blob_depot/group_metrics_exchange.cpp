@@ -2,6 +2,8 @@
 #include "data.h"
 #include "space_monitor.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
+
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::DoGroupMetricsExchange() {
@@ -25,7 +27,10 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT58, "TEvControllerGroupMetricsExchange", (Id, GetLogId()), (Msg, ev->Get()->Record));
+        YDB_LOG_DEBUG("TEvControllerGroupMetricsExchange",
+            {"marker", "BDT58"},
+            {"id", GetLogId()},
+            {"msg", ev->Get()->Record});
 
         if (Config.HasVirtualGroupId()) {
             auto response = std::make_unique<TEvBlobStorage::TEvControllerGroupMetricsExchange>();

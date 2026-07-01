@@ -73,7 +73,6 @@ class ByteArraySource(ByteSource):
     def read_float64(self) -> float:
         return struct.unpack("<d", self.read_bytes(8))[0]
 
-    # pylint: disable=too-many-return-statements
     def read_array(self, array_type: str, num_rows: int):  # type: ignore
         if array_type == "B":
             return [self.read_byte() for _ in range(num_rows)]

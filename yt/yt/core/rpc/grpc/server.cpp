@@ -23,6 +23,8 @@
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/fluent.h>
 
+#include <library/cpp/yt/system/thread_id.h>
+
 #include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
@@ -177,7 +179,7 @@ private:
                 ::fprintf(logFile, "%s\tGRPC server shutdown failed: %s (ThreadId: %" PRISZT ")\n",
                     GetInstant().ToString().c_str(),
                     CurrentExceptionMessage().c_str(),
-                    GetCurrentThreadId());
+                    GetSystemThreadId());
             }
         }
     }
@@ -202,6 +204,15 @@ private:
         private:
             const TServerPtr Owner_;
         };
+
+        // The server may have never been started (e.g. when the process is
+        // shutting down due to a startup failure in some other component), in
+        // which case there is nothing to shut down. The public Stop() already
+        // guards this via the Started_ flag, but the shutdown callback invokes
+        // DoStop directly, bypassing that check.
+        if (!Started_) {
+            return OKFuture;
+        }
 
         if (!ShutdownStarted_.exchange(true)) {
             YT_VERIFY(Native_);

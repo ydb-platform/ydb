@@ -124,7 +124,7 @@ Y_UNIT_TEST_F(TestLogicalDataSize, TBlockReaderFixture) {
 
     // Test GetDataWeight after slize
     for (ui32 i = 0; i < arrayHelpers.size(); ++i) {
-        const auto slice = DeepSlice(arrays[i], offset, len);
+        const auto slice = DeepSlice(*arrays[i], offset, len);
         UNIT_ASSERT_VALUES_EQUAL_C(arrayHelpers[i]->Reader->GetDataWeight(*slice), expectedLogicalSize[i], "sliced array: " << i);
     }
 }

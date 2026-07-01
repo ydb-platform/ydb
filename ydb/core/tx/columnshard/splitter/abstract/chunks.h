@@ -10,6 +10,10 @@ namespace NKikimr::NColumnShard {
 class TSplitterCounters;
 }
 
+namespace NKikimr::NArrow::NAccessor {
+struct IAdditionalAccessorData;
+}
+
 namespace NKikimr::NOlap {
 
 class TPortionInfo;
@@ -46,6 +50,10 @@ protected:
     virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(
         TString&& /*data*/, const ui32 /*rawBytes*/, const TSimpleColumnInfo& /*columnInfo*/) const {
         AFL_VERIFY(false);
+        return nullptr;
+    }
+
+    virtual std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> DoGetAdditionalAccessorData() const {
         return nullptr;
     }
 
@@ -143,6 +151,10 @@ public:
 
     void AddInplaceIntoPortion(TPortionAccessorConstructor& portionInfo) const {
         return DoAddInplaceIntoPortion(portionInfo);
+    }
+
+    std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> GetAdditionalAccessorDataOptional() const {
+        return DoGetAdditionalAccessorData();
     }
 };
 

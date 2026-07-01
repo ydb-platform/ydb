@@ -2839,10 +2839,10 @@ class TExprCycleDetector {
 public:
     explicit TExprCycleDetector(ui64 maxQueueSize);
     void Reset();
-    void AddNode(const TExprNode& node);
+    void AddNode(const TExprNode& node, ui64 repeatTransformCount);
 
 private:
-    THashSet<TString> Set_;
+    THashMap<TString, ui64> Map_;
     TQueue<TString> Queue_;
     const ui64 MaxQueueSize_;
 };
@@ -3114,7 +3114,7 @@ struct TExprContext: private TNonCopyable {
 
     void CheckCycle(const TExprNode& node) {
         if (CycleDetector) {
-            CycleDetector->AddNode(node);
+            CycleDetector->AddNode(node, RepeatTransformCounter);
         }
     }
 

@@ -32,7 +32,7 @@ void TGRpcYdbOverFqService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrp
         requestType,                                                \
         YDB_API_DEFAULT_COUNTER_BLOCK(ydb_over_fq, methodName),     \
         auditMode,                                                  \
-        EEmptyDatabaseMode::EmptyDatabaseAllowed,                   \
+        EEmptyDatabaseMode::EmptyDatabaseForbidden,                 \
         COMMON,                                                     \
         operationCallClass,                                         \
         GRpcRequestProxyId_,                                        \

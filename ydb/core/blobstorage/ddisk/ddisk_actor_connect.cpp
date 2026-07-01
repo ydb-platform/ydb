@@ -2,34 +2,47 @@
 
 #include <ydb/core/util/stlog.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
+
 namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(TEvConnect::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD00, "TDDiskActor::Handle(TEvConnect)", (DDiskId, DDiskId),
-            (Record, record));
+        YDB_LOG_DEBUG("TDDiskActor::Handle(TEvConnect)",
+            {"marker", "BSDD00"},
+            {"DDiskId", DDiskId},
+            {"record", record});
 
         const TQueryCredentials creds(record.GetCredentials());
         const auto [it, inserted] = Connections.try_emplace(creds.TabletId);
         TConnectionInfo& connection = it->second;
 
         if (!inserted) {
-            if (creds.Generation < connection.Generation) {
-                // this is definitely obsolete tablet trying to reach us, reject
+            const bool obsoleteSession =
+                creds.Generation < connection.Generation ||
+                (creds.RequiresDDiskSessionSeqNoCheck() &&
+                 creds.Generation == connection.Generation &&
+                 creds.DDiskSessionSeqNo < connection.DDiskSessionSeqNo);
+            if (obsoleteSession) {
+                // this is definitely obsolete tablet/session trying to reach us, reject
                 SendReply(*ev, std::make_unique<TEvConnectResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::BLOCKED));
                 return;
-            } else if (connection.Generation < creds.Generation) {
-                // drop connection with previous tablet
             }
         }
 
         connection.TabletId = creds.TabletId;
         connection.Generation = creds.Generation;
+        connection.DDiskSessionSeqNo = creds.DDiskSessionSeqNo;
         connection.NodeId = ev->Sender.NodeId();
         connection.InterconnectSessionId = ev->InterconnectSession;
 
+        YDB_LOG_DEBUG("TDDiskActor::Handle(TEvConnect) sending OK",
+            {"marker", "BSDD11"},
+            {"DDiskId", DDiskId},
+            {"recipient", ev->Sender},
+            {"ICSession", ev->InterconnectSession});
         SendReply(*ev, std::make_unique<TEvConnectResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt,
-            DDiskInstanceGuid));
+                DDiskInstanceGuid));
 
         if (ev->InterconnectSession) {
             // subscribe to session to check for disconnections (if not yet)
@@ -50,15 +63,15 @@ namespace NKikimr::NDDisk {
     bool TDDiskActor::ValidateConnection(const IEventHandle& ev, const TQueryCredentials& creds) const {
         const auto it = Connections.find(creds.TabletId);
         if (it == Connections.end()) {
-            return creds.FromPersistentBuffer;
+            return creds.IsInternal();
         }
         const TConnectionInfo& connection = it->second;
         return connection.TabletId == creds.TabletId &&
             connection.Generation == creds.Generation &&
+            (!creds.RequiresDDiskSessionSeqNoCheck() || connection.DDiskSessionSeqNo == creds.DDiskSessionSeqNo) &&
             (!creds.DDiskInstanceGuid || creds.DDiskInstanceGuid == DDiskInstanceGuid) &&
-            (creds.FromPersistentBuffer || (
-            connection.NodeId == ev.Sender.NodeId() &&
-            connection.InterconnectSessionId == ev.InterconnectSession));
+            (!creds.RequiresSenderCheck() || connection.NodeId == ev.Sender.NodeId()) &&
+            (!creds.RequiresInterconnectSessionCheck() || connection.InterconnectSessionId == ev.InterconnectSession);
     }
 
     void TDDiskActor::SendReply(const IEventHandle& queryEv, std::unique_ptr<IEventBase> replyEv) const {

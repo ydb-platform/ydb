@@ -21,7 +21,7 @@ TIntrusivePtr<IOperator> TBuildInitialCBOTreeRule::SimpleMatchAndApply(const TIn
 
     if (input->Kind == EOperator::Join) {
         auto join = CastOperator<TOpJoin>(input);
-        if (!containsJoins(join->GetLeftInput()) && !containsJoins(join->GetRightInput())) {
+        if (join->JoinFilters.empty() && !containsJoins(join->GetLeftInput()) && !containsJoins(join->GetRightInput())) {
             return MakeIntrusive<TOpCBOTree>(input, input->Pos);
         }
     }

@@ -24,6 +24,8 @@ def test(case):
     program_text = '\n'.join(['use plato;'] + spec.program)
     in_tables = yql_utils.get_input_tables(None, spec.cfg, DATA_PATH, def_attr=yql_utils.KSV_ATTR)
 
+    RUNNER_FACTORY = facade_runner(prov='yt', cfg_dir=CFG_DIR, secure_params=spec.secure_params)
+
     res = RUNNER_FACTORY(spec.langver).yql_exec(
         program=program_text,
         run_sql=True,

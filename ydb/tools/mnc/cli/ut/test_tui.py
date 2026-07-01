@@ -11,6 +11,7 @@ from ydb.tools.mnc.lib import progress
 from ydb.tools.mnc.lib.exceptions import CliError
 
 from ydb.tools.mnc.cli import arg_metadata, command_options, parser_factory
+from ydb.tools.mnc.cli.tui import app as tui_app
 from ydb.tools.mnc.cli.tui.app import TuiApp
 from ydb.tools.mnc.cli.tui.command_picker import CommandPickerApp, _BackListItem
 from ydb.tools.mnc.cli.tui.common import ConfigCandidate, config_preview
@@ -384,7 +385,7 @@ class TuiAppErrorTest(unittest.IsolatedAsyncioTestCase):
         async def action(pbar):
             raise CliError("boom")
 
-        with mock.patch("ydb.tools.mnc.cli.tui.app.RuntimeProgressApp.run_async", new=self._run_runtime_app):
+        with mock.patch.object(tui_app.RuntimeProgressApp, "run_async", new=self._run_runtime_app):
             with self.assertRaises(CliError) as error:
                 await app.run_async(action)
 
@@ -405,7 +406,7 @@ class TuiAppErrorTest(unittest.IsolatedAsyncioTestCase):
         async def action(pbar):
             raise CliError("generic failure", result=command_result)
 
-        with mock.patch("ydb.tools.mnc.cli.tui.app.RuntimeProgressApp.run_async", new=self._run_runtime_app):
+        with mock.patch.object(tui_app.RuntimeProgressApp, "run_async", new=self._run_runtime_app):
             with self.assertRaises(CliError) as error:
                 await app.run_async(action)
 
@@ -443,7 +444,7 @@ class TuiAppErrorTest(unittest.IsolatedAsyncioTestCase):
                 ],
             )
 
-        with mock.patch("ydb.tools.mnc.cli.tui.app.RuntimeProgressApp.run_async", new=self._run_runtime_app):
+        with mock.patch.object(tui_app.RuntimeProgressApp, "run_async", new=self._run_runtime_app):
             await app.run_async(action)
         rendered = console.export_text()
 
@@ -458,7 +459,7 @@ class TuiAppErrorTest(unittest.IsolatedAsyncioTestCase):
         async def action(pbar):
             return progress.TaskResult(level=progress.TaskResultLevel.ERROR, message="failed step")
 
-        with mock.patch("ydb.tools.mnc.cli.tui.app.RuntimeProgressApp.run_async", new=self._run_runtime_app):
+        with mock.patch.object(tui_app.RuntimeProgressApp, "run_async", new=self._run_runtime_app):
             result = await app.run_async(action)
 
         self.assertFalse(result)
@@ -479,7 +480,7 @@ class TuiMainRoutingTest(unittest.IsolatedAsyncioTestCase):
             return True
 
         module = types.SimpleNamespace(
-            __name__="ydb.tools.mnc.cli.commands.install",
+            __name__="install",
             expected_config=None,
             prefer_tui_launcher=True,
             add_arguments=lambda parser: None,
@@ -489,9 +490,9 @@ class TuiMainRoutingTest(unittest.IsolatedAsyncioTestCase):
         launcher_result = LauncherResult(args=parser.parse_args(["install"]), argv=["install"])
 
         with mock.patch("sys.argv", ["mnc"]), \
-             mock.patch("ydb.tools.mnc.cli.parser_factory.build_parser", return_value=(parser, actions, expected_config, prefer_launcher)), \
-             mock.patch("ydb.tools.mnc.cli.tui.launcher.TuiLauncher.run_async", return_value=launcher_result), \
-             mock.patch("ydb.tools.mnc.cli.tui.app.TuiApp.run_async", side_effect=self._run_tui_action):
+             mock.patch.object(main.parser_factory, "build_parser", return_value=(parser, actions, expected_config, prefer_launcher)), \
+             mock.patch.object(main.TuiLauncher, "run_async", return_value=launcher_result), \
+             mock.patch.object(main.TuiApp, "run_async", side_effect=self._run_tui_action):
             await main.async_main()
 
     async def test_async_main_install_does_not_run_launcher_without_tui_flag(self):
@@ -501,7 +502,7 @@ class TuiMainRoutingTest(unittest.IsolatedAsyncioTestCase):
             return True
 
         module = types.SimpleNamespace(
-            __name__="ydb.tools.mnc.cli.commands.install",
+            __name__="install",
             expected_config=None,
             prefer_tui_launcher=True,
             add_arguments=lambda parser: None,
@@ -510,9 +511,9 @@ class TuiMainRoutingTest(unittest.IsolatedAsyncioTestCase):
         parser, actions, expected_config, prefer_launcher = parser_factory.build_parser([module])
 
         with mock.patch("sys.argv", ["mnc", "install"]), \
-             mock.patch("ydb.tools.mnc.cli.parser_factory.build_parser", return_value=(parser, actions, expected_config, prefer_launcher)), \
-             mock.patch("ydb.tools.mnc.cli.tui.launcher.TuiLauncher.run_async") as run_launcher, \
-             mock.patch("ydb.tools.mnc.cli.tui.app.TuiApp.run_async", side_effect=self._run_tui_action) as run_tui:
+             mock.patch.object(main.parser_factory, "build_parser", return_value=(parser, actions, expected_config, prefer_launcher)), \
+             mock.patch.object(main.TuiLauncher, "run_async") as run_launcher, \
+             mock.patch.object(main.TuiApp, "run_async", side_effect=self._run_tui_action) as run_tui:
             await main.async_main()
 
         run_launcher.assert_not_called()

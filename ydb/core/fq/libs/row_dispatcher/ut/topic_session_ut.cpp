@@ -49,13 +49,19 @@ public:
         RowDispatcherActorId = Runtime.AllocateEdgeActor();
     }
 
-    void Init(const TString& topicPath, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max()) {
+    void Init(
+        const TString& topicPath,
+        ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max(),
+        ui64 timeoutBeforeStartSessionSec = TimeoutBeforeStartSessionSec,
+        const TDuration& compileResponseDelay = {},
+        ui64 batchCreationTimeoutMs = 100)
+        {
         TopicPath = topicPath;
-        Config.SetTimeoutBeforeStartSessionSec(TimeoutBeforeStartSessionSec);
+        Config.SetTimeoutBeforeStartSessionSec(timeoutBeforeStartSessionSec);
         Config.SetMaxSessionUsedMemory(maxSessionUsedMemory);
         Config.SetSendStatusPeriodSec(2);
         Config.SetWithoutConsumer(false);
-        Config.MutableJsonParser()->SetBatchCreationTimeoutMs(100);
+        Config.MutableJsonParser()->SetBatchCreationTimeoutMs(batchCreationTimeoutMs);
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
@@ -68,7 +74,7 @@ public:
             nullptr);
 
         CompileNotifier = Runtime.AllocateEdgeActor();
-        const auto compileServiceActorId = Runtime.Register(CreatePurecalcCompileServiceMock(CompileNotifier));
+        const auto compileServiceActorId = Runtime.Register(CreatePurecalcCompileServiceMock(CompileNotifier, compileResponseDelay));
 
         if constexpr (MockTopicSession) {
             PqGatewayNotifier = Runtime.AllocateEdgeActor();
@@ -478,6 +484,33 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId2, source);
     }
 
+    Y_UNIT_TEST_F(RestartSessionIfNewClientWithOffsetConfirmStartRace, TRealTopicFixture) {
+        const TString topicName = "topic6001";
+        PQCreateStream(topicName);
+        Init(topicName);
+        auto source = BuildSource();
+
+        PQWrite({ Json1, Json2, Json3 }); // offset 0, 1, 2
+        StartSession(ReadActorId1, source, 3);
+        ExpectStatistics({{ReadActorId1, Nothing()}});
+        // We should better wait till Confirm; sadly, on unpatched rd confirm changes nothing visible (no new event is sent, statistics is not changed); so, just try to wait it out (test is safe - "unlucky" case (could've been) false positive: local runs with fix reverted shows that 3s delay is unsufficient, and 5s is sufficient)
+        Sleep(TDuration::Seconds(10));
+
+
+        // Restart topic session.
+        StartSession(ReadActorId2, source, 1);
+        ExpectNewDataArrived({ReadActorId2});
+
+        PQWrite({ Json4 }); // offset 3
+        ExpectNewDataArrived({ReadActorId1});
+
+        ExpectMessageBatch(ReadActorId1, { JsonMessage(4) }, false);
+        ExpectMessageBatch(ReadActorId2, { JsonMessage(2), JsonMessage(3), JsonMessage(4) }, false);
+
+        StopSession(ReadActorId1, source);
+        StopSession(ReadActorId2, source);
+    }
+
     Y_UNIT_TEST_F(ReadNonExistentTopic, TRealTopicFixture) {
         const TString topicName = "topic7";
         Init(topicName);
@@ -672,6 +705,31 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         PQWrite({ Json1, wrongJson, wrongJson, Json3 });
         ExpectMessageBatch(ReadActorId1, { JsonMessage(1), JsonMessage(3) }, true, {0, 3});
         PassAway();
+    }
+
+    Y_UNIT_TEST_F(LongCompilation, TRealTopicFixture) {
+        const TString topicName = "long_compilation";
+        PQCreateStream(topicName);
+        Init(topicName, std::numeric_limits<ui64>::max(), 5, TDuration::Seconds(2), 4000);
+        auto source = BuildSource();
+        const std::vector<TString> data = { Json1, Json2, Json3};
+        PQWrite(data);
+
+        StartSession(ReadActorId1, source, 1);
+        ExpectNewDataArrived({ReadActorId1});
+        ExpectMessageBatch(ReadActorId1, { JsonMessage(2), JsonMessage(3) }, false);
+
+        StartSession(ReadActorId2, source, 1);
+
+        const std::vector<TString> data2 = { Json4 };
+        PQWrite(data2);
+   
+        ExpectNewDataArrived({ReadActorId1, ReadActorId2});
+        ExpectMessageBatch(ReadActorId1, { JsonMessage(4) }, false);
+        ExpectMessageBatch(ReadActorId2, { JsonMessage(2), JsonMessage(3), JsonMessage(4)}, false);
+
+        StopSession(ReadActorId1, source);
+        StopSession(ReadActorId2, source);
     }
 }
 

@@ -406,7 +406,6 @@ allowed_labels:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -453,7 +452,6 @@ allowed_labels:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -507,7 +505,6 @@ allowed_labels:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -554,7 +551,6 @@ config:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -816,7 +812,6 @@ allowed_labels:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -1272,6 +1267,125 @@ TMap<TSet<TVector<NYamlConfig::TLabel>>, TVector<int>> ExpectedResolved =
     },
 };
 
+Y_UNIT_TEST_SUITE(YamlConfigOpaqueConfigMarker) {
+
+    Y_UNIT_TEST(OpaqueConfigFieldsIncludesExistingOpaqueFields) {
+        const auto& fields = NYaml::OpaqueConfigFields();
+
+        bool found = false;
+        for (const auto& f : fields) {
+            if (f.Name == "private_database_config") {
+                found = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found,
+            "expected 'private_database_config' in OpaqueConfigFields()");
+    }
+
+    Y_UNIT_TEST(OpaqueConfigFieldsAreStable) {
+        // The list is computed once and cached; consecutive calls must return
+        // the same vector by reference.
+        const auto& a = NYaml::OpaqueConfigFields();
+        const auto& b = NYaml::OpaqueConfigFields();
+        UNIT_ASSERT_EQUAL(&a, &b);
+    }
+
+    Y_UNIT_TEST(CaptureOpaqueConfigFieldsReplacesMessageSubtreeWithEmptyMap) {
+        NJson::TJsonValue cfg(NJson::JSON_MAP);
+        auto& sub = cfg["private_database_config"];
+        sub.SetType(NJson::JSON_MAP);
+        sub["some_unknown_field"] = 42;
+        sub["some_unknown_struct"]["field_1"] = 1;
+        sub["some_unknown_struct"]["field_2"] = "abc";
+
+        NYaml::CaptureOpaqueConfigFields(cfg);
+
+        UNIT_ASSERT(cfg.Has("private_database_config"));
+        const auto& captured = cfg["private_database_config"];
+        UNIT_ASSERT_C(captured.IsMap(),
+            "private_database_config must remain a map after capture");
+        UNIT_ASSERT_C(captured.GetMap().empty(),
+            "private_database_config must be replaced with an empty map");
+    }
+
+    Y_UNIT_TEST(CaptureOpaqueConfigFieldsLeavesOtherFieldsUntouched) {
+        NJson::TJsonValue cfg(NJson::JSON_MAP);
+        cfg["private_database_config"]["dropped"] = "value";
+        cfg["feature_flags"]["enable_something"] = true;
+        cfg["actor_system_config"]["sys_executor"] = 0;
+
+        NYaml::CaptureOpaqueConfigFields(cfg);
+
+        UNIT_ASSERT(cfg["private_database_config"].IsMap());
+        UNIT_ASSERT(cfg["private_database_config"].GetMap().empty());
+
+        UNIT_ASSERT(cfg["feature_flags"].IsMap());
+        UNIT_ASSERT_EQUAL(cfg["feature_flags"]["enable_something"].GetBoolean(), true);
+
+        UNIT_ASSERT(cfg["actor_system_config"].IsMap());
+        UNIT_ASSERT_EQUAL(cfg["actor_system_config"]["sys_executor"].GetInteger(), 0);
+    }
+
+    Y_UNIT_TEST(CaptureOpaqueConfigFieldsIsNoopWhenFieldAbsent) {
+        NJson::TJsonValue cfg(NJson::JSON_MAP);
+        cfg["feature_flags"]["enable_something"] = true;
+
+        NYaml::CaptureOpaqueConfigFields(cfg);
+
+        UNIT_ASSERT(!cfg.Has("private_database_config"));
+        UNIT_ASSERT(cfg["feature_flags"].IsMap());
+        UNIT_ASSERT_EQUAL(cfg["feature_flags"]["enable_something"].GetBoolean(), true);
+    }
+
+    Y_UNIT_TEST(CaptureOpaqueConfigFieldsIsNoopOnNonMap) {
+        // Non-map inputs must not crash and must remain unchanged.
+        NJson::TJsonValue arr(NJson::JSON_ARRAY);
+        arr.AppendValue(1);
+        arr.AppendValue(2);
+        NYaml::CaptureOpaqueConfigFields(arr);
+        UNIT_ASSERT(arr.IsArray());
+        UNIT_ASSERT_VALUES_EQUAL(arr.GetArray().size(), 2u);
+
+        NJson::TJsonValue scalar(42);
+        NYaml::CaptureOpaqueConfigFields(scalar);
+        UNIT_ASSERT_EQUAL(scalar.GetInteger(), 42);
+    }
+
+    Y_UNIT_TEST(CaptureOpaqueConfigFieldsHandlesAlreadyEmptyMap) {
+        NJson::TJsonValue cfg(NJson::JSON_MAP);
+        cfg["private_database_config"].SetType(NJson::JSON_MAP);
+
+        NYaml::CaptureOpaqueConfigFields(cfg);
+
+        UNIT_ASSERT(cfg["private_database_config"].IsMap());
+        UNIT_ASSERT(cfg["private_database_config"].GetMap().empty());
+    }
+
+    Y_UNIT_TEST(ParseAcceptsUnknownOpaqueFieldSubtree) {
+        // End-to-end: the parser must accept unknown content under an
+        // opaque top-level field without allow_unknown_fields, because
+        // CaptureOpaqueConfigFields() strips the subtree before the
+        // proto merge.
+        const TString yaml = R"(---
+metadata:
+  cluster: ""
+  version: 0
+config:
+  private_database_config:
+    some_unknown_field: 42
+    some_unknown_struct:
+      field_1: 1
+      field_2: abc
+)";
+        NKikimrConfig::TAppConfig cfg;
+        UNIT_ASSERT_NO_EXCEPTION(cfg = NYaml::Parse(yaml, /*transform=*/ false));
+        // The merge stored an empty message for the opaque field; nothing
+        // from the YAML sub-tree leaked into the proto.
+        UNIT_ASSERT(cfg.HasPrivateDatabaseConfig());
+    }
+}
+
 Y_UNIT_TEST_SUITE(YamlConfig) {
     Y_UNIT_TEST(CollectLabels) {
         auto doc = NFyaml::TDocument::Parse(WholeConfig);
@@ -1517,6 +1631,147 @@ Y_UNIT_TEST_SUITE(YamlConfig) {
         }
         TStringStream stream;
         stream << cfg;
+    }
+
+    void AppendDatabaseConfigBase(
+        const TString mainConfig,
+        const TString databaseConfig)
+    {
+        auto treeOriginal = NFyaml::TDocument::Parse(mainConfig);
+        auto tree = NFyaml::TDocument::Parse(mainConfig);
+        auto dbTree = NFyaml::TDocument::Parse(databaseConfig);
+
+        const size_t selectorsCountBefore =
+            tree.Root().Map().Has("selector_config")
+                ? tree.Root().Map().at("selector_config").Sequence().size()
+                : 0;
+
+        // Add empty selector_config nodes to avoid processing missing YAML
+        // nodes
+        if (!tree.Root().Map().Has("selector_config")) {
+            tree.Root().Map().Append(
+                tree.Buildf("selector_config"),
+                tree.Buildf("[]"));
+        }
+        if (!treeOriginal.Root().Map().Has("selector_config")) {
+            treeOriginal.Root().Map().Append(
+                treeOriginal.Buildf("selector_config"),
+                treeOriginal.Buildf("[]"));
+        }
+
+        UNIT_ASSERT_NO_EXCEPTION(
+            NKikimr::NYamlConfig::AppendDatabaseConfig(tree, dbTree));
+
+        auto selectors = tree.Root().Map().at("selector_config").Sequence();
+        UNIT_ASSERT_VALUES_EQUAL(selectors.size(), selectorsCountBefore + 1);
+
+        auto lastSelector = selectors.at(selectors.size() - 1).Map();
+        UNIT_ASSERT(lastSelector.Has("config"));
+
+        // Check that main config selectors have not changed
+        auto selectorsOriginal =
+            treeOriginal.Root().Map().at("selector_config").Sequence();
+
+        for (size_t i = 0; i < selectorsCountBefore; i++) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                selectors.at(i).Map().size(),
+                selectorsOriginal.at(i).Map().size());
+
+            // Сheck all map elements (description, selector, config)
+            for (auto field = selectors.at(i).Map().begin(),
+                      fieldOrig = selectorsOriginal.at(i).Map().begin();
+                 field != selectors.at(i).Map().end();
+                 field++, fieldOrig++)
+            {
+                TStringStream fieldStr;
+                fieldStr << field->Key() << ": " << field->Value();
+
+                TStringStream fieldOriginalStr;
+                fieldOriginalStr << fieldOrig->Key() << ": "
+                                 << fieldOrig->Value();
+
+                UNIT_ASSERT_VALUES_EQUAL(
+                    fieldStr.Str(),
+                    fieldOriginalStr.Str());
+            }
+        }
+
+        // Check that the db config selector is appended to the end of the main
+        // config selectors
+        TStringStream actualLastConfig;
+        actualLastConfig << lastSelector.at("config");
+
+        TStringStream expectedConfig;
+        expectedConfig << dbTree.Root().Map().at("config");
+
+        UNIT_ASSERT_VALUES_EQUAL(actualLastConfig.Str(), expectedConfig.Str());
+    }
+
+    Y_UNIT_TEST(AppendDatabaseConfigAsTheOnlySelector)
+    {
+        const TString mainConfig = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  feature_flags:
+    some_param_1: true
+)";
+
+        const TString databaseConfig = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+config:
+  feature_flags: !inherit
+    some_param_1: false
+)";
+
+        AppendDatabaseConfigBase(mainConfig, databaseConfig);
+    }
+
+    Y_UNIT_TEST(AppendDatabaseConfigAfterExistingSelectors)
+    {
+        const TString mainConfig = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  feature_flags:
+    some_param_1: true
+selector_config:
+- description: pre-existing selector 1 with config
+  selector:
+    tenant: dynamic
+  config:
+    feature_flags: !inherit
+      some_param_2: true
+- description: pre-existing selector 2 with config
+  selector:
+    tenant: dynamic
+  config:
+    feature_flags: !inherit
+      some_param_3: true
+)";
+
+        const TString databaseConfig = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+config:
+  feature_flags: !inherit
+    some_param_1: false
+)";
+
+        AppendDatabaseConfigBase(mainConfig, databaseConfig);
     }
 
     Y_UNIT_TEST(GetMetadata) {
@@ -2080,19 +2335,19 @@ Y_UNIT_TEST(AllTestConfigs) {
             uniqDocs.insert(toStr(cfg.second));
         }
 
-        UNIT_ASSERT_VALUES_EQUAL_C(uniqDocs.size(), resolvedUniq.size(), 
+        UNIT_ASSERT_VALUES_EQUAL_C(uniqDocs.size(), resolvedUniq.size(),
             TString("Config: ") + name + ", ResolveUniqueDocs has duplicates");
 
         for (const auto& s : uniqDocs) {
-            UNIT_ASSERT_C(allDocs.contains(s), 
+            UNIT_ASSERT_C(allDocs.contains(s),
                 TString("Config: ") + name + ", ResolveUniqueDocs has extra doc not in ResolveAll");
         }
 
-        UNIT_ASSERT_VALUES_EQUAL_C(allDocs.size(), uniqDocs.size(), 
+        UNIT_ASSERT_VALUES_EQUAL_C(allDocs.size(), uniqDocs.size(),
             TString("Config: ") + name + ", size mismatch");
 
         for (const auto& s : allDocs) {
-            UNIT_ASSERT_C(uniqDocs.contains(s), 
+            UNIT_ASSERT_C(uniqDocs.contains(s),
                 TString("Config: ") + name + ", ResolveUniqueDocs missing doc from ResolveAll");
         }
     };

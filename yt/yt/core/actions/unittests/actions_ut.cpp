@@ -138,7 +138,7 @@ TEST(TAllSucceededBoundedConcurrencyTest, CancelOthers)
     auto error = WaitFor(RunWithAllSucceededBoundedConcurrency(std::move(callbacks), 4));
 
     EXPECT_FALSE(error.IsOK());
-    EXPECT_EQ(error.GetMessage(), TString("Testing"));
+    EXPECT_EQ(error.GetMessage(), std::string("Testing"));
 
     EXPECT_EQ(numDone->load(), 4);
 }

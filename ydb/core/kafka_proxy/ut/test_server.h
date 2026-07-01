@@ -61,6 +61,7 @@ public:
     THolder<TTempFileHandle> MeteringFile;
 
     TTicketParserAccessServiceMock accessServiceMock;
+    TTicketParserAccessServiceMockV2 accessServiceMockV2;
     std::unique_ptr<grpc::Server> AccessServer;
 };
 

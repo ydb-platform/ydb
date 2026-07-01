@@ -77,10 +77,10 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         self.all_types = {**supported_pk_types, **supported_non_pk_types}
 
         yield from self.setup_cluster(
-            extra_feature_flags={
-                "enable_arrow_result_set_format": True,
-                "enable_columnshard_bool": True,
-            },
+            extra_feature_flags=[
+                "enable_arrow_result_set_format",
+                "enable_columnshard_bool",
+            ],
             table_service_config={
                 "resource_manager": {
                     "channel_buffer_size": channel_buffer_size

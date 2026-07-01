@@ -5,6 +5,7 @@ SIZE(MEDIUM)
 SRCS(
     kqp_executer_ut.cpp
     kqp_tasks_graph_ut.cpp
+    max_tasks_graph_ut.cpp
 )
 
 PEERDIR(

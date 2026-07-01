@@ -1,6 +1,5 @@
 import zlib
 from abc import abstractmethod
-from typing import Union
 
 import lz4
 import lz4.frame
@@ -12,11 +11,11 @@ except ImportError:
     brotli = None
 
 
-available_compression = ['lz4', 'zstd']
+available_compression = ["lz4", "zstd"]
 
 if brotli:
-    available_compression.append('br')
-available_compression.extend(['gzip', 'deflate'])
+    available_compression.append("br")
+available_compression.extend(["gzip", "deflate"])
 
 comp_map = {}
 
@@ -26,14 +25,14 @@ class Compressor:
         comp_map[tag] = cls() if thread_safe else cls
 
     @abstractmethod
-    def compress_block(self, block) -> Union[bytes, bytearray]:
+    def compress_block(self, block) -> bytes | bytearray:
         return block
 
     def flush(self):
         pass
 
 
-class GzipCompressor(Compressor, tag='gzip', thread_safe=False):
+class GzipCompressor(Compressor, tag="gzip", thread_safe=False):
     def __init__(self, level: int = 6, wbits: int = 31):
         self.zlib_obj = zlib.compressobj(level=level, wbits=wbits)
 
@@ -44,7 +43,7 @@ class GzipCompressor(Compressor, tag='gzip', thread_safe=False):
         return self.zlib_obj.flush()
 
 
-class Lz4Compressor(Compressor, tag='lz4', thread_safe=False):
+class Lz4Compressor(Compressor, tag="lz4", thread_safe=False):
     def __init__(self):
         self.comp = lz4.frame.LZ4FrameCompressor()
 
@@ -54,12 +53,12 @@ class Lz4Compressor(Compressor, tag='lz4', thread_safe=False):
         return output + self.comp.flush()
 
 
-class ZstdCompressor(Compressor, tag='zstd'):
+class ZstdCompressor(Compressor, tag="zstd"):
     def compress_block(self, block):
         return zstandard.compress(block)
 
 
-class BrotliCompressor(Compressor, tag='br'):
+class BrotliCompressor(Compressor, tag="br"):
     def compress_block(self, block):
         return brotli.compress(block)
 

@@ -381,7 +381,11 @@ public:
         FillColumnsBuffers();
         Buffer.Reserve(Config.BatchSize, MaxNumberRows);
 
-        LOG_ROW_DISPATCHER_INFO("Simdjson active implementation " << simdjson::get_active_implementation()->name() << " (" << simdjson::get_active_implementation()->description() << "), error skip mode: " << Config.SkipErrors);
+        LOG_ROW_DISPATCHER_INFO("JsonParser was created, simdjson active implementation " << simdjson::get_active_implementation()->name() 
+            << " (" << simdjson::get_active_implementation()->description() << ")"
+            << ", config: error skip mode: " << Config.SkipErrors << ", batch size: " << Config.BatchSize << ", latency limit " << Config.LatencyLimit
+            << ", buffer cell count: " << Config.BufferCellCount
+            << ", max number rows: " << MaxNumberRows );
         Parser.threaded = false;
     }
 

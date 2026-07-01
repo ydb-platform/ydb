@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/persqueue/public/cloud_events
     ydb/core/protos
     ydb/core/tx/scheme_board
+    ydb/library/actors/core
 )
 
 END()

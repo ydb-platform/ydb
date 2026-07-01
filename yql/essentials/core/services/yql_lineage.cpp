@@ -336,7 +336,7 @@ private:
         for (const auto& r : Reads_) {
             TVector<TPinInfo> inputs;
             auto& formatter = r.second->GetPlanFormatter();
-            formatter.GetInputs(*r.first, inputs, false);
+            formatter.GetInputs(*r.first, inputs, /*withLimits=*/false);
             for (const auto& i : inputs) {
                 const TStringBuf& tableName = AppendString(i.DisplayName);
                 readTables.emplace_back(tableName, r.first);
@@ -441,7 +441,7 @@ private:
                 writer.OnKeyedItem("Id");
                 writer.OnInt64Scalar(ind - 1);
                 writer.OnKeyedItem("Schema");
-                WriteSchema(writer, *value, nullptr);
+                WriteSchema(writer, *value, /*formatter=*/nullptr);
                 writer.OnEndMap();
             }
             writer.OnEndList();
@@ -615,7 +615,7 @@ private:
             writer.OnInt64Scalar(SchemaSets_[schema] - 1);
         } else {
             writer.OnKeyedItem("Schema");
-            WriteSchema(writer, *schema, nullptr);
+            WriteSchema(writer, *schema, /*formatter=*/nullptr);
         }
     }
 
@@ -1004,7 +1004,7 @@ private:
                     newTransforms = ETransformsType::Math;
                 }
 
-                MergeLineageFromUsedFields(expr, arg, innerLineage, res, true, flattenColumns, newTransforms);
+                MergeLineageFromUsedFields(expr, arg, innerLineage, res, /*produceStruct=*/true, flattenColumns, newTransforms);
             }
 
             return;
@@ -1049,9 +1049,15 @@ private:
                 value = &body;
                 while (value->IsCallable({"FlatMap", "OrderedFlatMap"})) {
                     TNodeMap<TMaybe<TFieldsLineage>> visited;
-                    if (auto res = ScanExprLineage(value->Head(), &arg, &innerLineage, visited, TFieldsLineageMap(Allocator_.get()))) {
-                        flattenColumns.emplace(value->Tail().Head().HeadPtr().Get(), res);
+                    auto res = ScanExprLineage(value->Head(), &arg, &innerLineage, visited, TFieldsLineageMap(Allocator_.get()));
+                    if (!res) {
+                        TFieldsLineage all(Allocator_.get());
+                        for (const auto& f : *innerLineage.Fields) {
+                            all.Items.insert(f.second.Items.begin(), f.second.Items.end());
+                        }
+                        res = std::move(all);
                     }
+                    flattenColumns.emplace(value->Tail().Head().HeadPtr().Get(), res);
                     value = &value->Tail().Tail();
                 }
                 if (value->IsCallable("Just")) {
@@ -1118,13 +1124,13 @@ private:
                                                initHandler->Head().Head(),
                                                innerLineage,
                                                source,
-                                               false,
+                                               /*produceStruct=*/false,
                                                TFieldsLineageMap(Allocator_.get()));
                     MergeLineageFromUsedFields(updateHandler->Tail(),
                                                updateHandler->Head().Head(),
                                                innerLineage,
                                                source,
-                                               false,
+                                               /*produceStruct=*/false,
                                                TFieldsLineageMap(Allocator_.get()));
                 } else if (payload->Child(1)->IsCallable("AggApply")) {
                     auto extractHandler = payload->Child(1)->Child(2);
@@ -1175,7 +1181,7 @@ private:
 
         lineage.Fields.ConstructInPlace(Allocator_.get());
         FillStructLineage(lineage,
-                          nullptr,
+                          /*value=*/nullptr,
                           arg,
                           innerLineage,
                           GetSeqItemType(body.GetTypeAnn()),
@@ -1198,7 +1204,7 @@ private:
 
         lineage.Fields.ConstructInPlace(Allocator_.get());
         FillStructLineage(lineage,
-                          nullptr,
+                          /*value=*/nullptr,
                           arg,
                           innerLineage,
                           GetSeqItemType(body.GetTypeAnn()),
@@ -1221,11 +1227,11 @@ private:
                         res.Items.insert(x);
                     }
 
-                    if (f->StructItems || f->Items.empty()) {
+                    if (f->StructItems) {
                         if (!hasStructItems) {
                             hasStructItems = true;
                         }
-                    } else {
+                    } else if (!f->Items.empty()) {
                         hasStructItems = false;
                     }
                 }
@@ -1290,13 +1296,13 @@ private:
                                            initHandler->Head().Head(),
                                            innerLineage,
                                            res,
-                                           false,
+                                           /*produceStruct=*/false,
                                            TFieldsLineageMap(Allocator_.get()));
                 MergeLineageFromUsedFields(updateHandler->Tail(),
                                            updateHandler->Head().Head(),
                                            innerLineage,
                                            res,
-                                           false,
+                                           /*produceStruct=*/false,
                                            TFieldsLineageMap(Allocator_.get()));
             }
         }
@@ -1334,13 +1340,13 @@ private:
                                                    initHandler->Head().Head(),
                                                    innerLineage,
                                                    res,
-                                                   false,
+                                                   /*produceStruct=*/false,
                                                    TFieldsLineageMap(Allocator_.get()));
                         MergeLineageFromUsedFields(updateHandler->Tail(),
                                                    updateHandler->Head().Head(),
                                                    innerLineage,
                                                    res,
-                                                   false,
+                                                   /*produceStruct=*/false,
                                                    TFieldsLineageMap(Allocator_.get()));
                     } else {
                         lineage.Fields.Clear();
@@ -1402,11 +1408,11 @@ private:
             }
 
             auto& h = hasStructItems[field->GetName()];
-            if (f.StructItems || f.Items.empty()) {
+            if (f.StructItems) {
                 if (!h) {
                     h = true;
                 }
-            } else {
+            } else if (!f.Items.empty()) {
                 h = false;
             }
         }
@@ -1459,8 +1465,8 @@ private:
                 for (const auto& f : child->Children()) {
                     TNodeMap<TMaybe<TFieldsLineage>> visited;
                     auto res = ScanExprLineage(f->Tail(),
-                                               nullptr,
-                                               nullptr,
+                                               /*arg=*/nullptr,
+                                               /*src=*/nullptr,
                                                visited,
                                                TFieldsLineageMap(Allocator_.get()));
                     if (res) {
@@ -1471,8 +1477,8 @@ private:
             } else {
                 TNodeMap<TMaybe<TFieldsLineage>> visited;
                 auto res = ScanExprLineage(*child,
-                                           nullptr,
-                                           nullptr,
+                                           /*arg=*/nullptr,
+                                           /*src=*/nullptr,
                                            visited,
                                            TFieldsLineageMap(Allocator_.get()));
                 if (res) {

@@ -4,6 +4,8 @@
 
 #include <yt/yt/core/concurrency/thread_affinity.h>
 
+#include <library/cpp/yt/logging/logger.h>
+
 #include <library/cpp/yt/string/format.h>
 
 #include <library/cpp/yt/misc/tls.h>
@@ -457,6 +459,35 @@ TRefCountedTracker::TGlobalSlot* TRefCountedTracker::GetGlobalSlot(TRefCountedTy
         GlobalSlots_.resize(static_cast<size_t>(index) + 1);
     }
     return &GlobalSlots_[index];
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TRefCountedTracker::LogDebugInfo(const NLogging::TLogger& logger, NLogging::ELogLevel level) const
+{
+    auto statistics = GetStatistics();
+
+    auto& slots = statistics.NamedStatistics;
+    // Only types with live instances can be holding the leaked object.
+    std::erase_if(slots, [] (const auto& slot) {
+        return slot.ObjectsAlive == 0;
+    });
+    std::sort(slots.begin(), slots.end(), [] (const auto& lhs, const auto& rhs) {
+        return lhs.ObjectsAlive > rhs.ObjectsAlive;
+    });
+
+    YT_LOG_EVENT(logger, level, "Ref-counted tracker dump (LiveTypes: %v, TotalLiveObjects: %v, TotalLiveBytes: %v)",
+        slots.size(),
+        statistics.TotalStatistics.ObjectsAlive,
+        statistics.TotalStatistics.BytesAlive);
+
+    for (const auto& slot : slots) {
+        YT_LOG_EVENT(logger, level, "Ref-counted tracker slot (ObjectsAlive: %v, ObjectsAllocated: %v, BytesAlive: %v, Name: %v)",
+            slot.ObjectsAlive,
+            slot.ObjectsAllocated,
+            slot.BytesAlive,
+            slot.FullName);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

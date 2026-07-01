@@ -9,9 +9,12 @@
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/file/yql_yt_file_yt_job_service.h>
 
+#include <yt/yql/providers/yt/fmr/test_utils/yql_yt_file_test_utils.h>
+
 #include <util/stream/file.h>
 
 namespace NYql::NFmr {
+
 
 TString TableContent_1 = "{\"key\"=\"075\";\"subkey\"=\"1\";\"value\"=\"abc\"};\n"
                         "{\"key\"=\"800\";\"subkey\"=\"2\";\"value\"=\"ddd\"};\n"
@@ -104,8 +107,8 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
 
         auto err = std::get_if<TFmrError>(&res);
 
-        UNIT_ASSERT_C(!err,err->ErrorMessage);
-        const TString resultFileContent = TFileInput(ytOutputFile.Name()).ReadAll();
+        UNIT_ASSERT_C(!err, err->ErrorMessage);
+        const TString resultFileContent = ReadFileWithSplittedSupport(ytOutputFile.Name());
         TString expectedLine;
         TStringStream expectedStream(TableContent_1);
         while (expectedStream.ReadLine(expectedLine)) {
@@ -299,7 +302,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         ETaskStatus status = RunJob(task, MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher, cancelFlag).TaskStatus;
 
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
-        const TString resultFileContent = TFileInput(ytOutputFile.Name()).ReadAll();
+        const TString resultFileContent = ReadFileWithSplittedSupport(ytOutputFile.Name());
         TString expectedLine;
         TStringStream expectedStream(TableContent_1);
         while (expectedStream.ReadLine(expectedLine)) {

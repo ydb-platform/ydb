@@ -45,7 +45,7 @@ void BenchmarkFixedSizeCoalesce(benchmark::State& state) {
     TTypeInfoHelper tif;
 
     auto getArray = [&](TType* type, bool isOptional) {
-        auto array_builder = MakeArrayBuilder(tif, type, *NYql::NUdf::GetYqlMemoryPool(), arrayLength, nullptr);
+        auto array_builder = MakeArrayBuilder(tif, type, *NYql::NUdf::GetYqlMemoryPool(), arrayLength, /*pgBuilder=*/nullptr);
         for (int i = 0; i < arrayLength; i++) {
             if (!isOptional) {
                 array_builder->Add(getBlockItem(drng->GenRand64()));

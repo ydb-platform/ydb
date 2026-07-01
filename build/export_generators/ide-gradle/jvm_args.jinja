@@ -64,32 +64,64 @@ tasks.withType<JavaExec> {
 }
 {%- endif -%}
 
-{%- set test_jvm_args = jvm_args -%}
-{%- set extra_jvm_args = extra_targets|selectattr('jvm_args')|map(attribute='jvm_args')|sum -%}
-{%- if extra_jvm_args|length and test_jvm_args|join('|') != extra_jvm_args|join('|') %}
-{%-     set test_jvm_args = test_jvm_args + extra_jvm_args -%}
-{%- endif -%}
-{%- set test_cwds = extra_targets|selectattr('test_cwd')|map(attribute='test_cwd')|sum|unique -%}
-{%- set test_envs = extra_targets|selectattr('test_env')|map(attribute='test_env')|sum|unique -%}
-{%- set test_system_properties = extra_targets|selectattr('system_properties')|map(attribute='system_properties')|sum -%}
-{%- if test_jvm_args|length or test_cwds|length or test_envs|length or test_system_properties|length %}
+{%- if named_tests -%}
+{%-     for extra_target in extra_targets -%}
+{%-         set testname = SourceSetName(extra_target) -%}
+{%-         set test_jvm_args = jvm_args -%}
+{%-         if extra_target.enable_preview -%}
+{%-             set test_jvm_args = test_jvm_args + ["--enable-preview"] -%}
+{%-         endif -%}
+{%-         if extra_target.jvm_args|length %}
+{%-             set test_jvm_args = test_jvm_args + extra_target.jvm_args -%}
+{%-         endif -%}
+{%-         if test_jvm_args|length or extra_target.test_cwd|trim != '' or extra_target.test_env|length or extra_target.system_properties|length %}
+
+tasks.named<Test>("{{ testname }}") {
+{#- glue -#}
+{{ JvmArgs(test_jvm_args, extra_target.system_properties) }}
+{#- glue -#}
+{%-             if target.enable_preview -%}
+    environment["JAVA_TOOL_OPTIONS"] = "--enable-preview"
+{%              endif -%}
+{%-             if extra_target.test_cwd|trim != '' -%}
+{%-                 set test_cwd = extra_target.test_cwd-%}
+{%-                 if test_cwd[0] != '/' -%}
+{%-                     set test_cwd = '$arcadia_root/' + test_cwd -%}
+{%-                 endif %}
+    workingDir({{ PatchRoots(test_cwd) }})
+{%-             endif -%}
+{{ Env(extra_target.test_env) }}
+}
+{%-         endif -%}
+{%-     endfor -%}
+{%- else -%}
+{%-     set test_jvm_args = jvm_args -%}
+{%-     set extra_jvm_args = extra_targets|selectattr('jvm_args')|map(attribute='jvm_args')|sum -%}
+{%-     if extra_jvm_args|length and test_jvm_args|join('|') != extra_jvm_args|join('|') %}
+{%-         set test_jvm_args = test_jvm_args + extra_jvm_args -%}
+{%-     endif -%}
+{%-     set test_cwds = extra_targets|selectattr('test_cwd')|map(attribute='test_cwd')|sum|unique -%}
+{%-     set test_envs = extra_targets|selectattr('test_env')|map(attribute='test_env')|sum|unique -%}
+{%-     set test_system_properties = extra_targets|selectattr('system_properties')|map(attribute='system_properties')|sum -%}
+{%-     if test_jvm_args|length or test_cwds|length or test_envs|length or test_system_properties|length %}
 
 tasks.withType<Test> {
 {#- glue -#}
 {{ JvmArgs(test_jvm_args, test_system_properties) }}
-{%-     if target.enable_preview -%}
+{%-         if target.enable_preview -%}
     environment["JAVA_TOOL_OPTIONS"] = "--enable-preview"
-{%      endif -%}
-{%-     if test_cwds|length -%}
-{%-         if test_cwds|length > 1 %}
+{%          endif -%}
+{%-         if test_cwds|length -%}
+{%-             if test_cwds|length > 1 %}
 // Use first of found TEST_CWDs: {%- for tcwd in test_cwds -%}{{ tcwd }}{%- if not loop.last -%}, {%- endif -%}{%- endfor -%}
-{%-         endif -%}
-{%-         set test_cwd = test_cwds|first -%}
-{%-         if test_cwd[0] != '/' -%}
-{%-             set test_cwd = '$arcadia_root/' + test_cwd -%}
-{%-         endif %}
+{%-             endif -%}
+{%-             set test_cwd = test_cwds|first -%}
+{%-             if test_cwd[0] != '/' -%}
+{%-                 set test_cwd = '$arcadia_root/' + test_cwd -%}
+{%-             endif %}
     workingDir({{ PatchRoots(test_cwd) }})
-{%-     endif -%}
+{%-         endif -%}
 {{ Env(test_envs) }}
 }
+{%-     endif -%}
 {%- endif -%}

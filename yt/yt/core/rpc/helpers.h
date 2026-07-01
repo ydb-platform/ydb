@@ -4,6 +4,8 @@
 
 #include <yt/yt/core/actions/public.h>
 
+#include <yt/yt/core/bus/public.h>
+
 #include <yt/yt/core/compression/public.h>
 
 #include <yt/yt/core/misc/error.h>
@@ -130,6 +132,17 @@ int FeatureIdToInt(E featureId);
 void EnrichClientRequestError(
     TError* error,
     TFeatureIdFormatter featureIdFormatter);
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Adapts a bus-layer direct placement transfer to the RPC layer: the returned
+//! transfer forwards #GetExpectedBufferSizes and #Run to #underlying and, once the
+//! consumer drives it to completion, invokes #onCompleted with the transferred parts
+//! (used to lazily expose request/response attachments) before resolving its own
+//! #TFuture<void>.
+IDirectPlacementTransferPtr CreateChainedDirectPlacementTransfer(
+    NYT::NBus::IDirectPlacementTransferPtr underlying,
+    TCallback<void(std::vector<TSharedRef>&&)> onCompleted);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -414,6 +414,14 @@ Checks: >
   readability-uppercase-literal-suffix,
   -readability-use-anyofallof,
 CheckOptions:
+  - key: bugprone-argument-comment.IgnoreSingleArgument
+    value: true
+  - key: bugprone-argument-comment.CommentAnonymousInitLists
+    value: true
+  - key: bugprone-argument-comment.CommentBoolLiterals
+    value: true
+  - key: bugprone-argument-comment.CommentNullPtrs
+    value: true
   - key: modernize-avoid-c-arrays.AllowStringArrays
     value: true
   - key: performance-move-const-arg.CheckTriviallyCopyableMove

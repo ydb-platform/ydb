@@ -2062,13 +2062,6 @@ private:
                             return TStatus::Error;
                         }
                     } else if (alterColumnAction == "setDefaultValue") {
-                        if (!SessionCtx->Config().FeatureFlags.GetEnableSetDropDefaultValue()) {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                                << "\". Set/drop default value is not enabled."));
-                            return TStatus::Error;
-                        }
-
                         if (table->Metadata->Kind == EKikimrTableKind::Olap) {
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
                                 "Default values are not supported in column tables"));
@@ -2108,13 +2101,6 @@ private:
                             return *status;
                         }
                     } else if (alterColumnAction == "dropDefault") {
-                        if (!SessionCtx->Config().FeatureFlags.GetEnableSetDropDefaultValue()) {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                                << "\". Set/drop default value is not enabled."));
-                            return TStatus::Error;
-                        }
-
                         auto* column = table->Metadata->Columns.FindPtr(name);
                         if (table->Metadata->Kind == EKikimrTableKind::Olap) {
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),

@@ -26,9 +26,8 @@ backup_targets:
         - "em"
     settings:
       s3:
-        endpoint: s3.mds.yandex.net
-        bucket: enterprise-manager-backups-test
-        scheme: 1
+        endpoint: s3.example.net
+        bucket: ydb-em-backups
         access_key: "<encrypted access key>"
         secret_key: "<encrypted secret key>"
         compression: "zstd"
@@ -40,10 +39,14 @@ Parameter | Description
 `tags.locations` | List of `location_id` values this target applies to. A database is backed up to this target if its `location_id` is included in the list. For YDB EM, this is usually `em`, matching `locations[].database_location_id` and `meta_location_id`.
 `settings.s3.endpoint` | S3-compatible storage endpoint.
 `settings.s3.bucket` | Bucket name for backups.
-`settings.s3.scheme` | Connection protocol: `1` for HTTP, `2` for HTTPS. If omitted, HTTPS is used. Internal MDS storage at `s3.mds.yandex.net` typically uses HTTP.
-`settings.s3.access_key` | Encrypted S3 access key.
-`settings.s3.secret_key` | Encrypted S3 secret key.
+`settings.s3.scheme` | Connection protocol: `1` for HTTP, `2` for HTTPS. If omitted, HTTPS is used.
+`settings.s3.access_key` | Encrypted [S3 access key](#master-key).
+`settings.s3.secret_key` | Encrypted [S3 secret key](#master-key).
 `settings.s3.compression` | Compression algorithm for exported data. The default is `zstd`. Remove this parameter if compression is not required.
+
+A **location** is a logical group of databases in YDB EM that each database belongs to through its `location_id`. Typically, a location corresponds to a single placement zone of databases — for example, a data center or availability zone where they run — but a location can also be used for logical separation, such as by environment (`prod`, `test`). For example, if databases are deployed across two data centers, you can assign them different locations and send backups from each data center to its own S3 storage. A typical YDB EM installation uses a single location with the value `em`, which matches the `locations[].database_location_id` and `meta_location_id` fields in the Control Plane configuration.
+
+`tags.locations` is useful when one Control Plane manages databases from several locations and different locations must use different backup storage targets. The worker selects a target by the database `location_id`: if the database `location_id` is included in `tags.locations`, this target is used for backups. For example, this lets you send backups from different zones or environments to different S3 buckets.
 
 {% note info %}
 
@@ -86,7 +89,7 @@ ydb-em-cp admin crypto decrypt --body '<encrypted value>' --cfg-file <ydb-em-cp-
 
 ## Configuring schedule and retention {#schedule-and-ttl}
 
-The target defines where backups are stored. The schedule and retention period are configured separately in `locations[].default_backup_config`:
+The target defines where backups are stored. The schedule and retention period are configured separately in `locations[].default_backup_config`. This is the default backup configuration for databases in the specified location. If an individual backup configuration is set for a specific database in YDB EM, it can differ from these defaults.
 
 ```yaml
 locations:

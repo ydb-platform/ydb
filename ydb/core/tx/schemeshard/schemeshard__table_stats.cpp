@@ -523,7 +523,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
-    if (table->IsTTLEnabled()) {
+    if (Self->TTLEnabledTables.contains(pathId)) {
         if (auto* p = table->GetPartitionStore().FindPtr(shardIdx)) {
             auto& lag = p->LastCondEraseLag;
 

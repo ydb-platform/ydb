@@ -714,9 +714,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    Y_UNIT_TEST(FiveWayJoinWithComplexPreds2) {
+    Y_UNIT_TEST_TWIN(FiveWayJoinWithComplexPreds2, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats(
-            "queries/five_way_join_with_complex_preds2.sql", "stats/basic.json", false, false
+            "queries/five_way_join_with_complex_preds2.sql", "stats/basic.json", false, ColumnStore
         );
     }
 

@@ -1530,11 +1530,11 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 8u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 1920);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1920);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 240);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 1920);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 1);
     }
 

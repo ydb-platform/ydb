@@ -548,7 +548,14 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStats(
         }
     } else if (isCrossJoin) {
         selectivity = std::min(1.0, leftStats.Selectivity * rightStats.Selectivity);
-        newCard = leftStats.Nrows * rightStats.Nrows * selectivity;
+        const bool lhsConst = leftStats.Type == EStatisticsType::Constant;
+        const bool rhsConst = rightStats.Type == EStatisticsType::Constant;
+        if (lhsConst != rhsConst) {
+            const auto& largeSide = lhsConst ? rightStats : leftStats;
+            newCard = largeSide.Nrows * selectivity;
+        } else {
+            newCard = leftStats.Nrows * rightStats.Nrows * selectivity;
+        }
 
         newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
         outputType = EStatisticsType::ManyManyJoin;
@@ -582,6 +589,9 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStats(
             newCard = effectiveRight * (effectiveLeft / std::max(lhsUniqueVals.GetRef(), 1.0));
         } else if (rhsUniqueVals.Defined()) {
             newCard = effectiveLeft * (effectiveRight / std::max(rhsUniqueVals.GetRef(), 1.0));
+        } else if (leftStats.Type == EStatisticsType::Constant || rightStats.Type == EStatisticsType::Constant) {
+            const bool lhsConst = leftStats.Type == EStatisticsType::Constant;
+            newCard = 0.2 * (lhsConst ? effectiveRight : effectiveLeft);
         } else {
             /* for example, join predicate between a column and a scalar aggregate */
             newCard = 0.2 * effectiveLeft * effectiveRight;

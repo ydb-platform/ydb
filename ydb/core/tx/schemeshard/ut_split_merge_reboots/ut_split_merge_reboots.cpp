@@ -1269,7 +1269,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                 // Verify multiple bloom filters are configured with scheme objects after migration
                 NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/Table",
                     {1, 3},
-                    {{"idx_bloom_1", {"key1"}}, {"idx_bloom_2", {"key1", "key2", "key3"}}});
+                    {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
             }
 
             // Perform split operation - split the single partition
@@ -1291,16 +1291,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                 TInactiveZone inactive(activeZone);
                 NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/Table",
                     {1, 3},
-                    {{"idx_bloom_1", {"key1"}}, {"idx_bloom_2", {"key1", "key2", "key3"}}});
+                    {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
             }
 
             // Perform merge operation with reboots
             {
                 TInactiveZone inactive(activeZone);
-                TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
-                    SourceTabletId: 72075186233409546
-                    SourceTabletId: 72075186233409547
-                )");
+                const auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
+                UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+                const TString mergeRequest = Sprintf(R"(
+                    SourceTabletId: %lu
+                    SourceTabletId: %lu
+                )", shards[0], shards[1]);
+                TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", mergeRequest);
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
@@ -1309,7 +1312,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                 TInactiveZone inactive(activeZone);
                 NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/Table",
                     {1, 3},
-                    {{"idx_bloom_1", {"key1"}}, {"idx_bloom_2", {"key1", "key2", "key3"}}});
+                    {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
             }
 
         });

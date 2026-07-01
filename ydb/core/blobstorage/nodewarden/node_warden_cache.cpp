@@ -1,7 +1,8 @@
 #include "node_warden.h"
 #include "node_warden_impl.h"
-
 #include <util/system/sysstat.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -79,7 +80,9 @@ std::function<std::function<void()>(const TActorContext&)> TNodeWarden::WrapCach
                 }
             }
         } catch (...) {
-            STLOG(PRI_WARN, BS_NODE, NW06, "WrapCacheOp failed to update cache", (Error, CurrentExceptionMessage()));
+            YDB_LOG_WARN("WrapCacheOp failed to update cache",
+                {"marker", "NW06"},
+                {"error", CurrentExceptionMessage()});
             if (writeError) {
                 writeError->Set(1);
             }

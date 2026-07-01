@@ -20,6 +20,8 @@
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
+#include <ydb/library/actors/core/mon.h>
+
 #include <util/system/fs.h>
 
 #include <unistd.h>
@@ -576,6 +578,8 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceStopped,
             HandleFastPathServiceStopped);
+
+        HFunc(NMon::TEvRemoteHttpInfo, HandleHttpInfo);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

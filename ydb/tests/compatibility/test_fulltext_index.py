@@ -11,8 +11,8 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 class TestFulltextIndex(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        if min(self.versions) < (26, 1):
-            pytest.skip("Only available since 26-1")
+        if min(self.versions) < (26, 3):
+            pytest.skip("Only available since 26-3")
         self.row_count = 50
         self.query_count = 5
         self.limit = 5

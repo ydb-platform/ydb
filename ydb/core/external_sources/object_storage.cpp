@@ -167,6 +167,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         }
         const bool hasPartitioning = objectStorage.projection_size() || objectStorage.partitioned_by_size();
         issues.AddIssues(ValidateFormatSetting(objectStorage.format(), objectStorage.format_setting(), location, hasPartitioning));
+        issues.AddIssues(ValidateCompressionForFormat(objectStorage.format(), objectStorage.compression()));
         issues.AddIssues(ValidateSchema(schema));
         issues.AddIssues(ValidateJsonListFormat(objectStorage.format(), schema, objectStorage.partitioned_by()));
         issues.AddIssues(ValidateRawFormat(objectStorage.format(), schema, objectStorage.partitioned_by()));
@@ -229,6 +230,16 @@ struct TObjectStorageExternalSource : public IExternalSource {
             }
 
             issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "unknown format setting " + key));
+        }
+        return issues;
+    }
+
+    static NYql::TIssues ValidateCompressionForFormat(const TString& format, const TString& compression) {
+        NYql::TIssues issues;
+        if (compression == "lz4"sv && (format == "raw"sv || format == "json_list"sv)) {
+            issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST,
+                TStringBuilder() << "Compression '" << compression << "' is not supported for format '" << format
+                                 << "'. Use one of: gzip, zstd, brotli, bzip2, xz"));
         }
         return issues;
     }

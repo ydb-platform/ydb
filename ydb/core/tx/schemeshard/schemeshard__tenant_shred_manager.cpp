@@ -137,6 +137,7 @@ void TTenantShredManager::Stop() {
 void TTenantShredManager::StartShred(NIceDb::TNiceDb& db, ui64 newGen) {
     const auto& ctx = SchemeShard->ActorContext();
     SetGeneration(newGen);
+    CleanupOldGenerationsOnShred(db);
     Queue->Clear();
     ActivePipes.clear();
     for (const auto& [shardIdx, status] : WaitingShredShards) {
@@ -304,8 +305,10 @@ bool TTenantShredManager::Restore(NIceDb::TNiceDb& db) {
         if (!rowset.IsReady()) {
             return false;
         }
+        TVector<ui64> generationsToCleanup;
         while (!rowset.EndOfSet()) {
             ui64 generation = rowset.GetValue<Schema::TenantShredGenerations::Generation>();
+            generationsToCleanup.push_back(generation);
             if (generation >= Generation) {
                 Generation = generation;
                 Status = rowset.GetValue<Schema::TenantShredGenerations::Status>();
@@ -317,6 +320,10 @@ bool TTenantShredManager::Restore(NIceDb::TNiceDb& db) {
                 return false;
             }
         }
+        // Max generation should not be removed.
+        std::erase(generationsToCleanup, Generation);
+
+        CleanupOldGenerationsOnRestore(db, generationsToCleanup); 
     }
     {
         auto rowset = db.Table<Schema::WaitingShredShards>().Range().Select();
@@ -376,6 +383,34 @@ bool TTenantShredManager::StopWaitingShred(const TShardIdx& shardIdx) {
         return true;
     }
     return false;
+}
+
+void TTenantShredManager::CleanupOldGenerationsOnRestore(NIceDb::TNiceDb& db, const TVector<ui64>& generationsToCleanup) {
+    auto ctx = SchemeShard->ActorContext();
+
+    for (ui64 generation : generationsToCleanup) {
+        if (generation >= Generation) {
+            // This should never occur because of the way the collection is initialized. Nevertheless, throwing
+            // an assertion from non-core logic—which includes the obsolete record shredding mechanism—is risky,
+            // so only a warning is output.
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "[TenantShredManager] Restore: Invalid element in collection: " << generation << 
+                " >= current shredding generation " << Generation << 
+                ". Element will be skipped. This should never occur.");
+        } else {
+            db.Table<Schema::TenantShredGenerations>().Key(generation).Delete();
+        }
+    }
+}
+
+void TTenantShredManager::CleanupOldGenerationsOnShred(NIceDb::TNiceDb& db) {
+    if (Generation >= 2) {
+        // Generation - 2 is used in order not to remove record with max Generation that might be used within TTenantShredManager::Restore
+        // to restore Generation property. Despite the fact that both removal and further update is performed within same transaction and thus
+        // there's no chance of a data loss in case of (Generation -1) removal and SchemaShard death after removal but before updating
+        // Schema::TenantShredGenerations with new value (Generation -2) is used for greater robustness.
+        db.Table<Schema::TenantShredGenerations>().Key(Generation - 2).Delete();
+    }
 }
 
 struct TSchemeShard::TTxRunTenantShred : public TSchemeShard::TRwTxBase {

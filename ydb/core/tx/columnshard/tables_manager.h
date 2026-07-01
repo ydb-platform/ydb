@@ -194,6 +194,9 @@ public:
         if (it == SchemeShardLocalPathIds.end()) {
             return std::nullopt;
         }
+        if (it->second.DropVersion) {
+            return std::nullopt;
+        }
         return it->second.CopyVersion;
     }
 

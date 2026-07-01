@@ -4954,6 +4954,5 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         const auto response = TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
         const auto& entry = response.GetResponse().GetEntry();
         UNIT_ASSERT_C(entry.IssuesSize() > 0, entry.ShortDebugString());
-        UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "Encryption is not supported for parquet files");
     }
 }

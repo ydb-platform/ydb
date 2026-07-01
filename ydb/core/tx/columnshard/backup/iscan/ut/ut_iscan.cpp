@@ -310,8 +310,9 @@ Y_UNIT_TEST_SUITE(IScan) {
         backupTask.MutableEncryptionSettings()->SetEncryptionAlgorithm("AES-256-GCM");
 
         auto exportFactory = std::make_shared<TDataShardExportFactory>();
-        auto result =
-            NColumnShard::NBackup::CreateIScanExportUploader(runtime->AllocateEdgeActor(), backupTask, exportFactory.get(), columns, 0);
+        auto result = runtime->RunCall([&] {
+            return NColumnShard::NBackup::CreateIScanExportUploader(runtime->AllocateEdgeActor(), backupTask, exportFactory.get(), columns, 0);
+        });
 
         UNIT_ASSERT(!result);
         UNIT_ASSERT_STRING_CONTAINS(result.GetErrorMessage(), "Encryption is not supported for parquet files");

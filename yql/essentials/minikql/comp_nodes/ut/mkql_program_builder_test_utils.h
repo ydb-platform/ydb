@@ -2,6 +2,8 @@
 
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
+#include <util/generic/guid.h>
 
 namespace NKikimr::NMiniKQL::NTest {
 namespace NPrivate {
@@ -188,6 +190,21 @@ inline TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, TStringBuf si
 {
     Y_UNUSED(simpleNode);
     return pb.NewDataLiteral<NUdf::EDataSlot::String>(simpleNode);
+}
+
+inline TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TGUID& guid)
+{
+    return pb.NewDataLiteral<NUdf::EDataSlot::Uuid>(TStringBuf(reinterpret_cast<const char*>(&guid), sizeof(guid)));
+}
+
+struct TDyNumberLiteral {
+    TStringBuf Value = "0";
+};
+
+inline TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, TDyNumberLiteral value)
+{
+    const auto val = ValueFromString(NUdf::EDataSlot::DyNumber, value.Value);
+    return pb.NewDataLiteral<NUdf::EDataSlot::DyNumber>(val.AsStringRef());
 }
 
 template <typename T, TTag Tag>

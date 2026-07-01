@@ -1555,7 +1555,7 @@ bool ConvertArrowTypeImpl(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>
             return true;
         }
         case NUdf::EDataSlot::Uuid: {
-            type = arrow::fixed_size_binary(16);
+            type = arrow::fixed_size_binary(sizeof(TGUID));
             return true;
         }
         case NUdf::EDataSlot::Decimal: {

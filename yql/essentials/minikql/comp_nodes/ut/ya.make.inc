@@ -37,6 +37,8 @@ SET(ORIG_SOURCES
     mkql_block_getelem_ut.cpp
     mkql_block_just_ut.cpp
     mkql_block_top_sort_ut.cpp
+    mkql_block_uuid_ut.cpp
+    mkql_block_dynumber_ut.cpp
     mkql_blocks_ut.cpp
     mkql_callable_ut.cpp
     mkql_combine_ut.cpp

@@ -203,31 +203,10 @@ struct TPrimitiveDataType<NYql::NDecimal::TInt128> {
     };
 };
 
-template <>
-struct TPrimitiveDataType<TGUID> {
-    using TLayout = TGUID;
-
-    class TResult: public arrow::FixedSizeBinaryType {
-    public:
-        TResult()
-            : arrow::FixedSizeBinaryType(16)
-        {
-        }
-    };
-
-    class TScalarResult: public arrow::FixedSizeBinaryScalar {
-    public:
-        explicit TScalarResult(std::shared_ptr<arrow::Buffer> value)
-            : arrow::FixedSizeBinaryScalar(std::move(value), arrow::fixed_size_binary(16))
-        {
-        }
-
-        TScalarResult()
-            : arrow::FixedSizeBinaryScalar(arrow::fixed_size_binary(16))
-        {
-        }
-    };
-};
+inline std::shared_ptr<arrow::DataType> GetGuidArrowType() {
+    static const std::shared_ptr<arrow::DataType> Type = arrow::fixed_size_binary(sizeof(TGUID));
+    return Type;
+}
 
 template <typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value>::type>
 inline arrow::Datum MakeScalarDatum(T value) {
@@ -257,13 +236,6 @@ namespace arrow {
 
 template <>
 struct TypeTraits<typename NKikimr::NMiniKQL::TPrimitiveDataType<NYql::NDecimal::TInt128>::TResult> {
-    static inline std::shared_ptr<DataType> type_singleton() { // NOLINT(readability-identifier-naming)
-        return arrow::fixed_size_binary(16);
-    }
-};
-
-template <>
-struct TypeTraits<typename NKikimr::NMiniKQL::TPrimitiveDataType<TGUID>::TResult> {
     static inline std::shared_ptr<DataType> type_singleton() { // NOLINT(readability-identifier-naming)
         return arrow::fixed_size_binary(16);
     }

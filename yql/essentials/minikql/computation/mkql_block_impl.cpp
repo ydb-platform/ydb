@@ -186,7 +186,7 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
                 const auto ref = value.AsStringRef();
                 MKQL_ENSURE(ref.Size() == sizeof(TGUID), "Wrong Uuid size: " << ref.Size());
                 std::memcpy(buffer->mutable_data(), ref.Data(), ref.Size());
-                return arrow::Datum(std::make_shared<TPrimitiveDataType<TGUID>::TScalarResult>(buffer));
+                return arrow::Datum(std::make_shared<arrow::FixedSizeBinaryScalar>(std::move(buffer), GetGuidArrowType()));
             }
             default:
                 MKQL_ENSURE(false, "Unsupported data slot " << slot);

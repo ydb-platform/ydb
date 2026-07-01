@@ -802,6 +802,17 @@ message CommitOffsetResult {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // ResetOffset
+//
+// Resets committed read positions for a consumer across all partitions of a topic.
+// This is a relatively common administrative operation. It is usually done to allow
+// an application to reprocess data or otherwise to skip existing records.
+//
+// Unlike CommitOffset, which updates progress for a single partition,
+// ResetOffset updates the committed offset in every partition of the topic.
+//
+// The consumer must be inactive when offsets are reset: there should be no active
+// read sessions for this topic. Otherwise running readers may overwrite the reset
+// offsets or the operation may fail.
 
 
 // Reset offset request sent from client to server.
@@ -810,17 +821,20 @@ message ResetOffsetRequest {
 
     // Topic path.
     string path = 2;
-    // Path of consumer.
+    // Consumer whose committed offsets are reset.
     string consumer = 3;
 
-    // In each topic partition, the committed offset is moved to the start of the partition.
+    // Reset committed offset to the beginning of each partition.
+    // After reset, the next read will start from the first available message in the partition.
     message PartitionStart {
     }
 
-    // In each topic partition, the committed offset is moved to the end of the partition.
+    // Reset committed offset to the end of each partition.
+    // After reset, the consumer will only receive messages written after the reset.
     message PartitionEnd {
     }
 
+    // Target position for the committed offset in each partition of the topic.
     oneof position {
         PartitionStart partition_start = 4;
         PartitionEnd partition_end = 5;

@@ -96,6 +96,12 @@ constexpr ui64 MaxHandledEventsCount = 1000;
 constexpr ui64 MaxHandledEventsSize = 1000000;
 constexpr ui64 GetEventByTimerPeriodSec = 30;
 
+struct TDecompressionException : public yexception {
+    TDecompressionException(ui64 offset, const TString& originalError) {
+        *this << "Decompression error at offset " << offset << ", reason: " << originalError;
+    }
+};
+
 class TTopicSession : public TActorBootstrapped<TTopicSession>, NYql::TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
 private:
     using TBase = TActorBootstrapped<TTopicSession>;
@@ -624,7 +630,11 @@ bool TTopicSession::HandleNewEvents() {
         }
         readSomething = true;
 
-        std::visit(TTopicEventProcessor{*this, LogPrefix, handledEventsSize}, *event);
+        try {
+            std::visit(TTopicEventProcessor{*this, LogPrefix, handledEventsSize}, *event);
+        } catch (const TDecompressionException& e) {
+            ThrowFatalError(TStatus::Fail(EStatusId::INTERNAL_ERROR, e.what()));
+        }
         if (handledEventsSize >= MaxHandledEventsSize) {
             break;
         }
@@ -660,9 +670,13 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
         messages.erase(messages.begin(), it);
     }
 
-    for (const auto& message : messages) {
-        LOG_ROW_DISPATCHER_TRACE("Data received: " << message.DebugString(true));
-        dataSize += message.GetData().size();
+    for (auto& message : messages) {
+        try {
+            LOG_ROW_DISPATCHER_TRACE("Data received: " << message.DebugString(true));
+            dataSize += message.GetData().size();
+        } catch (...) {
+            throw TDecompressionException(message.GetOffset(), CurrentExceptionMessage());
+        }
         Self.LastMessageOffset = message.GetOffset();
     }
 

@@ -1,3 +1,7 @@
+* Added a flag to support deferred session creation(when client timeout exceeded, the session is created in the backgroud)
+
+# v3.20.0
+
 * Added automatic retries for unary methods of table and query clients(ExecuteQuery, ExecuteScript, BulkUpsert, ReadRows).
 
 * Implemented native ranges(TRowRange) and iterators over both streaming query results and TResultSet.

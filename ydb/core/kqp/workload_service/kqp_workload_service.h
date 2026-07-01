@@ -7,12 +7,6 @@
 
 namespace NKikimr::NKqp {
 
-namespace NWorkload {
-
-bool IsWorkloadServiceRequired(const NResourcePool::TPoolSettings& config);
-
-}  // namespace NWorkload
-
 NActors::IActor* CreateKqpWorkloadService(NMonitoring::TDynamicCounterPtr counters);
 
 }  // namespace NKikimr::NKqp

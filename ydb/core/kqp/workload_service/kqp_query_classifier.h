@@ -46,6 +46,10 @@ public:
     struct TResolvedPoolId {
         TString PoolId;
         TString Resolver;
+        // If true, session actor should apply PoolConfig directly and skip WMS admission actor.
+        // Used when the pool has per-node caps (TotalCpu/TotalMemory) but no admission gating.
+        bool SkipAdmission = false;
+        NResourcePool::TPoolSettings PoolConfig;
     };
 
     struct TBypass {

@@ -601,9 +601,14 @@ public:
             [this, &sent](const NWorkload::IQueryClassifier::TResolvedPoolId& s) -> TError {
                 STLOG_D("PreCompile Classify resolved",
                     (pool_id, s.PoolId),
+                    (skip_admission, s.SkipAdmission),
                     (trace_id, TraceId()));
-                sent = true;
                 QueryState->UserRequestContext->PoolId = s.PoolId;
+                if (s.SkipAdmission) {
+                    QueryState->UserRequestContext->PoolConfig = s.PoolConfig;
+                    return std::nullopt;
+                }
+                sent = true;
                 PassRequestToResourcePool();
                 return std::nullopt;
             },
@@ -1001,9 +1006,14 @@ public:
             [this, &sent](const NWorkload::IQueryClassifier::TResolvedPoolId& r) -> TError {
                 STLOG_D("PostCompile Classify resolved",
                     (pool_id, r.PoolId),
+                    (skip_admission, r.SkipAdmission),
                     (trace_id, TraceId()));
-                sent = true;
                 QueryState->UserRequestContext->PoolId = r.PoolId;
+                if (r.SkipAdmission) {
+                    QueryState->UserRequestContext->PoolConfig = r.PoolConfig;
+                    return std::nullopt;
+                }
+                sent = true;
                 PassRequestToResourcePool();
                 return std::nullopt;
             },

@@ -226,8 +226,15 @@ private:
             return false;
         }
 
-        if (!NWorkload::IsWorkloadServiceRequired(poolInfo->Config)) {
+        if (!poolInfo->Config.IsWorkloadServiceRequired()) {
             store = TBypass{.Resolver = resolver};
+        } else if (!poolInfo->Config.IsAdmissionRequired()) {
+            store = TResolvedPoolId{
+                .PoolId = poolId,
+                .Resolver = resolver,
+                .SkipAdmission = true,
+                .PoolConfig = poolInfo->Config,
+            };
         } else {
             store = TResolvedPoolId{.PoolId = poolId, .Resolver = resolver};
         }

@@ -193,10 +193,10 @@ Y_UNIT_TEST_SUITE(THostStatTest)
     Y_UNIT_TEST(SuccessCountInitiallyZero)
     {
         THostStat stat;
-        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetSuccessCount());
+        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetConsecutiveSuccessCount());
 
         auto errorsInfo = stat.GetErrorsInfo(TInstant::Now());
-        UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.SuccessCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveSuccessCount);
     }
 
     Y_UNIT_TEST(SuccessCountIncrementsOnSuccess)
@@ -209,21 +209,27 @@ Y_UNIT_TEST_SUITE(THostStatTest)
             now,
             TDuration::MilliSeconds(10),
             EOperation::WriteToPBuffer);
-        UNIT_ASSERT_VALUES_EQUAL(1, stat.GetSuccessCount());
-        UNIT_ASSERT_VALUES_EQUAL(1, stat.GetErrorsInfo(now).SuccessCount);
+        UNIT_ASSERT_VALUES_EQUAL(1, stat.GetConsecutiveSuccessCount());
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            stat.GetErrorsInfo(now).ConsecutiveSuccessCount);
 
         stat.OnRequest(EOperation::ReadFromDDisk);
         stat.OnSuccess(
             now,
             TDuration::MilliSeconds(20),
             EOperation::ReadFromDDisk);
-        UNIT_ASSERT_VALUES_EQUAL(2, stat.GetSuccessCount());
-        UNIT_ASSERT_VALUES_EQUAL(2, stat.GetErrorsInfo(now).SuccessCount);
+        UNIT_ASSERT_VALUES_EQUAL(2, stat.GetConsecutiveSuccessCount());
+        UNIT_ASSERT_VALUES_EQUAL(
+            2,
+            stat.GetErrorsInfo(now).ConsecutiveSuccessCount);
 
         stat.OnRequest(EOperation::Flush);
         stat.OnSuccess(now, TDuration::MilliSeconds(30), EOperation::Flush);
-        UNIT_ASSERT_VALUES_EQUAL(3, stat.GetSuccessCount());
-        UNIT_ASSERT_VALUES_EQUAL(3, stat.GetErrorsInfo(now).SuccessCount);
+        UNIT_ASSERT_VALUES_EQUAL(3, stat.GetConsecutiveSuccessCount());
+        UNIT_ASSERT_VALUES_EQUAL(
+            3,
+            stat.GetErrorsInfo(now).ConsecutiveSuccessCount);
     }
 
     Y_UNIT_TEST(SuccessCountResetsOnError)
@@ -242,14 +248,18 @@ Y_UNIT_TEST_SUITE(THostStatTest)
             now,
             TDuration::MilliSeconds(10),
             EOperation::WriteToPBuffer);
-        UNIT_ASSERT_VALUES_EQUAL(2, stat.GetSuccessCount());
-        UNIT_ASSERT_VALUES_EQUAL(2, stat.GetErrorsInfo(now).SuccessCount);
+        UNIT_ASSERT_VALUES_EQUAL(2, stat.GetConsecutiveSuccessCount());
+        UNIT_ASSERT_VALUES_EQUAL(
+            2,
+            stat.GetErrorsInfo(now).ConsecutiveSuccessCount);
 
         // An error resets the counter to 0.
         stat.OnRequest(EOperation::WriteToPBuffer);
         stat.OnError(now, EOperation::WriteToPBuffer);
-        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetSuccessCount());
-        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetErrorsInfo(now).SuccessCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetConsecutiveSuccessCount());
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            stat.GetErrorsInfo(now).ConsecutiveSuccessCount);
     }
 
     Y_UNIT_TEST(SuccessCountNotAffectedByCancelled)
@@ -267,14 +277,18 @@ Y_UNIT_TEST_SUITE(THostStatTest)
             now,
             TDuration::MilliSeconds(10),
             EOperation::WriteToPBuffer);
-        UNIT_ASSERT_VALUES_EQUAL(2, stat.GetSuccessCount());
-        UNIT_ASSERT_VALUES_EQUAL(2, stat.GetErrorsInfo(now).SuccessCount);
+        UNIT_ASSERT_VALUES_EQUAL(2, stat.GetConsecutiveSuccessCount());
+        UNIT_ASSERT_VALUES_EQUAL(
+            2,
+            stat.GetErrorsInfo(now).ConsecutiveSuccessCount);
 
         // OnCancelled should not change SuccessCount.
         stat.OnRequest(EOperation::WriteToPBuffer);
         stat.OnCancelled(now, EOperation::WriteToPBuffer);
-        UNIT_ASSERT_VALUES_EQUAL(2, stat.GetSuccessCount());
-        UNIT_ASSERT_VALUES_EQUAL(2, stat.GetErrorsInfo(now).SuccessCount);
+        UNIT_ASSERT_VALUES_EQUAL(2, stat.GetConsecutiveSuccessCount());
+        UNIT_ASSERT_VALUES_EQUAL(
+            2,
+            stat.GetErrorsInfo(now).ConsecutiveSuccessCount);
     }
 
     Y_UNIT_TEST(SuccessCountAndErrorCountAreSymmetric)
@@ -283,42 +297,66 @@ Y_UNIT_TEST_SUITE(THostStatTest)
         TInstant now = TInstant::Now();
 
         // Initially both are 0.
-        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetSuccessCount());
-        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetErrorsInfo(now).ErrorCount);
-        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetErrorsInfo(now).SuccessCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetConsecutiveSuccessCount());
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            stat.GetErrorsInfo(now).ConsecutiveErrorCount);
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            stat.GetErrorsInfo(now).ConsecutiveSuccessCount);
 
         // Success: SuccessCount grows, ErrorCount stays 0.
         stat.OnRequest(EOperation::WriteToPBuffer);
         stat.OnSuccess(now, TDuration(), EOperation::WriteToPBuffer);
-        UNIT_ASSERT_VALUES_EQUAL(1, stat.GetSuccessCount());
-        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetErrorsInfo(now).ErrorCount);
-        UNIT_ASSERT_VALUES_EQUAL(1, stat.GetErrorsInfo(now).SuccessCount);
+        UNIT_ASSERT_VALUES_EQUAL(1, stat.GetConsecutiveSuccessCount());
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            stat.GetErrorsInfo(now).ConsecutiveErrorCount);
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            stat.GetErrorsInfo(now).ConsecutiveSuccessCount);
 
         stat.OnRequest(EOperation::WriteToPBuffer);
         stat.OnSuccess(now, TDuration(), EOperation::WriteToPBuffer);
-        UNIT_ASSERT_VALUES_EQUAL(2, stat.GetSuccessCount());
-        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetErrorsInfo(now).ErrorCount);
-        UNIT_ASSERT_VALUES_EQUAL(2, stat.GetErrorsInfo(now).SuccessCount);
+        UNIT_ASSERT_VALUES_EQUAL(2, stat.GetConsecutiveSuccessCount());
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            stat.GetErrorsInfo(now).ConsecutiveErrorCount);
+        UNIT_ASSERT_VALUES_EQUAL(
+            2,
+            stat.GetErrorsInfo(now).ConsecutiveSuccessCount);
 
         // Error: ErrorCount grows, SuccessCount resets.
         stat.OnRequest(EOperation::WriteToPBuffer);
         stat.OnError(now, EOperation::WriteToPBuffer);
-        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetSuccessCount());
-        UNIT_ASSERT_VALUES_EQUAL(1, stat.GetErrorsInfo(now).ErrorCount);
-        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetErrorsInfo(now).SuccessCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetConsecutiveSuccessCount());
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            stat.GetErrorsInfo(now).ConsecutiveErrorCount);
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            stat.GetErrorsInfo(now).ConsecutiveSuccessCount);
 
         stat.OnRequest(EOperation::WriteToPBuffer);
         stat.OnError(now, EOperation::WriteToPBuffer);
-        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetSuccessCount());
-        UNIT_ASSERT_VALUES_EQUAL(2, stat.GetErrorsInfo(now).ErrorCount);
-        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetErrorsInfo(now).SuccessCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetConsecutiveSuccessCount());
+        UNIT_ASSERT_VALUES_EQUAL(
+            2,
+            stat.GetErrorsInfo(now).ConsecutiveErrorCount);
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            stat.GetErrorsInfo(now).ConsecutiveSuccessCount);
 
         // Success again: SuccessCount resumes, ErrorCount resets.
         stat.OnRequest(EOperation::WriteToPBuffer);
         stat.OnSuccess(now, TDuration(), EOperation::WriteToPBuffer);
-        UNIT_ASSERT_VALUES_EQUAL(1, stat.GetSuccessCount());
-        UNIT_ASSERT_VALUES_EQUAL(0, stat.GetErrorsInfo(now).ErrorCount);
-        UNIT_ASSERT_VALUES_EQUAL(1, stat.GetErrorsInfo(now).SuccessCount);
+        UNIT_ASSERT_VALUES_EQUAL(1, stat.GetConsecutiveSuccessCount());
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            stat.GetErrorsInfo(now).ConsecutiveErrorCount);
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            stat.GetErrorsInfo(now).ConsecutiveSuccessCount);
     }
 }
 

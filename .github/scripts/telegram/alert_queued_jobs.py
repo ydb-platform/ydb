@@ -33,6 +33,27 @@ WORKFLOW_THRESHOLDS = [
     ("Postcommit", "Postcommit", 6),
 ]
 
+def stuck_job_display_type(run: Dict[str, Any]) -> str:
+    """Classify a queued run for threshold/display (PR-check push → Postcommit)."""
+    workflow_name = run.get('name', '')
+    event = run.get('event', '')
+    if workflow_name == 'PR-check' and event == 'push':
+        return 'Postcommit'
+    for pattern, display_name, _spec in WORKFLOW_THRESHOLDS:
+        if pattern in workflow_name:
+            return display_name
+    return 'Other'
+
+
+def threshold_spec_for_run(run: Dict[str, Any]):
+    display_type = stuck_job_display_type(run)
+    if display_type == 'Other':
+        return None
+    for _pattern, display_name, spec in WORKFLOW_THRESHOLDS:
+        if display_name == display_type:
+            return spec
+    return None
+
 EMPTY_QUEUE_MESSAGE = (
     "✅ *GITHUB ACTIONS MONITORING*\n\nQueue is empty - all jobs are working normally! 🎉"
 )
@@ -268,11 +289,10 @@ def is_job_stuck_by_criteria(run, waiting_hours):
     Returns:
         bool: True if job is considered stuck
     """
-    workflow_name = run.get('name', '')
     current_time = datetime.now(timezone.utc)
-    for pattern, display_name, spec in WORKFLOW_THRESHOLDS:
-        if pattern in workflow_name and waiting_hours > threshold_for_time(current_time, spec):
-            return True
+    spec = threshold_spec_for_run(run)
+    if spec is not None and waiting_hours > threshold_for_time(current_time, spec):
+        return True
     return False
 
 def generate_stuck_jobs_summary(stuck_jobs: List[Dict[str, Any]]) -> List[str]:
@@ -320,17 +340,8 @@ def count_stuck_jobs_by_type(stuck_jobs: List[Dict[str, Any]]) -> Dict[str, int]
     counts['Other'] = 0
     
     for stuck_job in stuck_jobs:
-        workflow_name = stuck_job['run'].get('name', '')
-        found_type = False
-        for pattern, display_name, spec in WORKFLOW_THRESHOLDS:
-            if pattern in workflow_name:
-                counts[display_name] += 1
-                found_type = True
-                break
-        
-        # If no type found, add to Other
-        if not found_type:
-            counts['Other'] += 1
+        display_type = stuck_job_display_type(stuck_job['run'])
+        counts[display_type] = counts.get(display_type, 0) + 1
     
     return counts
 

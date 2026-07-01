@@ -356,10 +356,9 @@ void AddPushRenameRulesForTest(TVector<std::unique_ptr<IRule>>& rules) {
     rules.emplace_back(std::make_unique<TPushRenameIntoReadRule>());
     rules.emplace_back(std::make_unique<TPushRenameIntoMapProducerRule>());
     rules.emplace_back(std::make_unique<TPushRenameIntoAggregateResultRule>());
-    rules.emplace_back(std::make_unique<TPushMapElementsThroughUnaryRule>());
+    rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
     rules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
     rules.emplace_back(std::make_unique<TPushMapElementsThroughAggregateRule>());
-    rules.emplace_back(std::make_unique<TPushMapElementsThroughJoinRule>());
 }
 
 void AddMapAliasRulesForTest(TVector<std::unique_ptr<IRule>>& rules) {
@@ -4101,7 +4100,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(renameMap, pos, {"l_a", "l_b"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushMapElementsThroughUnaryRule>());
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
         TRuleBasedStage pushMapElements("Focused push map elements through unary", std::move(rules));
         ComputeLogicalTestProps(root);
         pushMapElements.RunStage(root, testContext.RboCtx);
@@ -4141,7 +4140,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(renameMap, pos, {"a"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushMapElementsThroughUnaryRule>());
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
         TRuleBasedStage pushMapElements("Focused push map elements through unary", std::move(rules));
         ComputeLogicalTestProps(root);
         pushMapElements.RunStage(root, testContext.RboCtx);
@@ -4176,7 +4175,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(map, pos, {"a", "x"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushMapElementsThroughUnaryRule>());
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
         TRuleBasedStage pushMapElements("Focused push map elements through unary", std::move(rules));
         ComputeLogicalTestProps(root);
         pushMapElements.RunStage(root, testContext.RboCtx);
@@ -4206,7 +4205,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(map, pos, {"a", "x"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushMapElementsThroughUnaryRule>(/*pushExpressions*/ true));
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>(/*pushExpressions*/ true));
         TRuleBasedStage pushMapElements("Focused push map elements through unary", std::move(rules));
         ComputeLogicalTestProps(root);
         pushMapElements.RunStage(root, testContext.RboCtx);
@@ -4923,7 +4922,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(map, pos, {"a", "x"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushMapElementsThroughJoinRule>());
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
         TRuleBasedStage pushMapElements("Focused push map elements through join", std::move(rules));
         ComputeLogicalTestProps(root);
         pushMapElements.RunStage(root, testContext.RboCtx);

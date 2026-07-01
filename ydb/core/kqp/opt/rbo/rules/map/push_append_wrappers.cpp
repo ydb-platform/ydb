@@ -9,17 +9,12 @@ TIntrusivePtr<IOperator> TPushAppendRule::SimpleMatchAndApply(const TIntrusivePt
         return result;
     }
 
-    result = TPushMapElementsThroughUnaryRule(/*pushExpressions*/ false).SimpleMatchAndApply(input, ctx, props);
+    result = TPushMapElementsThroughInputRule(/*pushExpressions*/ false).SimpleMatchAndApply(input, ctx, props);
     if (result != input) {
         return result;
     }
 
-    result = TPushMapElementsThroughAggregateRule().SimpleMatchAndApply(input, ctx, props);
-    if (result != input) {
-        return result;
-    }
-
-    return TPushMapElementsThroughJoinRule().SimpleMatchAndApply(input, ctx, props);
+    return TPushMapElementsThroughAggregateRule().SimpleMatchAndApply(input, ctx, props);
 }
 
 TIntrusivePtr<IOperator> TPushAppendExpressionRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
@@ -28,12 +23,7 @@ TIntrusivePtr<IOperator> TPushAppendExpressionRule::SimpleMatchAndApply(const TI
         return result;
     }
 
-    result = TPushMapElementsThroughUnaryRule(/*pushExpressions*/ true).SimpleMatchAndApply(input, ctx, props);
-    if (result != input) {
-        return result;
-    }
-
-    return TPushMapElementsThroughJoinRule().SimpleMatchAndApply(input, ctx, props);
+    return TPushMapElementsThroughInputRule(/*pushExpressions*/ true).SimpleMatchAndApply(input, ctx, props);
 }
 
 } // namespace NKqp

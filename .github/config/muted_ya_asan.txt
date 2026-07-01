@@ -143,6 +143,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithSameNam
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithTags
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithWrongAttribute
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithWrongBody
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueue_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeferredTopicCreationForPreexistingQueues
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeleteMessage
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeleteMessageBatch
@@ -293,6 +294,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBatch
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBatchEmpty
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBatchLong
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBatchWithAtSignInConsumerNameInFederation
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBatchWithLeadingSlashInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageTooBig
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageWithAtSignInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesBasic
@@ -457,6 +459,7 @@ ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance+IsOlap
 ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance-IsOlap
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableAddColumnWithDefaultCancellation
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableViaApiMultipleTime
+ydb/core/kqp/ut/scheme KqpScheme.ModifySysViewDirPermissions
 ydb/core/kqp/ut/scheme KqpScheme.ParallelDropStreamingQuery
 ydb/core/kqp/ut/scheme KqpScheme.StreamingQueriesOnServerless
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
@@ -551,6 +554,7 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BuildToPosting
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.DimensionMismatchError
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.EmptyEmbeddingSkipped
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.NullEmbedding
+ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.BuildTable+WithForeign
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.BuildTable-WithForeign
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.MainTable
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.DimensionMismatchError

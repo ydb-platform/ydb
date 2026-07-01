@@ -169,10 +169,6 @@ private:
     void HandleICNodeDisconnected(
         const NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev,
         const NActors::TActorContext& ctx);
-
-    void HandleICNodeConnected(
-        const NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev,
-        const NActors::TActorContext& ctx);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

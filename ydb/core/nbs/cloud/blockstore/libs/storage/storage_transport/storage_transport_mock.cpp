@@ -10,8 +10,6 @@ using namespace NKikimrBlobStorage::NDDisk;
 
 TStorageTransportMock::TStorageTransportMock(ui32 baseNodeId)
 {
-    // Same layout as the test fixture's MakeDDiskIds: every host is
-    // distinguished by node/slot, PBuffers live on the next block of nodes.
     DDiskIds.reserve(DirectBlockGroupHostCount);
     PBufferIds.reserve(DirectBlockGroupHostCount);
     for (ui32 i = 0; i < DirectBlockGroupHostCount; ++i) {

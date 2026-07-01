@@ -14,12 +14,11 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
-TVector<NKikimr::NBsController::TDDiskId> MakeDDiskIds(ui32 baseNodeId);
-
 struct TDBGFixture: public NUnitTest::TBaseFixture
 {
-    // Default timeout for waiting on futures in tests.
-    static constexpr auto DefaultWaitTimeout = TDuration::Seconds(10);
+    static constexpr auto DefaultWaitFutureTimeout = TDuration::Seconds(10);
+    static constexpr auto DefaultExecutorAndRuntimeDuration =
+        TDuration::MilliSeconds(200);
 
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
     TVector<TExecutorPtr> Executors;
@@ -30,16 +29,18 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
     TVector<std::shared_ptr<TPartitionDirectServiceMock>> Services;
 
     void SetUp(NUnitTest::TTestContext& context) override;
-
     void TearDown(NUnitTest::TTestContext& context) override;
 
-    // Dispatches one batch of events queued in the runtime.
-    bool DispatchRuntimeOnce(NActors::TDispatchOptions options = {}) const;
-
-    // Dispatches everything currently queued in the runtime.
-    void DrainRuntime() const;
+    // Creates a mock service and starts the dbg.
+    NThreading::TFuture<void> RunAndGetInitialReady(
+        const std::shared_ptr<TDirectBlockGroup>& dbg,
+        bool dropScheduledCallbacks = true);
 
     TExecutorPtr MakeExecutor();
+    // Dispatches one batch of events queued in the runtime.
+    bool DispatchRuntimeOnce(NActors::TDispatchOptions options = {}) const;
+    // Dispatches everything currently queued in the runtime.
+    void DrainRuntime() const;
 
     [[nodiscard]] std::shared_ptr<TDirectBlockGroup> MakeDirectBlockGroup(
         const TExecutorPtr& executor,
@@ -75,7 +76,7 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
     // requests, callbacks) settles, without waiting for a specific condition.
     void DoAllExecutorAndRuntimeWork(
         const TExecutorPtr& executor,
-        TDuration duration) const;
+        TDuration duration = DefaultExecutorAndRuntimeDuration) const;
 
     // Pumps runtime + executor until `future` is resolved, then returns its
     // value.
@@ -92,27 +93,17 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
         return future.GetValue(timeout);
     }
 
-    // Creates a mock service (kept alive in Services) and starts the group,
-    // returning the initial-ready future from Run(). Hides the boilerplate
-    // `TPartitionDirectServiceMock service(true); dbg->Run(&service);` repeated
-    // across tests. `dropScheduledCallbacks` maps to the mock ctor argument.
-    NThreading::TFuture<void> RunAndGetInitialReady(
-        const std::shared_ptr<TDirectBlockGroup>& dbg,
-        bool dropScheduledCallbacks = true);
-
-    // Waits for a future (typically the initial-ready gate) and asserts it
-    // resolved. Unifies the readiness check across the mock-transport tests.
+    // Waits for a future and asserts it resolved.
     void WaitReady(
         const NThreading::TFuture<void>& future,
-        TDuration timeout = DefaultWaitTimeout);
+        TDuration timeout = DefaultWaitFutureTimeout);
 
-    // Waits for a future (typically the initial-ready gate) by pumping the
-    // runtime + executor, then asserts it resolved. Unifies the readiness check
-    // across the real-transport tests.
+    // Waits for a future by pumping the runtime + executor, then asserts it
+    // resolved.
     void WaitReady(
         const TExecutorPtr& executor,
         const NThreading::TFuture<void>& future,
-        TDuration timeout = DefaultWaitTimeout);
+        TDuration timeout = DefaultWaitFutureTimeout);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

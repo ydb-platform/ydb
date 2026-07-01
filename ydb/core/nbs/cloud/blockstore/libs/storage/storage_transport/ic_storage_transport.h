@@ -11,9 +11,6 @@ class TICStorageTransport: public IStorageTransport
 public:
     explicit TICStorageTransport(NActors::TActorSystem* actorSystem);
 
-    // Constructs a transport over an already registered transport actor.
-    // Useful for tests that register TICStorageTransportActor through a
-    // TTestActorRuntime and need to address it directly.
     TICStorageTransport(
         NActors::TActorSystem* actorSystem,
         NActors::TActorId icStorageTransportActorId);

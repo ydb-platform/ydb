@@ -7,33 +7,13 @@
 
 namespace {
 
-// Bound for a single Runtime->DispatchEvents() call. On an idle real runtime
-// the simulated clock does not advance, so DispatchEvents would otherwise block
-// until the (huge) default dispatch timeout. With a short bound it throws
-// TEmptyEventQueueException once the queue drains, which the pumping helpers
-// catch.
 constexpr auto DispatchTimeout = TDuration::MilliSeconds(50);
-
-// Duration of a single DispatchEvents step inside the pumping loops.
 constexpr auto DispatchStep = TDuration::MilliSeconds(10);
-
-// Upper bound on DispatchEvents iterations in DrainRuntime() so a misbehaving
-// runtime cannot loop forever.
 constexpr int MaxDrainIterations = 100;
 
 }   // namespace
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
-
-TVector<NKikimr::NBsController::TDDiskId> MakeDDiskIds(ui32 baseNodeId)
-{
-    TVector<NKikimr::NBsController::TDDiskId> ids;
-    ids.reserve(DirectBlockGroupHostCount);
-    for (ui32 i = 0; i < DirectBlockGroupHostCount; ++i) {
-        ids.emplace_back(baseNodeId + i, 1, i);
-    }
-    return ids;
-}
 
 void TDBGFixture::SetUp(NUnitTest::TTestContext& context)
 {
@@ -65,9 +45,9 @@ void TDBGFixture::TearDown(NUnitTest::TTestContext& context)
     }
 }
 
-// Dispatches one batch of events queued in the runtime.
 bool TDBGFixture::DispatchRuntimeOnce(NActors::TDispatchOptions options) const
 {
+    // TODO
     // Quirk: a non-empty FinalEvents list enables full simulation.
     options.FinalEvents.emplace_back([](NActors::IEventHandle&)
                                      { return false; });
@@ -113,9 +93,6 @@ TDBGFixture::MakeDirectBlockGroup(
         std::move(transport));
 }
 
-// Interleaves the simulated runtime and the coroutine executor: dispatches
-// everything queued in the runtime and lets the executor run the resumed
-// coroutines.
 bool TDBGFixture::DoExecutorAndRuntimeWorkWithPredicate(
     const TExecutorPtr& executor,
     std::function<bool()> predicate,
@@ -147,8 +124,6 @@ bool TDBGFixture::DoExecutorAndRuntimeWorkWithPredicate(
     }
 }
 
-// Pumps runtime + executor for a bounded time so in-flight async work (sent
-// requests, callbacks) settles, without waiting for a specific condition.
 void TDBGFixture::DoAllExecutorAndRuntimeWork(
     const TExecutorPtr& executor,
     TDuration duration) const

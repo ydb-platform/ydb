@@ -14,12 +14,6 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr TStringBuf DestroyErrorMessage =
-    "TICStorageTransportActor is destroyed";
-constexpr TStringBuf CantAcquireDataErrorMessage = "can't acquire data";
-constexpr TStringBuf UndeliveryErrorMessage = "Undelivered";
-constexpr TStringBuf SessionBrokenErrorMessage = "Session broken";
-
 template <typename T>
 void SetErrorStatus(
     NKikimrBlobStorage::NDDisk::TReplyStatus_E status,
@@ -78,18 +72,11 @@ void SetSessionBrokenError(T& record)
 }
 
 template <typename TEvent, typename TMap>
-void RejectRequestsForNode(TMap& map, ui32 nodeId, const TActorContext& ctx)
+void RejectRequestsForNode(TMap& map, ui32 nodeId)
 {
     for (auto it = map.begin(); it != map.end();) {
         auto& request = it->second;
         if (request->ServiceId.NodeId() == nodeId) {
-            LOG_ERROR(
-                ctx,
-                NKikimrServices::NBS_PARTITION,
-                "maks_ololo RejectRequestsForNode requrst disconnected for "
-                "node #%lu",
-                nodeId);
-
             TEvent event;
             SetSessionBrokenError(event.Record);
             request->Promise.SetValue(std::move(event.Record));
@@ -157,25 +144,19 @@ void TICStorageTransportActor::HandleConnect(
     const TActorContext& ctx)
 {
     const ui64 requestId = ++RequestIdGenerator;
-    auto [it, inserted] =
-        ConnectRequests.emplace(requestId, ev->Release().Release());
-    Y_ABORT_UNLESS(inserted);
-
-    const auto& request = *it->second;
-
-    // Subscribe for node disconnect already at the moment of the connect
-    // request (not only after a successful connect). Otherwise a host that is
-    // stuck in a pending connect would never be notified about a disconnect.
-    // The callback is copied here because it is still needed in
-    // ConnectRequests until the connect completes.
-    ICSubscribedNodes[request.ServiceId.NodeId()].push_back(
-        request.DisconnectCB);
-
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
         "Sent TEvConnect with requestId# %lu",
         requestId);
+
+    auto [it, inserted] =
+        ConnectRequests.emplace(requestId, ev->Release().Release());
+    Y_ABORT_UNLESS(inserted);
+
+    const auto& request = *it->second;
+    ICSubscribedNodes[request.ServiceId.NodeId()].push_back(
+        request.DisconnectCB);
 
     SendWithUndeliveryTracking(
         ctx,
@@ -227,8 +208,6 @@ void TICStorageTransportActor::HandleConnectResult(
 
     if (auto* r = ConnectRequests.FindPtr(requestId)) {
         auto& request = **r;
-        // The disconnect subscription is registered already in HandleConnect,
-        // so here we only resolve the promise and drop the request.
         request.Promise.SetValue(std::move(ev->Get()->Record));
 
         ConnectRequests.erase(requestId);
@@ -1135,7 +1114,6 @@ void TICStorageTransportActor::PassAway()
         }
     }
     ICSubscribedNodes.clear();
-    // TODO do we need to call cb and notify dbg?
     NActors::IActor::PassAway();
 }
 
@@ -1143,18 +1121,17 @@ void TICStorageTransportActor::RejectAllSessionRequestsForNode(
     ui32 nodeId,
     const NActors::TActorContext& ctx)
 {
-    RejectRequestsForNode<NDDisk::TEvReadResult>(
-        ReadFromDDiskRequests,
-        nodeId,
-        ctx);
-    RejectRequestsForNode<NDDisk::TEvWriteResult>(
-        WriteToDDiskRequests,
-        nodeId,
-        ctx);
+    LOG_WARN(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "ALl session's requests for node #%lu were rejected",
+        nodeId);
+
+    RejectRequestsForNode<NDDisk::TEvReadResult>(ReadFromDDiskRequests, nodeId);
+    RejectRequestsForNode<NDDisk::TEvWriteResult>(WriteToDDiskRequests, nodeId);
     RejectRequestsForNode<NDDisk::TEvSyncResult>(
         FlushFromPBufferRequests,
-        nodeId,
-        ctx);
+        nodeId);
 }
 
 void TICStorageTransportActor::HandleICNodeDisconnected(
@@ -1164,10 +1141,10 @@ void TICStorageTransportActor::HandleICNodeDisconnected(
     Y_UNUSED(ctx);
     const ui32 nodeId = ev->Get()->NodeId;
 
-    LOG_ERROR(
+    LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "maks_ololo Node #%lu disconnected",
+        "Node #%lu disconnected",
         nodeId);
 
     auto it = ICSubscribedNodes.find(nodeId);
@@ -1181,13 +1158,6 @@ void TICStorageTransportActor::HandleICNodeDisconnected(
     }
 
     RejectAllSessionRequestsForNode(nodeId, ctx);
-}
-
-void TICStorageTransportActor::HandleICNodeConnected(
-    const TEvInterconnect::TEvNodeConnected::TPtr& ev,
-    const TActorContext& ctx)
-{
-    Y_UNUSED(ev, ctx);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1280,7 +1250,7 @@ STFUNC(TICStorageTransportActor::StateWork)
             HandleListPersistentBufferResult);
 
         HFunc(TEvInterconnect::TEvNodeDisconnected, HandleICNodeDisconnected);
-        HFunc(TEvInterconnect::TEvNodeConnected, HandleICNodeConnected);
+        IgnoreFunc(TEvInterconnect::TEvNodeConnected);
 
         default:
             LOG_ERROR_S(

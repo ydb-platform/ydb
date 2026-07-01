@@ -20,7 +20,9 @@ TICStorageTransportTestAdapter::TICStorageTransportTestAdapter(
           runtime,
           // Register the real transport actor inside the runtime and address
           // it directly from the TICStorageTransport base.
-          runtime->Register(new TICStorageTransportActor(), 0))
+          runtime->Register(
+              std::make_unique<TICStorageTransportActor>().release(),
+              0))
 {}
 
 TICStorageTransportTestAdapter::TICStorageTransportTestAdapter(
@@ -32,8 +34,6 @@ TICStorageTransportTestAdapter::TICStorageTransportTestAdapter(
     , EdgeActor(runtime->AllocateEdgeActor(0))
     , TransportActorId(transportActorId)
 {
-    // Single node: every DDisk/PersistentBuffer lives on the runtime node and
-    // is distinguished only by pdisk/slot.
     DDiskIds.reserve(DirectBlockGroupHostCount);
     PBufferIds.reserve(DirectBlockGroupHostCount);
     for (ui32 i = 0; i < DirectBlockGroupHostCount; ++i) {
@@ -75,7 +75,9 @@ void TICStorageTransportTestAdapter::RegisterStub(
     const TDDiskId& ddiskId)
 {
     auto state = MakeIntrusive<TDDiskStubState>();
-    auto actorId = Runtime->Register(new TDDiskStubActor(state), 0);
+    auto actorId = Runtime->Register(
+        std::make_unique<TDDiskStubActor>(state).release(),
+        0);
 
     TActorId serviceId;
     switch (type) {
@@ -144,13 +146,12 @@ void TICStorageTransportTestAdapter::FireDisconnect(
     Y_UNUSED(type);
     Y_UNUSED(ddiskId);
 
-    Runtime->Send(
-        new IEventHandle(
-            TransportActorId,
-            EdgeActor,
-            new TEvInterconnect::TEvNodeDisconnected(nodeId)),
-        0,
-        true);
+    auto request = std::make_unique<IEventHandle>(
+        TransportActorId,
+        EdgeActor,
+        std::make_unique<TEvInterconnect::TEvNodeDisconnected>(nodeId)
+            .release());
+    Runtime->Send(request.release(), 0, true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

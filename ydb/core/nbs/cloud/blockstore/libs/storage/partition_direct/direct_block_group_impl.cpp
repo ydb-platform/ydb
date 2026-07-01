@@ -76,10 +76,8 @@ TDirectBlockGroup::TDDiskConnection::GetFuture() const
 
 void TDirectBlockGroup::TDDiskConnection::ResetSession()
 {
-    // Wake up everyone waiting on the old session future with an error, so that
-    // coroutines blocked in WaitForSessionLock don't hang forever.
     if (!ConnectPromise.HasValue()) {
-        ConnectPromise.SetValue(MakeError(E_REJECTED, "DDisk session reset"));
+        ConnectPromise.SetValue(MakeError(E_CANCELLED, "DDisk session reset"));
     }
 
     ConnectPromise = NThreading::NewPromise<NProto::TError>();
@@ -1291,7 +1289,7 @@ void TDirectBlockGroup::OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId)
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "TDBG::OnNodeDisconnected %s, host %s, nodeId: %d",
+        "OnNodeDisconnected %s, host %s, nodeId: %d",
         LogTitle.GetWithTime().c_str(),
         PrintHostIndex(hostIndex).c_str(),
         nodeId);

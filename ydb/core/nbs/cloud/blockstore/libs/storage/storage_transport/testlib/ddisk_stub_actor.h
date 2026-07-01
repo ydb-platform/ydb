@@ -11,15 +11,13 @@ namespace NYdb::NBS::NBlockStore::NStorage::NTransport::NTestLib {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Thread-safe state shared between the test thread (which configures pending
-// behaviour) and the stub actor running inside the test actor runtime.
+// Thread-safe state shared between the test threadand the stub actor
+// running inside the test actor runtime.
 struct TDDiskStubState: public TThrRefBase
 {
     TMutex Lock;
 
-    // When set, the stub does not answer the corresponding request, leaving it
-    // in flight inside TICStorageTransportActor (so it can later be rejected by
-    // a disconnect).
+    // When set, the stub does not answer the corresponding request.
     bool PendingConnect = false;
     bool PendingRead = false;
     bool PendingWrite = false;

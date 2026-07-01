@@ -51,14 +51,9 @@ public:
     // DDiskInstanceGuid reported in an immediate successful connect.
     ui64 DefaultDDiskInstanceGuid = 1;
 
-    // Generates the DDisk / PersistentBuffer ids for this group from baseNodeId
-    // using the same layout as the test adapter, so the mock owns the ids and
-    // exposes them via GetDDiskIds()/GetPBufferIds() in the same style.
     explicit TStorageTransportMock(ui32 baseNodeId = 100);
     ~TStorageTransportMock() override = default;
 
-    // DDisk / PersistentBuffer ids generated for this group. Pass them to the
-    // DirectBlockGroup under test.
     [[nodiscard]] const TVector<TDDiskId>& GetDDiskIds() const
     {
         return DDiskIds;
@@ -84,24 +79,16 @@ public:
     [[nodiscard]] TVector<NKikimr::NDDisk::TQueryCredentials>
     GetConnectCredentials(EConnectionType type, const TDDiskId& ddiskId) const;
 
-    // Simulates an IC break for the given host. Invokes the stored
-    // disconnectCB (registered during Connect) with the given nodeId and then
-    // rejects every in-flight Read/Write to that host with a "Session broken"
-    // error. Reproduces the chain HandleICNodeDisconnected -> disconnectCB ->
-    // OnNodeDisconnected -> ReEstablishDDiskConnection.
+    // Simulates an IC break for the given host.
     void FireDisconnect(
         EConnectionType type,
         const TDDiskId& ddiskId,
         ui32 nodeId = 1);
 
-    // Marks the next ReadFromDDisk(type, ddiskId) as pending: it returns an
-    // unresolved future. The returned promise can be resolved by the test, or
-    // is rejected automatically by FireDisconnect.
     TReadPromise SetPendingReadFromDDisk(
         EConnectionType type,
         const TDDiskId& ddiskId);
 
-    // Same as SetPendingReadFromDDisk but for WriteToDDisk.
     TWritePromise SetPendingWriteToDDisk(
         EConnectionType type,
         const TDDiskId& ddiskId);
@@ -189,8 +176,6 @@ private:
 
     [[nodiscard]] static TKey MakeKey(const THostConnection& connection);
 
-    // Single group: ids generated from baseNodeId, distinguished by node/slot,
-    // matching what the test passes to the DirectBlockGroup under test.
     TVector<TDDiskId> DDiskIds;
     TVector<TDDiskId> PBufferIds;
 
@@ -199,10 +184,10 @@ private:
     // observed for the given (type, ddiskId), ordered by call.
     TMap<TKey, TVector<NKikimr::NDDisk::TQueryCredentials>> ConnectCredentials;
 
-    // disconnectCB stored per host during Connect(); invoked by FireDisconnect.
+    // disconnectCB stored per host during Connect().
     TMap<TKey, TDisconnectCB> StoredDisconnectCBs;
 
-    // In-flight pending DDisk reads/writes; rejected by FireDisconnect.
+    // In-flight pending DDisk reads/writes.
     TMap<TKey, TReadPromise> PendingReadsFromDDisk;
     TMap<TKey, TWritePromise> PendingWritesToDDisk;
 };

@@ -257,7 +257,7 @@ public:
     i64 StartDecompressionTasks(const typename IExecutor::TPtr& executor,
                                 i64 availableMemory,
                                 TDeferredActions<UseMigrationProtocol>& deferred);
-    void PlanDecompressionTasks(double averageCompressionRatio,
+    bool PlanDecompressionTasks(double averageCompressionRatio,
                                 TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
                                 TDeferredActions<UseMigrationProtocol>& deferred);
 

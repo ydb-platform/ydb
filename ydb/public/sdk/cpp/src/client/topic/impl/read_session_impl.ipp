@@ -295,6 +295,8 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::Cleanup(TDeferredActio
 
     deferred.DeferDestroyDecompressionInfos(std::move(infos));
     deferred.DeferOnUserRetrievedEvent(std::move(accumulator));
+    Ready.clear();
+    NotReady.clear();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1189,9 +1191,11 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
                                                                                 Settings.Decompress_);
         Y_ABORT_UNLESS(decompressionInfo);
 
-        decompressionInfo->PlanDecompressionTasks(AverageCompressionRatio,
-                                                  partitionStream,
-                                                  deferred);
+        if (!decompressionInfo->PlanDecompressionTasks(AverageCompressionRatio,
+                                                       partitionStream,
+                                                       deferred)) {
+            return;
+        }
 
         DecompressionQueue.emplace_back(decompressionInfo, partitionStream);
         StartDecompressionTasksImpl(deferred);
@@ -1440,9 +1444,11 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         serverBytesSize = 0;
         Y_ABORT_UNLESS(decompressionInfo);
 
-        decompressionInfo->PlanDecompressionTasks(AverageCompressionRatio,
-                                                  partitionStream,
-                                                  deferred);
+        if (!decompressionInfo->PlanDecompressionTasks(AverageCompressionRatio,
+                                                       partitionStream,
+                                                       deferred)) {
+            return;
+        }
         DecompressionQueue.emplace_back(decompressionInfo, partitionStream);
         StartDecompressionTasksImpl(deferred);
     }
@@ -1888,6 +1894,10 @@ template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CleanupDecompressionQueueImpl(TDeferredActions<UseMigrationProtocol>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
+    if (DecompressionQueue.empty()) {
+        return;
+    }
+
     std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>> infos;
     infos.reserve(DecompressionQueue.size());
     for (auto& item : DecompressionQueue) {
@@ -2015,7 +2025,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl(TDeferredAct
 
     if (!Aborting) {
         Aborting = true;
-        CallCloseCallbackImpl();
+        CallCloseCallbackImpl(deferred);
 
         // Cancel(ClientContext); // Don't cancel, because this is used only as factory for other contexts.
         Cancel(ConnectContext);
@@ -3110,7 +3120,7 @@ i64 TDataDecompressionInfo<UseMigrationProtocol>::StartDecompressionTasks(
 }
 
 template<bool UseMigrationProtocol>
-void TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double averageCompressionRatio,
+bool TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double averageCompressionRatio,
                                                                           TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
                                                                           TDeferredActions<UseMigrationProtocol>& deferred) {
     constexpr size_t TASK_LIMIT = 512_KB;
@@ -3143,8 +3153,9 @@ void TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double
                                                      ReadyThresholds.back().Ready,
                                                      ReadyThresholds.back().Abandoned);
             if (!pushRes) {
+                deferred.DeferDestroyDecompressionInfos({TDataDecompressionInfo::shared_from_this()});
                 session->AbortImpl(&deferred);
-                return;
+                return false;
             }
         }
 
@@ -3168,6 +3179,8 @@ void TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double
     } else {
         ReadyThresholds.pop_back(); // Revert.
     }
+
+    return true;
 }
 
 template <bool UseMigrationProtocol>

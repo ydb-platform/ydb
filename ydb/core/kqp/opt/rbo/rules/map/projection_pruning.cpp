@@ -1,21 +1,181 @@
 #include <ydb/core/kqp/opt/rbo/rules/kqp_rules_include.h>
-#include <ydb/core/kqp/opt/rbo/rules/map/projection_pruning_helpers.h>
+
+#include <ydb/core/kqp/opt/physical/kqp_olap_filter_inspection.h>
 
 namespace NKikimr {
 namespace NKqp {
 
+namespace {
+
+void AddReadColumnByName(const TOpRead& read, const TString& columnName, TInfoUnitSet& requiredColumns) {
+    for (const auto& outputIU : read.OutputIUs) {
+        if (outputIU.GetFullName() == columnName || outputIU.GetColumnName() == columnName) {
+            AddInfoUnit(requiredColumns, outputIU);
+        }
+    }
+}
+
+void AddReadLambdaDeps(const TOpRead& read, const TExprNode::TPtr& lambda, TInfoUnitSet& requiredColumns) {
+    const auto inspection = NOpt::InspectOlapProcessLambda(lambda);
+    if (inspection.RequiresAllInputColumns) {
+        AddInfoUnits(requiredColumns, read.OutputIUs);
+        return;
+    }
+
+    for (const auto& columnName : inspection.Columns) {
+        AddReadColumnByName(read, columnName, requiredColumns);
+    }
+}
+
+void AddReadExpressionMemberDeps(const TOpRead& read, const TExprNode::TPtr& node, TInfoUnitSet& requiredColumns) {
+    if (!node) {
+        return;
+    }
+
+    if (node->IsCallable("Member")) {
+        if (node->ChildrenSize() == 2 && node->Child(1)->IsAtom()) {
+            AddReadColumnByName(read, TString(node->Child(1)->Content()), requiredColumns);
+        }
+        return;
+    }
+
+    for (const auto& child : node->ChildrenList()) {
+        AddReadExpressionMemberDeps(read, child, requiredColumns);
+    }
+}
+
+void AddReadOriginalPredicateDeps(const TOpRead& read, TInfoUnitSet& requiredColumns) {
+    if (!read.OriginalPredicate) {
+        return;
+    }
+
+    AddReadExpressionMemberDeps(read, read.OriginalPredicate->Node, requiredColumns);
+}
+
+TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const TInfoUnitSet& liveOut, const TInfoUnitSet& keepKeyColumns = {}) {
+    TVector<bool> keep(map->MapElements.size(), false);
+    for (size_t idx = 0; idx < map->MapElements.size(); ++idx) {
+        const auto& mapElement = map->MapElements[idx];
+        const auto to = mapElement.GetElementName();
+        if (liveOut.contains(to) || keepKeyColumns.contains(to)) {
+            keep[idx] = true;
+            continue;
+        }
+
+        if (mapElement.IsRename() && GetForbidden(map.get()).contains(mapElement.GetRename())) {
+            keep[idx] = true;
+        }
+    }
+
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        TInfoUnitSet keptOutputs;
+        for (size_t idx = 0; idx < map->MapElements.size(); ++idx) {
+            if (keep[idx]) {
+                AddInfoUnit(keptOutputs, map->MapElements[idx].GetElementName());
+            }
+        }
+
+        for (size_t idx = 0; idx < map->MapElements.size(); ++idx) {
+            const auto& mapElement = map->MapElements[idx];
+            if (!keep[idx] && mapElement.IsRename() && keptOutputs.contains(mapElement.GetRename())) {
+                keep[idx] = true;
+                changed = true;
+            }
+        }
+    }
+
+    TVector<TMapElement> newElements;
+    newElements.reserve(map->MapElements.size());
+    for (size_t idx = 0; idx < map->MapElements.size(); ++idx) {
+        if (keep[idx]) {
+            const auto& mapElement = map->MapElements[idx];
+            newElements.push_back(mapElement);
+        }
+    }
+
+    return newElements;
+}
+
+TVector<TInfoUnit> KeepLiveColumns(const TVector<TInfoUnit>& columns, const TInfoUnitSet& liveOut, const TInfoUnitSet& keepKeyColumns = {}) {
+    TVector<TInfoUnit> newColumns;
+    newColumns.reserve(columns.size());
+
+    for (const auto& column : columns) {
+        if (liveOut.contains(column) || keepKeyColumns.contains(column)) {
+            newColumns.push_back(column);
+        }
+    }
+
+    return newColumns;
+}
+
+bool NarrowReadColumns(const TIntrusivePtr<TOpRead>& read, const TVector<TInfoUnit>& liveOutput) {
+    TInfoUnitSet requiredColumns;
+    AddInfoUnits(requiredColumns, liveOutput);
+    AddReadLambdaDeps(*read, read->OlapFilterLambda, requiredColumns);
+    AddReadOriginalPredicateDeps(*read, requiredColumns);
+
+    TVector<TString> newColumns;
+    TVector<TInfoUnit> newOutputIUs;
+    newColumns.reserve(read->Columns.size());
+    newOutputIUs.reserve(read->OutputIUs.size());
+
+    Y_ENSURE(read->Columns.size() == read->OutputIUs.size());
+    for (size_t i = 0; i < read->OutputIUs.size(); ++i) {
+        if (requiredColumns.contains(read->OutputIUs[i])) {
+            newColumns.push_back(read->Columns[i]);
+            newOutputIUs.push_back(read->OutputIUs[i]);
+        }
+    }
+
+    if (newOutputIUs.empty() && read->GetTableStorageType() == NYql::EStorageType::ColumnStorage && !read->OutputIUs.empty()) {
+        newColumns.push_back(read->Columns.front());
+        newOutputIUs.push_back(read->OutputIUs.front());
+    }
+
+    if (newOutputIUs == read->OutputIUs) {
+        return false;
+    }
+
+    read->Columns = std::move(newColumns);
+    read->OutputIUs = std::move(newOutputIUs);
+    return true;
+}
+
+bool PruneAggregateTraits(const TIntrusivePtr<TOpAggregate>& aggregate, const TVector<TInfoUnit>& liveOutput) {
+    TInfoUnitSet liveOutputSet;
+    AddInfoUnits(liveOutputSet, liveOutput);
+
+    TVector<TOpAggregationTraits> newTraits;
+    newTraits.reserve(aggregate->AggregationTraitsList.size());
+    for (const auto& traits : aggregate->AggregationTraitsList) {
+        if (liveOutputSet.contains(traits.ResultColName)) {
+            newTraits.push_back(traits);
+        }
+    }
+
+    if (newTraits.size() == aggregate->AggregationTraitsList.size()) {
+        return false;
+    }
+
+    aggregate->AggregationTraitsList = std::move(newTraits);
+    return true;
+}
+
+} // anonymous namespace
+
 bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
+    Y_UNUSED(props);
 
     if (input->Kind != EOperator::Map) {
         return false;
     }
 
     auto map = CastOperator<TOpMap>(input);
-    const auto liveIt = props.LiveOut.find(map.get());
-    if (liveIt == props.LiveOut.end()) {
-        return false;
-    }
+    const auto& liveOut = GetLiveOut(map.get());
 
     // If we need to keep key columns, add them to keep list
     TInfoUnitSet keepKeyColumns;
@@ -25,23 +185,16 @@ bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
         }
     }
 
-    auto newElements = KeepLiveMapElements(map, liveIt->second, props, keepKeyColumns);
-    if (newElements.size() == map->MapElements.size()) {
-        return false;
-    }
+    auto newElements = KeepLiveMapElements(map, liveOut, keepKeyColumns);
 
     if (newElements.empty()) {
-        if (!CanReplaceInParents(map, map->GetInput(), props)) {
-            return false;
-        }
         input = map->GetInput();
     } else {
-        auto oldElements = std::move(map->MapElements);
-        map->MapElements = std::move(newElements);
-        if (!CanExposeToParents(map.get(), props)) {
-            map->MapElements = std::move(oldElements);
+        if (newElements.size() == map->MapElements.size()) {
             return false;
         }
+
+        map->MapElements = std::move(newElements);
     }
 
     return true;
@@ -49,16 +202,14 @@ bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
 
 bool TPruneDeadReadColumnsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
+    Y_UNUSED(props);
 
     if (input->Kind != EOperator::Source) {
         return false;
     }
 
     auto read = CastOperator<TOpRead>(input);
-    const auto liveIt = props.LiveOut.find(read.get());
-    if (liveIt == props.LiveOut.end()) {
-        return false;
-    }
+    const auto& liveOut = GetLiveOut(read.get());
 
     // If we need to keep key columns, add them to keep list
     TInfoUnitSet keepKeyColumns;
@@ -68,25 +219,23 @@ bool TPruneDeadReadColumnsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
         }
     }
 
-    const auto liveOutput = KeepLiveColumns(read->GetOutputIUs(), liveIt->second, keepKeyColumns);
+    const auto liveOutput = KeepLiveColumns(read->GetOutputIUs(), liveOut, keepKeyColumns);
     return NarrowReadColumns(read, liveOutput);
 }
 
 bool TPruneDeadAggregateTraitsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
+    Y_UNUSED(props);
 
     if (input->Kind != EOperator::Aggregate || CastOperator<TOpAggregate>(input)->IsDistinctAll()) {
         return false;
     }
 
     auto aggregate = CastOperator<TOpAggregate>(input);
-    const auto liveIt = props.LiveOut.find(aggregate.get());
-    if (liveIt == props.LiveOut.end()) {
-        return false;
-    }
+    const auto& liveOut = GetLiveOut(aggregate.get());
 
     // Key columns will be preserved in the aggregate anyway
-    const auto liveOutput = KeepLiveColumns(aggregate->GetOutputIUs(), liveIt->second);
+    const auto liveOutput = KeepLiveColumns(aggregate->GetOutputIUs(), liveOut);
     return PruneAggregateTraits(aggregate, liveOutput);
 }
 

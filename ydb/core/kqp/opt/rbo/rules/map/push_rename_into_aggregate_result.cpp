@@ -21,8 +21,8 @@ bool TPushRenameIntoAggregateResultRule::MatchAndApply(TIntrusivePtr<IOperator>&
     }
 
     auto topMap = CastOperator<TOpMap>(input);
-    const auto candidate = NMapRules::FindRenameCandidate(topMap, props);
-    if (!candidate || !NMapRules::CanStartLocalRenamePush(topMap, *candidate, props)) {
+    const auto candidate = NMapRules::FindRenameCandidate(topMap);
+    if (!candidate || !NMapRules::CanStartLocalRenamePush(topMap, *candidate)) {
         return false;
     }
 
@@ -31,23 +31,11 @@ bool TPushRenameIntoAggregateResultRule::MatchAndApply(TIntrusivePtr<IOperator>&
     }
 
     auto aggregate = CastOperator<TOpAggregate>(topMap->GetInput());
-    if (!aggregate->IsSingleConsumer() || !ProducesAggregateResult(aggregate, candidate->From) ||
-        !NMapRules::CanRenameOutput(aggregate, candidate->From, candidate->To, props)) {
+    if (!aggregate->IsSingleConsumer() || !ProducesAggregateResult(aggregate, candidate->From)) {
         return false;
     }
 
-    const auto oldTraits = aggregate->AggregationTraitsList;
-    for (auto& traits : aggregate->AggregationTraitsList) {
-        if (traits.ResultColName == candidate->From) {
-            traits.ResultColName = candidate->To;
-            break;
-        }
-    }
-
-    if (HasOutputConflicts(aggregate->GetOutputIUs())) {
-        aggregate->AggregationTraitsList = oldTraits;
-        return false;
-    }
+    aggregate->RenameProducedIUs({{candidate->From, candidate->To}}, ctx.ExprCtx);
 
     return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
 }

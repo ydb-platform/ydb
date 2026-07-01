@@ -7,7 +7,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 
-#include <cstdint>
+#include <utility>
 
 namespace NKikimr {
 namespace NKqp {
@@ -55,43 +55,59 @@ struct TSubplans {
         PlanMap.erase(iu);
     }
 
-    bool RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx);
+    bool RenameReferences(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx);
 
     THashMap<TInfoUnit, TSubplanEntry, TInfoUnit::THashFunction> PlanMap;
     TVector<TInfoUnit> OrderedList;
 };
 
-struct TPlanEdgeKey {
-    IOperator* Parent = nullptr;
-    ui32 ChildIdx = 0;
-    IOperator* Child = nullptr;
-
-    bool operator==(const TPlanEdgeKey& other) const {
-        return Parent == other.Parent && ChildIdx == other.ChildIdx && Child == other.Child;
+class TInfoUnitConstraintSet {
+public:
+    // A name constraint can be finite, or all names except a finite exception set.
+    static TInfoUnitConstraintSet AllExcept(TInfoUnitSet except) {
+        TInfoUnitConstraintSet result;
+        result.AllExcept_ = true;
+        result.Units_ = std::move(except);
+        return result;
     }
 
-    struct THashFunction {
-        size_t operator()(const TPlanEdgeKey& key) const {
-            size_t hash = reinterpret_cast<std::uintptr_t>(key.Parent);
-            hash ^= reinterpret_cast<std::uintptr_t>(key.Child) + 0x9e3779b97f4a7c15ULL + (hash << 6) + (hash >> 2);
-            hash ^= static_cast<size_t>(key.ChildIdx) + 0x9e3779b97f4a7c15ULL + (hash << 6) + (hash >> 2);
-            return hash;
-        }
-    };
+    bool Empty() const {
+        return !AllExcept_ && Units_.empty();
+    }
+
+    bool IsAllExcept() const {
+        return AllExcept_;
+    }
+
+    bool contains(const TInfoUnit& iu) const {
+        return AllExcept_ ? !Units_.contains(iu) : Units_.contains(iu);
+    }
+
+    const TInfoUnitSet& GetUnits() const {
+        return Units_;
+    }
+
+    bool UnionWith(const TInfoUnit& iu);
+    bool UnionWith(const TInfoUnitSet& ius);
+    bool UnionWith(const TInfoUnitConstraintSet& other);
+    bool Subtract(const TInfoUnit& iu);
+    bool Subtract(const TInfoUnitSet& ius);
+    bool IntersectWith(const TInfoUnitConstraintSet& other);
+    TInfoUnitConstraintSet Complement() const;
+
+private:
+    bool AllExcept_ = false;
+    TInfoUnitSet Units_;
 };
 
 struct TPlanNameConstraints {
     void Clear();
 
-    bool AddForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child, const TInfoUnit& iu);
-    bool AddForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child, const TInfoUnitSet& ius);
+    bool AddForbidden(const TInfoUnitConstraintSet& forbidden);
 
-    const TInfoUnitSet& GetForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child) const;
-    const TInfoUnitSet& GetForbiddenOut(IOperator* parent, ui32 childIdx) const;
-    const TInfoUnitSet& GetForbiddenOutForSingleConsumer(IOperator* op) const;
-    bool IsForbiddenAtOutput(IOperator* op, const TInfoUnit& iu) const;
+    const TInfoUnitConstraintSet& GetForbidden() const;
 
-    THashMap<TPlanEdgeKey, TInfoUnitSet, TPlanEdgeKey::THashFunction> ForbiddenOut;
+    TInfoUnitConstraintSet Forbidden;
 };
 
 struct TAliasCandidate {
@@ -102,22 +118,6 @@ struct TAliasCandidate {
 struct TPlanAliases {
     using TCandidates = TVector<TAliasCandidate>;
     using TAliasMap = THashMap<TInfoUnit, TCandidates, TInfoUnit::THashFunction>;
-
-    void Clear() {
-        AliasesAtOutput.clear();
-    }
-
-    const TCandidates* GetAliases(IOperator* op, const TInfoUnit& iu) const {
-        const auto opIt = AliasesAtOutput.find(op);
-        if (opIt == AliasesAtOutput.end()) {
-            return nullptr;
-        }
-
-        const auto aliasIt = opIt->second.find(iu);
-        return aliasIt == opIt->second.end() ? nullptr : &aliasIt->second;
-    }
-
-    THashMap<IOperator*, TAliasMap> AliasesAtOutput;
 };
 
 /**
@@ -125,9 +125,6 @@ struct TPlanAliases {
  */
 struct TPlanProps {
     TStageGraph StageGraph;
-    THashMap<IOperator*, TInfoUnitSet> LiveOut;
-    TPlanNameConstraints NameConstraints;
-    TPlanAliases Aliases;
     int InternalVarIdx = 1;
     TSubplans Subplans;
     bool PgSyntax = false;

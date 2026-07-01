@@ -9,8 +9,8 @@ bool TPushRenameIntoMapProducerRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
     }
 
     auto topMap = CastOperator<TOpMap>(input);
-    const auto candidate = NMapRules::FindRenameCandidate(topMap, props);
-    if (!candidate || !NMapRules::CanStartLocalRenamePush(topMap, *candidate, props)) {
+    const auto candidate = NMapRules::FindRenameCandidate(topMap);
+    if (!candidate || !NMapRules::CanStartLocalRenamePush(topMap, *candidate)) {
         return false;
     }
 
@@ -20,19 +20,18 @@ bool TPushRenameIntoMapProducerRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
 
     auto map = CastOperator<TOpMap>(topMap->GetInput());
     auto* outputElement = map->FindOutputElement(candidate->From);
-    if (!map->IsSingleConsumer() || !outputElement ||
-        !NMapRules::CanRenameOutput(map, candidate->From, candidate->To, props)) {
+    if (!map->IsSingleConsumer() || !outputElement) {
+        return false;
+    }
+    // Do not turn `from := to` into `to := to` inside the same map. The target
+    // name may be hidden there by another semantic rename.
+    if (!outputElement->IsRename() &&
+        outputElement->IsColumnAccess() &&
+        outputElement->GetColumnAccess() == candidate->To) {
         return false;
     }
 
-    const auto oldElements = map->MapElements;
-    outputElement->SetElementName(candidate->To);
-
-    if (HasOutputConflicts(map->GetOutputIUs())) {
-        map->MapElements = oldElements;
-        return false;
-    }
-
+    map->RenameProducedIUs({{candidate->From, candidate->To}}, ctx.ExprCtx);
     return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
 }
 

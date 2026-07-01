@@ -3,43 +3,98 @@
 namespace NKikimr {
 namespace NKqp {
 
+// Main shape this handles:
+// A: Map [ x <- a ]         == becomes ==>  Map [ x := a ]
+// B: `- input [a]                           `- input [a]
+//
+// The rule keeps alias "x" but stops hiding source "a". This simplifies
+// propagation of some properties, like ShuffledByColumns or KeyColumns.
+//
+// Caveats:
+// 1. Another rename keeps hiding the source when exposing it is not safe.
+// A: Map [ x <- a, y <- a ] == becomes ==>  Map [ x := a, y <- a ]
+// B: `- input [a]                           `- input [a]
+//
+// 2. Source exposure is prevented when it would duplicate an existing output
+//    or violate a forbidden-name constraint at Map A.
+// A: Map [ x <- a, a := f ] -- not changed
+// B: `- input [a]
+
 namespace {
 
-bool CanConvertRenameToAppend(const TIntrusivePtr<TOpMap>& map, size_t renameIdx, const TPlanProps& props) {
-    if (map->MapElements[renameIdx].GetRename() == map->MapElements[renameIdx].GetElementName()) {
+using TRenameSourceCounts = THashMap<TInfoUnit, size_t, TInfoUnit::THashFunction>;
+
+TRenameSourceCounts CountRenameSources(const TOpMap& map) {
+    TRenameSourceCounts result;
+
+    for (const auto& element : map.MapElements) {
+        if (!element.IsRename()) {
+            continue;
+        }
+
+        ++result[element.GetRename()];
+    }
+
+    return result;
+}
+
+bool WillExposeRenameSource(const TRenameSourceCounts& remainingRenameSourceCounts, const TInfoUnit& source) {
+    const auto it = remainingRenameSourceCounts.find(source);
+    Y_ENSURE(it != remainingRenameSourceCounts.end());
+    return it->second == 1;
+}
+
+bool CanConvertRenameToAppend(
+    const TMapElement& element,
+    const TRenameSourceCounts& remainingRenameSourceCounts,
+    const TInfoUnitSet& output,
+    const TInfoUnitConstraintSet& forbidden)
+{
+    const auto source = element.GetRename();
+    if (source == element.GetElementName()) {
+        // Identity renames are handled by identity-map cleanup.
         return false;
     }
 
-    auto oldElements = map->MapElements;
-    map->MapElements[renameIdx].SetIsRename(false);
-    const bool valid = CanExposeToParents(map.get(), props);
-    map->MapElements = std::move(oldElements);
+    if (!WillExposeRenameSource(remainingRenameSourceCounts, source)) {
+        return true;
+    }
 
-    return valid;
+    return !output.contains(source) && !forbidden.contains(source);
 }
 
 } // anonymous namespace
 
 bool TRenameToAppendRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
+    Y_UNUSED(props);
 
     if (input->Kind != EOperator::Map) {
         return false;
     }
 
     auto map = CastOperator<TOpMap>(input);
+    auto remainingRenameSourceCounts = CountRenameSources(*map);
+    if (remainingRenameSourceCounts.empty()) {
+        return false;
+    }
+
+    const auto output = MakeInfoUnitSet(map->GetOutputIUs());
+    const auto& forbidden = GetForbidden(map.get());
     bool changed = false;
 
-    for (size_t idx = 0; idx < map->MapElements.size(); ++idx) {
-        if (!map->MapElements[idx].IsRename()) {
+    for (auto& mapElement : map->MapElements) {
+        if (!mapElement.IsRename()) {
             continue;
         }
 
-        if (!CanConvertRenameToAppend(map, idx, props)) {
+        const auto source = mapElement.GetRename();
+        if (!CanConvertRenameToAppend(mapElement, remainingRenameSourceCounts, output, forbidden)) {
             continue;
         }
 
-        map->MapElements[idx].SetIsRename(false);
+        mapElement.SetIsRename(false);
+        --remainingRenameSourceCounts[source];
         changed = true;
     }
 

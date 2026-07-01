@@ -77,9 +77,10 @@ TAliasMap BuildIdentityAliases(const TVector<TInfoUnit>& output) {
     return aliases;
 }
 
-TAliasMap GetAliasesAtOutput(const TPlanAliases& planAliases, const TIntrusivePtr<IOperator>& op) {
-    const auto it = planAliases.AliasesAtOutput.find(op.get());
-    return it == planAliases.AliasesAtOutput.end() ? BuildIdentityAliases(op->GetOutputIUs()) : it->second;
+TAliasMap GetAliasesAtOutput(const TIntrusivePtr<IOperator>& op) {
+    Y_ENSURE(op);
+    Y_ENSURE(op->Props.Analysis.Aliases.has_value(), "Aliases requested for an operator without computed aliases");
+    return *op->Props.Analysis.Aliases;
 }
 
 TAliasMap RestrictAliases(const TAliasMap& inputAliases, const TVector<TInfoUnit>& output) {
@@ -109,17 +110,17 @@ TAliasMap RestrictAliases(const TAliasMap& inputAliases, const TVector<TInfoUnit
     return aliases;
 }
 
-TAliasMap BuildPassthroughAliases(IUnaryOperator& op, const TPlanAliases& planAliases) {
+TAliasMap BuildPassthroughAliases(IUnaryOperator& op) {
     const auto input = op.GetInput();
-    return RestrictAliases(GetAliasesAtOutput(planAliases, input), op.GetOutputIUs());
+    return RestrictAliases(GetAliasesAtOutput(input), op.GetOutputIUs());
 }
 
-TAliasMap BuildMapAliases(TOpMap& map, const TPlanAliases& planAliases) {
+TAliasMap BuildMapAliases(TOpMap& map) {
     const auto input = map.GetInput();
     const auto inputOutput = input->GetOutputIUs();
     const auto output = map.GetOutputIUs();
     const auto visible = MakeInfoUnitSet(output);
-    const auto inputAliases = GetAliasesAtOutput(planAliases, input);
+    const auto inputAliases = GetAliasesAtOutput(input);
 
     THashMap<TInfoUnit, size_t, TInfoUnit::THashFunction> classByCanonical;
     TVector<TCandidates> classes;
@@ -185,14 +186,14 @@ TAliasMap BuildMapAliases(TOpMap& map, const TPlanAliases& planAliases) {
     return aliases;
 }
 
-TAliasMap BuildJoinAliases(TOpJoin& join, const TPlanAliases& planAliases) {
+TAliasMap BuildJoinAliases(TOpJoin& join) {
     TAliasMap aliases;
     const auto output = join.GetOutputIUs();
     const auto visible = MakeInfoUnitSet(output);
 
     auto addChildAliases = [&](const TIntrusivePtr<IOperator>& child) {
         const auto childOutput = child->GetOutputIUs();
-        const auto childAliases = GetAliasesAtOutput(planAliases, child);
+        const auto childAliases = GetAliasesAtOutput(child);
 
         TVector<TInfoUnit> childVisibleOutput;
         const auto childVisible = MakeInfoUnitSet(childOutput);
@@ -217,37 +218,38 @@ TAliasMap BuildJoinAliases(TOpJoin& join, const TPlanAliases& planAliases) {
 
 } // anonymous namespace
 
-TPlanAliases::TAliasMap IOperator::ComputeAliases(const TPlanAliases& planAliases) {
-    Y_UNUSED(planAliases);
+TPlanAliases::TAliasMap IOperator::ComputeAliases() {
     return BuildIdentityAliases(GetOutputIUs());
 }
 
-TPlanAliases::TAliasMap TOpMap::ComputeAliases(const TPlanAliases& planAliases) {
-    return BuildMapAliases(*this, planAliases);
+TPlanAliases::TAliasMap TOpMap::ComputeAliases() {
+    return BuildMapAliases(*this);
 }
 
-TPlanAliases::TAliasMap TOpAddDependencies::ComputeAliases(const TPlanAliases& planAliases) {
-    return BuildPassthroughAliases(*this, planAliases);
+TPlanAliases::TAliasMap TOpAddDependencies::ComputeAliases() {
+    return BuildPassthroughAliases(*this);
 }
 
-TPlanAliases::TAliasMap TOpFilter::ComputeAliases(const TPlanAliases& planAliases) {
-    return BuildPassthroughAliases(*this, planAliases);
+TPlanAliases::TAliasMap TOpFilter::ComputeAliases() {
+    return BuildPassthroughAliases(*this);
 }
 
-TPlanAliases::TAliasMap TOpJoin::ComputeAliases(const TPlanAliases& planAliases) {
-    return BuildJoinAliases(*this, planAliases);
+TPlanAliases::TAliasMap TOpJoin::ComputeAliases() {
+    return BuildJoinAliases(*this);
 }
 
-TPlanAliases::TAliasMap TOpLimit::ComputeAliases(const TPlanAliases& planAliases) {
-    return BuildPassthroughAliases(*this, planAliases);
+TPlanAliases::TAliasMap TOpLimit::ComputeAliases() {
+    return BuildPassthroughAliases(*this);
 }
 
-TPlanAliases::TAliasMap TOpSort::ComputeAliases(const TPlanAliases& planAliases) {
-    return BuildPassthroughAliases(*this, planAliases);
+TPlanAliases::TAliasMap TOpSort::ComputeAliases() {
+    return BuildPassthroughAliases(*this);
 }
 
 void ComputePlanAliases(TOpRoot& root) {
-    root.PlanProps.Aliases.Clear();
+    for (const auto& iter : root) {
+        iter.Current->Props.Analysis.Aliases.reset();
+    }
 
     THashSet<IOperator*> visited;
     std::function<void(const TIntrusivePtr<IOperator>&)> compute = [&](const TIntrusivePtr<IOperator>& op) {
@@ -259,13 +261,21 @@ void ComputePlanAliases(TOpRoot& root) {
             compute(child);
         }
 
-        root.PlanProps.Aliases.AliasesAtOutput[op.get()] = op->ComputeAliases(root.PlanProps.Aliases);
+        op->Props.Analysis.Aliases = op->ComputeAliases();
     };
 
     compute(root.GetInput());
     for (const auto& subPlan : root.PlanProps.Subplans.Get()) {
         compute(CastOperator<IOperator>(subPlan.Plan));
     }
+}
+
+const TPlanAliases::TCandidates* GetAliases(IOperator* op, const TInfoUnit& iu) {
+    Y_ENSURE(op);
+    Y_ENSURE(op->Props.Analysis.Aliases.has_value(), "Aliases requested for an operator without computed aliases");
+
+    const auto aliasIt = op->Props.Analysis.Aliases->find(iu);
+    return aliasIt == op->Props.Analysis.Aliases->end() ? nullptr : &aliasIt->second;
 }
 
 } // namespace NKqp

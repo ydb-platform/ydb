@@ -4,36 +4,26 @@ namespace NKikimr {
 namespace NKqp {
 
 TIntrusivePtr<IOperator> TPushAppendRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    auto result = TPushAppendIntoMapRule().SimpleMatchAndApply(input, ctx, props);
+    auto result = TPushMapElementsIntoMapRule().SimpleMatchAndApply(input, ctx, props);
     if (result != input) {
         return result;
     }
 
-    result = TPushAppendThroughUnaryRule(PushUnderFilter).SimpleMatchAndApply(input, ctx, props);
+    result = TPushMapElementsThroughInputRule(/*pushExpressions*/ false).SimpleMatchAndApply(input, ctx, props);
     if (result != input) {
         return result;
     }
 
-    result = TPushAppendThroughAggregateRule().SimpleMatchAndApply(input, ctx, props);
-    if (result != input) {
-        return result;
-    }
-
-    return TPushAppendThroughJoinRule().SimpleMatchAndApply(input, ctx, props);
+    return TPushMapElementsThroughAggregateRule().SimpleMatchAndApply(input, ctx, props);
 }
 
 TIntrusivePtr<IOperator> TPushAppendExpressionRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    auto result = TPushAppendIntoMapRule().SimpleMatchAndApply(input, ctx, props);
+    auto result = TPushMapElementsIntoMapRule().SimpleMatchAndApply(input, ctx, props);
     if (result != input) {
         return result;
     }
 
-    result = TPushAppendThroughUnaryRule(PushUnderFilter).SimpleMatchAndApply(input, ctx, props);
-    if (result != input) {
-        return result;
-    }
-
-    return TPushAppendThroughJoinRule().SimpleMatchAndApply(input, ctx, props);
+    return TPushMapElementsThroughInputRule(/*pushExpressions*/ true).SimpleMatchAndApply(input, ctx, props);
 }
 
 } // namespace NKqp

@@ -303,8 +303,6 @@ void TDynamicNameserver::Die(const TActorContext &ctx)
     for (auto &config : DynamicConfigs) {
         if (config->NodeBrokerPipe)
             NTabletPipe::CloseClient(ctx, config->NodeBrokerPipe);
-        config->PendingCacheMisses.Clear();
-        config->CacheMissHolders.clear();
     }
     TBase::Die(ctx);
 }

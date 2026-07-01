@@ -16,6 +16,8 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LONG_TX_SERVICE
+
 namespace NKikimr {
 
 namespace {
@@ -146,8 +148,11 @@ protected:
         pSpan.Attribute("bytes", (long)sumBytes);
         pSpan.Attribute("rows", (long)rowsCount);
         pSpan.Attribute("shards_count", (long)splittedData.GetShardsCount());
-        AFL_DEBUG(NKikimrServices::LONG_TX_SERVICE)("affected_shards_count", splittedData.GetShardsInfo().size())(
-            "shards_count", splittedData.GetShardsCount())("path", Path)("shards_info", splittedData.ShortLogString(32));
+        YDB_LOG_DEBUG("",
+            {"affectedShardsCount", splittedData.GetShardsInfo().size()},
+            {"shardsCount", splittedData.GetShardsCount()},
+            {"path", Path},
+            {"shardsInfo", splittedData.ShortLogString(32)});
         this->Become(&TThis::StateMain);
     }
 

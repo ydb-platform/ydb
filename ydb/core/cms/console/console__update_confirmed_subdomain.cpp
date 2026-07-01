@@ -1,5 +1,7 @@
 #include "console_tenants_manager.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
+
 namespace NKikimr::NConsole {
 
 class TTenantsManager::TTxUpdateConfirmedSubdomain : public TTransactionBase<TTenantsManager> {
@@ -18,13 +20,14 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "TTxUpdateConfirmedSubdomain for tenant " << Path << " to " << Version);
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateConfirmedSubdomain for tenant",
+            {"path", Path},
+            {"version", Version});
 
         Tenant = Self->GetTenant(Path);
         if (!Tenant) {
-            LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
-                        "TTxUpdateConfirmedSubdomain cannot find tenant " << Path);
+            YDB_LOG_ERROR_CTX(ctx, "TTxUpdateConfirmedSubdomain cannot find tenant",
+                {"path", Path});
             return true;
         }
 
@@ -38,8 +41,8 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "TTxUpdateConfirmedSubdomain complete for " << Path);
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateConfirmedSubdomain complete",
+            {"path", Path});
 
         if (Tenant) {
             if (Tenant->Worker == Worker)

@@ -1,5 +1,7 @@
 #include "console_tenants_manager.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
+
 namespace NKikimr::NConsole {
 
 class TTenantsManager::TTxDecommitGroups : public TTransactionBase<TTenantsManager> {
@@ -22,21 +24,21 @@ public:
         auto ctx = executorCtx.MakeFor(Self->SelfId());
 
         if (Tenant != Self->GetTenant(Tenant->Path)) {
-            LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
-                        "TTxDecommitGroups tenant " << Tenant->Path << " mismatch");
+            YDB_LOG_ERROR_CTX(ctx, "TTxDecommitGroups tenant mismatch",
+                {"path", Tenant->Path});
             return true;
         }
 
         if (!Tenant->StoragePools.contains(Pool->Kind)
             || Pool != Tenant->StoragePools.at(Pool->Kind)) {
-            LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
-                        "TTxDecommitGroups pool " << Pool->Config.GetName() << " mismatch");
+            YDB_LOG_ERROR_CTX(ctx, "TTxDecommitGroups pool mismatch",
+                {"name", Pool->Config.GetName()});
             return true;
         }
 
         if (Pool->Worker != Worker) {
-            LOG_NOTICE_S(ctx, NKikimrServices::CMS_TENANTS,
-                         "TTxDecommitGroups pool " << Pool->Config.GetName() << " worker mismatch");
+            YDB_LOG_NOTICE_CTX(ctx, "TTxDecommitGroups pool worker mismatch",
+                {"name", Pool->Config.GetName()});
             return true;
         }
 
@@ -65,8 +67,8 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "TTxDecommitGroups complete for " << Pool->Config.GetName());
+        YDB_LOG_DEBUG_CTX(ctx, "TTxDecommitGroups complete",
+            {"name", Pool->Config.GetName()});
 
         if (Update) {
             Self->Counters.Dec(Pool->Kind, COUNTER_ALLOCATED_STORAGE_UNITS,

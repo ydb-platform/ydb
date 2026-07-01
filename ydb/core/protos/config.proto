@@ -1434,6 +1434,16 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1024,
             DefaultValue: 10 }];
+        optional uint64 SyncLogMaxDiskAmount = 49 [(ControlOptions) = {
+            Description: "Maximum amount of SyncLog data stored on disk in bytes; effective chunk count is max(2, amount / PDisk chunk size)",
+            MinValue: 0,
+            MaxValue: 1099511627776,
+            DefaultValue: 0 }];
+        optional uint64 SyncLogMaxMemAmount = 50 [(ControlOptions) = {
+            Description: "Maximum amount of SyncLog data stored in memory in bytes; effective page count is max(2, amount / append block size)",
+            MinValue: 0,
+            MaxValue: 1073741824,
+            DefaultValue: 67108864 }];
 
         optional uint64 BurstThresholdNsHDD = 6 [(ControlOptions) = {
             Description: "Minumum operation queue size that is considered a burst, setting for HDD",

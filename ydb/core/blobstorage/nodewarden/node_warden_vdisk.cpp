@@ -210,6 +210,8 @@ namespace NKikimr::NStorage {
             vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionSSD;
             vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightSSD;
         }
+        vdiskConfig->SyncLogMaxDiskAmount = SyncLogMaxDiskAmount;
+        vdiskConfig->SyncLogMaxMemAmount = SyncLogMaxMemAmount;
 
         vdiskConfig->ThrottlingDryRun = ThrottlingDryRun;
         vdiskConfig->ThrottlingMinLevel0SstCount = ThrottlingMinLevel0SstCount;

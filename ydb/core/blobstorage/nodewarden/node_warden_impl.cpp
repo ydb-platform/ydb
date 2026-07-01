@@ -33,6 +33,8 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , EnableSyncLogChunkCompressionSSD(0, 0, 1)
     , MaxSyncLogChunksInFlightHDD(10, 1, 1024)
     , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
+    , SyncLogMaxDiskAmount(0, 0, 1ull << 40)
+    , SyncLogMaxMemAmount(64ull << 20, 0, 1ull << 30)
     , DefaultHugeGarbagePerMille(300, 1, 1000)
     , HugeDefragFreeSpaceBorderPerMille(260, 1, 1000)
     , MaxChunksToDefragInflight(10, 1, 50)
@@ -376,6 +378,8 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(EnableSyncLogChunkCompressionSSD, "VDiskControls.EnableSyncLogChunkCompressionSSD");
         icb->RegisterSharedControl(MaxSyncLogChunksInFlightHDD, "VDiskControls.MaxSyncLogChunksInFlightHDD");
         icb->RegisterSharedControl(MaxSyncLogChunksInFlightSSD, "VDiskControls.MaxSyncLogChunksInFlightSSD");
+        icb->RegisterSharedControl(SyncLogMaxDiskAmount, "VDiskControls.SyncLogMaxDiskAmount");
+        icb->RegisterSharedControl(SyncLogMaxMemAmount, "VDiskControls.SyncLogMaxMemAmount");
         icb->RegisterSharedControl(DefaultHugeGarbagePerMille, "VDiskControls.DefaultHugeGarbagePerMille");
         icb->RegisterSharedControl(HugeDefragFreeSpaceBorderPerMille, "VDiskControls.HugeDefragFreeSpaceBorderPerMille");
         icb->RegisterSharedControl(MaxChunksToDefragInflight, "VDiskControls.MaxChunksToDefragInflight");

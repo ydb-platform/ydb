@@ -9,9 +9,11 @@ from ydb.tests.tools.nemesis.library import monitor
 class AbstractMonitoredNemesis(object):
     def __init__(self, scope=None):
         self.inject_completed = None
+        self.inject_failed = None
         self.inject_in_flight = None
         self.inject_in_flight_value = 0
         self.extract_completed = None
+        self.extract_failed = None
         self.registry = monitor.monitor()
         self.register_counters(scope)
 
@@ -24,8 +26,10 @@ class AbstractMonitoredNemesis(object):
         if scope is not None:
             labels.update({'scope': scope})
         self.inject_completed = self.registry.counter('InjectCompleted', labels)
+        self.inject_failed = self.registry.counter('InjectFailed', labels)
         self.inject_in_flight = self.registry.int_gauge('InjectInFlight', labels)
         self.extract_completed = self.registry.counter('ExtractCompleted', labels)
+        self.extract_failed = self.registry.counter('ExtractFailed', labels)
 
     def start_inject_fault(self):
         self.inject_in_flight_value += 1
@@ -39,3 +43,12 @@ class AbstractMonitoredNemesis(object):
             self.inject_in_flight_value -= 1
             self.inject_in_flight.set(self.inject_in_flight_value)
         self.inject_completed.inc()
+
+    def on_failed_inject_fault(self):
+        if self.inject_in_flight_value > 0:
+            self.inject_in_flight_value -= 1
+            self.inject_in_flight.set(self.inject_in_flight_value)
+        self.inject_failed.inc()
+
+    def on_failed_extract_fault(self):
+        self.extract_failed.inc()

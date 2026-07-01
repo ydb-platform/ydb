@@ -121,7 +121,7 @@ DICT_OF_PROCESSES = {
     },
     'workload_log_column' : {
         'status' : """
-            if ps aux | grep -E "/Berkanavt/nemesis/bin/ydb_cli.*workload.*log.*run.*bulk_upsert.*log_workload_column|/tmp/workload_log_column_wrapper.sh" | grep -v grep > /dev/null; then
+            if ps aux | grep -E "/Berkanavt/nemesis/bin/ydb_cli.*workload.*log.*run.*bulk.upsert.*log_workload_column|/tmp/workload_log_column_wrapper.sh" | grep -v grep > /dev/null; then
                 echo "Running"
             else
                 echo "Stopped"
@@ -129,7 +129,7 @@ DICT_OF_PROCESSES = {
     },
     'workload_log_row' : {
         'status' : """
-            if ps aux | grep -E "/Berkanavt/nemesis/bin/ydb_cli.*workload.*log.*run.*bulk_upsert.*log_workload_row|/tmp/workload_log_row_wrapper.sh" | grep -v grep > /dev/null; then
+            if ps aux | grep -E "/Berkanavt/nemesis/bin/ydb_cli.*workload.*log.*run.*bulk.upsert.*log_workload_row|/tmp/workload_log_row_wrapper.sh" | grep -v grep > /dev/null; then
                 echo "Running"
             else
                 echo "Stopped"
@@ -1549,7 +1549,7 @@ def main():
                         f'workload_log_{store_type}',
                         (
                             f'/Berkanavt/nemesis/bin/ydb_cli --endpoint grpc://localhost:{node.grpc_port} '
-                            f'--database /Root/db1 workload log run bulk_upsert --rows 2000 --threads 10 '
+                            f'--database /Root/db1 workload log run bulk-upsert --rows 2000 --threads 10 '
                             f'--timestamp_deviation 180 --seconds 86400 --path log_workload_{store_type}'
                         )
                     )

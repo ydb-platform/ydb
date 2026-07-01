@@ -1,10 +1,13 @@
 #include "local_partition_actor.h"
 #include "local_proxy.h"
-#include "logging.h"
 
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/writer/common.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_YDB_PROXY
 
 namespace NKikimr::NReplication {
 
@@ -60,14 +63,17 @@ protected:
 
 private:
     void DoCommitOffset() {
-        LOG_T("DoCommit");
+        YDB_LOG_TRACE("DoCommit",
+            {"logPrefix", LogPrefix});
 
         NTabletPipe::SendData(SelfId(), PartitionPipeClient, MakeCommitRequest().release());
         Become(&TLocalTopicPartitionCommitActor::StateCommitOffset);
     }
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"logPrefix", LogPrefix},
+            {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
 
@@ -112,7 +118,9 @@ private:
 }; // TLocalTopicPartitionCommitActor
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
-    LOG_T("Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE("Handle",
+        {"logPrefix", LogPrefix},
+        {"ev", ev->Get()->ToString()});
 
     auto [topicName, partitionId, consumerName, offset, settings] = std::move(ev->Get()->GetArgs());
     RegisterWithSameMailbox(new TLocalTopicPartitionCommitActor(

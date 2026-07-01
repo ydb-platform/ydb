@@ -18,7 +18,6 @@ def ok(rel):
     return (
         parts
         and parts[0] in IN_SCOPE
-        and parts[0] not in {"tests", "adapters"}
         and "ut" not in parts
         and "ut_utils" not in parts
     )
@@ -29,7 +28,12 @@ def peerdirs(text):
     for i, line in enumerate(text.splitlines(), 1):
         s = line.split("#", 1)[0].strip()
         if s.startswith("PEERDIR("):
-            in_block = True
+            if s.endswith(")"):
+                dep = s[len("PEERDIR("):-1].strip()
+                if dep:
+                    yield i, dep
+            else:
+                in_block = True
             continue
         if in_block:
             if s == ")":

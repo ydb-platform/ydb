@@ -334,7 +334,7 @@ private:
     template <class Fn>
     void IterateAllMessagesInOrder(Fn&& fn);
 
-    TReadMessage ConvertoToReadMessage(ui64 offset, const TMessage& message) const;
+    TReadMessage ConvertToReadMessage(ui64 offset, const TMessage& message) const;
     bool IsMessageGroupLocked(const TMessage& message, const absl::flat_hash_set<ui32>& skipMessageGroups) const;
 
     struct TNextMessageResult {

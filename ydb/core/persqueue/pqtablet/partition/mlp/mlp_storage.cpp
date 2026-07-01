@@ -152,7 +152,7 @@ bool TStorage::CanReadMessageGroupIdHash(const ui32 messageGroupIdHash) const {
     return MessageGroups.UnlockedMessageGroupsIdContains(messageGroupIdHash);
 }
 
-TReadMessage TStorage::ConvertoToReadMessage(ui64 offset, const TMessage& message) const {
+TReadMessage TStorage::ConvertToReadMessage(ui64 offset, const TMessage& message) const {
     return TReadMessage{
         .Offset = offset,
         .ApproximateReceiveCount = message.ProcessingCount,
@@ -162,7 +162,7 @@ TReadMessage TStorage::ConvertoToReadMessage(ui64 offset, const TMessage& messag
 
 static bool RetentionExpired(const TStorage::TMessage& message, const std::optional<ui32> retentionDeadlineDelta) {
     return retentionDeadlineDelta && message.WriteTimestampDelta <= retentionDeadlineDelta.value();
-};
+}
 
 bool TStorage::IsMessageGroupLocked(const TMessage& message, const absl::flat_hash_set<ui32>& skipMessageGroups) const {
     return message.HasMessageGroupId && (!CanReadMessageGroupIdHash(message.MessageGroupIdHash) || skipMessageGroups.contains(message.MessageGroupIdHash));
@@ -250,7 +250,7 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
                 unlockedList.Append(std::move(cut));
             }
             DoLock(nextMessage.Offset, *nextMessage.Message, deadline);
-            return ConvertoToReadMessage(nextMessage.Offset, *nextMessage.Message);
+            return ConvertToReadMessage(nextMessage.Offset, *nextMessage.Message);
         }
 
         auto tryReturn = [&](ui64 offset, const char* desc) -> std::optional<TReadMessage> {
@@ -259,7 +259,7 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
                 return std::nullopt;
             }
             DoLock(offset, *result.Message, deadline);
-            return ConvertoToReadMessage(offset, *result.Message);
+            return ConvertToReadMessage(offset, *result.Message);
         };
 
         for (ui64 offset : MessageGroups.UnorderedOffsets) [[unlikely]] {
@@ -283,7 +283,7 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
             }
 
             DoLock(offset, message, deadline);
-            return ConvertoToReadMessage(offset, message);
+            return ConvertToReadMessage(offset, message);
         }
     }
 
@@ -311,7 +311,7 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
             position.FastPosition = offset + 1;
 
             DoLock(offset, message, deadline);
-            return ConvertoToReadMessage(offset, message);
+            return ConvertToReadMessage(offset, message);
         } else if (moveUnlockedOffset) {
             ++FirstUnlockedOffset;
         }

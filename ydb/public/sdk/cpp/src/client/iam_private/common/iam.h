@@ -2,6 +2,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/common/generic_provider.h>
 
+#include <util/string/join.h>
+
 namespace NYdb::inline Dev {
 
 template<typename TRequest, typename TResponse, typename TService>
@@ -69,6 +71,18 @@ public:
 
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
         return std::make_shared<TCredentialsProvider>(Params_, std::move(facility));
+    }
+
+    std::string GetClientIdentity() const override final {
+        return TStringBuilder() << JoinSeq('\t', std::initializer_list<std::string_view> {
+                "TIamServiceCredentialsProviderFactory",
+                Params_.ServiceId,
+                Params_.MicroserviceId,
+                Params_.ResourceId,
+                Params_.ResourceType,
+                Params_.TargetServiceAccountId,
+                Params_.SystemServiceAccountCredentials->GetClientIdentity()
+        });
     }
 
 private:

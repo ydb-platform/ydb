@@ -16,7 +16,7 @@
 
 #include <google/protobuf/util/time_util.h>
 
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
@@ -3210,7 +3210,8 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
                 meta,
                 messageMeta,
                 messageData.uncompressed_size(),
-                messageData.message_group_id()
+                messageData.message_group_id(),
+                GetReadMessageCount(messageData, batch.codec())
         );
 
         minOffset = Min(minOffset, static_cast<i64>(messageData.offset()));

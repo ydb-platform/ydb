@@ -218,7 +218,7 @@ message TFeatureFlags {
     optional bool EnableRealSystemViewPaths = 191 [default = true];
     optional bool EnableCSSchemasCollapsing = 192 [default = false];
     optional bool EnableMoveColumnTable = 193 [default = true];
-    optional bool EnableArrowResultSetFormat = 194 [default = true];
+    optional bool EnableArrowResultSetFormat = 194 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableCsOverloadsSubscriptionRetries = 195 [default = true];
     optional bool EnableTopicCompactificationByKey = 196 [default = true];
     optional bool EnableCompactionOverloadDetection = 197 [default = true];
@@ -258,7 +258,7 @@ message TFeatureFlags {
     optional bool EnableForcedCompactions = 231 [default = true];
     optional bool EnableLocalBloomFilterIndex = 232 [default = true];
     optional bool EnableLocalBloomNgramFilterIndex = 233 [default = true];
-    optional bool EnableSetDropDefaultValue = 234 [default = true];
+    optional bool EnableSetDropDefaultValue = 234 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
     optional bool EnableBlobIdInSectorChecksum = 236 [default = false];
     optional bool TransferInternalDataDecompression = 237 [default = false];
@@ -325,5 +325,6 @@ message TFeatureFlags {
     optional bool EnableAccessServiceV2Interface = 283 [default = true, (RequireRestart) = true];
     optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
     optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
-    optional bool EnableSmallBlobsQuotaEnforcement = 286 [default = false];
+    optional bool EnableTopicDeferredPublish = 286 [default = false];
+    optional bool EnableSmallBlobsQuotaEnforcement = 287 [default = false];
 }

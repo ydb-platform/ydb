@@ -127,6 +127,9 @@ namespace NKikimr::NStorage {
         // Counters for drives by drive path.
         TMap<TString, TDrivePathCounters> ByPathDriveCounters;
 
+        // 1 if the last node warden cache file write failed, 0 otherwise (or no write attempted yet)
+        ::NMonitoring::TDynamicCounters::TCounterPtr CacheFileWriteError;
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         ui32 LocalNodeId; // NodeId for local node
@@ -290,6 +293,10 @@ namespace NKikimr::NStorage {
         TControlWrapper EnableDeepScrubbing;
 
         TControlWrapper EnableFreshSyncDataThrottling;
+
+        // retro-tracing controls
+        TControlWrapper EnableStorageRetroTraceGeneration;
+        TControlWrapper EnableStorageRetroTraceCollectionSlowRequests;
 
     public:
         struct TGroupRecord;

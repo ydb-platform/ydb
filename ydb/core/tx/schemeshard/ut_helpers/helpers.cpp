@@ -3471,15 +3471,17 @@ namespace NSchemeShardUT_Private {
         const TString& dbName,
         const TString& tablePath,
         const TVector<TString>& notNullColumns,
-        bool skipSettings,
-        const TString& user)
+        const TString& userSID,
+        bool skipSettings)
     {
         // We can't do `GetRequest`, because it is not implemented at the time of writing the test
         auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>();
         request->Record.SetTxId(txId);
         request->Record.SetDatabaseName(dbName);
 
-        request->Record.SetUserSID(user);
+        if (userSID != "") {
+            request->Record.SetUserSID(userSID);
+        }
 
         if (!skipSettings) {
             NKikimrSetColumnConstraint::TSetColumnConstraintSettings settings;
@@ -3498,6 +3500,17 @@ namespace NSchemeShardUT_Private {
         auto* event = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvCreateResponse>(handle);
         UNIT_ASSERT(event);
         return event->Record;
+    }
+
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        ui64 schemeShard,
+        const TString& dbName,
+        const TString& tablePath,
+        const TVector<TString>& notNullColumns)
+    {
+        return TestSetColumnConstraint(runtime, txId, schemeShard, dbName, tablePath, notNullColumns, "");
     }
 
     void AsyncSetColumnConstraint(

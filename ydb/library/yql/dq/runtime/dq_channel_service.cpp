@@ -1135,7 +1135,7 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
             ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, ev2.Release(), flags, item->SeqNo));
         }
 #endif
-        LOG_T(LogPrefix << "SEND MSG, G=" << GenMajor << '.' << GenMinor << ", SeqNo=" << item->SeqNo
+        LOG_T(LogPrefix << "SEND DATA, G=" << GenMajor << '.' << GenMinor << ", SeqNo=" << item->SeqNo
             << ", ChannelSeqNo=" << item->ChannelSeqNo
             << ", ChannelId=" << item->Descriptor->Info.ChannelId << ", Leading=" << item->Leading << ", Bytes=" << item->Data.Bytes);
         ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, ev.Release(), flags, item->SeqNo));
@@ -1380,45 +1380,32 @@ void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     }
 }
 
-void TNodeState::ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor, ui64 seqNo) {
-    std::lock_guard lock(Mutex);
-    if (!Connected) {
+void TNodeState::ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor) {
+    if (PeerActorId == sender && PeerGenMajor.load() == genMajor) {
+        LOG_D(LogPrefix << "RECONNECTED, PeerActorId=" << sender << ", PG=" << genMajor << '.' << genMinor);
+    } else {
         PeerActorId = sender;
         PeerGenMajor.store(genMajor);
-        PeerGenMinor.store(genMinor);
-        ConfirmedSeqNo = seqNo;
-        Connected = true;
-        LOG_D(LogPrefix << "CONNECTED, PeerActorId=" << sender << ", PG=" << genMajor << '.' << genMinor);
-    } else {
-        if (PeerActorId == sender && PeerGenMajor.load() == genMajor) {
-            LOG_D(LogPrefix << "RECONNECTED, PeerActorId=" << sender << ", PG=" << genMajor << '.' << genMinor);
-        } else {
-            PeerActorId = sender;
-            PeerGenMajor.store(genMajor);
-            LOG_W(LogPrefix << "RECONNECTED, PeerActorId=" << sender << ", PG=" << genMajor << '.' << genMinor);
-        }
-        PeerGenMinor.store(genMinor);
-        ConfirmedSeqNo = seqNo;
-        FailInputs(PeerActorId, PeerGenMajor.load());
+        ConfirmedSeqNo = 0;
+        LOG_W(LogPrefix << "RECONNECTED, PeerActorId=" << sender << ", PG=" << genMajor << '.' << genMinor);
     }
-    for (auto& [_, descriptor] : InputDescriptors) {
-        if (descriptor->EarlyFinished.load() || descriptor->PushStats.Bytes.load()) {
-            SendUpdateProgress(descriptor);
-        }
-    }
+    PeerGenMinor.store(genMinor);
+    FailInputs(PeerActorId, PeerGenMajor.load());
 }
 
 void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
 
     LastPeerActivity.store(TInstant::Now());
     auto& record = ev->Get()->Record;
-    ConnectSession(ev->Sender, record.GetGenMajor(), record.GetGenMinor(), record.GetSeqNo());
+
+    std::lock_guard lock(Mutex);
+    ConnectSession(ev->Sender, record.GetGenMajor(), record.GetGenMinor());
 
     auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
     evAck->Record.SetGenMajor(PeerGenMajor.load());
     evAck->Record.SetGenMinor(PeerGenMinor.load());
-    evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::OK);
+    evAck->Record.SetStatus(record.GetSeqNo() <= ConfirmedSeqNo ? NYql::NDqProto::TEvChannelAckV2::OK : NYql::NDqProto::TEvChannelAckV2::RESEND);
     evAck->Record.SetSeqNo(ConfirmedSeqNo);
 
     ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
@@ -1427,62 +1414,40 @@ void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) 
     }
 
     ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, evAck.Release(), flags, ev->Cookie));
+
+    for (auto& [_, descriptor] : InputDescriptors) {
+        if (descriptor->EarlyFinished.load() || descriptor->PushStats.Bytes.load()) {
+            SendUpdateProgress(descriptor);
+        }
+    }
 }
 
 void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
-    LastPeerActivity.store(TInstant::Now());
     auto& record = ev->Get()->Record;
-    LOG_T(LogPrefix << "RECV MSG, PG=" << PeerGenMajor.load() << '.' << PeerGenMinor.load() << ", SeqNo=" << record.GetSeqNo()
-        << ", ChannelSeqNo=" << record.GetChannelSeqNo()
-        << ", ChannelId=" << record.GetChannelId() << ", Bytes=" << record.GetBytes());
-
-    auto prevPeerGenMajor = PeerGenMajor.exchange(record.GetGenMajor());
-    if (PeerActorId != ev->Sender || (prevPeerGenMajor && prevPeerGenMajor != record.GetGenMajor())) {
-        auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
-
-        auto reconciliationLog = GetReconciliationLog();
-        evAck->Record.SetGenMajor(record.GetGenMajor());
-        evAck->Record.SetGenMinor(record.GetGenMinor());
-        evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::FAIL);
-        evAck->Record.SetSeqNo(ConfirmedSeqNo);
-        evAck->Record.SetMessage(reconciliationLog);
-        LOG_E(LogPrefix << "FAIL, PeerActorId=" << PeerActorId << ", ev->Sender" << ev->Sender
-            << ", PeerGenMajor=" << prevPeerGenMajor << ", record.GetGenMajor()=" << record.GetGenMajor()
-            << ", Log=" << reconciliationLog);
-
-        ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
-        if (!Subscribed.exchange(true)) {
-            flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
-        }
-
-        ActorSystem->Send(new NActors::IEventHandle(ev->Sender, NodeActorId, evAck.Release(), flags, ev->Cookie));
-        return;
-    }
-
-    PeerGenMinor.store(std::max<ui64>(record.GetGenMinor(), PeerGenMinor.load()));
-
+    auto genMajor = record.GetGenMajor();
+    auto genMinor = record.GetGenMinor();
     auto seqNo = record.GetSeqNo();
+
+    if (PeerActorId != ev->Sender || PeerGenMajor.load() != genMajor || PeerGenMinor.load() != genMinor) {
+        LOG_D(LogPrefix << "OBSOLETE DATA, PeerActorId=" << PeerActorId << ", PG=" << PeerGenMajor.load() << '.' << PeerGenMinor.load()
+            << "vs Sender=" << ev->Sender << ", G=" << genMajor << '.' << genMinor
+            << ", SeqNo=" << seqNo);
+    } else {
+        LOG_T(LogPrefix << "RECV DATA, G=" << genMajor << '.' << genMinor << ", SeqNo=" << seqNo
+            << ", ChannelSeqNo=" << record.GetChannelSeqNo()
+            << ", ChannelId=" << record.GetChannelId() << ", Bytes=" << record.GetBytes());
+    }
 
     if (seqNo <= ConfirmedSeqNo) {
         LOG_W(LogPrefix << "DATA/IGNORED, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo);
         return;
     }
 
-    switch (seqNo - ConfirmedSeqNo) {
-        case 1: {
-            break;
-        }
-        case 2: {
-            // allow 1 out of order message
-            LOG_W(LogPrefix << "DATA/OOO, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo);
-            OutOfOrderMessage = ev.Release();
-            return;
-        }
-        default: {
-            if (!ResendAsked.exchange(true)) {
-                LOG_W(LogPrefix << "DATA/RESEND, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo);
-            }
+    if (seqNo - ConfirmedSeqNo > 1) {
+        if (!ResendAsked.exchange(true)) {
+            LOG_W(LogPrefix << "DATA/RESEND, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo);
+
             auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
             evAck->Record.SetGenMajor(PeerGenMajor.load());
@@ -1496,26 +1461,14 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
             }
 
             ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, evAck.Release(), flags, ev->Cookie));
-            return;
         }
+        return;
     }
 
     // happy path
-
     ResendAsked.store(false);
     ConfirmedSeqNo++;
     HandleChannelData(ev);
-
-    if (OutOfOrderMessage) {
-        auto& record = OutOfOrderMessage->Get()->Record;
-
-        if (record.GetSeqNo() == ConfirmedSeqNo + 1) {
-            ConfirmedSeqNo++;
-            HandleChannelData(OutOfOrderMessage);
-        }
-
-        OutOfOrderMessage.Reset();
-    }
 }
 
 void TNodeState::SendFromWaiters(ui64 deltaBytes) {
@@ -1540,6 +1493,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
 
                 (*OutputBufferWaiterCount)--;
 /*
+now may need to send very last msg from terminated descriptor
                 if (WaitersQueue.top()->IsTerminatedOrAborted()) {
 
                     auto waitQueueBytes = WaitersQueue.top()->WaitQueueBytes.load();
@@ -1657,12 +1611,12 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
             StartReconciliation(true, 'F');
             return;
         }
-
+/*
         if (PeerActorId == NActors::TActorId{}) {
             PeerActorId = ev->Sender;
             LOG_D(LogPrefix << "PEER/ACK, PeerActorId=" << ev->Sender);
         }
-
+*/
         if (seqNo > SeqNo) {
             LOG_W(LogPrefix << "SEQ/LARGE, SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo);
             StartReconciliation(true, 'L');
@@ -1701,11 +1655,8 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                 }
             } else {
                 if (status == NYql::NDqProto::TEvChannelAckV2::RESEND) {
-                    // if we're reconcilating, ignore next RESENDs
-                    if (record.GetGenMinor() == GenMinor) {
-                        LOG_W(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo);
-                        StartReconciliation(false, 'R');
-                    }
+                    LOG_W(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo);
+                    StartReconciliation(false, 'R');
                     return;
                 }
 
@@ -2087,63 +2038,62 @@ void TNodeState::DoReconciliation(char logSymbol) {
             << ", Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo
             << ", WQ=" << WaitersQueueSize.load() << ", Log=" << reconciliationLog);
     } else {
-        LOG_D(LogPrefix << "RECONCILIATION, G" << GenMajor << '.' << GenMinor
+        LOG_D(LogPrefix << "RECONCILIATION, G=" << GenMajor << '.' << GenMinor
             << ", Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo
             << ", WQ=" << WaitersQueueSize.load() << ", Log=" << reconciliationLog);
     }
 
     ui32 delta = 0;
 
-    std::deque<std::shared_ptr<TOutputItem>> RebuiltQueue;
+    if (GenMinor == 1) { // => major reconciliation
+        std::deque<std::shared_ptr<TOutputItem>> RebuiltQueue;
+        while (!Queue.empty()) {
 
-    auto seqNo = SeqNo;
+            auto& item = Queue.front();
 
-    while (!Queue.empty()) {
-
-        auto& item = Queue.front();
-
-        if (item->Leading) {
-            auto prevGenMajor = item->Descriptor->GenMajor.exchange(GenMajor);
-            if (prevGenMajor != GenMajor) {
-                LOG_W(LogPrefix << "CHANGE OG G=" << prevGenMajor << " to " << GenMajor << " by RECONCILIATION"
-                    << " Channel: " << item->Descriptor->Info.ChannelId
-                    << ", SrcStageId: " << item->Descriptor->Info.SrcStageId
-                    << ", DstStageId: " << item->Descriptor->Info.DstStageId
-                    << ", Log=" << reconciliationLog);
+            if (item->Leading) {
+                auto prevGenMajor = item->Descriptor->GenMajor.exchange(GenMajor);
+                if (prevGenMajor != GenMajor) {
+                    LOG_W(LogPrefix << "CHANGE OD G=" << prevGenMajor << " to " << GenMajor << " by RECONCILIATION"
+                        << " Channel: " << item->Descriptor->Info.ChannelId
+                        << ", SrcStageId: " << item->Descriptor->Info.SrcStageId
+                        << ", DstStageId: " << item->Descriptor->Info.DstStageId
+                        << ", Log=" << reconciliationLog);
+                }
             }
-        }
 
-        if (item->Descriptor->CheckGenMajor(GenMajor, TStringBuilder() << "Abort by Reconciliation, Log=" << reconciliationLog)) {
-            item->SeqNo = ++SeqNo;
-            RebuiltQueue.push_back(std::move(item));
-        } else {
-            delta += item->Data.Bytes;
-        }
+            if (item->Descriptor->CheckGenMajor(GenMajor, TStringBuilder() << "Abort by Reconciliation, Log=" << reconciliationLog)) {
+                item->SeqNo = ++SeqNo;
+                RebuiltQueue.push_back(std::move(item));
+            } else {
+                delta += item->Data.Bytes;
+            }
 
-        Queue.pop_front();
+            Queue.pop_front();
+        }
+        Queue.swap(RebuiltQueue);
     }
-    Queue.swap(RebuiltQueue);
 
     InflightBytes -= delta;
 
-    SendDiscovery(MakeChannelServiceActorID(NodeId), seqNo);
+    SendDiscovery();
     ActorSystem->Schedule(reconciliationTimeout,
         new NActors::IEventHandle(NodeActorId, NodeActorId, new TEvPrivate::TEvReconciliation(GenMajor, GenMinor, ReconciliationCount)));
 }
 
-void TNodeState::SendDiscovery(NActors::TActorId actorId, ui64 seqNo) {
+void TNodeState::SendDiscovery() {
     auto evDiscovery = MakeHolder<TEvDqCompute::TEvChannelDiscoveryV2>();
 
     evDiscovery->Record.SetGenMajor(GenMajor);
     evDiscovery->Record.SetGenMinor(GenMinor);
-    evDiscovery->Record.SetSeqNo(seqNo);
+    evDiscovery->Record.SetSeqNo(SeqNo);
 
     ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
     if (!Subscribed.exchange(true)) {
         flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
     }
 
-    ActorSystem->Send(new NActors::IEventHandle(actorId, NodeActorId, evDiscovery.Release(), flags));
+    ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeId), NodeActorId, evDiscovery.Release(), flags));
 }
 
 TString TNodeState::GetDebugInfo() {

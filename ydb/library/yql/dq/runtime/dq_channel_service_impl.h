@@ -588,7 +588,7 @@ public:
     void SendAckWithError(ui64 cookie, const TString& message);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
     void SendFromWaiters(ui64 deltaBytes);
-    void ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor, ui64 seqNo);
+    void ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor);
     virtual TString GetDebugInfo();
     void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
     void SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
@@ -598,7 +598,7 @@ public:
     void DoReconciliation(char logSymbol);
     void AddReconciliationLog(char logSymbol);
     TString GetReconciliationLog();
-    void SendDiscovery(NActors::TActorId actorId, ui64 seqNo);
+    void SendDiscovery();
 
     NActors::TActorId NodeActorId;
     TString LogPrefix;
@@ -611,7 +611,6 @@ public:
     mutable std::unordered_map<TChannelInfo, std::shared_ptr<TInputDescriptor>> InputDescriptors;
     mutable std::queue<std::pair<TChannelInfo, TInstant>> UnboundInputs;
     mutable std::queue<std::pair<TChannelInfo, TInstant>> UnboundOutputs;
-    bool Connected = false;
     std::weak_ptr<TNodeState> Self;
     // Sender
     ui64 GenMajor = 1;
@@ -624,7 +623,6 @@ public:
     std::atomic<ui64> PeerGenMajor = 0;
     std::atomic<ui64> PeerGenMinor = 0;
     ui64 ConfirmedSeqNo = 0;
-    TEvDqCompute::TEvChannelDataV2::TPtr OutOfOrderMessage;
     // ...
     const TDqChannelLimits Limits;
     const ui64 MaxInflightMessages = 8192;

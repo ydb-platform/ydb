@@ -232,7 +232,7 @@ TStorage::TNextMessageResult TStorage::SearchForEligibleMessage(const std::optio
 };
 
 std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& position, const absl::flat_hash_set<ui32>& skipMessageGroups) {
-    const std::optional<ui64> retentionDeadlineDelta = GetRetentionDeadlineDelta();
+    const std::optional<ui32> retentionDeadlineDelta = GetRetentionDeadlineDelta();
 
     if (!position.SlowPosition) {
         position.SlowPosition = SlowMessages.begin();

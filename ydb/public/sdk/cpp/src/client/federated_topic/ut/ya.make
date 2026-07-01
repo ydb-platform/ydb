@@ -35,6 +35,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     basic_usage_ut.cpp
+    federation_observer_deadlock_ut.cpp
     simple_blocking_write_session_ut.cpp
 )
 

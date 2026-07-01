@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/generic/ptr.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -84,6 +85,7 @@ public:
     virtual IDataBatchPtr FlushDocs() = 0;
     virtual IDataBatchPtr FlushDict() = 0;
     virtual IDataBatchPtr FlushStats() = 0;
+    virtual void SetGen(NTableIndex::NFulltext::TGen gen) = 0;
 };
 
 using IDataBatchProjectionPtr = TIntrusivePtr<IDataBatchProjection>;

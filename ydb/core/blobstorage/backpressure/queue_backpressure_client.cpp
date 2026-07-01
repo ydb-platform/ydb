@@ -473,7 +473,7 @@ private:
                         PostponePumpDelay = Min(PostponePumpDelay * 2, TDuration::Seconds(1));
                     }
 
-                    YDB_LOG_CRIT_CTX(ctx, "Failed message",
+                    YDB_LOG_NOTICE_CTX(ctx, "Failed message",
                         {"logPrefix", LogPrefix},
                         {"func", __func__},
                         {"t", TypeName<TEv>()},

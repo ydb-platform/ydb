@@ -279,7 +279,9 @@ public:
             hFunc(TEvExecution::TEvRegisterProcess, HandleMain);
             hFunc(TEvExecution::TEvUnregisterProcess, HandleMain);
             default:
-                AFL_ERROR(NKikimrServices::TX_CONVEYOR)("problem", "unexpected event for task executor")("ev_type", ev->GetTypeName());
+                YDB_LOG_ERROR_COMP(NKikimrServices::TX_CONVEYOR, "",
+                    {"problem", "unexpected event for task executor"},
+                    {"evType", ev->GetTypeName()});
                 break;
         }
     }

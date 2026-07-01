@@ -137,7 +137,7 @@ TUserDataTable GetYqlModuleResolverImpl(
     parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
     parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
     NSQLTranslation::TTranslators translators(NSQLTranslationV1::MakeTranslator(lexers, parsers),
-        nullptr);
+                                              nullptr);
 
     TModulesTable modulesTable;
     if (!CompileLibraries(translators, mounts, *ctx, modulesTable, optimizeLibraries)) {

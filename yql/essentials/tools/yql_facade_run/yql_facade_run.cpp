@@ -606,7 +606,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
         /*isAmbiguityError=*/RunOptions_.TestSyntaxAmbiguities);
 
     NSQLTranslation::TTranslators translators(NSQLTranslationV1::MakeTranslator(lexers, parsers),
-        NSQLTranslationPG::MakeTranslator());
+                                              NSQLTranslationPG::MakeTranslator());
 
     TExprContext ctx;
     if (RunOptions_.PgSupport) {

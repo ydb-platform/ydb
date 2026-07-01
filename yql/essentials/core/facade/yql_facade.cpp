@@ -873,7 +873,7 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
     NSQLTranslation::TTranslators translators(NSQLTranslationV1::MakeTranslator(lexers, parsers),
-        NSQLTranslationPG::MakeTranslator());
+                                              NSQLTranslationPG::MakeTranslator());
 
     return FillParseResult(SqlToYql(translators, SourceCode_, currentSettings, &warningRules), &warningRules);
 }

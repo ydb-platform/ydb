@@ -217,7 +217,7 @@ class TestCompareIndexPerformance:
         # NOTE: perf adds overhead, so measured Txs/Sec are perturbed when on.
         self.flamegraph = _truthy(yatest.common.get_param('compare_flamegraph', default=''))
         self.perf_sudo = _truthy(yatest.common.get_param('compare_perf_sudo', default=''))
-        self.perf_freq = yatest.common.get_param('compare_perf_freq', default='50')
+        self.perf_freq = yatest.common.get_param('compare_perf_freq', default='9')
         self.flame_tool = (
             yatest.common.source_path("contrib/tools/flame-graph") if self.flamegraph else None)
 
@@ -314,25 +314,31 @@ class TestCompareIndexPerformance:
         # Send SIGINT to perf's process group (perf flushes perf.data on SIGINT).
         # With sudo, perf is not our direct child, so signal the whole group via
         # `sudo kill` to reach the privileged perf process.
+        # SIGINT is blocked here so the ya runner's own timeout signal does not
+        # interrupt our wait — we must let perf flush its data buffer.
         proc = perf["proc"]
+        old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
         try:
-            if self.perf_sudo:
-                subprocess.call(["sudo", "kill", "-INT", f"-{proc.pid}"])
-            else:
-                os.killpg(proc.pid, signal.SIGINT)
-        except OSError:
-            proc.send_signal(signal.SIGINT)
-        try:
-            proc.wait(timeout=120)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-        perf["log"].close()
-        # perf ran as root under sudo, so perf.data is root-owned. Chown it back
-        # so the rest of the pipeline (and ya's cleanup) can read/remove it
-        # without needing sudo.
-        if self.perf_sudo and os.path.isfile(perf["data"]):
-            subprocess.call(["sudo", "chown", f"{os.getuid()}:{os.getgid()}", perf["data"]])
+            try:
+                if self.perf_sudo:
+                    subprocess.call(["sudo", "kill", "-INT", f"-{proc.pid}"])
+                else:
+                    os.killpg(proc.pid, signal.SIGINT)
+            except OSError:
+                proc.send_signal(signal.SIGINT)
+            try:
+                proc.wait(timeout=120)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+            perf["log"].close()
+            # perf ran as root under sudo, so perf.data is root-owned. Chown it back
+            # so the rest of the pipeline (and ya's cleanup) can read/remove it
+            # without needing sudo.
+            if self.perf_sudo and os.path.isfile(perf["data"]):
+                subprocess.call(["sudo", "chown", f"{os.getuid()}:{os.getgid()}", perf["data"]])
+        finally:
+            signal.signal(signal.SIGINT, old_sigint)
 
     def _flame_script(self, name):
         # perl scripts shipped via DATA(arcadia/contrib/tools/flame-graph); run
@@ -342,7 +348,13 @@ class TestCompareIndexPerformance:
     def _run_pipeline(self, cmds, out_file, log_file, what):
         # Run cmds[0] | cmds[1] | ... with the final stdout written to out_file
         # and every stage's stderr appended to log_file. Fails loudly on error.
+        # SIGINT is temporarily ignored so that the ya runner's timeout signal
+        # does not interrupt us mid-pipeline (perf script on large data can be
+        # slow); the pipeline subprocesses each start in their own sessions so
+        # they are not affected by the mask.
         procs = []
+        rcs = ()
+        old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
         try:
             with open(out_file, "w") as out, open(log_file, "a") as plog:
                 prev_stdout = None
@@ -350,7 +362,8 @@ class TestCompareIndexPerformance:
                     last = idx == len(cmds) - 1
                     proc = subprocess.Popen(
                         cmd, stdin=prev_stdout,
-                        stdout=(out if last else subprocess.PIPE), stderr=plog)
+                        stdout=(out if last else subprocess.PIPE), stderr=plog,
+                        start_new_session=True)
                     if prev_stdout is not None:
                         prev_stdout.close()  # let the upstream stage get SIGPIPE
                     procs.append(proc)
@@ -360,6 +373,8 @@ class TestCompareIndexPerformance:
         except OSError as exc:
             self._reap(procs)
             pytest.fail(f"{what} failed: {exc}; log: {log_file}")
+        finally:
+            signal.signal(signal.SIGINT, old_sigint)
         if any(rc != 0 for rc in rcs):
             pytest.fail(f"{what} failed (rc={rcs}); log: {log_file}")
 

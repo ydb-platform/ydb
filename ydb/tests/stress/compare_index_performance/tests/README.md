@@ -72,7 +72,7 @@ sanity check) or two different refs — **without a local build**.
 | `compare_current_table_service_config` | `` | comma-separated `key=value` for the current `table_service_config` |
 | `compare_flamegraph` | `` | `1`/`true` → collect CPU flamegraphs (see below) |
 | `compare_perf_sudo` | `` | `1`/`true` → run `perf` under `sudo` |
-| `compare_perf_freq` | `50` | `perf record -F` sampling frequency |
+| `compare_perf_freq` | `9` | `perf record -F` sampling frequency |
 
 `table_service_config` values like `enable_vector_index_read=true` are parsed
 into booleans; everything else is kept as a string. Feature flags are appended

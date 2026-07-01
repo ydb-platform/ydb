@@ -7,7 +7,7 @@
 ```yql
 ALTER TABLE `<table_name>`
   ADD INDEX `<index_name>`
-    [GLOBAL|LOCAL]
+    GLOBAL
     [UNIQUE]
     [SYNC|ASYNC]
     [USING <index_type>]

@@ -22,6 +22,11 @@ message TReplicationDefaults {
         optional string ServiceId = 2;
         optional string MicroserviceId = 3;
         optional string ResourceType = 4;
+        // Timeout for a single IAM token request.
+        // WaitForToken() blocks up to 2 * IamTokenRequestTimeoutSeconds when
+        // a new TGrpcIamCredentialsProvider is created (e.g. on first connect).
+        // Defaults to 10 seconds (NIam::DEFAULT_REQUEST_TIMEOUT).
+        optional uint32 IamTokenRequestTimeoutSeconds = 5 [default = 10];
     }
 
     optional int32 RetentionPeriodSeconds = 1 [default = 86400]; // 1d

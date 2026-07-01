@@ -108,6 +108,9 @@ std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFact
         iamParams.ResourceType = serviceControl.GetResourceType();
         iamParams.ResourceId = resourceId;
         iamParams.TargetServiceAccountId = serviceAccountId;
+        // IamTokenRequestTimeoutSeconds defaults to 10 (NIam::DEFAULT_REQUEST_TIMEOUT).
+        // WaitForToken() blocks up to 2 * RequestTimeout on first connection.
+        iamParams.RequestTimeout = TDuration::Seconds(serviceControl.GetIamTokenRequestTimeoutSeconds());
 
         return CreateIamServiceCredentialsProviderFactory(iamParams);
     }

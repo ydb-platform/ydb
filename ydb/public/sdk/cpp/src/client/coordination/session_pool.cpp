@@ -117,7 +117,7 @@ struct TCoordinationSessionPool::TImpl {
         return std::nullopt;
     }
 
-    void Return(TSession session) noexcept {
+    void Return(TSession session) {
         auto pooled = TakeCheckedOut(session);
         if (!pooled) {
             return;
@@ -126,17 +126,14 @@ struct TCoordinationSessionPool::TImpl {
         const bool lost = pooled->State->ClearOnLost();
         if (lost) {
             CloseSession(pooled->Session);
-            pooled = StartSessionWithRetry();
-            if (!pooled) {
-                return;
-            }
+            pooled = StartSessionWithRetryOrThrow();
         }
 
         std::lock_guard guard(Lock_);
         Sessions_.push_back(std::move(*pooled));
     }
 
-    bool Replace(TSession session) noexcept {
+    bool Replace(TSession session) {
         auto pooled = TakeCheckedOut(session);
         if (!pooled) {
             return false;
@@ -144,14 +141,10 @@ struct TCoordinationSessionPool::TImpl {
 
         pooled->State->ClearOnLost();
         CloseSession(pooled->Session);
-
-        auto replacement = StartSessionWithRetry();
-        if (!replacement) {
-            return false;
-        }
+        auto replacement = StartSessionWithRetryOrThrow();
 
         std::lock_guard guard(Lock_);
-        Sessions_.push_back(std::move(*replacement));
+        Sessions_.push_back(std::move(replacement));
         return true;
     }
 
@@ -273,9 +266,14 @@ private:
         }
     }
 
-    void RefreshPooledSession(TPooledSession& pooled, TSessionLostCallback& onLost) {
-        CloseSession(pooled.Session);
+    TPooledSession StartSessionWithRetryOrThrow() {
+        if (auto session = StartSessionWithRetry()) {
+            return std::move(*session);
+        }
+        throw TYdbException("Failed to start session");
+    }
 
+    void RefreshPooledSession(TPooledSession& pooled, TSessionLostCallback& onLost) {
         auto replacement = StartSessionWithRetry();
         if (!replacement) {
             RestoreIdleSession(std::move(pooled));
@@ -285,7 +283,6 @@ private:
         pooled = std::move(*replacement);
         if (!pooled.State->SetOnLost(onLost)) {
             CloseSession(pooled.Session);
-            RestoreIdleSession(std::move(pooled));
             throw TYdbException("Failed to start session");
         }
     }

@@ -53,7 +53,7 @@ struct TDistributedLock::TImpl {
                 lockSettings.Path_,
                 TCoordinationSessionPoolSettings()
                     .PoolSize(1)
-                    .SessionSettings(TSessionSettings().Timeout(lockSettings.Timeout_))),
+                    .SessionSettings(TSessionSettings().Timeout(lockSettings.SessionTimeout_))),
             lockSettings)
     {
     }
@@ -67,6 +67,9 @@ struct TDistributedLock::TImpl {
     }
 
     ~TImpl() {
+        if (Locked_) {
+            LockLossState_->RequestStop();
+        }
         Locked_ ? ReplaceSession() : ReturnSession();
     }
 
@@ -75,18 +78,29 @@ struct TDistributedLock::TImpl {
     }
 
     bool try_lock() noexcept {
-        return TryAcquire() == EAcquireResult::Acquired;
+        return TryAcquire(Min(TDuration::MilliSeconds(100), Timeout_)) == EAcquireResult::Acquired;
     }
 
     void lock() {
-        switch (TryAcquire()) {
-            case EAcquireResult::Acquired:
-                return;
-            case EAcquireResult::NoSession:
-                throw TYdbLockException("Failed to start session");
-            case EAcquireResult::NotAcquired:
-            case EAcquireResult::Failed:
+        const auto deadline = TInstant::Now() + Timeout_;
+        while (true) {
+            const auto remaining = deadline - TInstant::Now();
+            if (remaining <= TDuration::Zero()) {
                 throw TYdbLockException("Failed to acquire semaphore");
+            }
+
+            const auto acquireTimeout = Min(ServerAcquireTimeout(), remaining);
+            switch (TryAcquire(acquireTimeout)) {
+                case EAcquireResult::Acquired:
+                    return;
+                case EAcquireResult::NotAcquired:
+                case EAcquireResult::NoSession:
+                    break;
+                case EAcquireResult::Failed:
+                    throw TYdbLockException("Failed to acquire semaphore");
+            }
+
+            Sleep(TDuration::MilliSeconds(1));
         }
     }
 
@@ -158,27 +172,35 @@ private:
     }
 
     void ReturnSession() noexcept {
-        if (Session_) {
-            Pool_.Return(std::move(Session_));
-            Session_ = {};
-        }
+        ReleaseSession(false);
     }
 
     void ReplaceSession() noexcept {
+        ReleaseSession(true);
+    }
+
+    void ReleaseSession(bool replace) noexcept {
         if (Session_) {
-            Pool_.Replace(std::move(Session_));
+            try {
+                if (replace) {
+                    Pool_.Replace(std::move(Session_));
+                } else {
+                    Pool_.Return(std::move(Session_));
+                }
+            } catch (...) {
+            }
             Session_ = {};
         }
     }
 
-    EAcquireResult TryAcquire() noexcept try {
+    EAcquireResult TryAcquire(TDuration acquireTimeout) noexcept try {
         if (!EnsureSession()) {
             return EAcquireResult::NoSession;
         }
 
         LockLossState_->Reset();
-        auto acquireFuture = Session_.AcquireSemaphore(Name_, MakeAcquireSettings(ServerAcquireTimeout()));
-        if (!acquireFuture.Wait(Timeout_)) {
+        auto acquireFuture = Session_.AcquireSemaphore(Name_, MakeAcquireSettings(acquireTimeout));
+        if (!acquireFuture.Wait(acquireTimeout)) {
             ReplaceSession();
             return EAcquireResult::Failed;
         }

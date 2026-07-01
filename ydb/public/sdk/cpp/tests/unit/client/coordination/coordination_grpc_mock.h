@@ -54,6 +54,7 @@ public:
     std::atomic<size_t> FailNextSessionStarts{0};
     std::atomic<bool> FailAllSessionStarts{false};
     std::atomic<size_t> StartedSessions{0};
+    std::atomic<uint64_t> LastSessionStartTimeoutMillis{0};
     std::atomic<uint64_t> LastAcquireTimeoutMillis{0};
 
     grpc::Status Session(
@@ -73,11 +74,14 @@ public:
         if (FailAllSessionStarts.load()) {
             return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Session start rejected");
         }
-        if (const size_t failCount = FailNextSessionStarts.load(); failCount > 0) {
-            FailNextSessionStarts.store(failCount - 1);
-            return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Session start rejected");
+        auto failCount = FailNextSessionStarts.load();
+        while (failCount > 0) {
+            if (FailNextSessionStarts.compare_exchange_weak(failCount, failCount - 1)) {
+                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Session start rejected");
+            }
         }
         auto& start = request.session_start();
+        LastSessionStartTimeoutMillis.store(start.timeout_millis());
         uint64_t sessionId = start.session_id();
         if (!sessionId) {
             sessionId = ++LastSessionId_;

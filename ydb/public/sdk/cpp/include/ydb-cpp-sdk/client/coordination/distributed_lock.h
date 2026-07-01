@@ -19,7 +19,10 @@ struct TDistributedLockSettings {
 
     FLUENT_SETTING(std::string, Path);
     FLUENT_SETTING(std::string, Name);
+    // Bounds lock acquisition wait.
     FLUENT_SETTING_DEFAULT(TDuration, Timeout, TDuration::Seconds(5));
+    // Bounds coordination session liveness/reconnect wait.
+    FLUENT_SETTING_DEFAULT(TDuration, SessionTimeout, TDuration::Seconds(5));
 };
 
 // Distributed exclusive lock backed by a YDB coordination semaphore.
@@ -35,7 +38,7 @@ public:
     TDistributedLock& operator=(TDistributedLock&&) = delete;
 
     // Throws TYdbLockException on session start failure, acquire timeout, transport
-    // error, or contention timeout (timeout bounds the acquire wait).
+    // error, or contention timeout (Timeout bounds the acquire wait).
     void lock();
 
     // Same as lock()

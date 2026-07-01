@@ -506,9 +506,6 @@ ru:
   - from: /maintenance/manual/cluster_expansion.md
     to: /devops/configuration-management/configuration-v1/cluster-expansion.md
   - from: /concepts/topic.md
-<<<<<<< HEAD
-    to: /concepts/datamodel/topic.md 
-=======
     to: /concepts/datamodel/topic.md
   - from: /devops/backup-and-recovery/system-tablet-backup.md
     to: /concepts/backup.md#system-tablet-backup
@@ -536,7 +533,6 @@ ru:
     to: /reference/ydb-sdk/observability/tracing/opentelemetry.md
   - from: /integrations/sql-dialect-converter.md
     to: /integrations/sql-translation/sql-dialect-converter.md
->>>>>>> e2e301d6dc0 (docs(ru): add SQLGlot plugin article, group SQL dialect conversion docs (#44184))
 
 en:
   - from: /cluster/system-requirements.md

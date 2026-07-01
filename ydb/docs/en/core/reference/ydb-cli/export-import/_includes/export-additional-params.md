@@ -1,4 +1,4 @@
-- 
+- `--description STRING`: Text description of the operation, saved in the operation history.
 - `--retries NUM`: Number of retry attempts for export that the server will make. Default value: `10`.
 - `--compression STRING`: Compress exported data. With the default compression level for the [Zstandard](https://en.wikipedia.org/wiki/Zstd) algorithm, data can be compressed by 5-10 times. Data compression uses CPU resources and may affect the speed of other database operations. Valid values:
 

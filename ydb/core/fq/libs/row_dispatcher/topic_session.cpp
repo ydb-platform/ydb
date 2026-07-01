@@ -670,14 +670,14 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
         messages.erase(messages.begin(), it);
     }
 
-    for (auto& message : messages) {
-        try {
+    try {
+        for (const auto& message : messages) {
             LOG_ROW_DISPATCHER_TRACE("Data received: " << message.DebugString(true));
             dataSize += message.GetData().size();
-        } catch (...) {
-            throw TDecompressionException(message.GetOffset(), CurrentExceptionMessage());
+            Self.LastMessageOffset = message.GetOffset();
         }
-        Self.LastMessageOffset = message.GetOffset();
+    } catch (...) {
+        throw TDecompressionException(message.GetOffset(), CurrentExceptionMessage());
     }
 
     Self.Statistics.Add(dataSize, messages.size());

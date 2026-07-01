@@ -101,12 +101,15 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     auto& results = response.GetPartitionResponse().GetCmdReadResult().GetResult();
     size_t& entryIndex = NextEntryIdx;
     int resultIndex = 0;
-    int resultsSize = results.size();
-    ui64 maxReturnedOffset = 0;
+    const int resultsSize = results.size();
 
-    if (resultsSize > 0) {
-        maxReturnedOffset = results[resultsSize - 1].GetOffset();
+    if (resultsSize <= 0) {
+        ++entryIndex;
+        ProcessQueue();
+        return;
     }
+
+    const ui64 maxReturnedOffset = results[resultsSize - 1].GetOffset();
 
     // Two-pointer: both SortedEntries and results are sorted by offset
     while (entryIndex < SortedEntries.size() && resultIndex < resultsSize) {
@@ -158,16 +161,14 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     }
 
     // Mark remaining entries whose offsets are <= maxReturnedOffset as missing
-    if (resultsSize > 0) {
-        while (entryIndex < SortedEntries.size() && SortedEntries[entryIndex].Offset <= maxReturnedOffset) {
-            auto& entry = SortedEntries[entryIndex];
-            if (!entry.Processed) {
-                entry.Processed = true;
-                --PendingResponses[entry.ReplyIndex].TotalMessages;
-                TrySendReplyIfComplete(entry.ReplyIndex);
-            }
-            ++entryIndex;
+    while (entryIndex < SortedEntries.size() && SortedEntries[entryIndex].Offset <= maxReturnedOffset) {
+        auto& entry = SortedEntries[entryIndex];
+        if (!entry.Processed) {
+            entry.Processed = true;
+            --PendingResponses[entry.ReplyIndex].TotalMessages;
+            TrySendReplyIfComplete(entry.ReplyIndex);
         }
+        ++entryIndex;
     }
 
     if (RepliesSent == PendingResponses.size()) {

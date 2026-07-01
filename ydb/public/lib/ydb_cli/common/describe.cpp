@@ -794,7 +794,7 @@ int TDescribeLogic::PrintSecretResponsePretty(const NSecret::TDescribeSecretResu
 int TDescribeLogic::DescribeEntryDefault(NScheme::TSchemeEntry entry, const TDescribeOptions& options) {
     if (options.ShowPermissions) {
         Out << Endl;
-        PrintAllPermissions(entry.Owner, entry.Permissions, entry.EffectivePermissions, Out);
+        PrintAllPermissions(entry.Owner, entry.Permissions, entry.EffectivePermissions, entry.InterruptInheritance, Out);
     }
     WarnAboutTableOptions(TString(entry.Name), options, EDataFormat::Default); // Assuming default format for check
     return EXIT_SUCCESS;
@@ -1311,6 +1311,7 @@ void TDescribeLogic::PrintPermissionsIfNeeded(const TDescriptionType& descriptio
             description.GetOwner(),
             description.GetPermissions(),
             description.GetEffectivePermissions(),
+            description.GetInterruptInheritance(),
             Out
         );
     }

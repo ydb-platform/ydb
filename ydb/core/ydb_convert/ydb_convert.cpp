@@ -1013,6 +1013,8 @@ void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::
         const bool isDir = from.GetPathType() == NKikimrSchemeOp::EPathTypeDir;
         ConvertAclToYdb(from.GetOwner(), from.GetEffectiveACL(), isDir, to->mutable_effective_permissions());
         ConvertAclToYdb(from.GetOwner(), from.GetACL(), isDir, to->mutable_permissions());
+        const NACLib::TACL acl(from.GetACL());
+        to->set_interrupt_permissions_inheritance(acl.GetInterruptInheritance());
     }
 }
 

@@ -64,6 +64,7 @@ struct TSchemeEntry {
     ESchemeEntryType Type;
     std::vector<TPermissions> EffectivePermissions;
     std::vector<TPermissions> Permissions;
+    bool InterruptInheritance = false;
     uint64_t SizeBytes = 0;
     TVirtualTimestamp CreatedAt;
 

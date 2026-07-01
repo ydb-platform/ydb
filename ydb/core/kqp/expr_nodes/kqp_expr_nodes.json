@@ -479,11 +479,6 @@
             "ListBase": "TKqlQuery"
         },
         {
-            "Name": "TKqpEffects",
-            "VarArgBase": "TExprBase",
-            "Match": {"Type": "Callable", "Name": "KqpEffects"}
-        },
-        {
             "Name": "TKqpConnection",
             "Base": "TDqConnection",
             "Match": {"Type": "CallableBase"},

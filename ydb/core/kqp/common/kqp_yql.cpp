@@ -523,7 +523,6 @@ TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TCoNameValueTupleList
     return settings;
 }
 
-
 NNodes::TCoNameValueTupleList TKqpUpsertRowsSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
     TVector<TCoNameValueTuple> settings;
     settings.reserve(1);

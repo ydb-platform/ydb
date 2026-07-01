@@ -771,6 +771,8 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
         return *error;
     }
 
+    PendingConsumersRestores.clear();
+
     auto dbDesc = ReadDatabaseDescription(fsPath, Log.get());
 
     TString dbPath;
@@ -2219,12 +2221,12 @@ void TRestoreClient::ScheduleConsumersRestore(const TString& topicPath, std::vec
 }
 
 TRestoreResult TRestoreClient::RestorePendingConsumers() {
-    for (const auto& pending : PendingConsumersRestores) {
-        if (auto result = RestoreConsumers(pending.TopicPath, pending.Consumers); !result.IsSuccess()) {
+    auto pending = std::exchange(PendingConsumersRestores, {});
+    for (const auto& entry : pending) {
+        if (auto result = RestoreConsumers(entry.TopicPath, entry.Consumers); !result.IsSuccess()) {
             return result;
         }
     }
-    PendingConsumersRestores.clear();
     return Result<TRestoreResult>();
 }
 

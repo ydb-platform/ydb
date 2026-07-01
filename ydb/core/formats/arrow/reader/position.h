@@ -77,8 +77,41 @@ private:
         return StartPosition <= position && position < FinishPosition;
     }
 
-    std::partial_ordering CompareImpl(const ui64 position, const TSortableScanData& item, const ui64 itemPosition, const ui32 size) const;
+    std::partial_ordering CompareImpl(const ui64 position, const TSortableScanData& item, const ui64 itemPosition, const ui32 size) const {
+        AFL_VERIFY(size <= PositionAddress.size() && size <= item.PositionAddress.size());
+        AFL_VERIFY(size);
+        if (Contains(position) && item.Contains(itemPosition)) {
+            for (ui32 idx = 0; idx < size; ++idx) {
+                std::partial_ordering cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition);
+                if (cmp != std::partial_ordering::equivalent) {
+                    return cmp;
+                }
+            }
+        } else {
+            for (ui32 idx = 0; idx < size; ++idx) {
+                std::partial_ordering cmp = std::partial_ordering::equivalent;
+                const bool containsSelf = PositionAddress[idx].GetAddress().Contains(position);
+                const bool containsItem = item.PositionAddress[idx].GetAddress().Contains(itemPosition);
+                if (containsSelf && containsItem) {
+                    cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition);
+                } else if (containsSelf) {
+                    auto temporaryAddress = item.Columns[idx]->GetChunk(item.PositionAddress[idx].GetAddress(), itemPosition);
+                    cmp = PositionAddress[idx].Compare(position, temporaryAddress, itemPosition);
+                } else if (containsItem) {
+                    auto temporaryAddress = Columns[idx]->GetChunk(PositionAddress[idx].GetAddress(), position);
+                    cmp = temporaryAddress.Compare(position, item.PositionAddress[idx], itemPosition);
+                } else {
+                    AFL_VERIFY(false);
+                }
+                if (cmp != std::partial_ordering::equivalent) {
+                    return cmp;
+                }
+            }
+        }
 
+        return std::partial_ordering::equivalent;
+    }
+    
     TSortableScanData(const ui64 start, const ui64 finish, const ui64 lastInit, const ui64 recordsCount,
         const std::vector<std::shared_ptr<NAccessor::IChunkedArray>>& columns, const std::vector<std::shared_ptr<arrow::Field>>& fields)
         : RecordsCount(recordsCount)

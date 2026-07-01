@@ -27,6 +27,11 @@
 #include <yql/essentials/public/udf/arrow/defs.h>
 #include <ydb/core/base/backtrace.h>
 
+#include <algorithm>
+#include <string>
+#include <tuple>
+#include <vector>
+
 
 using namespace NKikimr::NArrow::NMerger;
 
@@ -74,6 +79,60 @@ inline std::shared_ptr<arrow::RecordBatch> MakeBatch(int numRows, int sourceIdx)
     return arrow::RecordBatch::Make(MakeFullSchema(), numRows, {tsArr, aArr, bArr, verArr});
 }
 
+// Внедряет межисточниковые дубликаты: копирует PK каждой `stride`-й строки из
+// `src` в `dst`, выставляя ver = `dupVersion`. Результирующий батч пересобирается
+// и пересортировывается по PK (ts,a,b), чтобы сохранить инвариант
+// отсортированного источника, который требует мерж.
+inline std::shared_ptr<arrow::RecordBatch> InjectDuplicates(
+        const std::shared_ptr<arrow::RecordBatch>& dst,
+        const std::shared_ptr<arrow::RecordBatch>& src,
+        int stride, int64_t dupVersion) {
+    struct Row { int64_t Ts; std::string A; std::string B; int64_t Ver; };
+
+    const auto& dstTs  = static_cast<const arrow::TimestampArray&>(*dst->column(0));
+    const auto& dstA   = static_cast<const arrow::StringArray&>(*dst->column(1));
+    const auto& dstB   = static_cast<const arrow::StringArray&>(*dst->column(2));
+    const auto& dstVer = static_cast<const arrow::Int64Array&>(*dst->column(3));
+
+    std::vector<Row> rows;
+    rows.reserve(dst->num_rows() + src->num_rows() / std::max(1, stride) + 1);
+    for (int64_t i = 0; i < dst->num_rows(); ++i) {
+        rows.push_back({dstTs.Value(i), std::string(dstA.GetView(i)),
+                        std::string(dstB.GetView(i)), dstVer.Value(i)});
+    }
+
+    const auto& srcTs = static_cast<const arrow::TimestampArray&>(*src->column(0));
+    const auto& srcA  = static_cast<const arrow::StringArray&>(*src->column(1));
+    const auto& srcB  = static_cast<const arrow::StringArray&>(*src->column(2));
+    for (int64_t i = 0; i < src->num_rows(); i += stride) {
+        rows.push_back({srcTs.Value(i), std::string(srcA.GetView(i)),
+                        std::string(srcB.GetView(i)), dupVersion});
+    }
+
+    std::stable_sort(rows.begin(), rows.end(), [](const Row& l, const Row& r) {
+        return std::tie(l.Ts, l.A, l.B) < std::tie(r.Ts, r.A, r.B);
+    });
+
+    arrow::TimestampBuilder tsBuilder(arrow::timestamp(arrow::TimeUnit::MICRO), arrow::default_memory_pool());
+    arrow::StringBuilder aBuilder, bBuilder;
+    arrow::Int64Builder verBuilder;
+    for (const auto& row : rows) {
+        Y_ABORT_UNLESS(tsBuilder.Append(row.Ts).ok());
+        Y_ABORT_UNLESS(aBuilder.Append(row.A).ok());
+        Y_ABORT_UNLESS(bBuilder.Append(row.B).ok());
+        Y_ABORT_UNLESS(verBuilder.Append(row.Ver).ok());
+    }
+
+    std::shared_ptr<arrow::Array> tsArr, aArr, bArr, verArr;
+    Y_ABORT_UNLESS(tsBuilder.Finish(&tsArr).ok());
+    Y_ABORT_UNLESS(aBuilder.Finish(&aArr).ok());
+    Y_ABORT_UNLESS(bBuilder.Finish(&bArr).ok());
+    Y_ABORT_UNLESS(verBuilder.Finish(&verArr).ok());
+
+    return arrow::RecordBatch::Make(MakeFullSchema(), static_cast<int64_t>(rows.size()),
+                                    {tsArr, aArr, bArr, verArr});
+}
+
 struct TFixture {
     std::vector<std::shared_ptr<arrow::RecordBatch>> Batches;
 
@@ -87,6 +146,12 @@ struct TFixture {
         Batches.reserve(numSources);
         for (int i = 0; i < numSources; ++i) {
             Batches.push_back(MakeBatch(10000, i));
+        }
+        // Каждые 1234 строки добавляем дубликат PK из соседнего источника
+        // (batch[i] -> batch[i+1]) с version = 2. Идём в обратном порядке, чтобы
+        // источник всегда читался в исходном (не пополненном дубликатами) виде.
+        for (int i = numSources - 2; i >= 0; --i) {
+            Batches[i + 1] = InjectDuplicates(Batches[i + 1], Batches[i], 1234, i+2);
         }
     }
 };
@@ -134,6 +199,60 @@ inline std::shared_ptr<arrow20::RecordBatch> MakeBatch20(int numRows, uint32_t s
     return arrow20::RecordBatch::Make(MakeFullSchema20(), numRows, {tsArr, aArr, bArr, verArr});
 }
 
+// arrow_next-версия InjectDuplicates: см. комментарий к одноимённой функции выше.
+inline std::shared_ptr<arrow20::RecordBatch> InjectDuplicates20(
+        const std::shared_ptr<arrow20::RecordBatch>& dst,
+        const std::shared_ptr<arrow20::RecordBatch>& src,
+        int stride, int64_t dupVersion) {
+    struct Row { int64_t Ts; std::string A; std::string B; int64_t Ver; };
+
+    const auto& dstTs  = static_cast<const arrow20::TimestampArray&>(*dst->column(0));
+    const auto& dstA   = static_cast<const arrow20::StringArray&>(*dst->column(1));
+    const auto& dstB   = static_cast<const arrow20::StringArray&>(*dst->column(2));
+    const auto& dstVer = static_cast<const arrow20::Int64Array&>(*dst->column(3));
+
+    std::vector<Row> rows;
+    rows.reserve(dst->num_rows() + src->num_rows() / std::max(1, stride) + 1);
+    for (int64_t i = 0; i < dst->num_rows(); ++i) {
+        rows.push_back({dstTs.Value(i), std::string(dstA.GetView(i)),
+                        std::string(dstB.GetView(i)), dstVer.Value(i)});
+    }
+
+    const auto& srcTs = static_cast<const arrow20::TimestampArray&>(*src->column(0));
+    const auto& srcA  = static_cast<const arrow20::StringArray&>(*src->column(1));
+    const auto& srcB  = static_cast<const arrow20::StringArray&>(*src->column(2));
+    for (int64_t i = 0; i < src->num_rows(); i += stride) {
+        rows.push_back({srcTs.Value(i), std::string(srcA.GetView(i)),
+                        std::string(srcB.GetView(i)), dupVersion});
+    }
+
+    std::stable_sort(rows.begin(), rows.end(), [](const Row& l, const Row& r) {
+        return std::tie(l.Ts, l.A, l.B) < std::tie(r.Ts, r.A, r.B);
+    });
+
+    arrow20::TimestampBuilder tsBuilder(arrow20::timestamp(arrow20::TimeUnit::MICRO),
+                                        arrow20::default_memory_pool());
+    arrow20::StringBuilder aBuilder, bBuilder;
+    arrow20::Int64Builder verBuilder;
+    for (const auto& row : rows) {
+        Y_ABORT_UNLESS(tsBuilder.Append(row.Ts).ok());
+        Y_ABORT_UNLESS(aBuilder.Append(row.A).ok());
+        Y_ABORT_UNLESS(bBuilder.Append(row.B).ok());
+        Y_ABORT_UNLESS(verBuilder.Append(row.Ver).ok());
+    }
+
+    std::shared_ptr<arrow20::Array> tsArr, aArr, bArr, verArr;
+    Y_ABORT_UNLESS(tsBuilder.Finish(&tsArr).ok());
+    Y_ABORT_UNLESS(aBuilder.Finish(&aArr).ok());
+    Y_ABORT_UNLESS(bBuilder.Finish(&bArr).ok());
+    Y_ABORT_UNLESS(verBuilder.Finish(&verArr).ok());
+
+    return arrow20::RecordBatch::Make(MakeFullSchema20(), static_cast<int64_t>(rows.size()),
+                                      {tsArr, aArr, bArr, verArr});
+}
+
+
+
 struct TFixture20 {
     std::vector<std::shared_ptr<arrow20::RecordBatch>> Batches;
 
@@ -144,7 +263,13 @@ struct TFixture20 {
     TFixture20(int numSources) {
         Batches.reserve(numSources);
         for (int i = 0; i < numSources; ++i) {
-            Batches.push_back(MakeBatch20(10000, i));
+            Batches.push_back(MakeBatch20(10000, 1));
+        }
+        // Каждые 1234 строки добавляем дубликат PK из соседнего источника
+        // (batch[i] -> batch[i+1]) с version = 2. Идём в обратном порядке, чтобы
+        // источник всегда читался в исходном (не пополненном дубликатами) виде.
+        for (int i = numSources - 2; i >= 0; --i) {
+            Batches[i + 1] = InjectDuplicates20(Batches[i + 1], Batches[i], 1234, i+2);
         }
     }
 };
@@ -167,15 +292,13 @@ inline std::shared_ptr<arrow::RecordBatch> MergeOnce(const TFixture& f) {
 }
 
 inline std::shared_ptr<arrow20::Table> MergeOnceArrow20(const TFixture20& f) {
-    auto fullSchema = MakeFullSchema20();
-
     arrow20::compute::SortOptions sortOptions({
         arrow20::compute::SortKey("ts", arrow20::compute::SortOrder::Ascending),
         arrow20::compute::SortKey("a",  arrow20::compute::SortOrder::Ascending),
         arrow20::compute::SortKey("b",  arrow20::compute::SortOrder::Ascending),
         arrow20::compute::SortKey("ver", arrow20::compute::SortOrder::Descending),
     });
-    auto batch = arrow20::ConcatenateRecordBatches(f.Batches).ValueOrDie();
+    auto batch = arrow20::Table::FromRecordBatches(f.Batches).ValueOrDie();
     Y_ABORT_UNLESS(batch->num_rows() > 0);
 
     auto indicesRes = arrow20::compute::SortIndices(arrow20::Datum(batch), sortOptions);
@@ -184,8 +307,7 @@ inline std::shared_ptr<arrow20::Table> MergeOnceArrow20(const TFixture20& f) {
 
     auto takenRes = arrow20::compute::Take(arrow20::Datum(batch), arrow20::Datum(indices));
     Y_ABORT_UNLESS(takenRes.ok());
-    auto resultBatch = takenRes->record_batch();
-    auto result = arrow20::Table::FromRecordBatches(fullSchema, {resultBatch}).ValueOrDie();
+    auto result = takenRes->table();
 
     auto all_data_but_first_tuple = result->Slice(1);
     auto all_data_but_last_tuple = result->Slice(0, result->num_rows() - 1);
@@ -207,11 +329,14 @@ inline std::shared_ptr<arrow20::Table> MergeOnceArrow20(const TFixture20& f) {
 
     auto bitmap = arrow20::ChunkedArray::Make(chunks).ValueOrDie();
 
-    auto indices_ok = arrow20::compute::CallFunction("indices_nonzero", {bitmap}).ValueOrDie();
+    return arrow20::compute::Filter(result, bitmap, 
+        arrow20::compute::FilterOptions{arrow20::compute::FilterOptions::NullSelectionBehavior::DROP}).ValueOrDie().table();
 
-    auto res_without_first = arrow20::compute::Take(result, indices_ok).ValueOrDie();
+    // auto indices_ok = arrow20::compute::CallFunction("indices_nonzero", {bitmap}).ValueOrDie();
+
+    // auto res_without_first = arrow20::compute::Take(result, indices_ok).ValueOrDie();
     
-    return res_without_first.table();
+    // return res_without_first.table();
 }
 
 // (1,1), (1,0), (2,1), (2,0)

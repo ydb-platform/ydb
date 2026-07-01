@@ -3,6 +3,7 @@
 #include <library/cpp/testing/gbenchmark/benchmark.h>
 
 #include "merges.h"
+#include "remapper_bench.h"
 
 
 void RunMerge(const TFixture& f, benchmark::State& state) {
@@ -44,6 +45,33 @@ void SortIndices_5src_10k(benchmark::State& state)  { RunSortIndicesMerge(Get20_
 void SortIndices_10src_10k(benchmark::State& state) { RunSortIndicesMerge(Get20_10src_10k(), state); }
 void SortIndices_20src_10k(benchmark::State& state) { RunSortIndicesMerge(Get20_20src_10k(), state); }
 
+// ---- production remapper: TSortIndicesMerger::BuildRemapper vs TMergePartialStream::DrainAllParts ----
+// Оба строят remapper-батчи (indexFields) из одних и тех же TGeneralContainer-источников.
+
+void RunBuildRemapperBench(const NRemapperBench::TRemapperFixture& f, benchmark::State& state) {
+    for (auto _ : state) {
+        auto result = NRemapperBench::RunBuildRemapper(f);
+        benchmark::DoNotOptimize(result);
+    }
+}
+
+void RunDrainAllPartsBench(const NRemapperBench::TRemapperFixture& f, benchmark::State& state) {
+    for (auto _ : state) {
+        auto result = NRemapperBench::RunDrainAllParts(f);
+        benchmark::DoNotOptimize(result);
+    }
+}
+
+void BuildRemapper_2src_10k(benchmark::State& state)  { RunBuildRemapperBench(NRemapperBench::GetRemap_2src(),  state); }
+void BuildRemapper_5src_10k(benchmark::State& state)  { RunBuildRemapperBench(NRemapperBench::GetRemap_5src(),  state); }
+void BuildRemapper_10src_10k(benchmark::State& state) { RunBuildRemapperBench(NRemapperBench::GetRemap_10src(), state); }
+void BuildRemapper_20src_10k(benchmark::State& state) { RunBuildRemapperBench(NRemapperBench::GetRemap_20src(), state); }
+
+void DrainAllParts_2src_10k(benchmark::State& state)  { RunDrainAllPartsBench(NRemapperBench::GetRemap_2src(),  state); }
+void DrainAllParts_5src_10k(benchmark::State& state)  { RunDrainAllPartsBench(NRemapperBench::GetRemap_5src(),  state); }
+void DrainAllParts_10src_10k(benchmark::State& state) { RunDrainAllPartsBench(NRemapperBench::GetRemap_10src(), state); }
+void DrainAllParts_20src_10k(benchmark::State& state) { RunDrainAllPartsBench(NRemapperBench::GetRemap_20src(), state); }
+
 // ---- arrow_next 20: sort + Grouper + hash_first (с дедупликацией по max(ver)) ----
 
 BENCHMARK(HashFirst_2src_10k);
@@ -62,3 +90,15 @@ BENCHMARK(SortIndices_2src_10k);
 BENCHMARK(SortIndices_5src_10k);
 BENCHMARK(SortIndices_10src_10k);
 BENCHMARK(SortIndices_20src_10k);
+
+// ---- TSortIndicesMerger::BuildRemapper (production) ----
+BENCHMARK(BuildRemapper_2src_10k);
+BENCHMARK(BuildRemapper_5src_10k);
+BENCHMARK(BuildRemapper_10src_10k);
+BENCHMARK(BuildRemapper_20src_10k);
+
+// ---- TMergePartialStream::DrainAllParts (production) ----
+BENCHMARK(DrainAllParts_2src_10k);
+BENCHMARK(DrainAllParts_5src_10k);
+BENCHMARK(DrainAllParts_10src_10k);
+BENCHMARK(DrainAllParts_20src_10k);

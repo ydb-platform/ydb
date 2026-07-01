@@ -18,8 +18,7 @@
 #include "arrow/util/logging.h"
 
 #ifdef ARROW_WITH_BACKTRACE
-#include <util/system/backtrace.h>
-#include <util/stream/output.h>
+#include <execinfo.h>
 #endif
 #include <cstdlib>
 #include <iostream>
@@ -94,8 +93,9 @@ class CerrLog {
 
   void PrintBackTrace() {
 #ifdef ARROW_WITH_BACKTRACE
-    FormatBackTrace(&Cout);
-    Cout.Flush();
+    void* buffer[255];
+    const int calls = backtrace(buffer, static_cast<int>(sizeof(buffer) / sizeof(void*)));
+    backtrace_symbols_fd(buffer, calls, 1);
 #endif
   }
 };

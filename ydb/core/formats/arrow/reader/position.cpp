@@ -27,48 +27,6 @@ TString TSortableBatchPosition::DebugString() const {
 }
 
 
-// bool compare1(const NAccessor::IChunkedArray::TFullDataAddress& arr, int index) {
-//     arr.GetArray().Compare(const ui64 position, const TFullDataAddress &item, const ui64 itemPosition)
-// }
-
-
-std::partial_ordering TSortableScanData::CompareImpl(const ui64 position, const TSortableScanData& item, const ui64 itemPosition, const ui32 size) const {
-    AFL_VERIFY(size <= PositionAddress.size() && size <= item.PositionAddress.size());
-    AFL_VERIFY(size);
-    if (Contains(position) && item.Contains(itemPosition)) {
-        for (ui32 idx = 0; idx < size; ++idx) {
-            // PositionAddress1[idx1].Array[position - pos1[idx1].offset] to compare
-            // auto cmp = NKikimr::NArrow::TComparator::TypedCompare<false>(*Array, Address.GetLocalIndex(position), *item.Array, item.Address.GetLocalIndex(itemPosition));
-            std::partial_ordering cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition);
-            if (cmp != std::partial_ordering::equivalent) {
-                return cmp;
-            }
-        }
-    } else {
-        for (ui32 idx = 0; idx < size; ++idx) {
-            std::partial_ordering cmp = std::partial_ordering::equivalent;
-            const bool containsSelf = PositionAddress[idx].GetAddress().Contains(position);
-            const bool containsItem = item.PositionAddress[idx].GetAddress().Contains(itemPosition);
-            if (containsSelf && containsItem) {
-                cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition);
-            } else if (containsSelf) {
-                auto temporaryAddress = item.Columns[idx]->GetChunk(item.PositionAddress[idx].GetAddress(), itemPosition);
-                cmp = PositionAddress[idx].Compare(position, temporaryAddress, itemPosition);
-            } else if (containsItem) {
-                auto temporaryAddress = Columns[idx]->GetChunk(PositionAddress[idx].GetAddress(), position);
-                cmp = temporaryAddress.Compare(position, item.PositionAddress[idx], itemPosition);
-            } else {
-                AFL_VERIFY(false);
-            }
-            if (cmp != std::partial_ordering::equivalent) {
-                return cmp;
-            }
-        }
-    }
-
-    return std::partial_ordering::equivalent;
-}
-
 
 std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindBound(TRWSortableBatchPosition& position,
     const ui64 posStartExt, const ui64 posFinishExt, const TSortableBatchPosition& forFound, const bool upper) {

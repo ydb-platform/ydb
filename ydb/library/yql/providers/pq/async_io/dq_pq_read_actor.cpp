@@ -535,6 +535,10 @@ private:
     void PassAway() override { // Is called from Compute Actor
         ClearMkqlData();
 
+        // Stop the executor proxy first to prevent the SDK from posting
+        // new decompression/handler events to the actor's mailbox.
+        StopExecuterProxy();
+
         for (auto& clusterState : Clusters) {
             if (clusterState.ReadSession) {
                 clusterState.ReadSession->Close(TDuration::Zero());

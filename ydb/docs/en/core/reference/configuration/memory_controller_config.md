@@ -53,6 +53,7 @@ Most other memory limits can be configured either in absolute bytes or as percen
 Example of a `memory_controller_config` section with a specified hard memory limit:
 
 
+
 ```yaml
 memory_controller_config:
   hard_limit_bytes: 16106127360
@@ -120,6 +121,7 @@ Thus, although the total individual limits of activity components may collective
 There are other activity components that currently do not have any individual memory limits.
 
 Example of the `memory_controller_config` section with the specified limit for QP:
+
 
 
 ```yaml

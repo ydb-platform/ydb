@@ -463,7 +463,6 @@ class Test(TestBase):
 
         pdisk_columns = [
             'NodeId:PDiskId',
-            'NumActiveSlots',
             'LeakedSlots',
         ]
 

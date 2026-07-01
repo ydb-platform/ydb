@@ -1089,6 +1089,17 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActor
     StartCompaction(ev->Get()->GetGuard());
 }
 
+void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    const auto pathId = TPathId::FromProto(record.GetPathId());
+
+    LOG_S_WARN("Forced compaction is not implemented for column tables" << ": tablet# " << TabletID() << ", pathId# " << pathId
+                                                                        << ", requested from# " << ev->Sender);
+
+    auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(TabletID(), pathId, NKikimrTxDataShard::TEvCompactTableResult::FAILED);
+    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+}
+
 void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& /*ctx*/) {
     AFL_VERIFY(ev->Get()->GetGeneration() == Generation())("ev", ev->Get()->GetGeneration())("tablet", Generation());
     ev->Get()->GetProcessor()->ApplyResult(

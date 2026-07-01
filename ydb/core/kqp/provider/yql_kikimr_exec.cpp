@@ -2781,7 +2781,7 @@ public:
                                 return SyncError();
                             }
 
-                            
+
                             TIndexDescription::TLocalBloomFilterDescription localBloomFilterDesc;
                             for (auto&& is : alterIndexSettings) {
                                 YQL_ENSURE(is.Value().Maybe<TCoAtom>());
@@ -3075,9 +3075,14 @@ public:
                         }
                     }
                 } else if (name == "compact") {
-                    if (!SessionCtx->Config().FeatureFlags.GetEnableForcedCompactions()) {
+                    if (table.Metadata->StoreType == EStoreType::Row && !SessionCtx->Config().FeatureFlags.GetEnableForcedCompactions()) {
                         ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
-                            TStringBuilder() << "Compact is not allowed"));
+                            TStringBuilder() << "Compact is not allowed for row tables"));
+                        return SyncError();
+                    }
+                    if (table.Metadata->StoreType == EStoreType::Column && !SessionCtx->Config().FeatureFlags.GetEnableForcedColumnCompactions()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                            TStringBuilder() << "Compact is not allowed for column tables"));
                         return SyncError();
                     }
                     auto& compact = *alterTableRequest.mutable_compact();

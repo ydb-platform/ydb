@@ -3533,7 +3533,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsTotal(), shardsTotalBefore);
     }
 
-    Y_UNIT_TEST(SchemeshardShouldNotCompactColumnTable) {
+    Y_UNIT_TEST(SchemeshardShouldFailToCompactColumnTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         Setup(runtime, env);
@@ -3550,9 +3550,14 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable", false, 1, Ydb::StatusIds::BAD_REQUEST);
-        ui64 compactionId = txId;
-        TestGetCompaction(runtime, compactionId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
+
+        // the request itself is accepted for column tables ...
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable");
+
+        // ... but the columnshard does not implement forced compaction and responds with an error
+        runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 1; });
+        UNIT_ASSERT_VALUES_EQUAL(block[0]->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::FAILED);
     }
 
     Y_UNIT_TEST(CheckForgetCancelledOperationSuccess) {

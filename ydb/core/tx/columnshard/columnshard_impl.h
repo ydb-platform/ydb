@@ -325,6 +325,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCancelBackup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCancelRestore::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
     void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
@@ -501,6 +502,7 @@ protected:
             HFunc(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
             HFunc(TEvDataShard::TEvCancelBackup, Handle);
             HFunc(TEvDataShard::TEvCancelRestore, Handle);
+            HFunc(TEvDataShard::TEvCompactTable, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {

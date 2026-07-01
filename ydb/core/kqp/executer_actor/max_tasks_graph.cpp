@@ -158,8 +158,99 @@ void TMaxTasksGraph::DistributeTasksToNodes() {
         return;
     }
 
+    // Resource-aware placement first; round-robin only when it can't fit everything (e.g. nodes report no budget, as in
+    // unit tests, or the cluster is genuinely too small). Pinned columns are kept by both paths (idempotent).
+    if (!DistributeByResources()) {
+        DistributeRoundRobin();
+    }
+
+    CheckInvariants();
+}
+
+bool TMaxTasksGraph::DistributeByResources() {
+    // Task memory can grow during execution; reserve a bit more than the estimate (mirrors KqpPlanner).
+    constexpr double memoryOverflow = 1.2;
+
+    const auto memoryCost = [&](const TGroup& group) {
+        return static_cast<ui64>(group.ColumnCost.Memory * memoryOverflow);
+    };
+
+    // Working per-node budget, started from the snapshot and pre-charged with the already-pinned columns.
+    std::vector<ui64> freeMemory(NodesCount());
+    std::vector<ui32> freeTasks(NodesCount());
+    std::vector<size_t> tasksOnNode(NodesCount(), 0); // load metric for the spread tie-break.
+    for (TNodeIdx n = 0; n < NodesCount(); ++n) {
+        freeMemory[n] = NodeResources[n].RemainsMemory;
+        freeTasks[n] = NodeResources[n].RemainsTasks;
+    }
+
+    std::vector<std::pair<TGroupIdx, size_t>> freeColumns; // (group, column index) of every column still to place.
+    for (TGroupIdx g = 0; g < Groups.size(); ++g) {
+        const auto& group = Groups[g];
+        for (size_t columnIdx = 0; columnIdx < group.ColumnNodes.size(); ++columnIdx) {
+            if (const auto& node = group.ColumnNodes[columnIdx]) {
+                const TNodeIdx n = *node;
+                freeMemory[n] -= std::min(freeMemory[n], memoryCost(group));
+                freeTasks[n] -= std::min<ui32>(freeTasks[n], group.ColumnCost.Tasks);
+                tasksOnNode[n] += group.ColumnCost.Tasks;
+            } else {
+                freeColumns.emplace_back(g, columnIdx);
+            }
+        }
+    }
+
+    // Place the heaviest columns first: harder-to-fit columns get the pick of the nodes (mirrors KqpPlanner).
+    std::ranges::sort(freeColumns, [&](const auto& lhs, const auto& rhs) {
+        return Groups[lhs.first].ColumnCost.Memory > Groups[rhs.first].ColumnCost.Memory;
+    });
+
+    std::vector<TNodeIdx> placement(freeColumns.size()); // chosen node per free column; applied only if all fit.
+    for (size_t i = 0; i < freeColumns.size(); ++i) {
+        const auto& group = Groups[freeColumns[i].first];
+        const ui64 memNeed = memoryCost(group);
+        const ui32 taskNeed = group.ColumnCost.Tasks;
+
+        // A real column always holds at least one task; zero means EstimateTasksResources hasn't run (e.g. unit tests),
+        // so there is no resource signal to place by - fall back to round-robin.
+        if (taskNeed == 0) {
+            return false;
+        }
+
+        // Least-loaded fitting node, tie-broken by most free memory, then most free task slots.
+        std::optional<TNodeIdx> best;
+        for (TNodeIdx n = 0; n < NodesCount(); ++n) {
+            if (freeMemory[n] < memNeed || freeTasks[n] < taskNeed) {
+                continue;
+            }
+            if (!best) {
+                best = n;
+            } else if (tasksOnNode[n] != tasksOnNode[*best]) {
+                if (tasksOnNode[n] < tasksOnNode[*best]) { best = n; }
+            } else if (freeMemory[n] != freeMemory[*best]) {
+                if (freeMemory[n] > freeMemory[*best]) { best = n; }
+            } else if (freeTasks[n] > freeTasks[*best]) {
+                best = n;
+            }
+        }
+
+        if (!best) {
+            return false; // doesn't fit anywhere - bail out without touching the placement.
+        }
+
+        placement[i] = *best;
+        freeMemory[*best] -= memNeed;
+        freeTasks[*best] -= taskNeed;
+        tasksOnNode[*best] += taskNeed;
+    }
+
+    for (size_t i = 0; i < freeColumns.size(); ++i) {
+        PlaceColumnOnNode(Groups[freeColumns[i].first], freeColumns[i].second, placement[i]);
+    }
+    return true;
+}
+
+void TMaxTasksGraph::DistributeRoundRobin() {
     // Place every free column round-robin. Pinned columns already have a node and are left untouched (idempotent).
-    // TODO: replace round-robin with the greedy resource-aware placement currently living in KqpPlanner.
     for (auto& group : Groups) {
         TNodeIdx roundRobin = 0;
         for (size_t columnIdx = 0; columnIdx < group.ColumnNodes.size(); ++columnIdx) {
@@ -171,8 +262,6 @@ void TMaxTasksGraph::DistributeTasksToNodes() {
             }
         }
     }
-
-    CheckInvariants();
 }
 
 std::vector<TMaxTasksGraph::TColumnsPerNode> TMaxTasksGraph::GroupColumns() const {
@@ -427,8 +516,8 @@ size_t TMaxTasksGraph::CountChannelsOnNode(const std::vector<TColumnsPerNode>& c
     return totalChannels;
 }
 
-void TMaxTasksGraph::Print() const {
-    auto& out = Cerr;
+TString TMaxTasksGraph::DumpToString() const {
+    TStringStream out;
 
     out << "=== TMaxTasksGraph ===" << Endl;
     out << "MaxChannelsCount: " << MaxChannelsCount << Endl;
@@ -455,6 +544,28 @@ void TMaxTasksGraph::Print() const {
             << Endl;
         out << "    Inputs: [" << JoinSeq(", ", stage.Inputs) << "]" << Endl;
         out << "    Outputs: [" << JoinSeq(", ", stage.Outputs) << "]" << Endl;
+
+        // Node histogram: tasks-on-a-node -> number of nodes hosting that many tasks of the stage. Same diagram the
+        // tests assert via TTaskDistribution::NodeHistogram, so its output can be transcribed straight into the
+        // per-stage expected tables.
+        const auto& group = Groups[stage.Group];
+        THashMap<TNodeIdx, size_t> perNode;
+        for (size_t c = 0; c < stage.Tasks.size() && c < group.ColumnNodes.size(); ++c) {
+            if (const auto& node = group.ColumnNodes[c]) {
+                perNode[*node]++;
+            }
+        }
+        std::map<size_t, size_t> histogram; // tasksOnNode -> nodeCount, ordered for stable output.
+        for (const auto& [node, count] : perNode) {
+            histogram[count]++;
+        }
+        out << "    Node histogram (tasksOnNode -> nodes): {";
+        bool first = true;
+        for (const auto& [tasksOnNode, nodeCount] : histogram) {
+            out << (first ? " " : ", ") << tasksOnNode << " -> " << nodeCount;
+            first = false;
+        }
+        out << " }" << Endl;
     }
 
     out << "--- Groups (" << Groups.size() << ") ---" << Endl;
@@ -480,6 +591,8 @@ void TMaxTasksGraph::Print() const {
     }
 
     out << "=== End TMaxTasksGraph ===" << Endl;
+
+    return out.Str();
 }
 
 void TMaxTasksGraph::CheckInvariants() const {

@@ -70,7 +70,7 @@ public:
     size_t GetStageTasksCount(const TStageId& stage, TNodeId node) const;
     size_t GetStageTasksCount(const TStageId& stage) const;
 
-    void Print() const;
+    TString DumpToString() const;
 
 private:
     // Per-node budget read from the resources snapshot. Used by the greedy resource-aware placement (the seam in
@@ -118,6 +118,15 @@ private:
 
     // The basic placement action: pin a column of a group to a node.
     void PlaceColumnOnNode(TGroup& group, size_t columnIdx, TNodeIdx node);
+
+    // Greedy resource-aware placement of all free columns (ported from KqpPlanner's strategy). Pinned columns pre-charge
+    // their nodes' budget; free columns are placed largest-memory-first onto the least-loaded node that still fits, using
+    // the per-column cost from EstimateTasksResources. Returns false (placing nothing) if some column doesn't fit
+    // anywhere - the caller then falls back to round-robin.
+    bool DistributeByResources();
+
+    // Fallback placement: every free column round-robin per group, ignoring resources.
+    void DistributeRoundRobin();
 
     // Per-group column distribution over nodes (every column must be placed). This is what the scaling math works on.
     std::vector<TColumnsPerNode> GroupColumns() const;

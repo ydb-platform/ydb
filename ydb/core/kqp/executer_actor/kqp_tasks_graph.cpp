@@ -3577,6 +3577,7 @@ TString TKqpTasksGraph::DumpToString() const {
         }
         dump << Endl;
     }
+    dump << MaxTasksGraph->DumpToString();
 
     return dump.Str();
 }

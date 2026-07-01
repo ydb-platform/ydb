@@ -9,6 +9,7 @@ INCLUDE(../pg_include_dirs.inc)
 
 SRCS(
     arrow_ut.cpp
+    pg_block_to_pg_ut.cpp
     codegen_ut.cpp
     compare_ut.cpp
     sign_ut.cpp

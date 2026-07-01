@@ -605,18 +605,18 @@ public:
     {
     }
 
-    void DoAddNotNull(TUnboxedValuePod value) {
-        const auto ref = value.AsStringRef();
+    void DoAddNotNullFromStringRef(TStringBuf ref) {
         TGUID uuid;
         std::memcpy(&uuid, ref.Data(), sizeof(uuid));
         this->PlaceItem(std::move(uuid));
     }
 
+    void DoAddNotNull(TUnboxedValuePod value) {
+        DoAddNotNullFromStringRef(value.AsStringRef());
+    }
+
     void DoAddNotNull(TBlockItem value) {
-        const auto ref = value.AsStringRef();
-        TGUID uuid;
-        std::memcpy(&uuid, ref.Data(), sizeof(uuid));
-        this->PlaceItem(std::move(uuid));
+        DoAddNotNullFromStringRef(value.AsStringRef());
     }
 
     void DoAddNotNull(TInputBuffer& input) {
@@ -624,8 +624,8 @@ public:
     }
 
     void DoAddNotNull(TBlockItem value, size_t count) {
-        const auto ref = value.AsStringRef();
         TGUID uuid;
+        const auto ref = value.AsStringRef();
         std::memcpy(&uuid, ref.Data(), sizeof(uuid));
         std::fill(this->DataPtr_ + this->GetCurrLen(), this->DataPtr_ + this->GetCurrLen() + count, uuid);
     }

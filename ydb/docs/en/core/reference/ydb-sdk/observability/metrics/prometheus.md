@@ -1,14 +1,18 @@
-# Включение метрик в Prometheus
+# Enabling metrics in Prometheus
 
-Ниже приведены примеры кода для включения метрик в Prometheus в различных {{ ydb-short-name }} SDK.
+Below are code examples for enabling metrics in Prometheus in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
+
+- C++
+
+  This feature is not currently supported.
 
 - Go
 
   {% list tabs %}
 
-  - Нативный SDK
+  - Native SDK
 
     ```go
     package main
@@ -87,20 +91,28 @@
 
 - Java
 
-  Данная функциональность в настоящее время не поддерживается.
+  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
 
 - Python
 
-  Данная функциональность в настоящее время не поддерживается.
+  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
 
-  Отслеживайте прогресс или голосуйте за поддержку Rust SDK: [ydb-rs-sdk#267](https://github.com/ydb-platform/ydb-rs-sdk/issues/267)
+  Track progress or vote for support in the Rust SDK: [ydb-rs-sdk#267](https://github.com/ydb-platform/ydb-rs-sdk/issues/267)
+
+- PHP
+
+  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

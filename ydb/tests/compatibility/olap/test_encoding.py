@@ -50,7 +50,7 @@ class TestEncoding(RollingUpgradeAndDowngradeFixture):
             values.append(f'(Timestamp("{ts_str}"), "{resource_id}", "{uid}")')
 
         query = f"""
-            INSERT INTO `{self.table_name}` (timestamp, resource_id, uid)
+            UPSERT INTO `{self.table_name}` (timestamp, resource_id, uid)
             VALUES {",".join(values)};
             """
 

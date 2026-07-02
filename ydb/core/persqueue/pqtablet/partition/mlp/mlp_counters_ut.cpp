@@ -25,26 +25,7 @@ void SimpleCountersImpl(const bool keepMessagesOrder) {
             .EndAddConsumer());
 
     if (keepMessagesOrder) {
-        auto writeManyGroups = [&runtime](size_t messagesCount, size_t groupsCount) {
-            std::vector<TWriterSettings::TMessage> messages;
-            for (size_t i = 0; i < messagesCount; ++i) {
-                messages.push_back({
-                    .Index = i,
-                    .MessageBody = TStringBuilder() << "message_body_" << i,
-                    .MessageGroupId = TStringBuilder() << "message_group_id_" << (i % groupsCount),
-                });
-            }
-            CreateWriterActor(runtime, {
-                .DatabasePath = "/Root",
-                .TopicName = "/Root/topic1",
-                .Messages = std::move(messages),
-            });
-            auto response = GetWriteResponse(runtime);
-        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), messagesCount);
-        };
-
-        writeManyGroups(120, 75);
+        WriteManyGroups(setup, "/Root/topic1", 16, 120, 75);
     } else {
         WriteMany(setup, "/Root/topic1", 0, 16, 59);
         WriteMany(setup, "/Root/topic1", 1, 16, 61);

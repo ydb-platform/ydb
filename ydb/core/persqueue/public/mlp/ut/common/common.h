@@ -49,7 +49,7 @@ void AssertPurgeError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::Statu
 void AssertPurgeOK(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 
 void WriteMany(std::shared_ptr<TTopicSdkTestSetup> setup, const std::string& topic, ui32 partitionId, size_t messageSize, size_t messageCount);
-void WriteManyGroups(std::shared_ptr<TTopicSdkTestSetup> setup, const std::string& topic, ui32 partitionId, size_t messageSize, size_t messageCount, size_t groupsCount);
+void WriteManyGroups(const std::shared_ptr<TTopicSdkTestSetup>& setup, const std::string& topic, size_t messageSize, size_t messageCount, size_t groupCount);
 
 ui64 GetTabletId(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic, ui32 partitionId = 0);
 ui64 GetPQRBTabletId(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic);

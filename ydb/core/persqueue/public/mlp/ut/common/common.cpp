@@ -244,6 +244,28 @@ void WriteMany(std::shared_ptr<TTopicSdkTestSetup> setup, const std::string& top
     session->Close();
 }
 
+void WriteManyGroups(const std::shared_ptr<TTopicSdkTestSetup>& setup, const std::string& topic, size_t messageSize, size_t messageCount, size_t groupCount) {
+    std::vector<TWriterSettings::TMessage> messages;
+    messages.reserve(messageCount);
+    for (size_t i = 0; i < messageCount; ++i) {
+        messages.push_back({
+            .Index = i,
+            .MessageBody = NUnitTest::RandomString(messageSize),
+            .MessageGroupId = TStringBuilder() << "message_group_id_" << (i % groupCount),
+        });
+    }
+    auto& runtime = setup->GetRuntime();
+    TWriterSettings settings{
+        .DatabasePath = setup->GetDatabase(),
+        .TopicName = ToString(topic),
+        .Messages = std::move(messages),
+    };
+    CreateWriterActor(runtime, std::move(settings));
+    auto response = GetWriteResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), messageCount);
+}
+
 ui64 GetTabletId(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic, ui32 partitionId) {
     CreateDescriberActor(setup->GetRuntime(), database, topic);
     auto result = GetDescriberResponse(setup->GetRuntime());

@@ -8,7 +8,6 @@
 #include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -44,7 +43,6 @@ class TKqpVectorSearchActor : public NActors::TActorBootstrapped<TKqpVectorSearc
 
     enum class EPhase {
         WaitInput,    // waiting for the target vector
-        Resolve,      // resolving shard partitionings of the index/main tables
         Level,        // traversing the KMeans tree level table
         Posting,      // scanning posting table for candidate PKs (and, for a
                       // non-covered index, the pipelined main reads they feed)
@@ -52,9 +50,10 @@ class TKqpVectorSearchActor : public NActors::TActorBootstrapped<TKqpVectorSearc
     };
 
     // Each inner read of a phase is tagged with which table it scans. The posting
-    // and main reads of a non-covered search overlap (main reads are launched as
-    // posting shards finish), so a single EPhase no longer identifies a read's
-    // table -- the tag does. See HandleRead.
+    // and main reads of a non-covered search overlap (a main read is launched once
+    // enough candidate PKs have accumulated, while the posting read is still
+    // running), so a single EPhase no longer identifies a read's table -- the tag
+    // does. See HandleRead.
     enum class EReadKind {
         Level,
         Posting,
@@ -170,7 +169,6 @@ private:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvNewAsyncInputDataArrived, HandleRead);
                 hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
-                hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandleResolvePartitioning);
             }
         } catch (const yexception& e) {
             RuntimeError(e.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -280,127 +278,15 @@ private:
             << " levelTop=" << LevelTop << " topK=" << TopK << " hasPrefix=" << HasPrefix
             << " levelRoots=" << CurrentParents.size() << " directPosting=" << DirectPostingParents.size());
 
-        // Pre-resolve the shard partitioning of the level/posting/main tables once,
-        // concurrently. The maps are data-independent, so resolving them up front lets
-        // every per-phase read target shards directly (ShardIdHint) and skip its own
-        // scheme-cache resolve round-trip -- which otherwise sits serially on the
-        // critical path before each phase. Traversal begins once all maps arrive.
-        StartResolve();
+        BeginTraversal();
     }
 
     void BeginTraversal() {
-        TraversalStarted = true;
         if (CurrentParents.empty()) {
-            // All roots are direct posting partitions: skip level traversal. This
-            // may defer inside StartPosting if the posting resolve has not landed yet.
+            // All roots are direct posting partitions: skip level traversal.
             StartPosting();
         } else {
             StartLevelRound();
-        }
-    }
-
-    // ---- Partitioning pre-resolve -----------------------------------------
-
-    void StartResolve() {
-        Phase = EPhase::Resolve;
-        PendingResolves = 0;
-        LevelResolved = false;
-        PostingResolved = false;
-        // A covered index never reads (and never resolves) the main table.
-        MainResolved = PostingCovers;
-        const NScheme::TTypeInfo u64(NScheme::NTypeIds::Uint64);
-        // Level table key is (parent, id), both Uint64.
-        SendPartitioningResolve(Settings.GetLevelTable(), {u64, u64});
-        // Posting key is (__ydb_parent, <main PK columns>).
-        TVector<NScheme::TTypeInfo> postingKeyTypes;
-        postingKeyTypes.reserve(1 + MainKeyTypeInfos.size());
-        postingKeyTypes.push_back(u64);
-        postingKeyTypes.insert(postingKeyTypes.end(), MainKeyTypeInfos.begin(), MainKeyTypeInfos.end());
-        SendPartitioningResolve(Settings.GetPostingTable(), postingKeyTypes);
-        if (!PostingCovers) {
-            // Covered index ranks on the posting table and never reads the main table.
-            SendPartitioningResolve(Settings.GetMainTable(), MainKeyTypeInfos);
-        }
-    }
-
-    void SendPartitioningResolve(const NKikimrTxDataShard::TKqpTransaction::TTableMeta& table,
-        const TVector<NScheme::TTypeInfo>& keyTypes)
-    {
-        const auto& t = table.GetTableId();
-        TTableId tableId(t.GetOwnerId(), t.GetTableId(), table.GetSysViewInfo(), t.GetSchemaVersion());
-
-        TVector<TCell> minusInf(keyTypes.size());
-        TVector<TCell> plusInf;
-        TTableRange range(minusInf, true, plusInf, true, false);
-
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
-        request->DatabaseName = Settings.GetDatabase();
-        request->ResultSet.emplace_back(MakeHolder<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Read,
-            keyTypes, TVector<TKeyDesc::TColumnOp>{}));
-
-        ++PendingResolves;
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
-    }
-
-    static bool SameTable(const TTableId& id, const NKikimrTxDataShard::TKqpTransaction::TTableMeta& table) {
-        const auto& t = table.GetTableId();
-        return id.PathId.OwnerId == t.GetOwnerId() && id.PathId.LocalPathId == t.GetTableId();
-    }
-
-    void HandleResolvePartitioning(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        auto* request = ev->Get()->Request.Get();
-        // Attribute the response to its table and mark that table resolved. Each
-        // request carries exactly one key desc, whose TableId is echoed back even on
-        // error, so the response is attributable regardless of success. The
-        // partitioning is applied only on success; on any failure it stays null and
-        // the phase falls back to a normal resolving read, preserving correctness.
-        if (!request->ResultSet.empty()) {
-            const auto& entry = request->ResultSet[0];
-            const auto& id = entry.KeyDescription->TableId;
-            const bool ok = request->ErrorCount == 0;
-            if (SameTable(id, Settings.GetLevelTable())) {
-                if (ok) LevelPartitioning = entry.KeyDescription->Partitioning;
-                LevelResolved = true;
-            } else if (SameTable(id, Settings.GetPostingTable())) {
-                if (ok) PostingPartitioning = entry.KeyDescription->Partitioning;
-                PostingResolved = true;
-            } else if (SameTable(id, Settings.GetMainTable())) {
-                if (ok) MainPartitioning = entry.KeyDescription->Partitioning;
-                MainResolved = true;
-            }
-        }
-        if (--PendingResolves == 0) {
-            // Safety net: every response is in. Mark all tables resolved so no phase
-            // can hang even if a response could not be attributed to a table above.
-            LevelResolved = PostingResolved = MainResolved = true;
-        }
-        if (Failed) {
-            return;
-        }
-        DriveResolvedPhases();
-    }
-
-    // Start or resume each phase whose partitioning has just become available. Level
-    // traversal begins on the level resolve alone; the posting/main resolves unblock
-    // their phases only if execution already reached them -- which normally it has
-    // not, the multi-round level traversal having covered their latency.
-    void DriveResolvedPhases() {
-        if (LevelResolved && !TraversalStarted) {
-            BeginTraversal();
-        }
-        if (PostingResolved && PostingStartPending) {
-            PostingStartPending = false;
-            StartPosting();
-        }
-        // Deferred posting->main tail: a (prefixed all-direct-posting) posting scan
-        // finished while the main resolve was still in flight, so its candidate PKs
-        // are still buffered and no main read is running. Flush them now that main is
-        // resolved. In the common case posting is still running here and the normal
-        // HandleRead flush path handles it, so this only fires for that rare tail.
-        if (MainResolved && !PostingCovers && !PendingMainKeys.empty()
-            && Phase != EPhase::Done && CountActiveReads(EReadKind::Posting) == 0)
-        {
-            FlushPendingMainKeys();
         }
     }
 
@@ -526,13 +412,6 @@ private:
     }
 
     void StartPosting() {
-        if (!PostingResolved) {
-            // Reached posting before its background resolve landed. Only possible for
-            // a prefixed all-direct-posting search, which has no level traversal to
-            // cover the resolve; resume from DriveResolvedPhases once it arrives.
-            PostingStartPending = true;
-            return;
-        }
         // Candidate leaf clusters are now in CurrentParents. For a prefixed index,
         // also scan the prefix groups' direct posting partitions (roots that had no
         // level-table subtree), which bypassed level traversal. They are all read in
@@ -725,7 +604,7 @@ private:
             SetVectorTopK(src, /* column */ 2, LevelTop);
         }
 
-        LaunchPhaseReads(src, arena, LevelPartitioning, EReadKind::Level);
+        LaunchRead(src, arena, EReadKind::Level);
     }
 
     void StartPostingRead(TVector<TClusterId>& parents) {
@@ -773,7 +652,7 @@ private:
             }
         }
 
-        LaunchPhaseReads(src, arena, PostingPartitioning, EReadKind::Posting);
+        LaunchRead(src, arena, EReadKind::Posting);
     }
 
     // Launch a main-table read for one batch of candidate PKs. Non-covered searches
@@ -827,99 +706,28 @@ private:
         // datashard returns only the K nearest of the gathered candidate PKs.
         SetVectorTopK(src, Settings.GetVectorColumnIndex(), TopK);
 
-        LaunchPhaseReads(src, arena, MainPartitioning, EReadKind::Main);
+        LaunchRead(src, arena, EReadKind::Main);
     }
 
-    // Launch the reads for one phase. With a pre-resolved partitioning, each read is
-    // pinned to a single shard via ShardIdHint, so the inner read actor skips its own
-    // scheme-cache resolve (one less serial round-trip per phase). Without it (resolve
-    // failed), a single read is launched that resolves itself -- the legacy behaviour.
-    void LaunchPhaseReads(NKikimrTxDataShard::TKqpReadRangesSourceSettings* src,
+    // Launch one inner read for a phase over all its ranges. The standard read actor
+    // resolves the table's partitioning itself (a single scheme-cache round-trip that
+    // returns every partition of the range) and fans the ranges out across the shards
+    // internally, so the search actor does not pre-resolve or pin shards. The read's
+    // ranges/points must already be globally sorted, which the read actor requires to
+    // match them against partitions in lockstep (see AddParentRanges / LaunchMainReadFor).
+    void LaunchRead(NKikimrTxDataShard::TKqpReadRangesSourceSettings* src,
         TIntrusivePtr<NActors::TProtoArenaHolder>& arena,
-        const TPartitioning::TCPtr& partitioning,
         EReadKind kind)
     {
-        TVector<std::pair<NKikimrTxDataShard::TKqpReadRangesSourceSettings*, TIntrusivePtr<NActors::TProtoArenaHolder>>> reads;
-        if (partitioning && partitioning->Size() > 1) {
-            // Multi-shard table: fan out one read per shard, each pinned via ShardIdHint.
-            SplitByShards(src, partitioning, reads);
-        } else {
-            // Single-shard table: hint the shard directly to skip the resolve.
-            // No partitioning (resolve failed): leave the read to resolve itself.
-            if (partitioning) {
-                src->SetShardIdHint(partitioning->GetTablePartitioning()[0].ShardId);
-            }
-            reads.emplace_back(src, arena);
-        }
-
-        for (auto& [shardSrc, shardArena] : reads) {
-            auto [readActorInput, readActor] = CreateKqpReadActor(shardSrc, shardArena, this->SelfId(),
-                0, IngressStats.Level, TxId, TaskId, TypeEnv, HolderFactory, Alloc, TraceId, Counters);
-            ActiveReads.push_back({readActorInput, kind});
-            RegisterWithSameMailbox(readActor);
-        }
-        // Kick off the freshly launched reads: the first GetAsyncInputData poll starts
+        auto [readActorInput, readActor] = CreateKqpReadActor(src, arena, this->SelfId(),
+            0, IngressStats.Level, TxId, TaskId, TypeEnv, HolderFactory, Alloc, TraceId, Counters);
+        ActiveReads.push_back({readActorInput, kind});
+        RegisterWithSameMailbox(readActor);
+        // Kick off the freshly launched read: the first GetAsyncInputData poll starts
         // the inner read actor. Always called after (never during) the ActiveReads
-        // iteration loop, so re-entering HandleRead here is safe -- the new reads have
+        // iteration loop, so re-entering HandleRead here is safe -- the new read has
         // no data yet, so the nested call finds nothing finished and returns early.
         HandleRead(nullptr);
-    }
-
-    // Partition the phase read's ranges/points across shards by the pre-resolved map,
-    // cloning the read settings per shard with that shard's subset and a ShardIdHint.
-    void SplitByShards(const NKikimrTxDataShard::TKqpReadRangesSourceSettings* src,
-        const TPartitioning::TCPtr& partitioning,
-        TVector<std::pair<NKikimrTxDataShard::TKqpReadRangesSourceSettings*, TIntrusivePtr<NActors::TProtoArenaHolder>>>& out)
-    {
-        // Key types describe the read's own ranges; take them straight from the source
-        // settings (single source of truth) rather than tracking a parallel copy.
-        TVector<NScheme::TTypeInfo> keyTypes;
-        keyTypes.reserve(src->KeyColumnTypesSize());
-        for (size_t i = 0; i < src->KeyColumnTypesSize(); ++i) {
-            keyTypes.push_back(NScheme::TypeInfoFromProto(src->GetKeyColumnTypes(i), src->GetKeyColumnTypeInfos(i)));
-        }
-        const bool hasPoints = src->GetRanges().KeyPointsSize() > 0;
-
-        // shardId -> indices into the source's KeyRanges/KeyPoints list.
-        TMap<ui64, TVector<ui32>> byShard;
-        if (hasPoints) {
-            for (ui32 i = 0; i < src->GetRanges().KeyPointsSize(); ++i) {
-                TSerializedCellVec point(src->GetRanges().GetKeyPoints(i));
-                TTableRange r(point.GetCells(), true, point.GetCells(), true, /* point */ true);
-                for (const auto& it : partitioning->GetIntersectionWithRange(keyTypes, r)) {
-                    byShard[it.ShardId].push_back(i);
-                }
-            }
-        } else {
-            for (ui32 i = 0; i < src->GetRanges().KeyRangesSize(); ++i) {
-                TSerializedTableRange range(src->GetRanges().GetKeyRanges(i));
-                for (const auto& it : partitioning->GetIntersectionWithRange(keyTypes, range.ToTableRange())) {
-                    byShard[it.ShardId].push_back(i);
-                }
-            }
-        }
-
-        // Copy the source settings once without ranges; each shard read reuses this
-        // ranges-free template and appends only its own subset, so the (potentially
-        // large) range list isn't deep-copied once per shard.
-        NKikimrTxDataShard::TKqpReadRangesSourceSettings base;
-        base.CopyFrom(*src);
-        base.ClearRanges();
-        for (const auto& [shardId, indices] : byShard) {
-            auto shardArena = MakeIntrusive<NActors::TProtoArenaHolder>();
-            auto* shardSrc = shardArena->Allocate<NKikimrTxDataShard::TKqpReadRangesSourceSettings>();
-            shardSrc->CopyFrom(base);
-            shardSrc->SetShardIdHint(shardId);
-            auto* ranges = shardSrc->MutableRanges();
-            for (ui32 i : indices) {
-                if (hasPoints) {
-                    ranges->AddKeyPoints(src->GetRanges().GetKeyPoints(i));
-                } else {
-                    *ranges->AddKeyRanges() = src->GetRanges().GetKeyRanges(i);
-                }
-            }
-            out.emplace_back(shardSrc, shardArena);
-        }
     }
 
     // The inner read actors are not async inputs of the compute actor, so the
@@ -966,11 +774,12 @@ private:
     // Drain every active inner read, collecting their rows by table kind. Inner reads
     // notify via TEvNewAsyncInputDataArrived (all with the same input index), so each
     // wake-up polls all of them. Level rounds are barriered (the next round needs all
-    // children ranked). Posting and main reads of a non-covered search overlap: as
-    // each posting shard finishes, the PKs it produced are dispatched to a main read
-    // (LaunchMainReadFor) while the remaining posting shards are still reading, so
-    // cross-node latency is hidden instead of serialized behind a posting->main
-    // barrier. The search finishes once no posting and no main reads remain.
+    // children ranked). Posting and main reads of a non-covered search overlap: as the
+    // posting read streams rows in, once enough candidate PKs have buffered they are
+    // dispatched to a main read (LaunchMainReadFor) while the posting read keeps
+    // running, so cross-node latency is hidden instead of serialized behind a
+    // posting->main barrier. The search finishes once no posting and no main reads
+    // remain.
     void HandleRead(TEvNewAsyncInputDataArrived::TPtr) {
         if (ActiveReads.empty()) {
             return;
@@ -1017,21 +826,17 @@ private:
             return;
         }
         // Pipeline posting -> main, mirroring the legacy StreamLookup chain: dispatch
-        // the buffered PKs to a main read that overlaps the still-running posting reads
+        // the buffered PKs to a main read that overlaps the still-running posting read
         // as soon as we have a full batch (MainReadFlushThreshold), instead of waiting
-        // for the whole posting shard to drain. A posting shard finishing also flushes
-        // (its below-threshold tail must not be left stranded); the last one carries the
-        // final PKs. Covered searches build candidates straight from the posting rows
-        // and never read the main table.
+        // for the whole posting scan to drain. The posting read finishing also flushes
+        // (its below-threshold tail must not be left stranded), carrying the final PKs.
+        // Covered searches build candidates straight from the posting rows and never
+        // read the main table.
         bool postingFinished = false;
         for (const auto& ar : finishedReads) {
             postingFinished |= (ar.Kind == EReadKind::Posting);
         }
-        // Only flush once the main resolve has landed (MainResolved). It is fired
-        // alongside the posting resolve and the multi-round level traversal normally
-        // covers its latency, so this gate almost never defers; when it does, the
-        // buffered PKs are flushed from DriveResolvedPhases on the main resolve.
-        if (!PostingCovers && MainResolved && !PendingMainKeys.empty()
+        if (!PostingCovers && !PendingMainKeys.empty()
             && (postingFinished || PendingMainKeys.size() >= MainReadFlushThreshold))
         {
             FlushPendingMainKeys();
@@ -1051,12 +856,6 @@ private:
         // remains. Covered -> candidates are already built; non-covered -> candidates
         // came from the main reads (or there were none -> empty result).
         if (CountActiveReads(EReadKind::Posting) == 0 && CountActiveReads(EReadKind::Main) == 0) {
-            if (!PostingCovers && !MainResolved && !PendingMainKeys.empty()) {
-                // Posting finished but the main resolve has not landed yet; the
-                // buffered candidate PKs will be flushed to a main read once it does
-                // (DriveResolvedPhases). Don't finalize with an incomplete result.
-                return;
-            }
             CA_LOG_D("Posting/main done: candidateRows=" << Candidates.size() << " topK=" << TopK);
             FinalizeResults();
         }
@@ -1348,32 +1147,9 @@ private:
     NKikimr::NMiniKQL::TUnboxedValueDeque ResultRows;
 
     // Active inner read actors, each tagged with the table it scans. Level rounds are
-    // barriered; posting and (non-covered) main reads coexist (pipelined).
+    // barriered; posting and (non-covered) main reads coexist (pipelined). Each read
+    // resolves its own table partitioning and fans out across shards internally.
     TVector<TActiveRead> ActiveReads;
-
-    // Pre-resolved shard partitionings of the index/main tables, used to pin each
-    // per-phase read to its shards via ShardIdHint and skip per-read resolves. A null
-    // map (resolve failed) falls back to a normal resolving read for that table.
-    TPartitioning::TCPtr LevelPartitioning;
-    TPartitioning::TCPtr PostingPartitioning;
-    TPartitioning::TCPtr MainPartitioning;
-    ui32 PendingResolves = 0;
-    // Per-table resolve readiness. Instead of one barrier waiting for all three
-    // resolves before the first read, each phase starts as soon as its own
-    // partitioning lands: level traversal on the level resolve alone, while the
-    // posting/main resolves finish in the background (their latency hidden behind
-    // the multi-round level traversal) and gate only their own later phases. See
-    // HandleResolvePartitioning / DriveResolvedPhases.
-    bool LevelResolved = false;
-    bool PostingResolved = false;
-    bool MainResolved = false;
-    // BeginTraversal has run (guards the level resolve from starting it twice via
-    // both the direct arrival and the all-responses-in safety net).
-    bool TraversalStarted = false;
-    // StartPosting was reached before the posting resolve landed and is waiting to
-    // resume once it does (only possible for a prefixed all-direct-posting search,
-    // which has no level traversal to cover the resolve).
-    bool PostingStartPending = false;
 
     TVector<NKikimrDataEvents::TLock> Locks;
 

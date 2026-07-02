@@ -52,7 +52,7 @@ To diagnose system clock drift on {{ ydb-short-name }} servers, use the followin
 
     {% note info %}
 
-    For more information, see [{#T}](../../../reference/ydb-sdk/health-check-api.md)
+    For more information, see [Health Check API](../../../reference/ydb-sdk/health-check-api.md)
 
     {% endnote %}
 

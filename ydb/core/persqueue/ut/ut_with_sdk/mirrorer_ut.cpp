@@ -1,7 +1,7 @@
 #include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/persqueue/ut/common/sdk_ut_common.h>
 
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/ut/ut_common.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/data_plane_helpers.h>
@@ -388,12 +388,10 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
 
             auto batch = NKafka::ReadKafkaRecordBatch(message.GetData());
             UNIT_ASSERT_VALUES_EQUAL(batch.Records.size(), messageCount);
+            NKafka::NTest::AssertKafkaBatchPayload(message.GetData(), messageCount, fill, dataSize);
             for (ui32 recordIndex = 0; recordIndex < messageCount; ++recordIndex) {
                 UNIT_ASSERT_VALUES_EQUAL(batch.Records[recordIndex].OffsetDelta, recordIndex);
                 UNIT_ASSERT_VALUES_EQUAL(NKafka::GetRecordSeqNo(batch, recordIndex, batch.Records[recordIndex]), firstSeqNo + recordIndex);
-                UNIT_ASSERT(batch.Records[recordIndex].Value);
-                const auto& value = *batch.Records[recordIndex].Value;
-                UNIT_ASSERT_VALUES_EQUAL(TString(value.data(), value.size()), TString(dataSize, fill));
             }
 
             expectedOffset += messageCount;

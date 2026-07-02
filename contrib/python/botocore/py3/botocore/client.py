@@ -14,7 +14,7 @@ import logging
 
 from botocore import waiter, xform_name
 from botocore.args import ClientArgsCreator
-from botocore.auth import AUTH_TYPE_MAPS
+from botocore.auth import AUTH_TYPE_MAPS, resolve_auth_type
 from botocore.awsrequest import prepare_request_dict
 from botocore.compress import maybe_compress_request
 from botocore.config import Config
@@ -148,15 +148,19 @@ class ClientCreator:
         region_name, client_config = self._normalize_fips_region(
             region_name, client_config
         )
+        if auth := service_model.metadata.get('auth'):
+            service_signature_version = resolve_auth_type(auth)
+        else:
+            service_signature_version = service_model.metadata.get(
+                'signatureVersion'
+            )
         endpoint_bridge = ClientEndpointBridge(
             self._endpoint_resolver,
             scoped_config,
             client_config,
             service_signing_name=service_model.metadata.get('signingName'),
             config_store=self._config_store,
-            service_signature_version=service_model.metadata.get(
-                'signatureVersion'
-            ),
+            service_signature_version=service_signature_version,
         )
         client_args = self._get_client_args(
             service_model,
@@ -199,7 +203,7 @@ class ClientCreator:
         bases = [BaseClient]
         service_id = service_model.service_id.hyphenize()
         self._event_emitter.emit(
-            'creating-client-class.%s' % service_id,
+            f'creating-client-class.{service_id}',
             class_attributes=class_attributes,
             base_classes=bases,
         )
@@ -223,10 +227,10 @@ class ClientCreator:
                 else:
                     client_config = config_use_fips_endpoint
                 logger.warning(
-                    'transforming region from %s to %s and setting '
+                    f'transforming region from {region_name} to '
+                    f'{normalized_region_name} and setting '
                     'use_fips_endpoint to true. client should not '
                     'be configured with a fips psuedo region.'
-                    % (region_name, normalized_region_name)
                 )
                 region_name = normalized_region_name
         return region_name, client_config
@@ -289,7 +293,7 @@ class ClientCreator:
         handler = self._retry_handler_factory.create_retry_handler(
             retry_config, endpoint_prefix
         )
-        unique_id = 'retry-config-%s' % service_event_name
+        unique_id = f'retry-config-{service_event_name}'
         client.meta.events.register(
             f"needs-retry.{service_event_name}", handler, unique_id=unique_id
         )
@@ -487,7 +491,7 @@ class ClientCreator:
             return
 
         if signature_version.startswith('v4-s3express'):
-            return f'{signature_version}'
+            return signature_version
 
         for suffix in ['-query', '-presign-post']:
             if signature_version.endswith(suffix):
@@ -573,7 +577,7 @@ class ClientCreator:
             method_name=operation_name,
             event_emitter=self._event_emitter,
             method_description=operation_model.documentation,
-            example_prefix='response = client.%s' % py_operation_name,
+            example_prefix=f'response = client.{py_operation_name}',
             include_signature=False,
         )
         _api_call.__doc__ = docstring
@@ -953,8 +957,10 @@ class BaseClient:
             'client_region': self.meta.region_name,
             'client_config': self.meta.config,
             'has_streaming_input': operation_model.has_streaming_input,
-            'auth_type': operation_model.auth_type,
+            'auth_type': operation_model.resolved_auth_type,
+            'unsigned_payload': operation_model.unsigned_payload,
         }
+
         api_params = self._emit_api_params(
             api_params=api_params,
             operation_model=operation_model,
@@ -982,9 +988,7 @@ class BaseClient:
 
         service_id = self._service_model.service_id.hyphenize()
         handler, event_response = self.meta.events.emit_until_response(
-            'before-call.{service_id}.{operation_name}'.format(
-                service_id=service_id, operation_name=operation_name
-            ),
+            f'before-call.{service_id}.{operation_name}',
             model=operation_model,
             params=request_dict,
             request_signer=self._request_signer,
@@ -1003,9 +1007,7 @@ class BaseClient:
             )
 
         self.meta.events.emit(
-            'after-call.{service_id}.{operation_name}'.format(
-                service_id=service_id, operation_name=operation_name
-            ),
+            f'after-call.{service_id}.{operation_name}',
             http_response=http,
             parsed=parsed_response,
             model=operation_model,
@@ -1027,10 +1029,7 @@ class BaseClient:
             return self._endpoint.make_request(operation_model, request_dict)
         except Exception as e:
             self.meta.events.emit(
-                'after-call-error.{service_id}.{operation_name}'.format(
-                    service_id=self._service_model.service_id.hyphenize(),
-                    operation_name=operation_model.name,
-                ),
+                f'after-call-error.{self._service_model.service_id.hyphenize()}.{operation_model.name}',
                 exception=e,
                 context=request_context,
             )
@@ -1259,13 +1258,13 @@ class BaseClient:
         """
         config = self._get_waiter_config()
         if not config:
-            raise ValueError("Waiter does not exist: %s" % waiter_name)
+            raise ValueError(f"Waiter does not exist: {waiter_name}")
         model = waiter.WaiterModel(config)
         mapping = {}
         for name in model.waiter_names:
             mapping[xform_name(name)] = name
         if waiter_name not in mapping:
-            raise ValueError("Waiter does not exist: %s" % waiter_name)
+            raise ValueError(f"Waiter does not exist: {waiter_name}")
 
         return waiter.create_waiter_with_client(
             mapping[waiter_name], model, self

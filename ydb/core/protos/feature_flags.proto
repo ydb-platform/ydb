@@ -137,7 +137,7 @@ message TFeatureFlags {
     reserved 111; // UseVDisksBalancing
     optional bool EnableViews = 112 [default = true];
     optional bool EnableServerlessExclusiveDynamicNodes = 113 [default = false];
-    optional bool EnableAccessServiceBulkAuthorization = 114 [default = false];
+    optional bool EnableAccessServiceBulkAuthorization = 114 [default = true];
     optional bool EnableAddColumsWithDefaults = 115 [default = true];
     optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = true];
     optional bool EnableCMSRequestPriorities = 117 [default = true];
@@ -218,7 +218,7 @@ message TFeatureFlags {
     optional bool EnableRealSystemViewPaths = 191 [default = true];
     optional bool EnableCSSchemasCollapsing = 192 [default = false];
     optional bool EnableMoveColumnTable = 193 [default = true];
-    optional bool EnableArrowResultSetFormat = 194 [default = true];
+    optional bool EnableArrowResultSetFormat = 194 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableCsOverloadsSubscriptionRetries = 195 [default = true];
     optional bool EnableTopicCompactificationByKey = 196 [default = true];
     optional bool EnableCompactionOverloadDetection = 197 [default = true];
@@ -239,7 +239,7 @@ message TFeatureFlags {
     optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
     optional bool EnableOlapRejectProbability = 213 [default = true];
     optional bool EnablePDiskLogForSmallDisks = 214 [default = false];
-    optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = true];
+    optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableColumnTablesBackup = 216 [default = true];
     optional bool EnableReplication = 217 [default = true];
     optional bool EnableShuttingDownNodeState = 218 [default = true];
@@ -258,7 +258,7 @@ message TFeatureFlags {
     optional bool EnableForcedCompactions = 231 [default = true];
     optional bool EnableLocalBloomFilterIndex = 232 [default = true];
     optional bool EnableLocalBloomNgramFilterIndex = 233 [default = true];
-    optional bool EnableSetDropDefaultValue = 234 [default = true];
+    optional bool EnableSetDropDefaultValue = 234 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
     optional bool EnableBlobIdInSectorChecksum = 236 [default = false];
     optional bool TransferInternalDataDecompression = 237 [default = false];
@@ -322,6 +322,10 @@ message TFeatureFlags {
     optional bool EnableCompactFulltextIndex = 280 [default = false];
     optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
     optional bool EnableFulltextIndexPrefix = 282 [default = false];
-    optional bool EnableAccessServiceV2Interface = 283 [default = false, (RequireRestart) = true];
+    optional bool EnableAccessServiceV2Interface = 283 [default = true, (RequireRestart) = true];
     optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
+    optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
+    optional bool EnableTopicDeferredPublish = 286 [default = false];
+    optional bool EnableConfiguredBootstrapper = 287 [default = false, (RequireRestart) = true];
+    optional bool EnableSmallBlobsQuotaEnforcement = 288 [default = false];
 }

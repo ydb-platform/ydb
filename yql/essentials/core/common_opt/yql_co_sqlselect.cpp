@@ -1884,7 +1884,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(
                 current = BuildUsingMap(
                     pos,
                     std::move(current),
-                    std::move(secondStruct),
+                    secondStruct,
                     std::move(toRemove),
                     ctx);
 
@@ -1914,7 +1914,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(
                     return std::make_tuple(name, lhs, rhs);
                 }, ctx);
 
-                return BuildUsingMap(pos, std::move(source), std::move(secondStruct), /*toRemove=*/{}, ctx);
+                return BuildUsingMap(pos, std::move(source), secondStruct, /*toRemove=*/{}, ctx);
             };
 
             auto predicate = join->Child(1)->TailPtr();
@@ -4180,7 +4180,7 @@ TExprNode::TPtr ExpandSqlSelectImpl(
     TMaybe<TColumnOrderInfo> columnOrder;
     if (auto order = optCtx.Types->LookupColumnOrder(*originalNode)) {
         columnOrder.ConstructInPlace();
-        columnOrder->Node = std::move(*order);
+        columnOrder->Node = *order;
         columnOrder->Target = columnOrder->Node;
 
         for (const auto& [x, gen_x] : columnOrder->Node) {
@@ -4479,7 +4479,7 @@ TExprNode::TPtr ExpandSqlSelectImpl(
                     TExprNode::TPtr expr = setItemNodes[inputIndex];
                     if (!isYql && columnOrder) {
                         expr = NormalizeColumnOrder(
-                            std::move(expr),
+                            expr,
                             columnOrder->BySetItems[inputIndex],
                             columnOrder->Target,
                             ctx);

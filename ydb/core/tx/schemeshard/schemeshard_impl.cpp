@@ -2647,7 +2647,8 @@ void TSchemeShard::PersistSubDomainState(NIceDb::TNiceDb& db, const TPathId& pat
 
     db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::SubDomains::StateVersion>(subDomain.GetDomainStateVersion()),
-            NIceDb::TUpdate<Schema::SubDomains::DiskQuotaExceeded>(subDomain.GetDiskQuotaExceeded()));
+            NIceDb::TUpdate<Schema::SubDomains::DiskQuotaExceeded>(subDomain.GetDiskQuotaExceeded()),
+            NIceDb::TUpdate<Schema::SubDomains::SmallBlobsQuotaExceeded>(subDomain.GetSmallBlobsQuotaExceeded()));
 }
 
 void TSchemeShard::PersistSubDomainSchemeQuotas(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain) {
@@ -5931,6 +5932,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         //namespace NIndexBuilder {
         HFuncTraced(TEvSetColumnConstraint::TEvCreateRequest, Handle);
+        HFuncTraced(TEvSetColumnConstraint::TEvGetRequest, Handle);
         HFuncTraced(TEvDataShard::TEvValidateRowConditionResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvCreateRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvGetRequest, Handle);
@@ -8777,13 +8779,18 @@ void TSchemeShard::ConfigureForcedCompactionQueue(
     ForcedCompactionPersistBatchSize = config.GetPersistBatchSize();
     ForcedCompactionPersistBatchMaxTime = TDuration::MilliSeconds(config.GetPersistBatchMaxTimeMs());
 
+    ForcedCompactionStoredOperationsLimit = config.GetStoredOperationsLimit();
+    ForcedCompactionAutoForgetOperations = config.GetAutoForgetOperations();
+
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "ForcedCompactionQueue configured: Timeout# " << compactionConfig.Timeout
                  << ", Rate# " << ForcedCompactionQueue->GetRate()
                  << ", WakeupInterval# " << compactionConfig.WakeupInterval
                  << ", InflightLimit# " << compactionConfig.InflightLimit
                  << ", ForcedCompactionPersistBatchSize# " << ForcedCompactionPersistBatchSize
-                 << ", ForcedCompactionPersistBatchMaxTime# " << ForcedCompactionPersistBatchMaxTime);
+                 << ", ForcedCompactionPersistBatchMaxTime# " << ForcedCompactionPersistBatchMaxTime
+                 << ", ForcedCompactionStoredOperationsLimit# " << ForcedCompactionStoredOperationsLimit
+                 << ", ForcedCompactionAutoForgetOperations# " << ForcedCompactionAutoForgetOperations);
 }
 
 void TSchemeShard::ConfigureBackgroundCleaningQueue(
@@ -8992,8 +8999,8 @@ void TSchemeShard::ChangeDiskSpaceTopicsTotalBytes(ui64 value) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_TOPICS_TOTAL_BYTES].Set(value);
 }
 
-void TSchemeShard::ChangeDiskSpaceQuotaExceeded(i64 delta) {
-    TabletCounters->Simple()[COUNTER_DISK_SPACE_QUOTA_EXCEEDED].Add(delta);
+void TSchemeShard::ChangeSimpleCounter(ESimpleCounters counter, i64 delta) {
+    TabletCounters->Simple()[counter].Add(delta);
 }
 
 void TSchemeShard::ChangeDiskSpaceHardQuotaBytes(i64 delta) {
@@ -9010,6 +9017,30 @@ void TSchemeShard::AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType
     } else if (storageType == EUserFacingStorageType::Hdd) {
         TabletCounters->Simple()[COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES_ON_HDD].Add(addend);
     }
+}
+
+void TSchemeShard::ChangeSmallBlobsVolumeBytes(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_VOLUME_BYTES].Add(delta);
+}
+
+void TSchemeShard::ChangeSmallBlobsCount(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_COUNT].Add(delta);
+}
+
+void TSchemeShard::ChangeSmallBlobsVolumeHardQuotaBytes(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_VOLUME_HARD_QUOTA_BYTES].Add(delta);
+}
+
+void TSchemeShard::ChangeSmallBlobsVolumeSoftQuotaBytes(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_VOLUME_SOFT_QUOTA_BYTES].Add(delta);
+}
+
+void TSchemeShard::ChangeSmallBlobsCountHardQuota(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_COUNT_HARD_QUOTA].Add(delta);
+}
+
+void TSchemeShard::ChangeSmallBlobsCountSoftQuota(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_COUNT_SOFT_QUOTA].Add(delta);
 }
 
 void TSchemeShard::ChangePathCount(i64 delta) {

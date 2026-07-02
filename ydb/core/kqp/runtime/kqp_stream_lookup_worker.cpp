@@ -18,7 +18,20 @@ namespace NKikimr {
 namespace NKqp {
 
 constexpr ui64 SEQNO_SPACE = 40;
-constexpr ui64 MaxTaskId = (1ULL << (64 - SEQNO_SPACE));
+
+// Upper bound on the DQ task id whose rowSeqNo (taskId << SEQNO_SPACE) round-trips
+// losslessly through the cookie of the given format version. The cookie reserves
+// some low bits for flags, so taskId + counter must fit in 64 - reservedBits bits.
+//
+// v0 keeps the historical (intentionally too permissive) 2^24 bound so that with
+// the new-format feature flag disabled behavior is byte-identical to before; that
+// path still overflows for taskId >= 16, exactly as it does on current main.
+ui64 MaxTaskIdForCookieVersion(ui32 version) {
+    const ui64 reservedBits = (version == StreamLookupJoinCookieVersionLegacy)
+        ? 0
+        : StreamLookupJoinCookieV1ReservedBits;
+    return 1ULL << (64 - SEQNO_SPACE - reservedBits);
+}
 
 TStreamLookupShardReadResult::TStreamLookupShardReadResult(const ui64 shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>> readResult, NMiniKQL::TAllocState* alloc)
     : ShardId(shardId)
@@ -606,7 +619,7 @@ public:
         , InputRowSeqNo(taskId << SEQNO_SPACE)
         , InputRowSeqNoLast((taskId + 1) << SEQNO_SPACE)
     {
-        YQL_ENSURE(taskId < MaxTaskId);
+        YQL_ENSURE(taskId < MaxTaskIdForCookieVersion(Settings.CookieFormatVersion));
         // read columns should contain join key and result columns
         for (const auto& joinKey : Settings.InputColumns) {
             ReadColumns.emplace(joinKey.Name, joinKey);
@@ -646,7 +659,7 @@ public:
         bool lastRow = true;
         if (IsInputTriplet()) {
             auto value = inputRow.GetElement(2).Get<ui64>();
-            auto cookie = TStreamLookupJoinRowCookie::Decode(value);
+            auto cookie = TStreamLookupJoinRowCookie::Decode(value, Settings.CookieFormatVersion);
             rowSeqNo = cookie.RowSeqNo;
             firstRow = cookie.FirstRow;
             lastRow = cookie.LastRow;
@@ -671,7 +684,7 @@ public:
         ui64 joinKeyId = JoinKeySeqNo++;
         TOwnedCellVec cellVec(std::move(joinKeyCells));
         auto [resIt, _] = ResultRowsBySeqNo.emplace(
-            rowSeqNo, MakeIntrusive<TResultBatch>(KeepRowsOrder() ? nullptr : &FlushedResultRows, HolderFactory, rowSeqNo, std::move(row)));
+            rowSeqNo, MakeIntrusive<TResultBatch>(KeepRowsOrder() ? nullptr : &FlushedResultRows, HolderFactory, rowSeqNo, std::move(row), Settings.CookieFormatVersion));
         auto resultBatch = resIt->second;
         resultBatch->AcceptLeftRow(firstRow, lastRow);
         if (!IsKeyAllowed(cellVec)) {
@@ -1068,10 +1081,11 @@ private:
             TReadResultStats Stats;
         };
 
-        explicit TResultBatch(std::deque<TResultRow>* result, const NMiniKQL::THolderFactory& holderFactory, ui64 seqNo, TSizedUnboxedValue&& leftRow)
+        explicit TResultBatch(std::deque<TResultRow>* result, const NMiniKQL::THolderFactory& holderFactory, ui64 seqNo, TSizedUnboxedValue&& leftRow, ui32 cookieFormatVersion)
             : Result(result)
             , HolderFactory(holderFactory)
             , RowSeqNo(seqNo)
+            , CookieFormatVersion(cookieFormatVersion)
             , LeftRow(std::move(leftRow))
         {
         }
@@ -1085,6 +1099,7 @@ private:
         bool FirstRow = false;
         bool LastRow = false;
         ui64 RowSeqNo = 0;
+        ui32 CookieFormatVersion = 0;
 
         TSizedUnboxedValue LeftRow;
         TSizedUnboxedValue RightRow;
@@ -1134,7 +1149,7 @@ private:
                 resultRowItems[0] = LeftRow.Data;
                 resultRowItems[1] = std::move(RightRow.Data);
                 auto rowCookie = TStreamLookupJoinRowCookie{.RowSeqNo=RowSeqNo, .LastRow=ProcessedAllJoinKeys(), .FirstRow=FirstRowInBatch()};
-                resultRowItems[2] = NUdf::TUnboxedValuePod(rowCookie.Encode());
+                resultRowItems[2] = NUdf::TUnboxedValuePod(rowCookie.Encode(CookieFormatVersion));
 
                 rowStats.ReadRowsCount += (hasValue ? 1 : 0);
                 rowStats.ReadBytesCount += RightRow.StorageBytes;
@@ -1339,6 +1354,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
 
     preparedSettings.AllowNullKeysPrefixSize = settings.HasAllowNullKeysPrefixSize() ? settings.GetAllowNullKeysPrefixSize() : 0;
     preparedSettings.KeepRowsOrder = settings.HasKeepRowsOrder() && settings.GetKeepRowsOrder();
+    preparedSettings.CookieFormatVersion = settings.GetCookieFormatVersion();
     preparedSettings.LookupStrategy = settings.GetLookupStrategy();
 
     preparedSettings.KeyColumns.reserve(settings.GetKeyColumns().size());

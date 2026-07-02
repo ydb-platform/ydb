@@ -1,7 +1,10 @@
 LIBRARY()
 
 SRCS(
+    kqp_run_script_actor_impl.cpp
     kqp_run_script_actor.cpp
+    kqp_script_lease_watcher_actor.cpp
+    kqp_script_result_handler.cpp
 )
 
 PEERDIR(

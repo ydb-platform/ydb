@@ -202,6 +202,7 @@ enum class EErrorKind
     ErrorSession,
 };
 
+bool IsCancelledError(const NProto::TError& e);
 bool IsConnectionError(const NProto::TError& e);
 EErrorKind GetErrorKind(const NProto::TError& e);
 

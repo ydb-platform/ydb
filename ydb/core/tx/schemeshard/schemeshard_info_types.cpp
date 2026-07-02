@@ -29,14 +29,9 @@ using namespace NKikimr::NSchemeShard;
 using TDiskSpaceQuotas = TSubDomainInfo::TDiskSpaceQuotas;
 using TQuotasPair = TDiskSpaceQuotas::TQuotasPair;
 using TStoragePoolUsage = TSubDomainInfo::TDiskSpaceUsage::TStoragePoolUsage;
+using TSmallBlobsQuotas = TSubDomainInfo::TSmallBlobsQuotas;
 
-enum class EDiskUsageStatus {
-    AboveHardQuota,
-    InBetween,
-    BelowSoftQuota,
-};
-
-EDiskUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsage>& storagePoolsUsage,
+EQuotaUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsage>& storagePoolsUsage,
                                          const THashMap<TString, TQuotasPair>& storagePoolsQuotas
 ) {
     bool softQuotaExceeded = false;
@@ -45,7 +40,7 @@ EDiskUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsa
             const auto totalSize = usage.DataSize + usage.IndexSize;
             // If a quota is equal to zero, then it sets no limit on the disk space usage.
             if (quota->HardQuota && totalSize > quota->HardQuota) {
-                return EDiskUsageStatus::AboveHardQuota;
+                return EQuotaUsageStatus::AboveHardQuota;
             }
             if (quota->SoftQuota && totalSize >= quota->SoftQuota) {
                 softQuotaExceeded = true;
@@ -53,8 +48,8 @@ EDiskUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsa
         }
     }
     return softQuotaExceeded
-            ? EDiskUsageStatus::InBetween
-            : EDiskUsageStatus::BelowSoftQuota;
+            ? EQuotaUsageStatus::InBetween
+            : EQuotaUsageStatus::BelowSoftQuota;
 }
 
 /*
@@ -146,26 +141,68 @@ TDiskSpaceQuotas TSubDomainInfo::GetDiskSpaceQuotas() const {
     return TDiskSpaceQuotas{hardQuota, softQuota, std::move(storagePoolsQuotas)};
 }
 
+void TSubDomainInfo::RecomputeSmallBlobsStorageUnits() {
+    SmallBlobsStorageUnits = 0;
+    if (!DatabaseQuotas) {
+        return;
+    }
+
+    // Columnshards report only the total small-blobs usage, not a per-pool split, so we
+    // collapse the quota into a single budget to compare that total against
+    ui64 diskHardQuotaBytes = 0;
+    if (!AppData()->FeatureFlags.GetEnableSeparateDiskSpaceQuotas()) {
+        diskHardQuotaBytes = DatabaseQuotas->data_size_hard_quota();
+    } else {
+        for (const auto& storageQuota : DatabaseQuotas->storage_quotas()) {
+            diskHardQuotaBytes += storageQuota.data_size_hard_quota();
+        }
+    }
+
+    constexpr ui64 TenTiB = 10ull << 40;
+    SmallBlobsStorageUnits = static_cast<double>(diskHardQuotaBytes) / TenTiB;
+}
+
+TSmallBlobsQuotas TSubDomainInfo::GetSmallBlobsQuotas() const {
+    if (!DatabaseQuotas || SmallBlobsStorageUnits <= 0.0) {
+        return {};
+    }
+
+    const auto& config = AppData()->SmallBlobsQuotaConfig;
+
+    const double softRatio = std::clamp(config.GetSoftRatio(), 0.0, 0.999);
+
+    TSmallBlobsQuotas quotas;
+    quotas.VolumeHardQuota = static_cast<ui64>(SmallBlobsStorageUnits * config.GetVolumeBytesPer10TiB());
+    quotas.CountHardQuota = static_cast<ui64>(SmallBlobsStorageUnits * config.GetCountPer10TiB());
+    quotas.VolumeSoftQuota = static_cast<ui64>(quotas.VolumeHardQuota * softRatio);
+    quotas.CountSoftQuota = static_cast<ui64>(quotas.CountHardQuota * softRatio);
+    return quotas;
+}
+
+bool TSubDomainInfo::ApplyQuotaExceededStatus(EQuotaUsageStatus status, bool& exceeded, ESimpleCounters counter, IQuotaCounters* counters) {
+    if (status == EQuotaUsageStatus::AboveHardQuota && !exceeded) {
+        counters->ChangeSimpleCounter(counter, +1);
+        exceeded = true;
+        ++DomainStateVersion;
+        return true;
+    }
+    if (status == EQuotaUsageStatus::BelowSoftQuota && exceeded) {
+        counters->ChangeSimpleCounter(counter, -1);
+        exceeded = false;
+        ++DomainStateVersion;
+        return true;
+    }
+    return false;
+}
+
 bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
-    const auto changeSubdomainState = [&](EDiskUsageStatus diskUsage) {
-        if (diskUsage == EDiskUsageStatus::AboveHardQuota && !DiskQuotaExceeded) {
-            counters->ChangeDiskSpaceQuotaExceeded(+1);
-            DiskQuotaExceeded = true;
-            ++DomainStateVersion;
-            return true;
-        }
-        if (diskUsage == EDiskUsageStatus::BelowSoftQuota && DiskQuotaExceeded) {
-            counters->ChangeDiskSpaceQuotaExceeded(-1);
-            DiskQuotaExceeded = false;
-            ++DomainStateVersion;
-            return true;
-        }
-        return false;
+    const auto changeSubdomainState = [&](EQuotaUsageStatus diskUsage) {
+        return ApplyQuotaExceededStatus(diskUsage, DiskQuotaExceeded, COUNTER_DISK_SPACE_QUOTA_EXCEEDED, counters);
     };
 
     auto quotas = GetDiskSpaceQuotas();
     if (!quotas) {
-        return changeSubdomainState(EDiskUsageStatus::BelowSoftQuota);
+        return changeSubdomainState(EQuotaUsageStatus::BelowSoftQuota);
     }
 
     if (!AppData()->FeatureFlags.GetEnableSeparateDiskSpaceQuotas()) {
@@ -178,10 +215,10 @@ bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
         const bool isTotalUsageBelowSoftQuota = !quotas.SoftQuota || totalUsage < quotas.SoftQuota;
 
         if (isHardQuotaExceeded) {
-            return changeSubdomainState(EDiskUsageStatus::AboveHardQuota);
+            return changeSubdomainState(EQuotaUsageStatus::AboveHardQuota);
         }
         if (isTotalUsageBelowSoftQuota) {
-            return changeSubdomainState(EDiskUsageStatus::BelowSoftQuota);
+            return changeSubdomainState(EQuotaUsageStatus::BelowSoftQuota);
         }
     } else {
         // If the feature flag is turned on, then the overall quota is ignored:
@@ -189,20 +226,73 @@ bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
         const auto storagePoolsUsageStatus = CheckStoragePoolsQuotas(DiskSpaceUsage.StoragePoolsUsage, quotas.StoragePoolsQuotas);
 
         const bool isSomeStoragePoolHardQuotaExceeded = !quotas.StoragePoolsQuotas.empty()
-                                                            && storagePoolsUsageStatus == EDiskUsageStatus::AboveHardQuota;
+                                                            && storagePoolsUsageStatus == EQuotaUsageStatus::AboveHardQuota;
         const bool isEachStoragePoolUsageBelowSoftQuota = quotas.StoragePoolsQuotas.empty()
-                                                            || storagePoolsUsageStatus == EDiskUsageStatus::BelowSoftQuota;
+                                                            || storagePoolsUsageStatus == EQuotaUsageStatus::BelowSoftQuota;
 
         if (isSomeStoragePoolHardQuotaExceeded) {
-            return changeSubdomainState(EDiskUsageStatus::AboveHardQuota);
+            return changeSubdomainState(EQuotaUsageStatus::AboveHardQuota);
         }
         if (isEachStoragePoolUsageBelowSoftQuota) {
-            return changeSubdomainState(EDiskUsageStatus::BelowSoftQuota);
+            return changeSubdomainState(EQuotaUsageStatus::BelowSoftQuota);
         }
     }
 
     // made no changes to the state of the subdomain
     return false;
+}
+
+bool TSubDomainInfo::CheckSmallBlobsQuotas(IQuotaCounters* counters) {
+    const auto metricStatus = [](ui64 usage, ui64 hardQuota, ui64 softQuota) -> EQuotaUsageStatus {
+        if (hardQuota && usage > hardQuota) {
+            return EQuotaUsageStatus::AboveHardQuota;
+        }
+        if (!softQuota || usage < softQuota) {
+            return EQuotaUsageStatus::BelowSoftQuota;
+        }
+        return EQuotaUsageStatus::InBetween;
+    };
+
+    const auto quotas = GetSmallBlobsQuotas();
+
+    const EQuotaUsageStatus volumeStatus = metricStatus(SmallBlobsUsage.VolumeBytes, quotas.VolumeHardQuota, quotas.VolumeSoftQuota);
+    const EQuotaUsageStatus countStatus = metricStatus(SmallBlobsUsage.Count, quotas.CountHardQuota, quotas.CountSoftQuota);
+
+    EQuotaUsageStatus combinedStatus;
+    if (volumeStatus == EQuotaUsageStatus::AboveHardQuota || countStatus == EQuotaUsageStatus::AboveHardQuota) {
+        combinedStatus = EQuotaUsageStatus::AboveHardQuota;
+    } else if (volumeStatus == EQuotaUsageStatus::BelowSoftQuota && countStatus == EQuotaUsageStatus::BelowSoftQuota) {
+        combinedStatus = EQuotaUsageStatus::BelowSoftQuota;
+    } else {
+        combinedStatus = EQuotaUsageStatus::InBetween;
+    }
+
+    return ApplyQuotaExceededStatus(combinedStatus, SmallBlobsQuotaExceeded, COUNTER_SMALL_BLOBS_QUOTA_EXCEEDED, counters);
+}
+
+bool TSubDomainInfo::CheckQuotas(IQuotaCounters* counters) {
+    const ui64 versionBefore = DomainStateVersion;
+    const bool diskQuotaChanged = CheckDiskSpaceQuotas(counters);
+    const bool smallBlobsQuotaChanged = CheckSmallBlobsQuotas(counters);
+    if (DomainStateVersion > versionBefore + 1) {
+        DomainStateVersion = versionBefore + 1;
+    }
+    return diskQuotaChanged || smallBlobsQuotaChanged;
+}
+
+void TSubDomainInfo::CountSmallBlobsQuotas(IQuotaCounters* counters, const TSmallBlobsQuotas& prev, const TSmallBlobsQuotas& next) {
+    if (const i64 delta = static_cast<i64>(next.VolumeHardQuota) - static_cast<i64>(prev.VolumeHardQuota); delta != 0) {
+        counters->ChangeSmallBlobsVolumeHardQuotaBytes(delta);
+    }
+    if (const i64 delta = static_cast<i64>(next.VolumeSoftQuota) - static_cast<i64>(prev.VolumeSoftQuota); delta != 0) {
+        counters->ChangeSmallBlobsVolumeSoftQuotaBytes(delta);
+    }
+    if (const i64 delta = static_cast<i64>(next.CountHardQuota) - static_cast<i64>(prev.CountHardQuota); delta != 0) {
+        counters->ChangeSmallBlobsCountHardQuota(delta);
+    }
+    if (const i64 delta = static_cast<i64>(next.CountSoftQuota) - static_cast<i64>(prev.CountSoftQuota); delta != 0) {
+        counters->ChangeSmallBlobsCountSoftQuota(delta);
+    }
 }
 
 void TSubDomainInfo::CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& quotas) {
@@ -244,6 +334,17 @@ void TSubDomainInfo::CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskS
                 counters->AddDiskSpaceSoftQuotaBytes(GetUserFacingStorageType(poolKind), addend);
             }
         }
+    }
+}
+
+void TSubDomainInfo::AggrSmallBlobsUsage(IQuotaCounters* counters, i64 bytesDelta, i64 countDelta) {
+    if (bytesDelta != 0) {
+        SmallBlobsUsage.VolumeBytes = std::max<i64>(0, static_cast<i64>(SmallBlobsUsage.VolumeBytes) + bytesDelta);
+        counters->ChangeSmallBlobsVolumeBytes(bytesDelta);
+    }
+    if (countDelta != 0) {
+        SmallBlobsUsage.Count = std::max<i64>(0, static_cast<i64>(SmallBlobsUsage.Count) + countDelta);
+        counters->ChangeSmallBlobsCount(countDelta);
     }
 }
 
@@ -819,8 +920,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         alterData->TableDescriptionFull->SetUniqueIndexKeySize(op.GetUniqueIndexKeySize());
     }
 
-    if (op.HasIndexImplType()) {
-        alterData->TableDescriptionFull->SetIndexImplType(op.GetIndexImplType());
+    if (op.HasTableType()) {
+        alterData->TableDescriptionFull->SetTableType(op.GetTableType());
     }
 
     if (source) {
@@ -2189,6 +2290,12 @@ void TTableAggregatedStats::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsag
         Aggregated.DataSize += delta.DataSize;
         Aggregated.IndexSize += delta.IndexSize;
     }
+
+    Aggregated.SmallBlobsVolumeBytes = std::max<i64>(
+        0, static_cast<i64>(Aggregated.SmallBlobsVolumeBytes) + (static_cast<i64>(newStats.SmallBlobsVolumeBytes) - static_cast<i64>(oldStats.SmallBlobsVolumeBytes)));
+    Aggregated.SmallBlobsCount = std::max<i64>(
+        0, static_cast<i64>(Aggregated.SmallBlobsCount) + (static_cast<i64>(newStats.SmallBlobsCount) - static_cast<i64>(oldStats.SmallBlobsCount)));
+
     // second, aggregation of space separated by storage pool kinds
     for (const auto& [poolKind, newStoragePoolStats] : newStats.StoragePoolsStats) {
         const auto* oldStoragePoolStats = oldStats.StoragePoolsStats.FindPtr(poolKind);

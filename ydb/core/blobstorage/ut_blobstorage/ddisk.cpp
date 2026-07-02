@@ -27,14 +27,18 @@ Y_UNIT_TEST_SUITE(DDisk) {
         int LetterIndex = 0;
         const TString Letters = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-        TDDiskTestContext(ui32 surfaceSize = 64_KB, ui64 inMemCache = 128_MB)
+        TDDiskTestContext(ui32 surfaceSize = 64_KB, ui64 inMemCache = 128_MB,
+                std::optional<ui32> minFreeSectorsReserve = std::nullopt)
             : Env({
                 .NodeCount = 8,
                 .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-                .ConfigPreprocessor = [inMemCache](ui32, TNodeWardenConfig& cfg){
+                .ConfigPreprocessor = [inMemCache, minFreeSectorsReserve](ui32, TNodeWardenConfig& cfg){
                     NYdb::NBS::NProto::TPBufferConfig pbCfg;
                     pbCfg.SetMaxChunks(10);
                     pbCfg.SetMaxInMemoryCache(inMemCache);
+                    if (minFreeSectorsReserve.has_value()) {
+                        pbCfg.SetMinFreeSectorsReserve(*minFreeSectorsReserve);
+                    }
                     cfg.PBufferConfig = pbCfg;
                 }
             }) {
@@ -894,7 +898,9 @@ Y_UNIT_TEST_SUITE(DDisk) {
     }
 
     Y_UNIT_TEST(PersistentBufferEraseBarrierManyTablets) {
-        TDDiskTestContext f(1_MB);
+        // Use MinFreeSectorsReserve=0 so that the guard never fires when the
+        // disk fills up during the large write loop in this test.
+        TDDiskTestContext f(1_MB, 128_MB, 0);
         auto groups = f.AllocateDDiskBlockGroup();
         auto& node = groups.begin()->GetNodes(0);
         f.ChangeTestingNode(node);

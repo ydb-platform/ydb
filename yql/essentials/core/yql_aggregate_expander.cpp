@@ -1755,7 +1755,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregate(const TExprNode::TPtr&
     if (!UsePartitionsByKeys_ && UseFinalizeByKeys_ && !HaveSessionSetting_) {
         postAgg = Ctx_.Builder(Node_->Pos())
             .Callable("ShuffleByKeys")
-                .Add(0, std::move(preAgg))
+                .Add(0, preAgg)
                 .Add(1, keyExtractor)
                 .Lambda(2)
                     .Param("stream")
@@ -1772,7 +1772,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregate(const TExprNode::TPtr&
         auto condenseSwitch = GenerateCondenseSwitch(keyExtractor);
         postAgg = Ctx_.Builder(Node_->Pos())
             .Callable("PartitionsByKeys")
-                .Add(0, std::move(preAgg))
+                .Add(0, preAgg)
                 .Add(1, keyExtractor)
                 .Add(2, SortParams_.Order)
                 .Add(3, SortParams_.Key)

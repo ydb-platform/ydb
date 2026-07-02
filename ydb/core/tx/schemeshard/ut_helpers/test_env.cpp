@@ -16,6 +16,7 @@
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -1207,6 +1208,7 @@ NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NS
     NoRebootEventTypes.insert(TEvIndexBuilder::EvGetRequest);
     NoRebootEventTypes.insert(TEvIndexBuilder::EvCancelRequest);
     NoRebootEventTypes.insert(TEvIndexBuilder::EvForgetRequest);
+    NoRebootEventTypes.insert(TEvSetColumnConstraint::EvCreateRequest);
 }
 
 void NSchemeShardUT_Private::TTestWithReboots::Run(std::function<void (TTestActorRuntime &, bool &)> testScenario) {

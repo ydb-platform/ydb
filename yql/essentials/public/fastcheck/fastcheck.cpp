@@ -105,7 +105,7 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
     }
 
     TExprContext libCtx;
-    libCtx.IssueManager.AddIssues(std::move(astRes.Issues));
+    libCtx.IssueManager.AddIssues(astRes.Issues);
     IModuleResolver::TPtr moduleResolver;
     TUserDataTable userDataTable = GetYqlModuleResolver(libCtx, moduleResolver, userData, options.ClusterMapping, {});
     if (!userDataTable) {

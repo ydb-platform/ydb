@@ -836,6 +836,7 @@ struct Schema : NIceDb::Schema {
         struct AuditSettings : Column<30, NScheme::NTypeIds::String> {};
         struct ServerlessComputeResourcesMode : Column<31, NScheme::NTypeIds::Uint32> { using Type = EServerlessComputeResourcesMode; };
         struct ColumnTableColumnsLimit : Column<32, NScheme::NTypeIds::Uint64> {};
+        struct SmallBlobsQuotaExceeded : Column<33, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -870,7 +871,8 @@ struct Schema : NIceDb::Schema {
             ImportsLimit,
             AuditSettings,
             ServerlessComputeResourcesMode,
-            ColumnTableColumnsLimit
+            ColumnTableColumnsLimit,
+            SmallBlobsQuotaExceeded
         >;
     };
 
@@ -2609,6 +2611,65 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct SetColumnConstraint : Table<138> {
+        struct OperationId :            Column<1, NScheme::NTypeIds::Uint64>  { using Type = TIndexBuildId; };
+        struct TableOwnerId :           Column<2, NScheme::NTypeIds::Uint64>  { using Type = TOwnerId; };
+        struct TableLocalId :           Column<3, NScheme::NTypeIds::Uint64>  { using Type = TLocalPathId; };
+        // ColumnNames in protobuf format
+        struct SerializedColumnNames :  Column<4, NScheme::NTypeIds::String>  {};
+
+        struct ValidationFailed :       Column<5, NScheme::NTypeIds::Bool>    { static constexpr bool Default = false; };
+        struct OperationState :         Column<6, NScheme::NTypeIds::Uint32>  {};
+
+        // We dont want keep LockingNullWritesTxId/FinishingTxId/UnlockingTxId separately (look at struct IndexBuild : Table<69> for an explanation)
+        struct SubStateTxId :           Column<7, NScheme::NTypeIds::Uint64>  { using Type = TTxId; };
+        struct SubStateTxStatus :       Column<8, NScheme::NTypeIds::Uint32>  { using Type = NKikimrScheme::EStatus; };
+        struct SubStateTxDone :         Column<9, NScheme::NTypeIds::Bool>    {};
+
+        // LockTxId is persisted separately because it's needed in Unlocking phase
+        // to identify which lock to drop (LockGuard.OwnerTxId), even after SubStateTxId
+        // has been overwritten by subsequent phases.
+        struct LockTxId :               Column<10, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
+
+        struct UserSID :                Column<11, NScheme::NTypeIds::Utf8>   {};
+        struct StartTime :              Column<12, NScheme::NTypeIds::Uint64> {};
+        struct EndTime :                Column<13, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<OperationId>;
+        using TColumns = TableColumns<
+            OperationId,
+            TableOwnerId,
+            TableLocalId,
+            SerializedColumnNames,
+            ValidationFailed,
+            OperationState,
+            SubStateTxId,
+            SubStateTxStatus,
+            SubStateTxDone,
+            LockTxId,
+            UserSID,
+            StartTime,
+            EndTime
+        >;
+    };
+
+    struct SetColumnConstraintShardStatus : Table<139> {
+        struct OperationId :            Column<1, NScheme::NTypeIds::Uint64>  { using Type = TIndexBuildId; };
+        struct OwnerShardIdx :          Column<2, NScheme::NTypeIds::Uint64>  { using Type = TOwnerId; };
+        struct LocalShardIdx :          Column<3, NScheme::NTypeIds::Uint64>  { using Type = TLocalShardIdx; };
+        struct Status :                 Column<4, NScheme::NTypeIds::Uint32>  { using Type = NKikimrSetColumnConstraint::EValidateStatus; };
+        struct Issue :                  Column<5, NScheme::NTypeIds::Utf8>    { using Type = TString; };
+
+        using TKey = TableKey<OperationId, OwnerShardIdx, LocalShardIdx>;
+        using TColumns = TableColumns<
+            OperationId,
+            OwnerShardIdx,
+            LocalShardIdx,
+            Status,
+            Issue
+        >;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2744,7 +2805,9 @@ struct Schema : NIceDb::Schema {
         TablePartitionsByShardIdx,
         TablePartitionStatsByShardIdx,
         FullBackups,
-        FullBackupItems
+        FullBackupItems,
+        SetColumnConstraint,
+        SetColumnConstraintShardStatus
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

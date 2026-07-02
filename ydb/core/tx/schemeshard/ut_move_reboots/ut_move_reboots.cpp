@@ -568,7 +568,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                 // Verify source table has multiple bloom filter prefixes and scheme objects after migration
                 NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/Table",
                     {1, 3},
-                    {{"idx_bloom_1", {"key1"}}, {"idx_bloom_2", {"key1", "key2", "key3"}}});
+                    {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
             }
 
             // Perform CopyTable operation with reboots
@@ -580,7 +580,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                 // Verify copied table has all bloom filter prefixes and scheme objects
                 NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/TableCopy",
                     {1, 3},
-                    {{"idx_bloom_1", {"key1"}}, {"idx_bloom_2", {"key1", "key2", "key3"}}});
+                    {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
             }
 
             // Perform MoveTable operation with reboots
@@ -596,7 +596,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                 // Verify moved table has all bloom filter prefixes and scheme objects
                 NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/TableMove",
                     {1, 3},
-                    {{"idx_bloom_1", {"key1"}}, {"idx_bloom_2", {"key1", "key2", "key3"}}});
+                    {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
             }
         });
     }

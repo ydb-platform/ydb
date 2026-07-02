@@ -39,6 +39,7 @@ struct TEvPrivate {
         EvSoftDeadline,
         EvTruncatedCountResult,
         EvCheckTopology,
+        EvRetryFetch,
     };
 
     struct TQueryToCompile {
@@ -66,6 +67,7 @@ struct TEvPrivate {
     struct TEvHardDeadline : public NActors::TEventLocal<TEvHardDeadline, EvHardDeadline> {};
     struct TEvSoftDeadline : public NActors::TEventLocal<TEvSoftDeadline, EvSoftDeadline> {};
     struct TEvCheckTopology : public NActors::TEventLocal<TEvCheckTopology, EvCheckTopology> {};
+    struct TEvRetryFetch : public NActors::TEventLocal<TEvRetryFetch, EvRetryFetch> {};
 
     struct TEvTruncatedCountResult : public NActors::TEventLocal<TEvTruncatedCountResult, EvTruncatedCountResult> {
         bool Success;
@@ -303,9 +305,8 @@ public:
               << (Config.MaxConcurrentCompilations == 0 ? " (adjusted from 0)" : "")
               << ", self-orchestrating topology discovery");
 
+        // Soft deadline is armed only after the board is up (HandleCheckTopology), so a long board wait on a cold v2 bootstrap doesn't eat the compile budget.
         Schedule(hardDeadline, new TEvPrivate::TEvHardDeadline());
-        SoftDeadlineCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
-        Schedule(softDeadline, new TEvPrivate::TEvSoftDeadline(), SoftDeadlineCookieHolder.Get());
 
         if (Database.empty()) {
             LOG_I("Database is empty, skipping warmup");
@@ -356,6 +357,7 @@ private:
     STFUNC(StateFetching) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvFetchCacheResult, HandleFetchResult);
+            cFunc(TEvPrivate::EvRetryFetch, StartFetch);
             hFunc(TEvPrivate::TEvTruncatedCountResult, HandleTruncatedCount);
             cFunc(TEvPrivate::EvHardDeadline, HandleHardDeadline);
             cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadline);
@@ -438,6 +440,9 @@ private:
             return;
         }
 
+        SoftDeadlineCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
+        Schedule(Config.SoftDeadline, new TEvPrivate::TEvSoftDeadline(), SoftDeadlineCookieHolder.Get());
+
         LOG_I("Initial board sync delivered " << peerCount << " peer(s), waiting for "
               "TEvStartWarmup from KqpProxy");
     }
@@ -454,6 +459,8 @@ private:
             Complete(true, "Skipped: empty NodeIds");
             return;
         }
+
+        ++FetchAttempts;
 
         const ui32 maxNodesToQuery = Config.MaxNodesToRequest;
         if (maxNodesToQuery > 0 && maxNodesToQuery < NodeIds.size()) {
@@ -482,6 +489,13 @@ private:
         auto* result = ev->Get();
 
         if (!result->Success) {
+            // DB may not be resolvable yet this early after start; retry before giving up.
+            if (!SoftDeadlineReached && FetchAttempts < MaxFetchAttempts) {
+                LOG_W("Fetch failed (attempt " << FetchAttempts << "/" << MaxFetchAttempts
+                      << "), retrying in " << FetchRetryDelay << ": " << result->Error);
+                Schedule(FetchRetryDelay, new TEvPrivate::TEvRetryFetch());
+                return;
+            }
             LOG_W("Fetch failed (no compile cache nodes responded), skipping warmup: " << result->Error);
             Complete(false, "Fetch failed: " + result->Error);
             return;
@@ -672,7 +686,7 @@ private:
 
 
     void HandleHardDeadline() {
-        LOG_I("Hard deadline reached, compiled: " << EntriesLoaded
+        LOG_W("Hard deadline reached, compiled: " << EntriesLoaded
               << ", failed: " << EntriesFailed
               << ", pending: " << PendingCompilations);
 
@@ -699,7 +713,7 @@ private:
 
     void HandleSoftDeadlineInTopology() {
         // No peer NodeIds yet → can only read self (useless on warm restart).
-        LOG_I("Soft deadline reached while waiting for topology, skipping warmup");
+        LOG_W("Soft deadline reached while waiting for topology, skipping warmup");
         Complete(true, "Skipped: topology not delivered before soft deadline");
     }
 
@@ -724,6 +738,8 @@ private:
     }
 
     static constexpr TDuration TopologyCheckInterval = TDuration::MilliSeconds(500);
+    static constexpr ui32 MaxFetchAttempts = 3;
+    static constexpr TDuration FetchRetryDelay = TDuration::Seconds(1);
 
     const TKqpWarmupConfig Config;
 
@@ -738,6 +754,7 @@ private:
     THashMap<ui64, TEvPrivate::TQueryToCompile> PendingQueriesByCookie;
     ui64 NextCookie = 0;
     ui32 PendingCompilations = 0;
+    ui32 FetchAttempts = 0;
     ui32 EntriesLoaded = 0;
     ui32 EntriesFailed = 0;
     ui32 MaxConcurrentCompilations = 1;

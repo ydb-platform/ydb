@@ -1,54 +1,42 @@
 # Yandex Enterprise Database changelog
 
+## Version 25.4 {#25-4}
+
+### Version 25.4.1.ent.2 {#25-4-1-ent-2}
+
+Release date: June 17, 2026.
+
+This version includes all improvements from {{ ydb-short-name }} 25.4.1.15; see the [changelog](./changelog-server.md#25-4-1-15). It also includes all [additional fixes](#25-2-1-ent-13-extras) listed below for version 25.2.1.ent.13.
+
 ## Version 25.3 {#25-3}
 
 ### Version 25.3.1.ent.3 {#25-3-1-ent-3}
 
-Release date: June 12, 2026.
+Release date: June 11, 2026.
 
-#### New Features
-
-* Added support for two–data center configuration with synchronous data writes (Bridge mode).
-* Topic improvements:
-  * In Kafka API [compacted](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) topics can now be created, and YDB automatically creates and removes the internal service consumer used for topic compaction;
-  * Topic APIs were extended with new `DescribeConsumer` and [per-partition topic metrics can now be exported into user quotas](./reference/observability/metrics/index.md#topics).
-* Implemented [backup and restore](./reference/ydb-cli/export-import/file-structure.md?version=v25.3#topics) of topic configuration to and from S3;
-
-#### Bug Fixes
-
-* [Fixed](https://github.com/ydb-platform/ydb/pull/33758) an issue that caused a server-side session leak.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/36926) an issue where, in rare cases, reads from a table could block its deletion.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/20238) a race condition when updating the CPU soft limit.
-* [Fixed behavior](https://github.com/ydb-platform/ydb/pull/18121), where `ALTER TABLE` could fail for tables with a vector index.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/18088) inconsistent results in some read-write transactions — conflicting writes no longer overwrite uncommitted changes.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/18234) serializability violations in read-write transactions after shard restarts.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/20560) a memory management issue when committing offsets in topics with automatic partitioning enabled.
-* [Added ](https://github.com/ydb-platform/ydb/pull/18698) checks for enabled encryption in zero-copy transfers.
-* [Fixed ](https://github.com/ydb-platform/ydb/pull/20519) an issue that could cause a VDisk to hang in local recovery after a ChunkRead error.
-* [Eliminated](https://github.com/ydb-platform/ydb/pull/18924) phantom VDisk appearances caused by race conditions between group creation and deletion operations.
-* [Improved](https://github.com/ydb-platform/ydb/pull/17687) phantom VDisks caused by races between group creation and deletion operations.
-* When a session ends via attach stream, a notification is now [sent](https://github.com/ydb-platform/ydb/pull/22298).
-* The coordination service now correctly [returns](https://github.com/ydb-platform/ydb/pull/16901) `SCHEME_ERROR` for non-existent resources instead of the incorrect `INTERNAL_ERROR` code.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/20157) memory handling issues and internal data consistency violations in Workload Manager and related scheduler code.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/20432) an issue where PDisk info requests could time out when the target node was disabled or unavailable.
+This version includes all improvements from {{ ydb-short-name }} 25.3.1.27; see the [changelog](./changelog-server.md#25-3-1-27). It also includes all [additional fixes](#25-2-1-ent-13-extras) listed below for version 25.2.1.ent.13.
 
 ## Version 25.2 {#25-2}
 
 ### Version 25.2.1.ent.13 {#25-2-1-ent-13}
 
-Release date: June 12, 2026.
+Release date: June 11, 2026.
 
-#### Performance
+This version includes all improvements from {{ ydb-short-name }} 25.2.1.26; see the [changelog](./changelog-server.md#25-2-1-26). It also includes a number of additional improvements ported from the current 26.1 version.
 
-* [Reduced](https://github.com/ydb-platform/ydb/pull/32880) memory consumption when processing queries with the `TopSort` operation (`SELECT ... ORDER BY x LIMIT n`).
-* Added an optimization that filters rows by secondary index columns before accessing the main table, reducing the number of read operations.
+#### Additional Fixes {#25-2-1-ent-13-extras}
 
-#### Bug Fixes
+The following changes were ported from version 26.1 into supported stable versions of Yandex Enterprise Database:
 
-* [Fixed](https://github.com/ydb-platform/ydb/issues/24779) the `Unexpected end of buffer, Handle(): requirement chunkSize <= Buffer.size() failed` error that caused crashes in dynamic nodes.
-* Resolved several potential hang scenarios during query execution when using `StreamIndexLookup` index access.
-* Fixed a bug where the query limit was not applied to the index table, causing it to read far more records than necessary.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/38425) an [LDAP authentication](./security/authentication.md) vulnerability: knowing the login and password of any LDAP user (including one who is not a member of a group allowed to access {{ ydb-short-name }}), an attacker could bypass group membership checks and gain access to the cluster (LDAP search filter injection; special characters are now escaped per RFC 2254).
+* Fixed a bug that violated the sort order specified in the query when accessing system tables.
+* Fixed a bug in internal state integrity check logic that in rare cases could cause a single (not mass) restart of storage nodes.
+* Added an optimization that allows filtering rows by index columns before querying the main table, reducing the number of accesses to the main table when executing certain types of queries.
+* Implemented a set of fixes in index access (StreamIndexLookup) that eliminates the possibility of rare situations where executed queries could hang, and reduces RAM consumption during query execution.
+* Added an optimization that reduces memory consumption when processing queries with the TopSort operation (`SELECT ... ORDER BY x LIMIT n`).
+* Added support for index materialization during backup and restore.
+* TLI (Transaction Locks Invalidated) error messages now always include either an identifier or the path of the affected table.
+* Lock metrics have been added to query statistics provided through the `.sys/query_metrics_*` system tables.
+* Invalid views can now be restored from a backup. This allows restoring backups created from databases containing such views without additional actions from the administrator.
 
 ### Version 25.2.1.ent.4 {#25-2-1-ent-4}
 
@@ -94,7 +82,7 @@ Release date: February 12, 2026.
 
 ## Version 25.1 {#25-1}
 
-### Version 25.1.4.ent.8 {#24-1-4-ent-8}
+### Version 25.1.4.ent.8 {#25-1-4-ent-8}
 
 Release date: February 12, 2026.
 
@@ -103,7 +91,7 @@ Release date: February 12, 2026.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/29940) an [issue](https://github.com/ydb-platform/ydb/issues/29903) where named expression containing another named expression caused incorrect `VIEW` backup
 * [Fixed](https://github.com/ydb-platform/ydb/commit/c3b025603a6ba71d27ef0f1f66b9f643407643b3) descending sorting not working in queries to system views.
 
-### Version 25.1.4.ent.3 {#24-1-4-ent-3}
+### Version 25.1.4.ent.3 {#25-1-4-ent-3}
 
 Release date: November 25, 2025.
 
@@ -222,7 +210,7 @@ Release date: November 25, 2025.
 
 ## Version 24.4 {#24-4}
 
-### Version 24.4.4.15 {#24-4-4-20}
+### Version 24.4.4.20 {#24-4-4-20}
 
 Release date: November 1, 2025.
 

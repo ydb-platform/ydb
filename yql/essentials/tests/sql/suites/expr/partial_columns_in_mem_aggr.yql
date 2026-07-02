@@ -1,4 +1,3 @@
-/* syntax version 1 */
 select
     Domain,
     aggregate_list(AsStruct(DeviceID as DeviceID, DeviceCategory as DeviceCategory)) as Devices

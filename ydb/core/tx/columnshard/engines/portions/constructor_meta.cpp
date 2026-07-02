@@ -36,6 +36,7 @@ TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta) {
     CompactionLevel = meta.GetCompactionLevel();
     DeletionsCount = meta.GetDeletionsCount();
     TierName = meta.GetTierNameOptional();
+    BsIndexBlobBytes = meta.GetBsIndexBlobBytes();
 }
 
 TPortionMeta TPortionMetaConstructor::Build() {
@@ -62,6 +63,7 @@ TPortionMeta TPortionMetaConstructor::Build() {
     result.ColumnBlobBytes = *TValidator::CheckNotNull(ColumnBlobBytes);
     result.IndexRawBytes = *TValidator::CheckNotNull(IndexRawBytes);
     result.IndexBlobBytes = *TValidator::CheckNotNull(IndexBlobBytes);
+    result.BsIndexBlobBytes = BsIndexBlobBytes;
     result.NumSlices = *TValidator::CheckNotNull(NumSlices);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_size", result.GetMemorySize())("data_size", result.GetDataSize())(
         "sum", sumValuesMeta.Add(result.GetMemorySize()))("count", countValues.Inc())("size_of_meta", sizeof(TPortionMeta));
@@ -85,6 +87,9 @@ bool TPortionMetaConstructor::LoadMetadata(
     ColumnBlobBytes = TValidator::CheckNotNull(portionMeta.GetColumnBlobBytes());
     IndexRawBytes = portionMeta.GetIndexRawBytes();
     IndexBlobBytes = portionMeta.GetIndexBlobBytes();
+    if (portionMeta.HasBsIndexBlobBytes()) {
+        BsIndexBlobBytes = portionMeta.GetBsIndexBlobBytes();
+    }
     NumSlices = portionMeta.HasNumSlices() ? portionMeta.GetNumSlices() : 1;
     if (portionMeta.HasPrimaryKeyBordersV1()) {
         FirstAndLastPK = NArrow::TFirstLastSpecialKeys(

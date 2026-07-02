@@ -164,7 +164,10 @@ public:
 };
 
 template <bool Nullable>
-class TFixedSizeBlockItemComparator<TGUID, Nullable>: public TStringBlockItemComparator<arrow::BinaryType, Nullable> {
+using TGuidBlockItemComparator = TStringBlockItemComparator<arrow::BinaryType, Nullable>;
+
+template <bool Nullable>
+class TFixedSizeBlockItemComparator<TGUID, Nullable>: public TGuidBlockItemComparator<Nullable> {
 };
 
 class TSingularTypeBlockItemComparator: public TBlockItemComparatorBase<TSingularTypeBlockItemComparator, /*Nullable=*/false> {

@@ -80,7 +80,10 @@ public:
 };
 
 template <bool Nullable>
-class TFixedSizeBlockItemHasher<TGUID, Nullable>: public TStringBlockItemHasher<arrow::BinaryType, Nullable> {
+using TGuidBlockItemHasher = TStringBlockItemHasher<arrow::BinaryType, Nullable>;
+
+template <bool Nullable>
+class TFixedSizeBlockItemHasher<TGUID, Nullable>: public TGuidBlockItemHasher<Nullable> {
 };
 
 class TSingularTypeBlockItemHaser: public TBlockItemHasherBase<TSingularTypeBlockItemHaser, /*Nullable=*/false> {

@@ -40,6 +40,10 @@ SQS_MIGRATION_FEATURE_FLAGS = [
     'enable_sqsmigration_finished',
 ]
 
+SQS_MIGRATION_REQUIRED_FEATURE_FLAGS = [
+    'enable_topic_message_level_parallelism',
+]
+
 SQS_MIGRATION_STAGES = {
     'topic_creation': {
         'enable_sqsmigration_topic_creation': True,
@@ -325,6 +329,9 @@ class KikimrSqsTestBase(object):
         )
         for flag, enabled in cls._get_sqs_migration_feature_flags().items():
             config_generator.yaml_config['feature_flags'][flag] = enabled
+        if os.environ.get('YDB_SQS_MIGRATION_STAGE') is not None:
+            for flag in SQS_MIGRATION_REQUIRED_FEATURE_FLAGS:
+                config_generator.yaml_config['feature_flags'][flag] = True
         config_generator.yaml_config['sqs_config']['root'] = cls.sqs_root
         config_generator.yaml_config['sqs_config']['enable_queue_master'] = True
         config_generator.yaml_config['sqs_config']['masters_describer_update_time_ms'] = 2000

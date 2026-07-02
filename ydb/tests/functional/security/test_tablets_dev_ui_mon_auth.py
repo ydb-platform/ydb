@@ -10,6 +10,7 @@ from security_test_helpers import (
     tablet_devui_new_action_paths,
     tablet_devui_sid_matrix,
 )
+from ydb.tests.library.clients.kikimr_http_client import DEFAULT_HIVE_ID
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
@@ -214,6 +215,169 @@ def test_datashard_tablet_devui_mon_paths_with_enforce_user_token_and_secure_pat
         ydb_cluster_with_enforce_user_token_secure_devui_flag_and_datashard_tablet,
         _data_shard_devui_mon_paths_with_enforce(tid, secure_path_mode=True),
     )
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_enforce_user_token_and_hive_tablet(ydb_cluster_with_enforce_user_token):
+    cluster = ydb_cluster_with_enforce_user_token
+    cluster.hive_tablet_id = DEFAULT_HIVE_ID
+    yield cluster
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet(
+    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
+):
+    cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
+    cluster.hive_tablet_id = DEFAULT_HIVE_ID
+    yield cluster
+
+
+def _hive_endpoint_cases(endpoint_paths, token_statuses):
+    return [
+        (endpoint_path, token, expected_status)
+        for endpoint_path in endpoint_paths
+        for token, expected_status in token_statuses.items()
+    ]
+
+
+def _hive_token_desc(token):
+    return token if token is not None else 'null'
+
+
+def _hive_mon_base_url(cluster):
+    node = cluster.nodes[1]
+    return f'https://{node.host}:{node.mon_port}'
+
+
+def _hive_get_status(cluster, endpoint_path, token=None):
+    headers = {}
+    if token is not None:
+        headers['Authorization'] = token
+    response = requests.get(
+        f'{_hive_mon_base_url(cluster)}{endpoint_path}',
+        headers=headers,
+        verify=False,
+    )
+    return response.status_code
+
+
+def _hive_post_status(cluster, endpoint_path, token=None):
+    headers = {}
+    if token is not None:
+        headers['Authorization'] = token
+    response = requests.post(
+        f'{_hive_mon_base_url(cluster)}{endpoint_path}',
+        headers=headers,
+        verify=False,
+    )
+    return response.status_code
+
+
+def _hive_readonly_devui_cases(tablet_id, secure_path_mode):
+    q = f'TabletID={tablet_id}'
+    all_forbidden, monitoring_allowed, admin_allowed = tablet_devui_sid_matrix()
+    # Without the flag: monitoring users can access /tablets/app (legacy compatibility).
+    # With the flag: /tablets/app is forbidden for everyone; all Hive DevUI moves to /app/secure.
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
+    return (
+        # Tablets summary page keeps monitoring-level access (different handler).
+        _hive_endpoint_cases([f'/tablets?{q}'], monitoring_allowed)
+        # Read-only /tablets/app?... pages — behavior depends on flag.
+        + _hive_endpoint_cases(
+            [
+                f'/tablets/app?{q}',
+                f'/tablets/app?{q}&page=LandingData',
+                f'/tablets/app?{q}&page=Settings',
+            ],
+            expected_on_app,
+        )
+        # Secure path read-only pages — admin-only in both modes.
+        + _hive_endpoint_cases(
+            [
+                f'/tablets/app/secure?{q}',
+                f'/tablets/app/secure?{q}&page=LandingData',
+                f'/tablets/app/secure?{q}&page=Settings',
+            ],
+            admin_allowed,
+        )
+    )
+
+
+def _hive_mutating_devui_cases(tablet_id, secure_path_mode):
+    q = f'TabletID={tablet_id}'
+    all_forbidden, monitoring_allowed, admin_allowed = tablet_devui_sid_matrix()
+    # Without the flag: monitoring users can POST to /tablets/app (legacy compatibility).
+    # With the flag: /tablets/app is forbidden for everyone; all Hive DevUI moves to /app/secure.
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
+    return (
+        _hive_endpoint_cases(
+            [
+                # Node management actions
+                f'/tablets/app?{q}&page=SetDown&node=1&down=0',
+                f'/tablets/app?{q}&page=SetFreeze&node=1&freeze=0',
+                f'/tablets/app?{q}&page=KickNode&node=1',
+                f'/tablets/app?{q}&page=DrainNode&node=1&wait=0',
+                # Cluster management actions
+                f'/tablets/app?{q}&page=Rebalance',
+                f'/tablets/app?{q}&page=ReassignTablet&tablet=all&wait=0',
+            ],
+            expected_on_app,
+        )
+        + _hive_endpoint_cases(
+            [
+                f'/tablets/app/secure?{q}&page=SetDown&node=1&down=0',
+                f'/tablets/app/secure?{q}&page=SetFreeze&node=1&freeze=0',
+                f'/tablets/app/secure?{q}&page=KickNode&node=1',
+                f'/tablets/app/secure?{q}&page=DrainNode&node=1&wait=0',
+                f'/tablets/app/secure?{q}&page=Rebalance',
+                f'/tablets/app/secure?{q}&page=ReassignTablet&tablet=all&wait=0',
+            ],
+            admin_allowed,
+        )
+    )
+
+
+def test_hive_tablet_devui_mon_paths_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token_and_hive_tablet,
+):
+    cluster = ydb_cluster_with_enforce_user_token_and_hive_tablet
+    tid = cluster.hive_tablet_id
+
+    for endpoint_path, token, expected_status in _hive_readonly_devui_cases(tid, secure_path_mode=False):
+        status = _hive_get_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected GET {endpoint_path} with token={_hive_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
+
+    for endpoint_path, token, expected_status in _hive_mutating_devui_cases(tid, secure_path_mode=False):
+        status = _hive_post_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected POST {endpoint_path} with token={_hive_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
+
+
+def test_hive_tablet_devui_mon_paths_with_enforce_user_token_and_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet,
+):
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet
+    tid = cluster.hive_tablet_id
+
+    for endpoint_path, token, expected_status in _hive_readonly_devui_cases(tid, secure_path_mode=True):
+        status = _hive_get_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected GET {endpoint_path} with token={_hive_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
+
+    for endpoint_path, token, expected_status in _hive_mutating_devui_cases(tid, secure_path_mode=True):
+        status = _hive_post_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected POST {endpoint_path} with token={_hive_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
 
 
 def _schemeshard_endpoint_cases(endpoint_paths, token_statuses):

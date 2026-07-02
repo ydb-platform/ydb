@@ -1,5 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/core/base/mon_auth.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/counters_hive.pb.h>
@@ -181,6 +182,16 @@ bool THive::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorCo
 
     if (!ev)
         return true;
+
+    if (!IsTabletDevUiAccessAllowed(
+            AppData(ctx),
+            ev->Get()->PathInfo(),
+            ev->Get()->GetUserToken(),
+            /*isMonitoringDevUiRequest=*/false))
+    {
+        ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+        return true;
+    }
 
     CreateEvMonitoring(ev, ctx);
     return true;

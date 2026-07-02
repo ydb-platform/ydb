@@ -306,7 +306,9 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
             }
 
             if (OnRenderAppHtmlPage(nullptr, ctx)) {
-                const TStringBuf tabletDevUiAppPrefix = TabletType() == TTabletTypes::DataShard && AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
+                const TStringBuf tabletDevUiAppPrefix = (TabletType() == TTabletTypes::DataShard
+                        || TabletType() == TTabletTypes::Hive)
+                    && AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
                     ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
                     : TStringBuf("app");
                 DIV_CLASS("row") {

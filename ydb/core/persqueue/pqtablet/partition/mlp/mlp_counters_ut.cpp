@@ -9,7 +9,7 @@ Y_UNIT_TEST_SUITE(TMLPCountersTests) {
 
 void SimpleCountersImpl(const bool keepMessagesOrder) {
     auto setup = CreateSetup();
-    NActors::TTestActorRuntime& runtime = setup->GetRuntime();
+    auto& runtime = setup->GetRuntime();
 
     CreateTopic(setup, "/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
             .PartitioningSettings(2, 2)
@@ -117,7 +117,6 @@ void SimpleCountersImpl(const bool keepMessagesOrder) {
     assertMetric("topic.inflight.unlocked_messages", 101);
     assertMetric("topic.inflight.scheduled_to_dlq_messages", 0);
     assertMetric("topic.inflight.message_groups", keepMessagesOrder ? 75 : 0);
-
     assertMetric("topic.committed_messages", 1);
     assertMetric("topic.purged_messages", 0);
 

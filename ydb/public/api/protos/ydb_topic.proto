@@ -810,9 +810,11 @@ message CommitOffsetResult {
 // Unlike CommitOffset, which updates progress for a single partition,
 // ResetOffset updates the committed offset in every partition of the topic.
 //
-// The consumer must be inactive when offsets are reset: there should be no active
-// read sessions for this topic. Otherwise running readers may overwrite the reset
-// offsets or the operation may fail.
+// All active read sessions for this consumer and topic are restarted after the reset.
+// They continue reading from the new committed positions.
+//
+// Position can be specified as earliest, latest, or as the offset of the first message
+// with written_at greater or equal to the given timestamp.
 
 
 // Reset offset request sent from client to server.
@@ -834,10 +836,17 @@ message ResetOffsetRequest {
     message Latest {
     }
 
+    // Reset committed offset to the offset of the message with the nearest written_at
+    // that is greater or equal to the given timestamp.
+    message FromWrittenAt {
+        google.protobuf.Timestamp written_at = 1;
+    }
+
     // Target position for the committed offset in each partition of the topic.
     oneof position {
         Earliest earliest = 4;
         Latest latest = 5;
+        FromWrittenAt from_written_at = 6;
     }
 }
 

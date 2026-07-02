@@ -8,7 +8,7 @@ namespace NKikimr::NFlatTxCoordinator {
         TActorId pipeServerId = ev->Recipient;
         auto itPipeServer = PipeServers.find(pipeServerId);
         if (Y_UNLIKELY(itPipeServer == PipeServers.end())) {
-            YDB_LOG_CRIT("Unexpected TEvSubscribeLastStep from at coordinator without an active pipe server",
+            YDB_LOG_CRIT("Unexpected TEvSubscribeLastStep: no active pipe server",
                 {"sender", ev->Sender},
                 {"tabletId", TabletID()});
             return;
@@ -16,7 +16,7 @@ namespace NKikimr::NFlatTxCoordinator {
 
         auto* msg = ev->Get();
         if (Y_UNLIKELY(msg->Record.GetCoordinatorID() != TabletID())) {
-            YDB_LOG_CRIT("Unexpected TEvSubscribeLastStep from at coordinator for coordinator",
+            YDB_LOG_CRIT("Unexpected TEvSubscribeLastStep: wrong coordinator",
                 {"sender", ev->Sender},
                 {"tabletId", TabletID()},
                 {"coordinatorId", msg->Record.GetCoordinatorID()});
@@ -46,7 +46,7 @@ namespace NKikimr::NFlatTxCoordinator {
             subscriber = &LastStepSubscribers[ev->Sender];
         }
 
-        YDB_LOG_DEBUG("Processing TEvSubscribeLastStep from at coordinator with seqNo and cookie",
+        YDB_LOG_DEBUG("Processing TEvSubscribeLastStep",
             {"sender", ev->Sender},
             {"tabletId", TabletID()},
             {"seqNo", msg->Record.GetSeqNo()},
@@ -69,7 +69,7 @@ namespace NKikimr::NFlatTxCoordinator {
         TActorId pipeServerId = ev->Recipient;
         auto itPipeServer = PipeServers.find(pipeServerId);
         if (Y_UNLIKELY(itPipeServer == PipeServers.end())) {
-            YDB_LOG_CRIT("Unexpected TEvUnsubscribeLastStep from at coordinator without an active pipe server",
+            YDB_LOG_CRIT("Unexpected TEvUnsubscribeLastStep: no active pipe server",
                 {"sender", ev->Sender},
                 {"tabletId", TabletID()});
             return;
@@ -77,7 +77,7 @@ namespace NKikimr::NFlatTxCoordinator {
 
         auto* msg = ev->Get();
         if (Y_UNLIKELY(msg->Record.GetCoordinatorID() != TabletID())) {
-            YDB_LOG_CRIT("Unexpected TEvSubscribeLastStep from at coordinator for coordinator",
+            YDB_LOG_CRIT("Unexpected TEvUnsubscribeLastStep: wrong coordinator",
                 {"sender", ev->Sender},
                 {"tabletId", TabletID()},
                 {"coordinatorId", msg->Record.GetCoordinatorID()});
@@ -91,7 +91,7 @@ namespace NKikimr::NFlatTxCoordinator {
 
         auto& subscriber = itSubscriber->second;
         if (pipeServerId == subscriber.PipeServer && msg->Record.GetSeqNo() == subscriber.SeqNo) {
-            YDB_LOG_DEBUG("Processing TEvUnsubscribeLastStep from at coordinator with seqNo",
+            YDB_LOG_DEBUG("Processing TEvUnsubscribeLastStep",
                 {"sender", ev->Sender},
                 {"tabletId", TabletID()},
                 {"seqNo", msg->Record.GetSeqNo()});

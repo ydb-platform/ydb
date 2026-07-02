@@ -306,7 +306,7 @@ void TTxCoordinator::SchedulePlanTickExact(ui64 next) {
         {"coordinator", TabletID()},
         {"next", next},
         {"delay", delay},
-        {"monotonicAndDelay)", (monotonic + delay)});
+        {"monotonicAndDelay", (monotonic + delay)});
     if (delay > TDuration::Zero()) {
         Schedule(monotonic + delay, new TEvPrivate::TEvPlanTick(next));
     } else {
@@ -441,7 +441,7 @@ void TTxCoordinator::SendStepConfirmations(TCoordinatorStepConfirmations &confir
         YDB_LOG_DEBUG_CTX(ctx, "SEND EvProposeTransactionStatus Proxy",
             {"tablet", TabletID()},
             {"txid", x.TxId},
-            {"stepId", x.Step},
+            {"step", x.Step},
             {"status", x.Status},
             {"to", x.ProxyId});
         ctx.Send(x.ProxyId, new TEvTxProxy::TEvProposeTransactionStatus(x.Status, x.TxId, x.Step));
@@ -456,7 +456,7 @@ void TTxCoordinator::DoConfiguration(const TEvSubDomain::TEvConfigure &ev, const
     const TEvSubDomain::TEvConfigure::ProtoRecordType &record = ev.Record;
 
     if(0 == record.MediatorsSize()) {
-        YDB_LOG_ERROR_CTX(ctx, "HANDLE EvCoordinatorConfiguration recive empty mediators set",
+        YDB_LOG_ERROR_CTX(ctx, "HANDLE EvCoordinatorConfiguration received empty mediators set",
             {"tablet", TabletID()},
             {"version", record.GetVersion()});
         Y_ABORT("empty mediators set");
@@ -636,8 +636,8 @@ bool TTxCoordinator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const
 void TTxCoordinator::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) {
     const auto* msg = ev->Get();
 
-    YDB_LOG_INFO_CTX(ctx, "Reason",
-        {"onTabletStop", TabletID()},
+    YDB_LOG_INFO_CTX(ctx, "OnTabletStop",
+        {"tablet", TabletID()},
         {"reason", msg->GetReason()});
 
     switch (msg->GetReason()) {

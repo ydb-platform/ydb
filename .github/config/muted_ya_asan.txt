@@ -55,6 +55,7 @@ ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/driver_lib/run/ut unittest.[*/*] chunk
 ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.SlowSession
 ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
+ydb/core/graph/shard/ut unittest.sole chunk
 ydb/core/http_proxy/ut TestMalformedRequest.CompressedDeflateContentLengthCorrect
 ydb/core/http_proxy/ut TestMalformedRequest.CompressedDeflateContentLengthHigher
 ydb/core/http_proxy/ut TestMalformedRequest.CompressedDeflateContentLengthLower
@@ -210,6 +211,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisib
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityNonExistentConsumerInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityWithAtSignInConsumerNameInFederation
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityWithLeadingSlashInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityZeroTimeout
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateFifoQueueWithoutSuffix
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueue
@@ -267,6 +269,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueUrlOfNotEx
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueUrlWithAtSignInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueUrlWithConsumer
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueUrlWithIAM
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueUrlWithLeadingSlashInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestListQueues
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthCreateQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthDeleteMessage
@@ -289,15 +292,18 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestPurgeQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestPurgeQueueInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestPurgeQueueNonExistentConsumerInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestPurgeQueueNonExisting
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestPurgeQueueWithAtSignInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessage
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageEmpty
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageGroup
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageInvalidQueueUrl
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageInvalidSize
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageKafkaBatches
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageNonExistentConsumerInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageNonExistingQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageNotUtf8
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageReturnToQueue
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageWithLeadingSlashInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageZstdCompressed
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessage
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBadQueueUrl
@@ -566,6 +572,7 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.EmptyEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.BuildTable+WithForeign
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.BuildTable-WithForeign
+ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.DimensionMismatchError
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.MainTable
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.DimensionMismatchError
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.NullEmbedding
@@ -605,6 +612,7 @@ ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.Spli
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitMergePreservesMultipleBloomPrefixes[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_subdomain TSchemeShardSubDomainTest.SimultaneousCreateTenantTable
+ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.CoordinatorRunAtSubdomainNodeWhenAvailable
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst-false
 ydb/core/tx/tx_proxy/ut_ext_tenant unittest.[*/*] chunk
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_query_long_multipart
@@ -780,6 +788,7 @@ ydb/tests/functional/config test_config_migration.py.TestConfigMigrationWithStor
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metrics
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_infer_pdisk_slot_count
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
 ydb/tests/functional/encryption test_encryption.py.TestEncryption.test_simple_encryption
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx

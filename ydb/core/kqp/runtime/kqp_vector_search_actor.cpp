@@ -248,7 +248,9 @@ private:
             return;
         }
 
-        LevelsRemaining = std::max<ui32>(1, Settings.GetIndexLevels());
+
+        Y_ENSURE(Settings.GetIndexLevels() >= 1);
+        LevelsRemaining = Settings.GetIndexLevels();
 
         if (HasPrefix) {
             // Prefixed index: the level-traversal roots are the prefix groups' root
@@ -869,13 +871,16 @@ private:
                     RuntimeError("Returned clusters for invalid parent", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
                     return;
                 }
+
                 TClusterId child = value.GetElement(1).Get<ui64>();
+
                 auto centroid = value.GetElement(2);
                 auto centroidRef = centroid.AsStringRef();
                 if (!RankClusters->IsExpectedFormat(centroidRef)) {
                     RuntimeError("Invalid centroids in level table", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
                     return;
                 }
+
                 // Compute the centroid<->target distance now, overlapping the shard
                 // reads still in flight; ranking is deferred to the round barrier.
                 PushLevelCandidate(child, RankClusters->CalcDistance(centroidRef, TargetVector));

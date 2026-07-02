@@ -444,13 +444,14 @@ IChannelPtr CreateFailureDetectingChannel(
 
 TTraceContextPtr GetOrCreateHandlerTraceContext(
     const NProto::TRequestHeader& header,
+    const std::string& spanName,
     bool forceTracing)
 {
     auto requestId = FromProto<TRequestId>(header.request_id());
     const auto& ext = header.GetExtension(NProto::TRequestHeader::tracing_ext);
     return NTracing::TTraceContext::NewChildFromRpc(
         ext,
-        ConcatToString(TStringBuf("RpcServer:"), header.service(), TStringBuf("."), header.method()),
+        spanName,
         requestId,
         forceTracing);
 }

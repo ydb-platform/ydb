@@ -75,6 +75,7 @@ IChannelPtr CreateFailureDetectingChannel(
 
 NTracing::TTraceContextPtr GetOrCreateHandlerTraceContext(
     const NProto::TRequestHeader& header,
+    const std::string& spanName,
     bool forceTracing);
 NTracing::TTraceContextPtr CreateCallTraceContext(
     std::string service,

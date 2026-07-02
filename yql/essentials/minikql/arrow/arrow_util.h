@@ -205,10 +205,7 @@ struct TPrimitiveDataType<NYql::NDecimal::TInt128> {
 
 inline constexpr size_t GuidBinarySize = sizeof(TGUID);
 
-inline std::shared_ptr<arrow::DataType> GetGuidArrowType() {
-    static const std::shared_ptr<arrow::DataType> Type = arrow::fixed_size_binary(GuidBinarySize);
-    return Type;
-}
+std::shared_ptr<arrow::DataType> GetGuidArrowType();
 
 template <typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value>::type>
 inline arrow::Datum MakeScalarDatum(T value) {

@@ -2581,53 +2581,7 @@ struct TToPgExec {
             *res = builder.Build(true);
             break;
         }
-        case NUdf::EDataSlot::DyNumber: {
-            NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
-            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
-            for (size_t i = 0; i < length; ++i) {
-                auto item = reader.GetItem(array, i);
-                if (!item) {
-                    builder.Add(NUdf::TBlockItem());
-                    continue;
-                }
 
-                auto pgNumeric = DyNumberToPgNumeric(NUdf::TUnboxedValuePod::Embedded(item.AsStringRef()));
-                auto ref = NUdf::TStringRef((const char*)pgNumeric, GetFullVarSize((const text*)pgNumeric));
-                auto ptr = builder.AddPgItem<false, 0>(ref);
-                UpdateCleanVarSize((text*)(ptr + sizeof(void*)), GetCleanVarSize((const text*)pgNumeric));
-                pfree(pgNumeric);
-            }
-
-            *res = builder.Build(true);
-            break;
-        }
-        case NUdf::EDataSlot::Uuid: {
-            NUdf::TFixedSizeBlockReader<TGUID, true> reader;
-            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
-            for (size_t i = 0; i < length; ++i) {
-                auto item = reader.GetItem(array, i);
-                if (!item) {
-                    builder.Add(NUdf::TBlockItem());
-                    continue;
-                }
-
-                TString str;
-                str.reserve(36);
-                const auto uuidRef = item.AsStringRef();
-                ui16 dw[8];
-                std::memcpy(dw, uuidRef.Data(), sizeof(dw));
-                TStringOutput out(str);
-                NKikimr::NUuid::UuidToString(dw, out);
-                auto pgRes = (text*)DirectFunctionCall1Coll(uuid_in, DEFAULT_COLLATION_OID, PointerGetDatum(str.c_str()));
-                auto pgRef = NUdf::TStringRef((const char*)pgRes, GetFullVarSize(pgRes));
-                auto ptr = builder.AddPgItem<false, 0>(pgRef);
-                UpdateCleanVarSize((text*)(ptr + sizeof(void*)), GetCleanVarSize(pgRes));
-                pfree(pgRes);
-            }
-
-            *res = builder.Build(true);
-            break;
-        }
         default:
             ythrow yexception() << "Unsupported type: " << NUdf::GetDataTypeInfo(SourceDataSlot).Name;
         }
@@ -2671,8 +2625,6 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, T
     case NUdf::EDataSlot::Interval:
     case NUdf::EDataSlot::Interval64:
     case NUdf::EDataSlot::Uint64:
-    case NUdf::EDataSlot::Uuid:
-    case NUdf::EDataSlot::DyNumber:
     case NUdf::EDataSlot::Yson:
     case NUdf::EDataSlot::Json:
     case NUdf::EDataSlot::JsonDocument:

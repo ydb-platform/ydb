@@ -70,4 +70,9 @@ void UntrackDatum(const arrow::Datum& datum) {
     }
 }
 
+std::shared_ptr<arrow::DataType> GetGuidArrowType() {
+    static const std::shared_ptr<arrow::DataType> Type = arrow::fixed_size_binary(GuidBinarySize);
+    return Type;
+}
+
 } // namespace NKikimr::NMiniKQL

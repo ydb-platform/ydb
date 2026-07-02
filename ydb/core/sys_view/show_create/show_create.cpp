@@ -118,6 +118,9 @@ private:
         } catch (const TFormatFail& ex) {
             ReplyErrorAndDie(ex.Status, ex.Error);
             return true;
+        } catch (const yexception& ex) {
+            ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, ex.what());
+            return true;
         }
 
         return false;

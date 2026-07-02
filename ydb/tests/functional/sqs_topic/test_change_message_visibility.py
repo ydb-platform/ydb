@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import time
+
 from hamcrest import assert_that, equal_to, has_length, not_none
 
 from ydb.tests.library.sqs_topic.test_base import KikimrSqsTopicTestBase
@@ -21,7 +23,7 @@ class TestSqsTopicChangeMessageVisibility(KikimrSqsTopicTestBase):
             QueueUrl=self._queue_url,
             WaitTimeSeconds=20,
             MaxNumberOfMessages=1,
-            VisibilityTimeout=10,
+            VisibilityTimeout=600,
         )
 
         messages = response.get('Messages')
@@ -34,6 +36,14 @@ class TestSqsTopicChangeMessageVisibility(KikimrSqsTopicTestBase):
             QueueUrl=self._queue_url,
             ReceiptHandle=receipt_handle,
             VisibilityTimeout=1,
+        )
+
+        time.sleep(2)
+
+        response = self._boto_client.receive_message(
+            QueueUrl=self._queue_url,
+            WaitTimeSeconds=20,
+            MaxNumberOfMessages=1,
         )
 
         messages = response.get('Messages')
@@ -55,7 +65,7 @@ class TestSqsTopicChangeMessageVisibility(KikimrSqsTopicTestBase):
             QueueUrl=self._queue_url,
             WaitTimeSeconds=20,
             MaxNumberOfMessages=1,
-            VisibilityTimeout=10,
+            VisibilityTimeout=600,
         )
 
         messages = response.get('Messages')
@@ -68,6 +78,14 @@ class TestSqsTopicChangeMessageVisibility(KikimrSqsTopicTestBase):
             QueueUrl=self._queue_url,
             ReceiptHandle=receipt_handle,
             VisibilityTimeout=1,
+        )
+
+        time.sleep(2)
+
+        response = self._boto_client.receive_message(
+            QueueUrl=self._queue_url,
+            WaitTimeSeconds=20,
+            MaxNumberOfMessages=1,
         )
 
         messages = response.get('Messages')

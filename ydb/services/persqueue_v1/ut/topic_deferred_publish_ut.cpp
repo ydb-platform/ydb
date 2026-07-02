@@ -186,8 +186,10 @@ Y_UNIT_TEST(BeginPublicationRejectsEmptyDatabaseAtGrpcProxy) {
     server.AnnoyingClient->GrantConnect("root@builtin");
 
     const auto outcome = CallBeginPublicationWithEmptyDatabaseHeader(*MakeStub(server));
-    UNIT_ASSERT(!outcome.RpcStatus.ok());
-    UNIT_ASSERT_VALUES_EQUAL(outcome.RpcStatus.error_code(), grpc::StatusCode::UNAUTHENTICATED);
+    UNIT_ASSERT(outcome.RpcStatus.ok());
+    UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::BAD_REQUEST);
+    UNIT_ASSERT_GT(outcome.Operation.issues_size(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.issues(0).message(), "Requests without specified database are not allowed");
 }
 
 Y_UNIT_TEST(BeginPublicationRejectsEmptyDatabaseInHandler) {
@@ -206,8 +208,10 @@ Y_UNIT_TEST(BeginPublicationRejectsMissingDatabaseAtGrpcProxy) {
     server.AnnoyingClient->GrantConnect("root@builtin");
 
     const auto outcome = CallBeginPublicationWithoutDatabaseHeader(*MakeStub(server));
-    UNIT_ASSERT(!outcome.RpcStatus.ok());
-    UNIT_ASSERT_VALUES_EQUAL(outcome.RpcStatus.error_code(), grpc::StatusCode::UNAUTHENTICATED);
+    UNIT_ASSERT(outcome.RpcStatus.ok());
+    UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::BAD_REQUEST);
+    UNIT_ASSERT_GT(outcome.Operation.issues_size(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.issues(0).message(), "Requests without specified database are not allowed");
 }
 
 Y_UNIT_TEST(BeginPublicationRejectsMissingDatabaseInHandler) {

@@ -124,7 +124,7 @@ private:
                 name = Columns_->at(i);
             }
 
-            columns->Add(BuildQuotedAtom(Pos_, std::move(name)));
+            columns->Add(BuildQuotedAtom(Pos_, name));
         }
         return columns;
     }
@@ -350,7 +350,7 @@ private:
             TString label = TermAlias(term, i, used);
             used.emplace(label);
 
-            term->SetLabel(std::move(label));
+            term->SetLabel(label);
         }
 
         return ::NSQLTranslationV1::Init(ctx, src, terms);
@@ -478,7 +478,7 @@ private:
     }
 
     TNodePtr BuildYqlResultItem(TString name, TNodePtr term) const {
-        TNodePtr nameAtom = BuildQuotedAtom(Pos_, std::move(name));
+        TNodePtr nameAtom = BuildQuotedAtom(Pos_, name);
         return Y("YqlResultItem", std::move(nameAtom), Y("Void"), Y("lambda", Q(Y()), std::move(term)));
     }
 
@@ -507,7 +507,7 @@ private:
                 columnList = L(std::move(columnList), BuildQuotedAtom(Pos_, column));
             }
 
-            TNodePtr nameAtom = BuildQuotedAtom(Pos_, std::move(name));
+            TNodePtr nameAtom = BuildQuotedAtom(Pos_, name);
             return Q(Y(std::move(node), std::move(nameAtom), Q(std::move(columnList))));
         };
 
@@ -517,7 +517,7 @@ private:
 
         if (auto& columns = source.Alias->Columns) {
             if (auto* values = dynamic_cast<TYqlValuesNode*>(source.Node.Get())) {
-                if (!values->SetColumns(std::move(columns), ctx)) {
+                if (!values->SetColumns(columns, ctx)) {
                     return Nothing();
                 }
 
@@ -525,7 +525,7 @@ private:
             }
 
             if (source.Alias->Kind == TYqlSourceAlias::EKind::CTE) {
-                return build(source.Node, source.Alias->Name, std::move(columns));
+                return build(source.Node, source.Alias->Name, columns);
             }
 
             ctx.Error() << "Qualified by column names source alias "
@@ -862,7 +862,7 @@ public:
             if (auto columns = Columns()) {
                 TNodePtr list = Y();
                 for (TString& column : *columns) {
-                    TNodePtr columnAtom = BuildQuotedAtom(Pos_, std::move(column));
+                    TNodePtr columnAtom = BuildQuotedAtom(Pos_, column);
                     list = L(std::move(list), std::move(columnAtom));
                 }
 
@@ -1091,12 +1091,12 @@ TNodePtr WrapYqlSelectSubExpr(TNodePtr node) {
 
 TNodePtr BuildYqlScalarSubquery(TNodePtr node) {
     TYqlSubLinkNode::TScalar variant = {};
-    return new TYqlSubLinkNode(std::move(node), std::move(variant));
+    return new TYqlSubLinkNode(std::move(node), variant);
 }
 
 TNodePtr BuildYqlExistsSubquery(TNodePtr node) {
     TYqlSubLinkNode::TExists variant = {};
-    return new TYqlSubLinkNode(std::move(node), std::move(variant));
+    return new TYqlSubLinkNode(std::move(node), variant);
 }
 
 TNodePtr BuildYqlInSubquery(TNodePtr node, TNodePtr expression) {

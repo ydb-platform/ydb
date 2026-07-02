@@ -206,7 +206,7 @@ Y_UNIT_TEST(WhenConcurrentlyAccessed_ThenDoesNotDie) {
             if (a.IsGet) {
                 Y_DO_NOT_OPTIMIZE_AWAY(cache->Get(a.Key));
             } else {
-                Y_DO_NOT_OPTIMIZE_AWAY(cache->Update(a.Key, std::move(a.Value)));
+                Y_DO_NOT_OPTIMIZE_AWAY(cache->Update(a.Key, a.Value));
             }
         }));
     }

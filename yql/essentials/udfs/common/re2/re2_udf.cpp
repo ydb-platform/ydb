@@ -397,7 +397,7 @@ template <bool posix>
 class TIsValidRegexp: public TBoxedValue {
 public:
     explicit TIsValidRegexp(const TOptionsSchema optionsSchema)
-        : OptionsSchema_(std::move(optionsSchema))
+        : OptionsSchema_(optionsSchema)
     {
     }
 

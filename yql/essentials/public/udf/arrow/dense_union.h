@@ -19,6 +19,12 @@ struct TDenseUnionChildUsage {
 TVector<TDenseUnionChildUsage> CalculateDenseUnionChildrenUsage(const arrow::ArrayData& data);
 
 void AdjustDenseUnionValueOffsets(
+    TArrayRef<const i32> src,
+    TArrayRef<i32> dst,
+    TArrayRef<const i8> typeCodes,
+    TArrayRef<const TDenseUnionChildUsage> childUsage);
+
+void AdjustDenseUnionValueOffsetsInplace(
     TArrayRef<i32> valueOffsets,
     TArrayRef<const i8> typeCodes,
     TArrayRef<const TDenseUnionChildUsage> childUsage);

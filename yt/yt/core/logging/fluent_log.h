@@ -3,6 +3,8 @@
 #include <yt/yt/core/yson/public.h>
 #include <yt/yt/core/ytree/fluent.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -57,9 +59,8 @@ private:
     const i64 MaxBatchSize_;
     const ELogLevel Level_;
 
-    // TODO(babenko): migrate to std::string
-    TString BatchYson_;
-    TStringOutput BatchOutputStream_{BatchYson_};
+    std::string BatchYson_;
+    TStdStringOutput BatchOutputStream_{BatchYson_};
     NYson::TYsonWriter BatchYsonWriter_{
         &BatchOutputStream_,
         NYson::EYsonFormat::Binary,

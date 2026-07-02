@@ -3,7 +3,7 @@
 #include "cube.h"
 #include "tag_registry.h"
 
-#include <yt/yt/library/profiling/sensor_impl.h>
+#include <yt/yt/library/profiling/simple_sensor_impl.h>
 #include <yt/yt/library/profiling/tag.h>
 #include <yt/yt/library/profiling/solomon/sensor_dump.pb.h>
 

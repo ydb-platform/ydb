@@ -2,8 +2,6 @@
 
 PY3_LIBRARY()
 
-SUBSCRIBER(g:python-contrib)
-
 VERSION(41.0.6)
 
 LICENSE(

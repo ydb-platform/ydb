@@ -4,56 +4,65 @@
 """
 Unit tests for :py:mod:`OpenSSL.crypto`.
 """
-
+import base64
+import sys
+from datetime import datetime, timedelta
+from subprocess import PIPE, Popen
 from warnings import simplefilter
 
-import base64
-from subprocess import PIPE, Popen
-from datetime import datetime, timedelta
-import sys
-
-import pytest
-
 from cryptography import x509
-from cryptography.hazmat.backends.openssl.backend import backend
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, ed25519, ed448, rsa
 
 import flaky
 
-from OpenSSL.crypto import TYPE_RSA, TYPE_DSA, Error, PKey
-from OpenSSL.crypto import X509, X509Name
-from OpenSSL.crypto import (
-    X509Store,
-    X509StoreFlags,
-    X509StoreContext,
-    X509StoreContextError,
-)
-from OpenSSL.crypto import X509Req
-from OpenSSL.crypto import X509Extension
-from OpenSSL.crypto import load_certificate, load_privatekey
-from OpenSSL.crypto import load_publickey, dump_publickey
-from OpenSSL.crypto import FILETYPE_PEM, FILETYPE_ASN1, FILETYPE_TEXT
-from OpenSSL.crypto import dump_certificate, load_certificate_request
-from OpenSSL.crypto import dump_certificate_request, dump_privatekey
-from OpenSSL.crypto import PKCS7, load_pkcs7_data
-from OpenSSL.crypto import PKCS12, load_pkcs12
-from OpenSSL.crypto import CRL, Revoked, dump_crl, load_crl
-from OpenSSL.crypto import NetscapeSPKI
-from OpenSSL.crypto import (
-    sign,
-    verify,
-    get_elliptic_curve,
-    get_elliptic_curves,
-)
+import pytest
 
 from OpenSSL._util import ffi as _ffi, lib as _lib
+from OpenSSL.crypto import (
+    CRL,
+    Error,
+    FILETYPE_ASN1,
+    FILETYPE_PEM,
+    FILETYPE_TEXT,
+    NetscapeSPKI,
+    PKCS12,
+    PKCS7,
+    PKey,
+    Revoked,
+    TYPE_DSA,
+    TYPE_RSA,
+    X509,
+    X509Extension,
+    X509Name,
+    X509Req,
+    X509Store,
+    X509StoreContext,
+    X509StoreContextError,
+    X509StoreFlags,
+    dump_certificate,
+    dump_certificate_request,
+    dump_crl,
+    dump_privatekey,
+    dump_publickey,
+    get_elliptic_curve,
+    get_elliptic_curves,
+    load_certificate,
+    load_certificate_request,
+    load_crl,
+    load_pkcs12,
+    load_pkcs7_data,
+    load_privatekey,
+    load_publickey,
+    sign,
+    verify,
+)
 
 from .util import (
     EqualityTestsMixin,
-    is_consistent_type,
-    WARNING_TYPE_EXPECTED,
     NON_ASCII,
+    WARNING_TYPE_EXPECTED,
+    is_consistent_type,
 )
 
 
@@ -64,7 +73,7 @@ def normalize_privatekey_pem(pem):
 GOOD_CIPHER = "blowfish"
 BAD_CIPHER = "zippers"
 
-GOOD_DIGEST = "SHA1"
+GOOD_DIGEST = "SHA256"
 BAD_DIGEST = "monkeys"
 
 old_root_cert_pem = b"""-----BEGIN CERTIFICATE-----
@@ -609,9 +618,10 @@ vrzEeLDRiiPl92dyyWmu
 -----END X509 CRL-----
 """
 
+# The signature on this CRL is invalid.
 crlDataUnsupportedExtension = b"""\
 -----BEGIN X509 CRL-----
-MIIGRzCCBS8CAQIwDQYJKoZIhvcNAQELBQAwJzELMAkGA1UEBhMCVVMxGDAWBgNV
+MIIGRzCCBS8CAQEwDQYJKoZIhvcNAQELBQAwJzELMAkGA1UEBhMCVVMxGDAWBgNV
 BAMMD2NyeXB0b2dyYXBoeS5pbxgPMjAxNTAxMDEwMDAwMDBaGA8yMDE2MDEwMTAw
 MDAwMFowggTOMBQCAQAYDzIwMTUwMTAxMDAwMDAwWjByAgEBGA8yMDE1MDEwMTAw
 MDAwMFowXDAYBgNVHRgEERgPMjAxNTAxMDEwMDAwMDBaMDQGA1UdHQQtMCukKTAn
@@ -783,6 +793,21 @@ MBsCAQACAS0CAQcCAQACAQ8CAQMCAQACAQACAQA=
 -----END RSA PRIVATE KEY-----
 """
 
+ed25519_private_key_pem = b"""-----BEGIN PRIVATE KEY-----
+MC4CAQAwBQYDK2VwBCIEIKlxBbhVsSURoLTmsu9uTqYH6oF7zpxmp1ZQCAPhDmI2
+-----END PRIVATE KEY-----
+"""
+
+ed448_private_key_pem = b"""-----BEGIN PRIVATE KEY-----
+MEcCAQAwBQYDK2VxBDsEOcqZ7a3k6JwrJbYO8CNTPT/d7dlWCo5vCf0EYDj79ZvA\nhD8u9EPHlYJw5Y8ZQdH4WmVEfpKA23xkdQ==
+-----END PRIVATE KEY-----
+"""
+
+x25519_private_key_pem = b"""-----BEGIN PRIVATE KEY-----
+MC4CAQAwBQYDK2VuBCIEIPAjVfPNTm25VxtBRg+JjjFx9tA3M8aaBdVhjb92iBts
+-----END PRIVATE KEY-----
+"""
+
 
 @pytest.fixture
 def x509_data():
@@ -809,7 +834,7 @@ def x509_data():
     yield pkey, x509
 
 
-class TestX509Ext(object):
+class TestX509Ext:
     """
     Tests for `OpenSSL.crypto.X509Extension`.
     """
@@ -914,7 +939,7 @@ class TestX509Ext(object):
             b"basicConstraints", False, b"CA:TRUE", subject=x509
         )
         x509.add_extensions([ext1])
-        x509.sign(pkey, "sha1")
+        x509.sign(pkey, "sha256")
         # This is a little lame.  Can we think of a better way?
         text = dump_certificate(FILETYPE_TEXT, x509)
         assert b"X509v3 Basic Constraints:" in text
@@ -930,7 +955,7 @@ class TestX509Ext(object):
             b"subjectKeyIdentifier", False, b"hash", subject=x509
         )
         x509.add_extensions([ext3])
-        x509.sign(pkey, "sha1")
+        x509.sign(pkey, "sha256")
         text = dump_certificate(FILETYPE_TEXT, x509)
         assert b"X509v3 Subject Key Identifier:" in text
 
@@ -963,7 +988,7 @@ class TestX509Ext(object):
             b"basicConstraints", False, b"CA:TRUE", issuer=x509
         )
         x509.add_extensions([ext1])
-        x509.sign(pkey, "sha1")
+        x509.sign(pkey, "sha256")
         text = dump_certificate(FILETYPE_TEXT, x509)
         assert b"X509v3 Basic Constraints:" in text
         assert b"CA:TRUE" in text
@@ -978,7 +1003,7 @@ class TestX509Ext(object):
             b"authorityKeyIdentifier", False, b"issuer:always", issuer=x509
         )
         x509.add_extensions([ext2])
-        x509.sign(pkey, "sha1")
+        x509.sign(pkey, "sha256")
         text = dump_certificate(FILETYPE_TEXT, x509)
         assert b"X509v3 Authority Key Identifier:" in text
         assert b"DirName:/CN=Yoda root CA" in text
@@ -1008,22 +1033,40 @@ class TestX509Ext(object):
             )
 
 
-class TestPKey(object):
+class TestPKey:
     """
     Tests for `OpenSSL.crypto.PKey`.
     """
 
-    def test_convert_from_cryptography_private_key(self):
+    @pytest.mark.parametrize(
+        ("key_string", "key_type"),
+        [
+            (intermediate_key_pem, rsa.RSAPrivateKey),
+            (ec_private_key_pem, ec.EllipticCurvePrivateKey),
+            (ed25519_private_key_pem, ed25519.Ed25519PrivateKey),
+            (ed448_private_key_pem, ed448.Ed448PrivateKey),
+        ],
+    )
+    def test_convert_roundtrip_cryptography_private_key(
+        self, key_string, key_type
+    ):
         """
         PKey.from_cryptography_key creates a proper private PKey.
+        PKey.to_cryptography_key creates a proper cryptography private key.
         """
-        key = serialization.load_pem_private_key(
-            intermediate_key_pem, None, backend
-        )
+        key = serialization.load_pem_private_key(key_string, None)
         pkey = PKey.from_cryptography_key(key)
 
         assert isinstance(pkey, PKey)
-        assert pkey.bits() == key.key_size
+        parsed_key = pkey.to_cryptography_key()
+        assert isinstance(parsed_key, key_type)
+        assert parsed_key.public_key().public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        ) == key.public_key().public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
         assert pkey._only_public is False
         assert pkey._initialized is True
 
@@ -1031,7 +1074,7 @@ class TestPKey(object):
         """
         PKey.from_cryptography_key creates a proper public PKey.
         """
-        key = serialization.load_pem_public_key(cleartextPublicKeyPEM, backend)
+        key = serialization.load_pem_public_key(cleartextPublicKeyPEM)
         pkey = PKey.from_cryptography_key(key)
 
         assert isinstance(pkey, PKey)
@@ -1043,9 +1086,7 @@ class TestPKey(object):
         """
         PKey.from_cryptography_key raises TypeError with an unsupported type.
         """
-        key = serialization.load_pem_private_key(
-            ec_private_key_pem, None, backend
-        )
+        key = serialization.load_pem_private_key(x25519_private_key_pem, None)
         with pytest.raises(TypeError):
             PKey.from_cryptography_key(key)
 
@@ -1057,16 +1098,6 @@ class TestPKey(object):
         key = pkey.to_cryptography_key()
 
         assert isinstance(key, rsa.RSAPublicKey)
-        assert pkey.bits() == key.key_size
-
-    def test_convert_private_pkey_to_cryptography_key(self):
-        """
-        PKey.to_cryptography_key creates a proper cryptography private key.
-        """
-        pkey = load_privatekey(FILETYPE_PEM, root_key_pem)
-        key = pkey.to_cryptography_key()
-
-        assert isinstance(key, rsa.RSAPrivateKey)
         assert pkey.bits() == key.key_size
 
     def test_type(self):
@@ -1175,10 +1206,11 @@ class TestPKey(object):
 
     def test_inconsistent_key(self):
         """
-        `PKey.check` returns `Error` if the key is not consistent.
+        Either `load_privatekey` or `PKey.check` returns `Error` if the key is
+        not consistent.
         """
-        key = load_privatekey(FILETYPE_PEM, inconsistentPrivateKeyPEM)
         with pytest.raises(Error):
+            key = load_privatekey(FILETYPE_PEM, inconsistentPrivateKeyPEM)
             key.check()
 
     def test_check_public_key(self):
@@ -1197,10 +1229,11 @@ class TestPKey(object):
 
     def test_check_pr_897(self):
         """
-        `PKey.check` raises `OpenSSL.crypto.Error` if provided with broken key
+        Either `load_privatekey` or `PKey.check` raises `OpenSSL.crypto.Error`
+        if provided with broken key
         """
-        pkey = load_privatekey(FILETYPE_PEM, rsa_p_not_prime_pem)
         with pytest.raises(Error):
+            pkey = load_privatekey(FILETYPE_PEM, rsa_p_not_prime_pem)
             pkey.check()
 
 
@@ -1222,7 +1255,7 @@ def x509_name(**attrs):
     return name
 
 
-class TestX509Name(object):
+class TestX509Name:
     """
     Unit tests for `OpenSSL.crypto.X509Name`.
     """
@@ -1398,6 +1431,19 @@ class TestX509Name(object):
         # other X509Name.
         assert_greater_than(x509_name(CN="def"), x509_name(CN="abc"))
 
+        def assert_raises(a, b):
+            with pytest.raises(TypeError):
+                a < b
+            with pytest.raises(TypeError):
+                a <= b
+            with pytest.raises(TypeError):
+                a > b
+            with pytest.raises(TypeError):
+                a >= b
+
+        # Only X509Name objects can be compared with lesser than / greater than
+        assert_raises(x509_name(), object())
+
     def test_hash(self):
         """
         `X509Name.hash` returns an integer hash based on the value of the name.
@@ -1555,14 +1601,20 @@ class TestX509Req(_PKeyInteractionTestsMixin):
         """
         `X509Req.set_version` sets the X.509 version of the certificate
         request. `X509Req.get_version` returns the X.509 version of the
-        certificate request. The initial value of the version is 0.
+        certificate request. The only defined version is 0. Others may or
+        may not be supported depending on backend.
         """
         request = X509Req()
         assert request.get_version() == 0
-        request.set_version(1)
-        assert request.get_version() == 1
-        request.set_version(3)
-        assert request.get_version() == 3
+        request.set_version(0)
+        assert request.get_version() == 0
+        try:
+            request.set_version(1)
+            assert request.get_version() == 1
+            request.set_version(3)
+            assert request.get_version() == 3
+        except Error:
+            pass
 
     def test_version_wrong_args(self):
         """
@@ -1686,9 +1738,7 @@ class TestX509Req(_PKeyInteractionTestsMixin):
         assert request.verify(pkey)
 
     def test_convert_from_cryptography(self):
-        crypto_req = x509.load_pem_x509_csr(
-            cleartextCertificateRequestPEM, backend
-        )
+        crypto_req = x509.load_pem_x509_csr(cleartextCertificateRequestPEM)
         req = X509Req.from_cryptography(crypto_req)
         assert isinstance(req, X509Req)
 
@@ -1752,8 +1802,8 @@ class TestX509(_PKeyInteractionTestsMixin):
         `X509.get_version` retrieves it.
         """
         cert = X509()
-        cert.set_version(1234)
-        assert cert.get_version() == 1234
+        cert.set_version(2)
+        assert cert.get_version() == 2
 
     def test_serial_number(self):
         """
@@ -1767,12 +1817,12 @@ class TestX509(_PKeyInteractionTestsMixin):
         assert certificate.get_serial_number() == 0
         certificate.set_serial_number(1)
         assert certificate.get_serial_number() == 1
-        certificate.set_serial_number(2 ** 32 + 1)
-        assert certificate.get_serial_number() == 2 ** 32 + 1
-        certificate.set_serial_number(2 ** 64 + 1)
-        assert certificate.get_serial_number() == 2 ** 64 + 1
-        certificate.set_serial_number(2 ** 128 + 1)
-        assert certificate.get_serial_number() == 2 ** 128 + 1
+        certificate.set_serial_number(2**32 + 1)
+        assert certificate.get_serial_number() == 2**32 + 1
+        certificate.set_serial_number(2**64 + 1)
+        assert certificate.get_serial_number() == 2**64 + 1
+        certificate.set_serial_number(2**128 + 1)
+        assert certificate.get_serial_number() == 2**128 + 1
 
     def _setBoundTest(self, which):
         """
@@ -1920,6 +1970,14 @@ class TestX509(_PKeyInteractionTestsMixin):
         cert.gmtime_adj_notAfter(2)
         assert not cert.has_expired()
 
+    def test_has_expired_exception(self):
+        """
+        `X509.has_expired` throws ValueError if not-after time is not set
+        """
+        cert = X509()
+        with pytest.raises(ValueError):
+            cert.has_expired()
+
     def test_root_has_not_expired(self):
         """
         `X509.has_expired` returns `False` if the certificate's not-after time
@@ -1935,13 +1993,13 @@ class TestX509(_PKeyInteractionTestsMixin):
         """
         cert = load_certificate(FILETYPE_PEM, old_root_cert_pem)
         assert (
-            # This is MD5 instead of GOOD_DIGEST because the digest algorithm
-            # actually matters to the assertion (ie, another arbitrary, good
-            # digest will not product the same digest).
             # Digest verified with the command:
-            # openssl x509 -in root_cert.pem -noout -fingerprint -md5
-            cert.digest("MD5")
-            == b"19:B3:05:26:2B:F8:F2:FF:0B:8F:21:07:A8:28:B8:75"
+            # openssl x509 -in root_cert.pem -noout -fingerprint -sha256
+            cert.digest("SHA256")
+            == (
+                b"3E:0F:16:39:6B:B1:3E:4F:08:85:C6:5F:10:0D:CB:2C:"
+                b"25:C2:91:4E:D0:4A:C2:29:06:BD:55:E3:A7:B3:B7:06"
+            )
         )
 
     def _extcert(self, pkey, extensions):
@@ -1957,7 +2015,7 @@ class TestX509(_PKeyInteractionTestsMixin):
         cert.set_notAfter(when)
 
         cert.add_extensions(extensions)
-        cert.sign(pkey, "sha1")
+        cert.sign(pkey, "sha256")
         return load_certificate(
             FILETYPE_PEM, dump_certificate(FILETYPE_PEM, cert)
         )
@@ -2036,8 +2094,8 @@ class TestX509(_PKeyInteractionTestsMixin):
             b"DNS:altnull.python.org\x00example.com, "
             b"email:null@python.org\x00user@example.org, "
             b"URI:http://null.python.org\x00http://example.org, "
-            b"IP Address:192.0.2.1, IP Address:2001:DB8:0:0:0:0:0:1\n"
-            == str(ext).encode("ascii")
+            b"IP Address:192.0.2.1, IP Address:2001:DB8:0:0:0:0:0:1"
+            == str(ext).encode("ascii").strip()
         )
 
     def test_invalid_digest_algorithm(self):
@@ -2204,9 +2262,7 @@ tgI5
             cert.sign(object(), b"sha256")
 
     def test_convert_from_cryptography(self):
-        crypto_cert = x509.load_pem_x509_certificate(
-            intermediate_cert_pem, backend
-        )
+        crypto_cert = x509.load_pem_x509_certificate(intermediate_cert_pem)
         cert = X509.from_cryptography(crypto_cert)
 
         assert isinstance(cert, X509)
@@ -2224,7 +2280,7 @@ tgI5
         assert crypto_cert.version.value == cert.get_version()
 
 
-class TestX509Store(object):
+class TestX509Store:
     """
     Test for `OpenSSL.crypto.X509Store`.
     """
@@ -2295,7 +2351,7 @@ class TestX509Store(object):
     def test_load_locations_parameters(
         self, cafile, capath, call_cafile, call_capath, monkeypatch
     ):
-        class LibMock(object):
+        class LibMock:
             def load_locations(self, store, cafile, capath):
                 self.cafile = cafile
                 self.capath = capath
@@ -2326,7 +2382,7 @@ class TestX509Store(object):
             store.load_locations(cafile=str(invalid_ca_file))
 
 
-class TestPKCS12(object):
+class TestPKCS12:
     """
     Test for `OpenSSL.crypto.PKCS12` and `OpenSSL.crypto.load_pkcs12`.
     """
@@ -2467,7 +2523,7 @@ class TestPKCS12(object):
                 b"-nodes",
                 b"-passin",
                 b"pass:" + passwd,
-                *extra
+                *extra,
             )
             assert recovered_key[-len(key) :] == key
         if cert:
@@ -2479,7 +2535,7 @@ class TestPKCS12(object):
                 b"-passin",
                 b"pass:" + passwd,
                 b"-nokeys",
-                *extra
+                *extra,
             )
             assert recovered_cert[-len(cert) :] == cert
         if ca:
@@ -2491,7 +2547,7 @@ class TestPKCS12(object):
                 b"-passin",
                 b"pass:" + passwd,
                 b"-nokeys",
-                *extra
+                *extra,
             )
             assert recovered_cert[-len(ca) :] == ca
 
@@ -2802,7 +2858,7 @@ def _runopenssl(pem, *args):
     return output
 
 
-class TestLoadPublicKey(object):
+class TestLoadPublicKey:
     """
     Tests for :func:`load_publickey`.
     """
@@ -2842,7 +2898,7 @@ class TestLoadPublicKey(object):
         assert dumped_pem == cleartextPublicKeyPEM
 
 
-class TestFunction(object):
+class TestFunction:
     """
     Tests for free-functions in the `OpenSSL.crypto` module.
     """
@@ -3263,7 +3319,7 @@ class TestFunction(object):
             load_pkcs7_data(object(), b"foo")
 
 
-class TestLoadCertificate(object):
+class TestLoadCertificate:
     """
     Tests for `load_certificate_request`.
     """
@@ -3287,7 +3343,7 @@ class TestLoadCertificate(object):
             load_certificate(FILETYPE_ASN1, b"lol")
 
 
-class TestPKCS7(object):
+class TestPKCS7:
     """
     Tests for `PKCS7`.
     """
@@ -3387,7 +3443,7 @@ class TestNetscapeSPKI(_PKeyInteractionTestsMixin):
         assert isinstance(blob, bytes)
 
 
-class TestRevoked(object):
+class TestRevoked:
     """
     Tests for `OpenSSL.crypto.Revoked`.
     """
@@ -3477,7 +3533,7 @@ class TestRevoked(object):
         revoked.set_reason(None)
         assert revoked.get_reason() is None
 
-    @pytest.mark.parametrize("reason", [object(), 1.0, u"foo"])
+    @pytest.mark.parametrize("reason", [object(), 1.0, "foo"])
     def test_set_reason_wrong_args(self, reason):
         """
         `Revoked.set_reason` raises `TypeError` if called with an argument
@@ -3497,7 +3553,7 @@ class TestRevoked(object):
             revoked.set_reason(b"blue")
 
 
-class TestCRL(object):
+class TestCRL:
     """
     Tests for `OpenSSL.crypto.CRL`.
     """
@@ -3548,17 +3604,17 @@ class TestCRL(object):
         dumped_crl = self._get_crl().export(
             self.cert, self.pkey, days=20, digest=b"sha256"
         )
-        crl = x509.load_pem_x509_crl(dumped_crl, backend)
+        crl = x509.load_pem_x509_crl(dumped_crl)
         revoked = crl.get_revoked_certificate_by_serial_number(0x03AB)
         assert revoked is not None
         assert crl.issuer == x509.Name(
             [
-                x509.NameAttribute(x509.NameOID.COUNTRY_NAME, u"US"),
-                x509.NameAttribute(x509.NameOID.STATE_OR_PROVINCE_NAME, u"IL"),
-                x509.NameAttribute(x509.NameOID.LOCALITY_NAME, u"Chicago"),
-                x509.NameAttribute(x509.NameOID.ORGANIZATION_NAME, u"Testing"),
+                x509.NameAttribute(x509.NameOID.COUNTRY_NAME, "US"),
+                x509.NameAttribute(x509.NameOID.STATE_OR_PROVINCE_NAME, "IL"),
+                x509.NameAttribute(x509.NameOID.LOCALITY_NAME, "Chicago"),
+                x509.NameAttribute(x509.NameOID.ORGANIZATION_NAME, "Testing"),
                 x509.NameAttribute(
-                    x509.NameOID.COMMON_NAME, u"Testing Root CA"
+                    x509.NameOID.COMMON_NAME, "Testing Root CA"
                 ),
             ]
         )
@@ -3573,19 +3629,19 @@ class TestCRL(object):
 
         # DER format
         dumped_crl = self._get_crl().export(
-            self.cert, self.pkey, FILETYPE_ASN1, digest=b"md5"
+            self.cert, self.pkey, FILETYPE_ASN1, digest=b"sha256"
         )
-        crl = x509.load_der_x509_crl(dumped_crl, backend)
+        crl = x509.load_der_x509_crl(dumped_crl)
         revoked = crl.get_revoked_certificate_by_serial_number(0x03AB)
         assert revoked is not None
         assert crl.issuer == x509.Name(
             [
-                x509.NameAttribute(x509.NameOID.COUNTRY_NAME, u"US"),
-                x509.NameAttribute(x509.NameOID.STATE_OR_PROVINCE_NAME, u"IL"),
-                x509.NameAttribute(x509.NameOID.LOCALITY_NAME, u"Chicago"),
-                x509.NameAttribute(x509.NameOID.ORGANIZATION_NAME, u"Testing"),
+                x509.NameAttribute(x509.NameOID.COUNTRY_NAME, "US"),
+                x509.NameAttribute(x509.NameOID.STATE_OR_PROVINCE_NAME, "IL"),
+                x509.NameAttribute(x509.NameOID.LOCALITY_NAME, "Chicago"),
+                x509.NameAttribute(x509.NameOID.ORGANIZATION_NAME, "Testing"),
                 x509.NameAttribute(
-                    x509.NameOID.COMMON_NAME, u"Testing Root CA"
+                    x509.NameOID.COMMON_NAME, "Testing Root CA"
                 ),
             ]
         )
@@ -3600,7 +3656,7 @@ class TestCRL(object):
 
         # text format
         dumped_text = crl.export(
-            self.cert, self.pkey, type=FILETYPE_TEXT, digest=b"md5"
+            self.cert, self.pkey, type=FILETYPE_TEXT, digest=b"sha256"
         )
         assert len(dumped_text) > 500
 
@@ -3610,9 +3666,9 @@ class TestCRL(object):
         signature algorithm based on that digest function.
         """
         crl = self._get_crl()
-        dumped_crl = crl.export(self.cert, self.pkey, digest=b"sha1")
+        dumped_crl = crl.export(self.cert, self.pkey, digest=b"sha384")
         text = _runopenssl(dumped_crl, b"crl", b"-noout", b"-text")
-        text.index(b"Signature Algorithm: sha1")
+        text.index(b"Signature Algorithm: sha384")
 
     def test_export_md5_digest(self):
         """
@@ -3794,7 +3850,9 @@ class TestCRL(object):
             crl.add_revoked(revoked)
         crl.set_version(1)
         crl.set_lastUpdate(b"20140601000000Z")
-        crl.set_nextUpdate(b"20180601000000Z")
+        # The year 5000 is far into the future so that this CRL isn't
+        # considered to have expired.
+        crl.set_nextUpdate(b"50000601000000Z")
         crl.sign(issuer_cert, issuer_key, digest=b"sha512")
         return crl
 
@@ -3820,7 +3878,7 @@ class TestCRL(object):
         store_ctx = X509StoreContext(store, self.intermediate_server_cert)
         with pytest.raises(X509StoreContextError) as err:
             store_ctx.verify_certificate()
-        assert err.value.args[0][2] == "certificate revoked"
+        assert str(err.value) == "certificate revoked"
 
     def test_verify_with_missing_crl(self):
         """
@@ -3840,11 +3898,11 @@ class TestCRL(object):
         store_ctx = X509StoreContext(store, self.intermediate_server_cert)
         with pytest.raises(X509StoreContextError) as err:
             store_ctx.verify_certificate()
-        assert err.value.args[0][2] == "unable to get certificate CRL"
+        assert str(err.value) == "unable to get certificate CRL"
         assert err.value.certificate.get_subject().CN == "intermediate-service"
 
     def test_convert_from_cryptography(self):
-        crypto_crl = x509.load_pem_x509_crl(crlData, backend)
+        crypto_crl = x509.load_pem_x509_crl(crlData)
         crl = CRL.from_cryptography(crypto_crl)
         assert isinstance(crl, CRL)
 
@@ -3858,7 +3916,7 @@ class TestCRL(object):
         assert isinstance(crypto_crl, x509.CertificateRevocationList)
 
 
-class TestX509StoreContext(object):
+class TestX509StoreContext:
     """
     Tests for `OpenSSL.crypto.X509StoreContext`.
     """
@@ -4051,7 +4109,11 @@ class TestX509StoreContext(object):
         with pytest.raises(X509StoreContextError) as exc:
             store_ctx.verify_certificate()
 
-        assert exc.value.args[0][2] == "self signed certificate"
+        # OpenSSL 1.1.x and 3.0.x have different error messages
+        assert str(exc.value) in [
+            "self signed certificate",
+            "self-signed certificate",
+        ]
         assert exc.value.certificate.get_subject().CN == "Testing Root CA"
 
     def test_invalid_chain_no_root(self):
@@ -4066,7 +4128,7 @@ class TestX509StoreContext(object):
         with pytest.raises(X509StoreContextError) as exc:
             store_ctx.verify_certificate()
 
-        assert exc.value.args[0][2] == "unable to get issuer certificate"
+        assert str(exc.value) == "unable to get issuer certificate"
         assert exc.value.certificate.get_subject().CN == "intermediate"
 
     def test_invalid_chain_no_intermediate(self):
@@ -4081,7 +4143,7 @@ class TestX509StoreContext(object):
         with pytest.raises(X509StoreContextError) as exc:
             store_ctx.verify_certificate()
 
-        assert exc.value.args[0][2] == "unable to get local issuer certificate"
+        assert str(exc.value) == "unable to get local issuer certificate"
         assert exc.value.certificate.get_subject().CN == "intermediate-service"
 
     def test_modification_pre_verify(self):
@@ -4099,7 +4161,7 @@ class TestX509StoreContext(object):
         with pytest.raises(X509StoreContextError) as exc:
             store_ctx.verify_certificate()
 
-        assert exc.value.args[0][2] == "unable to get issuer certificate"
+        assert str(exc.value) == "unable to get issuer certificate"
         assert exc.value.certificate.get_subject().CN == "intermediate"
 
         store_ctx.set_store(store_good)
@@ -4124,7 +4186,7 @@ class TestX509StoreContext(object):
         with pytest.raises(X509StoreContextError) as exc:
             store_ctx.verify_certificate()
 
-        assert exc.value.args[0][2] == "certificate has expired"
+        assert str(exc.value) == "certificate has expired"
 
     def test_get_verified_chain(self):
         """
@@ -4158,7 +4220,7 @@ class TestX509StoreContext(object):
         with pytest.raises(X509StoreContextError) as exc:
             store_ctx.get_verified_chain()
 
-        assert exc.value.args[0][2] == "unable to get issuer certificate"
+        assert str(exc.value) == "unable to get issuer certificate"
         assert exc.value.certificate.get_subject().CN == "intermediate"
 
     @pytest.fixture
@@ -4223,10 +4285,23 @@ class TestX509StoreContext(object):
         with pytest.raises(X509StoreContextError) as exc:
             store_ctx.verify_certificate()
 
-        assert exc.value.args[0][2] == "unable to get local issuer certificate"
+        assert str(exc.value) == "unable to get local issuer certificate"
+
+    def test_verify_with_partial_chain(self):
+        store = X509Store()
+        store.add_cert(self.intermediate_cert)
+
+        store_ctx = X509StoreContext(store, self.intermediate_server_cert)
+        with pytest.raises(X509StoreContextError):
+            store_ctx.verify_certificate()
+
+        # Now set the partial verification flag for verification.
+        store.set_flags(X509StoreFlags.PARTIAL_CHAIN)
+        store_ctx = X509StoreContext(store, self.intermediate_server_cert)
+        assert store_ctx.verify_certificate() is None
 
 
-class TestSignVerify(object):
+class TestSignVerify:
     """
     Tests for `OpenSSL.crypto.sign` and `OpenSSL.crypto.verify`.
     """
@@ -4250,7 +4325,7 @@ class TestSignVerify(object):
         # certificate unrelated to priv_key, used to trigger an error
         bad_cert = load_certificate(FILETYPE_PEM, server_cert_pem)
 
-        for digest in ["md5", "sha1"]:
+        for digest in ["md5", "sha1", "sha256"]:
             sig = sign(priv_key, content, digest)
 
             # Verify the signature of content, will throw an exception if
@@ -4289,7 +4364,7 @@ class TestSignVerify(object):
 
         priv_key = load_privatekey(FILETYPE_PEM, root_key_pem)
         cert = load_certificate(FILETYPE_PEM, root_cert_pem)
-        for digest in ["md5", "sha1"]:
+        for digest in ["md5", "sha1", "sha256"]:
             with pytest.warns(DeprecationWarning) as w:
                 simplefilter("always")
                 sig = sign(priv_key, content, digest)
@@ -4319,8 +4394,8 @@ class TestSignVerify(object):
         )
         priv_key = load_privatekey(FILETYPE_PEM, ec_root_key_pem)
         cert = load_certificate(FILETYPE_PEM, ec_root_cert_pem)
-        sig = sign(priv_key, content, "sha1")
-        verify(cert, sig, content, "sha1")
+        sig = sign(priv_key, content, "sha256")
+        verify(cert, sig, content, "sha256")
 
     def test_sign_nulls(self):
         """
@@ -4329,8 +4404,8 @@ class TestSignVerify(object):
         content = b"Watch out!  \0  Did you see it?"
         priv_key = load_privatekey(FILETYPE_PEM, root_key_pem)
         good_cert = load_certificate(FILETYPE_PEM, root_cert_pem)
-        sig = sign(priv_key, content, "sha1")
-        verify(good_cert, sig, content, "sha1")
+        sig = sign(priv_key, content, "sha256")
+        verify(good_cert, sig, content, "sha256")
 
     def test_sign_with_large_key(self):
         """
@@ -4345,10 +4420,10 @@ class TestSignVerify(object):
         )
 
         priv_key = load_privatekey(FILETYPE_PEM, large_key_pem)
-        sign(priv_key, content, "sha1")
+        sign(priv_key, content, "sha256")
 
 
-class TestEllipticCurve(object):
+class TestEllipticCurve:
     """
     Tests for `_EllipticCurve`, `get_elliptic_curve`, and
     `get_elliptic_curves`.
@@ -4375,7 +4450,7 @@ class TestEllipticCurve(object):
         does not identify a supported curve.
         """
         with pytest.raises(ValueError):
-            get_elliptic_curve(u"this curve was just invented")
+            get_elliptic_curve("this curve was just invented")
 
     def test_repr(self):
         """
@@ -4399,7 +4474,7 @@ class TestEllipticCurve(object):
         curve._to_EC_KEY()
 
 
-class EllipticCurveFactory(object):
+class EllipticCurveFactory:
     """
     A helper to get the names of two curves.
     """
@@ -4434,7 +4509,7 @@ class TestEllipticCurveEquality(EqualityTestsMixin):
         return get_elliptic_curve(self.curve_factory.another_curve_name)
 
 
-class TestEllipticCurveHash(object):
+class TestEllipticCurveHash:
     """
     Tests for `_EllipticCurve`'s implementation of hashing (thus use as
     an item in a `dict` or `set`).

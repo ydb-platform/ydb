@@ -26,7 +26,7 @@ template<bool Distinct>
 TExprNode::TPtr KeepUniqueConstraint(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
     if (const auto constraint = src.GetConstraint<TUniqueConstraintNodeBase<Distinct>>()) {
         const auto pos = node->Pos();
-        TExprNode::TListType children(1U, std::move(node));
+        TExprNode::TListType children(1U, node);
         for (const auto& sets : constraint->GetContent()) {
             TExprNode::TListType lists;
             lists.reserve(sets.size());
@@ -54,7 +54,7 @@ TExprNode::TPtr KeepUniqueConstraint(TExprNode::TPtr node, const TExprNode& src,
 TExprNode::TPtr KeepChoppedConstraint(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
     if (const auto constraint = src.GetConstraint<TChoppedConstraintNode>()) {
         const auto pos = node->Pos();
-        TExprNode::TListType children(1U, std::move(node));
+        TExprNode::TListType children(1U, node);
         for (const auto& set : constraint->GetContent()) {
             TExprNode::TListType columns;
             columns.reserve(set.size());
@@ -1001,7 +1001,7 @@ TExprNode::TPtr ExpandRemovePrefixMembers(const TExprNode::TPtr& node, TExprCont
             );
         }
         return Build<TCoAsStruct>(ctx, srcStruct->Pos())
-            .Add(std::move(nonSystemMembers))
+            .Add(nonSystemMembers)
             .Done()
             .Ptr();
     };

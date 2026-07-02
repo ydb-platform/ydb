@@ -672,8 +672,8 @@ protected:
         currentSpilling.StateWidth = keysAndStatesWidth;
 
         for (size_t i = 0; i < NumBuckets; ++i) {
-            currentSpilling.Spillage[i].SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, KeysAndStatesType, SpillingIoBuffer, Ctx.RuntimeSettings.DatumValidation.Get());
-            currentSpilling.Spillage[i].SpilledInput = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, InputUnpackedItemsType, SpillingIoBuffer, Ctx.RuntimeSettings.DatumValidation.Get());
+            currentSpilling.Spillage[i].SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, KeysAndStatesType, SpillingIoBuffer);
+            currentSpilling.Spillage[i].SpilledInput = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, InputUnpackedItemsType, SpillingIoBuffer);
         }
 
         [[maybe_unused]] size_t totalWritten = 0;

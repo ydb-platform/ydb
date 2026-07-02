@@ -13,7 +13,6 @@
 
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
-#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -251,7 +250,6 @@ private:
         Y_ABORT_UNLESS(!Executer);
         Executer = ev->Sender;
         Task = ev->Get()->Record.GetTask();
-        RuntimeSettings = NYql::DeserializeRuntimeSettingsFromProto(Task.GetProgram().GetRuntimeSettings());
 
         Yql::DqsProto::TTaskMeta taskMeta;
         Task.GetMeta().UnpackTo(&taskMeta);
@@ -311,7 +309,6 @@ private:
                         auto& source = SourcesMap[inputId];
                         source.TypeEnv = const_cast<NKikimr::NMiniKQL::TTypeEnvironment*>(&typeEnv);
                         source.ProgramBuilder.emplace(*source.TypeEnv, *FunctionRegistry);
-                        Y_ENSURE(RuntimeSettings, "RuntimeSettings is not set");
                         std::tie(source.Source, source.Actor) =
                             AsyncIoFactory->CreateDqSource(
                             IDqAsyncIoFactory::TSourceArguments {
@@ -326,8 +323,7 @@ private:
                                 .TypeEnv = typeEnv,
                                 .HolderFactory = holderFactory,
                                 .ProgramBuilder = *source.ProgramBuilder,
-                                .MemoryQuotaManager = MemoryQuotaManager,
-                                .DatumValidationMode = RuntimeSettings->DatumValidation.Get()
+                                .MemoryQuotaManager = MemoryQuotaManager
                             });
                         RegisterLocalChild(source.Actor);
                     } else {
@@ -795,7 +791,6 @@ private:
     TActorId TaskRunnerActor;
 
     NDqProto::TDqTask Task;
-    TRuntimeSettings::TConstPtr RuntimeSettings;
     ui64 StageId = 0;
     bool TaskRunnerPrepared = false;
 

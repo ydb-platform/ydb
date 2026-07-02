@@ -7,7 +7,6 @@
 #include <ydb/library/yql/dq/runtime/dq_input_producer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_output.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/generic/ptr.h>
@@ -267,7 +266,6 @@ public:
         const google::protobuf::Message* SourceSettings = nullptr;  // used only in case if we execute compute actor locally
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;  // Arena for SourceSettings
         NWilson::TTraceId TraceId;
-        NYql::EDatumValidationMode DatumValidationMode = DefaultDatumValidationMode;
     };
 
     struct TLookupSourceArguments {

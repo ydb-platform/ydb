@@ -679,7 +679,6 @@ public:
                         .Level = StatsModeToCollectStatsLevel(Settings.StatsMode),
                         .TransportVersion = inputChannelDesc.GetTransportVersion(),
                         .PackerVersion = FromProto(task.GetValuePackerVersion()),
-                        .DatumValidationMode = RuntimeSettings->DatumValidation.Get(),
                         .MaxStoredBytes = memoryLimits.ChannelBufferSize,
                         .ChannelQuotaManager = memoryLimits.ChannelQuotaManager,
                     };
@@ -839,7 +838,6 @@ public:
                         .Level = StatsModeToCollectStatsLevel(Settings.StatsMode),
                         .TransportVersion = outputChannelDesc.GetTransportVersion(),
                         .PackerVersion = FromProto(task.GetValuePackerVersion()),
-                        .DatumValidationMode = RuntimeSettings->DatumValidation.Get(),
                         .MaxStoredBytes = memoryLimits.ChannelBufferSize,
                         .ChannelQuotaManager = memoryLimits.ChannelQuotaManager,
                         .MaxChunkBytes = memoryLimits.OutputChunkMaxSize,

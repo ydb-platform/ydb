@@ -1,6 +1,5 @@
 #include "proto_builder.h"
 
-#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
@@ -105,7 +104,7 @@ bool TProtoBuilder::WriteData(NYql::NDq::TDqSerializedBatch&& data, const std::f
     THolderFactory holderFactory(Alloc.Ref(), memInfo);
     const auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
 
-    NDq::TDqDataSerializer dataDeserializer(TypeEnv, holderFactory, transportVersion, NDq::FromProto(data.Proto.GetValuePackerVersion()), DefaultDatumValidationMode);
+    NDq::TDqDataSerializer dataDeserializer(TypeEnv, holderFactory, transportVersion, NDq::FromProto(data.Proto.GetValuePackerVersion()));
 
     YQL_ENSURE(!ResultType->IsMulti());
     TUnboxedValueBatch buffer(ResultType);
@@ -127,7 +126,7 @@ bool TProtoBuilder::WriteData(TVector<NYql::NDq::TDqSerializedBatch>&& rows, con
 
     for (auto& part : rows) {
         TUnboxedValueBatch buffer(ResultType);
-        NDq::TDqDataSerializer dataDeserializer(TypeEnv, holderFactory, transportVersion, NDq::FromProto(part.Proto.GetValuePackerVersion()), DefaultDatumValidationMode);
+        NDq::TDqDataSerializer dataDeserializer(TypeEnv, holderFactory, transportVersion, NDq::FromProto(part.Proto.GetValuePackerVersion()));
         dataDeserializer.Deserialize(std::move(part), ResultType, buffer);
         if (!buffer.ForEachRow([&func](const auto& value) { return func(value); })) {
             return false;

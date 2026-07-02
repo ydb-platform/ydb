@@ -34,7 +34,7 @@ public:
 
     TDqOutputChannel(const TDqChannelSettings& settings, const TLogFunc& logFunc)
         : OutputType(settings.RowType)
-        , Packer(settings.RowType, settings.PackerVersion, settings.DatumValidationMode, settings.BufferPageAllocSize)
+        , Packer(settings.RowType, settings.PackerVersion, settings.BufferPageAllocSize)
         , Width(settings.RowType->IsMulti() ? static_cast<NMiniKQL::TMultiType*>(settings.RowType)->GetElementsCount() : 1u)
         , Storage(settings.ChannelStorage)
         , HolderFactory(settings.HolderFactory)

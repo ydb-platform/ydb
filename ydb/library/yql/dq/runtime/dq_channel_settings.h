@@ -8,7 +8,6 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 #include <yql/essentials/minikql/mkql_node.h>
-#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 
 #include <util/generic/size_literals.h>
 
@@ -26,7 +25,6 @@ struct TDqChannelSettings {
     TCollectStatsLevel Level = TCollectStatsLevel::None;
     NDqProto::EDataTransportVersion TransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
     NKikimr::NMiniKQL::EValuePackerVersion PackerVersion = NKikimr::NMiniKQL::EValuePackerVersion::V0;
-    NYql::EDatumValidationMode DatumValidationMode = DefaultDatumValidationMode;
     ui64 MaxStoredBytes = 8_MB;
     IMemoryQuotaManager::TPtr ChannelQuotaManager;
 

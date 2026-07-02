@@ -3,7 +3,6 @@
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/actors/core/log.h>
-#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -39,7 +38,7 @@ void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NDq::TDqSerializedBatch
     if (rows.RowCount()) {
         NDq::TDqDataSerializer dataSerializer(
             AllocState->TypeEnv, AllocState->HolderFactory,
-            static_cast<NDqProto::EDataTransportVersion>(rows.Proto.GetTransportVersion()), NDq::FromProto(rows.Proto.GetValuePackerVersion()), DefaultDatumValidationMode);
+            static_cast<NDqProto::EDataTransportVersion>(rows.Proto.GetTransportVersion()), NDq::FromProto(rows.Proto.GetValuePackerVersion()));
         dataSerializer.Deserialize(std::move(rows), result.MkqlItemType, result.Rows);
     }
 }

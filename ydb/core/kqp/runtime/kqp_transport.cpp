@@ -1,8 +1,6 @@
 #include "kqp_transport.h"
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
 
-#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
-
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/kqp/common/result_set_format/kqp_result_set_builders.h>
 #include <ydb/core/kqp/common/kqp_types.h>
@@ -68,7 +66,7 @@ void TKqpProtoBuilder::BuildYdbResultSet(
         valuePackerVersion = NDq::FromProto(data.front().Proto.GetValuePackerVersion());
     }
 
-    NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion, valuePackerVersion, DefaultDatumValidationMode);
+    NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion, valuePackerVersion);
     NFormats::BuildResultSetFromBatches(&resultSet, formatsSettings, fillSchema, mkqlSrcRowType,
         dataSerializer, std::move(data), columnOrder, columnHints);
 }

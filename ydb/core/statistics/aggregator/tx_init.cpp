@@ -55,7 +55,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 switch (id) {
                     case Schema::SysParam_Database:
                         Self->Database = value;
-                        YDB_LOG_DEBUG("Loaded",
+                        YDB_LOG_DEBUG("Loaded database",
                             {"tabletId", Self->TabletID()},
                             {"database", Self->Database});
                         break;
@@ -66,7 +66,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         break;
                     case Schema::SysParam_TraversalTableDatabase:
                         Self->TraversalDatabase = value;
-                        YDB_LOG_DEBUG("Loaded traversal table",
+                        YDB_LOG_DEBUG("Loaded traversal table database",
                             {"tabletId", Self->TabletID()},
                             {"database", Self->TraversalDatabase});
                         break;
@@ -85,28 +85,28 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                     case Schema::SysParam_TraversalStartTime: {
                         auto us = FromString<ui64>(value);
                         Self->TraversalStartTime = TInstant::MicroSeconds(us);
-                        YDB_LOG_DEBUG("Loaded traversal start",
+                        YDB_LOG_DEBUG("Loaded traversal start time",
                             {"tabletId", Self->TabletID()},
                             {"time", us});
                         break;
                     }
                     case Schema::SysParam_TraversalIsColumnTable: {
                         Self->TraversalIsColumnTable = FromString<bool>(value);
-                        YDB_LOG_DEBUG("Loaded traversal",
+                        YDB_LOG_DEBUG("Loaded traversal IsColumnTable",
                             {"tabletId", Self->TabletID()},
                             {"isColumnTable", value});
                         break;
                     }
                     case Schema::SysParam_GlobalTraversalRound: {
                         Self->GlobalTraversalRound = FromString<ui64>(value);
-                        YDB_LOG_DEBUG("Loaded global traversal",
+                        YDB_LOG_DEBUG("Loaded global traversal round",
                             {"tabletId", Self->TabletID()},
                             {"round", value});
                         break;
                     }
                     case Schema::SysParam_ForceTraversalOperationId:
                         Self->ForceTraversalOperationId = value;
-                        YDB_LOG_DEBUG("Loaded force traversal operation",
+                        YDB_LOG_DEBUG("Loaded force traversal operation id",
                             {"tabletId", Self->TabletID()},
                             {"id", value});
                         break;
@@ -143,9 +143,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 }
             }
 
-            YDB_LOG_DEBUG("Loaded BaseStatistics: schemeshard",
+            YDB_LOG_DEBUG("Loaded BaseStatistics",
                 {"tabletId", Self->TabletID()},
-                {"count", Self->BaseStatistics.size()});
+                {"schemeShardsCount", Self->BaseStatistics.size()});
         }
 
         // ColumnStatistics
@@ -169,9 +169,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 }
             }
 
-            YDB_LOG_DEBUG("Loaded ColumnStatistics: column",
+            YDB_LOG_DEBUG("Loaded ColumnStatistics",
                 {"tabletId", Self->TabletID()},
-                {"count", Self->CountMinSketches.size()});
+                {"columnCount", Self->CountMinSketches.size()});
         }
 
         // ScheduleTraversals

@@ -28,7 +28,7 @@ struct TStatisticsAggregator::TTxAnalyzeOpList : public TTxBase {
 
     void Complete(const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
-        YDB_LOG_NOTICE("][AnalyzeOp] TTxAnalyzeOpList::Complete",
+        YDB_LOG_NOTICE("[AnalyzeOp] TTxAnalyzeOpList::Complete",
             {"tabletId", Self->TabletID()},
             {"dbName", record.GetDatabaseName()});
 

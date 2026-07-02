@@ -27,23 +27,23 @@ struct TStatisticsAggregator::TTxAnalyzeShardResponse : public TTxBase {
         if (!operationTable) {
             YDB_LOG_ERROR("TTxAnalyzeShardResponse::Execute. Unknown OperationTable",
                 {"tabletId", Self->TabletID()},
-                {"record", Record});
+                {"record", Record.ShortDebugString()});
             return true;
         }
 
         auto analyzedShard = std::find_if(operationTable->AnalyzedShards.begin(), operationTable->AnalyzedShards.end(),
             [tabletId = Record.GetShardTabletId()] (TAnalyzedShard& analyzedShard) { return analyzedShard.ShardTabletId == tabletId;});
         if (analyzedShard == operationTable->AnalyzedShards.end()) {
-            YDB_LOG_ERROR("TTxAnalyzeShardResponse::Execute. Unknown AnalyzedShards. ShardTabletId",
+            YDB_LOG_ERROR("TTxAnalyzeShardResponse::Execute. Unknown AnalyzedShards.",
                 {"tabletId", Self->TabletID()},
-                {"record", Record},
+                {"record", Record.ShortDebugString()},
                 {"shardTabletId", Record.GetShardTabletId()});
             return true;
         }
         if (analyzedShard->Status != TAnalyzedShard::EStatus::AnalyzeStarted) {
-            YDB_LOG_ERROR("TTxAnalyzeShardResponse::Execute. Unknown AnalyzedShards Status. ShardTabletId",
+            YDB_LOG_ERROR("TTxAnalyzeShardResponse::Execute. Unknown AnalyzedShards Status.",
                 {"tabletId", Self->TabletID()},
-                {"record", Record},
+                {"record", Record.ShortDebugString()},
                 {"shardTabletId", Record.GetShardTabletId()});
         }
 

@@ -81,9 +81,9 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
                 });
 
         if (hasPendingTables) {
-            YDB_LOG_DEBUG("TTxFinishTraversal::Complete. Don't send TEvAnalyzeResponse. There are pending operations, OperationId",
+            YDB_LOG_DEBUG("TTxFinishTraversal::Complete. Don't send TEvAnalyzeResponse. There are pending operations.",
                 {"tabletId", Self->TabletID()},
-                {"operationId", OperationId},
+                {"operationId", OperationId.Quote()},
                 {"actorId", ReplyToActorId});
         } else {
             YDB_LOG_DEBUG("TTxFinishTraversal::Complete. Send TEvAnalyzeResponse,",

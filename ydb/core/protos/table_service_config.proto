@@ -307,7 +307,7 @@ message TTableServiceConfig {
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 3, (InvalidateCompileCache) = true];
     reserved 59; //optional bool OldLookupJoinBehaviour = 59 [default = false];
 
-    optional bool EnableOltpSink = 60 [default = true, (InvalidateCompileCache) = true];
+    reserved 60; // EnableOltpSink
 
     enum EBlockChannelsMode {
         BLOCK_CHANNELS_SCALAR = 0;

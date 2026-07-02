@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/protos/table_stats.pb.h>
@@ -18,6 +19,27 @@ namespace {
 
 namespace NTypeIds = NScheme::NTypeIds;
 using TTypeInfo = NScheme::TTypeInfo;
+
+// A ColumnShard test controller that can pause compaction after every single compaction wave. The shard
+// re-schedules compaction as soon as one completes, so once enabled it would normally collapse all portions
+// in one go; disabling the Compaction background from inside the completion hook breaks that cascade, letting
+// a test run compaction exactly one wave at a time (see StoreStatsSmallBlobsQuotaImpl).
+class TPauseAfterCompactionController: public NYDBTest::NColumnShard::TController {
+private:
+    using TBase = NYDBTest::NColumnShard::TController;
+
+protected:
+    bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& change, const ::NKikimr::NColumnShard::TColumnShard& shard) override {
+        const bool result = TBase::DoOnWriteIndexComplete(change, shard);
+        if (PauseCompactionAfterEachWave && change.TypeString() == "CS::GENERAL") {
+            DisableBackground(EBackground::Compaction);
+        }
+        return result;
+    }
+
+public:
+    bool PauseCompactionAfterEachWave = false;
+};
 
 static const TString defaultStoreSchema = R"(
     Name: "OlapStore"
@@ -94,6 +116,37 @@ NLs::TCheckFunc LsCheckDiskQuotaExceeded(
     };
 }
 
+// A single flag covers both the volume and the count small-blobs quota 
+bool GetSmallBlobsQuotaExceeded(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    const auto& state = record.GetPathDescription().GetDomainDescription().GetDomainState();
+    return state.GetSmallBlobsQuotaExceeded();
+}
+
+NLs::TCheckFunc LsCheckSmallBlobsQuotaExceeded(
+    bool expectExceeded = true,
+    const TString& debugHint = ""
+) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        auto& desc = record.GetPathDescription().GetDomainDescription();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            GetSmallBlobsQuotaExceeded(record),
+            expectExceeded,
+            debugHint << ", subdomain's disk space usage:\n" << desc.GetDiskSpaceUsage().DebugString()
+        );
+    };
+}
+
+void CheckSmallBlobsQuotaExceedance(TTestActorRuntime& runtime,
+                                    ui64 schemeShard,
+                                    const TString& pathToSubdomain,
+                                    bool expectExceeded,
+                                    const TString& debugHint = ""
+) {
+    TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain), {
+        LsCheckSmallBlobsQuotaExceeded(expectExceeded, debugHint)
+    });
+}
+
 void CheckQuotaExceedance(TTestActorRuntime& runtime,
                           ui64 schemeShard,
                           const TString& pathToSubdomain,
@@ -132,6 +185,307 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runt
     return stats;
 }
 
+// Drives a ColumnShard subdomain past one of its small-blobs quotas and back, verifying that writes are
+// rejected while the quota is exceeded and accepted again once compaction + cleanup bring the usage back down.
+// checkCount picks which quota to exercise: the count quota when true, the volume quota when false.
+void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
+    TTestBasicRuntime runtime;
+
+    TTestEnvOptions opts;
+    // Report partition stats to SchemeShard without batching, so the small-blobs usage (and hence the
+    // "quota exceeded" flag) is published promptly instead of after a batch timeout
+    opts.DisableStatsBatching(true);
+    opts.EnablePersistentPartitionStats(true);
+
+    TTestEnv env(runtime, opts);
+    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_COMPACTION, NActors::NLog::PRI_DEBUG);
+    // The optimizer's add path classifies a portion as compactable only once the *real* wall clock
+    // (TInstant::Now() inside the optimizer) has passed the portion's snapshot time, but the snapshot is
+    // stamped with the runtime's *virtual* clock. SimulateSleep advances the virtual clock far faster than
+    // the real clock, so fresh portions would look like they are timestamped in the future and never become
+    // compaction-eligible. Starting the virtual clock well behind wall-clock now() keeps portion snapshots
+    // safely in the (real) past for the whole test.
+    runtime.UpdateCurrentTime(TInstant::Now() - TDuration::Seconds(600));
+
+    auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TPauseAfterCompactionController>();
+    // Keep compaction off until the quota is exceeded, so each write accumulates as its own small portion.
+    csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+    // Keep the cleanup floor close to the plan step so compaction-replaced portions become collectable ~1s
+    // after they are replaced (see the recovery loop below).
+    csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
+
+    auto& appData = runtime.GetAppData();
+    // Use the l-buckets optimizer: it merges identical-key portions in a single bucket and, unlike the
+    // tiling (LSM) optimizer, honours CompactionMemoryLimit when sizing a compaction task - which is how we
+    // throttle recovery to a couple of portions per wave below.
+    appData.ColumnShardConfig.SetDefaultCompactionPreset("l-buckets");
+    appData.FeatureFlags.SetEnableSmallBlobsQuotaEnforcement(true);
+
+    // Each identical upsert batch lands as one small portion contributing ~perPortionBytes of small-blobs
+    // volume and 1 to the small-blobs count (every blob is "small", see the 1 GB threshold below).
+    const ui64 perPortionBytes = 1'225'216;
+    // Place the hard quota at hardPortions worth of small blobs and use a wide hysteresis band (soft = half
+    // of hard). The wide band plus a gradual, one-portion-at-a-time reduction (see CompactionMemoryLimit
+    // below) makes usage clearly step through the soft..hard band both on the way up and on the way down, so
+    // all four hysteresis transitions are observable.
+    const ui64 hardPortions = 20;
+    const double softRatio = 0.5;
+
+    auto* smallBlobsQuota = &appData.SmallBlobsQuotaConfig;
+    smallBlobsQuota->SetSoftRatio(softRatio);
+    // Treat every blob as "small" (1 GB threshold) so all written data counts toward the small-blobs quotas.
+    smallBlobsQuota->SetSmallBlobSizeThresholdBytes(1'000'000'000);
+    // Both quotas scale as (diskHardQuota / 10TiB) * per10TiB, and the 1 GiB disk hard quota set below makes
+    // that factor exactly 1/10240, so per10TiB = X * 10240 yields a hard quota of exactly X. We set count
+    // and volume so both are crossed by the *same* number of portions (hardPortions); the quota not under
+    // test is disabled (per10TiB = 0, i.e. unlimited) so exactly one limit is exercised.
+    if (checkCount) {
+        smallBlobsQuota->SetCountPer10TiB(hardPortions * 10240);
+        smallBlobsQuota->SetVolumeBytesPer10TiB(0);
+    } else {
+        smallBlobsQuota->SetCountPer10TiB(0);
+        smallBlobsQuota->SetVolumeBytesPer10TiB(hardPortions * perPortionBytes * 10240);
+    }
+
+    // The reported small-blobs usage that SchemeShard compares to the quotas above, in the same units.
+    const ui64 hardQuota = checkCount ? hardPortions : hardPortions * perPortionBytes;
+    const ui64 softQuota = static_cast<ui64>(hardQuota * softRatio);
+
+    // Throttle compaction to a couple of input portions per task (the optimizer always merges at least 2).
+    // Recovery then collapses the written portions a few at a time - lowering the active small-blobs usage in
+    // small steps - instead of merging everything in a single task. That gradual descent, combined with the
+    // wide soft..hard band, is what lets usage be observed inside the band on the way down (transition 3).
+    appData.ColumnShardConfig.SetCompactionMemoryLimit(1);
+
+    // Use the local scan-snapshot guard (not the registry one) so the cleanup floor is simply
+    // GetOutdatedStep() - MaxReadStaleness, i.e. it tracks the plan step directly. The registry guard's
+    // default window is ~60s wide and ignores MaxReadStaleness, which is much harder to drive here.
+    appData.FeatureFlags.SetEnableSnapshotsLocking(false);
+
+    // apply config via reboot
+    TActorId sender = runtime.AllocateEdgeActor();
+    GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+    // Disk hard quota of 1 GiB - large enough that it is never approached here (the write burst peaks at a
+    // few tens of MB), so this test exercises only the small-blobs quota. 1 GiB also makes the small-blobs
+    // quota scaling above exact (1 GiB / 10 TiB = 1/10240).
+    constexpr const char* databaseDescription = R"(
+        DatabaseQuotas {
+            data_size_hard_quota: 1073741824
+            data_size_soft_quota: 1000000000
+        }
+    )";
+
+    ui64 txId = 100;
+
+    TestCreateSubDomain(runtime, ++txId,  "/MyRoot", TStringBuilder() << R"(
+            Name: "SomeDatabase"
+        )" << databaseDescription
+    );
+
+    const TString& olapSchema = defaultStoreSchema;
+
+    const auto expectedStorePathId = GetNextLocalPathId(runtime, txId);
+    TestCreateOlapStore(runtime, ++txId, "/MyRoot/SomeDatabase", olapSchema);
+    env.TestWaitNotification(runtime, txId);
+
+    TestLs(runtime, "/MyRoot/SomeDatabase/OlapStore", false, NLs::PathExist);
+    TestLsPathId(runtime, expectedStorePathId, NLs::PathStringEqual("/MyRoot/SomeDatabase/OlapStore"));
+
+    TString tableSchema = R"(
+        Name: "ColumnTable"
+        ColumnShardCount: 1
+    )";
+
+    const auto expectedTablePathId = GetNextLocalPathId(runtime, txId);
+    TestCreateColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase/OlapStore", tableSchema);
+    env.TestWaitNotification(runtime, txId);
+
+    ui64 pathId = 0;
+    ui64 shardId = 0;
+    NTxUT::TPlanStep planStep;
+    auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        auto& self = record.GetPathDescription().GetSelf();
+        pathId = self.GetPathId();
+        txId = self.GetCreateTxId() + 1;
+        planStep = NTxUT::TPlanStep{self.GetCreateStep()};
+        auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
+        UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
+        shardId = sharding.GetColumnShards()[0];
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPath(), "/MyRoot/SomeDatabase/OlapStore/ColumnTable");
+    };
+
+    TestLsPathId(runtime, expectedTablePathId, checkFn);
+    UNIT_ASSERT(shardId);
+    UNIT_ASSERT(pathId);
+    UNIT_ASSERT(planStep.Val());
+
+    CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+
+    ui64 writeId = 0;
+    const ui32 rowsInBatch = 100000;
+    const TString data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, {"timestamp"});
+
+    // Follow the exact small-blobs usage the shard reports to SchemeShard - this is the value the quota
+    // check compares against the hard/soft quotas, so it lets us pin down which side of the band we are on.
+    ui64 reportedSmallBlobsCount = 0;
+    ui64 reportedSmallBlobsVolume = 0;
+    auto statsObserver = runtime.AddObserver<TEvDataShard::TEvPeriodicTableStats>([&](const auto& ev) {
+        const auto& record = ev->Get()->Record;
+        if (record.GetDatashardId() == shardId) {
+            reportedSmallBlobsCount = record.GetTableStats().GetSmallBlobsCount();
+            reportedSmallBlobsVolume = record.GetTableStats().GetSmallBlobsVolumeBytes();
+        }
+    });
+    const auto usage = [&]() { return checkCount ? reportedSmallBlobsCount : reportedSmallBlobsVolume; };
+    const auto inBand = [&](const ui64 u) { return softQuota <= u && u <= hardQuota; };
+
+    // The quota uses hysteresis: the "exceeded" flag is raised only when usage rises strictly above the hard
+    // quota, and cleared only when usage falls strictly below the soft quota; inside the [soft, hard] band it
+    // keeps its previous value. We walk usage up across the band and then back down across it, checking all
+    // four transitions:
+    //   (1) usage reaches the band on the way up           -> still not blocked
+    //   (2) usage rises above the hard quota               -> blocked
+    //   (3) usage falls back into the band on the way down  -> still blocked
+    //   (4) usage falls below the soft quota               -> unblocked
+
+    // Phase up. Write identical upsert batches - each lands as its own small portion (compaction is still
+    // off) - until SchemeShard reports the quota exceeded. The "exceeded" flag travels back through
+    // SchemeShard asynchronously, so it flips a few batches after the limit is actually crossed; we submit a
+    // batch only while it still reads "not exceeded", so every batch issued here is expected to succeed.
+    bool sawBandNotBlockedGoingUp = false;
+    int batches = 0;
+    while (!GetSmallBlobsQuotaExceeded(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase"))) {
+        UNIT_ASSERT_C(++batches <= 100, "small-blobs quota was never exceeded; " << DEBUG_HINT);
+        std::vector<ui64> writeIds;
+        ++txId;
+        UNIT_ASSERT_C(
+            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId),
+            DEBUG_HINT);
+        planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+        NTxUT::PlanCommit(runtime, sender, shardId, planStep, {txId});
+        runtime.SimulateSleep(TDuration::Seconds(1));   // let the stats and the quota flag propagate
+        // (1) Usage is rising, so SchemeShard's view lags below the shard's: whenever the shard is already in
+        // the band, SchemeShard still sees "not exceeded". Catching such a sample proves reaching the soft
+        // quota does not block writes.
+        if (inBand(usage())) {
+            sawBandNotBlockedGoingUp = true;
+        }
+    }
+    // (2) Above the hard quota -> blocked.
+    CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
+    UNIT_ASSERT_C(sawBandNotBlockedGoingUp, "usage never observed inside the soft..hard band while unblocked; " << DEBUG_HINT);
+
+    // The quota calibration above (perPortionBytes -> VolumeBytesPer10TiB and the hard/soft volume quotas) assumes
+    // each identical batch produces a portion of ~perPortionBytes of small blobs. Cross-check that assumption
+    // against what the shard actually reports (volume / count == per-portion volume, independent of which quota is
+    // under test) so that a change in Arrow serialization/encoding fails here with a clear message instead of
+    // silently miscalibrating the test into a hang or premature exit.
+    UNIT_ASSERT_C(reportedSmallBlobsCount > 0, DEBUG_HINT);
+    const ui64 actualPerPortionBytes = reportedSmallBlobsVolume / reportedSmallBlobsCount;
+    UNIT_ASSERT_C(actualPerPortionBytes > perPortionBytes * 0.9 && actualPerPortionBytes < perPortionBytes * 1.1,
+        "per-portion small-blobs volume " << actualPerPortionBytes << " deviates >10% from the hardcoded perPortionBytes "
+            << perPortionBytes << "; update the constant (and the quota calibration); " << DEBUG_HINT);
+
+    {   // With the quota exceeded, a further write must be refused. The shard does not reject it outright - it
+        // throttles it by holding the request in its write queue (the same way it handles the local
+        // BadPortions/compaction overload) and only fails it with OVERLOADED once the request timeout elapses. We
+        // pass a short timeout so the blocked write fails fast instead of waiting in the queue indefinitely.
+        std::vector<ui64> writeIds;
+        ++txId;
+        AFL_VERIFY(!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
+            NEvWrite::EModificationType::Upsert, txId, TDuration::Seconds(1)));
+        NTxUT::ProposeCommitFail(runtime, sender, shardId, txId, writeIds, txId);
+    }
+
+    {   // Enforcement is gated by EnableSmallBlobsQuotaEnforcement. With the flag off, the very same write must go
+        // through even though the quota is still exceeded (the shard simply stops consulting the quota). We restore
+        // the flag right after so the rest of the test keeps exercising enforcement.
+        runtime.GetAppData().FeatureFlags.SetEnableSmallBlobsQuotaEnforcement(false);
+        std::vector<ui64> writeIds;
+        ++txId;
+        UNIT_ASSERT_C(NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
+                          NEvWrite::EModificationType::Upsert, txId),
+            "write must be accepted while enforcement is disabled; " << DEBUG_HINT);
+        planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+        NTxUT::PlanCommit(runtime, sender, shardId, planStep, {txId});
+        runtime.GetAppData().FeatureFlags.SetEnableSmallBlobsQuotaEnforcement(true);
+    }
+
+    {   // Persistence across restarts. The "exceeded" flags live in the SubDomains table (SchemeShard) and in the
+        // shard's local state, so neither a SchemeShard nor a ColumnShard restart may silently reset them - writes
+        // must stay blocked. Restart SchemeShard first and confirm it reloaded the persisted flag...
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
+
+        // ...then restart the ColumnShard and confirm it reloaded its persisted flag and still refuses writes.
+        GracefulRestartTablet(runtime, shardId, sender);
+        std::vector<ui64> writeIds;
+        ++txId;
+        AFL_VERIFY(!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
+            NEvWrite::EModificationType::Upsert, txId, TDuration::Seconds(1)));
+        NTxUT::ProposeCommitFail(runtime, sender, shardId, txId, writeIds, txId);
+    }
+
+    // Phase down. Compaction (throttled to a couple of portions per task) merges the tiny upsert portions a
+    // few at a time and marks the originals for removal; background cleanup then physically drops those
+    // replaced portions and GC frees their blobs, lowering the active small-blobs usage in small steps.
+    //
+    // We must observe a *settled* usage that lies inside the band: while a wave is in flight the shard reports
+    // the blobs still pending deletion on top of the active portions, which briefly inflates the usage far
+    // above the band. So we step one wave at a time - re-enable compaction for a single wave (the controller
+    // disables it again as soon as that wave completes), then let cleanup + GC fully drain - and only then
+    // sample. That gives a clean, monotonically decreasing active-portion usage that lands inside the band.
+    //
+    // (Cleanup collects a replaced portion only once the cleanup floor (plan step - MaxReadStaleness) passes
+    // its remove-step. In production the coordinator advances mediator time continuously, keeping the floor
+    // moving; here the data path bypasses the coordinator, so we advance the plan step ourselves with empty
+    // PlanCommits - the test-level equivalent of the coordinator ticking - which also wakes the shard to run
+    // its background cycle.)
+    const auto tick = [&]() {
+        NTxUT::PlanCommit(runtime, sender, shardId, NTxUT::TPlanStep{runtime.GetTimeProvider()->Now().MilliSeconds()}, {});
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    };
+    // The controller disables compaction again after each compaction wave, so re-enabling it lets exactly one
+    // throttled wave (~2 portions -> 1) run per loop iteration; cleanup + GC then drain in the settle ticks.
+    csController->PauseCompactionAfterEachWave = true;
+    bool sawBandStillBlockedGoingDown = false;
+    bool recovered = false;
+    for (int i = 0; i < 60 && !recovered; ++i) {
+        // One throttled compaction wave...
+        csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        tick();
+        // ...then let cleanup + GC drain so the reported usage reflects only the active portions again.
+        for (int j = 0; j < 5; ++j) {
+            tick();
+        }
+        const bool exceeded = GetSmallBlobsQuotaExceeded(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase"));
+        // (3) Usage is back inside the band but not yet below the soft quota -> still blocked.
+        if (exceeded && inBand(usage())) {
+            sawBandStillBlockedGoingDown = true;
+        }
+        recovered = !exceeded;
+    }
+    // (4) Below the soft quota -> unblocked.
+    UNIT_ASSERT_C(recovered, DEBUG_HINT);
+    CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+    UNIT_ASSERT_C(sawBandStillBlockedGoingDown, "usage never observed inside the soft..hard band while blocked; " << DEBUG_HINT);
+
+    {   // Quota recovered - writes should be accepted again
+        std::vector<ui64> writeIds;
+        ++txId;
+        bool writeResult =
+            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+        UNIT_ASSERT_C(writeResult, DEBUG_HINT);
+        planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+        TSet<ui64> txIds = { txId };
+        NTxUT::PlanCommit(runtime, sender, shardId, planStep, txIds);
+    }
+
+    statsObserver.Remove();
+}
 
 }}
 
@@ -1205,6 +1559,14 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         WaitTableStats(runtime, shardId);
         CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+    }
+
+    Y_UNIT_TEST(StoreStatsSmallBlobsCountQuota) {
+        StoreStatsSmallBlobsQuotaImpl(/*checkCount=*/true);
+    }
+
+    Y_UNIT_TEST(StoreStatsSmallBlobsVolumeQuota) {
+        StoreStatsSmallBlobsQuotaImpl(/*checkCount=*/false);
     }
 
     Y_UNIT_TEST(MoveNonExistentTable) {

@@ -299,5 +299,20 @@ message TFeatureFlags {
     optional bool EnableTablePartitionsFormatShardIdxByDefault = 272 [default = false];
     optional bool EnableTablePartitionsFormatAutoConvert = 273 [default = false];
     optional bool EnableTablePartitionsConsistencyCheck = 276 [default = true];
+<<<<<<< HEAD
     optional bool EnableKqpConstraintsTransformer = 277 [default = false];
+=======
+    optional bool EnableKqpConstraintsTransformer = 277 [default = true];
+    optional bool EnableLocalIndexAsSchemeObject = 278 [default = true];
+    optional bool EnableDataShardDetailedMetrics = 279 [default = false];
+    optional bool EnableCompactFulltextIndex = 280 [default = false];
+    optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
+    optional bool EnableFulltextIndexPrefix = 282 [default = false];
+    optional bool EnableAccessServiceV2Interface = 283 [default = true, (RequireRestart) = true];
+    optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
+    optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
+    optional bool EnableTopicDeferredPublish = 286 [default = false];
+    optional bool EnableConfiguredBootstrapper = 287 [default = false, (RequireRestart) = true];
+    optional bool EnableSmallBlobsQuotaEnforcement = 288 [default = false];
+>>>>>>> 2e42be49468 (Small blobs limits to Column Tables (#43393))
 }

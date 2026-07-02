@@ -44,6 +44,8 @@
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SQS
+
 using namespace NActors;
 using namespace NKikimrClient;
 
@@ -197,10 +199,7 @@ namespace NKikimr::NSqsTopic::V1 {
             result.set_message_id(GenerateMessageId(message.MessageId));
 
             if (!NSQS::DeserializeUserAttributes(result, message.Attributes)) {
-                LOG_WARN_S(
-                    ctx,
-                    NKikimrServices::SQS,
-                    "Unable to deserialize message attributes");
+                YDB_LOG_WARN_CTX(ctx, "Unable to deserialize message attributes");
             }
 
             result.set_receipt_handle(SerializeReceipt(message.MessageId));

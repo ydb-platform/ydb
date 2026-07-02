@@ -24,6 +24,8 @@
 #include "utils.h"
 #include "ydb/core/ymq/actor/log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SQS
+
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -138,15 +140,11 @@ namespace NKikimr::NYmq::V1 {
         ~TBaseRpcRequestActor() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx) {
-            LOG_DEBUG_S(
-                ctx,
-                NKikimrServices::SQS,
-                TStringBuilder() << "Got new request in YMQ proxy."
-                << " FolderId: " << FolderId
-                << ", CloudId: " << CloudId
-                << ", UserSid: " << UserSid
-                << ", RequestId: " << RequestId;
-            );
+            YDB_LOG_DEBUG_CTX(ctx, "Got new request in YMQ proxy",
+                {"folderId", FolderId},
+                {"cloudId", CloudId},
+                {"userSid", UserSid},
+                {"requestId", RequestId;});
             TSqsRequest sqsRequest;
 
             sqsRequest.SetRequestId(RequestId);

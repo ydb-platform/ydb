@@ -17,6 +17,8 @@
 
 #include <ydb/core/protos/pqconfig.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_CLUSTER_TRACKER
+
 namespace NKikimr::NPQ::NClusterDiscovery {
 
 using namespace NCounters;
@@ -68,7 +70,7 @@ private:
     }
 
     void SubscribeToClusterTracker() {
-        LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "TClusterDiscoveryServiceActor: send TEvClusterTracker::TEvSubscribe");
+        YDB_LOG_DEBUG_CTX(Ctx(), "TClusterDiscoveryServiceActor: send TEvClusterTracker::TEvSubscribe");
         Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
     }
 

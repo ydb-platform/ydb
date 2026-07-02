@@ -10,7 +10,7 @@ WITH(
     SCHEMA(
         ts Timestamp NOT NULL
     ),
-    WATERMARK = SystemMetadata('write_time') - Interval("PT7S"),
+    WATERMARK = __ydb_write_time - Interval("PT7S"),
     WATERMARK_GRANULARITY="PT2S",
     WATERMARK_IDLE_TIMEOUT="PT3S"
 );

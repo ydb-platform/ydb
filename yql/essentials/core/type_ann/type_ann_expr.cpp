@@ -1240,7 +1240,7 @@ bool PartialAnnonateTypes(TAstNode* astRoot, bool isLibrary, TLangVersion langve
     }),
                                             "RewriteEvaluation", TIssuesIds::CORE_PRE_TYPE_ANN));
     transformers.push_back(TTransformStage(
-        CreatePartialTypeAnnotationTransformer(std::move(callableTypeAnnTransformer), typeCtx),
+        CreatePartialTypeAnnotationTransformer(callableTypeAnnTransformer, typeCtx),
         "PartialTypeAnn", TIssuesIds::CORE_PARTIAL_TYPE_ANN));
     auto transformer = CreateCompositeGraphTransformer(transformers, /* useIssueScopes= */ true);
     auto status = InstantTransform(*transformer, exprRoot, ctx);

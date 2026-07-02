@@ -1807,7 +1807,7 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
                     .Build();
                 convertedChildren.push_back(std::move(convertedChild));
             } else {
-                convertedChildren.emplace_back(std::move(child));
+                convertedChildren.emplace_back(child);
             }
         }
         if (hasConvertions) {

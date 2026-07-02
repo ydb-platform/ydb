@@ -29,6 +29,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/mon.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
@@ -124,6 +126,8 @@ struct TWriteInfo {
     NActors::TActorId OriginActor;
     ui64              OriginCookie = 0;
     bool              ReplySent = false;
+
+    NWilson::TSpan Span;
 };
 
 // Each worker owns a single DBG, so the PB-write cookie carries only the LSN.
@@ -347,6 +351,8 @@ struct TReadInflight {
     // Zero TActorId means "internal read" (none today; reserved for future).
     NActors::TActorId OriginActor;
     ui64              OriginCookie = 0;
+
+    NWilson::TSpan Span;
 };
 
 struct TDecodedAddress {
@@ -553,12 +559,13 @@ private:
     void BestEffortEraseAll(TPerDbgState& dbg);
     void AccountReadRequest(TPerDbgState& dbg, EOp op, ui32 size);
     bool SendPbRead(TPerDbgState& dbg, ui32 dbgIndex, ui64 lsn,
-        const TWriteInfo& info, const TActorId& origin, ui64 originCookie);
+        const TWriteInfo& info, const TActorId& origin, ui64 originCookie,
+        NWilson::TSpan& span);
     bool SendDDiskRead(TPerDbgState& dbg, ui32 dbgIndex, ui32 vChunkIndex,
         ui64 offset, ui32 size, std::bitset<kHostsPerDbgMax> flushMask,
-        const TActorId& origin, ui64 originCookie);
+        const TActorId& origin, ui64 originCookie, NWilson::TSpan& span);
     bool CompleteRead(ui64 cookie, bool ok, TActorId& origin, ui64& originCookie,
-        ui32& size);
+        ui32& size, TStringBuf errorReason = {});
     void ReplyWriteErr(const TActorId& origin, ui64 cookie,
         ENbsIoResultStatus status, TString reason = {});
     void ReplyReadErr(const TActorId& origin, ui64 cookie,
@@ -2147,12 +2154,24 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
     const ui64 cookie = ev->Cookie;
     LOG_T("HandleNbsWrite Cookie# " << cookie << " Addr# " << msg.GetAddress() << " Size# " << msg.GetSizeBytes());
 
+    auto span = NWilson::TSpan(
+        TWilsonNbs::NbsBasic,
+        ev->TraceId.Clone(),
+        "NbsDbgLike.Write",
+        NWilson::EFlags::NONE,
+        TActivationContext::ActorSystem());
+    span
+        .Attribute("addr", static_cast<i64>(msg.GetAddress()))
+        .Attribute("size", static_cast<i64>(msg.GetSizeBytes()));
+
     if (IoSizeBytes == 0) {
+        span.EndError("IoSizeBytes not set");
         ReplyWriteErr(origin, cookie, NBSIO_NOT_CONFIGURED, "IoSizeBytes not set");
         return;
     }
 
     if (ev->Get()->Payload.IsEmpty()) {
+        span.EndError("Payload absent");
         ReplyWriteErr(origin, cookie, NBSIO_MISSING_PAYLOAD, "Payload absent");
         return;
     }
@@ -2163,10 +2182,11 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
             << " SizeBytes# " << msg.GetSizeBytes()
             << " IoSizeBytes# " << IoSizeBytes
             << " ActiveDbgs# " << ActiveDbgs);
-        ReplyWriteErr(origin, cookie, NBSIO_INVALID_ADDRESS,
-            TStringBuilder() << "decode failed Addr# " << msg.GetAddress()
-                << " SizeBytes# " << msg.GetSizeBytes()
-                << " IoSizeBytes# " << IoSizeBytes);
+        const TString reason = TStringBuilder() << "decode failed Addr# " << msg.GetAddress()
+            << " SizeBytes# " << msg.GetSizeBytes()
+            << " IoSizeBytes# " << IoSizeBytes;
+        span.EndError(reason);
+        ReplyWriteErr(origin, cookie, NBSIO_INVALID_ADDRESS, reason);
         return;
     }
     const ui32 dbgIndex = decoded->DbgIndex;
@@ -2180,9 +2200,10 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
             << " PBConnected# " << pbConnectedCount
             << " need# " << kPrimaryHostsPerDbg
             << "; replying TABLET_NOT_READY");
-        ReplyWriteErr(origin, cookie, NBSIO_TABLET_NOT_READY,
-            TStringBuilder() << "PB peers not ready: " << pbConnectedCount
-                << "/" << kPrimaryHostsPerDbg);
+        const TString reason = TStringBuilder() << "PB peers not ready: " << pbConnectedCount
+            << "/" << kPrimaryHostsPerDbg;
+        span.EndError(reason);
+        ReplyWriteErr(origin, cookie, NBSIO_TABLET_NOT_READY, reason);
         return;
     }
 
@@ -2192,9 +2213,10 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
         if (RootCnt.Lsns.BackpressureHits) {
             RootCnt.Lsns.BackpressureHits->Inc();
         }
-        ReplyWriteErr(origin, cookie, NBSIO_BACKPRESSURE,
-            TStringBuilder() << "TotalLsns# " << TotalLsns()
-                << " >= cap# " << Max<ui64>(1, maxInflight / denom));
+        const TString reason = TStringBuilder() << "TotalLsns# " << TotalLsns()
+            << " >= cap# " << Max<ui64>(1, maxInflight / denom);
+        span.EndError(reason);
+        ReplyWriteErr(origin, cookie, NBSIO_BACKPRESSURE, reason);
         return;
     }
 
@@ -2221,6 +2243,7 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
     info.CoordinatorIndex = static_cast<ui8>(coord);
     info.OriginActor = origin;
     info.OriginCookie = cookie;
+    info.Span = std::move(span);
     if (TabletConfig.GetDisableReplication()) {
         info.WriteRequested.set(coord);
     } else {
@@ -2257,7 +2280,7 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
 
     wireEv->AddPayload(std::move(ev->Get()->Payload));
 
-    Send(dbg.PBActor[coord], wireEv.release(), 0, lsn);
+    Send(dbg.PBActor[coord], wireEv.release(), 0, lsn, it->second.Span.GetTraceId().Clone());
 
     ++dbg.WritesInFlight;
     ++dbg.InFlightTo[coord];
@@ -2292,7 +2315,8 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
 }
 
 bool TNbsDbgLikeActor::SendPbRead(TPerDbgState& dbg, ui32 dbgIndex, ui64 lsn,
-    const TWriteInfo& info, const TActorId& origin, ui64 originCookie)
+    const TWriteInfo& info, const TActorId& origin, ui64 originCookie,
+    NWilson::TSpan& span)
 {
     if (!info.WriteConfirmed.any()) {
         return false;
@@ -2315,8 +2339,10 @@ bool TNbsDbgLikeActor::SendPbRead(TPerDbgState& dbg, ui32 dbgIndex, ui64 lsn,
     ri.SentAt = MonotonicNow();
     ri.OriginActor = origin;
     ri.OriginCookie = originCookie;
+    ri.Span = std::move(span);
+    NWilson::TTraceId traceId = ri.Span.GetTraceId();
     ReadInflight.emplace(cookie, std::move(ri));
-    Send(dbg.PBActor[k], ev.release(), 0, cookie);
+    Send(dbg.PBActor[k], ev.release(), 0, cookie, std::move(traceId));
 
     ++dbg.ReadsInFlight;
     AccountReadRequest(dbg, EOp::ReadPB, info.Size);
@@ -2327,7 +2353,7 @@ bool TNbsDbgLikeActor::SendPbRead(TPerDbgState& dbg, ui32 dbgIndex, ui64 lsn,
 bool TNbsDbgLikeActor::SendDDiskRead(TPerDbgState& dbg, ui32 dbgIndex,
     ui32 vChunkIndex, ui64 offset, ui32 size,
     std::bitset<kHostsPerDbgMax> flushMask,
-    const TActorId& origin, ui64 originCookie)
+    const TActorId& origin, ui64 originCookie, NWilson::TSpan& span)
 {
     const TPeerBitset& effectiveMask = flushMask.any() ? flushMask : kAllPrimaryHostsMask;
     const ui32 k = PickRandomSetBit(effectiveMask, Rng.GenRand());
@@ -2347,8 +2373,10 @@ bool TNbsDbgLikeActor::SendDDiskRead(TPerDbgState& dbg, ui32 dbgIndex,
     ri.SentAt = MonotonicNow();
     ri.OriginActor = origin;
     ri.OriginCookie = originCookie;
+    ri.Span = std::move(span);
+    NWilson::TTraceId traceId = ri.Span.GetTraceId();
     ReadInflight.emplace(cookie, std::move(ri));
-    Send(dbg.DDiskActor[k], ev.release(), 0, cookie);
+    Send(dbg.DDiskActor[k], ev.release(), 0, cookie, std::move(traceId));
 
     ++dbg.ReadsInFlight;
     AccountReadRequest(dbg, EOp::ReadDDisk, size);
@@ -2364,12 +2392,24 @@ void TNbsDbgLikeActor::HandleNbsRead(TEvLoad::TEvNbsRead::TPtr& ev,
     const ui64 cookie = ev->Cookie;
     LOG_T("HandleNbsRead Cookie# " << cookie << " Addr# " << msg.GetAddress() << " Size# " << msg.GetSizeBytes());
 
+    auto span = NWilson::TSpan(
+        TWilsonNbs::NbsBasic,
+        ev->TraceId.Clone(),
+        "NbsDbgLike.Read",
+        NWilson::EFlags::NONE,
+        TActivationContext::ActorSystem());
+    span
+        .Attribute("addr", static_cast<i64>(msg.GetAddress()))
+        .Attribute("size", static_cast<i64>(msg.GetSizeBytes()));
+
     if (IoSizeBytes == 0) {
+        span.EndError("IoSizeBytes not set");
         ReplyReadErr(origin, cookie, NBSIO_NOT_CONFIGURED, "IoSizeBytes not set");
         return;
     }
 
     if (TabletConfig.GetDisableReplication()) {
+        span.EndError("DisableReplication=true");
         ReplyReadErr(origin, cookie, NBSIO_READS_DISABLED, "DisableReplication=true");
         return;
     }
@@ -2378,9 +2418,10 @@ void TNbsDbgLikeActor::HandleNbsRead(TEvLoad::TEvNbsRead::TPtr& ev,
     if (!decoded || decoded->DbgIndex != MyDbgIndex) {
         LOG_D("HandleNbsRead invalid Address# " << msg.GetAddress()
             << " SizeBytes# " << msg.GetSizeBytes());
-        ReplyReadErr(origin, cookie, NBSIO_INVALID_ADDRESS,
-            TStringBuilder() << "decode failed Addr# " << msg.GetAddress()
-                << " SizeBytes# " << msg.GetSizeBytes());
+        const TString reason = TStringBuilder() << "decode failed Addr# " << msg.GetAddress()
+            << " SizeBytes# " << msg.GetSizeBytes();
+        span.EndError(reason);
+        ReplyReadErr(origin, cookie, NBSIO_INVALID_ADDRESS, reason);
         return;
     }
     const ui32 dbgIndex = decoded->DbgIndex;
@@ -2394,9 +2435,10 @@ void TNbsDbgLikeActor::HandleNbsRead(TEvLoad::TEvNbsRead::TPtr& ev,
             << " DDConnected# " << ddConnectedCount
             << " need# " << kPrimaryHostsPerDbg
             << "; replying TABLET_NOT_READY");
-        ReplyReadErr(origin, cookie, NBSIO_TABLET_NOT_READY,
-            TStringBuilder() << "DDisk peers not ready: " << ddConnectedCount
-                << "/" << kPrimaryHostsPerDbg);
+        const TString reason = TStringBuilder() << "DDisk peers not ready: " << ddConnectedCount
+            << "/" << kPrimaryHostsPerDbg;
+        span.EndError(reason);
+        ReplyReadErr(origin, cookie, NBSIO_TABLET_NOT_READY, reason);
         return;
     }
 
@@ -2413,25 +2455,27 @@ void TNbsDbgLikeActor::HandleNbsRead(TEvLoad::TEvNbsRead::TPtr& ev,
         } else {
             const auto& info = lit->second;
             if (ShouldReadFromPBuffer(info.State)) {
-                if (SendPbRead(dbg, dbgIndex, lsn, info, origin, cookie)) {
+                if (SendPbRead(dbg, dbgIndex, lsn, info, origin, cookie, span)) {
                     return;
                 }
             }
             if (SendDDiskRead(dbg, dbgIndex, vChunkIndex, info.OffsetInVChunk,
-                              info.Size, info.FlushConfirmed, origin, cookie)) {
+                              info.Size, info.FlushConfirmed, origin, cookie, span)) {
                 return;
             }
-            ReplyReadErr(origin, cookie, NBSIO_READ_DISPATCH_FAILED,
-                TStringBuilder() << "no PB or DDisk peer for in-flight slot vChunk# "
-                    << vChunkIndex << " slot# " << slot);
+            const TString reason = TStringBuilder() << "no PB or DDisk peer for in-flight slot vChunk# "
+                << vChunkIndex << " slot# " << slot;
+            span.EndError(reason);
+            ReplyReadErr(origin, cookie, NBSIO_READ_DISPATCH_FAILED, reason);
             return;
         }
     }
     if (!SendDDiskRead(dbg, dbgIndex, vChunkIndex, offset, IoSizeBytes,
-                       /*flushMask=*/{}, origin, cookie)) {
-        ReplyReadErr(origin, cookie, NBSIO_READ_DISPATCH_FAILED,
-            TStringBuilder() << "DDisk dispatch failed for cold slot vChunk# "
-                << vChunkIndex << " slot# " << slot);
+                       /*flushMask=*/{}, origin, cookie, span)) {
+        const TString reason = TStringBuilder() << "DDisk dispatch failed for cold slot vChunk# "
+            << vChunkIndex << " slot# " << slot;
+        span.EndError(reason);
+        ReplyReadErr(origin, cookie, NBSIO_READ_DISPATCH_FAILED, reason);
     }
 }
 
@@ -2570,6 +2614,7 @@ void TNbsDbgLikeActor::HandleWritePbsResult(
             dbg.Counters.Request.WriteQuorumMs->Collect(quorumMs);
         }
         if (!info.ReplySent && info.OriginActor) {
+            info.Span.EndOk();
             Send(info.OriginActor, new TEvLoad::TEvNbsWriteResult(NBSIO_OK),
                 0, info.OriginCookie);
             info.ReplySent = true;
@@ -2585,9 +2630,10 @@ void TNbsDbgLikeActor::HandleWritePbsResult(
         if (needed > stillPending.count()) {
             EnterState(dbg, info.State, /*delta=*/-1);
             if (!info.ReplySent && info.OriginActor) {
-                Send(info.OriginActor, new TEvLoad::TEvNbsWriteResult(NBSIO_QUORUM_LOST,
-                    TStringBuilder() << "confirmed# " << info.WriteConfirmed.count()
-                        << " need# " << writeQuorum),
+                const TString reason = TStringBuilder() << "confirmed# " << info.WriteConfirmed.count()
+                    << " need# " << writeQuorum;
+                info.Span.EndError(reason);
+                Send(info.OriginActor, new TEvLoad::TEvNbsWriteResult(NBSIO_QUORUM_LOST, reason),
                     0, info.OriginCookie);
                 info.ReplySent = true;
             }
@@ -3174,14 +3220,21 @@ void TNbsDbgLikeActor::BestEffortEraseAll(TPerDbgState& dbg) {
 }
 
 bool TNbsDbgLikeActor::CompleteRead(ui64 cookie, bool ok, TActorId& origin,
-    ui64& originCookie, ui32& size)
+    ui64& originCookie, ui32& size, TStringBuf errorReason)
 {
     auto rIt = ReadInflight.find(cookie);
     if (rIt == ReadInflight.end()) {
         return false;
     }
-    TReadInflight read = rIt->second;
+    TReadInflight read = std::move(rIt->second);
     ReadInflight.erase(rIt);
+    if (read.Span) {
+        if (ok) {
+            read.Span.EndOk();
+        } else {
+            read.Span.EndError(TString(errorReason));
+        }
+    }
     origin = read.OriginActor;
     originCookie = read.OriginCookie;
     size = read.Size;
@@ -3254,12 +3307,16 @@ void TNbsDbgLikeActor::HandlePbReadResult(
     TActorId origin;
     ui64 originCookie = 0;
     ui32 size = 0;
-    if (CompleteRead(cookie, ok, origin, originCookie, size) && origin) {
+    TString errorReason;
+    if (!ok) {
+        errorReason = TStringBuilder() << "PbRead: "
+            << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
+            << ": " << msg.GetErrorReason();
+    }
+    if (CompleteRead(cookie, ok, origin, originCookie, size, errorReason) && origin) {
         TString reason;
         if (!ok) {
-            reason = TStringBuilder() << "PbRead: "
-                << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
-                << ": " << msg.GetErrorReason();
+            reason = std::move(errorReason);
         }
         auto resp = std::make_unique<TEvLoad::TEvNbsReadResult>(
             ok ? NBSIO_OK : NBSIO_IO_ERROR, std::move(reason));
@@ -3281,12 +3338,16 @@ void TNbsDbgLikeActor::HandleDDiskReadResult(
     TActorId origin;
     ui64 originCookie = 0;
     ui32 size = 0;
-    if (CompleteRead(cookie, ok, origin, originCookie, size) && origin) {
+    TString errorReason;
+    if (!ok) {
+        errorReason = TStringBuilder() << "DDiskRead: "
+            << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
+            << ": " << msg.GetErrorReason();
+    }
+    if (CompleteRead(cookie, ok, origin, originCookie, size, errorReason) && origin) {
         TString reason;
         if (!ok) {
-            reason = TStringBuilder() << "DDiskRead: "
-                << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
-                << ": " << msg.GetErrorReason();
+            reason = std::move(errorReason);
         }
         auto resp = std::make_unique<TEvLoad::TEvNbsReadResult>(
             ok ? NBSIO_OK : NBSIO_IO_ERROR, std::move(reason));

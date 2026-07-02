@@ -864,7 +864,7 @@ TExprNode::TPtr FilterPushdownOverJoinOptionalSide(
         .Seal()
         .Build();
 
-    auto newJoinTree = ctx.ReplaceNode(std::move(joinTree), *parentJoinPtr, newParentJoin);
+    auto newJoinTree = ctx.ReplaceNode(joinTree, *parentJoinPtr, newParentJoin);
 
     // Combine join labels from left tree and associate them with result of `EquiJoin` from above.
     auto combinedLabelList = CombineLabels(leftJoinLabelsFull);

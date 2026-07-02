@@ -255,7 +255,7 @@ public:
         , Hints_([hints = std::move(hints)] {
             THashMap<EStatementKind, TNameIndex> index;
             for (auto& [k, hints] : hints) {
-                index.emplace(k, BuildNameIndex(std::move(hints), NormalizeName));
+                index.emplace(k, BuildNameIndex(hints, NormalizeName));
             }
             return index;
         }())
@@ -284,7 +284,7 @@ private:
 INameService::TPtr MakeStaticNameService(TNameSet names, TFrequencyData frequency) {
     names = Pruned(std::move(names), frequency);
     names = Filtered(std::move(names), DefaultNameFilter());
-    IRanking::TPtr ranking = MakeDefaultRanking(std::move(frequency));
+    IRanking::TPtr ranking = MakeDefaultRanking(frequency);
     return MakeStaticNameService(std::move(names), std::move(ranking));
 }
 

@@ -1,13 +1,13 @@
+import os
 import sys
 import warnings
-
-from six import PY2, text_type
+from typing import Any, Callable, NoReturn, Type, Union
 
 from cryptography.hazmat.bindings.openssl.binding import Binding
 
+StrOrBytesPath = Union[str, bytes, os.PathLike]
 
 binding = Binding()
-binding.init_static_locks()
 ffi = binding.ffi
 lib = binding.lib
 
@@ -18,7 +18,7 @@ lib = binding.lib
 no_zero_allocator = ffi.new_allocator(should_clear_after_alloc=False)
 
 
-def text(charp):
+def text(charp: Any) -> str:
     """
     Get a native string type representing of the given CFFI ``char*`` object.
 
@@ -28,10 +28,10 @@ def text(charp):
     """
     if not charp:
         return ""
-    return native(ffi.string(charp))
+    return ffi.string(charp).decode("utf-8")
 
 
-def exception_from_error_queue(exception_type):
+def exception_from_error_queue(exception_type: Type[Exception]) -> NoReturn:
     """
     Convert an OpenSSL library failure into a Python exception.
 
@@ -57,13 +57,13 @@ def exception_from_error_queue(exception_type):
     raise exception_type(errors)
 
 
-def make_assert(error):
+def make_assert(error: Type[Exception]) -> Callable[[bool], Any]:
     """
     Create an assert function that uses :func:`exception_from_error_queue` to
     raise an exception wrapped by *error*.
     """
 
-    def openssl_assert(ok):
+    def openssl_assert(ok: bool) -> None:
         """
         If *ok* is not True, retrieve the error from OpenSSL and raise it.
         """
@@ -73,66 +73,35 @@ def make_assert(error):
     return openssl_assert
 
 
-def native(s):
+def path_bytes(s: StrOrBytesPath) -> bytes:
     """
-    Convert :py:class:`bytes` or :py:class:`unicode` to the native
-    :py:class:`str` type, using UTF-8 encoding if conversion is necessary.
+    Convert a Python path to a :py:class:`bytes` for the path which can be
+    passed into an OpenSSL API accepting a filename.
 
-    :raise UnicodeError: The input string is not UTF-8 decodeable.
-
-    :raise TypeError: The input is neither :py:class:`bytes` nor
-        :py:class:`unicode`.
-    """
-    if not isinstance(s, (bytes, text_type)):
-        raise TypeError("%r is neither bytes nor unicode" % s)
-    if PY2:
-        if isinstance(s, text_type):
-            return s.encode("utf-8")
-    else:
-        if isinstance(s, bytes):
-            return s.decode("utf-8")
-    return s
-
-
-def path_string(s):
-    """
-    Convert a Python string to a :py:class:`bytes` string identifying the same
-    path and which can be passed into an OpenSSL API accepting a filename.
-
-    :param s: An instance of :py:class:`bytes` or :py:class:`unicode`.
+    :param s: A path (valid for os.fspath).
 
     :return: An instance of :py:class:`bytes`.
     """
-    if isinstance(s, bytes):
-        return s
-    elif isinstance(s, text_type):
-        return s.encode(sys.getfilesystemencoding())
+    b = os.fspath(s)
+
+    if isinstance(b, str):
+        return b.encode(sys.getfilesystemencoding())
     else:
-        raise TypeError("Path must be represented as bytes or unicode string")
+        return b
 
 
-if PY2:
-
-    def byte_string(s):
-        return s
-
-
-else:
-
-    def byte_string(s):
-        return s.encode("charmap")
+def byte_string(s: str) -> bytes:
+    return s.encode("charmap")
 
 
 # A marker object to observe whether some optional arguments are passed any
 # value or not.
 UNSPECIFIED = object()
 
-_TEXT_WARNING = (
-    text_type.__name__ + " for {0} is no longer accepted, use bytes"
-)
+_TEXT_WARNING = "str for {0} is no longer accepted, use bytes"
 
 
-def text_to_bytes_and_warn(label, obj):
+def text_to_bytes_and_warn(label: str, obj: Any) -> Any:
     """
     If ``obj`` is text, emit a warning that it should be bytes instead and try
     to convert it to bytes automatically.
@@ -145,7 +114,7 @@ def text_to_bytes_and_warn(label, obj):
         UTF-8 encoding of that text is returned.  Otherwise, ``obj`` itself is
         returned.
     """
-    if isinstance(obj, text_type):
+    if isinstance(obj, str):
         warnings.warn(
             _TEXT_WARNING.format(label),
             category=DeprecationWarning,

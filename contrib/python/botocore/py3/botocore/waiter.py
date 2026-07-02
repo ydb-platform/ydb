@@ -64,8 +64,7 @@ def create_waiter_with_client(waiter_name, waiter_model, client):
 
     # Rename the waiter class based on the type of waiter.
     waiter_class_name = str(
-        '%s.Waiter.%s'
-        % (get_service_module_name(client.meta.service_model), waiter_name)
+        f'{get_service_module_name(client.meta.service_model)}.Waiter.{waiter_name}'
     )
 
     # Create the new waiter class
@@ -127,8 +126,8 @@ class WaiterModel:
             raise WaiterConfigError(
                 error_msg=(
                     "Unsupported waiter version, supported version "
-                    "must be: %s, but version of waiter config "
-                    "is: %s" % (self.SUPPORTED_VERSION, version)
+                    f"must be: {self.SUPPORTED_VERSION}, but version "
+                    f"of waiter config is: {version}"
                 )
             )
 
@@ -136,7 +135,7 @@ class WaiterModel:
         try:
             single_waiter_config = self._waiter_config[waiter_name]
         except KeyError:
-            raise ValueError("Waiter does not exist: %s" % waiter_name)
+            raise ValueError(f"Waiter does not exist: {waiter_name}")
         return SingleWaiterConfig(single_waiter_config)
 
 
@@ -178,28 +177,23 @@ class AcceptorConfig:
     @property
     def explanation(self):
         if self.matcher == 'path':
-            return 'For expression "{}" we matched expected path: "{}"'.format(
-                self.argument,
-                self.expected,
-            )
+            return f'For expression "{self.argument}" we matched expected path: "{self.expected}"'
         elif self.matcher == 'pathAll':
             return (
-                'For expression "%s" all members matched excepted path: "%s"'
-                % (self.argument, self.expected)
+                f'For expression "{self.argument}" all members matched '
+                f'expected path: "{self.expected}"'
             )
         elif self.matcher == 'pathAny':
             return (
-                'For expression "%s" we matched expected path: "%s" at least once'
-                % (self.argument, self.expected)
+                f'For expression "{self.argument}" we matched expected '
+                f'path: "{self.expected}" at least once'
             )
         elif self.matcher == 'status':
-            return 'Matched expected HTTP status code: %s' % self.expected
+            return f'Matched expected HTTP status code: {self.expected}'
         elif self.matcher == 'error':
-            return 'Matched expected service error code: %s' % self.expected
+            return f'Matched expected service error code: {self.expected}'
         else:
-            return (
-                'No explanation for unknown waiter type: "%s"' % self.matcher
-            )
+            return f'No explanation for unknown waiter type: "{self.matcher}"'
 
     def _create_matcher_func(self):
         # An acceptor function is a callable that takes a single value.  The
@@ -222,7 +216,7 @@ class AcceptorConfig:
             return self._create_error_matcher()
         else:
             raise WaiterConfigError(
-                error_msg="Unknown acceptor: %s" % self.matcher
+                error_msg=f"Unknown acceptor: {self.matcher}"
             )
 
     def _create_path_matcher(self):
@@ -302,7 +296,15 @@ class AcceptorConfig:
             # response.  So response is still a dictionary, and in the case
             # of an error response will contain the "Error" and
             # "ResponseMetadata" key.
-            return response.get("Error", {}).get("Code", "") == expected
+            # When expected is True, accept any error code.
+            # When expected is False, check if any errors were encountered.
+            # Otherwise, check for a specific AWS error code.
+            if expected is True:
+                return "Error" in response and "Code" in response["Error"]
+            elif expected is False:
+                return "Error" not in response
+            else:
+                return response.get("Error", {}).get("Code", "") == expected
 
         return acceptor_matches
 
@@ -356,8 +358,7 @@ class Waiter:
                     # can just handle here by raising an exception.
                     raise WaiterError(
                         name=self.name,
-                        reason='An error occurred (%s): %s'
-                        % (
+                        reason='An error occurred ({}): {}'.format(
                             response['Error'].get('Code', 'Unknown'),
                             response['Error'].get('Message', 'Unknown'),
                         ),
@@ -369,9 +370,7 @@ class Waiter:
                 )
                 return
             if current_state == 'failure':
-                reason = 'Waiter encountered a terminal failure state: %s' % (
-                    acceptor.explanation
-                )
+                reason = f'Waiter encountered a terminal failure state: {acceptor.explanation}'
                 raise WaiterError(
                     name=self.name,
                     reason=reason,
@@ -382,8 +381,8 @@ class Waiter:
                     reason = 'Max attempts exceeded'
                 else:
                     reason = (
-                        'Max attempts exceeded. Previously accepted state: %s'
-                        % (acceptor.explanation)
+                        f'Max attempts exceeded. Previously accepted state: '
+                        f'{acceptor.explanation}'
                     )
                 raise WaiterError(
                     name=self.name,

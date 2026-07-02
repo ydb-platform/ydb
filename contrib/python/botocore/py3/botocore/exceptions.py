@@ -514,7 +514,7 @@ class UnknownClientMethodError(BotoCoreError):
 class UnsupportedSignatureVersionError(BotoCoreError):
     """Error when trying to use an unsupported Signature Version."""
 
-    fmt = 'Signature version is not supported: {signature_version}'
+    fmt = 'Signature version(s) are not supported: {signature_version}'
 
 
 class ClientError(Exception):

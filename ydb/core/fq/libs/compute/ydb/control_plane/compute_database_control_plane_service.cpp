@@ -194,7 +194,7 @@ public:
             return;
         }
         FillRequest(Request, client->Config);
-        Send(client->ActorId, new TEvYdbCompute::TEvCreateDatabaseRequest{Request->Get()->CloudId, Scope, Request->Get()->BasePath, Request->Get()->Path, client->Config.GetExecutionConnection()}, 0, ev->Cookie);
+        Send(client->ActorId, new TEvYdbCompute::TEvCreateDatabaseRequest{Request->Get()->CloudId, Scope, Request->Get()->BasePath, Request->Get()->Path, client->Config.GetExecutionConnection(), client->Config.GetFolderId()}, 0, ev->Cookie);
     }
 
     void Handle(TEvYdbCompute::TEvAddDatabaseResponse::TPtr& ev) {
@@ -442,7 +442,7 @@ public:
         for (const auto& config: mapping.GetCommon()) {
             auto databaseCounters = Counters->GetSubgroup("database", config.GetControlPlaneConnection().GetDatabase());
             const auto clientActor = Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
-            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, databaseCounters).release());
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, databaseCounters, config.GetControlPlaneConnection().GetDatabase()).release());
             TActorId databaseMonitoringActor;
             const NConfig::TLoadControlConfig& loadConfig = config.GetLoadControlConfig().GetEnable()
                 ? config.GetLoadControlConfig()
@@ -466,7 +466,7 @@ public:
         for (const auto& [scope, config]: mapping.GetScopeToComputeDatabase()) {
             auto databaseCounters = Counters->GetSubgroup("database", config.GetControlPlaneConnection().GetDatabase());
             const auto clientActor = Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
-            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, databaseCounters).release());
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, databaseCounters, config.GetControlPlaneConnection().GetDatabase()).release());
             TActorId databaseMonitoringActor;
             const NConfig::TLoadControlConfig& loadConfig = config.GetLoadControlConfig().GetEnable()
                 ? config.GetLoadControlConfig()
@@ -491,7 +491,7 @@ public:
         for (const auto& config: mapping.GetCommon()) {
             auto databaseCounters = Counters->GetSubgroup("database", config.GetControlPlaneConnection().GetDatabase());
             const auto clientActor = Register(CreateYdbcpGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
-            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, databaseCounters).release());
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, databaseCounters, config.GetControlPlaneConnection().GetDatabase()).release());
             Clients->CommonDatabaseClients.push_back({clientActor, config, cacheActor, {}});
         }
 
@@ -500,7 +500,7 @@ public:
         for (const auto& [scope, config]: mapping.GetScopeToComputeDatabase()) {
             auto databaseCounters = Counters->GetSubgroup("database", config.GetControlPlaneConnection().GetDatabase());
             const auto clientActor = Register(CreateYdbcpGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
-            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, databaseCounters).release());
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, databaseCounters, config.GetControlPlaneConnection().GetDatabase()).release());
             Clients->ScopeToDatabaseClient[scope] = {clientActor, config, cacheActor, {}};
         }
     }

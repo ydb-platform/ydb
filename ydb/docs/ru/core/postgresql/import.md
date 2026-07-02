@@ -9,7 +9,7 @@
 
 {% if oss == true %}
 
-- С помощью утилиты [ydb-importer](../integrations/ingestion/import-jdbc.md).
+- С помощью утилиты [ydb-importer](../integrations/data-migration/import-jdbc.md).
 
 {% endif %}
 
@@ -18,7 +18,7 @@
 |[pg-dump](#pg-dump)|Создание всей необходимой структуры таблиц и данных|Импорт баз данных PostgreSQL целиком|
 |Импорт данных [из файлов](../reference/ydb-cli/export-import/import-file.md)|Импорт файлов с данными в заранее созданные таблицы базы данных {{ydb-name}}|Импорт данных из баз данных Greenplum или любых других баз данных со сменой структуры хранения данных|
 {% if oss == true %}
-|[ydb-importer](../integrations/ingestion/import-jdbc.md)|Импорт данных из другой базы данных в заранее созданные таблицы базы данных {{ydb-name}}|Импорт данных из любых баз данных, поддерживающих [JDBC-протокол](https://ru.wikipedia.org/wiki/Java_Database_Connectivity)|
+|[ydb-importer](../integrations/data-migration/import-jdbc.md)|Импорт данных из другой базы данных в заранее созданные таблицы базы данных {{ydb-name}}|Импорт данных из любых баз данных, поддерживающих [JDBC-протокол](https://ru.wikipedia.org/wiki/Java_Database_Connectivity)|
 {% endif %}
 
 ## pg-dump {#pg-dump}

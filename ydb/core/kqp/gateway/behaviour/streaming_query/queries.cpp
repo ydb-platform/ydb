@@ -857,7 +857,8 @@ private:
 
 //// Table actions
 
-class TQueryBase : public NKikimr::TQueryBase {
+template<typename TDerived, typename TResponse>
+class TQueryBase : public NKikimr::TQueryBase, public TQueryRetryActorMixin<TDerived, TResponse> {
 public:
     TQueryBase(const TString& operationName, const TString& databaseId, const TString& queryPath)
         : NKikimr::TQueryBase(NKikimrServices::KQP_PROXY)
@@ -983,7 +984,7 @@ protected:
 // Updates OperationName, OperationActorId and OperationStartedAt according to current operation.
 // If OperationActorId already filled, actor will be checked.
 
-class TLockStreamingQueryRequestActor final : public TQueryBase {
+class TLockStreamingQueryRequestActor final : public TQueryBase<TLockStreamingQueryRequestActor, TEvPrivate::TEvLockStreamingQueryResult> {
     static constexpr TDuration LOCK_TIMEOUT = TDuration::Seconds(10);
 
 public:
@@ -995,8 +996,6 @@ public:
         bool CreateLockIfNotExists = false;
         NKikimrKqp::TStreamingQueryState::EStatus DefaultQueryStatus = NKikimrKqp::TStreamingQueryState::STATUS_UNSPECIFIED;
     };
-
-    using TRetry = TQueryRetryActor<TLockStreamingQueryRequestActor, TEvPrivate::TEvLockStreamingQueryResult, TString, TString, TSettings>;
 
     TLockStreamingQueryRequestActor(const TString& databaseId, const TString& queryPath, const TSettings& settings)
         : TQueryBase(__func__, databaseId, queryPath)
@@ -1121,12 +1120,14 @@ class TLockStreamingQueryTableActor final : public TActionActorBase<TLockStreami
     using TBase = TActionActorBase<TLockStreamingQueryTableActor>;
     using TRetryPolicy = IRetryPolicy<bool>;
 
-    inline static const TDuration CHECK_ALIVE_REQUEST_TIMEOUT = TDuration::Seconds(60);
+    static constexpr TDuration CHECK_ALIVE_REQUEST_SOFT_TIMEOUT = TDuration::Seconds(30); // Advance on each retry of check alive
+    static constexpr TDuration CHECK_ALIVE_REQUEST_HARD_TIMEOUT = TDuration::Seconds(60); // Hard timeout for all retries
     inline static const ui64 MAX_CHECK_ALIVE_RETRIES = 50;
 
     enum class EWakeup {
         RetryCheckAlive,
-        CheckAliveTimeout,
+        CheckAliveSoftTimeout,
+        CheckAliveHardTimeout,
     };
 
 public:
@@ -1192,7 +1193,8 @@ public:
 
         LOG_D("Start check alive for " << Info.PreviousOwner);
         Send(Info.PreviousOwner, new TEvPrivate::TEvCheckAliveRequest(), CheckAliveFlags);
-        Schedule(CHECK_ALIVE_REQUEST_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveTimeout)));
+        Schedule(CHECK_ALIVE_REQUEST_SOFT_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveSoftTimeout)));
+        Schedule(CHECK_ALIVE_REQUEST_HARD_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveHardTimeout)));
     }
 
     void Handle(TEvPrivate::TEvCheckAliveResponse::TPtr& ev) {
@@ -1208,14 +1210,23 @@ public:
         switch (static_cast<EWakeup>(ev->Get()->Tag)) {
             case EWakeup::RetryCheckAlive: {
                 WaitRetryCheckAlive = false;
-                LOG_D("Retry check alive request for " << Info.PreviousOwner);
-                Send(Info.PreviousOwner, new TEvPrivate::TEvCheckAliveRequest(), CheckAliveFlags);
-                Schedule(CHECK_ALIVE_REQUEST_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveTimeout)));
+                if (WaitLock) {
+                    LOG_N("Skipped retry check alive, already waiting query lock");
+                } else {
+                    LOG_D("Retry check alive request for " << Info.PreviousOwner);
+                    Send(Info.PreviousOwner, new TEvPrivate::TEvCheckAliveRequest(), CheckAliveFlags);
+                    Schedule(CHECK_ALIVE_REQUEST_SOFT_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveSoftTimeout)));
+                }
                 break;
             }
-            case EWakeup::CheckAliveTimeout: {
-                LOG_W("Deliver streaming query owner " << Info.PreviousOwner << " check alive request timeouted, retry check alive");
+            case EWakeup::CheckAliveSoftTimeout: {
+                LOG_W("Deliver streaming query owner " << Info.PreviousOwner << " check alive request timed out, retry check alive");
                 RetryCheckAlive(/* longDelay */ false);
+                break;
+            }
+            case EWakeup::CheckAliveHardTimeout: {
+                LOG_W("Deliver streaming query owner " << Info.PreviousOwner << " check alive request timed out, start lock");
+                StartLockStreamingQueryRequestActor(Info.PreviousOwner);
                 break;
             }
         }
@@ -1256,7 +1267,7 @@ private:
             return;
         }
 
-        const auto& lockActorId = Register(new TLockStreamingQueryRequestActor::TRetry(SelfId(), DatabaseId, QueryPath, {
+        const auto& lockActorId = Register(TLockStreamingQueryRequestActor::MakeRetry(SelfId(), DatabaseId, QueryPath, TLockStreamingQueryRequestActor::TSettings{
             .OperationName = Settings.OperationName,
             .OperationStartedAt = Settings.OperationStartedAt,
             .OperationOwner = Settings.OperationOwner,
@@ -1305,10 +1316,8 @@ private:
     bool WaitLock = false;
 };
 
-class TUnlockStreamingQueryRequestActor final : public TQueryBase {
+class TUnlockStreamingQueryRequestActor final : public TQueryBase<TUnlockStreamingQueryRequestActor, TEvPrivate::TEvUnlockStreamingQueryResult> {
 public:
-    using TRetry = TQueryRetryActor<TUnlockStreamingQueryRequestActor, TEvPrivate::TEvUnlockStreamingQueryResult, TString, TString, TActorId>;
-
     TUnlockStreamingQueryRequestActor(const TString& databaseId, const TString& queryPath, const TActorId& operationOwner)
         : TQueryBase(__func__, databaseId, queryPath)
         , OperationOwner(operationOwner)
@@ -1405,10 +1414,8 @@ private:
 
 // Update column "state" of .metadata/streaming/queries table if OperationActorId is not changed
 
-class TUpdateStreamingQueryStateRequestActor final : public TQueryBase {
+class TUpdateStreamingQueryStateRequestActor final : public TQueryBase<TUpdateStreamingQueryStateRequestActor, TEvPrivate::TEvUpdateStreamingQueryResult> {
 public:
-    using TRetry = TQueryRetryActor<TUpdateStreamingQueryStateRequestActor, TEvPrivate::TEvUpdateStreamingQueryResult, TString, TString, NKikimrKqp::TStreamingQueryState>;
-
     TUpdateStreamingQueryStateRequestActor(const TString& databaseId, const TString& queryPath, const NKikimrKqp::TStreamingQueryState& state)
         : TQueryBase(__func__, databaseId, queryPath)
         , State(state)
@@ -1491,17 +1498,18 @@ public:
 
     void Handle(TEvCancelScriptExecutionOperationResponse::TPtr& ev) {
         const auto& executionId = State.GetCurrentExecutionId();
-        const auto status = ev->Get()->Status;
-        if (status != Ydb::StatusIds::NOT_FOUND && status != Ydb::StatusIds::PRECONDITION_FAILED && HandleResult(ev, TStringBuilder() << "Cancel query execution (execution id: " << executionId << ")")) {
+        if (HandleResult(ev, TStringBuilder() << "Cancel query execution (execution id: " << executionId << ")")) {
             return;
         }
 
-        LOG_D("Cancel streaming query execution " << ev->Sender << " finished " << status << ", execution id: " << executionId);
-        if (status != Ydb::StatusIds::NOT_FOUND) {
+        const auto entryExists = ev->Get()->ExecutionEntryExists;
+        LOG_D("Cancel streaming query execution " << ev->Sender << " finished, entry exists: " << entryExists << ", execution id: " << executionId);
+
+        if (entryExists) {
             State.AddPreviousExecutionIds(executionId);
         }
-        State.ClearCurrentExecutionId();
 
+        State.ClearCurrentExecutionId();
         StartUpdateState("clear current execution id");
     }
 
@@ -1509,13 +1517,12 @@ public:
         Y_ABORT_UNLESS(ev->Cookie < State.PreviousExecutionIdsSize());
 
         const auto& executionId = State.GetPreviousExecutionIds(ev->Cookie);
-        const auto status = ev->Get()->Status;
-        if (status != Ydb::StatusIds::NOT_FOUND && HandleResult(ev, TStringBuilder() << "Forget query execution (execution id: " << executionId << ")")) {
+        if (HandleResult(ev, TStringBuilder() << "Forget query execution (execution id: " << executionId << ")")) {
             return;
         }
 
         --OperationsToForget;
-        LOG_D("Forget streaming query execution #" << ev->Cookie << " " << ev->Sender << " finished " << status << ", execution id: " << executionId << ", remains: " << OperationsToForget);
+        LOG_D("Forget streaming query execution #" << ev->Cookie << " " << ev->Sender << " finished, execution id: " << executionId << ", remains: " << OperationsToForget);
 
         if (OperationsToForget == 0) {
             State.ClearPreviousExecutionIds();
@@ -1530,7 +1537,7 @@ protected:
 
 private:
     void StartUpdateState(const TString& info) const {
-        const auto& updaterId = Register(new TUpdateStreamingQueryStateRequestActor::TRetry(SelfId(), Context.GetDatabaseId(), QueryPath, State));
+        const auto& updaterId = Register(TUpdateStreamingQueryStateRequestActor::MakeRetry(SelfId(), Context.GetDatabaseId(), QueryPath, State));
         LOG_D("Start TUpdateStreamingQueryStateRequestActor " << updaterId << " (" << info << ")");
     }
 
@@ -1544,7 +1551,10 @@ private:
         if (State.HasCurrentExecutionId()) {
             const auto& executionId = State.GetCurrentExecutionId();
             LOG_D("Cancel streaming query execution " << executionId);
-            SendToKqpProxy(std::make_unique<TEvCancelScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA));
+            SendToKqpProxy(std::make_unique<TEvCancelScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA, TEvCancelScriptExecutionOperation::TSettings{
+                .FailOnNotFound = false,
+                .FailOnAlreadyStopped = false,
+            }));
             return;
         }
 
@@ -1552,7 +1562,10 @@ private:
             LOG_D("Cleanup #" << State.PreviousExecutionIdsSize() << " previous executions");
 
             for (const auto& executionId : State.GetPreviousExecutionIds()) {
-                SendToKqpProxy(std::make_unique<TEvForgetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA), OperationsToForget++);
+                SendToKqpProxy(std::make_unique<TEvForgetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA, TEvForgetScriptExecutionOperation::TSettings{
+                    .FailOnNotFound = false,
+                    .CancelIfRunning = true,
+                }), OperationsToForget++);
                 LOG_D("Forget streaming query execution #" << OperationsToForget << " " << executionId);
             }
             return;
@@ -1574,7 +1587,6 @@ class TStartStreamingQueryTableActor final : public TActionActorBase<TStartStrea
     using TRetryPolicy = IRetryPolicy<>;
 
     inline static constexpr ui64 MAX_QUERY_EXECUTIONS = 3;
-    inline static constexpr TDuration START_REQUEST_TIMEOUT = TDuration::Seconds(30);
 
 public:
     using TBase::LogPrefix;
@@ -1619,8 +1631,7 @@ public:
     }
 
     void HandlePrepare(TEvGetScriptPhysicalGraphResponse::TPtr& ev) {
-        const auto status = ev->Get()->Status;
-        if (status != Ydb::StatusIds::NOT_FOUND && HandleResult(ev, "Load previous query execution state")) {
+        if (HandleResult(ev, "Load previous query execution state")) {
             return;
         }
 
@@ -1628,8 +1639,13 @@ public:
             PreviousPhysicalGraph = std::move(ev->Get()->PhysicalGraph);
         }
 
+        if (!ev->Get()->ExecutionEntryExists) {
+            LOG_W("Previous script execution not found, lease generation and graph was reset");
+            State.ClearCheckpointId(); // We don't know previous generation, so must start from fresh checkpoint
+        }
+
         PreviousGeneration = ev->Get()->Generation;
-        LOG_D("Load previous query execution state " << ev->Sender << " finished " << status << ", generation: " << PreviousGeneration << ", has saved state: " << PreviousPhysicalGraph.has_value());
+        LOG_D("Load previous query execution state " << ev->Sender << " finished, generation: " << PreviousGeneration << ", has saved state: " << PreviousPhysicalGraph.has_value());
 
         PrepareToStart();
     }
@@ -1639,13 +1655,12 @@ public:
         Y_ABORT_UNLESS(ev->Cookie < toCleanup);
 
         const auto& executionId = State.GetPreviousExecutionIds(ev->Cookie);
-        const auto status = ev->Get()->Status;
-        if (status != Ydb::StatusIds::NOT_FOUND && HandleResult(ev, TStringBuilder() << "Forget query execution (execution id: " << executionId << ")")) {
+        if (HandleResult(ev, TStringBuilder() << "Forget query execution (execution id: " << executionId << ")")) {
             return;
         }
 
         --OperationsToForget;
-        LOG_D("Forget streaming query execution #" << ev->Cookie << " " << ev->Sender << " finished " << status << ", execution id: " << executionId << ", remains: " << OperationsToForget);
+        LOG_D("Forget streaming query execution #" << ev->Cookie << " " << ev->Sender << " finished, execution id: " << executionId << ", remains: " << OperationsToForget);
 
         if (OperationsToForget == 0) {
             auto& executionIds = *State.MutablePreviousExecutionIds();
@@ -1683,12 +1698,12 @@ public:
     void HandleStartQuery(TEvents::TEvWakeup::TPtr&) {
         const auto& executionId = State.GetCurrentExecutionId();
         LOG_D("Get streaming query execution " << executionId);
-        SendToKqpProxy(std::make_unique<TEvGetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA));
+        SendToKqpProxy(std::make_unique<TEvGetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA, /* failOnNotFound */ true));
     }
 
     void HandleStartQuery(TEvGetScriptExecutionOperationResponse::TPtr& ev) {
         const auto& info = *ev->Get();
-        LOG_D("Got script execution info, StateSaved: " << info.StateSaved << ", Ready: " << info.Ready);
+        LOG_D("Got script execution info, state saved: " << info.StateSaved << ", ready: " << info.Ready);
 
         if (HandleResult(ev, "Query compilation / planing")) {
             return;
@@ -1754,7 +1769,7 @@ protected:
 
 private:
     void UpdateQueryState(const TString& info) const {
-        const auto& updaterId = Register(new TUpdateStreamingQueryStateRequestActor::TRetry(SelfId(), Context.GetDatabaseId(), QueryPath, State));
+        const auto& updaterId = Register(TUpdateStreamingQueryStateRequestActor::MakeRetry(SelfId(), Context.GetDatabaseId(), QueryPath, State));
         LOG_D("Start TUpdateStreamingQueryStateRequestActor " << updaterId << " (" << info << ")");
     }
 
@@ -1781,7 +1796,10 @@ private:
 
             for (ui64 i = 0; i < toCleanup; ++i) {
                 const auto& executionId = State.GetPreviousExecutionIds(i);
-                SendToKqpProxy(std::make_unique<TEvForgetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA), OperationsToForget++);
+                SendToKqpProxy(std::make_unique<TEvForgetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA, TEvForgetScriptExecutionOperation::TSettings{
+                    .FailOnNotFound = false,
+                    .CancelIfRunning = true
+                }), OperationsToForget++);
                 LOG_D("Forget streaming query execution #" << OperationsToForget << " " << executionId);
             }
             return;
@@ -1848,6 +1866,7 @@ private:
 
     void GetScriptExecutionOperation() {
         if (!GetOperationRetryState) {
+            // We will wait for query start without timeout, because otherwise query may not retry after start
             GetOperationRetryState = TRetryPolicy::GetExponentialBackoffPolicy(
                 []() {
                     return ERetryErrorClass::ShortRetry;
@@ -1856,21 +1875,14 @@ private:
                 TDuration::MilliSeconds(100),
                 TDuration::Seconds(1),
                 std::numeric_limits<size_t>::max(),
-                START_REQUEST_TIMEOUT
+                TDuration::Max()
             )->CreateRetryState();
         }
 
-        if (const auto delay = GetOperationRetryState->GetNextRetryDelay()) {
-            LOG_D("Schedule get script execution operation in " << *delay);
-            Schedule(*delay, new TEvents::TEvWakeup());
-        } else {
-            LOG_W("Script execution operation not started after " << START_REQUEST_TIMEOUT << " send response");
-            Issues.AddIssue(
-                NYql::TIssue(TStringBuilder() << "Streaming query not started after " << START_REQUEST_TIMEOUT << ", try to check query status later")
-                    .SetCode(NYql::TIssuesIds::KIKIMR_TIMEOUT, NYql::TSeverityIds::S_INFO)
-            );
-            Finish(Ydb::StatusIds::SUCCESS);
-        }
+        const auto delay = GetOperationRetryState->GetNextRetryDelay();
+        Y_VALIDATE(delay, "Retries unexpectedly finished");
+        LOG_D("Schedule get script execution operation in " << *delay);
+        Schedule(*delay, new TEvents::TEvWakeup());
     }
 
     static std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> CreateDefaultRetryMapping() {
@@ -1995,17 +2007,18 @@ public:
 
     void Handle(TEvCancelScriptExecutionOperationResponse::TPtr& ev) {
         const auto& executionId = State.GetCurrentExecutionId();
-        const auto status = ev->Get()->Status;
-        if (status != Ydb::StatusIds::NOT_FOUND && status != Ydb::StatusIds::PRECONDITION_FAILED && HandleResult(ev, TStringBuilder() << "Cancel query execution (execution id: " << executionId << ")")) {
+        if (HandleResult(ev, TStringBuilder() << "Cancel query execution (execution id: " << executionId << ")")) {
             return;
         }
 
-        LOG_D("Cancel streaming query execution " << ev->Sender << " finished " << status << ", execution id: " << executionId);
-        if (status != Ydb::StatusIds::NOT_FOUND) {
+        const auto entryExists = ev->Get()->ExecutionEntryExists;
+        LOG_D("Cancel streaming query execution " << ev->Sender << " finished, execution id: " << executionId << ", entry exists: " << entryExists);
+
+        if (entryExists) {
             State.AddPreviousExecutionIds(executionId);
         }
-        State.ClearCurrentExecutionId();
 
+        State.ClearCurrentExecutionId();
         SyncQuery();
     }
 
@@ -2058,7 +2071,7 @@ protected:
 
 private:
     void UpdateQueryState(const TString& info) const {
-        const auto& updaterId = Register(new TUpdateStreamingQueryStateRequestActor::TRetry(SelfId(), Context.GetDatabaseId(), QueryPath, State));
+        const auto& updaterId = Register(TUpdateStreamingQueryStateRequestActor::MakeRetry(SelfId(), Context.GetDatabaseId(), QueryPath, State));
         LOG_D("Start TUpdateStreamingQueryStateRequestActor " << updaterId << " (" << info << ")");
     }
 
@@ -2113,7 +2126,10 @@ private:
         if (State.HasCurrentExecutionId()) {
             const auto& executionId = State.GetCurrentExecutionId();
             LOG_D("Cancel streaming query execution " << executionId << " (" << info << ")");
-            SendToKqpProxy(std::make_unique<TEvCancelScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA));
+            SendToKqpProxy(std::make_unique<TEvCancelScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA, TEvCancelScriptExecutionOperation::TSettings{
+                .FailOnNotFound = false,
+                .FailOnAlreadyStopped = false,
+            }));
             return;
         }
 
@@ -2308,7 +2324,7 @@ protected:
         }
 
         TBase::Become(&TDerived::StateFunc);
-        const auto& unlockActorId = TBase::Register(new TUnlockStreamingQueryRequestActor::TRetry(TBase::SelfId(), Context.GetDatabaseId(), TBase::QueryPath, TBase::SelfId()));
+        const auto& unlockActorId = TBase::Register(TUnlockStreamingQueryRequestActor::MakeRetry(TBase::SelfId(), Context.GetDatabaseId(), TBase::QueryPath, TBase::SelfId()));
         LOG_D("Start TUnlockStreamingQueryRequestActor " << unlockActorId);
 
         FinalStatus = status;
@@ -2808,7 +2824,7 @@ private:
             QueryState.SetStatus(NKikimrKqp::TStreamingQueryState::STATUS_UNSPECIFIED);
             QueryState.ClearSchemeInfo();
 
-            const auto& updaterId = Register(new TUpdateStreamingQueryStateRequestActor::TRetry(SelfId(), Context.GetDatabaseId(), QueryPath, QueryState));
+            const auto& updaterId = Register(TUpdateStreamingQueryStateRequestActor::MakeRetry(SelfId(), Context.GetDatabaseId(), QueryPath, QueryState));
             LOG_D("Start TUpdateStreamingQueryStateRequestActor " << updaterId);
             return;
         }

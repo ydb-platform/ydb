@@ -98,6 +98,10 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTabl
         ops.emplace(EAlterOperationKind::Compact);
     }
 
+    if (req->set_not_null_size()) {
+        ops.emplace(EAlterOperationKind::SetColumnConstraint);
+    }
+
     return ops;
 }
 
@@ -439,6 +443,47 @@ bool BuildAlterTableBloomFilterModifyScheme(const Ydb::Table::AlterTableRequest*
 {
     return BuildAlterTableBloomFilterModifyScheme(req->path(), req, modifyScheme, code, error);
 }
+
+bool BuildAlterTableSetColumnConstraintRequest(
+    const Ydb::Table::AlterTableRequest* req,
+    NKikimrSetColumnConstraint::TSetColumnConstraintSettings* settings,
+    Ydb::StatusIds::StatusCode& status,
+    TString& error)
+{
+    const auto ops = GetAlterOperationKinds(req);
+    if (ops.size() != 1 || *ops.begin() != EAlterOperationKind::SetColumnConstraint) {
+        status = Ydb::StatusIds::INTERNAL_ERROR;
+        error = "Unexpected build alter table set column constraint call.";
+        return false;
+    }
+
+    if (!AppData()->FeatureFlags.GetEnableSetColumnConstraint()) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Set column constraint is not allowed";
+        return false;
+    }
+
+    if (req->set_not_null_size() == 0) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "No column constraints specified";
+        return false;
+    }
+
+    for (const auto& constraint : req->set_not_null()) {
+        if (!constraint.has_column_name()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Column name is not specified";
+            return false;
+        }
+
+        settings->AddNotNullColumns(constraint.column_name());
+    }
+
+    settings->SetTablePath(req->path());
+
+    return true;
+}
+
 
 bool BuildAlterTableCompactRequest(const Ydb::Table::AlterTableRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,
     Ydb::StatusIds::StatusCode& status, TString& error)

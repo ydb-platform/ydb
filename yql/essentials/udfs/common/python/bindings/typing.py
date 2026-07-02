@@ -1,5 +1,6 @@
 import sys
 
+
 # implementation of six.python_2_unicode_compatible method from:
 # https://github.com/benjaminp/six/blob/c8e394065cd541a16c040515dc0afb85cf22a7c3/six.py#L963
 def python_2_unicode_compatible(klass):
@@ -12,12 +13,14 @@ def python_2_unicode_compatible(klass):
     """
     if sys.version_info[0] == 2:
         if '__str__' not in klass.__dict__:
-            raise ValueError("@python_2_unicode_compatible cannot be applied "
-                             "to %s because it doesn't define __str__()." %
-                             klass.__name__)
+            raise ValueError(
+                "@python_2_unicode_compatible cannot be applied "
+                "to %s because it doesn't define __str__()." % klass.__name__
+            )
         klass.__unicode__ = klass.__str__
         klass.__str__ = lambda self: self.__unicode__().encode('utf-8')
     return klass
+
 
 def main():
     import importlib.abc

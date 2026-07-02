@@ -90,7 +90,7 @@ TEST_F(TBusTest, TerminateBeforeAccept)
     auto clientSocket = NNet::AcceptSocket(serverSocket, &clientAddress);
     EXPECT_NE(clientSocket, INVALID_SOCKET);
 
-    EXPECT_EQ(WaitForFast(terminated.ToFuture()).GetCode(), error.GetCode());
+    EXPECT_EQ(WaitFor(terminated.ToFuture()).GetCode(), error.GetCode());
 
     NNet::CloseSocket(clientSocket);
     NNet::CloseSocket(serverSocket);
@@ -110,15 +110,15 @@ TEST_F(TBusTest, BlackHole)
     auto message = CreateMessage(1);
     auto options = TSendOptions{.TrackingLevel = EDeliveryTrackingLevel::Full};
 
-    WaitForFast(bus->Send(message, options))
+    WaitFor(bus->Send(message, options))
         .ThrowOnError();
 
     bus->SetTosLevel(BlackHoleTosLevel);
 
-    auto result = WaitForFast(bus->Send(message, options));
+    auto result = WaitFor(bus->Send(message, options));
     EXPECT_FALSE(result.IsOK());
 
-    WaitForFast(server->Stop())
+    WaitFor(server->Stop())
         .ThrowOnError();
 }
 

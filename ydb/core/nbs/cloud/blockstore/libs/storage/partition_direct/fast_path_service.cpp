@@ -378,6 +378,17 @@ ui64 TFastPathService::GenerateLsn()
     return lsn;
 }
 
+TFastPathServiceInfo TFastPathService::GetMonInfo() const
+{
+    const ui64 vchunkSize = StorageConfig->GetVChunkSize();
+    Y_ABORT_UNLESS(vchunkSize != 0);
+    return {
+        .LsnCounter = SequenceGenerator.load(),
+        .TotalVChunks = Regions.size() * (RegionSize / vchunkSize),
+        .DbgCount = DirectBlockGroups.size(),
+    };
+}
+
 void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
 {
     const ui64 step = StorageConfig->GetPBufferCleanupLsnStep();

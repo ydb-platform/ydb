@@ -1,13 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import boto3
-import botocore
-
 import random
 import logging
+import urllib.parse
 import requests
 import time
 import uuid
+import xmltodict
+
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
+from botocore.credentials import Credentials
 
 import pytest
 import yatest
@@ -24,6 +27,9 @@ ANOTHER_TABLES_FORMAT_PARAMS = {
     'argvalues': [0, 1],
     'ids': ['tables_format_v0', 'tables_format_v1'],
 }
+
+SQS_API_VERSION = '2012-11-05'
+SQS_REGION = 'ru-central1'
 
 
 class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTestBase)):
@@ -80,21 +86,48 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
     def _get_queue_arn(self, queue_url):
         return self._sqs_api.get_queue_attributes(queue_url, ['QueueArn'])['QueueArn']
 
-    def _make_boto_client(self, access_key_id, secret_access_key, url):
-        session = boto3.session.Session()
-        return session.client(
-            service_name='sqs',
-            aws_access_key_id=access_key_id,  # service account
-            aws_secret_access_key=secret_access_key,
-            aws_session_token='unused',
-            endpoint_url=url,
-            region_name='ru-central1'
-        )
-
     def _make_server_url(self):
         host = self.cluster.nodes[1].host
         port = self.cluster_nodes[0].sqs_port
         return 'http://{}:{}'.format(host, port)
+
+    def _signed_sqs_request(self, access_key_id, secret_access_key, action, **params):
+        url = self._make_server_url()
+        body_params = {'Action': action, 'Version': SQS_API_VERSION}
+        body_params.update(params)
+        data = urllib.parse.urlencode(body_params)
+
+        request = AWSRequest(
+            method='POST',
+            url=url,
+            data=data,
+            headers={'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8'},
+        )
+        credentials = Credentials(access_key_id, secret_access_key, token='unused')
+        SigV4Auth(credentials, 'sqs', SQS_REGION).add_auth(request)
+        prepared = request.prepare()
+        return requests.post(prepared.url, data=prepared.body, headers=dict(prepared.headers))
+
+    def _signed_sqs_request_or_raise(self, access_key_id, secret_access_key, action, **params):
+        response = self._signed_sqs_request(access_key_id, secret_access_key, action, **params)
+        if response.status_code != 200:
+            raise RuntimeError(response.text)
+        return response
+
+    @staticmethod
+    def _extract_queue_url(response):
+        result = xmltodict.parse(response.text)
+        return result['CreateQueueResponse']['CreateQueueResult']['QueueUrl']
+
+    @staticmethod
+    def _extract_queue_urls(response):
+        result = xmltodict.parse(response.text)
+        urls = result['ListQueuesResponse']['ListQueuesResult'].get('QueueUrl')
+        if urls is None:
+            return []
+        if isinstance(urls, list):
+            return urls
+        return [urls]
 
     def test_empty_auth_header(self):
         url = self._make_server_url()
@@ -104,53 +137,54 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_retryable_iam_error(self, tables_format):
         self._init_with_params(tables_format=tables_format)
-        url = self._make_server_url()
-
-        boto_client = self._make_boto_client('TEST_ID_FOR_RETRYIES', 'SECRET', url)
 
         def list_queues():
-            boto_client.list_queues()
+            self._signed_sqs_request_or_raise('TEST_ID_FOR_RETRYIES', 'SECRET', 'ListQueues')
 
         assert_that(
             list_queues,
             raises(
-                botocore.exceptions.ClientError,
-                pattern='ServiceUnavailable.+IAM authorization error'
+                RuntimeError,
+                pattern='IAM authorization error'
             )
         )
 
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_empty_access_key_id(self, tables_format):
         self._init_with_params(tables_format=tables_format)
-        url = self._make_server_url()
-
-        boto_client = self._make_boto_client('sa_' + self._username, 'SECRET', url)
+        access_key_id = 'sa_' + self._username
 
         # basic sanity check
-        queue_url = boto_client.create_queue(QueueName=self.queue_name)['QueueUrl']
-        assert_that(boto_client.list_queues()['QueueUrls'], has_item(queue_url))
-        boto_client.send_message(QueueUrl=queue_url, MessageBody='awesome')
-
-        unknown_boto_client = self._make_boto_client('', 'SECRET', url)
+        create_response = self._signed_sqs_request_or_raise(
+            access_key_id, 'SECRET', 'CreateQueue', QueueName=self.queue_name
+        )
+        queue_url = self._extract_queue_url(create_response)
+        list_response = self._signed_sqs_request_or_raise(access_key_id, 'SECRET', 'ListQueues')
+        assert_that(self._extract_queue_urls(list_response), has_item(queue_url))
+        self._signed_sqs_request_or_raise(
+            access_key_id, 'SECRET', 'SendMessage', QueueUrl=queue_url, MessageBody='awesome'
+        )
 
         def list_queues_for_empty_access_key_id():
-            unknown_boto_client.list_queues()
+            self._signed_sqs_request_or_raise('', 'SECRET', 'ListQueues')
 
         assert_that(
             list_queues_for_empty_access_key_id,
             raises(
-                botocore.exceptions.ClientError,
+                RuntimeError,
                 pattern='InvalidClientTokenId'
             )
         )
 
         def send_message_for_empty_access_key_id():
-            unknown_boto_client.send_message(QueueUrl=queue_url, MessageBody='psst, wanna some weed?')
+            self._signed_sqs_request_or_raise(
+                '', 'SECRET', 'SendMessage', QueueUrl=queue_url, MessageBody='psst, wanna some weed?'
+            )
 
         assert_that(
             send_message_for_empty_access_key_id,
             raises(
-                botocore.exceptions.ClientError,
+                RuntimeError,
                 pattern='AccessDenied'
             )
         )

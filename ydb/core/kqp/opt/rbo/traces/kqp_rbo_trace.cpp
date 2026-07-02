@@ -116,6 +116,7 @@ std::string FormatStatisticsType(EStatisticsType type) {
         case NKikimr::NKqp::BaseTable: return "BaseTable";
         case NKikimr::NKqp::FilteredFactTable: return "FilteredFactTable";
         case NKikimr::NKqp::ManyManyJoin: return "ManyManyJoin";
+        case NKikimr::NKqp::Constant: return "Constant";
         default: return "Unknown";
     }
 }

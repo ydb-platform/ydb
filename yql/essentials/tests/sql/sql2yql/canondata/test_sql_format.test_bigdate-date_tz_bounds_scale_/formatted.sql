@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     CAST(TzDate32('-144169-01-02,Europe/Moscow') AS TzDatetime64),
     CAST(TzDate32('-144169-01-01,America/Los_Angeles') AS TzDatetime64),

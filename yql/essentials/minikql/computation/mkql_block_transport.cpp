@@ -1028,7 +1028,7 @@ private:
         if (needsOffsetAdjust) {
             auto mutableValueOffsets = NYql::NUdf::CopyBuffer(*valueOffsetsBuf, 0, blockLen * sizeof(i32), Pool_);
             auto* destOffsets = reinterpret_cast<i32*>(mutableValueOffsets->mutable_data());
-            NYql::NUdf::AdjustDenseUnionValueOffsets(
+            NYql::NUdf::AdjustDenseUnionValueOffsetsInplace(
                 TArrayRef<i32>(destOffsets, blockLen),
                 TArrayRef<const i8>(reinterpret_cast<const i8*>(typeCodesBuf->data()), blockLen),
                 ChildrenUsage_);

@@ -251,7 +251,7 @@ def test_external_data_table_with_fail(db_fixture, ydb_cluster):
 
     # drop secret in between
     _test_external_data_table_with_fail(
-        get_eds_for_s3(secrets[0], secrets[1], '', 's3_source_with_removed_secret'),
+        get_eds_for_s3(secrets[0], secrets[1], 'my-bucket', 's3_source_with_removed_secret'),
         's3_source_with_removed_secret',
         f"DROP SECRET `{secrets[1]}`;",
         f"secret `{secrets[1]}` not found",
@@ -259,7 +259,7 @@ def test_external_data_table_with_fail(db_fixture, ydb_cluster):
 
     # revoke grant for a secret in between
     _test_external_data_table_with_fail(
-        get_eds_for_s3(secrets[0], secrets[2], '', 's3_source_with_revoked_grant_secret'),
+        get_eds_for_s3(secrets[0], secrets[2], 'my-bucket', 's3_source_with_revoked_grant_secret'),
         's3_source_with_revoked_grant_secret',
         f"REVOKE 'ydb.granular.select_row' ON `{secrets[2]}` FROM {user2};",
         f"secret `{secrets[2]}` not found",

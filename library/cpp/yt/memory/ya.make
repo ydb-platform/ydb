@@ -47,6 +47,12 @@ CHECK_DEPENDENT_DIRS(
 
 END()
 
+IF (NOT OPENSOURCE)
+    RECURSE(
+        benchmark
+    )
+ENDIF()
+
 RECURSE_FOR_TESTS(
     unittests
 )

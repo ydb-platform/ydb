@@ -34,7 +34,7 @@ using namespace NKikimr::NFulltext;
  * Destination columns with a FulltextPlain index: <prefix columns>, __ydb_token, <PK columns>, <data columns>
  * Destination columns with a FulltextRelevance index: <prefix columns>, __ydb_token, <PK columns>, __ydb_freq
  * Destination columns with a FulltextCompact/FulltextCompactRelevance/JsonCompact index:
- *   __ydb_token, __ydb_max_id, __ydb_generation (always max), __ydb_added (always true), __ydb_segment
+ *   __ydb_token, __ydb_generation (always max), __ydb_max_id, __ydb_added (always true), __ydb_segment
  *
  * Request:
  * - The client sends TEvBuildFulltextIndexRequest with:
@@ -256,13 +256,13 @@ public:
         case NKikimrTxDataShard::EFulltextIndexType::JsonCompact:
             {
                 Ydb::Type type;
-                NScheme::ProtoFromTypeInfo(KeyTypes.at(0), type);
-                uploadTypes->emplace_back(MaxIdColumn, type);
+                type.set_type_id(NTableIndex::NFulltext::GenType);
+                uploadTypes->emplace_back(GenColumn, type);
             }
             {
                 Ydb::Type type;
-                type.set_type_id(NTableIndex::NFulltext::GenType);
-                uploadTypes->emplace_back(GenColumn, type);
+                NScheme::ProtoFromTypeInfo(KeyTypes.at(0), type);
+                uploadTypes->emplace_back(MaxIdColumn, type);
             }
             {
                 Ydb::Type type;
@@ -552,12 +552,12 @@ public:
         TVector<TCell> uploadKey(::Reserve(state.Prefix.size() + 3));
         uploadKey.insert(uploadKey.end(), state.Prefix.begin(), state.Prefix.end());
         uploadKey.push_back(TCell(state.Token));
+        uploadKey.push_back(TCell::Make(std::numeric_limits<NTableIndex::NFulltext::TGen>::max()));
         if (KeyTypeId == NScheme::NTypeIds::Uint64 || KeyTypeId == NScheme::NTypeIds::Int64) {
             uploadKey.push_back(TCell::Make(state.Segment.GetMaxId()));
         } else {
             uploadKey.push_back(TCell::Make((ui32)state.Segment.GetMaxId()));
         }
-        uploadKey.push_back(TCell::Make(std::numeric_limits<NTableIndex::NFulltext::TGen>::max()));
         TVector<TCell> uploadValue(::Reserve(2));
         uploadValue.push_back(TCell::Make(true));
         uploadValue.push_back(TCell((const char*)segment.data(), segment.size()));
@@ -825,9 +825,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         const auto& userTable = **userTableIt;
 
         // 2. Validating request fields
-        if (!request.HasSnapshotStep() || !request.HasSnapshotTxId()) {
-            badRequest(TStringBuilder() << "Missing snapshot");
-        } else {
+        // The snapshot is optional: live-table scans (plain/relevance/compact over the main table)
+        // always carry one, but the compact rowid-mode posting fill scans the transient seq-keyed
+        // row-id source table - a build impl table that is immutable once the prepass completed and so
+        // needs no snapshot (mirrors the dictionary scan over the 0build impl table, fulltext_dict.cpp).
+        if (request.HasSnapshotStep() || request.HasSnapshotTxId()) {
             const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
             if (!SnapshotManager.FindAvailable(snapshotKey)) {
                 badRequest(TStringBuilder() << "Unknown snapshot for path id " << pathId.OwnerId << ":" << pathId.LocalPathId
@@ -874,6 +876,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
             badRequest(TStringBuilder() << "Prefix columns are not supported for JSON indexes");
         }
 
+        // Compact builds scan a table with a single integer key holding the doc id: either the main
+        // table (single-integer-PK case) or, for an arbitrary-PK main table, the row-id source table
+        // built by the rowid-mode prepass (a generic secondary-index build keyed by __ydb_row_id).
         if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||
             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance ||
             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact) {

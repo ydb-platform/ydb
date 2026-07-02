@@ -4,6 +4,8 @@
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/base/appdata.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -194,7 +196,9 @@ void TLockInfo::SetBroken(TRowVersion at) {
     }
 
     if (!IsBroken(at)) {
-        LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD, "Lock " << LockId << " marked broken at " << at);
+        YDB_LOG_TRACE_CTX(LockLoggerContext, "Lock marked broken",
+            {"lockId", LockId},
+            {"at", at});
 
         BreakVersion = at;
         Locker->ScheduleRemoveBrokenRanges(LockId, at);
@@ -1388,7 +1392,8 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
         auto it = Cache->Locks.find(lockTxId);
         if (it != Cache->Locks.end())
             return it->second;
-        LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD, "TSysLocks::GetLock: lock " << lockTxId << " not found in cache");
+        YDB_LOG_TRACE_CTX(LockLoggerContext, "TSysLocks::GetLock: lock not found in cache",
+            {"lockTxId", lockTxId});
         return TLock();
     }
 
@@ -1410,16 +1415,18 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
                 if (txLock->GetReadTables().contains(tableId) || txLock->GetWriteTables().contains(tableId)) {
                     return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), tableId, txLock->IsWriteLock());
                 } else {
-                    LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD,
-                            "TSysLocks::GetLock: lock " << lockTxId << " exists, but not set for table " << tableId);
+                    YDB_LOG_TRACE_CTX(LockLoggerContext, "TSysLocks::GetLock: lock exists, but not set for table",
+                        {"lockTxId", lockTxId},
+                        {"tableId", tableId});
                 }
             } else {
-                LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD,
-                        "TSysLocks::GetLock: bad request for lock " << lockTxId);
+                YDB_LOG_TRACE_CTX(LockLoggerContext, "TSysLocks::GetLock: bad request for lock",
+                    {"lockTxId", lockTxId});
             }
         }
     } else {
-        LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD, "TSysLocks::GetLock: lock " << lockTxId << " not found");
+        YDB_LOG_TRACE_CTX(LockLoggerContext, "TSysLocks::GetLock: lock not found",
+            {"lockTxId", lockTxId});
     }
 
     Self->IncCounter(COUNTER_LOCKS_LOST);

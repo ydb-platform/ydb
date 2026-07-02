@@ -423,7 +423,8 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
             auto input = MkqlBuildExpr(indexLookupJoin.Input().Ref(), buildCtx);
 
-            return ctx.PgmBuilder().KqpIndexLookupJoin(input, joinType, leftLabel, rightLabel);
+            return ctx.PgmBuilder().KqpIndexLookupJoin(input, joinType, leftLabel, rightLabel,
+                ctx.StreamLookupJoinCookieVersion());
         });
 
     compiler->AddCallable(TDqBlockHashJoinCore::CallableName(),
@@ -533,6 +534,8 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
     });
 
     compiler->AddCallable(TDqPhyWatermarkGenerator::CallableName(), [kqpCtx = std::ref(ctx)](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto& pgmBuilder = kqpCtx.get().PgmBuilder();
+
         TDqPhyWatermarkGenerator wg(&node);
 
         const auto input = MkqlBuildExpr(*wg.Input().Raw(), ctx);
@@ -541,20 +544,36 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return MkqlBuildLambda(*wg.WatermarkExtractor().Raw(), ctx, {item});
         };
 
-        const auto partitionIdExtractor = [&](TRuntimeNode item) {
-            return MkqlBuildLambda(*wg.PartitionIdExtractor().Raw(), ctx, {item});
+        const auto partitionKeyExtractor = [&](TRuntimeNode item) {
+            return MkqlBuildLambda(*wg.PartitionKeyExtractor().Raw(), ctx, {item});
         };
 
-        std::vector<std::string_view> watermarkSettings;
-        watermarkSettings.reserve(2 * wg.WatermarkSettings().Size());
+        std::vector<std::pair<std::string, std::string>> watermarkSettings;
+        watermarkSettings.reserve(wg.WatermarkSettings().Size());
         for (const auto& nameValue : wg.WatermarkSettings()) {
-            const auto name = nameValue.Name().Value();
-            watermarkSettings.push_back(name);
-            const auto value = nameValue.Value().Cast<TCoAtom>().Value();
-            watermarkSettings.push_back(value);
+            if (std::string_view name  = nameValue.Name().Value();
+                "FederatedClusters" == name) {
+                const auto valueList = nameValue.Value().Cast<TCoAtomList>();
+
+                TStringBuilder valueBuilder;
+                for (bool first = true; const auto& value : valueList) {
+                    if (!std::exchange(first, false)) {
+                        valueBuilder << ',';
+                    }
+                    valueBuilder << value.Value();
+                }
+                const TString value = valueBuilder;
+
+                watermarkSettings.emplace_back(name, value);
+            } else {
+                std::string_view value = nameValue.Value().Cast<TCoAtom>().Value();
+                watermarkSettings.emplace_back(name, value);
+            }
         }
 
-        return kqpCtx.get().PgmBuilder().DqWatermarkGenerator(input, watermarkExtractor, partitionIdExtractor, watermarkSettings);
+        const auto partitionKeys = pgmBuilder.NewVoid();
+
+        return pgmBuilder.DqWatermarkGenerator(input, watermarkExtractor, partitionKeyExtractor, watermarkSettings, partitionKeys);
     });
 
     compiler->AddCallable("FulltextAnalyze",

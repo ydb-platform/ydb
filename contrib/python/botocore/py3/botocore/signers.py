@@ -20,6 +20,7 @@ import botocore.auth
 from botocore.awsrequest import create_request_object, prepare_request_dict
 from botocore.compat import OrderedDict
 from botocore.exceptions import (
+    ParamValidationError,
     UnknownClientMethodError,
     UnknownSignatureVersionError,
     UnsupportedSignatureVersionError,
@@ -152,9 +153,7 @@ class RequestSigner:
 
         # Allow mutating request before signing
         self._event_emitter.emit(
-            'before-sign.{}.{}'.format(
-                self._service_id.hyphenize(), operation_name
-            ),
+            f'before-sign.{self._service_id.hyphenize()}.{operation_name}',
             request=request,
             signing_name=signing_name,
             region_name=self._region_name,
@@ -231,9 +230,7 @@ class RequestSigner:
             signature_version += suffix
 
         handler, response = self._event_emitter.emit_until_response(
-            'choose-signer.{}.{}'.format(
-                self._service_id.hyphenize(), operation_name
-            ),
+            f'choose-signer.{self._service_id.hyphenize()}.{operation_name}',
             signing_name=signing_name,
             region_name=region_name,
             signature_version=signature_version,
@@ -428,9 +425,9 @@ class CloudFrontSigner:
         if isinstance(policy, str):
             policy = policy.encode('utf8')
         if date_less_than is not None:
-            params = ['Expires=%s' % int(datetime2timestamp(date_less_than))]
+            params = [f'Expires={int(datetime2timestamp(date_less_than))}']
         else:
-            params = ['Policy=%s' % self._url_b64encode(policy).decode('utf8')]
+            params = [f"Policy={self._url_b64encode(policy).decode('utf8')}"]
         signature = self.rsa_signer(policy)
         params.extend(
             [
@@ -501,6 +498,15 @@ def add_generate_db_auth_token(class_attributes, **kwargs):
     class_attributes['generate_db_auth_token'] = generate_db_auth_token
 
 
+def add_dsql_generate_db_auth_token_methods(class_attributes, **kwargs):
+    class_attributes['generate_db_connect_auth_token'] = (
+        dsql_generate_db_connect_auth_token
+    )
+    class_attributes['generate_db_connect_admin_auth_token'] = (
+        dsql_generate_db_connect_admin_auth_token
+    )
+
+
 def generate_db_auth_token(self, DBHostname, Port, DBUsername, Region=None):
     """Generates an auth token used to connect to a db with IAM credentials.
 
@@ -555,6 +561,99 @@ def generate_db_auth_token(self, DBHostname, Port, DBUsername, Region=None):
     return presigned_url[len(scheme) :]
 
 
+def _dsql_generate_db_auth_token(
+    self, Hostname, Action, Region=None, ExpiresIn=900
+):
+    """Generate a DSQL database token for an arbitrary action.
+
+    :type Hostname: str
+    :param Hostname: The DSQL endpoint host name.
+
+    :type Action: str
+    :param Action: Action to perform on the cluster (DbConnectAdmin or DbConnect).
+
+    :type Region: str
+    :param Region: The AWS region where the DSQL Cluster is hosted. If None, the client region will be used.
+
+    :type ExpiresIn: int
+    :param ExpiresIn: The token expiry duration in seconds (default is 900 seconds).
+
+    :return: A presigned url which can be used as an auth token.
+    """
+    possible_actions = ("DbConnect", "DbConnectAdmin")
+
+    if Action not in possible_actions:
+        raise ParamValidationError(
+            report=f"Received {Action} for action but expected one of: {', '.join(possible_actions)}"
+        )
+
+    if Region is None:
+        Region = self.meta.region_name
+
+    request_dict = {
+        'url_path': '/',
+        'query_string': '',
+        'headers': {},
+        'body': {
+            'Action': Action,
+        },
+        'method': 'GET',
+    }
+    scheme = 'https://'
+    endpoint_url = f'{scheme}{Hostname}'
+    prepare_request_dict(request_dict, endpoint_url)
+    presigned_url = self._request_signer.generate_presigned_url(
+        operation_name=Action,
+        request_dict=request_dict,
+        region_name=Region,
+        expires_in=ExpiresIn,
+        signing_name='dsql',
+    )
+    return presigned_url[len(scheme) :]
+
+
+def dsql_generate_db_connect_auth_token(
+    self, Hostname, Region=None, ExpiresIn=900
+):
+    """Generate a DSQL database token for the "DbConnect" action.
+
+    :type Hostname: str
+    :param Hostname: The DSQL endpoint host name.
+
+    :type Region: str
+    :param Region: The AWS region where the DSQL Cluster is hosted. If None, the client region will be used.
+
+    :type ExpiresIn: int
+    :param ExpiresIn: The token expiry duration in seconds (default is 900 seconds).
+
+    :return: A presigned url which can be used as an auth token.
+    """
+    return _dsql_generate_db_auth_token(
+        self, Hostname, "DbConnect", Region, ExpiresIn
+    )
+
+
+def dsql_generate_db_connect_admin_auth_token(
+    self, Hostname, Region=None, ExpiresIn=900
+):
+    """Generate a DSQL database token for the "DbConnectAdmin" action.
+
+    :type Hostname: str
+    :param Hostname: The DSQL endpoint host name.
+
+    :type Region: str
+    :param Region: The AWS region where the DSQL Cluster is hosted. If None, the client region will be used.
+
+    :type ExpiresIn: int
+    :param ExpiresIn: The token expiry duration in seconds (default is 900 seconds).
+
+    :return: A presigned url which can be used as an auth token.
+    """
+    return _dsql_generate_db_auth_token(
+        self, Hostname, "DbConnectAdmin", Region, ExpiresIn
+    )
+
+
 class S3PostPresigner:
     def __init__(self, request_signer):
         self._request_signer = request_signer
@@ -580,11 +679,14 @@ class S3PostPresigner:
         :type conditions: list
         :param conditions: A list of conditions to include in the policy. Each
             element can be either a list or a structure. For example:
-            [
-             {"acl": "public-read"},
-             {"bucket": "mybucket"},
-             ["starts-with", "$key", "mykey"]
-            ]
+
+            .. code:: python
+
+                [
+                    {"acl": "public-read"},
+                    {"bucket": "amzn-s3-demo-bucket"},
+                    ["starts-with", "$key", "mykey"]
+                ]
 
         :type expires_in: int
         :param expires_in: The number of seconds the presigned post is valid
@@ -599,12 +701,17 @@ class S3PostPresigner:
             the form fields and respective values to use when submitting the
             post. For example:
 
-            {'url': 'https://mybucket.s3.amazonaws.com
-             'fields': {'acl': 'public-read',
+            .. code:: python
+
+                {
+                    'url': 'https://amzn-s3-demo-bucket.s3.amazonaws.com',
+                    'fields': {
+                        'acl': 'public-read',
                         'key': 'mykey',
                         'signature': 'mysignature',
-                        'policy': 'mybase64 encoded policy'}
-            }
+                        'policy': 'mybase64 encoded policy'
+                    }
+                }
         """
         if fields is None:
             fields = {}
@@ -755,11 +862,13 @@ def generate_presigned_post(
     :param Conditions: A list of conditions to include in the policy. Each
         element can be either a list or a structure. For example:
 
-        [
-         {"acl": "public-read"},
-         ["content-length-range", 2, 5],
-         ["starts-with", "$success_action_redirect", ""]
-        ]
+        .. code:: python
+
+            [
+                {"acl": "public-read"},
+                ["content-length-range", 2, 5],
+                ["starts-with", "$success_action_redirect", ""]
+            ]
 
         Conditions that are included may pertain to acl,
         content-length-range, Cache-Control, Content-Type,
@@ -768,7 +877,7 @@ def generate_presigned_post(
         and/or x-amz-meta-.
 
         Note that if you include a condition, you must specify
-        the a valid value in the fields dictionary as well. A value will
+        a valid value in the fields dictionary as well. A value will
         not be added automatically to the fields dictionary based on the
         conditions.
 
@@ -782,12 +891,17 @@ def generate_presigned_post(
         the form fields and respective values to use when submitting the
         post. For example:
 
-        {'url': 'https://mybucket.s3.amazonaws.com
-         'fields': {'acl': 'public-read',
+        .. code:: python
+
+            {
+                'url': 'https://amzn-s3-demo-bucket.s3.amazonaws.com',
+                'fields': {
+                    'acl': 'public-read',
                     'key': 'mykey',
                     'signature': 'mysignature',
-                    'policy': 'mybase64 encoded policy'}
-        }
+                    'policy': 'mybase64 encoded policy'
+                }
+            }
     """
     bucket = Bucket
     key = Key

@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
@@ -17,6 +18,7 @@ using namespace NYdb::NQuery;
 using namespace fmt::literals;
 using namespace NYql::NConnector::NTest;
 using namespace NTestUtils;
+using namespace NFederatedQueryTest;
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {
@@ -1058,6 +1060,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             // legal, but nothing to check
             return;
         }
+        NeedsStatsCollectors = true;
         constexpr ui32 combinations = WithFeatureFlag && !WithFullscanFlag ? 2 : 1;
         {
             auto& setupAppConfig = SetupAppConfig();
@@ -1187,6 +1190,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         readSession->AddDataReceivedEvent(sampleMessages);
         writeSession->ExpectMessages({"A-P4", "B-P6", "A-P4"});
 
+        auto actorsAlive = GetCounters("utils")->GetSubgroup("execpool", "User")->GetSubgroup("sensor", "ActorsAliveByActivity")->GetNamedCounter("activity", "NYql::NDq::(anonymous namespace)::TInputTransformStreamLookupBase");
+        WaitFor(TDuration::Seconds(10), "ActorsAlive", [&](TString& error) {
+            auto val = actorsAlive->Val();
+            error = TStringBuilder() << "InputTransform actors count is " << val << ", expected 1";
+            return val == 1;
+        });
+
         CheckScriptExecutionsCount(1, 1);
         const auto results = ExecQuery(
             "SELECT ast_compressed FROM `.metadata/script_executions`;"
@@ -1196,6 +1206,21 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             const auto& ast = result.ColumnParser(0).GetOptionalString();
             UNIT_ASSERT(ast);
             UNIT_ASSERT_STRING_CONTAINS(*ast, "DqCnStreamLookup");
+        });
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+
+        CheckScriptExecutionsCount(1, 0);
+
+        WaitFor(TDuration::Seconds(10), "ActorsAlive", [&](TString& error) {
+            auto val = actorsAlive->Val();
+            error = TStringBuilder() << "InputTransform actors count is " << val << ", expected 0";
+            return val == 0;
         });
 
         if (!WithFullscanFlag) {
@@ -1231,7 +1256,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             EStatus::GENERIC_ERROR,
             "EnableDqSourceStreamLookupJoinFullscan disabled, but FullscanLimit is 123");
 
-            CheckScriptExecutionsCount(2, 1);
+            CheckScriptExecutionsCount(2, 0);
         }
     }
 
@@ -2748,6 +2773,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopic1, "test-A");
         ReadTopicMessage(outputTopic2, "test-B");
 
+        Sleep(TDuration::Seconds(1));
         const auto& results = ExecQuery(fmt::format(R"(
             SELECT * FROM `{row_table}`;
             SELECT * FROM `{column_table}`;)",
@@ -2848,7 +2874,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
             CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Status").GetOptionalUtf8(), "FAILED");
+                UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Status").GetOptionalUtf8(), "STOPPED");
             });
         }
 
@@ -3516,6 +3542,30 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         )sql", "t"_a = tableName));
 
         ReadTopicMessage(outputTopic, R"({"id":"X","val":42})", TInstant::Now() - TDuration::Seconds(100), UseLocalTopics);
+    }
+
+    Y_UNIT_TEST_F(ReadTopicSchemaWithYdbPrefixIsProhibited, TStreamingTestFixture) {
+        const std::string sourceName = "schema_with_ydb_prefix_source";
+        CreatePqSource(sourceName);
+
+        const std::string topicName = "schema_with_ydb_prefix_topic";
+        CreateTopic(topicName);
+
+        // Schema column name starting with __ydb_ should be rejected
+        ExecQuery(fmt::format(R"(
+            SELECT * FROM `{source}`.`{topic}` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA (
+                    __ydb_my_field String NOT NULL,
+                    value String NOT NULL
+                )
+            )
+            LIMIT 1;)",
+            "source"_a = sourceName,
+            "topic"_a = topicName
+        ),
+        EStatus::GENERIC_ERROR,
+        "names starting with '__ydb_' are reserved for system columns");
     }
 }
 

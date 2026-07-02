@@ -1,4 +1,3 @@
-/* syntax version 1 */
 PRAGMA DisableSimpleColumns;
 
 $one = [<|'a': {'1'}, 'b': 2|>, <|'a': {'2'}, 'b': 3|>, <|'a': {'3'}, 'b': 4|>, <|'a': {'1'}, 'b': 8|>];

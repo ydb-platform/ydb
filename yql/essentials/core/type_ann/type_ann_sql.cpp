@@ -4352,7 +4352,7 @@ IGraphTransformer::TStatus SqlValuesListWrapper(const TExprNode::TPtr& input, TE
             if (item->GetTypeAnn()->Cast<TPgExprType>()->GetId() == commonTypes[j]) {
                 rowValues.emplace_back(item);
             } else {
-                rowValues.push_back(WrapWithPgCast(std::move(item), commonTypes[j], ctx.Expr));
+                rowValues.push_back(WrapWithPgCast(item, commonTypes[j], ctx.Expr));
             }
         }
         resultValues.push_back(ctx.Expr.NewList(value->Pos(), std::move(rowValues)));

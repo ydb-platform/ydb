@@ -11,8 +11,8 @@
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
-#include <ydb/library/kafka/kafka.h>
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 #include "actors.h"
 #include "kafka_fetch_actor.h"

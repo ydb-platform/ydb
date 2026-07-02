@@ -1901,7 +1901,7 @@ private:
         TStackVec<TRuntimeNode> values(valuesCount);
         for (ui32 i = 0; i < valuesCount; ++i) {
             auto item = PopNode();
-            values[i] = TRuntimeNode(item, false);
+            values[i] = TRuntimeNode(item, /*isImmediate=*/false);
         }
 
         const char* immediateFlags = ReadMany(GetBitmapBytes(valuesCount));
@@ -1948,7 +1948,7 @@ private:
         TStackVec<TRuntimeNode> values(valuesCount);
         for (ui32 i = 0; i < valuesCount; ++i) {
             auto item = PopNode();
-            values[i] = TRuntimeNode(item, false);
+            values[i] = TRuntimeNode(item, /*isImmediate=*/false);
         }
 
         const char* immediateFlags = ReadMany(GetBitmapBytes(valuesCount));
@@ -1982,7 +1982,7 @@ private:
         items.reserve(itemsCount);
         for (ui32 i = 0; i < itemsCount; ++i) {
             auto item = PopNode();
-            items.push_back(TRuntimeNode(item, false));
+            items.push_back(TRuntimeNode(item, /*isImmediate=*/false));
         }
 
         const char* immediateFlags = ReadMany(GetBitmapBytes(itemsCount));
@@ -2047,8 +2047,8 @@ private:
         for (ui32 i = 0; i < itemsCount; ++i) {
             auto key = PopNode();
             auto payload = PopNode();
-            items[i].first = TRuntimeNode(key, false);
-            items[i].second = TRuntimeNode(payload, false);
+            items[i].first = TRuntimeNode(key, /*isImmediate=*/false);
+            items[i].second = TRuntimeNode(payload, /*isImmediate=*/false);
         }
 
         const char* immediateFlags = ReadMany(GetBitmapBytes(itemsCount * 2));
@@ -2110,7 +2110,7 @@ private:
             TStackVec<TRuntimeNode> inputs(inputsCount);
             for (ui32 i = 0; i < inputsCount; ++i) {
                 auto input = PopNode();
-                inputs[i] = TRuntimeNode(input, false);
+                inputs[i] = TRuntimeNode(input, /*isImmediate=*/false);
             }
 
             const char* immediateFlags = ReadMany(GetBitmapBytes(inputsCount));
@@ -2241,7 +2241,7 @@ private:
 } // namespace
 
 TString SerializeNode(TNode* node, std::vector<TNode*>& nodeStack) {
-    return SerializeRuntimeNode(TRuntimeNode(node, true), nodeStack);
+    return SerializeRuntimeNode(TRuntimeNode(node, /*isImmediate=*/true), nodeStack);
 }
 
 TString SerializeRuntimeNode(TExploringNodeVisitor& explorer, TRuntimeNode node, std::vector<TNode*>& nodeStack) {

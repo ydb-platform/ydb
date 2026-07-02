@@ -1426,7 +1426,7 @@ public:
 
         TNodePtr node = nullptr;
         if (Values_) {
-            if (!Values_->Init(ctx, nullptr)) {
+            if (!Values_->Init(ctx, /*src=*/nullptr)) {
                 return false;
             }
             TTableList tableList;
@@ -1437,7 +1437,7 @@ public:
                 return false;
             }
 
-            TNodePtr inputTables(BuildInputTables(Pos_, tableList, false, Scoped_));
+            TNodePtr inputTables(BuildInputTables(Pos_, tableList, /*inSubquery=*/false, Scoped_));
             if (!inputTables->Init(ctx, valuesSource)) {
                 return false;
             }
@@ -2082,7 +2082,7 @@ public:
         opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params_.Consumers) {
-            const auto desc = CreateConsumerDesc(ctx, consumer, *this, false);
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, /*alter=*/false);
             if (!desc) {
                 return false;
             }
@@ -2197,7 +2197,7 @@ public:
         opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params_.AddConsumers) {
-            const auto desc = CreateConsumerDesc(ctx, consumer, *this, false);
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, /*alter=*/false);
             if (!desc) {
                 return false;
             }
@@ -2205,7 +2205,7 @@ public:
         }
 
         for (const auto& [_, consumer] : Params_.AlterConsumers) {
-            const auto desc = CreateConsumerDesc(ctx, consumer, *this, true);
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, /*alter=*/true);
             if (!desc) {
                 return false;
             }
@@ -3654,7 +3654,7 @@ public:
             if (block->SubqueryAlias()) {
                 continue;
             }
-            if (!block->Init(ctx, nullptr)) {
+            if (!block->Init(ctx, /*src=*/nullptr)) {
                 hasError = true;
                 continue;
             }
@@ -3664,7 +3664,7 @@ public:
             auto& data = Scoped_->Local.ExprClustersMap[x.Get()];
             auto& node = data.second;
 
-            if (!node->Init(ctx, nullptr)) {
+            if (!node->Init(ctx, /*src=*/nullptr)) {
                 hasError = true;
                 continue;
             }
@@ -4089,7 +4089,7 @@ public:
             settings = L(settings, Q(Y(Q("autoref"))));
         }
 
-        TNodePtr node(BuildInputTables(Pos_, {Table_}, false, Scoped_));
+        TNodePtr node(BuildInputTables(Pos_, {Table_}, /*inSubquery=*/false, Scoped_));
         if (!node->Init(ctx, src)) {
             return false;
         }

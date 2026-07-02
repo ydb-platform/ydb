@@ -148,6 +148,43 @@ IInvokerPtr GetFinalizerInvoker()
     return NConcurrency::GetFinalizerInvoker();
 }
 
+TClosure MakeGuardedCallback(
+    TClosure onSuccess,
+    TClosure onCancel)
+{
+    class TGuard final
+    {
+    public:
+        TGuard(TClosure onSuccess, TClosure onCancel)
+            : OnSuccess_(std::move(onSuccess))
+            , OnCancel_(std::move(onCancel))
+        { }
+
+        void Run()
+        {
+            YT_VERIFY(!std::exchange(Run_, true));
+            OnSuccess_();
+        }
+
+        ~TGuard()
+        {
+            if (!Run_) {
+                OnCancel_();
+            }
+        }
+
+    private:
+        const TClosure OnSuccess_;
+        const TClosure OnCancel_;
+
+        bool Run_ = false;
+    };
+
+    return BIND(
+        &TGuard::Run,
+        New<TGuard>(std::move(onSuccess), std::move(onCancel)));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

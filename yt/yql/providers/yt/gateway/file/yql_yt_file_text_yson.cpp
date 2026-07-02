@@ -2,17 +2,19 @@
 #include <yt/yql/providers/yt/lib/yson_helpers/yson_helpers.h>
 #include <yt/cpp/mapreduce/interface/io.h>
 #include <library/cpp/yson/parser.h>
+#include <library/cpp/yson/node/node_io.h>
 #include <util/stream/buffer.h>
 #include <util/stream/file.h>
 #include <util/system/fs.h>
 
 namespace NYql::NFile {
 
+// When numberOfParts is Nothing(), reads from a single file.
+// When set to N, reads all .part.0 ... .part.N-1 files in order into a single stream.
 class TTextYsonInput: public NYT::TRawTableReader {
 public:
-    TTextYsonInput(const TString& file, const TColumnsInfo& columnsInfo, bool addRowIndex) {
-        TIFStream in(file);
-
+    TTextYsonInput(const TString& file, const TColumnsInfo& columnsInfo, bool addRowIndex,
+                   TMaybe<i64> numberOfParts = Nothing()) {
         TBinaryYsonWriter writer(&Input_, ::NYson::EYsonType::ListFragment);
         if (addRowIndex) {
             writer.OnBeginAttributes();
@@ -33,24 +35,27 @@ public:
             if (columnsInfo.RenameColumns) {
                 renames.ConstructInPlace(columnsInfo.RenameColumns->begin(), columnsInfo.RenameColumns->end());
             }
-
             filter.Reset(new TColumnFilteringConsumer(consumer, columns, renames));
             consumer = filter.Get();
         }
-        NYson::TYsonParser parser(consumer, &in, ::NYson::EYsonType::ListFragment);
-        parser.Parse();
+        if (numberOfParts.Defined()) {
+            for (i64 i = 0; i < *numberOfParts; ++i) {
+                TIFStream in(file + ".part." + ToString(i));
+                NYson::TYsonParser parser(consumer, &in, ::NYson::EYsonType::ListFragment);
+                parser.Parse();
+            }
+        } else {
+            TIFStream in(file);
+            NYson::TYsonParser parser(consumer, &in, ::NYson::EYsonType::ListFragment);
+            parser.Parse();
+        }
     }
 
-    bool Retry(const TMaybe<ui32>& /* rangeIndex */, const TMaybe<ui64>& /* rowIndex */, const std::exception_ptr& /* error */) override {
+    bool Retry(const TMaybe<ui32>&, const TMaybe<ui64>&, const std::exception_ptr&) override {
         return false;
     }
-
-    void ResetRetries() override {
-    }
-
-    bool HasRangeIndices() const override {
-        return false;
-    }
+    void ResetRetries() override {}
+    bool HasRangeIndices() const override { return false; }
 
 protected:
     size_t DoRead(void* buf, size_t len) override {
@@ -61,6 +66,18 @@ private:
     TBufferStream Input_;
 };
 
+i64 ReadSplittedPartsCount(const TString& filePath) {
+    const TString attrPath = filePath + ".attr";
+    if (!NFs::Exists(attrPath)) {
+        return 0;
+    }
+    const auto attrs = NYT::NodeFromYsonString(TIFStream(attrPath).ReadAll());
+    if (!attrs.HasKey("splitted")) {
+        return 0;
+    }
+    return attrs["splitted"].AsInt64();
+}
+
 TVector<NYT::TRawTableReaderPtr> MakeTextYsonInputs(const TVector<std::pair<TString, TColumnsInfo>>& files, bool addRowIndex) {
     TVector<NYT::TRawTableReaderPtr> rawReaders;
     for (auto& file: files) {
@@ -68,7 +85,9 @@ TVector<NYT::TRawTableReaderPtr> MakeTextYsonInputs(const TVector<std::pair<TStr
             rawReaders.emplace_back(nullptr);
             continue;
         }
-        rawReaders.emplace_back(MakeIntrusive<TTextYsonInput>(file.first, file.second, addRowIndex));
+        const i64 numParts = ReadSplittedPartsCount(file.first);
+        TMaybe<i64> numberOfParts = numParts > 0 ? TMaybe<i64>(numParts) : Nothing();
+        rawReaders.emplace_back(MakeIntrusive<TTextYsonInput>(file.first, file.second, addRowIndex, numberOfParts));
     }
     return rawReaders;
 }

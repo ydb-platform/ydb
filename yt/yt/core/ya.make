@@ -26,6 +26,7 @@ SRCS(
     actions/invoker_util.cpp
 
     bus/public.cpp
+    bus/helpers.cpp
 
     bus/tcp/connection.cpp
     bus/tcp/dispatcher.cpp
@@ -202,6 +203,7 @@ SRCS(
 
     rpc/authentication_identity.cpp
     rpc/authenticator.cpp
+    rpc/backend.cpp
     rpc/balancing_channel.cpp
     rpc/caching_channel_factory.cpp
     rpc/channel_detail.cpp
@@ -210,6 +212,7 @@ SRCS(
     GLOBAL rpc/configure_dispatcher.cpp
     rpc/dispatcher.cpp
     rpc/dynamic_channel_pool.cpp
+    rpc/endpoint_address.cpp
     rpc/hedging_channel.cpp
     rpc/helpers.cpp
     rpc/local_channel.cpp
@@ -236,9 +239,13 @@ SRCS(
     rpc/stream.cpp
     rpc/throttling_channel.cpp
     rpc/viable_peer_registry.cpp
+    rpc/multi_protocol_channel_factory.cpp
+    rpc/multi_protocol_server.cpp
 
     rpc/bus/server.cpp
     rpc/bus/channel.cpp
+    GLOBAL rpc/bus/tcp_backend.cpp
+    GLOBAL rpc/bus/uds_backend.cpp
 
     service_discovery/service_discovery.cpp
 
@@ -430,6 +437,17 @@ IF (NOT OPENSOURCE AND OS_LINUX)
     )
 ENDIF()
 
+IF (NOT OPENSOURCE AND OS_LINUX)
+    RECURSE(
+        bus/ucx
+        rpc/ucx
+    )
+
+    RECURSE_FOR_TESTS(
+        bus/ucx/unittests
+    )
+ENDIF()
+
 RECURSE_FOR_TESTS(
     actions/unittests
     concurrency/unittests
@@ -450,12 +468,14 @@ IF (NOT OS_WINDOWS)
 
     RECURSE_FOR_TESTS(
         bus/tcp/unittests
+        rpc/bus/unittests
         compression/unittests
         crypto/unittests
         json/unittests
         logging/unittests
         phoenix/unittests
         profiling/unittests
+        rpc/grpc/unittests
         rpc/unittests
         ypath/unittests
         ytree/unittests

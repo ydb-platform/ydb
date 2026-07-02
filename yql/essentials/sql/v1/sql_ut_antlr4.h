@@ -80,7 +80,7 @@ inline NYql::TAstParseResult SqlToYql(const TString& query, size_t maxErrors = 1
 }
 
 inline NYql::TAstParseResult SqlToYqlWithSettings(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
-    return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
 }
 
 inline void ExpectFailWithError(const TString& query, const TString& error) {

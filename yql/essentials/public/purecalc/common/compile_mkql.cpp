@@ -21,7 +21,7 @@ NCommon::IMkqlCallableCompiler::TCompiler MakeSelfCallableCompiler() {
         auto type = ctx.BuildType(node, *node.GetTypeAnn());
         NKikimr::NMiniKQL::TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), node.Content(), type);
         call.Add(ctx.ProgramBuilder.NewDataLiteral<ui32>(inputIndex));
-        return NKikimr::NMiniKQL::TRuntimeNode(call.Build(), false);
+        return NKikimr::NMiniKQL::TRuntimeNode(call.Build(), /*isImmediate=*/false);
     };
 }
 

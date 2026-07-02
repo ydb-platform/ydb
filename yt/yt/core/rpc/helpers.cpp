@@ -2,8 +2,11 @@
 #include "client.h"
 #include "dispatcher.h"
 #include "channel_detail.h"
+#include "direct_placement_transfer.h"
 #include "service.h"
 #include "authentication_identity.h"
+
+#include <yt/yt/core/bus/direct_placement_transfer.h>
 
 #include <yt/yt/core/ytree/helpers.h>
 #include <yt/yt/core/ytree/fluent.h>
@@ -379,9 +382,15 @@ private:
             UnderlyingHandler_->HandleAcknowledgement();
         }
 
-        void HandleResponse(TSharedRefArray message, const std::string& address) override
+        void HandleResponse(
+            TSharedRefArray message,
+            const std::string& address,
+            NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer) override
         {
-            UnderlyingHandler_->HandleResponse(std::move(message), address);
+            UnderlyingHandler_->HandleResponse(
+                std::move(message),
+                address,
+                std::move(attachmentsTransfer));
         }
 
         void HandleError(TError error) override
@@ -667,6 +676,51 @@ void EnrichClientRequestError(
     if (IsChannelFailureError(*error) && !IsChannelFailureErrorHandled(*error)) {
         LabelHandledChannelFailureError(&*error);
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+class TChainedDirectPlacementTransfer
+    : public IDirectPlacementTransfer
+{
+public:
+    TChainedDirectPlacementTransfer(
+        NBus::IDirectPlacementTransferPtr underlying,
+        TCallback<void(std::vector<TSharedRef>&&)> onCompleted)
+        : Underlying_(std::move(underlying))
+        , OnCompleted_(std::move(onCompleted))
+    { }
+
+    std::vector<i64> GetExpectedBufferSizes() const override
+    {
+        return Underlying_->GetExpectedBufferSizes();
+    }
+
+    TFuture<void> Run(std::vector<TSharedMutableRef>&& buffers) override
+    {
+        return Underlying_->Run(std::move(buffers))
+            .AsUnique()
+            .Apply(BIND([onCompleted = OnCompleted_] (std::vector<TSharedRef>&& parts) {
+                onCompleted(std::move(parts));
+            }));
+    }
+
+private:
+    const NBus::IDirectPlacementTransferPtr Underlying_;
+    const TCallback<void(std::vector<TSharedRef>&&)> OnCompleted_;
+};
+
+} // namespace
+
+IDirectPlacementTransferPtr CreateChainedDirectPlacementTransfer(
+    NBus::IDirectPlacementTransferPtr underlying,
+    TCallback<void(std::vector<TSharedRef>&&)> onCompleted)
+{
+    return New<TChainedDirectPlacementTransfer>(
+        std::move(underlying),
+        std::move(onCompleted));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

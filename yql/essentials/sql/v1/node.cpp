@@ -1118,11 +1118,11 @@ bool TCallDirectRow::DoInit(TContext& ctx, ISource* src) {
 }
 
 void TCallDirectRow::DoUpdateState() const {
-    State_.Set(ENodeState::Const, false);
+    State_.Set(ENodeState::Const, /*val=*/false);
 }
 
 void TWinAggrEmulation::DoUpdateState() const {
-    State_.Set(ENodeState::OverWindow, true);
+    State_.Set(ENodeState::OverWindow, /*val=*/true);
 }
 
 bool TWinAggrEmulation::DoInit(TContext& ctx, ISource* src) {
@@ -1420,10 +1420,10 @@ void TColumns::Merge(const TColumns& columns) {
                 continue;
             }
             if (columns.Real.contains(c)) {
-                Add(&c, false, false);
+                Add(&c, /*countHint=*/false, /*isArtificial=*/false);
             }
             if (columns.Artificial.contains(c)) {
-                Add(&c, false, true);
+                Add(&c, /*countHint=*/false, /*isArtificial=*/true);
             }
         }
         HasUnreliable |= columns.HasUnreliable;
@@ -1738,7 +1738,7 @@ TNodePtr TColumnNode::DoClone() const {
 }
 
 void TColumnNode::DoUpdateState() const {
-    State_.Set(ENodeState::Const, false);
+    State_.Set(ENodeState::Const, /*val=*/false);
     State_.Set(ENodeState::MaybeConst, MaybeType_);
     State_.Set(ENodeState::Aggregated, GroupKey_);
     State_.Set(ENodeState::AggregationKey, GroupKey_);
@@ -1939,7 +1939,7 @@ TNodePtr IAggregation::WindowTraits(const TNodePtr& type, TContext& ctx) const {
 
     const bool distinct = AggMode_ == EAggregateMode::OverWindowDistinct;
     const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos_, DistinctKey_))) : type;
-    auto traits = Y(Q(Name_), GetApply(listType, false, false, ctx));
+    auto traits = Y(Q(Name_), GetApply(listType, /*many=*/false, /*allowAggApply=*/false, ctx));
     if (AggMode_ == EAggregateMode::OverWindowDistinct) {
         traits->Add(BuildQuotedAtom(Pos_, DistinctKey_));
     }
@@ -2334,11 +2334,11 @@ template class TLiteralNumberNode<ui16>;
 template class TLiteralNumberNode<i16>;
 
 TNodePtr BuildLiteralNull(TPosition pos) {
-    return new TLiteralNode(pos, true);
+    return new TLiteralNode(pos, /*isNull=*/true);
 }
 
 TNodePtr BuildLiteralVoid(TPosition pos) {
-    return new TLiteralNode(pos, false);
+    return new TLiteralNode(pos, /*isNull=*/false);
 }
 
 TNodePtr BuildLiteralSmartString(TContext& ctx, const TString& value) {
@@ -2744,13 +2744,13 @@ public:
             }
 
             if (Ids_.size() > 2) {
-                if (!CheckColumnId(pos, ctx, Ids_[idx], ColumnOnly_ ? "Correlation" : "Column", true)) {
+                if (!CheckColumnId(pos, ctx, Ids_[idx], ColumnOnly_ ? "Correlation" : "Column", /*checkLookup=*/true)) {
                     return false;
                 }
                 ++idx;
             }
             if (!useSourceAsColumn) {
-                if (!IsLookup_ && !CheckColumnId(pos, ctx, Ids_[idx], ColumnOnly_ ? "Column" : "Member", false)) {
+                if (!IsLookup_ && !CheckColumnId(pos, ctx, Ids_[idx], ColumnOnly_ ? "Column" : "Member", /*checkLookup=*/false)) {
                     return false;
                 }
                 ++idx;
@@ -3179,7 +3179,7 @@ TNodePtr BuildIsNullOp(TPosition pos, TNodePtr a) {
         return nullptr;
     }
     if (a->IsNull()) {
-        return BuildLiteralBool(pos, true);
+        return BuildLiteralBool(pos, /*value=*/true);
     }
     return new TCallNodeImpl(pos, "Not", {new TCallNodeImpl(pos, "Exists", {a})});
 }
@@ -3443,7 +3443,7 @@ public:
         State_.Set(ENodeState::Const, FuncNode_->IsConstant());
         State_.Set(ENodeState::MaybeConst, FuncNode_->MaybeConstant());
         State_.Set(ENodeState::Aggregated, FuncNode_->IsAggregated());
-        State_.Set(ENodeState::OverWindow, true);
+        State_.Set(ENodeState::OverWindow, /*val=*/true);
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
@@ -3496,7 +3496,7 @@ public:
     }
 
     void DoUpdateState() const override {
-        State_.Set(ENodeState::Const, true);
+        State_.Set(ENodeState::Const, /*val=*/true);
     }
 
 protected:
@@ -3688,7 +3688,7 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) final {
         Y_UNUSED(src);
-        if (!IProxyNode::DoInit(ctx, nullptr) || !IProxyNode::InitReference(ctx)) {
+        if (!IProxyNode::DoInit(ctx, /*src=*/nullptr) || !IProxyNode::InitReference(ctx)) {
             return false;
         }
 

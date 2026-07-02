@@ -80,7 +80,7 @@ TComputationNodeFactory GetListTestFactory() {
 
 TRuntimeNode CreateFlow(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     if (list) {
-        return pb.ToFlow(TRuntimeNode(list, false));
+        return pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false));
     } else {
         std::vector<const TRuntimeNode> arr;
         arr.reserve(vecSize);
@@ -169,7 +169,7 @@ TRuntimeNode CreateCondense<false>(TProgramBuilder& pb, size_t vecSize, TCallabl
     auto flow = CreateFlow(pb, vecSize, list);
 
     auto switcherHandler = [&](TRuntimeNode, TRuntimeNode) -> TRuntimeNode {
-        return NTest::ConvertValueToLiteralNode(pb, false);
+        return NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false);
     };
     auto updateHandler = [&](TRuntimeNode item, TRuntimeNode state) -> TRuntimeNode {
         return pb.Add(item, state);
@@ -191,7 +191,7 @@ TRuntimeNode CreateCondense<true>(TProgramBuilder& pb, size_t vecSize, TCallable
             /* init */
             [&](TRuntimeNode::TList item) -> TRuntimeNode::TList { return {item}; },
             /* switcher */
-            [&](TRuntimeNode::TList, TRuntimeNode::TList) -> TRuntimeNode { return NTest::ConvertValueToLiteralNode(pb, false); },
+            [&](TRuntimeNode::TList, TRuntimeNode::TList) -> TRuntimeNode { return NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false); },
             /* handler */
             [&](TRuntimeNode::TList item, TRuntimeNode::TList state) -> TRuntimeNode::TList { return {pb.Add(item.front(), state.front())}; }),
         [&](TRuntimeNode::TList items) -> TRuntimeNode { return items.front(); });
@@ -404,7 +404,7 @@ TRuntimeNode CreateMapJoin(TProgramBuilder& pb, size_t vecSize, TCallable* list 
 
     const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, ui64>>{{1, 3000}, {2, 4000}, {3, 5000}});
 
-    const auto dict = pb.ToSortedDict(list2, false,
+    const auto dict = pb.ToSortedDict(list2, /*all=*/false,
                                       [&](TRuntimeNode item) { return pb.Nth(item, 0); },
                                       [&](TRuntimeNode item) { return pb.NewTuple({pb.Nth(item, 1U)}); });
 
@@ -498,7 +498,7 @@ void ParallelProgTest(T f, bool useLLVM, ui64 testResult, size_t vecSize = 10'00
 
             auto graph = entry->Pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider, &graphAlloc.Ref()));
             TUnboxedValue* items = nullptr;
-            graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(data.size(), items));
+            graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(data.size(), items));
 
             std::transform(data.cbegin(), data.cend(), items,
                            [](const auto s) {
@@ -643,13 +643,13 @@ Y_UNIT_TEST(DoubleNotifyPatternCompiled) {
     cache.EmplacePattern(key, entry);
 
     for (ui32 i = 0; i < cacheSize + 1; ++i) {
-        entry->Pattern->Compile("", nullptr);
+        entry->Pattern->Compile("", /*stats=*/nullptr);
         cache.NotifyPatternCompiled(key);
     }
 
     entry = std::make_shared<TPatternCacheEntry>();
     entry->Pattern = MakeIntrusive<TMockComputationPattern>(cacheSize + 1);
-    entry->Pattern->Compile("", nullptr);
+    entry->Pattern->Compile("", /*stats=*/nullptr);
     cache.EmplacePattern(key, entry);
 }
 
@@ -790,7 +790,7 @@ Y_UNIT_TEST_TWIN(FilterPerf, Wide) {
             auto graph = pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider));
             auto data = genData();
             TUnboxedValue* items = nullptr;
-            graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(data.size(), items));
+            graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(data.size(), items));
 
             std::transform(data.cbegin(), data.cend(), items,
                            [](const auto s) {
@@ -871,9 +871,9 @@ Y_UNIT_TEST(UpdateConfigurationResize) {
     constexpr size_t initialMaxBytes = patternSize * patternCount;
 
     auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-    auto maxSizeBytes = counters->GetCounter("PatternCache/MaxSizeBytes", false);
-    auto maxCompiledSizeBytes = counters->GetCounter("PatternCache/MaxCompiledSizeBytes", false);
-    auto sizeCompiledBytes = counters->GetCounter("PatternCache/SizeCompiledBytes", false);
+    auto maxSizeBytes = counters->GetCounter("PatternCache/MaxSizeBytes", /*derivative=*/false);
+    auto maxCompiledSizeBytes = counters->GetCounter("PatternCache/MaxCompiledSizeBytes", /*derivative=*/false);
+    auto sizeCompiledBytes = counters->GetCounter("PatternCache/SizeCompiledBytes", /*derivative=*/false);
 
     TComputationPatternLRUCache cache({initialMaxBytes, initialMaxBytes, 0}, counters);
 
@@ -886,7 +886,7 @@ Y_UNIT_TEST(UpdateConfigurationResize) {
         keys.push_back(key);
         auto entry = std::make_shared<TPatternCacheEntry>();
         entry->Pattern = MakeIntrusive<TMockComputationPattern>(patternSize);
-        entry->Pattern->Compile("", nullptr);
+        entry->Pattern->Compile("", /*stats=*/nullptr);
         cache.EmplacePattern(key, entry);
     }
     UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*sizeCompiledBytes), patternSize * patternCount);
@@ -964,7 +964,7 @@ Y_UNIT_TEST(TripletKeyNotifyPatternCompiled) {
     auto entry = MakeMockEntry(512);
     cache.EmplacePattern(key, entry);
 
-    entry->Pattern->Compile("", nullptr);
+    entry->Pattern->Compile("", /*stats=*/nullptr);
     cache.NotifyPatternCompiled(key);
 
     auto found = cache.Find(key);

@@ -475,7 +475,7 @@ class TestCompareIndexPerformance:
         # overwrite the first.
         report_file = yatest.common.output_path(f"report_{slug}.md")
         with open(report_file, "w") as f:
-            f.write(f"## Performance Comparison: `{self.ref}` vs `{current_label}` ({workload_name})\n\n")
+            f.write(f"### Performance Comparison: `{self.ref}` vs `{current_label}` ({workload_name})\n\n")
             f.write(f"**Build preset:** `{self.build_preset}` | **Duration:** {self.duration}s "
                     f"per workload | **Iterations:** {self.iterations} (median reported)\n\n")
             f.write(f"| Workload | {self.ref} (Txs/Sec) | {current_label} (Txs/Sec) | Diff | 3σ significance |\n")

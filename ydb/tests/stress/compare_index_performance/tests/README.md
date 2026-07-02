@@ -153,7 +153,7 @@ ydb/tests/stress/compare_index_performance/tests/test-results/py3test/testing_ou
 Example report:
 
 ```
-## Performance Comparison: `main` vs `current(main)` (vector select)
+### Performance Comparison: `main` vs `current(main)` (vector select)
 
 **Build preset:** `relwithdebinfo` | **Duration:** 60s per workload | **Iterations:** 1 (median reported)
 

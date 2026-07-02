@@ -1,8 +1,6 @@
 name: compare_index_performance
 
 on:
-  schedule:
-    - cron: "0 23 * * *"  # At 23:00 every day
   workflow_dispatch:
     inputs:
       duration:
@@ -163,13 +161,18 @@ jobs:
           PR_NUMBER: ${{ inputs.pull_number }}
           BUILD_PRESET: ${{ inputs.build_preset || 'release' }}
           GITHUB_TOKEN: ${{ github.token }}
+          COMMIT_SHA: ${{ steps.resolve-ref.outputs.checkout_ref }}
         run: |
           pip install PyGithub
           RESULTS_DIR=ydb/tests/stress/compare_index_performance/tests/test-results
           REPORTS=$(find -L "$RESULTS_DIR" -name 'report_*.md' -path "*/testing_out_stuff/*" 2>/dev/null | sort)
           run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          commit_url="https://github.com/${GITHUB_REPOSITORY}/commit/${COMMIT_SHA}"
+          short_sha="${COMMIT_SHA:0:10}"
           {
-            echo "### Index performance comparison"
+            echo "#### Index performance comparison"
+            echo ""
+            echo "[${short_sha}](${commit_url}) | [Workflow run](${run_url})"
             echo ""
             if [[ -n "$REPORTS" ]]; then
               for r in $REPORTS; do
@@ -179,7 +182,6 @@ jobs:
             else
               echo "No report generated."
             fi
-            echo "[Workflow run](${run_url}) — full logs are in the \`benchmark-results\` artifact."
           } | .github/scripts/tests/comment-pr.py --rewrite --no-timestamp
 
       - name: Upload benchmark logs

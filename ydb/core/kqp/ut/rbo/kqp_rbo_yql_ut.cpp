@@ -354,9 +354,7 @@ struct TMapRuleTestContext {
 };
 
 void AddPushRenameRulesForTest(TVector<std::unique_ptr<IRule>>& rules) {
-    rules.emplace_back(std::make_unique<TPushRenameIntoReadRule>());
-    rules.emplace_back(std::make_unique<TPushRenameIntoMapProducerRule>());
-    rules.emplace_back(std::make_unique<TPushRenameIntoAggregateResultRule>());
+    rules.emplace_back(std::make_unique<TPushRenameIntoProducerRule>());
     rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
     rules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
     rules.emplace_back(std::make_unique<TPushMapElementsThroughAggregateRule>());

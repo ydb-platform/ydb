@@ -189,26 +189,10 @@ class TRenameToAppendRule : public IRule {
     virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };
 
-class TPushRenameIntoReadRule : public IRule {
+class TPushRenameIntoProducerRule : public IRule {
   public:
-    TPushRenameIntoReadRule()
-        : IRule("Push semantic rename into read", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
-
-    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
-};
-
-class TPushRenameIntoMapProducerRule : public IRule {
-  public:
-    TPushRenameIntoMapProducerRule()
-        : IRule("Push semantic rename into map producer", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
-
-    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
-};
-
-class TPushRenameIntoAggregateResultRule : public IRule {
-  public:
-    TPushRenameIntoAggregateResultRule()
-        : IRule("Push semantic rename into aggregate result", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
+    TPushRenameIntoProducerRule()
+        : IRule("Push semantic rename into producer", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };

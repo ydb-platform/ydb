@@ -418,9 +418,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
         rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>(/*pushExpressions*/ false));
         rules.emplace_back(std::make_unique<TPushMapElementsThroughAggregateRule>());
         rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
-        rules.emplace_back(std::make_unique<TPushRenameIntoReadRule>());
-        rules.emplace_back(std::make_unique<TPushRenameIntoMapProducerRule>());
-        rules.emplace_back(std::make_unique<TPushRenameIntoAggregateResultRule>());
+        rules.emplace_back(std::make_unique<TPushRenameIntoProducerRule>());
         rules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>(false));
         rules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
     };

@@ -128,23 +128,29 @@ void TMaxTasksGraph::PlaceColumnOnNode(TGroup& group, size_t columnIdx, TNodeIdx
 }
 
 void TMaxTasksGraph::EstimateTasksResources() {
+    // Mirror TKqpPlanner: it estimated every task's memory with a single coarse task count - the total number of tasks
+    // being placed - not the per-stage count. Dividing the mkql limit by the per-stage count would give a low-parallelism
+    // stage (e.g. a 1-task result stage) the full mkql limit, turning its column into a memory outlier that sorts first
+    // and pre-loads a node, skewing larger sibling stages. Keep the coarse count so the placement matches the planner.
+    size_t totalTasks = 0;
+    for (const auto& stage : Stages) {
+        totalTasks += stage.Tasks.size();
+    }
+
     for (auto& group : Groups) {
         TColumnCost cost;
         for (TStageIdx stageIdx : group.Stages) {
             const auto& stage = Stages[stageIdx];
-            const size_t tasksCount = stage.Tasks.size();
-            if (tasksCount == 0) {
+            if (stage.Tasks.empty()) {
                 continue; // empty stage (e.g. a COPY of an empty input) contributes no task to the column.
             }
 
             // Mirror TKqpPlanner::BuildInitialTaskResources: a single channel buffer per direction that exists, and the
-            // mkql class taken from the stage program. tasksCount is the stage's task count (== the group's column count).
-            // TODO (step 6 reconciliation): the planner divides the mkql limit by a coarser task count (total unassigned
-            // or per-node), not by the stage count - revisit when shadow-comparing against the planner.
+            // mkql class taken from the stage program.
             TTaskResourceEstimation est;
             est.ChannelBuffersCount = (stage.Info->InputsCount ? 1 : 0) + (stage.Info->OutputsCount ? 1 : 0);
             est.HeavyProgram = stage.Info->Meta.GetStage(stage.Info->Id).GetProgram().GetSettings().GetHasMapJoin();
-            EstimateTaskResources(est, EstimationParams, tasksCount);
+            EstimateTaskResources(est, EstimationParams, totalTasks);
 
             cost.Memory += est.TotalMemoryLimit;
             cost.Tasks += 1; // one task of this stage per column.
@@ -199,8 +205,10 @@ bool TMaxTasksGraph::DistributeByResources() {
         }
     }
 
-    // Place the heaviest columns first: harder-to-fit columns get the pick of the nodes (mirrors KqpPlanner).
-    std::ranges::sort(freeColumns, [&](const auto& lhs, const auto& rhs) {
+    // Place the heaviest columns first: harder-to-fit columns get the pick of the nodes (mirrors KqpPlanner). Stable, so
+    // equal-cost columns keep creation (group) order and stay contiguous per group - otherwise a small group's columns
+    // could interleave into a large sibling and perturb its otherwise-even spread.
+    std::ranges::stable_sort(freeColumns, [&](const auto& lhs, const auto& rhs) {
         return Groups[lhs.first].ColumnCost.Memory > Groups[rhs.first].ColumnCost.Memory;
     });
 

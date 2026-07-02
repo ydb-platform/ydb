@@ -847,12 +847,12 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
             /* stage  2 */ { {8, 1} },
             /* stage  3 */ { {1, 1} },
             /* stage  4 */ { {1, 1} },
-            /* stage  5 */ { {8, 120} },
+            /* stage  5 */ { {7, 41}, {8, 38}, {9, 41} }, // was: { {8, 120} },
             /* stage  6 */ { {2, 104}, {3, 16} },
             /* stage  7 */ { {2, 104}, {3, 16} },
             /* stage  8 */ { {2, 104}, {3, 16} },
             /* stage  9 */ { {1, 1} },
-            /* stage 10 */ { {7, 23}, {8, 74}, {9, 23} },
+            /* stage 10 */ { {1, 1}, {6, 1}, {7, 32}, {8, 45}, {9, 41} }, // was: { {7, 23}, {8, 74}, {9, 23} },
             /* stage 11 */ { {1, 1} },
         };
         AssertNodeDistribution(dist, 0, expected);
@@ -935,10 +935,10 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
             /* stage 0 */ { {2, 104}, {3, 16} },
             /* stage 1 */ { {10, 120} },
-            /* stage 2 */ { {2, 105}, {3, 14}, {4, 1} },
+            /* stage 2 */ { {2, 104}, {3, 16} }, // was: { {2, 105}, {3, 14}, {4, 1} },
             /* stage 3 */ { {2, 104}, {3, 16} },
             /* stage 4 */ { {2, 104}, {3, 16} },
-            /* stage 5 */ { {1, 6}, {2, 108}, {3, 6} },
+            /* stage 5 */ { {1, 32}, {2, 56}, {3, 32} }, // was: { {1, 6}, {2, 108}, {3, 6} },
             /* stage 6 */ { {1, 1} },
         };
         AssertNodeDistribution(dist, 0, expected);
@@ -1112,8 +1112,8 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
             /* stage 5 */ { {8, 1} },
             /* stage 6 */ { {10, 1} },
             /* stage 7 */ { {8, 120} },
-            /* stage 8 */ { {9, 23}, {10, 74}, {11, 23} },
-            /* stage 9 */ { {8, 1}, {9, 22}, {10, 73}, {11, 24} },
+            /* stage 8 */ { {2, 1}, {8, 32}, {10, 4}, {11, 82} }, // was: { {9, 23}, {10, 74}, {11, 23} },
+            /* stage 9 */ { {10, 120} }, // was: { {8, 1}, {9, 22}, {10, 73}, {11, 24} },
             /* stage 10 */ { {1, 1} },
         };
         AssertNodeDistribution(dist, 0, expected);
@@ -1253,11 +1253,11 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
             /* stage 1 */ { {10, 120} },
             /* stage 2 */ { {10, 1} },
             /* stage 3 */ { {2, 104}, {3, 16} },
-            /* stage 4 */ { {2, 105}, {3, 14}, {4, 1} },
+            /* stage 4 */ { {2, 104}, {3, 16} }, // was: { {2, 105}, {3, 14}, {4, 1} },
             /* stage 5 */ { {2, 104}, {3, 16} },
             /* stage 6 */ { {2, 104}, {3, 16} },
             /* stage 7 */ { {2, 104}, {3, 16} },
-            /* stage 8 */ { {1, 8}, {2, 104}, {3, 8} },
+            /* stage 8 */ { {1, 27}, {3, 71} }, // was: { {1, 8}, {2, 104}, {3, 8} },
             /* stage 9 */ { {1, 1} },
         };
         AssertNodeDistribution(dist, 0, expected);

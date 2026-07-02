@@ -20,7 +20,6 @@ ENDIF()
 PY_SRCS(
     conftest.py
 )
-TIMEOUT(80)
 
 REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE)
@@ -32,7 +31,6 @@ ELSE()
     FORK_SUBTESTS()
 ENDIF()
 
-TIMEOUT(80)
 PEERDIR(
     ydb/tests/library
     ydb/tests/library/test_meta

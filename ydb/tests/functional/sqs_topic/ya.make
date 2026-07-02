@@ -9,11 +9,18 @@ TEST_SRCS(
     test_send_message_batch.py
     test_receive_message.py
     test_change_message_visibility.py
+    test_change_message_visibility_batch.py
     test_delete_message.py
+    test_delete_message_batch.py
     test_list_queues.py
     test_purge_queue.py
     test_add_permission.py
     test_remove_permission.py
+    test_tag_queue.py
+    test_untag_queue.py
+    test_start_message_move_task.py
+    test_cancel_message_move_task.py
+    test_list_message_move_tasks.py
 )
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)

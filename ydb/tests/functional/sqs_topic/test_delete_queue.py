@@ -37,3 +37,17 @@ class TestSqsTopicDeleteQueue(KikimrSqsTopicTestBase):
         self._boto_client.delete_queue(QueueUrl=queue_url)
 
         self._assert_topic_not_exists(topic_path)
+
+    def test_delete_queue_fifo_queue(self):
+        queue_name = self._create_fifo_queue('delete_queue_fifo_queue')
+        queue_url = self._queue_url
+
+        assert_that(queue_url, not_none())
+
+        topic_path = '{}/{}'.format(self.database, queue_name)
+        self._assert_topic_exists(topic_path, expected_name=queue_name)
+
+        self._boto_client.delete_queue(QueueUrl=queue_url)
+
+        self._assert_topic_not_exists(topic_path)
+        self._queue_url = None

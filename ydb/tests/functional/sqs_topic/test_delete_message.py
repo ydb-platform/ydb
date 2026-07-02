@@ -49,15 +49,57 @@ class TestSqsTopicDeleteMessage(KikimrSqsTopicTestBase):
             equal_to(0),
         )
 
-    def test_delete_message_batch(self):
-        queue_name = self._make_queue_name('delete_message_batch')
-        self._queue_url = self._boto_client.create_queue(QueueName=queue_name)['QueueUrl']
+    def test_delete_message_fifo_queue(self):
+        queue_name = self._create_fifo_queue('delete_message_fifo_queue')
+
+        message_body = 'hello from fifo sqs'
+        self._boto_client.send_message(
+            QueueUrl=self._queue_url,
+            MessageBody=message_body,
+            MessageGroupId='message-group-1',
+        )
+
+        assert_that(
+            self._get_consumer_uncommitted_messages_count(queue_name),
+            equal_to(1),
+        )
+
+        response = self._boto_client.receive_message(
+            QueueUrl=self._queue_url,
+            WaitTimeSeconds=20,
+            MaxNumberOfMessages=1,
+        )
+
+        messages = response.get('Messages')
+        assert_that(messages, not_none())
+        assert_that(messages, has_length(1))
+        assert_that(messages[0]['Body'], equal_to(message_body))
+        receipt_handle = messages[0]['ReceiptHandle']
+
+        assert_that(
+            self._get_consumer_uncommitted_messages_count(queue_name),
+            equal_to(1),
+        )
+
+        self._boto_client.delete_message(
+            QueueUrl=self._queue_url,
+            ReceiptHandle=receipt_handle,
+        )
+
+        assert_that(
+            self._get_consumer_uncommitted_messages_count(queue_name),
+            equal_to(0),
+        )
+
+    def test_delete_message_batch_fifo_queue(self):
+        queue_name = self._create_fifo_queue('delete_message_batch_fifo_queue')
 
         message_bodies = ['message-0', 'message-1']
-        for message_body in message_bodies:
+        for index, message_body in enumerate(message_bodies):
             self._boto_client.send_message(
                 QueueUrl=self._queue_url,
                 MessageBody=message_body,
+                MessageGroupId='message-group-{}'.format(index),
             )
 
         assert_that(

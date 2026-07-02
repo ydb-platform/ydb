@@ -30,3 +30,27 @@ class TestSqsTopicSendMessageBatch(KikimrSqsTopicTestBase):
         messages = self._read_messages_from_topic_without_consumer(queue_name, len(message_bodies))
         received_bodies = [message.data.decode('utf-8') for message in messages]
         assert_that(received_bodies, equal_to(message_bodies))
+
+    def test_send_message_batch_fifo_queue(self):
+        queue_name = self._create_fifo_queue('send_message_batch_fifo_queue')
+
+        message_bodies = ['message-0', 'message-1', 'message-2']
+        response = self._boto_client.send_message_batch(
+            QueueUrl=self._queue_url,
+            Entries=[
+                {
+                    'Id': str(index),
+                    'MessageBody': message_body,
+                    'MessageGroupId': 'message-group-1',
+                }
+                for index, message_body in enumerate(message_bodies)
+            ],
+        )
+
+        assert_that(response['Successful'], has_length(len(message_bodies)))
+        for entry in response['Successful']:
+            assert_that(entry['MessageId'], not_none())
+
+        messages = self._read_messages_from_topic_without_consumer(queue_name, len(message_bodies))
+        received_bodies = [message.data.decode('utf-8') for message in messages]
+        assert_that(received_bodies, equal_to(message_bodies))

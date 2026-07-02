@@ -34,3 +34,31 @@ class TestSqsTopicPurgeQueue(KikimrSqsTopicTestBase):
             self._get_consumer_uncommitted_messages_count(queue_name),
             equal_to(0),
         )
+
+    def test_purge_queue_fifo_queue(self):
+        queue_name = self._create_fifo_queue('purge_queue_fifo_queue')
+
+        self._boto_client.send_message(
+            QueueUrl=self._queue_url,
+            MessageBody='hello from fifo sqs',
+            MessageGroupId='message-group-1',
+        )
+
+        assert_that(
+            self._get_consumer_uncommitted_messages_count(queue_name),
+            equal_to(1),
+        )
+
+        self._boto_client.purge_queue(QueueUrl=self._queue_url)
+
+        response = self._boto_client.receive_message(
+            QueueUrl=self._queue_url,
+            WaitTimeSeconds=1,
+            MaxNumberOfMessages=1,
+        )
+
+        assert_that(response.get('Messages', []), has_length(0))
+        assert_that(
+            self._get_consumer_uncommitted_messages_count(queue_name),
+            equal_to(0),
+        )

@@ -19,6 +19,14 @@ class TestSqsTopicGetQueueUrl(KikimrSqsTopicTestBase):
 
         assert_that(get_response['QueueUrl'], equal_to(create_response['QueueUrl']))
 
+    def test_get_queue_url_fifo_queue(self):
+        queue_name = self._create_fifo_queue('get_queue_url_fifo_queue')
+        create_response = {'QueueUrl': self._queue_url}
+
+        get_response = self._boto_client.get_queue_url(QueueName=queue_name)
+
+        assert_that(get_response['QueueUrl'], equal_to(create_response['QueueUrl']))
+
     def test_get_queue_url_in_directory(self):
         unique_suffix = uuid.uuid1()
         directory = 'directory_{}'.format(unique_suffix)

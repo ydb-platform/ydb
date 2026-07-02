@@ -6,7 +6,7 @@ import botocore
 
 from hamcrest import assert_that, not_none, contains_string, all_of, raises, equal_to, is_not
 
-from ydb.tests.library.sqs_topic.test_base import KikimrSqsTopicTestBase
+from ydb.tests.library.sqs_topic.test_base import DEFAULT_SQS_CONSUMER, KikimrSqsTopicTestBase
 
 
 class TestSqsTopicCreateQueue(KikimrSqsTopicTestBase):
@@ -27,6 +27,33 @@ class TestSqsTopicCreateQueue(KikimrSqsTopicTestBase):
             '{}/{}'.format(self.database, queue_name),
             expected_name=queue_name,
         )
+
+    def test_create_fifo_queue(self):
+        queue_name = '{}.fifo'.format(self._make_queue_name('create_fifo_queue'))
+        response = self._boto_client.create_queue(
+            QueueName=queue_name,
+            Attributes={
+                'FifoQueue': 'true',
+            },
+        )
+        self._queue_url = response['QueueUrl']
+
+        assert_that(self._queue_url, not_none())
+        assert_that(
+            self._queue_url,
+            all_of(
+                contains_string(queue_name),
+                contains_string(DEFAULT_SQS_CONSUMER),
+            ),
+        )
+
+        topic_path = '{}/{}'.format(self.database, queue_name)
+        self._assert_topic_exists(
+            topic_path,
+            expected_name=queue_name,
+        )
+        self._assert_topic_has_consumer(topic_path, DEFAULT_SQS_CONSUMER)
+        self._assert_consumer_keep_message_order(topic_path, True, DEFAULT_SQS_CONSUMER)
 
     def test_create_queue_in_directory(self):
         unique_suffix = uuid.uuid1()

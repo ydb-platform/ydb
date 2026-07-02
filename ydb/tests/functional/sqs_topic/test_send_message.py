@@ -21,3 +21,18 @@ class TestSqsTopicSendMessage(KikimrSqsTopicTestBase):
 
         message = self._read_message_from_topic_without_consumer(queue_name)
         assert_that(message.data.decode('utf-8'), equal_to(message_body))
+
+    def test_send_message_fifo_queue(self):
+        queue_name = self._create_fifo_queue('send_message_fifo_queue')
+
+        message_body = 'hello from fifo sqs'
+        response = self._boto_client.send_message(
+            QueueUrl=self._queue_url,
+            MessageBody=message_body,
+            MessageGroupId='message-group-1',
+        )
+
+        assert_that(response['MessageId'], not_none())
+
+        message = self._read_message_from_topic_without_consumer(queue_name)
+        assert_that(message.data.decode('utf-8'), equal_to(message_body))

@@ -191,7 +191,8 @@ namespace NKikimr {
                 TDataPartSet parts;
                 GType.SplitData((TErasureType::ECrcMode)logoBlobId.CrcMode(), whole, parts);
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(logoBlobId,
-                        parts.Parts[logoBlobId.PartId() - 1].OwnedString, VDiskId, true, &cookie, TInstant::Max(), PutHandleClass);
+                    parts.Parts[logoBlobId.PartId() - 1].OwnedString, VDiskId, true, &cookie, TInstant::Max(),
+                    PutHandleClass, TWriteSource::GroupWriteLoadActor);
                 ctx.Send(QueueActorId, ev.release());
                 ++TEvVPutsSent;
             }
@@ -227,7 +228,7 @@ namespace NKikimr {
                         const ui32 collectStep = CollectStep++;
                         auto ev = std::make_unique<TEvBlobStorage::TEvVCollectGarbage>(TabletId, Generation, CollectCounter++,
                                 Channel, true, Generation, collectStep, false, nullptr, nullptr, VDiskId,
-                                TInstant::Max());
+                                TInstant::Max(), TWriteSource::GroupWriteLoadActor);
                         ctx.Send(QueueActorId, ev.release());
                         NextCollectRequestTimestamp = now + CollectIntervalGenerator.Generate();
 

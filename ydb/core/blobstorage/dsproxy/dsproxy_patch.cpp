@@ -212,8 +212,9 @@ public:
         Buffer = result->Responses[0].Buffer.ConvertToString();
         ApplyDiffs();
 
-        std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(PatchedId, Buffer, Deadline,
-                NKikimrBlobStorage::AsyncBlob, TEvBlobStorage::TEvPut::TacticDefault);
+        std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(
+                PatchedId, Buffer, Deadline, NKikimrBlobStorage::AsyncBlob,
+                TEvBlobStorage::TEvPut::TacticDefault, TWriteSource::DSProxyPatch);
         put->Orbit = std::move(Orbit);
         SendToProxy(std::move(put), OriginalId.Hash(), Span.GetTraceId());
     }

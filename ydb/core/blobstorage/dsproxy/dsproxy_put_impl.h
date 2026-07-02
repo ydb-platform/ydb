@@ -56,13 +56,15 @@ private:
         NLWTrace::TOrbit Orbit;
         bool Replied = false;
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks;
+        TWriteSource WriteSource;
         NWilson::TSpan Span;
         std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
         TInstant Deadline;
 
         TBlobInfo(TLogoBlobID id, TRope&& buffer, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId,
-                NLWTrace::TOrbit&& orbit, std::vector<std::pair<ui64, ui32>> extraBlockChecks, bool single,
-                std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay, TInstant deadline)
+                NLWTrace::TOrbit&& orbit, std::vector<std::pair<ui64, ui32>> extraBlockChecks,
+                TWriteSource writeSource, bool single, std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay,
+                TInstant deadline)
             : BlobId(id)
             , Buffer(std::move(buffer))
             , BufferSize(Buffer.size())
@@ -70,6 +72,7 @@ private:
             , Cookie(cookie)
             , Orbit(std::move(orbit))
             , ExtraBlockChecks(std::move(extraBlockChecks))
+            , WriteSource(writeSource)
             , Span(single ? NWilson::TSpan() : NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Put.Blob"))
             , ExecutionRelay(std::move(executionRelay))
             , Deadline(deadline)
@@ -124,7 +127,7 @@ public:
     {
         BlobMap.emplace(ev->Id, Blobs.size());
         Blobs.emplace_back(ev->Id, TRope(ev->Buffer), recipient, cookie, std::move(traceId), std::move(ev->Orbit),
-            std::move(ev->ExtraBlockChecks), true, std::move(ev->ExecutionRelay), ev->Deadline);
+            std::move(ev->ExtraBlockChecks), ev->WriteSource, true, std::move(ev->ExecutionRelay), ev->Deadline);
 
         auto& blob = Blobs.back();
         LWPROBE(DSProxyBlobPutTactics, blob.BlobId.TabletID(), Info->GroupID.GetRawId(), blob.BlobId.ToString(), Tactic,
@@ -155,8 +158,8 @@ public:
             Y_ABORT_UNLESS(msg.Tactic == tactic);
             BlobMap.emplace(msg.Id, Blobs.size());
             Blobs.emplace_back(msg.Id, TRope(msg.Buffer), ev->Sender, ev->Cookie, std::move(ev->TraceId),
-                std::move(msg.Orbit), std::move(msg.ExtraBlockChecks), false, std::move(msg.ExecutionRelay),
-                msg.Deadline);
+                std::move(msg.Orbit), std::move(msg.ExtraBlockChecks), msg.WriteSource, false,
+                std::move(msg.ExecutionRelay), msg.Deadline);
 
             auto& blob = Blobs.back();
             LWPROBE(DSProxyBlobPutTactics, blob.BlobId.TabletID(), Info->GroupID.GetRawId(), blob.BlobId.ToString(), Tactic,
@@ -233,11 +236,12 @@ public:
 
             if (std::next(it) == end) { // TEvVPut
                 auto [orderNumber, ptr] = *it++;
+                TBlobInfo& blob = Blobs[ptr->BlobIdx];
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(ptr->Id, ptr->Buffer, Info->GetVDiskId(orderNumber),
-                    false, nullptr, Blobs[ptr->BlobIdx].Deadline, Blackboard.PutHandleClass);
+                    false, nullptr, blob.Deadline, Blackboard.PutHandleClass, blob.WriteSource);
 
                 auto& record = ev->Record;
-                for (const auto& [tabletId, generation] : Blobs[ptr->BlobIdx].ExtraBlockChecks) {
+                for (const auto& [tabletId, generation] : blob.ExtraBlockChecks) {
                     auto *p = record.AddExtraBlockChecks();
                     p->SetTabletId(tabletId);
                     p->SetGeneration(generation);
@@ -264,8 +268,9 @@ public:
                 auto vput = History.CreateVPut(itemsCount, orderNumber);
                 while (it != end) {
                     auto [orderNumber, ptr] = *it++;
-                    ev->AddVPut(ptr->Id, TRcBuf(ptr->Buffer), nullptr, &Blobs[ptr->BlobIdx].ExtraBlockChecks,
-                        Blobs[ptr->BlobIdx].Span.GetTraceId());
+                    TBlobInfo& blob = Blobs[ptr->BlobIdx];
+                    ev->AddVPut(ptr->Id, TRcBuf(ptr->Buffer), nullptr, &blob.ExtraBlockChecks,
+                        blob.Span.GetTraceId(), blob.WriteSource);
                     HandoffPartsSent += ptr->IsHandoff;
                     vput.AddSubrequest(ptr->Id);
                 }

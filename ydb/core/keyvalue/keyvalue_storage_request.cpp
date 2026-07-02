@@ -707,11 +707,13 @@ public:
                     for (const TLogoBlobID& logoBlobId : request.LogoBlobIds) {
                         const auto begin = iter;
                         iter += logoBlobId.BlobSize();
-                        THolder<TEvBlobStorage::TEvPut> put(
-                            new TEvBlobStorage::TEvPut(
-                                logoBlobId, TRcBuf(TRope(begin, iter)),
-                                IntermediateResults->Deadline, request.HandleClass,
-                                request.Tactic));
+                        THolder<TEvBlobStorage::TEvPut> put(new TEvBlobStorage::TEvPut(
+                            logoBlobId,
+                            TRcBuf(TRope(begin, iter)),
+                            IntermediateResults->Deadline,
+                            request.HandleClass,
+                            request.Tactic,
+                            TWriteSource::KeyValuePut));
                         const ui32 groupId = TabletInfo->GroupFor(logoBlobId.Channel(), logoBlobId.Generation());
                         Y_ABORT_UNLESS(groupId != Max<ui32>(), "Put Blob# %s is mapped to an invalid group (-1)!",
                                 logoBlobId.ToString().c_str());

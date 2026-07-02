@@ -168,7 +168,8 @@ namespace {
                         auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(
                             key, std::move(data), vDiskId,
                             true, nullptr,
-                            TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob
+                            TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob,
+                            TWriteSource::BlobBalancer
                         );
                         SendRequest(TVDiskIdShort(vDiskId), selfId, ev.release(), dataSize);
                     } else {
@@ -180,7 +181,8 @@ namespace {
                             ev = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vDiskId, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob, true, nullptr);
                         }
 
-                        ev->AddVPut(key, TRcBuf(std::move(data)), nullptr, {}, NWilson::TTraceId());
+                        ev->AddVPut(key, TRcBuf(std::move(data)), nullptr, nullptr, NWilson::TTraceId(),
+                            TWriteSource::BlobBalancer);
                     }
                 }
             }

@@ -132,8 +132,8 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
     }
 
     void SendToBS(const TLogoBlobID &id, const TString &buffer, const TActorContext &ctx,
-                  const NKikimrBlobStorage::EPutHandleClass handleClass,
-                  TEvBlobStorage::TEvPut::ETactic tactic, NWilson::TTraceId traceId) {
+            NKikimrBlobStorage::EPutHandleClass handleClass,
+            TEvBlobStorage::TEvPut::ETactic tactic, TWriteSource writeSource, NWilson::TTraceId traceId) {
         Y_ABORT_UNLESS(id.TabletID() == Info->TabletID);
         const TTabletChannelInfo *channelInfo = Info->ChannelInfo(id.Channel());
         Y_ABORT_UNLESS(channelInfo);
@@ -143,7 +143,9 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
         ui64 cookie = RandomNumber<ui64>();
         RequestCookies ^= cookie;
 
-        SendPutToGroup(ctx, x->GroupID, Info.Get(), MakeHolder<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), handleClass, tactic), cookie, std::move(traceId));
+        SendPutToGroup(ctx, x->GroupID, Info.Get(),
+            MakeHolder<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), handleClass, tactic, writeSource),
+            cookie, std::move(traceId));
     }
 
 public:
@@ -181,7 +183,8 @@ public:
                 innerTraceId = res.first->second.GetTraceId();
             }
 
-            SendToBS(ref.Id, ref.Buffer, ctx, handleClass, ref.Tactic ? *ref.Tactic : CommitTactic, std::move(innerTraceId));
+            SendToBS(ref.Id, ref.Buffer, ctx, handleClass, ref.Tactic ? *ref.Tactic : CommitTactic,
+                TWriteSource::WriteLogReference, std::move(innerTraceId));
         }
 
         const TLogoBlobID actualLogEntryId = TLogoBlobID(
@@ -201,7 +204,8 @@ public:
             traceId = std::move(res.first->second.GetTraceId());
         }
 
-        SendToBS(actualLogEntryId, logEntryBuffer, ctx, NKikimrBlobStorage::TabletLog, CommitTactic, std::move(traceId));
+        SendToBS(actualLogEntryId, logEntryBuffer, ctx, NKikimrBlobStorage::TabletLog, CommitTactic,
+            TWriteSource::WriteLogEntry, std::move(traceId));
 
         RepliesToWait = References.size() + 1;
         Become(&TThis::StateWait);

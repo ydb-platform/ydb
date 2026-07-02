@@ -25,6 +25,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
     const bool Hard;
     const bool Collect;
     const bool Decommission;
+    const TWriteSource WriteSource;
 
     TGroupQuorumTracker QuorumTracker;
 
@@ -116,7 +117,8 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
     void SendCollectGarbageRequest(const TVDiskID& vdiskId) {
         const ui64 cookie = TVDiskIdShort(vdiskId).GetRaw();
         auto msg = std::make_unique<TEvBlobStorage::TEvVCollectGarbage>(TabletId, RecordGeneration, PerGenerationCounter,
-            Channel, Collect, CollectGeneration, CollectStep, Hard, Keep.get(), DoNotKeep.get(), vdiskId, Deadline);
+            Channel, Collect, CollectGeneration, CollectStep, Hard, Keep.get(), DoNotKeep.get(), vdiskId, Deadline,
+            WriteSource);
         SendToQueue(std::move(msg), cookie);
         RequestsSent++;
     }
@@ -124,7 +126,8 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartCollectGarbage;
         auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, RecordGeneration, PerGenerationCounter,
-            Channel, Collect, CollectGeneration, CollectStep, Keep.release(), DoNotKeep.release(), Deadline, false, Hard);
+            Channel, Collect, CollectGeneration, CollectStep, Keep.release(), DoNotKeep.release(), Deadline, false, WriteSource,
+            Hard);
         ev->RestartCounter = counter;
         ev->Decommission = Decommission;
         return ev;
@@ -153,6 +156,7 @@ public:
         , Hard(params.Common.Event->Hard)
         , Collect(params.Common.Event->Collect)
         , Decommission(params.Common.Event->Decommission)
+        , WriteSource(params.Common.Event->WriteSource)
         , QuorumTracker(Info.Get())
     {}
 

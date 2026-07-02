@@ -27,6 +27,43 @@ class TestSqsTopicGetQueueUrl(KikimrSqsTopicTestBase):
 
         assert_that(get_response['QueueUrl'], equal_to(create_response['QueueUrl']))
 
+    def test_get_queue_url_fifo_in_directory(self):
+        unique_suffix = uuid.uuid1()
+        directory = 'directory_{}'.format(unique_suffix)
+        topic_name = 'topic_{}.fifo'.format(unique_suffix)
+        queue_name = '{}/{}'.format(directory, topic_name)
+
+        create_response = self._boto_client.create_queue(
+            QueueName=queue_name,
+            Attributes={
+                'FifoQueue': 'true',
+            },
+        )
+        self._queue_url = create_response['QueueUrl']
+
+        get_response = self._boto_client.get_queue_url(QueueName=queue_name)
+
+        assert_that(get_response['QueueUrl'], equal_to(create_response['QueueUrl']))
+
+    def test_get_queue_url_fifo_in_directory_with_consumer(self):
+        unique_suffix = uuid.uuid1()
+        directory = 'directory_{}'.format(unique_suffix)
+        topic_name = 'topic_{}.fifo'.format(unique_suffix)
+        consumer_name = 'consumer_{}'.format(unique_suffix)
+        queue_name = '{}/{}@{}'.format(directory, topic_name, consumer_name)
+
+        create_response = self._boto_client.create_queue(
+            QueueName=queue_name,
+            Attributes={
+                'FifoQueue': 'true',
+            },
+        )
+        self._queue_url = create_response['QueueUrl']
+
+        get_response = self._boto_client.get_queue_url(QueueName=queue_name)
+
+        assert_that(get_response['QueueUrl'], equal_to(create_response['QueueUrl']))
+
     def test_get_queue_url_in_directory(self):
         unique_suffix = uuid.uuid1()
         directory = 'directory_{}'.format(unique_suffix)

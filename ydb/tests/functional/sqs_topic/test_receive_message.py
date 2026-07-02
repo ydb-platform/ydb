@@ -102,6 +102,72 @@ class TestSqsTopicReceiveMessage(KikimrSqsTopicTestBase):
         assert_that(messages[0]['Body'], equal_to(message_body))
         assert_that(messages[0]['Attributes']['MessageGroupId'], equal_to(message_group_id))
 
+    def test_receive_message_fifo_with_message_deduplication_id(self):
+        self._create_fifo_queue('receive_message_fifo_with_message_deduplication_id')
+
+        message_body = 'hello from fifo sqs'
+        deduplication_id = 'deduplication-id-1'
+        self._boto_client.send_message(
+            QueueUrl=self._queue_url,
+            MessageBody=message_body,
+            MessageGroupId='message-group-1',
+            MessageDeduplicationId=deduplication_id,
+        )
+
+        response = self._boto_client.receive_message(
+            QueueUrl=self._queue_url,
+            WaitTimeSeconds=20,
+            MaxNumberOfMessages=1,
+            AttributeNames=['All'],
+        )
+
+        messages = response.get('Messages')
+        assert_that(messages, not_none())
+        assert_that(messages, has_length(1))
+        assert_that(messages[0]['Body'], equal_to(message_body))
+        assert_that(
+            messages[0]['Attributes']['MessageDeduplicationId'],
+            equal_to(deduplication_id),
+        )
+
+    def test_receive_message_fifo_with_content_based_deduplication(self):
+        queue_name = self._make_fifo_queue_name('receive_message_fifo_with_content_based_deduplication')
+        self._queue_url = self._boto_client.create_queue(
+            QueueName=queue_name,
+            Attributes={
+                'FifoQueue': 'true',
+                'ContentBasedDeduplication': 'true',
+            },
+        )['QueueUrl']
+
+        message_body = 'deduplicated message'
+        for _ in range(2):
+            self._boto_client.send_message(
+                QueueUrl=self._queue_url,
+                MessageBody=message_body,
+                MessageGroupId='message-group-1',
+            )
+
+        response = self._boto_client.receive_message(
+            QueueUrl=self._queue_url,
+            WaitTimeSeconds=20,
+            MaxNumberOfMessages=2,
+            AttributeNames=['All'],
+        )
+
+        messages = response.get('Messages')
+        assert_that(messages, not_none())
+        assert_that(messages, has_length(1))
+        assert_that(messages[0]['Body'], equal_to(message_body))
+        assert_that(messages[0]['Attributes']['MessageGroupId'], equal_to('message-group-1'))
+
+        empty_response = self._boto_client.receive_message(
+            QueueUrl=self._queue_url,
+            WaitTimeSeconds=1,
+            MaxNumberOfMessages=1,
+        )
+        assert_that(empty_response.get('Messages'), equal_to(None))
+
     def test_receive_message_with_string_message_attribute(self):
         attribute_name = 'string_attr'
         attribute_value = {

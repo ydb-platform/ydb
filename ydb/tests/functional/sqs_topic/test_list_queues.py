@@ -29,6 +29,26 @@ class TestSqsTopicListQueues(KikimrSqsTopicTestBase):
 
         assert_that(queue_urls, has_item(self._queue_url))
 
+    def test_list_queues_fifo_in_directory(self):
+        unique_suffix = uuid.uuid1()
+        directory = 'directory_{}'.format(unique_suffix)
+        topic_name = 'topic_{}.fifo'.format(unique_suffix)
+        queue_name = '{}/{}'.format(directory, topic_name)
+
+        self._queue_url = self._boto_client.create_queue(
+            QueueName=queue_name,
+            Attributes={
+                'FifoQueue': 'true',
+            },
+        )['QueueUrl']
+
+        assert_that(self._queue_url, not_none())
+
+        response = self._boto_client.list_queues()
+        queue_urls = response.get('QueueUrls', [])
+
+        assert_that(queue_urls, has_item(self._queue_url))
+
     def test_list_queues_in_directory(self):
         unique_suffix = uuid.uuid1()
         directory = 'directory_{}'.format(unique_suffix)

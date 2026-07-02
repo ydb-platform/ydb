@@ -80,6 +80,65 @@ class TestSqsTopicCreateQueue(KikimrSqsTopicTestBase):
             parent_directory=directory_path,
         )
 
+    def test_create_fifo_queue_in_directory(self):
+        unique_suffix = uuid.uuid1()
+        directory = 'directory_{}'.format(unique_suffix)
+        topic_name = 'topic_{}.fifo'.format(unique_suffix)
+        queue_name = '{}/{}'.format(directory, topic_name)
+
+        response = self._boto_client.create_queue(
+            QueueName=queue_name,
+            Attributes={
+                'FifoQueue': 'true',
+            },
+        )
+        self._queue_url = response['QueueUrl']
+
+        assert_that(self._queue_url, not_none())
+        assert_that(
+            self._queue_url,
+            all_of(
+                contains_string(directory),
+                contains_string(topic_name),
+                contains_string(DEFAULT_SQS_CONSUMER),
+            ),
+        )
+
+        directory_path = '{}/{}'.format(self.database, directory)
+        topic_path = '{}/{}'.format(directory_path, topic_name)
+        self._assert_topic_exists(
+            topic_path,
+            expected_name=topic_name,
+            parent_directory=directory_path,
+        )
+        self._assert_topic_has_consumer(topic_path, DEFAULT_SQS_CONSUMER)
+        self._assert_consumer_keep_message_order(topic_path, True, DEFAULT_SQS_CONSUMER)
+
+    def test_create_fifo_queue_in_directory_with_consumer(self):
+        unique_suffix = uuid.uuid1()
+        directory = 'directory_{}'.format(unique_suffix)
+        topic_name = 'topic_{}.fifo'.format(unique_suffix)
+        consumer_name = 'consumer_{}'.format(unique_suffix)
+        queue_name = '{}/{}@{}'.format(directory, topic_name, consumer_name)
+
+        response = self._boto_client.create_queue(
+            QueueName=queue_name,
+            Attributes={
+                'FifoQueue': 'true',
+            },
+        )
+        self._queue_url = response['QueueUrl']
+
+        assert_that(self._queue_url, not_none())
+        assert_that(
+            self._queue_url,
+            all_of(
+                contains_string(directory),
+                contains_string(topic_name),
+                contains_string(consumer_name),
+            ),
+        )
+
     def test_create_queue_in_directory_with_consumer(self):
         unique_suffix = uuid.uuid1()
         directory = 'directory_{}'.format(unique_suffix)

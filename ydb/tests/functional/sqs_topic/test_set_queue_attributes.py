@@ -122,6 +122,44 @@ class TestSqsTopicSetQueueAttributes(KikimrSqsTopicTestBase):
 
         self._boto_client.delete_queue(QueueUrl=dlq_url)
 
+    def test_set_queue_attributes_redrive_policy_fifo(self):
+        dlq_name = self._make_fifo_queue_name('set_queue_attributes_redrive_policy_fifo_dlq')
+        dlq_url = self._boto_client.create_queue(
+            QueueName=dlq_name,
+            Attributes={
+                'FifoQueue': 'true',
+            },
+        )['QueueUrl']
+        dlq_arn = self._boto_client.get_queue_attributes(
+            QueueUrl=dlq_url,
+            AttributeNames=['QueueArn'],
+        )['Attributes']['QueueArn']
+
+        self._create_fifo_queue('set_queue_attributes_redrive_policy_fifo')
+        redrive_policy = json.dumps({
+            'deadLetterTargetArn': dlq_arn,
+            'maxReceiveCount': 5,
+        })
+        self._set_queue_attribute('RedrivePolicy', redrive_policy)
+
+        actual_redrive_policy = json.loads(self._get_queue_attribute('RedrivePolicy'))
+        assert_that(actual_redrive_policy['maxReceiveCount'], equal_to(5))
+        assert_that(actual_redrive_policy['deadLetterTargetArn'], equal_to(dlq_arn))
+
+        self._boto_client.delete_queue(QueueUrl=dlq_url)
+
+    def test_set_queue_attributes_visibility_timeout_fifo(self):
+        self._create_fifo_queue('set_queue_attributes_visibility_timeout_fifo')
+
+        self._set_queue_attribute('VisibilityTimeout', '60')
+        assert_that(self._get_queue_attribute('VisibilityTimeout'), equal_to('60'))
+
+    def test_set_queue_attributes_delay_seconds_fifo(self):
+        self._create_fifo_queue('set_queue_attributes_delay_seconds_fifo')
+
+        self._set_queue_attribute('DelaySeconds', '5')
+        assert_that(self._get_queue_attribute('DelaySeconds'), equal_to('5'))
+
     def test_set_queue_attributes_redrive_allow_policy(self):
         self._create_queue('set_queue_attributes_redrive_allow_policy')
 

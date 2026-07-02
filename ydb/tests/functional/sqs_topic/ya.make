@@ -23,6 +23,8 @@ TEST_SRCS(
     test_start_message_move_task.py
     test_cancel_message_move_task.py
     test_list_message_move_tasks.py
+    test_list_dead_letter_source_queues.py
+    test_list_queue_tags.py
 )
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)

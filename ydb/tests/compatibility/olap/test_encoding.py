@@ -111,9 +111,10 @@ class TestEncoding(RollingUpgradeAndDowngradeFixture):
         return queries
 
     def _do_queries(self, queries):
+        retry_settings = ydb.RetrySettings(idempotent=True)
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for query_type, query in queries:
-                result_sets = session_pool.execute_with_retries(query)
+                result_sets = session_pool.execute_with_retries(query, retry_settings=retry_settings)
                 if query_type == self.QueryType.SELECT_CNT:
                     assert len(result_sets[0].rows) > 0, "Query returned no rows"
                     for row in result_sets[0].rows:

@@ -219,6 +219,17 @@ class TestDatetime2(MixedClusterFixture):
         FROM {self.table_name};
         """
 
+    def create_pinned_driver(self, port):
+        driver = ydb.Driver(
+            ydb.DriverConfig(
+                database=self.database_path,
+                endpoint="grpc://localhost:%s" % port,
+                disable_discovery=True,
+            )
+        )
+        driver.wait(timeout=60)
+        return driver
+
     def test_all(self):
         with ydb.QuerySessionPool(self.driver) as session_pool:
 
@@ -245,15 +256,23 @@ class TestDatetime2(MixedClusterFixture):
         ]
 
         """
-        UDFs are compiled once on the node that initially receives the request.
-        The compiled UDF is then propagated to all other nodes. Executing the query a single time only verifies
-        compatibility in one direction—either from old to new or from new to old. Performing multiple retries
-        increases the likelihood that the UDF will be compiled on both the old and new versions, thereby improving coverage of compatibility testing.
-
-        Additionally, a session pool always sends requests to the same node. To ensure distribution across nodes, the session pool is recreated for each SELECT request.
+        Pin a driver to each node. This forces the query to be compiled on every binary version in the cluster.
         """
-        for _ in range(10):
-            with ydb.QuerySessionPool(self.driver) as session_pool:
-                for query in queries:
-                    result = session_pool.execute_with_retries(query)
-                    assert len(result[0].rows) > 0
+        seen_binaries = set()
+        pinned_drivers = []
+        for node_id, node in self.cluster.nodes.items():
+            binary_path = self.config.get_binary_path(node_id)
+            if binary_path in seen_binaries:
+                continue
+            seen_binaries.add(binary_path)
+            pinned_drivers.append(self.create_pinned_driver(node.port))
+
+        try:
+            for driver in pinned_drivers:
+                with ydb.QuerySessionPool(driver) as session_pool:
+                    for query in queries:
+                        result = session_pool.execute_with_retries(query)
+                        assert len(result[0].rows) > 0
+        finally:
+            for driver in pinned_drivers:
+                driver.stop()

@@ -1,18 +1,11 @@
 #pragma once
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 
 namespace NKikimr::NBackup {
 
-inline bool IsExportFilteringEnabled(const TAppData& appData) {
-    // Backward compatibility: clusters with only EnableEncryptedExport keep filtering API enabled.
-    // This also encodes the encryption prerequisite: encrypted export/import requires filtering support.
-    return appData.FeatureFlags.GetEnableExportFiltering()
-        || appData.FeatureFlags.GetEnableEncryptedExport();
-}
+bool IsExportFilteringEnabled(const TAppData& appData);
 
-inline bool IsEncryptedExportEnabled(const TAppData& appData) {
-    return appData.FeatureFlags.GetEnableEncryptedExport();
-}
+bool IsEncryptedExportEnabled(const TAppData& appData);
 
 } // namespace NKikimr::NBackup

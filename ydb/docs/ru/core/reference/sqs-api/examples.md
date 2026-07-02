@@ -71,6 +71,26 @@ ENDPOINT="https://my_db.balancer.example.com:8443/Root/my_db"
 aws --endpoint "$ENDPOINT" sqs list-queues
 ```
 
+### Получение QueueUrl топика
+
+Чтобы получить `QueueUrl` топика, выполните команду:
+
+```shell
+ENDPOINT="https://my_db.balancer.example.com:8443/Root/my_db"
+
+aws --endpoint "$ENDPOINT" sqs get-queue-url \
+  --queue-name "my_topic@my_consumer"
+```
+
+Где:
+
+- `{queue_name}` — значение параметра `--queue-name`, имя SQS-очереди в формате `{topic_name}@{consumer_name}`. Если [разделяемый (общий) читатель](../../concepts/datamodel/topic.md#shared-consumer) имеет имя `ydb-sqs-consumer`, достаточно указать только `{topic_name}`;
+- `{topic_name}` — имя топика с путём от корня базы данных, в которой он создан, например `production/order` (топик `order` в директории `production`);
+- `{consumer_name}` — имя [разделяемого (общего) читателя](../../concepts/datamodel/topic.md#shared-consumer) на топике, например `ydb-sqs-consumer`.
+
+В примере выше `my_topic` — это `{topic_name}`, а `my_consumer` — `{consumer_name}`.
+
+
 ## Запись в топик и чтение из топика
 
 Для операций чтения и записи AWS CLI использует параметр `--queue-url`. Его можно получить через `get-queue-url`.

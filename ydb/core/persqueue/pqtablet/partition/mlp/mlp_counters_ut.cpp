@@ -9,7 +9,7 @@ Y_UNIT_TEST_SUITE(TMLPCountersTests) {
 
 void SimpleCountersImpl(const bool keepMessagesOrder) {
     auto setup = CreateSetup();
-    auto& runtime = setup->GetRuntime();
+    NActors::TTestActorRuntime& runtime = setup->GetRuntime();
 
     CreateTopic(setup, "/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
             .PartitioningSettings(2, 2)
@@ -25,8 +25,26 @@ void SimpleCountersImpl(const bool keepMessagesOrder) {
             .EndAddConsumer());
 
     if (keepMessagesOrder) {
-        WriteManyGroups(setup, "/Root/topic1", 0, 16, 59, 25);
-        WriteManyGroups(setup, "/Root/topic1", 1, 16, 61, 43);
+        auto writeManyGroups = [&runtime](size_t messagesCount, size_t groupsCount) {
+            std::vector<TWriterSettings::TMessage> messages;
+            for (size_t i = 0; i < messagesCount; ++i) {
+                messages.push_back({
+                    .Index = i,
+                    .MessageBody = TStringBuilder() << "message_body_" << i,
+                    .MessageGroupId = TStringBuilder() << "message_group_id_" << (i % groupsCount),
+                });
+            }
+            CreateWriterActor(runtime, {
+                .DatabasePath = "/Root",
+                .TopicName = "/Root/topic1",
+                .Messages = std::move(messages),
+            });
+            auto response = GetWriteResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), messagesCount);
+        };
+
+        writeManyGroups(120, 75);
     } else {
         WriteMany(setup, "/Root/topic1", 0, 16, 59);
         WriteMany(setup, "/Root/topic1", 1, 16, 61);
@@ -117,7 +135,7 @@ void SimpleCountersImpl(const bool keepMessagesOrder) {
     assertMetric("topic.inflight.delayed_messages", 0);
     assertMetric("topic.inflight.unlocked_messages", 101);
     assertMetric("topic.inflight.scheduled_to_dlq_messages", 0);
-    assertMetric("topic.inflight.message_groups", keepMessagesOrder ? 18 : 0);
+    assertMetric("topic.inflight.message_groups", keepMessagesOrder ? 75 : 0);
 
     assertMetric("topic.committed_messages", 1);
     assertMetric("topic.purged_messages", 0);

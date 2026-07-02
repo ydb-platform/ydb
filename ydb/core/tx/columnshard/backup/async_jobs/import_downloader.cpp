@@ -11,9 +11,6 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/util/message_differencer.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard::NBackup {
 
@@ -76,11 +73,8 @@ public:
     }
 
     void Handle(NKikimr::TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev) {
-        const NActors::NStructuredLog::TLogStack::TLogGuard gLogContext;
-              YDB_LOG_UPDATE_CONTEXT(
-                  {"event", "import_s3_upload_rows"},
-                  {"txId", TxId},
-                  {"ydbSchemaSize", YdbSchema.size()});
+        const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)(
+            "event", "import_s3_upload_rows")("tx_id", TxId)("ydb_schema_size", YdbSchema.size());
 
         Counters.OnProcessStarted();
         const TInstant processStartTime = TInstant::Now();
@@ -106,12 +100,8 @@ public:
             rowSchemaOrder.emplace_back(std::move(name), typeInfo);
         }
 
-        YDB_LOG_DEBUG("",
-            {"event", "s3_upload_rows_schema"},
-            {"keyColumns", rowScheme.KeyColumnIdsSize()},
-            {"valueColumns", rowScheme.ValueColumnIdsSize()},
-            {"totalColumns", rowSchemaOrder.size()},
-            {"rows", record.RowsSize()});
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "s3_upload_rows_schema")("key_columns", rowScheme.KeyColumnIdsSize())(
+            "value_columns", rowScheme.ValueColumnIdsSize())("total_columns", rowSchemaOrder.size())("rows", record.RowsSize());
 
         TSerializedCellVec keyCells;
         TSerializedCellVec valueCells;

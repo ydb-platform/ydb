@@ -31,21 +31,17 @@ public:
     }
 
     void OnFail(const TString& errorMessage) const {
-        YDB_LOG_ERROR_COMP(NKikimrServices::TX_BACKGROUND, "",
-            {"problem", "fail_on_background_task"},
-            {"reason", errorMessage});
+        AFL_ERROR(NKikimrServices::TX_BACKGROUND)("problem", "fail_on_background_task")("reason", errorMessage);
         DoOnFail(errorMessage);
     }
 
     void OnAdded() const {
-        YDB_LOG_INFO_COMP(NKikimrServices::TX_BACKGROUND, "",
-            {"info", "background task added"});
+        AFL_INFO(NKikimrServices::TX_BACKGROUND)("info", "background task added");
         DoOnAdded();
     }
 
     void OnFinished() const {
-        YDB_LOG_INFO_COMP(NKikimrServices::TX_BACKGROUND, "",
-            {"info", "background task finished"});
+        AFL_INFO(NKikimrServices::TX_BACKGROUND)("info", "background task finished");
         DoOnFinished();
     }
 };

@@ -12,6 +12,7 @@
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
 #include <library/cpp/testing/hook/hook.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr {
 
@@ -188,7 +189,8 @@ Y_UNIT_TEST_SUITE(Restore) {
             });
 
             {
-                NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 8);
+                YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+                    {"TESTSTEP", 8});
                 TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 0));
                 reader.SetReplyColumnIds(TTestSchema::ExtractIds(schema));
                 auto rb = reader.ReadAll();

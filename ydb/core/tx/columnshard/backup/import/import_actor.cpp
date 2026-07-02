@@ -7,6 +7,8 @@
 #include <ydb/core/tx/datashard/datashard_user_table.h>
 #include <ydb/core/tx/datashard/import_common.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NImport {
 
 class TTxProposeFinish: public NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard> {
@@ -66,22 +68,32 @@ void TImportActor::HandleWakeup() {
         const TString errorMessage = TStringBuilder() << "Import operation timed out after " << elapsed.Seconds() << "s"
                                                       << " in stage " << StageToString(Stage) << ", tablet " << TabletId << ", importActorId "
                                                       << (ImportActorId ? ImportActorId.ToString() : "none");
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "import_timeout")("stage", StageToString(Stage))("elapsed_sec", elapsed.Seconds())(
-            "tablet_id", TabletId)("import_actor_id", ImportActorId ? ImportActorId.ToString() : "none");
+        YDB_LOG_ERROR("",
+            {"event", "import_timeout"},
+            {"stage", StageToString(Stage)},
+            {"elapsedSec", elapsed.Seconds()},
+            {"tabletId", TabletId},
+            {"importActorId", ImportActorId ? ImportActorId.ToString() : "none"});
         Counters.OnError();
         AbortImport(errorMessage);
         return;
     }
     if (elapsed > WarningInterval) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "import_slow_operation")("stage", StageToString(Stage))(
-            "elapsed_sec", elapsed.Seconds())("tablet_id", TabletId)("import_actor_id", ImportActorId ? ImportActorId.ToString() : "none");
+        YDB_LOG_WARN("",
+            {"event", "import_slow_operation"},
+            {"stage", StageToString(Stage)},
+            {"elapsedSec", elapsed.Seconds()},
+            {"tabletId", TabletId},
+            {"importActorId", ImportActorId ? ImportActorId.ToString() : "none"});
     }
     ScheduleTimeoutCheck();
 }
 
 void TImportActor::AbortImport(const TString& errorMessage) {
     if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "abort_after_import_finished")("message", errorMessage);
+        YDB_LOG_WARN("",
+            {"event", "abort_after_import_finished"},
+            {"message", errorMessage});
         return;
     }
     ImportSession->Abort(errorMessage);

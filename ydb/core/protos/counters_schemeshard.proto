@@ -288,13 +288,6 @@ enum ESimpleCounters {
     COUNTER_FORMAT_POSITION_TABLE_COUNT = 222 [(CounterOpts) = {Name: "TablesInFormatPosition"}];
 
     COUNTER_IN_FLIGHT_OPS_TxCreateFullBackupOp = 223 [(CounterOpts) = {Name: "InFlightOps/CreateFullBackupOp"}];
-<<<<<<< HEAD
-=======
-
-    COUNTER_IN_FLIGHT_OPS_TxCreateLocalIndex = 224 [(CounterOpts) = {Name: "InFlightOps/CreateLocalIndex"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropLocalIndex = 225 [(CounterOpts) = {Name: "InFlightOps/DropLocalIndex"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterLocalIndex = 226 [(CounterOpts) = {Name: "InFlightOps/AlterLocalIndex"}];
-    COUNTER_IN_FLIGHT_OPS_TxMoveLocalIndex = 227 [(CounterOpts) = {Name: "InFlightOps/MoveLocalIndex"}];
 
     COUNTER_SMALL_BLOBS_VOLUME_BYTES = 228               [(CounterOpts) = {Name: "SmallBlobsVolumeBytes"}];
     COUNTER_SMALL_BLOBS_COUNT = 229                      [(CounterOpts) = {Name: "SmallBlobsCount"}];
@@ -303,7 +296,6 @@ enum ESimpleCounters {
     COUNTER_SMALL_BLOBS_COUNT_HARD_QUOTA = 232           [(CounterOpts) = {Name: "SmallBlobsCountHardQuota"}];
     COUNTER_SMALL_BLOBS_COUNT_SOFT_QUOTA = 233           [(CounterOpts) = {Name: "SmallBlobsCountSoftQuota"}];
     COUNTER_SMALL_BLOBS_QUOTA_EXCEEDED = 234             [(CounterOpts) = {Name: "SmallBlobsQuotaExceeded"}];
->>>>>>> 2e42be49468 (Small blobs limits to Column Tables (#43393))
 }
 
 enum ECumulativeCounters {

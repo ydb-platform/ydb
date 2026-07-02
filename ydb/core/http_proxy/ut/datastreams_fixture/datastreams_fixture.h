@@ -81,13 +81,7 @@ public:
         bool EnableSqsTopic : 1 = false;
         bool EnforceUserTokenRequirement : 1 = false;
         bool EnableTopicPartitionSplitBasedOnKllSketch : 1 = false;
-<<<<<<< HEAD
-=======
-        bool EnableTopicPartitionSplitBasedOnMessages : 1 = false;
-        bool EnableTopicMessagesBatching : 1 = false;
-        bool EnableAccessServiceV2Interface : 1 = false;
         bool TopicsAreFirstClassCitizen : 1 = true;
->>>>>>> 5e204e22840 (Fixed MLP error for federation (#44926))
     };
 
     void InitAll(const TInitParameters initParameters);

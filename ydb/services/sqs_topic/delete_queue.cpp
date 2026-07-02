@@ -111,49 +111,12 @@ namespace NKikimr::NSqsTopic::V1 {
                 if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
                     return ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION, TStringBuilder() << "Deleting the changefeed is not supported"));
                 }
-<<<<<<< HEAD
                 if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
                     return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, TStringBuilder() << "Queue name used by another scheme object"));
                 }
                 // ok
             } else if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
                 return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist")));
-=======
-                case NDescriber::EStatus::NOT_TOPIC:
-                    return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE,
-                        "Queue name used by another scheme object"));
-                case NDescriber::EStatus::NOT_FOUND:
-                case NDescriber::EStatus::UNAUTHORIZED:
-                    return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE,
-                        "The specified queue doesn't exist"));
-                case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
-                    return ReplyWithError(MakeError(NSQS::NErrors::ACCESS_DENIED,
-                        "Access denied"));
-                case NDescriber::EStatus::UNKNOWN_ERROR:
-                    return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
-                        "Failed to describe topic"));
-            }
-
-            const auto& pqGroup = topicInfo.Info->Description;
-
-            auto consumerConfig = GetConsumerConfig(pqGroup.GetPQTabletConfig(), QueueUrl_->Consumer, ActorContext());
-            if (!consumerConfig) {
-                return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE,
-                    std::format("The specified queue doesn't exist (consumer: \"{}\")", QueueUrl_->Consumer.c_str())));
-            }
-            if (consumerConfig.Defined() && consumerConfig->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
-                return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE,
-                    std::format("The specified queue doesn't exist (consumer \"{}\" is not a shared consumer)", QueueUrl_->Consumer.c_str())));
-            }
-
-            if (pqGroup.GetPQTabletConfig().ConsumersSize() <= 1) {
-                this->RegisterWithSameMailbox(NPQ::NSchema::CreateDropTopicActor(SelfId(), {
-                    .Database = Database,
-                    .PeerName = this->Request_->GetPeerName(),
-                    .Path = topicInfo.RealPath,
-                    .UserToken = this->GetUserToken(),
-                }));
->>>>>>> 5e204e22840 (Fixed MLP error for federation (#44926))
             } else {
                 return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
                                                 TStringBuilder() << "Failed to describe topic: " << response.Status));
@@ -161,7 +124,7 @@ namespace NKikimr::NSqsTopic::V1 {
             Y_ABORT_UNLESS(response.PQGroupInfo);
             PQGroup = response.PQGroupInfo->Description;
             SelfInfo = response.Self->Info;
-            ConsumerConfig = GetConsumerConfig(PQGroup.GetPQTabletConfig(), QueueUrl_->Consumer);
+            ConsumerConfig = GetConsumerConfig(PQGroup.GetPQTabletConfig(), QueueUrl_->Consumer, ActorContext());
             if (!ConsumerConfig) {
                 return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist (consumer: \"{}\")", QueueUrl_->Consumer.c_str())));
             }

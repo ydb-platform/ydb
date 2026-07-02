@@ -114,19 +114,6 @@ namespace NKikimr::NSqsTopic::V1 {
             }
 
             SendDescribeProposeRequest(ctx);
-<<<<<<< HEAD
-=======
-
-            if (AttributesRequest.NeedRuntimeAttributes) {
-                ++RequestInflight;
-                Register(NPQ::NMLP::CreateDescriber(SelfId(), {
-                    .DatabasePath = Database,
-                    .TopicName = FullTopicPath_,
-                    .Consumer = ResolveConsumerNameFromQueueUrl(QueueUrl_->Consumer, ctx),
-                }));
-            }
-
->>>>>>> 5e204e22840 (Fixed MLP error for federation (#44926))
             Become(&TGetQueueAttributesActor::StateWork);
         }
 

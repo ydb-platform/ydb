@@ -1,3 +1,2 @@
-/* postgres can not */
 /* custom error:Fulltext score is not implemented yet*/
 select FulltextScore("some text", "text", "or" as DefaultOperator, "1" as MinimumShouldMatch);

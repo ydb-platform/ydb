@@ -16,6 +16,8 @@
 
 #include <yt/yt/core/ytree/fluent.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/stream/buffer.h>
 
 #include <util/generic/buffer.h>
@@ -49,9 +51,8 @@ void FillYTError(
     const THeadersPtr& headers,
     const TError& error)
 {
-    // TODO(babenko): migrate to std::string
-    TString errorString;
-    TStringOutput errorStringOutput(errorString);
+    std::string errorString;
+    TStdStringOutput errorStringOutput(errorString);
 
     auto consumer = CreateJsonConsumer(&errorStringOutput);
 

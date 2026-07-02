@@ -35,9 +35,12 @@
 #include <util/string/strip.h>
 #include <util/generic/algorithm.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_LOAD_TEST
-
 namespace NKikimr::NNbsDbgLike {
+
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsLoadTabletHttp] " << stream)
+#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsLoadTabletHttp] " << stream)
+#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsLoadTabletHttp] " << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsLoadTabletHttp] " << stream)
 
 namespace {
 
@@ -449,11 +452,10 @@ public:
 
         const TDuration timeout = kHelperBaseTimeout;
         Schedule(timeout, new TEvents::TEvWakeup);
-        YDB_LOG_INFO("[NbsLoadTabletHttp] Bootstrap",
-            {"op", OpName(Op)},
-            {"ownerIdx", OwnerIdx},
-            {"timeout", timeout},
-            {"origin", Origin});
+        LOG_I("Bootstrap Op# " << OpName(Op)
+            << " OwnerIdx# " << OwnerIdx
+            << " Timeout# " << timeout
+            << " Origin# " << Origin);
         ResolveTenantDomainAndProceed();
     }
 
@@ -486,12 +488,10 @@ private:
             for (const auto& [poolName, _] : domainsInfo->Domain->StoragePoolTypes) {
                 TenantStoragePools.push_back(poolName);
             }
-            YDB_LOG_DEBUG("[NbsLoadTabletHttp] Resolved root domain",
-                {"op", OpName(Op)},
-                {"tenant", (TenantName.empty() ? "<root>" : TenantName)},
-                {"hiveTabletId", HiveTabletId},
-                {"domain", DomainSchemeShard},
-                {"domainPathId", DomainPathId});
+            LOG_D("Resolved root domain for Op# " << OpName(Op)
+                << " Tenant# " << (TenantName.empty() ? "<root>" : TenantName)
+                << " HiveTabletId# " << HiveTabletId
+                << " Domain# " << DomainSchemeShard << ":" << DomainPathId);
             OpenHivePipeAndSendRequest();
             return;
         }
@@ -502,9 +502,8 @@ private:
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
         entry.Path = SplitPath(TenantName);
 
-        YDB_LOG_DEBUG("[NbsLoadTabletHttp] Resolving tenant domain",
-            {"op", OpName(Op)},
-            {"tenant", TenantName});
+        LOG_D("Resolving tenant domain Op# " << OpName(Op)
+            << " Tenant# " << TenantName);
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
     }
 
@@ -545,12 +544,10 @@ private:
                 TenantStoragePools.push_back(pool.GetName());
             }
         }
-        YDB_LOG_DEBUG("[NbsLoadTabletHttp] Resolved tenant domain",
-            {"op", OpName(Op)},
-            {"tenant", TenantName},
-            {"hiveTabletId", HiveTabletId},
-            {"domain", DomainSchemeShard},
-            {"domainPathId", DomainPathId});
+        LOG_D("Resolved tenant domain for Op# " << OpName(Op)
+            << " Tenant# " << TenantName
+            << " HiveTabletId# " << HiveTabletId
+            << " Domain# " << DomainSchemeShard << ":" << DomainPathId);
         OpenHivePipeAndSendRequest();
     }
 
@@ -558,11 +555,10 @@ private:
         NTabletPipe::TClientConfig pipeConfig{
             .RetryPolicy = {.RetryLimitCount = kPipeRetryLimit}};
         HivePipe = Register(NTabletPipe::CreateClient(SelfId(), HiveTabletId, pipeConfig));
-        YDB_LOG_DEBUG("[NbsLoadTabletHttp] Opened Hive pipe",
-            {"op", OpName(Op)},
-            {"tenant", (TenantName.empty() ? "<root>" : TenantName)},
-            {"hiveTabletId", HiveTabletId},
-            {"hivePipe", HivePipe});
+        LOG_D("Opened Hive pipe Op# " << OpName(Op)
+            << " Tenant# " << (TenantName.empty() ? "<root>" : TenantName)
+            << " HiveTabletId# " << HiveTabletId
+            << " HivePipe# " << HivePipe);
 
         switch (Op) {
             case EOp::Create:
@@ -575,11 +571,9 @@ private:
     }
 
     void SendCreate() {
-        YDB_LOG_DEBUG("[NbsLoadTabletHttp] Send create to Hive",
-            {"ownerIdx", OwnerIdx},
-            {"tenant", (TenantName.empty() ? "<root>" : TenantName)},
-            {"domain", DomainSchemeShard},
-            {"domainPathId", DomainPathId});
+        LOG_D("Send create to Hive OwnerIdx# " << OwnerIdx
+            << " Tenant# " << (TenantName.empty() ? "<root>" : TenantName)
+            << " Domain# " << DomainSchemeShard << ":" << DomainPathId);
         auto req = std::make_unique<TEvHive::TEvCreateTablet>();
         auto& rec = req->Record;
         rec.SetOwner(kLoadOwner);
@@ -594,9 +588,8 @@ private:
             for (ui32 i = 0; i < kDefaultChannelCount; ++i) {
                 effectivePoolNames.push_back(TenantStoragePools[i % TenantStoragePools.size()]);
             }
-            YDB_LOG_DEBUG("[NbsLoadTabletHttp] Using tenant storage pools for create",
-                {"ownerIdx", OwnerIdx},
-                {"pools", JoinSeq(",", effectivePoolNames)});
+            LOG_D("Using tenant storage pools for create OwnerIdx# " << OwnerIdx
+                << " Pools# " << JoinSeq(",", effectivePoolNames));
         }
         if (effectivePoolNames.empty()) {
             // Last-resort fallback: let Hive pick default bindings.
@@ -611,12 +604,10 @@ private:
     }
 
     void SendLookup() {
-        YDB_LOG_DEBUG("[NbsLoadTabletHttp] Send lookup to Hive",
-            {"op", OpName(Op)},
-            {"ownerIdx", OwnerIdx},
-            {"tenant", (TenantName.empty() ? "<root>" : TenantName)},
-            {"domain", DomainSchemeShard},
-            {"domainPathId", DomainPathId});
+        LOG_D("Send lookup to Hive Op# " << OpName(Op)
+            << " OwnerIdx# " << OwnerIdx
+            << " Tenant# " << (TenantName.empty() ? "<root>" : TenantName)
+            << " Domain# " << DomainSchemeShard << ":" << DomainPathId);
         auto req = std::make_unique<TEvHive::TEvLookupTablet>();
         auto& rec = req->Record;
         rec.SetOwner(kLoadOwner);
@@ -627,10 +618,9 @@ private:
     void Handle(TEvHive::TEvCreateTabletReply::TPtr& ev) {
         const auto& rec = ev->Get()->Record;
         const auto status = rec.GetStatus();
-        YDB_LOG_DEBUG("[NbsLoadTabletHttp] Hive reply",
-            {"op", OpName(Op)},
-            {"status", NKikimrProto::EReplyStatus_Name(status)},
-            {"tabletId", rec.GetTabletID()});
+        LOG_D("Hive reply Op# " << OpName(Op)
+            << " Status# " << NKikimrProto::EReplyStatus_Name(status)
+            << " TabletId# " << rec.GetTabletID());
 
         // For Lookup (Run/Delete), Hive replies NODATA when the OwnerIdx is
         // unknown (hive_impl.cpp:2236-2245).
@@ -650,9 +640,8 @@ private:
                 // (Hive only sends that on first boot) and try the idempotent
                 // tablet handler directly. Phase 1.2 spec §23.10 case 1.
                 WaitingForTabletCreation = false;
-                YDB_LOG_NOTICE("[NbsLoadTabletHttp] Tablet already exists",
-                    {"ownerIdx", OwnerIdx},
-                    {"tabletId", TabletId});
+                LOG_N("Tablet already exists OwnerIdx# " << OwnerIdx
+                    << " TabletId# " << TabletId);
                 OpenTabletPipe();
                 return;
             }
@@ -660,8 +649,7 @@ private:
             // back to this helper actor (e.g. routing nuances), so proceed
             // immediately with the idempotent tablet Create request.
             WaitingForTabletCreation = false;
-            YDB_LOG_DEBUG("[NbsLoadTabletHttp] Hive create OK, opening tablet pipe immediately",
-                {"tabletId", TabletId});
+            LOG_D("Hive create OK, opening tablet pipe immediately TabletId# " << TabletId);
             OpenTabletPipe();
             return;
         }
@@ -672,9 +660,8 @@ private:
 
     void Handle(TEvHive::TEvTabletCreationResult::TPtr& ev) {
         if (Op != EOp::Create || !WaitingForTabletCreation) {
-            YDB_LOG_DEBUG("[NbsLoadTabletHttp] Ignoring late tablet creation result",
-                {"op", OpName(Op)},
-                {"waitingForTabletCreation", (WaitingForTabletCreation ? "true" : "false")});
+            LOG_D("Ignoring late tablet creation result Op# " << OpName(Op)
+                << " WaitingForTabletCreation# " << (WaitingForTabletCreation ? "true" : "false"));
             return;
         }
         const auto& rec = ev->Get()->Record;
@@ -683,9 +670,8 @@ private:
                 << NKikimrProto::EReplyStatus_Name(rec.GetStatus()));
         }
         WaitingForTabletCreation = false;
-        YDB_LOG_NOTICE("[NbsLoadTabletHttp] Tablet created successfully",
-            {"ownerIdx", OwnerIdx},
-            {"tabletId", TabletId});
+        LOG_N("Tablet created successfully OwnerIdx# " << OwnerIdx
+            << " TabletId# " << TabletId);
         OpenTabletPipe();
     }
 
@@ -693,10 +679,9 @@ private:
         NTabletPipe::TClientConfig pipeConfig{
             .RetryPolicy = {.RetryLimitCount = kPipeRetryLimit}};
         TabletPipe = Register(NTabletPipe::CreateClient(SelfId(), TabletId, pipeConfig));
-        YDB_LOG_DEBUG("[NbsLoadTabletHttp] Opened tablet pipe",
-            {"op", OpName(Op)},
-            {"tabletId", TabletId},
-            {"tabletPipe", TabletPipe});
+        LOG_D("Opened tablet pipe Op# " << OpName(Op)
+            << " TabletId# " << TabletId
+            << " TabletPipe# " << TabletPipe);
         switch (Op) {
             case EOp::Create: {
                 auto ev = std::make_unique<TEvLoad::TEvNbsLoadTabletAllocateGroups>();
@@ -705,15 +690,13 @@ private:
                     return ReplyError(400, "failed to parse AllocConfig text-proto");
                 }
                 *ev->Record.MutableAllocConfig() = std::move(cfg);
-                YDB_LOG_DEBUG("[NbsLoadTabletHttp] Dispatch tablet create request",
-                    {"tabletId", TabletId});
+                LOG_D("Dispatch tablet create request TabletId# " << TabletId);
                 NTabletPipe::SendData(SelfId(), TabletPipe, ev.release());
                 break;
             }
             case EOp::Delete: {
                 auto ev = std::make_unique<TEvLoad::TEvNbsLoadTabletDelete>();
-                YDB_LOG_DEBUG("[NbsLoadTabletHttp] Dispatch tablet delete request",
-                    {"tabletId", TabletId});
+                LOG_D("Dispatch tablet delete request TabletId# " << TabletId);
                 NTabletPipe::SendData(SelfId(), TabletPipe, ev.release());
                 break;
             }
@@ -723,13 +706,11 @@ private:
     void Handle(TEvLoad::TEvNbsLoadTabletAllocateGroupsResult::TPtr& ev) {
         const auto& rec = ev->Get()->Record;
         if (rec.GetStatus() == NBSLT_OK) {
-            YDB_LOG_NOTICE("[NbsLoadTabletHttp] Tablet create completed",
-                {"tabletId", TabletId});
+            LOG_N("Tablet create completed TabletId# " << TabletId);
             return ReplyOk("Tablet created");
         }
         if (rec.GetStatus() == NBSLT_ALREADY_INITIALIZED) {
-            YDB_LOG_NOTICE("[NbsLoadTabletHttp] Tablet already initialized",
-                {"tabletId", TabletId});
+            LOG_N("Tablet already initialized TabletId# " << TabletId);
             return ReplyAlready("Tablet was already initialized");
         }
         ReplyError(409, TStringBuilder()
@@ -745,8 +726,7 @@ private:
                 << " " << rec.GetErrorReason());
         }
         // Now ask Hive to delete the tablet.
-        YDB_LOG_DEBUG("[NbsLoadTabletHttp] Tablet delete acknowledged, requesting Hive delete",
-            {"tabletId", TabletId});
+        LOG_D("Tablet delete acknowledged, requesting Hive delete TabletId# " << TabletId);
         auto del = std::make_unique<TEvHive::TEvDeleteTablet>();
         auto& rec2 = del->Record;
         rec2.SetShardOwnerId(kLoadOwner);
@@ -760,9 +740,8 @@ private:
             return ReplyError(500, TStringBuilder() << "Hive delete failed: "
                 << NKikimrProto::EReplyStatus_Name(rec.GetStatus()));
         }
-        YDB_LOG_NOTICE("[NbsLoadTabletHttp] Hive delete completed",
-            {"ownerIdx", OwnerIdx},
-            {"tabletId", TabletId});
+        LOG_N("Hive delete completed OwnerIdx# " << OwnerIdx
+            << " TabletId# " << TabletId);
         ReplyOk("Tablet deleted");
     }
 
@@ -777,10 +756,9 @@ private:
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {}
 
     void HandleTimeout(TEvents::TEvWakeup::TPtr&) {
-        YDB_LOG_ERROR("[NbsLoadTabletHttp] Operation timeout",
-            {"op", OpName(Op)},
-            {"ownerIdx", OwnerIdx},
-            {"tabletId", TabletId});
+        LOG_E("Operation timeout Op# " << OpName(Op)
+            << " OwnerIdx# " << OwnerIdx
+            << " TabletId# " << TabletId);
         ReplyError(504, "operation timeout");
     }
 
@@ -838,10 +816,9 @@ private:
     }
 
     void ReplyError(ui32 httpStatus, const TString& msg) {
-        YDB_LOG_ERROR("[NbsLoadTabletHttp] Reply error",
-            {"op", OpName(Op)},
-            {"httpStatus", httpStatus},
-            {"reason", msg});
+        LOG_E("Reply error Op# " << OpName(Op)
+            << " HttpStatus# " << httpStatus
+            << " Reason# " << msg);
         TStringStream html;
         html << "<div class='alert alert-danger'>"
              << "<strong>Error " << httpStatus << "</strong> &nbsp; "
@@ -867,11 +844,10 @@ private:
     }
 
     void Cleanup() {
-        YDB_LOG_DEBUG("[NbsLoadTabletHttp] Cleanup",
-            {"op", OpName(Op)},
-            {"tabletId", TabletId},
-            {"hivePipe", HivePipe},
-            {"tabletPipe", TabletPipe});
+        LOG_D("Cleanup Op# " << OpName(Op)
+            << " TabletId# " << TabletId
+            << " HivePipe# " << HivePipe
+            << " TabletPipe# " << TabletPipe);
         if (HivePipe) {
             NTabletPipe::CloseClient(SelfId(), HivePipe);
             HivePipe = TActorId();
@@ -1222,8 +1198,10 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
             // Shared workload parameter form rows (used by both the per-tablet
             // card and the combined multi-tablet card). All ids are scoped by
             // the card prefix p ("nbs-<inst>-"); inst is needed for the inline
-            // button handlers.
-            function nbsRunFormFieldsHtml(p, inst) {
+            // button handlers. Pass multi=true for the combined card to show
+            // "per tablet" qualifiers on the in-flight labels.
+            function nbsRunFormFieldsHtml(p, inst, multi) {
+                const perTablet = multi ? " per tablet" : "";
                 return "" +
                     "<div class='row'>" +
                       "<div class='col-sm-4'><div class='form-group'><label>Tag (0 = auto-assign):</label>" +
@@ -1231,19 +1209,19 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                       "<div class='col-sm-4'><div class='form-group'><label>DurationSeconds:</label>" +
                         "<input id='" + p + "duration' class='form-control' type='number' min='0' step='1' value='60' /></div></div>" +
                       "<div class='col-sm-4'><div class='form-group'><label>Measure after (warmup s):</label>" +
-                        "<input id='" + p + "delay-before' class='form-control' type='number' min='0' step='1' value='15' /></div></div>" +
+                        "<input id='" + p + "delay-before' class='form-control' type='number' min='0' step='1' value='0' /></div></div>" +
                     "</div>" +
                     "<div class='row'>" +
                       "<div class='col-sm-4'><div class='form-group'><label>Trials per InFlight:</label>" +
                         "<input id='" + p + "trials' class='form-control' type='number' min='1' step='2' value='1' />" +
                         "<p class='help-block'>1 = single run. Values &gt; 1 must be odd.</p></div></div>" +
-                      "<div class='col-sm-4'><div class='form-group'><label>MaxInFlight (single run):</label>" +
+                      "<div class='col-sm-4'><div class='form-group'><label>MaxInFlight" + perTablet + " (single run):</label>" +
                         "<input id='" + p + "max-inflight' class='form-control' type='number' min='1' step='1' value='32' /></div></div>" +
                     "</div>" +
                     "<div class='row'>" +
-                      "<div class='col-sm-4'><div class='form-group'><label>InFlightFrom (sweep start):</label>" +
+                      "<div class='col-sm-4'><div class='form-group'><label>InFlightFrom" + perTablet + " (sweep start):</label>" +
                         "<input id='" + p + "inflight-from' class='form-control' type='number' min='1' step='1' placeholder='e.g. 1' /></div></div>" +
-                      "<div class='col-sm-4'><div class='form-group'><label>InFlightTo (sweep end):</label>" +
+                      "<div class='col-sm-4'><div class='form-group'><label>InFlightTo" + perTablet + " (sweep end):</label>" +
                         "<input id='" + p + "inflight-to' class='form-control' type='number' min='1' step='1' placeholder='e.g. 128' />" +
                         "<p class='help-block'>If both set, sweeps MaxInFlight x2 per step.</p></div></div>" +
                     "</div>" +
@@ -1318,7 +1296,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                       "<input id='" + p + "targets' class='form-control' type='text' placeholder='e.g. 72075186224037888, 72075186224037889' />" +
                       "<p class='help-block'>Each tablet's node is resolved from the list above; its load actor runs on that node. The results below combine all tablets, plus a per-tablet breakdown.</p>" +
                     "</div>" +
-                    nbsRunFormFieldsHtml(p, inst) +
+                    nbsRunFormFieldsHtml(p, inst, true) +
                     "<div class='form-group'>" +
                       "<button type='button' id='" + p + "run-btn' onclick='nbsTabletSweepInst(\"" + inst + "\")' class='btn btn-primary'>Run</button> " +
                       "<span id='" + p + "status' class='text-muted' style='margin-left:10px'></span>" +

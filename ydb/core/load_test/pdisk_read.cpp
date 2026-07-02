@@ -11,8 +11,6 @@
 #include <util/random/fast.h>
 #include <util/generic/queue.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_LOAD_TEST
-
 namespace NKikimr {
 
 class TPDiskReaderLoadTestActor : public TActorBootstrapped<TPDiskReaderLoadTestActor> {
@@ -220,8 +218,7 @@ public:
             TStringStream str;
             str << "yard init failed, Status# " << NKikimrProto::EReplyStatus_Name(msg->Status);
             ErrorReason = str.Str();
-            YDB_LOG_INFO_CTX(ctx, "Yard init failed",
-                {"status", NKikimrProto::EReplyStatus_Name(msg->Status)});
+            LOG_INFO(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
             SendRequest(ctx, std::make_unique<TEvents::TEvPoisonPill>());
             return;
         }
@@ -284,8 +281,7 @@ public:
             str << "Chunk writing failed, loader going to die, Status# "
                 << NKikimrProto::EReplyStatus_Name(msg->Status);
             ErrorReason = str.Str();
-            YDB_LOG_INFO_CTX(ctx, "Chunk writing failed, loader going to die",
-                {"status", NKikimrProto::EReplyStatus_Name(msg->Status)});
+            LOG_INFO(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
             SendRequest(ctx, std::make_unique<TEvents::TEvPoisonPill>());
         }
         if (ChunkWrite_OK == Chunks.size()) {

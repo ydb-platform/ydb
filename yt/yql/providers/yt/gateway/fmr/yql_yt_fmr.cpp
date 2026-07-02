@@ -2,6 +2,7 @@
 
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/interface/client.h>
+
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <yt/yql/providers/yt/gateway/lib/exec_ctx.h>
 #include <yt/yql/providers/yt/gateway/lib/yt_attrs.h>
@@ -19,6 +20,8 @@
 #include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <yt/yql/providers/yt/provider/yql_yt_table_desc.h>
 #include <yt/yql/providers/yt/provider/yql_yt_mkql_compiler.h>
+#include <yt/yql/providers/yt/lib/yson_helpers/yson_helpers.h>
+#include <yt/yql/providers/yt/lib/res_pull/res_or_pull.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_type_helpers.h>
@@ -27,11 +30,17 @@
 #include <yql/essentials/core/yql_user_data.h>
 #include <yql/essentials/providers/common/mkql_simple_file/mkql_simple_file.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
-#include <yt/yql/providers/yt/lib/res_pull/res_or_pull.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/log/profile.h>
 
+#include <library/cpp/yson/parser.h>
+#include <library/cpp/yson/writer.h>
+
+#include <util/folder/tempdir.h>
+#include <util/generic/guid.h>
+#include <util/stream/buffer.h>
+#include <util/stream/file.h>
 #include <util/generic/ptr.h>
 #include <util/string/split.h>
 #include <util/system/condvar.h>
@@ -162,6 +171,42 @@ public:
         }
 
         RegisterYtMkqlCompilers(*MkqlCompiler_);
+
+        // FMR reads data in YSON format, so BlockTableContent (arrow) must fall back
+        // to TableContent (yson) + ListToBlocks, same as in the file gateway.
+        MkqlCompiler_->OverrideCallable(TYtBlockTableContent::CallableName(),
+            [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
+                TYtBlockTableContent tableContent(&node);
+                const TTypeAnnotationNode* typeAnn;
+                if (tableContent.Input().Maybe<TYtOutput>()) {
+                    typeAnn = tableContent.Input().Ref().GetTypeAnn();
+                } else {
+                    typeAnn = tableContent.Input().Ref().GetTypeAnn()
+                        ->Cast<TTupleExprType>()->GetItems().back();
+                }
+                auto origItemStructType = typeAnn->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+                TMaybe<ui64> itemsCount;
+                if (auto setting = NYql::GetSetting(tableContent.Settings().Ref(), EYtSettingType::ItemsCount)) {
+                    itemsCount = FromString<ui64>(setting->Child(1)->Content());
+                }
+                const auto itemType = ctx.BuildType(node, *origItemStructType);
+                NKikimr::NMiniKQL::TRuntimeNode values;
+                if (auto maybeRead = tableContent.Input().Maybe<TYtReadTable>()) {
+                    auto read = maybeRead.Cast();
+                    values = BuildTableContentCall(
+                        TYtTableContent::CallableName(),
+                        itemType,
+                        read.Input().Ref(), itemsCount, ctx, true);
+                } else {
+                    auto output = tableContent.Input().Cast<TYtOutput>();
+                    values = BuildTableContentCall(
+                        TYtTableContent::CallableName(),
+                        itemType,
+                        output.Ref(), itemsCount, ctx, true);
+                }
+                return ctx.ProgramBuilder.ListToBlocks(values);
+            });
 
         auto getOperationStatusesFunc = [this] {
             while (!StopFmrGateway_) {
@@ -775,17 +820,6 @@ public:
         }
         if (auto outputOp = opBase.Maybe<TYtOutputOpBase>()) {
             execCtx->SetOutput(outputOp.Cast().Output());
-        }
-
-        // FMR worker downloads table content as YsonBinary, but YtBlockTableContent expects
-        // Arrow-formatted blocks. The block-input optimizer decision is made earlier and
-        // can't be reversed here, so when the setting is enabled delegate the whole
-        // operation to the slave gateway.
-        if (options.Config()->JobBlockTableContent.Get(cluster).GetOrElse(false)) {
-            YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT (Run): node=" << node->Content()
-                << " reason: JobBlockTableContent is enabled and is not supported by FMR worker;"
-                << " consider pragma yt.JobBlockTableContent=\"false\"";
-            return UploadFmrInputsAndForwardToUnderlyingGateway(execCtx, node, ctx, std::move(options), nodePos);
         }
 
         TFuture<TFmrOperationResult> future;
@@ -2800,7 +2834,10 @@ private:
         });
     }
 
-    void PrepareUserFilesForUpload(
+    // Returns a non-null shared_ptr<TTempDir> in LOCAL mode when YtTableContent was transformed
+    // (binary YSON conversion files were written there). Caller must keep it alive until the
+    // operation future completes so WrapYtTableContent can read from those files.
+    std::shared_ptr<TTempDir> PrepareUserFilesForUpload(
         const TExecContextSimple<TRunOptions>::TPtr& execCtx,
         std::shared_ptr<TFmrUserJob> fmrJob,
         TString& lambdaCode,
@@ -2826,11 +2863,113 @@ private:
                     TSimpleFileTransformProvider(execCtx->FunctionRegistry_, userDataBlocks));
                 fmrJob->SetLambdaCode(lambdaCode);
             }
-            return;
+
+            // Resolve YtTableContent callables by passing local YSON file paths directly.
+            // In embedded mode, all tables are local files — no YT download is needed.
+            {
+                auto localDir = std::make_shared<TTempDir>();
+                auto gateway = execCtx->Gateway;
+                TString sessionId = execCtx->GetSessionId();
+                TString cluster = execCtx->Cluster_;
+                auto* functionRegistry = execCtx->FunctionRegistry_;
+                TString tmpDirPath = TString(localDir->Path());
+
+                auto tableContentTransform = [gateway, sessionId, cluster, functionRegistry, tmpDirPath](
+                    NKikimr::NMiniKQL::TInternName internName) -> NKikimr::NMiniKQL::TCallableVisitFunc {
+
+                    if (internName.Str() != NNodes::TYtTableContent::CallableName()) {
+                        return {};
+                    }
+                    return [gateway, sessionId, cluster, functionRegistry, tmpDirPath](
+                        NKikimr::NMiniKQL::TCallable& callable,
+                        const NKikimr::NMiniKQL::TTypeEnvironment& env) -> NKikimr::NMiniKQL::TRuntimeNode {
+
+                        using namespace NKikimr::NMiniKQL;
+
+                        YQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args in YtTableContent");
+
+                        TListLiteral* groupList = AS_VALUE(TListLiteral, callable.GetInput(0));
+                        YQL_ENSURE(groupList->GetItemsCount() == 1,
+                            "Expected single group in YtTableContent for local FMR");
+                        TListLiteral* tableList = AS_VALUE(TListLiteral, groupList->GetItems()[0]);
+
+                        // Unique ID is an absolute path prefix so WrapYtTableContent finds files.
+                        TString uniqueId = tmpDirPath + "/" + CreateGuidAsString();
+
+                        NYT::TNode specNode = NYT::TNode::CreateMap();
+                        NYT::TNode& tablesNode = specNode[YqlIOSpecTables];
+                        NYT::TNode& registryNode = specNode[YqlIOSpecRegistry];
+
+                        for (ui32 i = 0; i < tableList->GetItemsCount(); ++i) {
+                            TTupleLiteral* tuple = AS_VALUE(TTupleLiteral, tableList->GetItems()[i]);
+
+                            TString pathYson = TString(AS_VALUE(TDataLiteral, tuple->GetValue(0))->AsValue().AsStringRef());
+                            NYT::TRichYPath richYPath;
+                            NYT::Deserialize(richYPath, NYT::NodeFromYsonString(pathYson));
+                            TString tableCluster = richYPath.Cluster_.GetOrElse(cluster);
+                            bool isTemp = AS_VALUE(TDataLiteral, tuple->GetValue(1))->AsValue().Get<bool>();
+                            TString specStr = TString(AS_VALUE(TDataLiteral, tuple->GetValue(2))->AsValue().AsStringRef());
+
+                            auto localFilePath = gateway->GetTableFilePath(
+                                TGetTableFilePathOptions(sessionId).Cluster(tableCluster).Path(richYPath.Path_).IsTemp(isTemp));
+                            YQL_ENSURE(localFilePath.Defined(),
+                                "No local file for table: " << richYPath.Path_ << " cluster: " << tableCluster);
+
+                            // Convert text YSON (file gateway format) to binary YSON
+                            // (the format WrapYtTableContent/TYtCodecIo expects).
+                            // Apply column projection from the rich path if set.
+                            {
+                                TFileInput src(*localFilePath);
+                                TFileOutput dst(uniqueId + "_" + ToString(i));
+                                TBinaryYsonWriter writer(&dst, ::NYson::EYsonType::ListFragment);
+                                NYT::NYson::IYsonConsumer* consumer = &writer;
+                                THolder<TColumnFilteringConsumer> filter;
+                                if (!richYPath.Columns_.Empty()) {
+                                    TMaybe<TSet<TStringBuf>> columns;
+                                    columns.ConstructInPlace(
+                                        richYPath.Columns_->Parts_.begin(),
+                                        richYPath.Columns_->Parts_.end());
+                                    filter.Reset(new TColumnFilteringConsumer(consumer, columns, Nothing()));
+                                    consumer = filter.Get();
+                                }
+                                NYson::TYsonParser parser(consumer, &src, ::NYson::EYsonType::ListFragment);
+                                parser.Parse();
+                            }
+
+                            TString refName = TStringBuilder() << "$table" << i;
+                            registryNode[refName] = NYT::NodeFromYsonString(specStr);
+                            tablesNode.Add(refName);
+                        }
+
+                        TProgramBuilder pgmBuilder(env, *functionRegistry);
+                        TCallableBuilder call(env,
+                            TStringBuilder() << NNodes::TYtTableContent::CallableName() << "Job",
+                            callable.GetType()->GetReturnType());
+                        call.Add(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(uniqueId));
+                        call.Add(pgmBuilder.NewDataLiteral(tableList->GetItemsCount()));
+                        call.Add(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(specNode)));
+                        call.Add(pgmBuilder.NewDataLiteral(false)); // useSkiff
+                        call.Add(pgmBuilder.NewDataLiteral(false)); // decompress
+                        call.Add(callable.GetInput(2)); // length
+                        return TRuntimeNode(call.Build(), false);
+                    };
+                };
+
+                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
+                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
+                TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc, nullptr,
+                    nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, execCtx->Options_.LangVer());
+                size_t nodeCount = 0;
+                builder.UpdateLambdaCode(lambdaCode, nodeCount, tableContentTransform);
+                fmrJob->SetLambdaCode(lambdaCode);
+                return localDir;
+            }
+            return nullptr;
         }
 
         if (!Clusters_ || !UrlMapper_) {
-            return;
+            return nullptr;
         }
 
         TString sessionId = execCtx->GetSessionId();
@@ -2906,6 +3045,7 @@ private:
             }
         }
 
+        return nullptr;
     }
 
     TFuture<TFmrOperationResult> DoMap(
@@ -2950,7 +3090,7 @@ private:
         std::vector<TYtResourceInfo> ytResources; // Yt files and small tables which we need to download as files in jobs.
         std::vector<TFmrResourceOperationInfo> fmrResources; // Yt small tables, which are already in fmr and we need to download as files in jobs.
 
-        PrepareUserFilesForUpload(execCtx, mapJob, mapLambda, filesToUpload, ytResources, fmrResources);
+        auto localTableContentDir = PrepareUserFilesForUpload(execCtx, mapJob, mapLambda, filesToUpload, ytResources, fmrResources);
         auto uploadResourcesFuture = GetUploadResourcesFuture(sessionId, execCtx->Options_.Config(), std::move(filesToUpload), std::move(ytResources), execCtx->Options_.PublicId());
 
         return uploadResourcesFuture.Apply([=, this] (const auto& uploadF) mutable {
@@ -2986,7 +3126,7 @@ private:
                 << " from yt tables: " << JoinRange(' ', inputPaths.begin(), inputPaths.end())
                 << " to yt tables: " << JoinRange(' ', outputPaths.begin(), outputPaths.end());
             return GetRunningOperationFuture(mapOperationRequest, sessionId, Nothing(), execCtx->Options_.PublicId()).Apply(
-                [this, sessionId, fmrOutputTables](const auto& f) {
+                [this, sessionId, fmrOutputTables, localTableContentDir](const auto& f) {
                     auto result = f.GetValue();
                     if (result.Errors.empty()) {
                         for (const auto& output : fmrOutputTables) {
@@ -3038,7 +3178,7 @@ private:
         std::vector<TYtResourceInfo> ytResources;
         std::vector<TFmrResourceOperationInfo> fmrResources;
 
-        PrepareUserFilesForUpload(execCtx, fillJob, fillLambda, filesToUpload, ytResources, fmrResources);
+        auto localTableContentDir = PrepareUserFilesForUpload(execCtx, fillJob, fillLambda, filesToUpload, ytResources, fmrResources);
         auto uploadResourcesFuture = GetUploadResourcesFuture(sessionId, execCtx->Options_.Config(), std::move(filesToUpload), std::move(ytResources), execCtx->Options_.PublicId());
 
         return uploadResourcesFuture.Apply([=, this] (const auto& uploadF) mutable {
@@ -3068,7 +3208,7 @@ private:
 
             YQL_CLOG(INFO, FastMapReduce) << "Starting Fill to yt tables: " << JoinRange(' ', outputPaths.begin(), outputPaths.end());
             return GetRunningOperationFuture(fillOperationRequest, sessionId, Nothing(), execCtx->Options_.PublicId()).Apply(
-                [this, sessionId, fmrOutputTables](const auto& f) {
+                [this, sessionId, fmrOutputTables, localTableContentDir](const auto& f) {
                     auto result = f.GetValue();
                     if (result.Errors.empty()) {
                         for (const auto& output : fmrOutputTables) {
@@ -3235,7 +3375,7 @@ private:
         std::vector<TYtResourceInfo> ytResources; // Yt files and small tables which we need to download as files in jobs.
         std::vector<TFmrResourceOperationInfo> fmrResources; // Yt small tables, which are already in fmr and we need to download as files in jobs.
 
-        PrepareUserFilesForUpload(execCtx, reduceJob, reduceLambda, filesToUpload, ytResources, fmrResources);
+        auto localTableContentDir = PrepareUserFilesForUpload(execCtx, reduceJob, reduceLambda, filesToUpload, ytResources, fmrResources);
         auto uploadResourcesFuture = GetUploadResourcesFuture(sessionId, execCtx->Options_.Config(), std::move(filesToUpload), std::move(ytResources), execCtx->Options_.PublicId());
 
         return uploadResourcesFuture.Apply([=, this] (const auto& uploadF) mutable {
@@ -3273,7 +3413,8 @@ private:
             );
 
             YQL_CLOG(INFO, FastMapReduce) << "Starting reduce from yt tables: " << JoinRange(' ', inputPaths.begin(), inputPaths.end()) << " to yt tables: " << JoinRange(' ', outputPaths.begin(), outputPaths.end());
-            return GetRunningOperationFuture(reduceOperationRequest, sessionId, Nothing(), execCtx->Options_.PublicId());
+            return GetRunningOperationFuture(reduceOperationRequest, sessionId, Nothing(), execCtx->Options_.PublicId()).Apply(
+                [localTableContentDir](const auto& f) { return f.GetValue(); });
         });
     }
 

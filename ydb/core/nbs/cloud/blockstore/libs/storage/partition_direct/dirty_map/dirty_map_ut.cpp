@@ -1697,6 +1697,161 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "200{[H0,H1,H2][10..50][0..40]};",
             readHint1.DebugPrint());
     }
+
+    Y_UNIT_TEST(ShouldReadFromDDiskDuringPendingWrite)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        // Register a pending write (no PBuffer acknowledgement yet).
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
+
+        // A read during pending write should see DDisk data (Lsn=0),
+        // not the unacknowledged PBuffer data.
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "0{[H0,H1,H2][10..19][0..9]};",
+            readHint.DebugPrint());
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap.GetInflightCount());
+
+        // Complete the write. Now reads should see PBuffer data.
+        dirtyMap.WriteFinished(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
+
+        readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "123{[H0,H1,H2][10..19][0..9]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadFromPBufferDuringPendingWriteWithExistingInflight)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        // First write completes normally.
+        dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 10));
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 10),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
+
+        // Second write overlaps and is pending.
+        dirtyMap.RegisterInflightWrite(200, TBlockRange64::WithLength(10, 10));
+
+        // Actually, the pending write (Lsn=200) overlaps the completed one
+        // (Lsn=100) — the latest Lsn wins, and since Lsn 200 is in
+        // PBufferPendingWrite state, it returns PBuffer read.
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "100{[H0,H1,H2][10..19][0..9]};",
+            readHint.DebugPrint());
+
+        // Complete the second write.
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(10, 10),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
+
+        readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "200{[H0,H1,H2][10..19][0..9]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldEraseDisabledHostsAutomatically)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        const THostMask requested = MakePrimaryHosts();
+        const THostMask confirmed = MakePrimaryHosts();
+
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
+        dirtyMap.WriteFinished(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            requested,
+            confirmed);
+
+        // Flush all hosts.
+        auto flushHint = dirtyMap.MakeFlushHint(1);
+        for (const auto& [route, hint]: flushHint.GetAllHints()) {
+            dirtyMap.FlushFinished(route, MakeLsnVector(hint.Segments), {});
+        }
+
+        // Disable host 0 before erase.
+        vchunkConfig.DisableHost(0);
+        dirtyMap.UpdateConfig(vchunkConfig);
+
+        // Erase hints should only include enabled hosts.
+        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H1:0:123;"
+            "H2:0:123;",
+            eraseHints.DebugPrint());
+
+        // Finish erasing on enabled hosts.
+        for (const auto& [host, hint]: eraseHints.GetAllHints()) {
+            dirtyMap.EraseFinished(host, MakeLsnVector(hint.Segments), {});
+        }
+
+        // The disabled host's erase was auto-confirmed, so inflight should be
+        // clear.
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
+    }
+
+    Y_UNIT_TEST(ShouldHandleSafeBarrierWithPendingWrite)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        // No writes yet — no barrier.
+        UNIT_ASSERT(!dirtyMap.GetSafeBarrierForErase().has_value());
+
+        // Pending write holds the barrier from the moment of registration.
+        dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(100, *dirtyMap.GetSafeBarrierForErase());
+
+        // Second pending write — barrier stays at 100.
+        dirtyMap.RegisterInflightWrite(200, TBlockRange64::WithLength(20, 10));
+        UNIT_ASSERT_VALUES_EQUAL(100, *dirtyMap.GetSafeBarrierForErase());
+
+        // Completing write 100 with sub-quorum drops it.
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 10),
+            MakePrimaryHosts(),
+            MakeHostMask(true, true, false, false, false));
+        UNIT_ASSERT_VALUES_EQUAL(200, *dirtyMap.GetSafeBarrierForErase());
+
+        // Completing write 200 with quorum keeps it until erased.
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(20, 10),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
+        UNIT_ASSERT_VALUES_EQUAL(200, *dirtyMap.GetSafeBarrierForErase());
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

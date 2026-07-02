@@ -14,8 +14,6 @@
 #include <google/protobuf/text_format.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DS_LOAD_TEST
-
 // DataShard load is associated with full path to table: only one load per path can be started.
 //
 // TLoad is used to prepare database (drop, create, configure, etc) and then start load.
@@ -107,9 +105,8 @@ public:
 
     void CreateSession(const TActorContext& ctx) {
         auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        YDB_LOG_TRACE_CTX(ctx, "Sends event for session creation",
-            {"tload", Tag},
-            {"toProxy", kqpProxy});
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+            << " sends event for session creation to proxy# " << kqpProxy.ToString());
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
         ev->Record.MutableRequest()->SetDatabase(Request.GetTableSetup().GetWorkingDir());
@@ -121,9 +118,8 @@ public:
             return;
 
         auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        YDB_LOG_TRACE_CTX(ctx, "Sends session close query",
-            {"TLoad", Tag},
-            {"toProxy", kqpProxy});
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+            << " sends session close query to proxy: " << kqpProxy);
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
         ev->Record.MutableRequest()->SetSessionId(Session);
@@ -135,9 +131,7 @@ public:
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             Session = response.GetResponse().GetSessionId();
-            YDB_LOG_TRACE_CTX(ctx, "Dump TLoad, session",
-                {"TLoad", Tag},
-                {"session", Session});
+            LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag << " session: " << Session);
             PrepareTable(ctx);
         } else {
             StopWithError(ctx, "failed to create session: " + ev->Get()->ToString());
@@ -175,10 +169,9 @@ public:
 
     void DropTable(const TActorContext& ctx) {
         const auto& setup = Request.GetTableSetup();
-        YDB_LOG_NOTICE_CTX(ctx, "Drops",
-            {"TLoad", Tag},
-            {"table", setup.GetTableName()},
-            {"inDir", setup.GetWorkingDir()});
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+            << " drops table# " << setup.GetTableName()
+            << " in dir# " << setup.GetWorkingDir());
 
         TString queryBase = R"__(
             --!syntax_v1
@@ -196,10 +189,9 @@ public:
     void CreateTable(const TActorContext& ctx) {
         const auto& setup = Request.GetTableSetup();
 
-        YDB_LOG_NOTICE_CTX(ctx, "Creates",
-            {"TLoad", Tag},
-            {"table", setup.GetTableName()},
-            {"inDir", setup.GetWorkingDir()});
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+            << " creates table# " << setup.GetTableName()
+            << " in dir# " << setup.GetWorkingDir());
 
         TString queryBase = R"__(
             --!syntax_v1
@@ -247,10 +239,8 @@ public:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        YDB_LOG_TRACE_CTX(ctx, "Received",
-            {"TLoad", Tag},
-            {"sender", ev->Sender},
-            {"recordDebugString", ev->Get()->Record.DebugString()});
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+            << " received from " << ev->Sender << ": " << ev->Get()->Record.DebugString());
 
         auto& response = ev->Get()->Record;
         if (response.GetYdbStatus() != Ydb::StatusIds_StatusCode_SUCCESS) {
@@ -314,8 +304,8 @@ public:
         // i.e. shard which calculates stats, compacts, etc
 
         if (!Request.HasTableSetup() || Request.GetTableSetup().GetSkipWarmup()) {
-            YDB_LOG_INFO_CTX(ctx, "Skipped warmup",
-                {"TLoad", Tag});
+            LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+                << " skipped warmup");
 
             State = EState::RunLoad;
             PrepareTable(ctx);
@@ -343,19 +333,18 @@ public:
             cmd.SetRowCount(Request.GetReadKqpStart().GetRowCount());
             break;
         default: {
-            YDB_LOG_INFO_CTX(ctx, "Skipped warmup",
-                {"TLoad", Tag});
+            LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+                << " skipped warmup");
             State = EState::RunLoad;
             return PrepareTable(ctx);
         }
         }
 
         const auto& target = Request.GetTargetShard();
-        YDB_LOG_INFO_CTX(ctx, "Warmups with",
-            {"TLoad", Tag},
-            {"table", target.GetTableName()},
-            {"inDir", target.GetWorkingDir()},
-            {"rows", cmd.GetRowCount()});
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+            << " warmups table# " << target.GetTableName()
+            << " in dir# " << target.GetWorkingDir()
+            << " with rows# " << cmd.GetRowCount());
 
         cmd.SetInflight(100);
         cmd.SetBatchSize(100);
@@ -433,11 +422,8 @@ public:
         }
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "Created load actor of with",
-            {"TLoad", Tag},
-            {"type", Request.Command_case()},
-            {"tag", tag},
-            {"proto", Request.DebugString()});
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag << " created load actor of type# "
+            << Request.Command_case() <<  " with tag# " << tag << ", proto# " << Request.DebugString());
 
         LoadActors.insert(ctx.Register(actor.release()));
     }
@@ -458,10 +444,8 @@ public:
             return PrepareTable(ctx);
         }
 
-        YDB_LOG_INFO_CTX(ctx, "Received finished with",
-            {"TLoad", Tag},
-            {"fromActor", ev->Sender},
-            {"tag", record.GetTag()});
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+            << " received finished from actor# " << ev->Sender << " with tag# " << record.GetTag());
 
         FinishedTests.push_back({record.GetTag(), record.GetErrorReason(), TAppData::TimeProvider->Now(), record.GetReport()});
 
@@ -609,17 +593,14 @@ public:
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        YDB_LOG_INFO_CTX(ctx, "Actor received PoisonPill, going to die with",
-            {"TLoad", Tag},
-            {"subactorsCount", LoadActors.size()});
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+            << " actor received PoisonPill, going to die with subactorsCount# " << LoadActors.size());
         Stop(ctx);
     }
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
-        YDB_LOG_ERROR_CTX(ctx, "Stopped with killing",
-            {"TLoad", Tag},
-            {"error", reason},
-            {"subactorsCount", LoadActors.size()});
+        LOG_ERROR_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+            << " stopped with error: " << reason << ", killing subactorsCount# " << LoadActors.size());
 
         ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Tag, reason));
         Stop(ctx);

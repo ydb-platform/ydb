@@ -357,7 +357,10 @@ public:
         TString writeTimePredicateSerializedProto;
 
         if (State_->EnableTopicsPredicatePushdown) {
-            std::unordered_set<TString> fields{"_yql_sys_offset", "_yql_sys_write_time", "_yql_sys_partition_id"};
+            std::unordered_set<TString> fields{
+                "_yql_sys_offset", "_yql_sys_write_time", "_yql_sys_partition_id",
+                "__ydb_offset", "__ydb_write_time", "__ydb_partition_id"
+            };
             bool hasPredicate = !!FindNode(flatmap.Lambda().Body().Ptr(),
                 [&](const TExprNode::TPtr& node) {
                     if (!TCoMember::Match(node.Get())) {
@@ -397,8 +400,8 @@ public:
                             minWriteTime = std::min(minWriteTime, time);
                         }
                     }
-                    auto [offsetProto, emptyRangeByOffsets] = SerializePredicate("_yql_sys_offset", flatmap.Lambda(), ctx);
-                    auto [writeTimeProto, emptyRangeByWriteTime] = SerializePredicate("_yql_sys_write_time", flatmap.Lambda(), ctx, minWriteTime.MicroSeconds());
+                    auto [offsetProto, emptyRangeByOffsets] = SerializePredicateForFields({"_yql_sys_offset", "__ydb_offset"}, flatmap.Lambda(), ctx);
+                    auto [writeTimeProto, emptyRangeByWriteTime] = SerializePredicateForFields({"_yql_sys_write_time", "__ydb_write_time"}, flatmap.Lambda(), ctx, minWriteTime.MicroSeconds());
                     if (emptyRangeByOffsets || emptyRangeByWriteTime) {
                         YQL_CLOG(INFO, ProviderPq) << "Empty range by offsets or write time, replace node to List";
                         return ctx.NewCallable(node.Pos(), "List", { ExpandType(node.Pos(), *node.Ref().GetTypeAnn(), ctx) });
@@ -427,7 +430,7 @@ public:
         bool isPartitionListUpdated = false;
         TExprNode::TPtr partitionList = dqPqTopicSource.Partitions().Ptr();
         if (State_->EnableTopicsPredicatePushdown) {
-            auto splitedPredicate = SplitPredicateByMember(flatmap.Lambda(), {"_yql_sys_partition_id"}, ctx, false);
+            auto splitedPredicate = SplitPredicateByMember(flatmap.Lambda(), {"_yql_sys_partition_id", "__ydb_partition_id"}, ctx, false);
 
             if (splitedPredicate) {
                 auto newFilterArg = ctx.NewArgument(node.Pos(), "_yql_sys_partition_id");
@@ -439,7 +442,8 @@ public:
                     if (TCoMember::Match(exprNode.Get())) {
                         auto member = TCoMember(exprNode.Get());
                         if (member.Struct().Raw() == lambdaArg
-                            && member.Name().StringValue() == "_yql_sys_partition_id") {
+                            && (member.Name().StringValue() == "_yql_sys_partition_id"
+                                || member.Name().StringValue() == "__ydb_partition_id")) {
                             replaces[exprNode.Get()] = newFilterArg;
                         }
                         return false;
@@ -667,6 +671,23 @@ private:
         TString result; 
         YQL_ENSURE(proto.SerializeToString(&result));
         return {result, false};
+    }
+
+    // Serialize predicate for multiple equivalent field names (e.g. _yql_sys_offset and __ydb_offset).
+    // Tries each field name and returns the first non-empty result.
+    std::pair<TString, bool> SerializePredicateForFields(
+        const std::vector<TString>& memberNames,
+        const NNodes::TCoLambda& lambda,
+        TExprContext& ctx,
+        std::optional<ui64> min = std::nullopt
+    ) const {
+        for (const auto& memberName : memberNames) {
+            auto result = SerializePredicate(memberName, lambda, ctx, min);
+            if (!result.first.empty() || result.second) {
+                return result;
+            }
+        }
+        return {{}, false};
     }
 
     TMaybeNode<TExprBase> SplitPredicateByMember(

@@ -643,6 +643,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnableOnlineAddUniqueIndex(true);
     app.FeatureFlags.SetEnableFulltextIndex(true);
     app.FeatureFlags.SetEnableFulltextIndexPrefix(opts.EnableFulltextIndexPrefix_);
+    app.FeatureFlags.SetEnableFulltextIndexRowId(opts.EnableFulltextIndexRowId_);
     app.FeatureFlags.SetEnableJsonIndex(true);
     app.FeatureFlags.SetEnableSetColumnConstraint(true);
     app.FeatureFlags.SetEnableColumnStore(true);

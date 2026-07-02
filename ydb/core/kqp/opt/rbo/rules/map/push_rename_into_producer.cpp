@@ -1,7 +1,5 @@
 #include <ydb/core/kqp/opt/rbo/rules/kqp_rules_include.h>
 
-#include <optional>
-
 namespace NKikimr {
 namespace NKqp {
 
@@ -46,47 +44,6 @@ bool CanRewriteResidualTopMap(
     }
 
     return true;
-}
-
-bool RenameNeedsPush(const TIntrusivePtr<TOpMap>& topMap, const TMapElement& element, const TInfoUnitSet& liveOut) {
-    return liveOut.contains(element.GetElementName()) ||
-        GetForbidden(topMap.get()).contains(element.GetRename());
-}
-
-bool TryBuildRenameCandidate(
-    const TIntrusivePtr<TOpMap>& topMap,
-    size_t idx,
-    const TInfoUnitSet& liveOut,
-    TRenameCandidate& candidate)
-{
-    const auto& element = topMap->MapElements[idx];
-    candidate.Index = idx;
-    candidate.To = element.GetElementName();
-
-    if (element.IsRename()) {
-        candidate.From = element.GetRename();
-        return RenameNeedsPush(topMap, element, liveOut);
-    }
-
-    if (!element.IsColumnAccess()) {
-        return false;
-    }
-
-    candidate.From = element.GetColumnAccess();
-    return liveOut.contains(candidate.To) && !liveOut.contains(candidate.From);
-}
-
-std::optional<TRenameCandidate> FindRenameCandidate(const TIntrusivePtr<TOpMap>& topMap) {
-    const auto& liveOut = GetLiveOut(topMap.get());
-
-    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
-        TRenameCandidate candidate;
-        if (TryBuildRenameCandidate(topMap, idx, liveOut, candidate) && candidate.From != candidate.To) {
-            return candidate;
-        }
-    }
-
-    return std::nullopt;
 }
 
 TVector<TMapElement> BuildResidualTopMapElements(
@@ -203,19 +160,46 @@ bool TPushRenameIntoProducerRule::MatchAndApply(TIntrusivePtr<IOperator>& input,
     }
 
     auto topMap = CastOperator<TOpMap>(input);
-    const auto candidate = FindRenameCandidate(topMap);
-    if (!candidate ||
-        !topMap->IsSingleConsumer() ||
-        !CanRewriteResidualTopMap(topMap, candidate->Index, candidate->From, candidate->To)) {
+    if (!topMap->IsSingleConsumer()) {
         return false;
     }
 
-    if (!TryRenameProducerOutput(topMap->GetInput(), *candidate, ctx.ExprCtx)) {
-        return false;
+    const auto& liveOut = GetLiveOut(topMap.get());
+    const auto& forbidden = GetForbidden(topMap.get());
+
+    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
+        const auto& element = topMap->MapElements[idx];
+        TRenameCandidate candidate;
+        candidate.Index = idx;
+        candidate.To = element.GetElementName();
+
+        if (element.IsRename()) {
+            candidate.From = element.GetRename();
+            if (!liveOut.contains(candidate.To) && !forbidden.contains(candidate.From)) {
+                continue;
+            }
+        } else {
+            if (!element.IsColumnAccess()) {
+                continue;
+            }
+
+            candidate.From = element.GetColumnAccess();
+            if (!liveOut.contains(candidate.To) || liveOut.contains(candidate.From)) {
+                continue;
+            }
+        }
+
+        if (candidate.From == candidate.To ||
+            !CanRewriteResidualTopMap(topMap, candidate.Index, candidate.From, candidate.To) ||
+            !TryRenameProducerOutput(topMap->GetInput(), candidate, ctx.ExprCtx)) {
+            continue;
+        }
+
+        FinishRenamePush(input, topMap, candidate, ctx, props);
+        return true;
     }
 
-    FinishRenamePush(input, topMap, *candidate, ctx, props);
-    return true;
+    return false;
 }
 
 } // namespace NKqp

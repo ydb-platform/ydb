@@ -748,7 +748,9 @@ public:
             Y_DEBUG_ABORT_UNLESS(nodeId != SelfId().NodeId());
 
             bool isConnected = false;
-            vdisk->Queues.ForEachQueue([&](auto& queue) { isConnected |= queue.IsConnected; });
+            vdisk->Queues.ForEachQueue([&](auto& queue) {
+                isConnected |= queue.IsConnected.load(std::memory_order_acquire);
+            });
             if (isConnected) {
                 options.push_back(nodeId);
             }

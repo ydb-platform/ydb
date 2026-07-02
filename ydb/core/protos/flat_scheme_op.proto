@@ -215,6 +215,8 @@ message TPartitionConfig {
     reserved 26; // deprecated -> ByKeyFilterPrefixes
     repeated TByKeyFilterPrefix ByKeyFilterPrefixes = 27; // Bloom filters on PK prefixes
     repeated uint32 DropByKeyFilterPrefixLengths = 28; // Bloom filter prefix lengths to drop
+    // For unique indexes - number of leading PK columns which should have unique values (for correct locking)
+    optional uint32 UniqueIndexKeySize = 29;
 }
 
 message TByKeyFilterPrefix {
@@ -440,8 +442,7 @@ message TTableDescription {
     // Coordinated schema version for backup operations - persisted with AlterData
     optional uint64 CoordinatedSchemaVersion = 49;
 
-    // For unique indexes - number of leading PK columns which should have unique values (for correct locking)
-    optional uint32 UniqueIndexKeySize = 50;
+    reserved 50;
 
     /**
      * The detailed metrics settings for the given table.

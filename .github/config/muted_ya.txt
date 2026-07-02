@@ -8,18 +8,15 @@ ydb/core/kqp/ut/indexes KqpIndexes.OnlineDuplicatesStage2
 ydb/core/kqp/ut/indexes KqpIndexes.OnlineDuplicatesStage3
 ydb/core/kqp/ut/indexes KqpIndexes.OnlineDuplicatesStage4
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewRanges
-ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.ChunkDetailsMinMax
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-SchemeQuery
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
-ydb/core/tx/datashard/ut_read_iterator DataShardReadIteratorConsistency.WriteLockThenUncommittedReadUpgradeRetryAndRestart
 ydb/core/tx/datashard/ut_read_iterator DataShardReadIteratorConsistency.WriteLockUncommittedConflictFailure
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo_db
-ydb/library/actors/interconnect/rdma/ut TRdmaLow/TCqMode.ReadInOneProcessWithQpInterruption/EVENT
 ydb/library/actors/interconnect/ut_fat InterconnectUnstableConnection.InterconnectTestWithProxyTlsReestablishWithXdc
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.KeyedWriteSession_CloseTimeout
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
@@ -30,6 +27,7 @@ ydb/services/ydb/ut TGRpcLdapAuthentication.CanAuthWithValidCredentialsUseSaslEx
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes[False]
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncr.test_full_cycle_local_backup_restore_with_incrementals
+ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncrComplSchemaChange.test_full_cycle_local_backup_restore_with_incrementals_complex_schema_changes
 ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_failover
 ydb/tests/functional/config test_config_with_metadata.py.TestKiKiMRStoreConfigDir.test_config_stored_in_config_store
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_seed_nodes

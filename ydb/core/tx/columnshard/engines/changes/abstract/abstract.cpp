@@ -6,17 +6,11 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap {
 
 void TColumnEngineChanges::SetStage(const NChanges::EStage stage) {
-    YDB_LOG_DEBUG("",
-        {"event", "new_stage"},
-        {"stage", ::ToString(stage)},
-        {"taskId", GetTaskIdentifier()});
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "new_stage")("stage", ::ToString(stage))("task_id", GetTaskIdentifier());
     StateGuard.SetState(stage);
 }
 
@@ -29,9 +23,7 @@ TString TColumnEngineChanges::DebugString() const {
 }
 
 TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& context) noexcept {
-    YDB_LOG_CREATE_CONTEXT(
-        {"taskId", GetTaskIdentifier()},
-        {"taskClass", TypeString()});
+    const NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("task_id", GetTaskIdentifier())("task_class", TypeString());
     AFL_VERIFY(StateGuard.GetStage() == NChanges::EStage::ReadyForConstruct || StateGuard.GetStage() == NChanges::EStage::Started)(
                                                                                "actual_stage", StateGuard.GetStage());
 
@@ -59,10 +51,7 @@ void TColumnEngineChanges::WriteIndexOnExecute(NColumnShard::TColumnShard* self,
 void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     Y_ABORT_UNLESS(StateGuard.GetStage() == NChanges::EStage::Written || !self);
     SetStage(NChanges::EStage::Finished);
-    YDB_LOG_DEBUG("",
-        {"event", "WriteIndexComplete"},
-        {"type", TypeString()},
-        {"success", context.FinishedSuccessfully});
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "WriteIndexComplete")("type", TypeString())("success", context.FinishedSuccessfully);
     DoWriteIndexOnComplete(self, context);
     if (self) {
         OnFinish(*self, context);
@@ -84,9 +73,7 @@ TColumnEngineChanges::~TColumnEngineChanges() {
 }
 
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
-    YDB_LOG_WARN("",
-        {"event", "Abort"},
-        {"reason", context.ErrorMessage});
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Abort")("reason", context.ErrorMessage);
     AFL_VERIFY(StateGuard.GetStage() != NChanges::EStage::Finished && StateGuard.GetStage() != NChanges::EStage::Created && StateGuard.GetStage() != NChanges::EStage::Aborted)(
                                               "stage", StateGuard.GetStage())("reason", context.ErrorMessage)("prev_reason", AbortedReason);
     SetStage(NChanges::EStage::Aborted);
@@ -115,10 +102,7 @@ void TColumnEngineChanges::StartEmergency() {
 }
 
 void TColumnEngineChanges::AbortEmergency(const TString& reason) {
-    YDB_LOG_WARN("",
-        {"event", "AbortEmergency"},
-        {"reason", reason},
-        {"prevReason", AbortedReason});
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "AbortEmergency")("reason", reason)("prev_reason", AbortedReason);
     if (StateGuard.GetStage() == NChanges::EStage::Aborted) {
         AbortedReason += "; AnotherReason: " + reason;
     } else {

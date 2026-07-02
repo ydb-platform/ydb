@@ -3,8 +3,6 @@
 
 #include <ydb/core/formats/arrow/accessor/sub_columns/constructor.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
-
 namespace NKikimr::NOlap::NCompaction {
 
 const TSubColumnsMerger::TSettings& TSubColumnsMerger::GetSettings() const {
@@ -30,9 +28,7 @@ void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAcces
     auto splitted = commonStats.SplitByVolume(GetSettings(), statRecordsCount);
     ResultColumnStats = splitted.ExtractColumns();
     ResultColumnStats->CreateJsonPathAccessorTrieCache();
-    //    YDB_LOG_ERROR("",
-              {"columns", ResultColumnStats->DebugJson()},
-              {"others", splitted.ExtractOthers().DebugJson()});
+    //    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("columns", ResultColumnStats->DebugJson())("others", splitted.ExtractOthers().DebugJson());
     RemapKeyIndex.RegisterColumnStats(*ResultColumnStats);
     for (auto&& i : OrderedIterators) {
         i.Start();

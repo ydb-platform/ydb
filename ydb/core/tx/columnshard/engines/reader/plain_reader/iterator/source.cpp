@@ -34,7 +34,7 @@ void IDataSource::RegisterInterval(TFetchingInterval& interval, const std::share
         AFL_VERIFY(FetchingPlan);
         InitStageData(std::make_unique<TFetchedData>(GetExclusiveIntervalOnly(), GetRecordsCount()));
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", GetSourceIdx());
-        NActors::TLogContextGuard logGuard = NActors::TLogContextGuard(NActors::TLogContextBuilder::Build()("source", GetSourceIdx())("method", "InitFetchingPlan"));
+        NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", GetSourceIdx())("method", "InitFetchingPlan"));
         if (GetContext()->IsAborted()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "InitFetchingPlanAborted");
             return;

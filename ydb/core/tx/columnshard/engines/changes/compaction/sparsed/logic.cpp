@@ -3,8 +3,6 @@
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
-
 namespace NKikimr::NOlap::NCompaction {
 
 void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& /*mergingContext*/) {
@@ -25,15 +23,11 @@ TColumnPortionResult TSparsedMerger::DoExecute(const TChunkMergeContext& chunkCo
         }
         if (!Cursors[idx].InitGlobalRemapping(chunkContext.GetRemapper().GetReverseIndexes(idx), chunkContext.GetRemapper().GetOffset(),
                 chunkContext.GetRemapper().GetSize())) {
-            YDB_LOG_TRACE("",
-                {"event", "skip_source"},
-                {"idx", idx});
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "skip_source")("idx", idx);
             continue;
         }
         if (chunkContext.GetRemapper().GetRecordsCount() <= Cursors[idx].GetGlobalResultIndexVerified()) {
-            YDB_LOG_TRACE("",
-                {"event", "skip_source"},
-                {"idx", idx});
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "skip_source")("idx", idx);
             continue;
         }
         heap.emplace_back(&Cursors[idx]);
@@ -48,19 +42,13 @@ TColumnPortionResult TSparsedMerger::DoExecute(const TChunkMergeContext& chunkCo
                                                                    "cursor", heap.back()->DebugString())("context", chunkContext.DebugString());
         AFL_VERIFY(heap.back()->AddIndexTo(*writer));
         if (!heap.back()->Next()) {
-            YDB_LOG_TRACE("",
-                {"event", "stopped_source"},
-                {"idx", heap.back()->GetCursorIdx()});
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "stopped_source")("idx", heap.back()->GetCursorIdx());
             heap.pop_back();
         } else if (!heap.back()->GetGlobalResultIndexImpl()) {
-            YDB_LOG_TRACE("",
-                {"event", "stopped_source"},
-                {"idx", heap.back()->GetCursorIdx()});
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "stopped_source")("idx", heap.back()->GetCursorIdx());
             heap.pop_back();
         } else if (chunkContext.GetRemapper().GetRecordsCount() <= heap.back()->GetGlobalResultIndexVerified()) {
-            YDB_LOG_TRACE("",
-                {"event", "stopped_source"},
-                {"idx", heap.back()->GetCursorIdx()});
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "stopped_source")("idx", heap.back()->GetCursorIdx());
             heap.pop_back();
         } else {
             std::push_heap(heap.begin(), heap.end(), heapComparator);
@@ -75,10 +63,7 @@ TColumnPortionResult TSparsedMerger::TWriter::Flush(const ui32 recordsCount) {
     auto schema = std::make_shared<arrow::Schema>(fields);
     std::vector<std::shared_ptr<arrow::Array>> columns = { NArrow::TStatusValidator::GetValid(IndexBuilder->Finish()),
         NArrow::TStatusValidator::GetValid(ValueBuilder->Finish()) };
-    YDB_LOG_TRACE("",
-        {"event", "sparsed_flush"},
-        {"count", recordsCount},
-        {"useful", UsefulRecordsCount});
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "sparsed_flush")("count", recordsCount)("useful", UsefulRecordsCount);
     auto recordBatch = arrow::RecordBatch::Make(schema, UsefulRecordsCount, columns);
     NArrow::NAccessor::TSparsedArray::TBuilder builder(
         Context.GetIndexInfo().GetColumnFeaturesVerified(Context.GetColumnId()).GetDefaultValue().GetValue(), Context.GetResultField()->type());
@@ -110,20 +95,12 @@ bool TSparsedMerger::TSparsedChunkCursor::MoveToSignificant(const std::optional<
                 return true;
             }
         }
-        YDB_LOG_TRACE("",
-            {"event", "skip_record"},
-            {"idx", ScanIndex},
-            {"cursorIdx", CursorIdx},
-            {"recordIdx", GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex)},
-            {"lb", sourceLowerBound});
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "skip_record")("idx", ScanIndex)("cursor_idx", CursorIdx)(
+            "record_idx", GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex))("lb", sourceLowerBound);
         ++ScanIndex;
         while (ScanIndex < GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->length()) {
-            YDB_LOG_TRACE("",
-                {"event", "skip_record"},
-                {"idx", ScanIndex},
-                {"cursorIdx", CursorIdx},
-                {"recordIdx", GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex)},
-                {"lb", sourceLowerBound});
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "skip_record")("idx", ScanIndex)("cursor_idx", CursorIdx)(
+                "record_idx", GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex))("lb", sourceLowerBound);
             AFL_VERIFY(MoveToPosition(TBase::GetGlobalPosition(GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex))));
             if (GetGlobalResultIndexImpl().value_or(0) >= 0) {
                 if (!sourceLowerBound || *sourceLowerBound <= GetGlobalPosition()) {
@@ -162,17 +139,11 @@ std::optional<i64> TSparsedMerger::TSparsedChunkCursor::GetGlobalResultIndexImpl
 bool TSparsedMerger::TSparsedChunkCursor::InitGlobalRemapping(
     const TSourceReverseRemap& remapToGlobalResult, const ui32 globalResultOffset, const ui32 globalResultSize) {
     if (remapToGlobalResult.IsEmpty()) {
-        YDB_LOG_TRACE("",
-            {"event", "skip_source"},
-            {"reason", "empty"},
-            {"idx", GetCursorIdx()});
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "skip_source")("reason", "empty")("idx", GetCursorIdx());
         return false;
     }
     if (globalResultOffset + globalResultSize <= remapToGlobalResult.GetMinResultIndex()) {
-        YDB_LOG_TRACE("",
-            {"event", "skip_source"},
-            {"reason", "too_early"},
-            {"idx", GetCursorIdx()});
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "skip_source")("reason", "too_early")("idx", GetCursorIdx());
         return false;
     }
     AFL_VERIFY(IsValid());
@@ -186,14 +157,8 @@ bool TSparsedMerger::TSparsedChunkCursor::InitGlobalRemapping(
         }
     }
     if (!GetGlobalResultIndexImpl()) {
-        YDB_LOG_TRACE("",
-            {"event", "skip_source"},
-            {"reason", "not_index"},
-            {"idx", GetCursorIdx()},
-            {"offset", globalResultOffset},
-            {"size", globalResultSize},
-            {"debug", remapToGlobalResult.DebugString()},
-            {"pos", GetGlobalPosition()});
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "skip_source")("reason", "not_index")("idx", GetCursorIdx())(
+            "offset", globalResultOffset)("size", globalResultSize)("debug", remapToGlobalResult.DebugString())("pos", GetGlobalPosition());
         return false;
     }
     Y_UNUSED(GetGlobalResultIndexVerified());

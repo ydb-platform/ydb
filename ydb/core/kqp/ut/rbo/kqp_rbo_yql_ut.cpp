@@ -4523,7 +4523,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             MakeTestAppend(ignore.GetFullName(), "b", pos, testContext.ExprCtx, expressionProps),
         });
         auto topMap = MakeIntrusive<TOpMap>(aliasMap, pos, TVector<TMapElement>{
-            MakeTestAppend("out", "a", pos, testContext.ExprCtx, expressionProps),
+            MakeTestAppend("out", "b", pos, testContext.ExprCtx, expressionProps),
         });
         TOpRoot root(topMap, pos, {ignore.GetFullName(), "out"});
 
@@ -4535,7 +4535,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_VALUES_EQUAL(topMap->MapElements.size(), 1);
         UNIT_ASSERT(topMap->MapElements.front().IsColumnAccess());
-        UNIT_ASSERT(topMap->MapElements.front().GetColumnAccess() == TInfoUnit("b"));
+        UNIT_ASSERT(topMap->MapElements.front().GetColumnAccess() == TInfoUnit("a"));
     }
 
     Y_UNIT_TEST(RenameToAppendConvertsSafeRename) {

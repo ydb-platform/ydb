@@ -176,12 +176,12 @@ class TPushRenameIntoProducerRule : public IRule {
 };
 
 /**
- * Rewrites local expressions to the alias already preferred by liveness.
+ * Rewrites local expressions to the best non-generated alias.
  */
 class TRewriteExpressionsToPreferredAliasesRule : public IRule {
   public:
     TRewriteExpressionsToPreferredAliasesRule()
-        : IRule("Rewrite expressions to preferred aliases", ERuleProperties::RequireLiveness | ERuleProperties::RequireAliases) {}
+        : IRule("Rewrite expressions to preferred aliases", ERuleProperties::RequireAliases) {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };

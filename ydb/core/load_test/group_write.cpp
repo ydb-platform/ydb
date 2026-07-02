@@ -461,6 +461,14 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             DelayManager->Start(now);
         }
 
+        bool CanIssueRequest(TMonotonic now) const {
+            return Started && !InFlightTracker.LimitReached() && now >= NextRequestTimestamp;
+        }
+
+        bool IsWaitingForNextRequest(TMonotonic now) const {
+            return Started && !InFlightTracker.LimitReached() && now < NextRequestTimestamp;
+        }
+
         std::shared_ptr<TRequestDelayManager> DelayManager;
         TInFlightTracker InFlightTracker;
         TMonotonic NextRequestTimestamp = TMonotonic();
@@ -1058,26 +1066,18 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
     private:
         void UpdateNextWakeups(const TActorContext& ctx, const TMonotonic& now) {
             const TMonotonic nextWriteTimestamp = WriteSettings.DispatchingState->NextRequestTimestamp;
-            if (now < nextWriteTimestamp && !NextWriteInQueue) {
-                if (WriteSettings.SharedAcrossWriters) {
-                    Self.ScheduleSharedWriteWakeup(WriteSettings.DispatchingState, nextWriteTimestamp, ctx);
-                } else {
-                    Self.WakeupQueue.Put(nextWriteTimestamp, [this](const TActorContext& ctx) {
-                        IssueWriteIfPossible(ctx);
-                    }, ctx);
-                }
+            if (!WriteSettings.SharedAcrossWriters && now < nextWriteTimestamp && !NextWriteInQueue) {
+                Self.WakeupQueue.Put(nextWriteTimestamp, [this](const TActorContext& ctx) {
+                    IssueWriteIfPossible(ctx);
+                }, ctx);
                 NextWriteInQueue = true;
             }
 
             const TMonotonic nextReadTimestamp = ReadSettings.DispatchingState->NextRequestTimestamp;
-            if (now < nextReadTimestamp && !NextReadInQueue) {
-                if (ReadSettings.SharedAcrossWriters) {
-                    Self.ScheduleSharedReadWakeup(ReadSettings.DispatchingState, nextReadTimestamp, ctx);
-                } else {
-                    Self.WakeupQueue.Put(nextReadTimestamp, [this](const TActorContext& ctx) {
-                        IssueReadIfPossible(ctx);
-                    }, ctx);
-                }
+            if (!ReadSettings.SharedAcrossWriters && now < nextReadTimestamp && !NextReadInQueue) {
+                Self.WakeupQueue.Put(nextReadTimestamp, [this](const TActorContext& ctx) {
+                    IssueReadIfPossible(ctx);
+                }, ctx);
                 NextReadInQueue = true;
             }
 
@@ -1100,11 +1100,10 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             }
             const TMonotonic now = TActivationContext::Monotonic();
             ui32 issued = 0;
-            while (WriteSettings.LoadEnabled && !WriteSettings.DispatchingState->InFlightTracker.LimitReached() &&
+            while (WriteSettings.LoadEnabled && WriteSettings.DispatchingState->CanIssueRequest(now) &&
                     (TotalBytesWritten + WriteSettings.DispatchingState->InFlightTracker.BytesInFlight < WriteSettings.MaxTotalBytes ||
                         !WriteSettings.MaxTotalBytes) &&
                     issued < maxRequests &&
-                    now >= WriteSettings.DispatchingState->NextRequestTimestamp &&
                     (!ScriptedRequests || ScriptedRequests[ScriptedCounter].EvType == TEvBlobStorage::EvPut)) {
                 IssueWriteRequest(ctx);
                 ++issued;
@@ -1191,7 +1190,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
                 ResponseQT->Increment(response.MicroSeconds());
                 if (WriteSettings.SharedAcrossWriters) {
-                    Self.IssueWritesForSharedState(WriteSettings.DispatchingState, ctx);
+                    Self.KickSharedWriteDispatching(WriteSettings.DispatchingState, ctx);
                 } else {
                     IssueWriteIfPossible(ctx);
                 }
@@ -1201,7 +1200,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                         ReadSettings.DispatchingState->NextRequestTimestamp = TActivationContext::Monotonic();
                     }
                     if (ReadSettings.SharedAcrossWriters) {
-                        Self.IssueReadsForSharedState(ReadSettings.DispatchingState, ctx);
+                        Self.KickSharedReadDispatching(ReadSettings.DispatchingState, ctx);
                     } else {
                         IssueReadIfPossible(ctx);
                     }
@@ -1351,9 +1350,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             const TMonotonic now = TActivationContext::Monotonic();
             ui32 issued = 0;
 
-            while (ReadSettings.LoadEnabled && !ReadSettings.DispatchingState->InFlightTracker.LimitReached() &&
+            while (ReadSettings.LoadEnabled && ReadSettings.DispatchingState->CanIssueRequest(now) &&
                     issued < maxRequests &&
-                    now >= ReadSettings.DispatchingState->NextRequestTimestamp &&
                     ConfirmedBlobIds.size() + InitialAllocation.ConfirmedSize() > 0 &&
                     (!ScriptedRequests || ScriptedRequests[ScriptedCounter].EvType == TEvBlobStorage::EvGet)) {
                 IssueReadRequest(ctx);
@@ -1427,7 +1425,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
                 ReadResponseQT->Increment(response.MicroSeconds());
                 if (ReadSettings.SharedAcrossWriters) {
-                    Self.IssueReadsForSharedState(ReadSettings.DispatchingState, ctx);
+                    Self.KickSharedReadDispatching(ReadSettings.DispatchingState, ctx);
                 } else {
                     IssueReadIfPossible(ctx);
                 }
@@ -1699,7 +1697,7 @@ public:
         }
         WakeupQueue.Put(timestamp, [this, state](const TActorContext& ctx) {
             state->WriteWakeupScheduled = false;
-            IssueWritesForSharedState(state, ctx);
+            KickSharedWriteDispatching(state, ctx);
         }, ctx);
         state->WriteWakeupScheduled = true;
     }
@@ -1711,20 +1709,42 @@ public:
         }
         WakeupQueue.Put(timestamp, [this, state](const TActorContext& ctx) {
             state->ReadWakeupScheduled = false;
-            IssueReadsForSharedState(state, ctx);
+            KickSharedReadDispatching(state, ctx);
         }, ctx);
         state->ReadWakeupScheduled = true;
     }
 
-    void IssueWritesForSharedState(const std::shared_ptr<TRequestDispatchingState>& state, const TActorContext& ctx) {
+    void KickSharedWriteDispatching(const std::shared_ptr<TRequestDispatchingState>& state, const TActorContext& ctx) {
         if (Stopping || !state || TabletWriters.empty()) {
             return;
         }
+        DrainSharedWrites(state, ctx);
+
+        if (state->IsWaitingForNextRequest(TActivationContext::Monotonic())) {
+            ScheduleSharedWriteWakeup(state, state->NextRequestTimestamp, ctx);
+        }
+    }
+
+    void KickSharedReadDispatching(const std::shared_ptr<TRequestDispatchingState>& state, const TActorContext& ctx) {
+        if (Stopping || !state || TabletWriters.empty()) {
+            return;
+        }
+        DrainSharedReads(state, ctx);
+
+        if (state->IsWaitingForNextRequest(TActivationContext::Monotonic())) {
+            ScheduleSharedReadWakeup(state, state->NextRequestTimestamp, ctx);
+        }
+    }
+
+    void DrainSharedWrites(const std::shared_ptr<TRequestDispatchingState>& state, const TActorContext& ctx) {
+        auto canIssueRequest = [&] {
+            return state->CanIssueRequest(TActivationContext::Monotonic());
+        };
         bool madeProgress = true;
-        while (madeProgress && !state->InFlightTracker.LimitReached()) {
+        while (madeProgress && canIssueRequest()) {
             madeProgress = false;
             const size_t startWriterIndex = state->NextWriteWriterIndex % TabletWriters.size();
-            for (size_t i = 0; i < TabletWriters.size() && !state->InFlightTracker.LimitReached(); ++i) {
+            for (size_t i = 0; i < TabletWriters.size() && canIssueRequest(); ++i) {
                 const size_t writerIndex = (startWriterIndex + i) % TabletWriters.size();
                 if (TabletWriters[writerIndex]->IssueWriteIfUsesState(state, ctx, 1)) {
                     state->NextWriteWriterIndex = (writerIndex + 1) % TabletWriters.size();
@@ -1734,15 +1754,15 @@ public:
         }
     }
 
-    void IssueReadsForSharedState(const std::shared_ptr<TRequestDispatchingState>& state, const TActorContext& ctx) {
-        if (Stopping || !state || TabletWriters.empty()) {
-            return;
-        }
+    void DrainSharedReads(const std::shared_ptr<TRequestDispatchingState>& state, const TActorContext& ctx) {
+        auto canIssueRequest = [&] {
+            return state->CanIssueRequest(TActivationContext::Monotonic());
+        };
         bool madeProgress = true;
-        while (madeProgress && !state->InFlightTracker.LimitReached()) {
+        while (madeProgress && canIssueRequest()) {
             madeProgress = false;
             const size_t startWriterIndex = state->NextReadWriterIndex % TabletWriters.size();
-            for (size_t i = 0; i < TabletWriters.size() && !state->InFlightTracker.LimitReached(); ++i) {
+            for (size_t i = 0; i < TabletWriters.size() && canIssueRequest(); ++i) {
                 const size_t writerIndex = (startWriterIndex + i) % TabletWriters.size();
                 if (TabletWriters[writerIndex]->IssueReadIfUsesState(state, ctx, 1)) {
                     state->NextReadWriterIndex = (writerIndex + 1) % TabletWriters.size();
@@ -1774,10 +1794,10 @@ public:
         }
 
         for (const auto& state : sharedWriteStates) {
-            IssueWritesForSharedState(state, ctx);
+            KickSharedWriteDispatching(state, ctx);
         }
         for (const auto& state : sharedReadStates) {
-            IssueReadsForSharedState(state, ctx);
+            KickSharedReadDispatching(state, ctx);
         }
         TestStartTime = TActivationContext::Monotonic();
         UpdateWakeupQueue(ctx);

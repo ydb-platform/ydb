@@ -327,6 +327,14 @@ ui32 TKqpPlanner::GetCurrentRetryDelay(ui32 requestId) {
 }
 
 std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
+    for (const auto& task : TasksGraph.GetTasks()) {
+        if (task.Meta.ExpectedNodeId) {
+            TasksPerNode[*task.Meta.ExpectedNodeId].emplace_back(task.Id);
+        } else {
+            UnassignedTasks.emplace_back(task.Id);
+        }
+    }
+
     if (UnassignedTasks.empty()) {
         return nullptr;
     }
@@ -357,6 +365,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         ui64 localNodeId = ExecuterId.NodeId();
         for(ui64 taskId: UnassignedTasks) {
             TasksPerNode[localNodeId].push_back(taskId);
+            TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = localNodeId;
         }
 
         return nullptr;
@@ -374,6 +383,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
             ui64 localNodeId = ExecuterId.NodeId();
             for(ui64 taskId: UnassignedTasks) {
                 TasksPerNode[localNodeId].push_back(taskId);
+                TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = localNodeId;
             }
 
             return nullptr;
@@ -417,6 +427,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
             auto [it, success] = alreadyAssigned.emplace(taskId, ExecuterId.NodeId());
             if (success) {
                 TasksPerNode[ExecuterId.NodeId()].push_back(taskId);
+                TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = ExecuterId.NodeId();
             }
         }
     }
@@ -477,8 +488,10 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
                 if (NeedToRunLocally(TasksGraph.GetTask(taskId))) {
                     const ui64 selfNodeId = ExecuterId.NodeId();
                     TasksPerNode[selfNodeId].push_back(taskId);
+                    TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = selfNodeId;
                 } else {
                     TasksPerNode[group.NodeId].push_back(taskId);
+                    TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = group.NodeId;
                 }
             }
         }
@@ -576,12 +589,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
 }
 
 std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
-    for (const auto& task : TasksGraph.GetTasks()) {
-        if (task.Meta.ExpectedNodeId) {
-            TasksPerNode[*task.Meta.ExpectedNodeId].emplace_back(task.Id);
-        } else {
-            UnassignedTasks.emplace_back(task.Id);
-        }
+    if (auto err = AssignTasksToNodes()) {
+        return err;
     }
 
     const auto scanTasksCount = TasksGraph.GetTasks().size() - UnassignedTasks.size();
@@ -615,11 +624,6 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
             for (ui64 taskId : tasks) {
                 PendingComputeTasks.insert(taskId);
             }
-        }
-
-        auto err = AssignTasksToNodes();
-        if (err) {
-            return err;
         }
 
         if (TasksGraph.GetMeta().MayRunTasksLocally) {

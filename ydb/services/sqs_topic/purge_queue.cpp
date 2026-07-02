@@ -1,5 +1,6 @@
 #include "purge_queue.h"
 #include "actor.h"
+#include "config.h"
 #include "error.h"
 #include "request.h"
 #include "receipt.h"
@@ -65,7 +66,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
 
-            TMaybe purgeSettings = MakePurgerSettings();
+            TMaybe purgeSettings = MakePurgerSettings(ctx);
             if (!purgeSettings.Defined()) {
                 return;
             }
@@ -75,7 +76,7 @@ namespace NKikimr::NSqsTopic::V1 {
             this->Become(&TPurgeQueueActor::StateWork);
         }
 
-        TMaybe<NKikimr::NPQ::NMLP::TPurgerSettings> MakePurgerSettings() {
+        TMaybe<NKikimr::NPQ::NMLP::TPurgerSettings> MakePurgerSettings(const NActors::TActorContext& ctx) {
             if (this->QueueUrl_->Consumer.empty()) {
                 ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("Malformed QueueUrl")));
                 return Nothing();
@@ -84,7 +85,7 @@ namespace NKikimr::NSqsTopic::V1 {
             NKikimr::NPQ::NMLP::TPurgerSettings settings{
                 .DatabasePath = this->QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
-                .Consumer = this->QueueUrl_->Consumer,
+                .Consumer = ResolveConsumerNameFromQueueUrl(this->QueueUrl_->Consumer, ctx),
                 .UserToken = this->Request_->GetInternalToken(),
             };
             return settings;

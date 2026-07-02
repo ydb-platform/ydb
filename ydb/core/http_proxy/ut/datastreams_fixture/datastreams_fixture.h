@@ -81,6 +81,7 @@ public:
         bool EnableSqsTopic : 1 = false;
         bool EnforceUserTokenRequirement : 1 = false;
         bool EnableTopicPartitionSplitBasedOnKllSketch : 1 = false;
+        bool TopicsAreFirstClassCitizen : 1 = true;
     };
 
     void InitAll(const TInitParameters initParameters);

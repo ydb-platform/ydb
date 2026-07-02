@@ -1750,14 +1750,6 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
 
     bool HasBalancer() const { return bool(BalancerTabletID); }
 
-    ui32 GetTotalPartitionCountWithAlter() const {
-        ui32 res = 0;
-        for (const auto& shard : Shards) {
-            res += shard.second->PartsCount();
-        }
-        return res;
-    }
-
     ui32 ExpectedShardCount() const {
 
         Y_ENSURE(TotalPartitionCount);

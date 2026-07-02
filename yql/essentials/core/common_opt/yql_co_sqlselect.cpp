@@ -1884,7 +1884,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(
                 current = BuildUsingMap(
                     pos,
                     std::move(current),
-                    std::move(secondStruct),
+                    secondStruct,
                     std::move(toRemove),
                     ctx);
 
@@ -1914,7 +1914,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(
                     return std::make_tuple(name, lhs, rhs);
                 }, ctx);
 
-                return BuildUsingMap(pos, std::move(source), std::move(secondStruct), /*toRemove=*/{}, ctx);
+                return BuildUsingMap(pos, std::move(source), secondStruct, /*toRemove=*/{}, ctx);
             };
 
             auto predicate = join->Child(1)->TailPtr();
@@ -2182,7 +2182,7 @@ TExprNode::TPtr BuildProjectionLambda(
     TExprContext& ctx)
 {
     TMap<TStringBuf, TStringBuf> columnNamesMap;
-    for (size_t i = 0; nodeColumnOrder && i < nodeColumnOrder->Size(); ++i) {
+    for (size_t i = 0; !isYql && nodeColumnOrder && i < nodeColumnOrder->Size(); ++i) {
         YQL_ENSURE(nodeColumnOrder->Size() == setItemColumnOrder->Size());
         columnNamesMap[setItemColumnOrder->at(i).PhysicalName] = nodeColumnOrder->at(i).PhysicalName;
     }
@@ -4180,7 +4180,7 @@ TExprNode::TPtr ExpandSqlSelectImpl(
     TMaybe<TColumnOrderInfo> columnOrder;
     if (auto order = optCtx.Types->LookupColumnOrder(*originalNode)) {
         columnOrder.ConstructInPlace();
-        columnOrder->Node = std::move(*order);
+        columnOrder->Node = *order;
         columnOrder->Target = columnOrder->Node;
 
         for (const auto& [x, gen_x] : columnOrder->Node) {
@@ -4477,9 +4477,9 @@ TExprNode::TPtr ExpandSqlSelectImpl(
                     YQL_ENSURE(inputIndex < setItemNodes.size());
 
                     TExprNode::TPtr expr = setItemNodes[inputIndex];
-                    if (columnOrder) {
+                    if (!isYql && columnOrder) {
                         expr = NormalizeColumnOrder(
-                            std::move(expr),
+                            expr,
                             columnOrder->BySetItems[inputIndex],
                             columnOrder->Target,
                             ctx);
@@ -4507,7 +4507,7 @@ TExprNode::TPtr ExpandSqlSelectImpl(
             }
         } else {
             TExprNode::TListType children = setItemNodes;
-            for (ui32 childIndex = 0; columnOrder && childIndex < children.size(); ++childIndex) {
+            for (ui32 childIndex = 0; !isYql && columnOrder && childIndex < children.size(); ++childIndex) {
                 const auto& childColumnOrder = columnOrder->BySetItems[childIndex];
                 auto& child = children[childIndex];
                 child = NormalizeColumnOrder(child, childColumnOrder, columnOrder->Target, ctx);

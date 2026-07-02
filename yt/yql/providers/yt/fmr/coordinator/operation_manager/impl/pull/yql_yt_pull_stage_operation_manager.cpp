@@ -76,7 +76,7 @@ public:
     }
 
     std::vector<TString> GetOperationResult() override {
-        return {std::move(PullData_)};
+        return {PullData_};
     }
 
 private:

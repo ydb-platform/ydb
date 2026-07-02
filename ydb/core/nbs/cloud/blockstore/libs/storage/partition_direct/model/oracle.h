@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include "host.h"
+#include "host_mask.h"
 #include "host_stat.h"
 #include "host_state.h"
 
@@ -10,8 +11,6 @@
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
 
 #include <util/generic/vector.h>
-
-#include <span>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -43,18 +42,28 @@ public:
         THostIndex hostIndex,
         EOperation operation,
         TInstant now) = 0;
+    virtual void OnRequestCancelled(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now) = 0;
 
     // Picks the best host (by lowest inflight count) out of the provided set
     // of hosts. Ties are broken uniformly at random.
     [[nodiscard]] virtual THostIndex SelectBestPBufferHost(
-        std::span<const THostIndex> hostIndexes,
+        THostMask hosts,
         EOperation operation) const = 0;
 
+    [[nodiscard]] virtual TDuration GetReadHedgingDelay() const = 0;
+    [[nodiscard]] virtual TDuration GetReadRequestTimeout() const = 0;
     [[nodiscard]] virtual TDuration GetWriteHedgingDelay() const = 0;
     [[nodiscard]] virtual TDuration GetWriteRequestTimeout() const = 0;
-    [[nodiscard]] virtual TDuration GetPBufferReplyTimeout() const = 0;
+    [[nodiscard]] virtual TDuration GetIndirectWriteReplyTimeout() const = 0;
+    [[nodiscard]] virtual TDuration GetFlushRequestTimeout() const = 0;
+    [[nodiscard]] virtual TDuration GetEraseRequestTimeout() const = 0;
     [[nodiscard]] virtual EWriteMode GetWriteMode() const = 0;
 
+    [[nodiscard]] virtual const THostStat& GetHostStatistics(
+        THostIndex hostIndex) const = 0;
     [[nodiscard]] virtual TString Dump() const = 0;
 };
 
@@ -80,25 +89,39 @@ public:
         THostIndex hostIndex,
         EOperation operation,
         TInstant now) override;
+    void OnRequestCancelled(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now) override;
 
     [[nodiscard]] THostIndex SelectBestPBufferHost(
-        std::span<const THostIndex> hostIndexes,
+        THostMask hosts,
         EOperation operation) const override;
 
+    [[nodiscard]] TDuration GetReadHedgingDelay() const override;
+    [[nodiscard]] TDuration GetReadRequestTimeout() const override;
     [[nodiscard]] TDuration GetWriteHedgingDelay() const override;
     [[nodiscard]] TDuration GetWriteRequestTimeout() const override;
-    [[nodiscard]] TDuration GetPBufferReplyTimeout() const override;
+    [[nodiscard]] TDuration GetIndirectWriteReplyTimeout() const override;
+    [[nodiscard]] TDuration GetFlushRequestTimeout() const override;
+    [[nodiscard]] TDuration GetEraseRequestTimeout() const override;
     [[nodiscard]] EWriteMode GetWriteMode() const override;
 
+    [[nodiscard]] const THostStat& GetHostStatistics(
+        THostIndex hostIndex) const override;
     [[nodiscard]] TString Dump() const override;
 
 private:
     const TStorageConfigPtr StorageConfig;
 
     IHostStateController* const HostStateController;
+    const TDuration DefaultReadHedgingDelay;
+    const TDuration DefaultReadRequestTimeout;
     const TDuration DefaultWriteHedgingDelay;
     const TDuration DefaultWriteRequestTimeout;
-    const TDuration DefaultPBufferReplyTimeout;
+    const TDuration DefaultIndirectWriteReplyTimeout;
+    const TDuration DefaultFlushRequestTimeout;
+    const TDuration DefaultEraseRequestTimeout;
     const EWriteMode DefaultWriteMode;
 
     TVector<THostStat> HostStatistics;

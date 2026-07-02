@@ -266,11 +266,7 @@ public:
 
         for (const auto& stage: Tx.Stages()) {
             TDqStageBase stageBase = stage.Cast<TDqStageBase>();
-            if (stageBase.Program().Body().Maybe<TKqpEffects>()) {
-                auto& planNode = AddPlanNode(phaseNode);
-                planNode.TypeName = "Effect";
-                Visit(TExprBase(stage), planNode);
-            } else if (stageBase.Outputs()) { // Sink
+            if (stageBase.Outputs()) { // Sink
                 auto& planNode = AddPlanNode(phaseNode);
                 Visit(TExprBase(stage), planNode);
             }
@@ -1034,33 +1030,34 @@ private:
         AddOperator(stagePlanNode, "Source", op);
     }
 
-    void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
+    template<typename TSinkLike>
+    void VisitTableSink(const TSinkLike& sinkLike, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
         // Federated providers
         TOperator op;
-        TCoDataSink dataSink = sink.DataSink().Cast<TCoDataSink>();
+        TCoDataSink dataSink = sinkLike.DataSink().template Cast<TCoDataSink>();
         const TString dataSinkCategory = dataSink.Category().StringValue();
-        IDqIntegration* dqIntegration = nullptr;
-
-        {
-            auto providerIt = SerializerCtx.TypeCtx.DataSinkMap.find(dataSinkCategory);
-            if (providerIt != SerializerCtx.TypeCtx.DataSinkMap.end()) {
-                dqIntegration = providerIt->second->GetDqIntegration();
-            }
-        }
 
         // Common settings that can be overwritten by provider
         op.Properties["SinkType"] = dataSinkCategory;
         if (dataSinkCategory == NYql::KqpTableSinkName) {
-            auto settings = sink.Settings().Cast<TKqpTableSinkSettings>();
+            auto settings = sinkLike.Settings().template Cast<TKqpTableSinkSettings>();
 
             NKikimrKqp::TKqpTableSinkSettings tableSinkSettings;
             {
                 AFL_ENSURE(stagePlanNode.StageProto);
                 bool found = false;
                 for (const auto& protoSink : stagePlanNode.StageProto->GetSinks()) {
-                    if (FromString<ui32>(TStringBuf(sink.Index())) == protoSink.GetOutputIndex()
+                    if (FromString<ui32>(TStringBuf(sinkLike.Index())) == protoSink.GetOutputIndex()
                             && protoSink.HasInternalSink()
                             && protoSink.GetInternalSink().GetSettings().UnpackTo(&tableSinkSettings)) {
+                                found = true;
+                                break;
+                    }
+                }
+                for (const auto& protoTransform : stagePlanNode.StageProto->GetOutputTransforms()) {
+                    if (FromString<ui32>(TStringBuf(sinkLike.Index())) == protoTransform.GetOutputIndex()
+                            && protoTransform.HasInternalSink()
+                            && protoTransform.GetInternalSink().GetSettings().UnpackTo(&tableSinkSettings)) {
                                 found = true;
                                 break;
                     }
@@ -1210,11 +1207,37 @@ private:
             op.Properties["Name"] = "Write to external data source";
         }
 
-        if (dqIntegration) {
-            dqIntegration->FillSinkPlanProperties(sink, op.Properties);
+        AddOperator(planNode, "Sink", op);
+    }
+
+    void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
+        IDqIntegration* dqIntegration = nullptr;
+        auto dataSink = sink.DataSink().Cast<TCoDataSink>();
+        auto providerIt = SerializerCtx.TypeCtx.DataSinkMap.find(dataSink.Category().StringValue());
+        if (providerIt != SerializerCtx.TypeCtx.DataSinkMap.end()) {
+            dqIntegration = providerIt->second->GetDqIntegration();
         }
 
-        AddOperator(planNode, "Sink", op);
+        VisitTableSink(sink, stage, planNode, stagePlanNode);
+
+        if (dqIntegration) {
+            dqIntegration->FillSinkPlanProperties(sink, planNode.Operators.back().Properties);
+        }
+    }
+
+    void Visit(const TDqTransform& transform, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
+        IDqIntegration* dqIntegration = nullptr;
+        auto dataSink = transform.DataSink().Cast<TCoDataSink>();
+        auto providerIt = SerializerCtx.TypeCtx.DataSinkMap.find(dataSink.Category().StringValue());
+        if (providerIt != SerializerCtx.TypeCtx.DataSinkMap.end()) {
+            dqIntegration = providerIt->second->GetDqIntegration();
+        }
+
+        VisitTableSink(transform, stage, planNode, stagePlanNode);
+
+        if (dqIntegration) {
+            dqIntegration->FillSinkPlanProperties(transform, planNode.Operators.back().Properties);
+        }
     }
 
     void Visit(const TExprBase& expr, TQueryPlanNode& planNode) {
@@ -1288,6 +1311,8 @@ private:
                 for (auto output : outputs.Cast()) {
                     if (auto sink = output.Maybe<TDqSink>()) {
                         Visit(sink.Cast(), expr.Cast<TDqStageBase>(), planNode, stagePlanNode);
+                    } else if (auto transform = output.Maybe<TDqTransform>()) {
+                        Visit(transform.Cast(), expr.Cast<TDqStageBase>(), planNode, stagePlanNode);
                     }
                 }
             }
@@ -1396,10 +1421,6 @@ private:
             operatorId = Visit(maybeIter.Cast(), planNode);
         } else if (auto maybePartitionByKey = TMaybeNode<TCoPartitionByKey>(node)) {
             operatorId = Visit(maybePartitionByKey.Cast(), planNode);
-        } else if (auto maybeUpsert = TMaybeNode<TKqpUpsertRows>(node)) {
-            operatorId = Visit(maybeUpsert.Cast(), planNode);
-        } else if (auto maybeDelete = TMaybeNode<TKqpDeleteRows>(node)) {
-            operatorId = Visit(maybeDelete.Cast(), planNode);
         } else if (auto maybeArg = TMaybeNode<TCoArgument>(node)) {
             return {CurrentArgContext.AddArg(node.Get())};
         } else if (auto maybeCrossJoin = TMaybeNode<TDqPhyCrossJoin>(node)) {
@@ -1413,12 +1434,7 @@ private:
         }
 
         TVector<std::variant<ui32, TArgContext>> inputIds;
-        if (auto maybeEffects = TMaybeNode<TKqpEffects>(node)) {
-            for (const auto& effect : maybeEffects.Cast().Args()) {
-                auto ids = Visit(effect, planNode);
-                inputIds.insert(inputIds.end(), ids.begin(), ids.end());
-            }
-        } else {
+        {
             if (TMaybeNode<TCoFlatMapBase>(node)) {
                 auto flatMap = TExprBase(node).Cast<TCoFlatMapBase>();
                 auto flatMapInputs = Visit(flatMap, planNode);
@@ -1814,43 +1830,6 @@ private:
         }
 
         return AddOperator(planNode, "Aggregate", std::move(op));
-    }
-
-    std::variant<ui32, TArgContext> Visit(const TKqpUpsertRows& upsert, TQueryPlanNode& planNode) {
-        const auto tablePath = upsert.Table().Path().StringValue();
-
-        TOperator op;
-        op.Properties["Name"] = "Upsert";
-        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
-        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
-        op.Properties["Path"] = tablePath;
-
-        TTableWrite writeInfo;
-        writeInfo.Type = EPlanTableWriteType::MultiUpsert;
-        for (const auto& column : upsert.Columns()) {
-            writeInfo.Columns.push_back(TString(column.Value()));
-        }
-
-        SerializerCtx.Tables[tablePath].Writes.push_back(writeInfo);
-        planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
-        return AddOperator(planNode, "Upsert", std::move(op));
-    }
-
-    std::variant<ui32, TArgContext> Visit(const TKqpDeleteRows& del, TQueryPlanNode& planNode) {
-        const auto tablePath = del.Table().Path().StringValue();
-
-        TOperator op;
-        op.Properties["Name"] = "Delete";
-        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
-        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
-        op.Properties["Path"] = tablePath;
-
-        TTableWrite writeInfo;
-        writeInfo.Type = EPlanTableWriteType::MultiErase;
-
-        SerializerCtx.Tables[tablePath].Writes.push_back(writeInfo);
-        planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
-        return AddOperator(planNode, "Delete", std::move(op));
     }
 
     TString MakeJoinConditionString(const TCoAtomList& leftKeys, const TCoAtomList& rightKeys) {

@@ -121,10 +121,26 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
 
     TIndexInfo::TSecondaryData secondaryData;
     secondaryData.MutableExternalData() = entityChunksNew;
-    for (auto&& i : to->GetIndexInfo().GetIndexes()) {
-        to->GetIndexInfo()
-            .AppendIndex(entityChunksNew, i.first, storages, source.PortionInfo.GetPortionInfo().GetRecordsCount(), targetTier, secondaryData)
-            .Validate();
+    const bool sameSchema = from->GetVersion() == to->GetVersion();
+    const auto& fromIndexInfo = from->GetIndexInfo();
+    const ui32 recordsCount = source.PortionInfo.GetPortionInfo().GetRecordsCount();
+    for (auto&& [indexId, toIndex] : to->GetIndexInfo().GetIndexes()) {
+        bool reused = false;
+        if (fromIndexInfo.HasIndexId(indexId)) {
+            const bool canTryReuse =
+                sameSchema || fromIndexInfo.GetIndexVerified(indexId)->CheckModificationCompatibility(toIndex.GetObjectPtr()).Ok();
+            if (canTryReuse) {
+                auto existingChunks = source.GetEntityChunks(indexId);
+                if (!existingChunks.empty()) {
+                    reused = to->GetIndexInfo()
+                                 .ReuseIndexChunks(std::move(existingChunks), indexId, storages, recordsCount, targetTier, secondaryData)
+                                 .Ok();
+                }
+            }
+        }
+        if (!reused) {
+            to->GetIndexInfo().AppendIndex(entityChunksNew, indexId, storages, recordsCount, targetTier, secondaryData).Validate();
+        }
     }
 
     const NSplitter::TEntityGroups groups =
@@ -133,7 +149,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
     TGeneralSerializedSlice slice(secondaryData.GetExternalData(), schemaTo, counters);
 
     return TWritePortionInfoWithBlobsConstructor::BuildByBlobs(
-        slice.GroupChunksByBlobs(groups), secondaryData.GetSecondaryInplaceData(), std::move(constructor), storages);
+        slice.GroupChunksByBlobs(groups), secondaryData.GetSecondaryInplaceData(), std::move(constructor), storages, to->GetIndexInfo());
 }
 
 const TString& TReadPortionInfoWithBlobs::GetBlobByAddressVerified(const ui32 columnId, const ui32 chunkId) const {

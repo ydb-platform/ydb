@@ -127,6 +127,9 @@ namespace NKikimr::NStorage {
         // Counters for drives by drive path.
         TMap<TString, TDrivePathCounters> ByPathDriveCounters;
 
+        // 1 if the last node warden cache file write failed, 0 otherwise (or no write attempted yet)
+        ::NMonitoring::TDynamicCounters::TCounterPtr CacheFileWriteError;
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         ui32 LocalNodeId; // NodeId for local node
@@ -218,6 +221,8 @@ namespace NKikimr::NStorage {
         TControlWrapper EnableSyncLogChunkCompressionSSD;
         TControlWrapper MaxSyncLogChunksInFlightHDD;
         TControlWrapper MaxSyncLogChunksInFlightSSD;
+        TControlWrapper SyncLogMaxDiskAmount;
+        TControlWrapper SyncLogMaxMemAmount;
         TControlWrapper DefaultHugeGarbagePerMille;
         TControlWrapper HugeDefragFreeSpaceBorderPerMille;
         TControlWrapper MaxChunksToDefragInflight;
@@ -251,6 +256,7 @@ namespace NKikimr::NStorage {
         TControlWrapper EnablePhantomFlagStorage;
         TControlWrapper EnablePersistentPhantomFlagStorage;
         TControlWrapper PhantomFlagStorageLimitPerVDiskBytes;
+        TControlWrapper VolatilePhantomFlagStorageBlobSizeLimitBytes;
 
         TControlWrapper EnableChunkKeeper;
 
@@ -285,6 +291,12 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxPutTimeoutSeconds;
 
         TControlWrapper EnableDeepScrubbing;
+
+        TControlWrapper EnableFreshSyncDataThrottling;
+
+        // retro-tracing controls
+        TControlWrapper EnableStorageRetroTraceGeneration;
+        TControlWrapper EnableStorageRetroTraceCollectionSlowRequests;
 
     public:
         struct TGroupRecord;

@@ -43,12 +43,7 @@ struct TDBGWriteBlocksToManyPBuffersResponse
         NProto::TError Error;
     };
 
-    static TDBGWriteBlocksToManyPBuffersResponse MakeOverallError(
-        EWellKnownResultCodes code,
-        TString reason);
-
     TVector<TSinglePersistentBufferResult> Responses;
-    NProto::TError OverallError;
 };
 
 struct TDBGFlushResponse
@@ -129,7 +124,10 @@ public:
         const NWilson::TTraceId& traceId,
         TStringBuf name) = 0;
 
-    virtual void Run(IPartitionDirectService* service) = 0;
+    // Starts the DBG and returns a future that resolves when the locked-session
+    // quorum is reached for the first time. Intended only to gate the
+    // synchronous start.
+    virtual NThreading::TFuture<void> Run(IPartitionDirectService* service) = 0;
 
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
@@ -167,7 +165,7 @@ public:
     virtual void WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
-        TVector<THostIndex> hostIndexes,
+        THostMask hostIndexes,
         ui64 lsn,
         TBlockRange64 range,
         TDuration replyTimeout,
@@ -189,9 +187,8 @@ public:
 
     // Batch operation to erase a list of PBuffer entries.
     virtual NThreading::TFuture<TDBGEraseResponse> BatchEraseFromPBuffer(
-        ui32 vChunkIndex,
         THostIndex hostIndex,
-        const TVector<TPBufferSegment>& segments,
+        const TEraseSegments& segments,
         const NWilson::TTraceId& traceId) = 0;
 
     virtual void BarrierEraseFromPBuffer(ui64 lsn) = 0;

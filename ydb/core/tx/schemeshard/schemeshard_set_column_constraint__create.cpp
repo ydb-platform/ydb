@@ -100,7 +100,7 @@ public:
             return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed item check: There are no columns that need to be updated");
         }
 
-        std::vector<std::string> sortedSetNotNullColumns(settings.GetNotNullColumns().begin(), settings.GetNotNullColumns().end());
+        std::vector<TString> sortedSetNotNullColumns(settings.GetNotNullColumns().begin(), settings.GetNotNullColumns().end());
         std::sort(sortedSetNotNullColumns.begin(), sortedSetNotNullColumns.end());
 
         if (const auto duplicateIt = std::adjacent_find(sortedSetNotNullColumns.begin(), sortedSetNotNullColumns.end()); duplicateIt != sortedSetNotNullColumns.end()) {
@@ -116,7 +116,7 @@ public:
             Y_ABORT_UNLESS(tableInfo);
 
             for (const auto& columnName : sortedSetNotNullColumns) {
-                auto id = tableInfo->GetColumnIdByNameSlow(TString(columnName));
+                auto id = tableInfo->GetColumnIdByNameSlow(columnName);
                 if (id == TTableInfo::InvalidColumnId) {
                     return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed item check: Column '" << columnName << "' does not exist");
                 }

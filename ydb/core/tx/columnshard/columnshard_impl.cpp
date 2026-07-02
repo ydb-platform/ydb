@@ -4,7 +4,6 @@
 #include "scan_snapshot_guard.h"
 
 #include "blobs_action/bs/storage.h"
-#include "blobs_reader/events.h"
 #include "blobs_reader/task.h"
 #include "common/tablet_id.h"
 #include "resource_subscriber/task.h"
@@ -932,7 +931,7 @@ void TColumnShard::SetupCleanupTables() {
         pathIdsEmptyInInsertTable.insert(pathIds.begin(), pathIds.end());
     }
 
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsEmptyInInsertTable);
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsEmptyInInsertTable, DataLocksManager);
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;
@@ -1597,6 +1596,12 @@ void TColumnShard::Handle(TAutoPtr<TEventHandle<NOlap::NBackground::TEvExecuteGe
     Execute(ev->Get()->ExtractTransaction().release(), ctx);
 }
 
+void TColumnShard::Handle(NOlap::NBackground::TEvRemoveSession::TPtr& ev, const TActorContext& ctx) {
+    auto txRemove = BackgroundSessionsManager->TxRemove(ev->Get()->GetClassName(), ev->Get()->GetIdentifier());
+    AFL_VERIFY(!!txRemove);
+    Execute(txRemove.release(), ctx);
+}
+
 void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx) {
     if (SharingSessionsManager->IsSharingInProgress()) {
         ctx.Send(NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()),
@@ -1637,6 +1642,7 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
         HFunc(TEvPrivate::TEvNormalizerResult, Handle);
         HFunc(TEvPrivate::TEvAskTabletDataAccessors, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+        HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);
         default:
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "unexpected event in enqueue");
             return NTabletFlatExecutor::TTabletExecutedFlat::Enqueue(ev);

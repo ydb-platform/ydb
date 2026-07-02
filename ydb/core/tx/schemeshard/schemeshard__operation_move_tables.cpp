@@ -29,12 +29,6 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
 
     TPath srcPath = TPath::Resolve(srcStr, context.SS);
     {
-        if (!srcPath->IsTable() && !srcPath->IsColumnTable()) {
-            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "Cannot move non-tables")};
-        }
-        if (srcPath->IsColumnTable() && !AppData()->FeatureFlags.GetEnableMoveColumnTable()) {
-            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "RENAME is prohibited for column tables")};
-        }
         TPath::TChecker checks = srcPath.Check();
         checks.IsResolved()
               .NotDeleted()
@@ -44,6 +38,13 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
 
         if (!checks) {
             return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+        }
+
+        if (!srcPath.Base()->IsTable() && !srcPath.Base()->IsColumnTable()) {
+            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "Cannot move non-tables")};
+        }
+        if (srcPath.Base()->IsColumnTable() && !AppData()->FeatureFlags.GetEnableMoveColumnTable()) {
+            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "RENAME is prohibited for column tables")};
         }
     }
 
@@ -84,8 +85,12 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
         const bool isLocalIndex = context.SS->Indexes.contains(srcChildPath.Base()->PathId) &&
             TTableIndexInfo::IsLocalIndex(context.SS->Indexes.at(srcChildPath.Base()->PathId)->Type);
         if (isLocalIndex) {
-            const TString srcIndexPath = srcPath.PathString() + "/" + name;
-            result.push_back(CreateMoveLocalIndex(NextPartId(nextId, result), MoveLocalIndexTask(dstPath.PathString(), srcIndexPath, name)));
+            if (srcPath.Base()->IsColumnTable()) {
+                const TString srcIndexPath = srcPath.PathString() + "/" + name;
+                result.push_back(CreateMoveColumnTableLocalIndex(NextPartId(nextId, result), MoveLocalIndexTask(dstPath.PathString(), srcIndexPath, name)));
+            } else {
+                result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcChildPath, dstIndexPath)));
+            }
             continue;
         } else {
             result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcChildPath, dstIndexPath)));

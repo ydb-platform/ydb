@@ -238,8 +238,7 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
     , LastPortion(0)
     , LastGranule(0)
 {
-    AFL_VERIFY(SchemaObjectsCache);
-    ActualizationController = std::make_shared<NActualizer::TController>();
+    InitDerivedState();
     RegisterSchemaVersion(snapshot, presetId, schema);
 }
 
@@ -257,9 +256,14 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
     , LastPortion(0)
     , LastGranule(0)
 {
+    InitDerivedState();
+    RegisterSchemaVersion(snapshot, std::move(schema));
+}
+
+void TColumnEngineForLogs::InitDerivedState() {
     AFL_VERIFY(SchemaObjectsCache);
     ActualizationController = std::make_shared<NActualizer::TController>();
-    RegisterSchemaVersion(snapshot, std::move(schema));
+    Counters->SetSmallBlobThresholdBytes(StoragesManager->GetDefaultOperator()->GetSmallBlobThresholdBytes());
 }
 
 void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
@@ -463,7 +467,8 @@ std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> TColumnEngineFo
 }
 
 std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCleanupTables(
-    const THashSet<TInternalPathId>& pathsToDrop) noexcept {
+    const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
+    AFL_VERIFY(dataLocksManager);
     if (pathsToDrop.empty()) {
         return nullptr;
     }
@@ -471,12 +476,23 @@ std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCl
 
     ui64 txSize = 0;
     const ui64 txSizeLimit = TGlobalLimits::TxWriteLimitBytes / 4;
+    auto onPathProcessed = [&]() {
+        txSize += 256;
+        return txSize > txSizeLimit;
+    };
     for (TInternalPathId pathId : pathsToDrop) {
+        if (auto g = GranulesStorage->GetGranuleOptional(pathId)) {
+            if (dataLocksManager->IsLocked(*g, NDataLocks::ELockCategory::Tables)) {
+                if (onPathProcessed()) {
+                    break;
+                }
+                continue;
+            }
+        }
         if (!HasDataInPathId(pathId)) {
             changes->TablesToDrop.emplace(pathId);
         }
-        txSize += 256;
-        if (txSize > txSizeLimit) {
+        if (onPathProcessed()) {
             break;
         }
     }

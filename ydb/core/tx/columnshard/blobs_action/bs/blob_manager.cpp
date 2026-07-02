@@ -79,7 +79,14 @@ void TBlobBatch::SendWriteRequest(
     //auto handleClass = NKikimrBlobStorage::AsyncBlob; // TODO: what's the difference?
     auto tactic = TEvBlobStorage::TEvPut::TacticMaxThroughput;
 
-    THolder<TEvBlobStorage::TEvPut> put(new TEvBlobStorage::TEvPut(logoBlobId, data, deadline, handleClass, tactic));
+    THolder<TEvBlobStorage::TEvPut> put(new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
+        .BlobId = logoBlobId,
+        .Buffer = TRope(data),
+        .Deadline = deadline,
+        .HandleClass = handleClass,
+        .Tactic = tactic,
+        .WriteSource = TWriteSource::ColumnShardPut,
+    }));
     SendPutToGroup(ctx, groupId, BatchInfo->TabletInfo.Get(), std::move(put), cookie);
 }
 
@@ -449,6 +456,34 @@ void TBlobManager::DeleteBlobOnComplete(const TTabletId tabletId, const TUnified
         AFL_VERIFY(BlobsToDeleteDelayed.Add(tabletId, blobId));
         BlobsManagerCounters.OnBlobsToDeleteDelayed(BlobsToDeleteDelayed);
     }
+}
+
+TSmallBlobsStat TBlobManager::CalcSmallBlobsToDelete(const ui64 sizeThreshold) const {
+    TSmallBlobsStat result;
+    const auto account = [&](const TUnifiedBlobId& blobId) {
+        if (blobId.BlobSize() <= sizeThreshold) {
+            result.VolumeBytes += blobId.BlobSize();
+            ++result.Count;
+        }
+    };
+    // BlobsToDelete and BlobsToDeleteDelayed are disjoint sets
+    for (auto&& i : BlobsToDelete) {
+        account(i.first);
+    }
+    for (auto&& i : BlobsToDeleteDelayed) {
+        account(i.first);
+    }
+    return result;
+}
+
+TBlobStorageGroupType TBlobManager::GetBlobStorageGroupType() const {
+    // We assume here that all the channels have the same group type.
+    // We get [2] because it is the first channel where we store data.
+    // So, just in case, in the future 0, 1 channels be different from the rest, the code will still work.
+    if (TabletInfo && TabletInfo->Channels.size() > 2) {
+        return TabletInfo->Channels[2].Type;
+    }
+    return TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone);
 }
 
 void TBlobManager::OnGCFinishedOnExecute(const std::optional<TGenStep>& genStep, IBlobManagerDb& db) {

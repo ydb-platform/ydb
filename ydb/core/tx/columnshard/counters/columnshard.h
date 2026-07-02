@@ -20,6 +20,7 @@ enum class EOverloadStatus {
     None /* "none" */,
     OverloadCompaction /* "overload_compaction" */,
     RejectProbability,
+    SmallBlobsQuota,
 };
 
 struct TOverloadStatus {
@@ -115,6 +116,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardWritesSizeCount;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadRejectProbabilityBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadRejectProbabilityCount;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadSmallBlobsQuotaBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadSmallBlobsQuotaCount;
 
     std::shared_ptr<TValueAggregationClient> InternalCompactionGranuleBytes;
     std::shared_ptr<TValueAggregationClient> InternalCompactionGranulePortionsCount;
@@ -234,6 +237,11 @@ public:
     void OnWriteOverloadRejectProbability(const ui64 size) const {
         OverloadRejectProbabilityBytes->Add(size);
         OverloadRejectProbabilityCount->Add(1);
+    }
+
+    void OnWriteOverloadSmallBlobsQuota(const ui64 size) const {
+        OverloadSmallBlobsQuotaBytes->Add(size);
+        OverloadSmallBlobsQuotaCount->Add(1);
     }
 
     void SkipIndexationInputDueToSplitCompaction(const ui64 size) const {

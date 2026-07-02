@@ -50,6 +50,15 @@ constexpr std::string_view MonitoringProjectAttribute = "monitoring_project";
 constexpr std::string_view MonitoringClusterAttribute = "monitoring_cluster";
 constexpr std::string_view IdAttribute = "id";
 
+//! Row key in the flow_control dynamic table whose value is the YSON-serialized leader
+//! controller node info (see TNodeInfo). Supersedes the deprecated
+//! LeaderControllerAddressAttribute Cypress attribute.
+inline constexpr TStringBuf LeaderControllerKey = "leader_controller";
+
+//! Field inside the LeaderControllerKey value map that holds the controller RPC address.
+//! Must match the "rpc_address" parameter registered by TNodeInfo.
+inline constexpr TStringBuf LeaderControllerRpcAddressField = "rpc_address";
+
 constexpr int CurrentPipelineFormatVersion = 1;
 
 ////////////////////////////////////////////////////////////////////////////////

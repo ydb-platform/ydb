@@ -1,4 +1,5 @@
 #include "fulltext.h"
+#include "fulltext_query.h"
 
 #include <contrib/libs/snowball/include/libstemmer.h>
 
@@ -367,6 +368,60 @@ TVector<TString> BuildSearchTerms(const TString& query, const Ydb::Table::Fullte
     return searchTerms;
 }
 
+namespace {
+    // True if the query uses the `+term` required-term syntax: a `+` that begins
+    // the query or follows ASCII whitespace (i.e. starts a term). A `+` inside a
+    // term (e.g. "c++") is not an operator and does not trigger the per-term path.
+    bool HasRequiredOperator(const TString& query) {
+        bool atTermStart = true;
+        for (const char c : query) {
+            const bool ws = (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v');
+            if (ws) {
+                atTermStart = true;
+                continue;
+            }
+            if (c == '+' && atTermStart) {
+                return true;
+            }
+            atTermStart = false;
+        }
+        return false;
+    }
+}
+
+TVector<TSearchTerm> BuildSearchTermsStructured(const TString& query, const Ydb::Table::FulltextIndexSettings::Analyzers& settings) {
+    // Fast path: no `+term` syntax -> tokenize exactly like BuildSearchTerms over
+    // the whole query, every term optional. Keeps full backward compatibility
+    // (e.g. keyword-tokenizer queries stay a single token).
+    if (!HasRequiredOperator(query)) {
+        TVector<TSearchTerm> result;
+        for (auto& token : BuildSearchTerms(query, settings)) {
+            result.push_back({std::move(token), /* required */ false});
+        }
+        return result;
+    }
+
+    // Query-parser layer: split into whitespace-delimited raw terms, strip a single
+    // leading `+` (required), then run the analyzer over each term body and tag every
+    // resulting token with the term's required flag.
+    TVector<TSearchTerm> result;
+    for (const auto& part : StringSplitter(query).SplitBySet(" \t\n\r\f\v").SkipEmpty()) {
+        TStringBuf raw = part.Token();
+        bool required = false;
+        if (raw.StartsWith('+')) {
+            required = true;
+            raw.Skip(1);
+        }
+        if (raw.empty()) {
+            continue; // bare `+`
+        }
+        for (auto& token : BuildSearchTerms(TString(raw), settings)) {
+            result.push_back({std::move(token), required});
+        }
+    }
+    return result;
+}
+
 bool ValidateColumnsMatches(const NProtoBuf::RepeatedPtrField<TString>& columns, const Ydb::Table::FulltextIndexSettings& settings, TString& error) {
     return ValidateColumnsMatches(TVector<TString>{columns.begin(), columns.end()}, settings, error);
 }
@@ -377,8 +432,12 @@ bool ValidateColumnsMatches(const TVector<TString>& columns, const Ydb::Table::F
         settingsColumns.push_back(column.column());
     }
 
-    if (columns != settingsColumns) {
-        error = TStringBuilder() << "columns " << settingsColumns << " should be " << columns;
+    // The indexed (text) columns must be the suffix of the index key columns;
+    // any leading key columns are prefix columns.
+    if (settingsColumns.size() > columns.size() ||
+        !std::equal(settingsColumns.begin(), settingsColumns.end(), columns.end() - settingsColumns.size()))
+    {
+        error = TStringBuilder() << "indexed columns " << settingsColumns << " should be the suffix of index columns " << columns;
         return false;
     }
 
@@ -611,7 +670,7 @@ void TMultiDeltaReader::Reset(bool withFreq, bool sign) {
 
 void TMultiDeltaReader::Add(bool added, TDeltaReader* rdr) {
     Y_ENSURE(!Started);
-    Readers.push_back({ rdr, added });
+    Readers.push_back({ rdr, added, false });
 }
 
 void TMultiDeltaReader::Add(bool added, TConstArrayRef<ui8> buf) {
@@ -620,11 +679,34 @@ void TMultiDeltaReader::Add(bool added, TConstArrayRef<ui8> buf) {
         return;
     }
     auto rdr = std::make_unique<TDeltaReader>(buf, WithFreq, Sign);
-    Readers.push_back({ rdr.get(), added });
+    Readers.push_back({ rdr.get(), added, true });
     OwnedReaders.push_back(std::move(rdr));
 }
 
+void TMultiDeltaReader::Pop() {
+    if (!Readers.size()) {
+        return;
+    }
+    auto& last = Readers.back();
+    for (auto& item: Items) {
+        Y_ENSURE(item.RdrId != Readers.size());
+    }
+    if (last.Owned) {
+        Y_ENSURE(OwnedReaders.size() > 0 && OwnedReaders.back().get() == last.Reader);
+        OwnedReaders.pop_back();
+    }
+    Readers.pop_back();
+}
+
+void TMultiDeltaReader::SetMaxId(ui64 maxId) {
+    Y_ENSURE(!Items.size());
+    for (auto& rdr: Readers) {
+        rdr.Reader->SetMaxId(maxId);
+    }
+}
+
 void TMultiDeltaReader::Start() {
+    Y_ENSURE(!Started);
     Started = true;
     if (Readers.size() == 1) {
         OneLeft = true;
@@ -636,6 +718,12 @@ void TMultiDeltaReader::Start() {
             SelectNext();
         }
     }
+}
+
+void TMultiDeltaReader::Stop() {
+    Y_ENSURE(!Items.size()); // restart is allowed, for example after changing MaxId
+    OneLeft = false;
+    Started = false;
 }
 
 void TMultiDeltaReader::SelectNext() {

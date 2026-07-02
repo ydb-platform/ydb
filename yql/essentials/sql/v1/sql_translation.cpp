@@ -1588,14 +1588,14 @@ bool ColumnCompression(const TRule_compression_setting_entry& node, TTranslation
             }
             const auto literal = MakeIntrusive<TLiteralNumberNode<ui64>>(ctx.Context().Pos(), "Uint64", ToString(*result));
 
-            compression.Entries[std::move(id)] = std::move(literal);
+            compression.Entries[id] = literal;
             break;
         }
         case TRule_compression_setting_value::AltCase::kAltCompressionSettingValue2: {
             const auto result = Id(value.GetAlt_compression_setting_value2().GetRule_id1(), ctx);
             const TNodePtr literal = BuildLiteralRawString(ctx.Context().Pos(), result);
 
-            compression.Entries[std::move(id)] = std::move(literal);
+            compression.Entries[id] = literal;
             break;
         }
         case TRule_compression_setting_value::AltCase::ALT_NOT_SET:
@@ -1648,7 +1648,7 @@ bool EncodingSettingEntry(const TRule_encoding_setting_entry& node, TTranslation
         }
         case TRule_encoding_setting_value::kAltEncodingSettingValue2: {
             auto result = Id(value.GetAlt_encoding_setting_value2().GetRule_id1(), ctx);
-            encoding.Entries[id] = BuildLiteralRawString(ctx.Context().Pos(), std::move(result));
+            encoding.Entries[id] = BuildLiteralRawString(ctx.Context().Pos(), result);
             break;
         }
         case TRule_encoding_setting_value::ALT_NOT_SET:
@@ -1890,15 +1890,15 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
     }
 
     return TColumnSchema{
-        .Pos = std::move(pos),
-        .Name = std::move(name),
+        .Pos = pos,
+        .Name = name,
         .Type = std::move(type),
-        .Families = std::move(families),
-        .DefaultExpr = std::move(defaultExpr),
-        .Compression = std::move(compression),
-        .Nullable = std::move(nullable),
+        .Families = families,
+        .DefaultExpr = defaultExpr,
+        .Compression = compression,
+        .Nullable = nullable,
         .Serial = serial,
-        .ColumnEncoding = std::move(columnEncoding),
+        .ColumnEncoding = columnEncoding,
     };
 }
 
@@ -2153,7 +2153,7 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
             const TString name(Id(node.GetAlt_create_table_entry6().GetRule_an_id_schema1(), *this));
             const TPosition pos(Context().Pos());
 
-            params.Columns.push_back({.Pos = std::move(pos), .Name = std::move(name), .Nullable = true});
+            params.Columns.push_back({.Pos = pos, .Name = name, .Nullable = true});
             break;
         }
         case NSQLv1Generated::TRule_create_table_entry::ALT_NOT_SET:
@@ -3794,7 +3794,7 @@ TNodePtr TSqlTranslation::DictLiteral(const TRule_dict_literal& node) {
                 return nullptr;
             }
 
-            values.push_back(new TTupleNode(Ctx_.Pos(), std::move(tupleItems)));
+            values.push_back(new TTupleNode(Ctx_.Pos(), tupleItems));
         }
 
         for (auto& b : list.GetBlock3()) {
@@ -3819,7 +3819,7 @@ TNodePtr TSqlTranslation::DictLiteral(const TRule_dict_literal& node) {
                     return nullptr;
                 }
 
-                values.push_back(new TTupleNode(Ctx_.Pos(), std::move(tupleItems)));
+                values.push_back(new TTupleNode(Ctx_.Pos(), tupleItems));
             }
         }
     } else {
@@ -4213,7 +4213,7 @@ TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<
                         return std::unexpected(node.error());
                     }
 
-                    return TNonNull(ToTableExpression(GetYqlSource(std::move(*node))));
+                    return TNonNull(ToTableExpression(GetYqlSource(*node)));
                 },
                 [&]() -> TNodePtr {
                     TSqlSelect select(*this);
@@ -4245,7 +4245,7 @@ bool TSqlTranslation::ImportStatement(const TRule_import_stmt& stmt, TVector<TSt
         return false;
     }
     YQL_ENSURE(names.size() == aliases.size());
-    const TString moduleAlias = Ctx_.AddImport(std::move(modulePath));
+    const TString moduleAlias = Ctx_.AddImport(modulePath);
     if (!moduleAlias) {
         return false;
     }
@@ -4375,7 +4375,7 @@ bool TSqlTranslation::PasswordParameter(const TRule_password_option& passwordOpt
             return false;
         }
 
-        result.Password = TDeferredAtom(Ctx_.Pos(), std::move(password->Content));
+        result.Password = TDeferredAtom(Ctx_.Pos(), password->Content);
     }
 
     result.IsPasswordEncrypted = passwordOption.HasBlock1();
@@ -4396,7 +4396,7 @@ bool TSqlTranslation::HashParameter(const TRule_hash_option& hashOption, TUserPa
         return false;
     }
 
-    result.Hash = TDeferredAtom(Ctx_.Pos(), std::move(hash->Content));
+    result.Hash = TDeferredAtom(Ctx_.Pos(), hash->Content);
 
     return true;
 }
@@ -5739,10 +5739,7 @@ bool TSqlTranslation::ParseViewQuery(
     }
     queryText << CollectTokens(query);
 
-    ui32 flags = NYql::TAstNodeFlags::ArbitraryContent;
-    if (Ctx_.Settings.MarkQueryTextAtomWithIgnoredContent) {
-        flags |= NYql::TAstNodeFlags::IgnoredContent;
-    }
+    ui32 flags = NYql::TAstNodeFlags::ArbitraryContent | NYql::TAstNodeFlags::UnstableFormat;
     features["query_text"] = {Ctx_.Pos(), queryText, flags};
 
     // The AST is needed solely for the validation of the CREATE VIEW statement.
@@ -5819,10 +5816,7 @@ bool TSqlTranslation::ParseViewQuery(
     begin += beforeToken.value().size();
     YQL_ENSURE(begin < end);
 
-    ui32 flags = NYql::TAstNodeFlags::ArbitraryContent;
-    if (Ctx_.Settings.MarkQueryTextAtomWithIgnoredContent) {
-        flags |= NYql::TAstNodeFlags::IgnoredContent;
-    }
+    ui32 flags = NYql::TAstNodeFlags::ArbitraryContent | NYql::TAstNodeFlags::UnstableFormat;
     features[TStreamingQuerySettings::QUERY_TEXT_FEATURE] =
         TDeferredAtom(Ctx_.Pos(), Ctx_.Query.substr(begin, end - begin), flags);
 
@@ -6491,6 +6485,20 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
             return legacy();
         }
     }
+}
+
+bool TSqlTranslation::WarnUnusedCTEs() const {
+    bool isOk = true;
+
+    CTEs_->ForEachTopLevelUnused([&](const TReadyCTE& cte) {
+        const auto& [alias, v] = cte;
+
+        isOk &= Ctx_.Warning(alias.Position, TIssuesIds::YQL_UNUSED_SYMBOL, [&](auto& out) {
+            out << "CTE Symbol " << alias.Name << " is not used";
+        });
+    });
+
+    return isOk;
 }
 
 } // namespace NSQLTranslationV1

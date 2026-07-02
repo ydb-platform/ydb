@@ -2180,10 +2180,16 @@ TExprNode::TPtr PayloadRenameOverWindow(const TCoFlatMapBase& node, TExprContext
         return node.Ptr();
     }
 
+    auto flatMapInputStructType = GetSeqItemType(node.Input().Ref().GetTypeAnn())->Cast<TStructExprType>();
+
     // originalName -> nameAfterFlatMap
     TMap<TStringBuf, TStringBuf> renames;
     for (const auto& [dstName, srcName] : backRenames) {
         if (!renames.insert({ srcName, dstName }).second) {
+            return node.Ptr();
+        }
+        if (srcName != dstName && flatMapInputStructType->FindItemType(dstName)) {
+            // we overwrite existing column - can't handle this case here
             return node.Ptr();
         }
     }
@@ -2213,14 +2219,8 @@ TExprNode::TPtr PayloadRenameOverWindow(const TCoFlatMapBase& node, TExprContext
 
     TExprNodeList extractMembers;
     extractMembers.reserve(renames.size());
-    YQL_ENSURE(calcNode.Input().Ref().GetTypeAnn());
-    const TStructExprType& calcInputType = *calcNode.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     for (const auto& [srcName,  dstName] : renames) {
-        if (payloadColumns.contains(srcName)) {
-            if (calcInputType.FindItem(dstName)) {
-                return node.Ptr();
-            }
-        } else if (srcName != dstName) {
+        if (!payloadColumns.contains(srcName) && srcName != dstName) {
             return node.Ptr();
         }
         extractMembers.push_back(ctx.NewAtom(node.Pos(), dstName));
@@ -2372,7 +2372,7 @@ TExprNode::TPtr EquiJoinEmitPruneKeys(const TExprNode::TPtr& node, TExprContext&
     return ctx.ChangeChildren(*node, std::move(children));
 }
 
-TExprNodeList RenameChildCalcPayloads(const TExprNode::TPtr& node, TExprContext& ctx) {
+TMaybe<TExprNodeList> TryRenameChildCalcPayloads(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_ENSURE(TCoCalcOverWindowBase::Match(node.Get()) || TCoCalcOverWindowGroup::Match(node.Get()));
     YQL_ENSURE(TCoExtractMembers::Match(node->Child(0)));
     TCoExtractMembers extract(node->HeadPtr());
@@ -2386,9 +2386,15 @@ TExprNodeList RenameChildCalcPayloads(const TExprNode::TPtr& node, TExprContext&
     // we rename all child payload columns which are filtered by ExtractMembers to new names which will non conflict with any parent columns
     TMap<TStringBuf, TStringBuf> renames;
     for (auto& item : childOutput.GetItems()) {
-        if (!childInput.FindItem(item->GetName()) && !extractOutput.FindItem(item->GetName())) {
-            // this is a payload column for rename - name will be assigned later
-            YQL_ENSURE(renames.insert({ item->GetName(), ""}).second);
+        TStringBuf childOutName = item->GetName();
+        if (!extractOutput.FindItem(childOutName)) {
+            if (!childInput.FindItem(childOutName)) {
+                // this is a payload column for rename - name will be assigned later
+                YQL_ENSURE(renames.insert({childOutName, ""}).second);
+            } else {
+                // non-payload column which is removed by ExtractMembers - can not optimize this case
+                return {};
+            }
         }
     }
 
@@ -2516,7 +2522,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                                 .Input<TCoExtractMembers>()
                                     .Input(groupingCore.Input())
                                     .Members()
-                                        .Add(std::move(fields))
+                                        .Add(fields)
                                     .Build()
                                 .Build()
                                 .GroupSwitch(ctx.DeepCopyLambda(groupingCore.GroupSwitch().Ref()))
@@ -2621,7 +2627,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Input<TCoExtractMembers>()
                     .Input(self.Input())
                     .Members()
-                        .Add(std::move(fields))
+                        .Add(fields)
                     .Build()
                 .Build()
                 .GroupSwitch(ctx.DeepCopyLambda(self.GroupSwitch().Ref()))
@@ -2942,7 +2948,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 return Build<TCoChopper>(ctx, chopper.Pos())
                     .Input<TCoExtractMembers>()
                         .Input(chopper.Input())
-                        .Members().Add(std::move(fields)).Build()
+                        .Members().Add(fields).Build()
                         .Build()
                     .KeyExtractor(ctx.DeepCopyLambda(chopper.KeyExtractor().Ref()))
                     .GroupSwitch(ctx.DeepCopyLambda(chopper.GroupSwitch().Ref()))
@@ -3290,10 +3296,20 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return node;
         }
 
-        TExprNodeList calcs = seenExtractMembers ? RenameChildCalcPayloads(node, ctx) : ExtractCalcsOverWindow(child, ctx);
+        TExprNodeList calcs;
+        if (seenExtractMembers) {
+            auto maybeChildCalcs = TryRenameChildCalcPayloads(node, ctx);
+            if (!maybeChildCalcs) {
+                return node;
+            }
+            calcs = std::move(*maybeChildCalcs);
+        } else {
+            calcs = ExtractCalcsOverWindow(child, ctx);
+        }
+
         calcs.insert(calcs.end(), parentCalcs.begin(), parentCalcs.end());
 
-        auto result = RebuildCalcOverWindowGroup(child->Pos(), std::move(input), calcs, ctx);
+        auto result = RebuildCalcOverWindowGroup(child->Pos(), input, calcs, ctx);
         if (seenExtractMembers) {
             result = ctx.Builder(result->Pos())
                 .Callable("ExtractMembers")
@@ -3336,7 +3352,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Input<TCoExtractMembers>()
                     .Input(self.Input())
                     .Members()
-                        .Add(std::move(fields))
+                        .Add(fields)
                     .Build()
                 .Build()
                 .State(self.State())
@@ -3369,7 +3385,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Input<TCoExtractMembers>()
                     .Input(self.Input())
                     .Members()
-                        .Add(std::move(fields))
+                        .Add(fields)
                     .Build()
                 .Build()
                 .InitHandler(ctx.DeepCopyLambda(self.InitHandler().Ref()))
@@ -3400,7 +3416,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Input<TCoExtractMembers>()
                     .Input(self.Input())
                     .Members()
-                        .Add(std::move(fields))
+                        .Add(fields)
                     .Build()
                 .Build()
                 .InitHandler(ctx.DeepCopyLambda(self.InitHandler().Ref()))
@@ -3430,7 +3446,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Input<TCoExtractMembers>()
                     .Input(self.Input())
                     .Members()
-                        .Add(std::move(fields))
+                        .Add(fields)
                     .Build()
                 .Build()
                 .Lambda(ctx.DeepCopyLambda(self.Lambda().Ref()))
@@ -3459,7 +3475,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Stream<TCoExtractMembers>()
                     .Input(self.Stream())
                     .Members()
-                        .Add(std::move(fields))
+                        .Add(fields)
                     .Build()
                 .Build()
                 .KeySelector(ctx.DeepCopyLambda(self.KeySelector().Ref()))
@@ -3492,7 +3508,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Input<TCoExtractMembers>()
                     .Input(self.Input())
                     .Members()
-                        .Add(std::move(fields))
+                        .Add(fields)
                     .Build()
                 .Build()
                 .KeyExtractor(ctx.DeepCopyLambda(self.KeyExtractor().Ref()))
@@ -3534,7 +3550,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .InitFrom(self)
                 .LeftInput<TCoExtractMembers>()
                     .Input(self.LeftInput())
-                    .Members(std::move(fields))
+                    .Members(fields)
                     .Build()
                 .Done().Ptr();
         }

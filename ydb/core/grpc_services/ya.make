@@ -90,6 +90,7 @@ SRCS(
     rpc_stream_execute_scan_query.cpp
     rpc_stream_execute_yql_script.cpp
     rpc_test_shard.cpp
+    rpc_topic_deferred_publish.cpp
     rpc_view.cpp
     rpc_whoami.cpp
     table_settings.cpp
@@ -139,7 +140,9 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/opt
     ydb/core/local_indexes/bloom
+    ydb/core/persqueue/deferred_publish
     ydb/core/protos
+    ydb/core/statistics
     ydb/core/scheme
     ydb/core/sys_view
     ydb/core/tx

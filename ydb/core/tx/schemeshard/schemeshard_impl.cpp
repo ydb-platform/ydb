@@ -30,6 +30,7 @@
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
@@ -240,6 +241,97 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
             items.emplace_back(TLocalIndexMigrationItem{
                 .WorkingDir = workingDir,
                 .IndexConfig = std::move(indexConfig),
+            });
+        }
+    }
+
+    // Row tables: legacy prefix bloom filters live as nameless ByKeyFilterPrefixes in the
+    // partition config. Synthesize a named TTableIndex scheme object per prefix.
+    for (const auto& [tablePathId, tableInfo] : Tables) {
+        const auto& partitionConfig = tableInfo->PartitionConfig();
+        if (partitionConfig.ByKeyFilterPrefixesSize() == 0) {
+            continue;
+        }
+
+        const TPathElement::TPtr tablePath = PathsById.at(tablePathId);
+        if (tablePath->Dropped() || !tablePath->IsTable()) {
+            continue;
+        }
+        const TPath path = TPath::Init(tablePathId, this);
+        if (!path.IsCommonSensePath()) {
+            // Skip index impl tables and other non-user tables.
+            continue;
+        }
+
+        // Ordered primary-key column names.
+        TVector<TString> pkColumns;
+        pkColumns.reserve(tableInfo->KeyColumnIds.size());
+        for (ui32 colId : tableInfo->KeyColumnIds) {
+            auto colIt = tableInfo->Columns.find(colId);
+            if (colIt == tableInfo->Columns.end()) {
+                break;
+            }
+            pkColumns.push_back(colIt->second.Name);
+        }
+
+        const TString workingDir = path.PathString();
+
+        for (const auto& prefix : partitionConfig.GetByKeyFilterPrefixes()) {
+            const ui32 prefixLen = prefix.GetPrefixLength();
+            if (prefixLen == 0 || prefixLen > pkColumns.size()) {
+                continue;
+            }
+
+            // Idempotency: skip if a local bloom index over this prefix already exists.
+            bool alreadyExists = false;
+            for (const auto& [childName, childPathId] : tablePath->GetChildren()) {
+                const auto& child = PathsById.at(childPathId);
+                if (child->Dropped() || !child->IsTableIndex()) {
+                    continue;
+                }
+                auto indexIt = Indexes.find(childPathId);
+                if (indexIt == Indexes.end()
+                    || indexIt->second->Type != NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
+                    continue;
+                }
+                const auto& indexKeys = indexIt->second->IndexKeys;
+                if (indexKeys.size() == prefixLen
+                    && std::equal(indexKeys.begin(), indexKeys.end(), pkColumns.begin())) {
+                    alreadyExists = true;
+                    break;
+                }
+            }
+            if (alreadyExists) {
+                continue;
+            }
+
+            NKikimrSchemeOp::TIndexCreationConfig indexConfig;
+            for (ui32 i = 0; i < prefixLen; ++i) {
+                indexConfig.AddKeyColumnNames(pkColumns[i]);
+            }
+            // Legacy prefixes have no name. Use a deterministic convention
+            // "idx_bloom_<prefixLen>" to keep the name stable.
+            const TString name = TStringBuilder() << "idx_bloom_" << prefixLen;
+            if (tablePath->FindChild(name)) {
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "CollectLocalIndexMigrations: skipping row bloom prefix " << prefixLen
+                    << " for table " << workingDir << " (name '" << name << "' already taken)");
+                continue;
+            }
+            indexConfig.SetName(name);
+            indexConfig.SetType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+            indexConfig.SetState(NKikimrSchemeOp::EIndexStateReady);
+            indexConfig.MutableBloomFilterDescription()->SetFalsePositiveProbability(
+                prefix.HasFalsePositiveProbability()
+                    ? prefix.GetFalsePositiveProbability()
+                    : NTable::DefaultBloomFilterFpp);
+
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "CollectLocalIndexMigrations: adding row bloom index " << name << " from table " << workingDir);
+            items.emplace_back(TLocalIndexMigrationItem{
+                .WorkingDir = workingDir,
+                .IndexConfig = std::move(indexConfig),
+                .IsColumnTable = false,
             });
         }
     }
@@ -2555,7 +2647,8 @@ void TSchemeShard::PersistSubDomainState(NIceDb::TNiceDb& db, const TPathId& pat
 
     db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::SubDomains::StateVersion>(subDomain.GetDomainStateVersion()),
-            NIceDb::TUpdate<Schema::SubDomains::DiskQuotaExceeded>(subDomain.GetDiskQuotaExceeded()));
+            NIceDb::TUpdate<Schema::SubDomains::DiskQuotaExceeded>(subDomain.GetDiskQuotaExceeded()),
+            NIceDb::TUpdate<Schema::SubDomains::SmallBlobsQuotaExceeded>(subDomain.GetSmallBlobsQuotaExceeded()));
 }
 
 void TSchemeShard::PersistSubDomainSchemeQuotas(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain) {
@@ -5839,6 +5932,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         //namespace NIndexBuilder {
         HFuncTraced(TEvSetColumnConstraint::TEvCreateRequest, Handle);
+        HFuncTraced(TEvSetColumnConstraint::TEvGetRequest, Handle);
         HFuncTraced(TEvDataShard::TEvValidateRowConditionResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvCreateRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvGetRequest, Handle);
@@ -8685,13 +8779,18 @@ void TSchemeShard::ConfigureForcedCompactionQueue(
     ForcedCompactionPersistBatchSize = config.GetPersistBatchSize();
     ForcedCompactionPersistBatchMaxTime = TDuration::MilliSeconds(config.GetPersistBatchMaxTimeMs());
 
+    ForcedCompactionStoredOperationsLimit = config.GetStoredOperationsLimit();
+    ForcedCompactionAutoForgetOperations = config.GetAutoForgetOperations();
+
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "ForcedCompactionQueue configured: Timeout# " << compactionConfig.Timeout
                  << ", Rate# " << ForcedCompactionQueue->GetRate()
                  << ", WakeupInterval# " << compactionConfig.WakeupInterval
                  << ", InflightLimit# " << compactionConfig.InflightLimit
                  << ", ForcedCompactionPersistBatchSize# " << ForcedCompactionPersistBatchSize
-                 << ", ForcedCompactionPersistBatchMaxTime# " << ForcedCompactionPersistBatchMaxTime);
+                 << ", ForcedCompactionPersistBatchMaxTime# " << ForcedCompactionPersistBatchMaxTime
+                 << ", ForcedCompactionStoredOperationsLimit# " << ForcedCompactionStoredOperationsLimit
+                 << ", ForcedCompactionAutoForgetOperations# " << ForcedCompactionAutoForgetOperations);
 }
 
 void TSchemeShard::ConfigureBackgroundCleaningQueue(
@@ -8900,8 +8999,8 @@ void TSchemeShard::ChangeDiskSpaceTopicsTotalBytes(ui64 value) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_TOPICS_TOTAL_BYTES].Set(value);
 }
 
-void TSchemeShard::ChangeDiskSpaceQuotaExceeded(i64 delta) {
-    TabletCounters->Simple()[COUNTER_DISK_SPACE_QUOTA_EXCEEDED].Add(delta);
+void TSchemeShard::ChangeSimpleCounter(ESimpleCounters counter, i64 delta) {
+    TabletCounters->Simple()[counter].Add(delta);
 }
 
 void TSchemeShard::ChangeDiskSpaceHardQuotaBytes(i64 delta) {
@@ -8918,6 +9017,30 @@ void TSchemeShard::AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType
     } else if (storageType == EUserFacingStorageType::Hdd) {
         TabletCounters->Simple()[COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES_ON_HDD].Add(addend);
     }
+}
+
+void TSchemeShard::ChangeSmallBlobsVolumeBytes(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_VOLUME_BYTES].Add(delta);
+}
+
+void TSchemeShard::ChangeSmallBlobsCount(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_COUNT].Add(delta);
+}
+
+void TSchemeShard::ChangeSmallBlobsVolumeHardQuotaBytes(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_VOLUME_HARD_QUOTA_BYTES].Add(delta);
+}
+
+void TSchemeShard::ChangeSmallBlobsVolumeSoftQuotaBytes(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_VOLUME_SOFT_QUOTA_BYTES].Add(delta);
+}
+
+void TSchemeShard::ChangeSmallBlobsCountHardQuota(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_COUNT_HARD_QUOTA].Add(delta);
+}
+
+void TSchemeShard::ChangeSmallBlobsCountSoftQuota(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_COUNT_SOFT_QUOTA].Add(delta);
 }
 
 void TSchemeShard::ChangePathCount(i64 delta) {

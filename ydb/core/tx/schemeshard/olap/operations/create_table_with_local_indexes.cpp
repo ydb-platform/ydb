@@ -54,7 +54,7 @@ TVector<ISubOperation::TPtr> CreateColumnTableWithLocalIndexes(TOperationId next
         scheme.SetInternal(true);
         *scheme.MutableCreateTableIndex() = std::move(indexConfig);
 
-        result.push_back(CreateNewLocalIndex(NextPartId(nextId, result), scheme));
+        result.push_back(CreateNewColumnTableLocalIndex(NextPartId(nextId, result), scheme));
     }
 
     return result;

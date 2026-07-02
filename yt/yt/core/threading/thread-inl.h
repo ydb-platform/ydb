@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "thread.h"
 #endif
-#undef THREAD_INL_H_
 
 namespace NYT::NThreading {
 

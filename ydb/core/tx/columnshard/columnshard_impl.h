@@ -29,6 +29,7 @@
 #include "tablet/ext_tx_base.h"
 #include "transactions/tx_controller.h"
 
+#include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet/tablet_counters.h>
@@ -305,6 +306,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
 
     void Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NBackground::TEvExecuteGeneralLocalTransaction::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::NBackground::TEvRemoveSession::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModification::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished::TPtr& ev, const TActorContext& ctx);
@@ -320,6 +322,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& ctx);
     void Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCancelBackup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCancelRestore::TPtr& ev, const TActorContext& ctx);
 
@@ -478,6 +481,7 @@ protected:
 
             HFunc(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs, Handle);
             HFunc(NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
+            HFunc(NOlap::NBackground::TEvRemoveSession, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModification, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished, Handle);
 
@@ -492,6 +496,7 @@ protected:
             HFunc(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors, Handle);
             HFunc(NColumnShard::TEvPrivate::TEvAskColumnData, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);
             HFunc(TEvColumnShard::TEvOverloadUnsubscribe, Handle);
             HFunc(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
             HFunc(TEvDataShard::TEvCancelBackup, Handle);
@@ -649,6 +654,12 @@ private:
 
     void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev, IExecutor* executor);
     void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev, IExecutor* executor);
+
+    // We assume that all the blob storage groups for a database have the same layout (erasure, etc.)
+    std::optional<NKikimr::TBlobStorageGroupType> BlobStorageLayout;
+    const std::optional<NKikimr::TBlobStorageGroupType>& GetBlobStorageLayout();
+
+    ui64 NormalizeSmallBlobsCount(const ui64 rawCount);
 
 public:
     ui64 TabletTxCounter = 0;

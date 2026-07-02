@@ -20,16 +20,21 @@
 {%-     set with_kotlinc_plugin_lombok = all_targets|selectattr('with_kotlinc_plugin_lombok')|map(attribute='with_kotlinc_plugin_lombok')|sum -%}
 {#-     KAPT -#}
 {%-     set with_kapt = target.with_kapt and target.kapt.kapts|length -%}
-{%-     set with_test_kapt = extra_targets|selectattr('with_kapt', 'eq', true)|map(attribute='with_kapt')|length and extra_targets|selectattr('with_kapt', 'eq', true)|selectattr('kapt')|map(attribute='kapt')|selectattr('classpaths')|map(attribute='classpaths')|sum|length or extra_targets|selectattr('with_kapt', 'eq', true)|map(attribute='with_kapt')|length and extra_targets|selectattr('with_kapt', 'eq', true)|selectattr('kapt')|map(attribute='kapt')|selectattr('kapts')|map(attribute='kapts')|sum|length -%}
+{%-     set with_test_kapt = extra_targets|selectattr('with_kapt', 'eq', true)|selectattr('kapt')|map(attribute='kapt')|selectattr('kapts')|map(attribute='kapts')|sum|length -%}
 {#-     Options kapt.kotlin.generated autocreated by kapt plugin, skip it -#}
 {%-     set all_kapt_ap_opts = all_targets|selectattr('kapt')|map(attribute='kapt')|selectattr('ap_opts')|map(attribute='ap_opts')|sum|reject('startsWith', 'kapt.kotlin.generated=') -%}
 {%- endif -%}
 
 {#- ErrorProne -#}
-{%- set with_errorprone = not(disable_errorprone) and (target.use_errorprone) and (target.consumer|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length) -%}
-{%- set with_test_errorprone = not(disable_errorprone) and not(disable_test_errorprone) and (extra_targets|selectattr('use_errorprone', 'eq', true)|length) and (extra_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length) -%}
-{%- if with_errorprone or with_test_errorprone -%}
-{%-     set errorprones = all_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('classpath')|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|unique -%}
+{%- if disable_errorprone -%}
+{%-     set with_errorprone = false -%}
+{%-     set with_test_errorprones = [] -%}
+{%- else -%}
+{%-     set with_errorprone = target.use_errorprone -%}
+{%-     set with_test_errorprones = extra_targets|selectattr('use_errorprone')|map(attribute='use_errorprone') -%}
+{%-     if with_test_errorprones|length -%}
+{%-         set with_test_errorprones = with_test_errorprones|unique -%}
+{%-     endif -%}
 {%- endif -%}
 
 {#- Lombok -#}
@@ -43,7 +48,7 @@
 {%- set hasResources = all_targets|selectattr('resource_sets')|map(attribute='resource_sets')|sum|length -%}
 {%- if auto_resource_sets and not hasResources -%}
 {%-    set all_source_dirs = all_targets|selectattr('source_sets')|map(attribute='source_sets')|sum|selectattr('dir')|map(attribute='dir') -%}
-{%-    if all_source_dirs|select('eq', 'src/main/resources')|length or all_source_dirs|select('eq', 'src/test/resources')|length or all_source_dirs|select('eq', 'resources')|length -%}
+{%-    if 'resources' in all_source_dirs|join('|') -%}
 {%-        set hasResources = true -%}
 {%-    endif -%}
 {%- endif -%}

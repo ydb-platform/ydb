@@ -35,10 +35,6 @@ public:
     TStatus DoTransform(TExprNode::TPtr inputExpr, TExprNode::TPtr& outputExpr, TExprContext& ctx) final {
         outputExpr = inputExpr;
 
-        if (!KqpCtx->Config->GetEnableOltpSink()) {
-            return TStatus::Ok;
-        }
-
         TNodeOnNodeOwnedMap marked;
 
         {
@@ -158,6 +154,46 @@ public:
                             }
                         }
                     }
+
+                    if (auto maybeTransform = output.Maybe<TDqTransform>()) {
+                        const auto transform = maybeTransform.Cast();
+                        if (const auto sinkSettings = transform.Settings().Maybe<TKqpTableSinkSettings>()) {
+                            AFL_ENSURE(sinkSettings.Cast().Mode() != "fill_table");
+                            AFL_ENSURE(KqpCtx->Tables->ExistingTable(KqpCtx->Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Datashard);
+                            AFL_ENSURE(stage.Inputs().Size() == 1);
+                            AFL_ENSURE(stage.Inputs().Item(0).Maybe<TDqCnUnionAll>());
+                            AFL_ENSURE(stage.Settings().Empty());
+
+                            AFL_ENSURE(stage.Program().Args().Size() == 1);
+                            AFL_ENSURE(stage.Program().Body().Maybe<TCoArgument>());
+                            AFL_ENSURE(stage.Program().Body().Cast<TCoArgument>().Name() ==
+                                stage.Program().Args().Arg(0).Cast<TCoArgument>().Name());
+
+                            auto inputRows = Build<TDqPhyPrecompute>(ctx, node.Pos())
+                                .Connection(stage.Inputs().Item(0).Ptr())
+                                .Done();
+
+                            auto rowArg = Build<TCoArgument>(ctx, node.Pos())
+                                .Name("rowArg")
+                                .Done();
+
+                            replaces[node.Raw()] = Build<TDqStage>(ctx, node.Pos())
+                                .Inputs()
+                                    .Add(inputRows)
+                                    .Build()
+                                .Program()
+                                    .Args({rowArg})
+                                    .Body<TCoToFlow>()
+                                        .Input(rowArg)
+                                        .Build()
+                                    .Build()
+                                .Outputs<TDqStageOutputsList>()
+                                    .Add(transform)
+                                    .Build()
+                                .Settings().Build()
+                                .Done().Ptr();
+                        }
+                    }
                 }
             }
         }
@@ -241,22 +277,32 @@ private:
             }
 
             if (const auto outputs = stage.Outputs()) {
-                ui64 sinkOutputsCount = 0;
+                ui64 sinkOrTransformOutputsCount = 0;
                 for (const auto& output : outputs.Cast()) {
                     if (auto maybeSink = output.Maybe<TDqSink>()) {
                         const auto sink = maybeSink.Cast();
                         if (const auto sinkSettings = sink.Settings().Maybe<TKqpTableSinkSettings>()) {
-                            sinkOutputsCount++;
+                            sinkOrTransformOutputsCount++;
                             const auto executedAsSingleEffect = sinkSettings.Cast().Mode() == "fill_table"
                                 || (kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Olap);
                             if (!executedAsSingleEffect) {
                                 sinkStages.emplace(stage.Raw(), stage.Ptr());
                             }
                         }
+                    } else if (auto maybeTransform = output.Maybe<TDqTransform>()) {
+                        const auto transform = maybeTransform.Cast();
+                        if (const auto sinkSettings = transform.Settings().Maybe<TKqpTableSinkSettings>()) {
+                            sinkOrTransformOutputsCount++;
+                            AFL_ENSURE(sinkSettings.Cast().Mode() != "fill_table");
+                            AFL_ENSURE(kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Datashard);
+                            // OutputTransforms are not added to sinkStages directly.
+                            // They can still be processed for precomputation if they share
+                            // upstream dependencies with actual sink stages.
+                        }
                     }
                 }
 
-                AFL_ENSURE(sinkOutputsCount <= 1)("SinkOutputsCount", sinkOutputsCount);
+                AFL_ENSURE(sinkOrTransformOutputsCount <= 1)("SinkOrTransformOutputsCount", sinkOrTransformOutputsCount);
             }
 
             return true;

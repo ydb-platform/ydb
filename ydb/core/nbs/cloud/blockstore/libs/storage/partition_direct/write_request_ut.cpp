@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
 
         auto writeRequest = CreateRequestExecutor(
             MakeWriteTestRequestHeaders(Range, BlockSize),
-            EWriteMode::DirectPBuffersFilling);
+            EWriteMode::DirectWrite);
         writeRequest->Run();
 
         UNIT_ASSERT_VALUES_EQUAL(false, WriteClient->Response.has_value());
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
 
         auto writeRequest = CreateRequestExecutor(
             MakeWriteTestRequestHeaders(Range, BlockSize),
-            EWriteMode::DirectPBuffersFilling);
+            EWriteMode::DirectWrite);
         writeRequest->Run();
 
         UNIT_ASSERT_VALUES_EQUAL(false, WriteClient->Response.has_value());
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
 
         auto writeRequest = CreateRequestExecutor(
             MakeWriteTestRequestHeaders(Range, BlockSize),
-            EWriteMode::DirectPBuffersFilling);
+            EWriteMode::DirectWrite);
         writeRequest->Run();
         UNIT_ASSERT_VALUES_EQUAL(3, writePBufferPromises.size());
 
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
 
         auto writeRequest = CreateRequestExecutor(
             MakeWriteTestRequestHeaders(Range, BlockSize),
-            EWriteMode::DirectPBuffersFilling);
+            EWriteMode::DirectWrite);
         writeRequest->Run();
 
         UNIT_ASSERT_VALUES_EQUAL(3, writePBufferPromises.size());
@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
         // prepare and call main request
         auto writeRequest = CreateRequestExecutor(
             MakeWriteTestRequestHeaders(Range, BlockSize),
-            EWriteMode::PBufferReplication);
+            EWriteMode::IndirectWrite);
 
         writeRequest->Run();
 
@@ -268,7 +268,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
         // prepare and call main request
         auto writeRequest = CreateRequestExecutor(
             MakeWriteTestRequestHeaders(Range, BlockSize),
-            EWriteMode::PBufferReplication);
+            EWriteMode::IndirectWrite);
         writeRequest->Run();
 
         // as response is hanging, there is no results
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
         // prepare and call main request
         auto writeRequest = CreateRequestExecutor(
             MakeWriteTestRequestHeaders(Range, BlockSize),
-            EWriteMode::PBufferReplication);
+            EWriteMode::IndirectWrite);
         writeRequest->Run();
 
         // as response is hanging, there is no results
@@ -342,7 +342,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
         // prepare and call main request
         auto writeRequest = CreateRequestExecutor(
             MakeWriteTestRequestHeaders(Range, BlockSize),
-            EWriteMode::PBufferReplication);
+            EWriteMode::IndirectWrite);
         writeRequest->Run();
 
         // as response is hanging, there is no results
@@ -394,7 +394,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
         // prepare and call main request
         auto writeRequest = CreateRequestExecutor(
             MakeWriteTestRequestHeaders(Range, BlockSize),
-            EWriteMode::PBufferReplication);
+            EWriteMode::IndirectWrite);
         writeRequest->Run();
 
         // as response is hanging, there is no results
@@ -443,7 +443,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
         // prepare and call main request
         auto writeRequest = CreateRequestExecutor(
             MakeWriteTestRequestHeaders(Range, BlockSize),
-            EWriteMode::PBufferReplication);
+            EWriteMode::IndirectWrite);
         writeRequest->Run();
 
         // as response is hanging, there is no results
@@ -493,7 +493,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
 
         auto writeRequest = CreateRequestExecutor(
             MakeWriteTestRequestHeaders(Range, BlockSize),
-            EWriteMode::PBufferReplication);
+            EWriteMode::IndirectWrite);
 
         writeRequest->Run();
 
@@ -518,12 +518,11 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
 
         auto writeRequest = CreateRequestExecutor(
             MakeWriteTestRequestHeaders(Range, BlockSize),
-            EWriteMode::PBufferReplication);
+            EWriteMode::IndirectWrite);
         writeRequest->Run();
 
         {
             TDBGWriteBlocksToManyPBuffersResponse partResponse;
-            partResponse.OverallError = MakeError(S_OK);
             partResponse.Responses.push_back(
                 {.HostIndex = THostIndex{1}, .Error = MakeError(S_OK)});
             partResponse.Responses.push_back(
@@ -557,7 +556,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
 
         auto writeRequest = CreateRequestExecutor(
             MakeWriteTestRequestHeaders(Range, BlockSize),
-            EWriteMode::PBufferReplication);
+            EWriteMode::IndirectWrite);
         writeRequest->Run();
 
         //  call hedge mechanism
@@ -566,7 +565,6 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
 
         {
             TDBGWriteBlocksToManyPBuffersResponse partResponse;
-            partResponse.OverallError = MakeError(S_OK);
             partResponse.Responses.push_back(
                 {.HostIndex = THostIndex{0}, .Error = MakeError(S_OK)});
             partResponse.Responses.push_back(

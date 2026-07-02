@@ -19,7 +19,8 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
   [ENCODING([OFF|DICT])]
   [, ...],
     INDEX <index_name>
-      [GLOBAL]
+      [GLOBAL|LOCAL]
+      [UNIQUE]
       [SYNC|ASYNC]
       [USING <index_type>]
       ON ( <index_columns> )
@@ -63,7 +64,13 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 ### INDEX
 
-Определение индекса на таблице. Поддерживаются [вторичные индексы](secondary_index.md), [векторные индексы](vector_index.md) и [полнотекстовые индексы](fulltext_index.md).
+Определение индекса на таблице. Поддерживаются:
+
+* [вторичные индексы](secondary_index.md),
+* [векторные индексы](vector_index.md),
+* [полнотекстовые индексы](fulltext_index.md),
+* [Блум-индексы](bloom_skip_index.md),
+* [JSON-индексы](json_index.md).
 
 ### PRIMARY KEY
 
@@ -314,12 +321,15 @@ CREATE TABLE <table_name> (
 * [Вторичный индекс](secondary_index.md).
 * [Векторный индекс](vector_index.md).
 * [Полнотекстовый индекс](fulltext_index.md).
+* [JSON-индекс](json_index.md).
+* [Блум-индекс](bloom_skip_index.md).
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).
 * [Создание и заполнение таблицы на основе результатов запроса](as_select.md).
 
 Для колоночных таблиц при их создании возможно задать:
 
+* [Блум-индекс](bloom_skip_index.md).
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).
 * [Создание и заполнение таблицы на основе результатов запроса](as_select.md).

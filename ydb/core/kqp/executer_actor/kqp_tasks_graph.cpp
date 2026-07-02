@@ -18,6 +18,8 @@
 
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_tablemetadata.pb.h>
+#include <ydb/core/engine/mkql_keys.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -975,6 +977,7 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
 
     settings->SetLookupStrategy(streamLookup.GetLookupStrategy());
     settings->SetKeepRowsOrder(streamLookup.GetKeepRowsOrder());
+    settings->SetCookieFormatVersion(streamLookup.GetCookieFormatVersion());
     settings->SetAllowNullKeysPrefixSize(streamLookup.GetAllowNullKeysPrefixSize());
     settings->SetIsolationLevel(GetMeta().RequestIsolationLevel);
 
@@ -1145,7 +1148,7 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
 void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination) {
     const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
-    if (stage.GetIsEffectsStage() && stage.GetSinks().empty()) {
+    if (stage.GetIsEffectsStage() && stage.GetSinks().empty() && stage.GetOutputTransforms().empty()) {
         YQL_ENSURE(stageInfo.OutputsCount == 1);
 
         for (auto& taskId : stageInfo.Tasks) {
@@ -2518,6 +2521,19 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
         }
     }
 
+    // Resolve prefix column equality values (literal or $param) into serialized key cells.
+    for (const auto& prefixColumn : fullTextSource.GetQuerySettings().GetPrefixColumns()) {
+        auto value = ExtractPhyValue(
+            stageInfo, prefixColumn.GetValue(),
+            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+        auto* out = settings->MutableQuerySettings()->AddPrefixColumns();
+        out->MutableColumn()->CopyFrom(prefixColumn.GetColumn());
+        auto typeInfo = NScheme::TypeInfoFromProto(
+            prefixColumn.GetColumn().GetTypeId(), prefixColumn.GetColumn().GetTypeInfo());
+        TCell cell = NMiniKQL::MakeCell(typeInfo, value, TxAlloc->TypeEnv, /* copy */ true);
+        out->SetValue(TSerializedCellVec::Serialize(TConstArrayRef<TCell>(&cell, 1)));
+    }
+
     if (fullTextSource.HasTakeLimit()) {
         auto value = ExtractPhyValue(
             stageInfo, fullTextSource.GetTakeLimit(),
@@ -3666,9 +3682,14 @@ void TKqpTasksGraph::CountReadTasksFromSource(const TStageInfo& stageInfo, size_
     }
     MaxTasksGraph.AddStage(stageId, TMaxTasksGraph::ANY, inputs);
 
+    ui32 taskCountHint = stage.GetTaskCount();
+    if (!taskCountHint) {
+        taskCountHint = scheduledTaskCount;
+    }
+
     ui32 taskCount = externalSource.GetPartitionedTaskParams().size();
-    if (scheduledTaskCount) {
-        taskCount = std::min<ui32>(taskCount, scheduledTaskCount);
+    if (taskCountHint) {
+        taskCount = std::min<ui32>(taskCount, taskCountHint);
     } else if (resourceSnapshotSize) {
         taskCount = std::min<ui32>(taskCount, resourceSnapshotSize * 2);
     }

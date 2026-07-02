@@ -72,7 +72,7 @@ using TASessionClosedEvent = std::conditional_t<UseMigrationProtocol,
 
 struct TMigrationPartitionStream: public NYdb::NPersQueue::TPartitionStream {
     virtual void Commit(uint64_t startOffset, uint64_t endOffset) = 0;
-    virtual void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) = 0;
+    virtual void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset, std::optional<uint64_t> maxOffset) = 0;
     virtual void ConfirmDestroy() = 0;
     virtual void ConfirmEnd(std::span<const uint32_t> childIds) = 0;
 };
@@ -127,7 +127,7 @@ using TCallbackContextPtr = std::shared_ptr<TCallbackContext<TSingleClusterReadS
 template <bool UseMigrationProtocol>
 class TUserRetrievedEventsInfoAccumulator {
 public:
-    void Add(TDataDecompressionInfoPtr<UseMigrationProtocol> info, i64 decompressedSize);
+    void Add(TDataDecompressionInfoPtr<UseMigrationProtocol> info, i64 decompressedSize, size_t messagesCount = 1);
     void OnUserRetrievedEvent() const;
 
 private:
@@ -231,6 +231,15 @@ template <bool UseMigrationProtocol>
 class TDataDecompressionInfo : public std::enable_shared_from_this<TDataDecompressionInfo<UseMigrationProtocol>> {
 public:
     using TPtr = std::shared_ptr<TDataDecompressionInfo<UseMigrationProtocol>>;
+    using TMessage = typename TADataReceivedEvent<UseMigrationProtocol>::TMessage;
+    using TCompressedMessage = typename TADataReceivedEvent<UseMigrationProtocol>::TCompressedMessage;
+
+    struct TDecompressedData {
+        std::vector<TMessage> Messages;
+        std::vector<TCompressedMessage> CompressedMessages;
+        size_t DataSize = 0;
+        size_t MessagesTaken = 0;
+    };
 
     TDataDecompressionInfo(const TDataDecompressionInfo&) = default;
     TDataDecompressionInfo(TDataDecompressionInfo&&) = default;
@@ -238,7 +247,8 @@ public:
         TPartitionData<UseMigrationProtocol>&& msg,
         TCallbackContextPtr<UseMigrationProtocol> cbContext,
         bool doDecompress,
-        i64 serverBytesSize = 0 // to increment read request bytes size
+        i64 serverBytesSize = 0, // to increment read request bytes size
+        ui64 committedOffset = 0
     );
     ~TDataDecompressionInfo();
 
@@ -247,8 +257,9 @@ public:
     i64 StartDecompressionTasks(const typename IExecutor::TPtr& executor,
                                 i64 availableMemory,
                                 TDeferredActions<UseMigrationProtocol>& deferred);
-    void PlanDecompressionTasks(double averageCompressionRatio,
-                                TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream);
+    bool PlanDecompressionTasks(double averageCompressionRatio,
+                                TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                                TDeferredActions<UseMigrationProtocol>& deferred);
 
     void OnDestroyReadSession();
 
@@ -317,6 +328,14 @@ public:
     void PutDecompressionError(std::exception_ptr error, size_t batch, size_t message);
     std::exception_ptr GetDecompressionError(size_t batch, size_t message);
 
+    TDecompressedData TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                               size_t batch,
+                               size_t message,
+                               size_t& maxByteSize);
+
+    size_t GetPreparedDataSize(size_t batch, size_t message) const;
+    size_t GetPreparedMessageCount(size_t batch, size_t message) const;
+
     void OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount);
     void OnUserRetrievedEvent(i64 decompressedDataSize, size_t messagesCount);
     void OnTaskCanceled(i64 sourceSize, size_t messagesCount);
@@ -366,6 +385,13 @@ private:
     };
 
     void BuildBatchesMeta();
+    TDecompressedData BuildDecompressedData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                                            size_t batch,
+                                            size_t message,
+                                            const TDecompressionResult& codecResult);
+    void PutDecompressedData(size_t batch,
+                             size_t message,
+                             TDecompressedData&& data);
 
 private:
     TPartitionData<UseMigrationProtocol> ServerMessage;
@@ -373,8 +399,10 @@ private:
     using TMessageMetaPtrVector = std::vector<typename TAMessageMeta<UseMigrationProtocol>::TPtr>;
     TMetadataPtrVector BatchesMeta;
     std::vector<TMessageMetaPtrVector> MessagesMeta;
+    std::vector<std::vector<TDecompressedData>> DecompressedData;
     TCallbackContextPtr<UseMigrationProtocol> CbContext;
     bool DoDecompress;
+    ui64 CommittedOffset = 0;
     std::atomic<i64> ServerBytesSize = 0;
     std::atomic<i64> SourceDataNotProcessed = 0;
     std::pair<size_t, size_t> CurrentDecompressingMessage = {0, 0}; // (Batch, Message)
@@ -418,13 +446,12 @@ public:
         return !Ready;
     }
 
-    void TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
-                  std::vector<typename TADataReceivedEvent<UseMigrationProtocol>::TMessage>& messages,
-                  std::vector<typename TADataReceivedEvent<UseMigrationProtocol>::TCompressedMessage>& compressedMessages,
-                  size_t& maxByteSize,
-                  size_t& dataSize) const;
+    typename TDataDecompressionInfo<UseMigrationProtocol>::TDecompressedData
+    TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+             size_t& maxByteSize) const;
 
     size_t GetDataSize() const;
+    size_t GetMessageCount() const;
 
     TDataDecompressionInfoPtr<UseMigrationProtocol> GetParent() const {
         return Parent;
@@ -602,6 +629,7 @@ public:
                            TReadSessionEventsQueue<UseMigrationProtocol>& queue,
                            TDeferredActions<UseMigrationProtocol>& deferred);
     void DeleteNotReadyTail(TDeferredActions<UseMigrationProtocol>& deferred);
+    void Cleanup(TDeferredActions<UseMigrationProtocol>& deferred);
 
     void GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
                           size_t& maxEventsCount,
@@ -729,7 +757,7 @@ public:
     void Commit(uint64_t startOffset, uint64_t endOffset) override;
     void RequestStatus() override;
 
-    void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) override;
+    void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset, std::optional<uint64_t> maxOffset) override;
     void ConfirmDestroy() override;
     void ConfirmEnd(std::span<const uint32_t> childIds) override;
 
@@ -901,7 +929,7 @@ public:
     TReadSessionEventsQueue(const TAReadSessionSettings<UseMigrationProtocol>& settings);
 
     // Assumes we are under lock.
-    TReadSessionEventInfo<UseMigrationProtocol>
+    std::optional<TReadSessionEventInfo<UseMigrationProtocol>>
     GetEventImpl(size_t& maxByteSize,
                  TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator);
 
@@ -936,6 +964,9 @@ public:
         }
 
         // Delayed deletion is necessary to avoid deadlock with PushEvent
+        for (auto& queue : deferredDelete) {
+            queue.Cleanup(deferred);
+        }
         deferredDelete.clear();
 
         TReadSessionEventInfo<UseMigrationProtocol> info(event);
@@ -1120,7 +1151,7 @@ private:
         TCallbackContextPtr<UseMigrationProtocol> CbContext;
     };
 
-    TADataReceivedEvent<UseMigrationProtocol>
+    std::optional<TADataReceivedEvent<UseMigrationProtocol>>
         GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream,
                          size_t& maxByteSize,
                          TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator); // Assumes that we're under lock.
@@ -1218,7 +1249,7 @@ public:
     ~TSingleClusterReadSessionImpl();
 
     void Start();
-    void ConfirmPartitionStreamCreate(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, std::optional<ui64> readOffset, std::optional<ui64> commitOffset);
+    void ConfirmPartitionStreamCreate(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, std::optional<ui64> readOffset, std::optional<ui64> commitOffset, std::optional<ui64> maxOffset);
     void ConfirmPartitionStreamDestroy(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream);
     void ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, std::span<const ui32> childIds);
     void RequestPartitionStreamStatus(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream);
@@ -1242,7 +1273,7 @@ public:
     void OnUserRetrievedEvent(i64 decompressedSize, size_t messagesCount) override;
 
     void Abort();
-    void AbortImpl();
+    void AbortImpl(TDeferredActions<UseMigrationProtocol>* deferred = nullptr);
     void Close(std::function<void()> callback);
     void AbortSession(TASessionClosedEvent<UseMigrationProtocol>&& closeEvent);
 
@@ -1311,6 +1342,7 @@ private:
     void OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext);
     void OnConnect(TPlainStatus&&, typename IProcessor::TPtr&&, const NYdbGrpc::IQueueClientContextPtr& connectContext);
     void DestroyAllPartitionStreamsImpl(TDeferredActions<UseMigrationProtocol>& deferred); // Destroy all streams before setting new connection // Assumes that we're under lock.
+    void CleanupDecompressionQueueImpl(TDeferredActions<UseMigrationProtocol>& deferred); // Assumes that we're under lock.
 
     // Initing.
     inline void InitImpl(TDeferredActions<UseMigrationProtocol>& deferred); // Assumes that we're under lock.
@@ -1352,7 +1384,7 @@ private:
 
     bool GetRangesMode() const;
 
-    void CallCloseCallbackImpl();
+    void CallCloseCallbackImpl(TDeferredActions<UseMigrationProtocol>* deferred = nullptr);
 
     void UpdateMemoryUsageStatisticsImpl();
     void UpdateReadSizeBudgetCounter(i64 value);

@@ -1,5 +1,5 @@
 {
-    "time_to_sleep_between_requests_ms" = 100;
+    "time_to_sleep_between_requests_ms" = 1000;
     "memory_limit_bytes" = 0;
     "job_factory" = {
         "num_threads" = 10;

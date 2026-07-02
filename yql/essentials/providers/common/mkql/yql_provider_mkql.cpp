@@ -990,6 +990,21 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }
     });
 
+    AddCallable("BlockGuess", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto blockVariantValue = MkqlBuildExpr(*node.Child(0), ctx);
+        bool isScalar;
+        const TTypeAnnotationNode* blockItemType = GetBlockItemType(*node.Child(0)->GetTypeAnn(), isScalar);
+        const TTypeAnnotationNode* variantItemType = blockItemType->GetKind() == ETypeAnnotationKind::Optional
+                                                         ? blockItemType->Cast<TOptionalExprType>()->GetItemType()
+                                                         : blockItemType;
+        const auto* variantType = variantItemType->Cast<TVariantExprType>();
+        if (variantType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
+            const auto alternativeIndex = FromString<ui32>(node.Child(1)->Content());
+            return ctx.ProgramBuilder.BlockGuess(blockVariantValue, alternativeIndex);
+        }
+        return ctx.ProgramBuilder.BlockGuess(blockVariantValue, node.Child(1)->Content());
+    });
+
     AddCallable("Visit", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto variantObj = MkqlBuildExpr(node.Head(), ctx);
         const auto type = node.Head().GetTypeAnn()->Cast<TVariantExprType>();
@@ -1836,6 +1851,44 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.CommonJoinCore(list, joinKind, leftColumns, rightColumns,
                                                  requiredColumns, keyColumns, memLimit, sortedTableOrder, anyJoinSettings, tableIndexFieldPos, returnType);
+    });
+
+    AddCallable("ListJoinCore", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto stream = MkqlBuildExpr(node.Head(), ctx);
+        const auto inputStructType = GetSeqItemType(*node.Head().GetTypeAnn()).Cast<TStructExprType>();
+
+        const auto& keyTypeNode = *node.Child(1);
+        const auto& leftLambda = *node.Child(2);
+        const auto& leftTypeNode = *node.Child(3);
+        const auto& rightLambda = *node.Child(4);
+        const auto& rightTypeNode = *node.Child(5);
+        const auto& joinLambda = *node.Child(6);
+
+        auto buildColumnMap = [&](const TExprNode& structTypeNode, const TStringBuf prefix) {
+            const auto& items = structTypeNode.GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetItems();
+            using TColumnsVec = TVector<std::pair<const ui32, const ui32>>;
+            TColumnsVec cols(Reserve(items.size()));
+            for (ui32 outIdx = 0U; outIdx < items.size(); outIdx++) {
+                const auto inIdx = *GetFieldPosition(*inputStructType, TString::Join(prefix, items[outIdx]->GetName()));
+                cols.emplace_back(inIdx, outIdx);
+            }
+            return cols;
+        };
+
+        const auto keyType = ctx.BuildType(keyTypeNode, *keyTypeNode.GetTypeAnn());
+        const auto leftArgType = ctx.BuildType(leftTypeNode, *leftTypeNode.GetTypeAnn());
+        const auto rightArgType = ctx.BuildType(rightTypeNode, *rightTypeNode.GetTypeAnn());
+
+        const auto keyColumns = buildColumnMap(keyTypeNode, "_yql_ljc_key_");
+        const auto leftColumns = buildColumnMap(leftTypeNode, "_yql_ljc_left_input_");
+        const auto rightColumns = buildColumnMap(rightTypeNode, "_yql_ljc_right_input_");
+
+        const auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
+
+        return ctx.ProgramBuilder.ListJoinCore(stream, keyType, keyColumns, leftColumns, rightColumns,
+                                               leftArgType, [&](TRuntimeNode item) { return MkqlBuildLambda(leftLambda, ctx, {item}); },
+                                               rightArgType, [&](TRuntimeNode item) { return MkqlBuildLambda(rightLambda, ctx, {item}); },
+                                               returnType, [&](TRuntimeNode key, TRuntimeNode leftList, TRuntimeNode rightList) { return MkqlBuildLambda(joinLambda, ctx, {key, leftList, rightList}); });
     });
 
     AddCallable("CombineCore", [](const TExprNode& node, TMkqlBuildContext& ctx) {

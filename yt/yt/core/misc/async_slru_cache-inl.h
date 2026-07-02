@@ -374,6 +374,14 @@ template <class TKey, class TValue, class THash>
 typename TAsyncSlruCacheBase<TKey, TValue, THash>::TValuePtr
 TAsyncSlruCacheBase<TKey, TValue, THash>::Find(const TKey& key)
 {
+    return Find<TKey>(key);
+}
+
+template <class TKey, class TValue, class THash>
+template <class THeterogenousKey>
+typename TAsyncSlruCacheBase<TKey, TValue, THash>::TValuePtr
+TAsyncSlruCacheBase<TKey, TValue, THash>::Find(const THeterogenousKey& key)
+{
     auto* shard = GetShardByKey(key);
 
     if (GhostCachesEnabled_.load()) {
@@ -447,6 +455,14 @@ template <class TKey, class TValue, class THash>
 typename TAsyncSlruCacheBase<TKey, TValue, THash>::TValueFuture
 TAsyncSlruCacheBase<TKey, TValue, THash>::Lookup(const TKey& key)
 {
+    return Lookup<TKey>(key);
+}
+
+template <class TKey, class TValue, class THash>
+template <class THeterogenousKey>
+typename TAsyncSlruCacheBase<TKey, TValue, THash>::TValueFuture
+TAsyncSlruCacheBase<TKey, TValue, THash>::Lookup(const THeterogenousKey& key)
+{
     auto* shard = GetShardByKey(key);
 
     if (GhostCachesEnabled_.load()) {
@@ -488,8 +504,9 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::Touch(const TValuePtr& value)
 }
 
 template <class TKey, class TValue, class THash>
+template <class THeterogenousKey>
 typename TAsyncSlruCacheBase<TKey, TValue, THash>::TValueFuture
-TAsyncSlruCacheBase<TKey, TValue, THash>::DoLookup(TShard* shard, const TKey& key)
+TAsyncSlruCacheBase<TKey, TValue, THash>::DoLookup(TShard* shard, const THeterogenousKey& key)
 {
     auto readerGuard = ReaderGuard(shard->SpinLock);
 
@@ -1024,7 +1041,8 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::UpdateWeight(const TValuePtr& val
 }
 
 template <class TKey, class TValue, class THash>
-auto TAsyncSlruCacheBase<TKey, TValue, THash>::GetShardByKey(const TKey& key) const -> TShard*
+template <class THeterogenousKey>
+auto TAsyncSlruCacheBase<TKey, TValue, THash>::GetShardByKey(const THeterogenousKey& key) const -> TShard*
 {
     return &Shards_[THash()(key) & (Config_->ShardCount - 1)];
 }
@@ -1068,7 +1086,8 @@ auto TAsyncSlruCacheBase<TKey, TValue, THash>::GetLargeGhostCounters() const -> 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TKey, class TValue, class THash>
-bool TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::DoLookup(const TKey& key, bool allowAsyncHits)
+template <class THeterogenousKey>
+bool TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::DoLookup(const THeterogenousKey& key, bool allowAsyncHits)
 {
     auto readerGuard = ReaderGuard(SpinLock_);
 
@@ -1103,7 +1122,8 @@ bool TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::DoLookup(const TKey&
 }
 
 template <class TKey, class TValue, class THash>
-void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Find(const TKey& key)
+template <class THeterogenousKey>
+void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Find(const THeterogenousKey& key)
 {
     if (!DoLookup(key, /*allowAsyncHits*/ false)) {
         Counters_->MissedCounter.Increment();
@@ -1111,7 +1131,8 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Find(const TKey& key
 }
 
 template <class TKey, class TValue, class THash>
-void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Lookup(const TKey& key)
+template <class THeterogenousKey>
+void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Lookup(const THeterogenousKey& key)
 {
     if (!DoLookup(key, /*allowAsyncHits*/ true)) {
         Counters_->MissedCounter.Increment();

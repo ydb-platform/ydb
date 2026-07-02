@@ -1,9 +1,9 @@
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
@@ -156,7 +156,7 @@ public:
     {
         TActorId sender = GetRuntime()->AllocateEdgeActor();
         auto request = std::make_unique<TEvCheckpointStorage::TEvRegisterCoordinatorRequest>(coordinatorId);
-                
+
         GetRuntime()->Send(new IEventHandle(
             NYql::NDq::MakeCheckpointStorageID(), sender, request.release(), IEventHandle::FlagTrackDelivery));
 
@@ -606,7 +606,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TStorageServiceSdkTest = TStorageServiceTest<true>; 
+using TStorageServiceSdkTest = TStorageServiceTest<true>;
 using TStorageServiceLocalTest = TStorageServiceTest<false>;
 
 UNIT_TEST_SUITE_REGISTRATION(TStorageServiceSdkTest);

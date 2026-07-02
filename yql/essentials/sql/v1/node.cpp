@@ -312,6 +312,10 @@ void INode::DisableSort() {
     DisableSort_ = true;
 }
 
+void INode::PreserveSort() {
+    PreserveSort_ = true;
+}
+
 bool INode::UsedSubquery() const {
     return false;
 }
@@ -3776,6 +3780,19 @@ bool TSecretParameters::ValidateParameters(TContext& ctx, const TPosition stmBeg
     }
 
     return true;
+}
+
+TNodePtr RemoveSystemColumns(TNodePtr input, const TVector<TString>& extraSystemColumnPrefixes) {
+    TNodePtr result = input->Y("RemoveSystemMembers", input);
+    if (extraSystemColumnPrefixes.empty()) {
+        return result;
+    }
+    TNodePtr prefixes = input->Y();
+    for (const auto& prefix : extraSystemColumnPrefixes) {
+        prefixes = input->L(prefixes, input->Q(prefix));
+    }
+    result = input->Y("RemovePrefixMembers", result, input->Q(prefixes));
+    return result;
 }
 
 } // namespace NSQLTranslationV1

@@ -5,7 +5,10 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/yson
+    yql/essentials/core
     yql/essentials/providers/common/codec
+    yql/essentials/providers/common/mkql_simple_file
     yql/essentials/providers/common/provider
     yql/essentials/providers/result/expr_nodes
     yql/essentials/utils/log

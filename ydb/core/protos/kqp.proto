@@ -383,6 +383,7 @@ message TSessionInfo {
     optional string WmState = 18;
     optional int64 WmEnterTime = 19;
     optional int64 WmExitTime = 20;
+    optional string TraceId = 21;
 }
 
 message TEvListSessionsRequest {
@@ -932,6 +933,10 @@ message TKqpStreamLookupSettings {
     optional string PoolId = 21;
     optional TReadVectorTopK VectorTopK = 19;
     optional uint64 QuerySpanId = 20;
+    // RowSeqNo cookie wire format version (0 = legacy, 1 = fixed bit budget).
+    // Gated by the EnableStreamLookupJoinCookieV2 feature flag so the new format
+    // is only emitted once every node in the cluster understands it.
+    optional uint32 CookieFormatVersion = 23 [default = 0];
 }
 
 message TKqpFullTextSourceSettings {
@@ -940,6 +945,14 @@ message TKqpFullTextSourceSettings {
         optional string Query = 2;
         // Pre-compiled tokens extracted from jsonpath at query compile time (JSON index only)
         repeated bytes Tokens = 3;
+
+        // Resolved equality bindings for the index prefix columns (KeyColumnNames[0..n-2]).
+        // Value is a single TCell serialized with TSerializedCellVec, typed as Column.
+        message TPrefixColumn {
+            optional TKqpColumnMetadataProto Column = 1;
+            optional bytes Value = 2;
+        }
+        repeated TPrefixColumn PrefixColumns = 4;
     }
 
     message TIndexTable {
@@ -1017,6 +1030,8 @@ message TEvCancelScriptExecutionRequest {
 message TEvCancelScriptExecutionResponse {
     optional Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional bool AlreadyFinished = 3;
+    optional bool ExecutionEntryExists = 4 [default = true];
 }
 
 // Request that is sent to run script actor to check his existence.

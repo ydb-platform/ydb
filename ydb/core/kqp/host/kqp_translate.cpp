@@ -1,8 +1,11 @@
 #include "kqp_translate.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
+
+#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/sql/sql.h>
@@ -250,6 +253,20 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
         settings.Flags.insert("WarnOnAnsiAliasShadowing");
         settings.Flags.insert("AnsiCurrentRow");
         settings.Flags.insert("AnsiInForEmptyOrNullableItemsCollections");
+    }
+
+    // __ydb_row_id (added to a user table for the fulltext UseRowIdAsDocId opt-in) must not surface
+    // in SELECT *, yet stay readable when named explicitly. Only this synthetic column leaks onto
+    // user tables; the other __ydb_-prefixed columns live on index impl tables, where they must stay
+    // visible when the impl table is read directly -- so we hide this column specifically, not the
+    // whole __ydb_ system prefix.
+    settings.ExtraSystemColumnPrefixes.push_back(NKikimr::NTableIndex::NFulltext::RowIdColumn);
+
+    // PQ topic metadata is exposed as __ydb_-prefixed system columns (e.g. __ydb_offset,
+    // __ydb_write_time). Like __ydb_row_id, they must stay readable when named explicitly but
+    // must not leak into SELECT * (otherwise INSERT INTO topic SELECT * would carry them as data).
+    for (auto& ydbColumn : NYql::GetAllowedYdbSysColumns(/* includeUserAttributes */ true)) {
+        settings.ExtraSystemColumnPrefixes.push_back(std::move(ydbColumn));
     }
 
     if (QueryParameters) {

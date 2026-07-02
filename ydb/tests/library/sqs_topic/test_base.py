@@ -4,7 +4,7 @@ import logging
 import uuid
 
 import boto3
-from hamcrest import assert_that, equal_to
+from hamcrest import assert_that, equal_to, raises
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -124,5 +124,15 @@ class KikimrSqsTopicTestBase(object):
                     if child.name == expected_name and child.type == ydb.SchemeEntryType.TOPIC
                 ]
                 assert_that(len(matching_children), equal_to(1))
+        finally:
+            driver.stop()
+
+    def _assert_topic_not_exists(self, topic_path):
+        driver = self._make_ydb_driver()
+        try:
+            def describe_topic():
+                driver.scheme_client.describe_path(topic_path)
+
+            assert_that(describe_topic, raises(ydb.SchemeError))
         finally:
             driver.stop()

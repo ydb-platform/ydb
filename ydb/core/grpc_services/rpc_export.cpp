@@ -576,6 +576,21 @@ public:
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export filtering is not supported in current configuration");
         }
 
+        if constexpr (TTraits::HasEncryption) {
+            if (settings.has_encryption_settings()) { // Validate that it is possible to encrypt with these settings
+                if (!NBackup::IsEncryptedExportEnabled(*AppData())) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
+                }
+                if (!TTraits::HasDestination(settings)) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix specified for encrypted export");
+                }
+
+                if (!ValidateEncryptionParameters()) {
+                    return;
+                }
+            }
+        }
+
         try {
             ExcludeRegexps = NBackup::CombineRegexps(settings.exclude_regexps());
         } catch (const std::exception& ex) {
@@ -638,20 +653,6 @@ public:
             for (const auto& item : settings.items()) {
                 if (TTraits::GetDestination(item).empty() && !commonDestSpecified) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix or common destination prefix specified for item \"" << item.source_path() << "\"");
-                }
-            }
-        }
-        if constexpr (TTraits::HasEncryption) {
-            if (settings.has_encryption_settings()) { // Validate that it is possible to encrypt with these settings
-                if (!NBackup::IsEncryptedExportEnabled(*AppData())) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
-                }
-                if (!TTraits::HasDestination(settings)) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix specified for encrypted export");
-                }
-
-                if (!ValidateEncryptionParameters()) {
-                    return;
                 }
             }
         }

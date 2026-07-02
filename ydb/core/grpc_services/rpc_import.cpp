@@ -153,6 +153,18 @@ public:
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Destination path is not supported in current configuration");
             }
         }
+        if (settings.has_encryption_settings()) {
+            if (!encryptedExportEnabled) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
+            }
+            if (settings.encryption_settings().symmetric_key().key().empty()) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No encryption key specified");
+            }
+            if (!commonSourcePathSpecified) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No source prefix specified");
+            }
+        }
+
         if (settings.items().empty() && !commonSourcePathSpecified) {
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No source prefix specified. Don't know where to import from");
         } else if (settings.items().empty() && !exportFilteringEnabled) {
@@ -182,17 +194,6 @@ public:
             }
             if (TTraits::IsEmptyItem(item)) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Empty import item was specified");
-            }
-        }
-        if (settings.has_encryption_settings()) {
-            if (!encryptedExportEnabled) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
-            }
-            if (settings.encryption_settings().symmetric_key().key().empty()) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No encryption key specified");
-            }
-            if (!commonSourcePathSpecified) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No source prefix specified");
             }
         }
 

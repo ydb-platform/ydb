@@ -1,6 +1,7 @@
 #include "pq_impl.h"
 #include "pq_impl_types.h"
 
+#include <ydb/core/base/mon_auth.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/common/common_app.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
@@ -33,6 +34,25 @@ namespace {
     bool ShouldShowSendReadSetAction(const TDistributedTransaction& tx) {
         return tx.State == NKikimrPQ::TTransaction_EState_WAIT_RS;
     }
+
+    bool IsPersQueueDevUiAdminRequest(const TCgiParameters& cgi) {
+        if (cgi.Has("SendReadSet")) {
+            return true;
+        }
+        if (cgi.Has("action")) {
+            return true;
+        }
+        if (cgi.Has("kv")
+            || (cgi.Has("consumer") && cgi.Has("partitionId"))
+            || cgi.Has("TxId")
+            || (!cgi.Has("consumer") && !cgi.Has("partitionId")))
+        {
+            return false;
+        }
+        PQ_LOG_W("PersQueue DevUI request to unknown page, cgi: " << cgi.Print());
+        return true;
+    }
+
 }
 
 
@@ -263,7 +283,8 @@ bool TPersQueue::OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr& ev, const 
                                         }
                                         TABLED() {
                                             if (!predicate.HasPredicate() && ShouldShowSendReadSetAction(*tx)) {
-                                                str << RenderSendReadSetHtmlForms(*tx, MakeArrayRef(&tabletID, 1));
+                                                str << RenderSendReadSetHtmlForms(
+                                                    *tx, MakeArrayRef(&tabletID, 1), ev->Get()->PathInfo());
                                             }
                                         }
                                     }
@@ -280,7 +301,7 @@ bool TPersQueue::OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr& ev, const 
                         }
                         if (readSetPending > 0 && ShouldShowSendReadSetAction(*tx)) {
                              str << "Send ReadSet for all " << readSetPending << " waiting tablets";
-                             str << RenderSendReadSetHtmlForms(*tx, Nothing());
+                             str << RenderSendReadSetHtmlForms(*tx, Nothing(), ev->Get()->PathInfo());
                         }
                     }
                 }
@@ -300,17 +321,27 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
         return true;
     }
 
-    if (ev->Get()->Cgi().Has("SendReadSet")) {
+    const auto& cgi = ev->Get()->Cgi();
+    if (!IsTabletDevUiAccessAllowed(
+            AppData(ctx),
+            ev->Get()->PathInfo(),
+            ev->Get()->GetUserToken(),
+            !IsPersQueueDevUiAdminRequest(cgi)))
+    {
+        ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+        return true;
+    }
+    if (cgi.Has("SendReadSet")) {
         return OnSendReadSetToYourself(ev, ctx);
     }
 
-    if (ev->Get()->Cgi().Has("kv")) {
+    if (cgi.Has("kv")) {
         return TKeyValueFlat::OnRenderAppHtmlPage(ev, ctx);
     }
 
-    if (ev->Get()->Cgi().Has("consumer") && ev->Get()->Cgi().Has("partitionId")) {
-        auto partitionIdStr = ev->Get()->Cgi().Get("partitionId");
-        auto consumer = ev->Get()->Cgi().Get("consumer");
+    if (cgi.Has("consumer") && cgi.Has("partitionId")) {
+        auto partitionIdStr = cgi.Get("partitionId");
+        auto consumer = cgi.Get("consumer");
 
         char *endptr;
         const ui64 partitionId = strtoull(partitionIdStr.c_str(), &endptr, 10);
@@ -322,7 +353,7 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
         }
     }
 
-    if (ev->Get()->Cgi().Has("TxId")) {
+    if (cgi.Has("TxId")) {
         return OnRenderAppHtmlPageTx(ev, ctx);
     }
 

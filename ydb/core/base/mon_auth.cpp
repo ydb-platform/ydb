@@ -33,6 +33,7 @@ bool UsesTabletDevUiSecurePath(const TAppData* appData, TTabletTypes::EType type
         TTabletTypes::DataShard,
         TTabletTypes::Hive,
         TTabletTypes::GraphShard,
+        TTabletTypes::PersQueue,
         TTabletTypes::SchemeShard,
     };
 

@@ -5547,6 +5547,7 @@
             "DynamicNodeConfig": {},
             "FeatureFlags": {
                 "EnableAlterDatabaseCreateHiveFirst": true,
+                "EnableColumnStatistics": true,
                 "EnableDrainOnShutdown": false,
                 "EnableExtraSidsControlForHttpViewer": true,
                 "EnableLocalBloomFilterIndex": true,
@@ -6596,6 +6597,7 @@
             "DynamicNodeConfig": {},
             "FeatureFlags": {
                 "EnableAlterDatabaseCreateHiveFirst": true,
+                "EnableColumnStatistics": true,
                 "EnableDrainOnShutdown": false,
                 "EnableExtraSidsControlForHttpViewer": true,
                 "EnableLocalBloomFilterIndex": true,
@@ -7645,6 +7647,7 @@
             "DynamicNodeConfig": {},
             "FeatureFlags": {
                 "EnableAlterDatabaseCreateHiveFirst": true,
+                "EnableColumnStatistics": true,
                 "EnableDrainOnShutdown": false,
                 "EnableExtraSidsControlForHttpViewer": true,
                 "EnableLocalBloomFilterIndex": true,

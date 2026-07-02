@@ -4,7 +4,7 @@ import logging
 import uuid
 
 import boto3
-from hamcrest import assert_that, equal_to, raises
+from hamcrest import assert_that, equal_to, has_length, not_none, raises
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -155,3 +155,25 @@ class KikimrSqsTopicTestBase(object):
                 return reader.receive_message(timeout=timeout)
         finally:
             driver.stop()
+
+    def _send_and_receive_message_attribute(self, test_name, message_attributes, attribute_name):
+        queue_name = self._make_queue_name(test_name)
+        self._queue_url = self._boto_client.create_queue(QueueName=queue_name)['QueueUrl']
+
+        self._boto_client.send_message(
+            QueueUrl=self._queue_url,
+            MessageBody='message body',
+            MessageAttributes=message_attributes,
+        )
+
+        response = self._boto_client.receive_message(
+            QueueUrl=self._queue_url,
+            WaitTimeSeconds=20,
+            MaxNumberOfMessages=1,
+            MessageAttributeNames=['All'],
+        )
+
+        messages = response.get('Messages')
+        assert_that(messages, not_none())
+        assert_that(messages, has_length(1))
+        return messages[0]['MessageAttributes'][attribute_name]

@@ -5,6 +5,7 @@ TEST_SRCS(
     test_create_queue.py
     test_delete_queue.py
     test_send_message.py
+    test_receive_message.py
 )
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)

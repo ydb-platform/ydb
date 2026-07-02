@@ -322,18 +322,19 @@ public:
         return AsyncFuture;
     }
 
-    // Walks the AST and returns true if it contains any SHOW CREATE
-    // setting. SHOW CREATE is always a standalone statement, so an
-    // occurrence anywhere in the query means we are servicing a SHOW
-    // CREATE and can skip table-load wiring that is only needed for
-    // executing actual data reads.
+    // Returns true if any read node in the AST carries a SHOW CREATE setting.
+    // Only the read's Settings tuple is inspected (via IsShowCreate), so
+    // unrelated string literals that happen to spell a setting name (e.g. in a
+    // WHERE clause) cannot trigger a false positive. Runs against raw `Read!`
+    // callables since DoApplyAsyncChanges executes before RewriteIO turns them
+    // into TKiReadTable.
     bool ContainsShowCreateSetting(const TExprNode& input) {
         bool found = false;
         VisitExpr(input, [&](const TExprNode& node) -> bool {
             if (found) {
                 return false;
             }
-            if (node.IsAtom() && IsShowCreateSettingName(node.Content())) {
+            if (node.IsCallable(ReadName) && IsShowCreate(node)) {
                 found = true;
                 return false;
             }

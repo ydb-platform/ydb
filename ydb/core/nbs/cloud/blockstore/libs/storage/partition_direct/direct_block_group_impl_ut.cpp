@@ -425,8 +425,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         UNIT_ASSERT_VALUES_EQUAL(
             0,
             hostStat.InflightCount(EOperation::ReadFromDDisk));
-        UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ErrorCount);
-        UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.SuccessCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveErrorCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveSuccessCount);
     }
 
     Y_UNIT_TEST_F(
@@ -497,8 +497,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             UNIT_ASSERT_VALUES_EQUAL(
                 0,
                 hostStat.InflightCount(EOperation::WriteToPBuffer));
-            UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ErrorCount);
-            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.SuccessCount);
+            UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ConsecutiveErrorCount);
+            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveSuccessCount);
         };
         checkHostStat(1);
         checkHostStat(2);
@@ -555,8 +555,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             UNIT_ASSERT_VALUES_EQUAL(
                 0,
                 hostStat.InflightCount(EOperation::FlushCrossNode));
-            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ErrorCount);
-            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.SuccessCount);
+            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveErrorCount);
+            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveSuccessCount);
         }
         {   // Should count an error for the ddisk host
             const auto& hostStat =
@@ -565,8 +565,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             UNIT_ASSERT_VALUES_EQUAL(
                 0,
                 hostStat.InflightCount(EOperation::FlushCrossNode));
-            UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ErrorCount);
-            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.SuccessCount);
+            UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ConsecutiveErrorCount);
+            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveSuccessCount);
         }
     }
 
@@ -619,8 +619,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             UNIT_ASSERT_VALUES_EQUAL(
                 0,
                 hostStat.InflightCount(EOperation::FlushCrossNode));
-            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ErrorCount);
-            UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.SuccessCount);
+            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveErrorCount);
+            UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ConsecutiveSuccessCount);
         }
         {   // Should count a success for the ddisk host
             const auto& hostStat =
@@ -629,8 +629,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             UNIT_ASSERT_VALUES_EQUAL(
                 0,
                 hostStat.InflightCount(EOperation::FlushCrossNode));
-            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ErrorCount);
-            UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.SuccessCount);
+            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveErrorCount);
+            UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ConsecutiveSuccessCount);
         }
     }
 }

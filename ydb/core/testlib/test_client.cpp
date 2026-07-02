@@ -78,6 +78,7 @@
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/library/services/services.pb.h>
@@ -575,6 +576,7 @@ namespace Tests {
             MERGE_CFG_FROM_APP_CFG(SharedCacheConfig);
             MERGE_CFG_FROM_APP_CFG(MetadataCacheConfig);
             MERGE_CFG_FROM_APP_CFG(MemoryControllerConfig);
+            MERGE_CFG_FROM_APP_CFG(ReplicationConfig);
             MERGE_CFG_FROM_APP_CFG(HealthCheckConfig);
             MERGE_CFG_FROM_APP_CFG(WorkloadManagerConfig);
             MERGE_CFG_FROM_APP_CFG(QueryServiceConfig);
@@ -1452,6 +1454,10 @@ namespace Tests {
 
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             Runtime->GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, *Settings->AppConfig);
+
+            if (!Settings->AppConfig->GetTableServiceConfig().HasEnableCompileCacheWarmup()) {
+                Settings->AppConfig->MutableTableServiceConfig()->SetEnableCompileCacheWarmup(false);
+            }
 
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig->GetLogConfig(),
                                                                   Settings->AppConfig->GetTableServiceConfig(),

@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 select
     key,
     min(AsTuple(subkey, value)) as min,

@@ -2025,7 +2025,9 @@ public:
 
             Node_ = Y("block", Q(L(block, Y("return", "res"))));
         } else {
-            Node_ = ctx.EnableSystemColumns ? Y("RemoveSystemMembers", "row") : BuildAtom(Pos_, "row", 0);
+            Node_ = ctx.EnableSystemColumns
+                        ? RemoveSystemColumns(AstNode(TString("row")), ctx.Settings.ExtraSystemColumnPrefixes)
+                        : BuildAtom(Pos_, "row", 0);
         }
         return true;
     }
@@ -2068,7 +2070,9 @@ bool TTableRows::DoInit(TContext& ctx, ISource* /*src*/) {
         ctx.Error(Pos_) << "TableRows requires exactly 0 arguments";
         return false;
     }
-    Node_ = ctx.EnableSystemColumns ? Y("RemoveSystemMembers", "inputRowsList") : BuildAtom(Pos_, "inputRowsList", 0);
+    Node_ = ctx.EnableSystemColumns
+                ? RemoveSystemColumns(AstNode(TString("inputRowsList")), ctx.Settings.ExtraSystemColumnPrefixes)
+                : BuildAtom(Pos_, "inputRowsList", 0);
     return true;
 }
 
@@ -2987,8 +2991,8 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
 
         if (isYqlSelect) {
             TYqlAggregationArgs aggregation = {
-                .FunctionName = std::move(realFunctionName),
-                .FactoryName = std::move(factoryName),
+                .FunctionName = realFunctionName,
+                .FactoryName = factoryName,
                 .Type = type,
                 .Mode = aggMode,
                 .Args = args,
@@ -4220,7 +4224,7 @@ TNodeResult BuildBuiltinFunc(
             if (isYqlSelect && funcInfo.Kind == "Window") {
                 TYqlWindowArgs wargs = {
                     .Name = std::move(normalizedName),
-                    .Args = std::move(args),
+                    .Args = args,
                 };
 
                 return Wrap(BuildYqlWindow(pos, std::move(wargs)));
@@ -4386,7 +4390,7 @@ TNodeResult BuildBuiltinFunc(
                 resultArgs.emplace_back(std::move(handlers[idx]));
             }
             if (dflt.Defined()) {
-                resultArgs.emplace_back(std::move(dflt->Get()));
+                resultArgs.emplace_back(dflt->Get());
             }
             return TNonNull(TNodePtr(new TCallNodeImpl(pos, "SqlVisit", 1, -1, resultArgs)));
         } else if (normalizedName == "sqlexternalfunction") {

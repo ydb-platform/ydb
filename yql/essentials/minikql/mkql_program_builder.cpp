@@ -4536,31 +4536,31 @@ TRuntimeNode TProgramBuilder::BuildNth(const std::string_view& callableName, TRu
 }
 
 TRuntimeNode TProgramBuilder::MakeHeap(TRuntimeNode list, const TBinaryLambda& comparator) {
-    return BuildHeap(__func__, list, std::move(comparator));
+    return BuildHeap(__func__, list, comparator);
 }
 
 TRuntimeNode TProgramBuilder::PushHeap(TRuntimeNode list, const TBinaryLambda& comparator) {
-    return BuildHeap(__func__, list, std::move(comparator));
+    return BuildHeap(__func__, list, comparator);
 }
 
 TRuntimeNode TProgramBuilder::PopHeap(TRuntimeNode list, const TBinaryLambda& comparator) {
-    return BuildHeap(__func__, list, std::move(comparator));
+    return BuildHeap(__func__, list, comparator);
 }
 
 TRuntimeNode TProgramBuilder::SortHeap(TRuntimeNode list, const TBinaryLambda& comparator) {
-    return BuildHeap(__func__, list, std::move(comparator));
+    return BuildHeap(__func__, list, comparator);
 }
 
 TRuntimeNode TProgramBuilder::StableSort(TRuntimeNode list, const TBinaryLambda& comparator) {
-    return BuildHeap(__func__, list, std::move(comparator));
+    return BuildHeap(__func__, list, comparator);
 }
 
 TRuntimeNode TProgramBuilder::NthElement(TRuntimeNode list, TRuntimeNode n, const TBinaryLambda& comparator) {
-    return BuildNth(__func__, list, n, std::move(comparator));
+    return BuildNth(__func__, list, n, comparator);
 }
 
 TRuntimeNode TProgramBuilder::PartialSort(TRuntimeNode list, TRuntimeNode n, const TBinaryLambda& comparator) {
-    return BuildNth(__func__, list, n, std::move(comparator));
+    return BuildNth(__func__, list, n, comparator);
 }
 
 TRuntimeNode TProgramBuilder::BuildMap(const std::string_view& callableName, TRuntimeNode list, const TUnaryLambda& handler)
@@ -6289,6 +6289,46 @@ TRuntimeNode TProgramBuilder::WithContext(TRuntimeNode input, const std::string_
 
 TRuntimeNode TProgramBuilder::PgInternal0(TType* returnType) {
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BlockGuess(TRuntimeNode variant, ui32 tupleIndex) {
+    if constexpr (RuntimeVersion < 79) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto blockType = AS_TYPE(TBlockType, variant.GetStaticType());
+    auto inputItemType = blockType->GetItemType();
+    bool isOptional;
+    auto unpacked = UnpackOptional(inputItemType, isOptional);
+    auto variantType = AS_TYPE(TVariantType, unpacked);
+    auto underlying = AS_TYPE(TTupleType, variantType->GetUnderlyingType());
+    MKQL_ENSURE(tupleIndex < underlying->GetElementsCount(), "Wrong tuple index");
+    auto alternativeType = underlying->GetElementType(tupleIndex);
+    auto returnType = NewBlockType(NewOptionalType(alternativeType), blockType->GetShape());
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(variant);
+    callableBuilder.Add(NewDataLiteral<ui32>(tupleIndex));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BlockGuess(TRuntimeNode variant, const std::string_view& memberName) {
+    if constexpr (RuntimeVersion < 79) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto blockType = AS_TYPE(TBlockType, variant.GetStaticType());
+    auto inputItemType = blockType->GetItemType();
+    bool isOptional;
+    auto unpacked = UnpackOptional(inputItemType, isOptional);
+    auto variantType = AS_TYPE(TVariantType, unpacked);
+    auto underlying = AS_TYPE(TStructType, variantType->GetUnderlyingType());
+    auto structIndex = underlying->GetMemberIndex(memberName);
+    auto alternativeType = underlying->GetMemberType(structIndex);
+    auto returnType = NewBlockType(NewOptionalType(alternativeType), blockType->GetShape());
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(variant);
+    callableBuilder.Add(NewDataLiteral<ui32>(structIndex));
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

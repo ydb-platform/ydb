@@ -933,6 +933,10 @@ message TKqpStreamLookupSettings {
     optional string PoolId = 21;
     optional TReadVectorTopK VectorTopK = 19;
     optional uint64 QuerySpanId = 20;
+    // RowSeqNo cookie wire format version (0 = legacy, 1 = fixed bit budget).
+    // Gated by the EnableStreamLookupJoinCookieV2 feature flag so the new format
+    // is only emitted once every node in the cluster understands it.
+    optional uint32 CookieFormatVersion = 23 [default = 0];
 }
 
 message TKqpFullTextSourceSettings {

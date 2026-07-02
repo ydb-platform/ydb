@@ -165,7 +165,7 @@ TLoggerPtr MakeNullLogger() {
 }
 
 TLoggerPtr MakeSynchronizedLogger(const TLoggerPtr& inner) {
-    return new TSynchronizedLogger(std::move(inner));
+    return new TSynchronizedLogger(inner);
 }
 
 #define SWITCH_ENUM_TYPE_TO_STR(name, val) \

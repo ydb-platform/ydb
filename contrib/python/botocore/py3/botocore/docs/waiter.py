@@ -72,7 +72,7 @@ class WaiterDocumenter:
         waiter_section.style.start_codeblock()
         waiter_section.style.new_line()
         waiter_section.write(
-            'waiter = client.get_waiter(\'%s\')' % xform_name(waiter_name)
+            f'waiter = client.get_waiter(\'{xform_name(waiter_name)}\')'
         )
         waiter_section.style.end_codeblock()
 
@@ -135,7 +135,7 @@ def document_wait_method(
         type_name='integer',
         documentation=(
             '<p>The amount of time in seconds to wait between '
-            'attempts. Default: {}</p>'.format(waiter_model.delay)
+            f'attempts. Default: {waiter_model.delay}</p>'
         ),
     )
 
@@ -144,7 +144,7 @@ def document_wait_method(
         type_name='integer',
         documentation=(
             '<p>The maximum number of attempts to be made. '
-            'Default: {}</p>'.format(waiter_model.max_attempts)
+            f'Default: {waiter_model.max_attempts}</p>'
         ),
     )
 
@@ -161,14 +161,10 @@ def document_wait_method(
     ]
 
     wait_description = (
-        'Polls :py:meth:`{}.Client.{}` every {} '
+        f'Polls :py:meth:`{get_service_module_name(service_model)}.Client.'
+        f'{xform_name(waiter_model.operation)}` every {waiter_model.delay} '
         'seconds until a successful state is reached. An error is '
-        'returned after {} failed checks.'.format(
-            get_service_module_name(service_model),
-            xform_name(waiter_model.operation),
-            waiter_model.delay,
-            waiter_model.max_attempts,
-        )
+        f'raised after {waiter_model.max_attempts} failed checks.'
     )
 
     document_model_driven_method(

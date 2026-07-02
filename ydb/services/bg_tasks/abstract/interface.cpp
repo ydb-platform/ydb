@@ -1,12 +1,15 @@
 #include "interface.h"
 #include <ydb/services/bg_tasks/protos/container.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BG_TASKS
+
 namespace NKikimr::NBackgroundTasks {
 
 bool TStringContainerProcessor::DeserializeFromContainer(const TString& data, TString& className, TString& binary) {
     NKikimrProto::TStringContainer protoData;
     if (!protoData.ParseFromArray(data.data(), data.size())) {
-        ALS_ERROR(NKikimrServices::BG_TASKS) << "cannot parse string as proto: " << Base64Encode(data);
+        YDB_LOG_ERROR("Cannot parse string",
+            {"proto", Base64Encode(data)});
         return false;
     }
     className = protoData.GetClassName();

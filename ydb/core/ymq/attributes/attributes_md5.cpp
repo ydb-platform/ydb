@@ -21,6 +21,11 @@ static std::uint32_t ToBigEndian(std::uint32_t x) {
     return htonl(x);
 }
 
+static void UpdateValue(MD5& md5, const TString& value) {
+    const std::uint32_t valueLen = ToBigEndian(static_cast<std::uint32_t>(value.size()));
+    md5.Update(&valueLen, sizeof(valueLen)).Update(value);
+}
+
 static void Update(MD5& md5, const TMessageAttribute& attr) {
     const std::uint32_t nameLen = ToBigEndian(static_cast<std::uint32_t>(attr.GetName().size()));
     const std::uint32_t dataTypeLen = ToBigEndian(static_cast<std::uint32_t>(attr.GetDataType().size()));
@@ -29,15 +34,21 @@ static void Update(MD5& md5, const TMessageAttribute& attr) {
         .Update(&dataTypeLen, sizeof(dataTypeLen)).Update(attr.GetDataType());
 
     if (attr.HasStringValue()) {
-        const std::uint32_t valueLen = ToBigEndian(static_cast<std::uint32_t>(attr.GetStringValue().size()));
-        md5
-            .Update(&STRING_TRANSPORT_TYPE_CODE, sizeof(std::uint8_t))
-            .Update(&valueLen, sizeof(valueLen)).Update(attr.GetStringValue());
-    } else {
-        const std::uint32_t valueLen = ToBigEndian(static_cast<std::uint32_t>(attr.GetBinaryValue().size()));
-        md5
-            .Update(&BINARY_TRANSPORT_TYPE_CODE, sizeof(std::uint8_t))
-            .Update(&valueLen, sizeof(valueLen)).Update(attr.GetBinaryValue());
+        md5.Update(&STRING_TRANSPORT_TYPE_CODE, sizeof(std::uint8_t));
+        UpdateValue(md5, attr.GetStringValue());
+    } else if (attr.stringlistvalues_size()) {
+        md5.Update(&STRING_TRANSPORT_TYPE_CODE, sizeof(std::uint8_t));
+        for (const auto& value : attr.stringlistvalues()) {
+            UpdateValue(md5, value);
+        }
+    } else if (attr.binarylistvalues_size()) {
+        md5.Update(&BINARY_TRANSPORT_TYPE_CODE, sizeof(std::uint8_t));
+        for (const auto& value : attr.binarylistvalues()) {
+            UpdateValue(md5, value);
+        }
+    } else if (attr.HasBinaryValue()) {
+        md5.Update(&BINARY_TRANSPORT_TYPE_CODE, sizeof(std::uint8_t));
+        UpdateValue(md5, attr.GetBinaryValue());
     }
 }
 

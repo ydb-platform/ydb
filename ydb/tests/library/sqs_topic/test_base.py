@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import logging
+import time
 import uuid
 
 import boto3
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_REGION = 'ru-central1'
 DEFAULT_SECURITY_TOKEN = 'root@builtin'
+DEFAULT_SQS_CONSUMER = 'ydb-sqs-consumer'
 
 
 class KikimrSqsTopicTestBase(object):
@@ -138,6 +140,10 @@ class KikimrSqsTopicTestBase(object):
             driver.stop()
 
     def _read_message_from_topic_without_consumer(self, topic_path, timeout=10):
+        messages = self._read_messages_from_topic_without_consumer(topic_path, 1, timeout=timeout)
+        return messages[0]
+
+    def _read_messages_from_topic_without_consumer(self, topic_path, messages_count, timeout=10):
         driver = self._make_ydb_driver()
         try:
             topic_description = driver.topic_client.describe_topic(topic_path, include_stats=False)
@@ -147,12 +153,41 @@ class KikimrSqsTopicTestBase(object):
                 path=topic_path,
                 partitions=partition_ids,
             )
+            messages = []
             with driver.topic_client.reader(
                 topic_selector,
                 consumer=None,
                 event_handler=ydb.TopicReaderEvents.EventHandler(),
             ) as reader:
-                return reader.receive_message(timeout=timeout)
+                deadline = time.time() + timeout
+                while len(messages) < messages_count and time.time() < deadline:
+                    try:
+                        messages.append(reader.receive_message(timeout=1))
+                    except TimeoutError:
+                        continue
+
+            assert_that(messages, has_length(messages_count))
+            return messages
+        finally:
+            driver.stop()
+
+    def _get_consumer_uncommitted_messages_count(self, topic_path, consumer_name=DEFAULT_SQS_CONSUMER):
+        driver = self._make_ydb_driver()
+        try:
+            consumer_description = driver.topic_client.describe_consumer(
+                topic_path,
+                consumer_name,
+                include_stats=True,
+            )
+            uncommitted_count = 0
+            for partition in consumer_description.partitions:
+                assert_that(partition.partition_stats, not_none())
+                assert_that(partition.partition_consumer_stats, not_none())
+                uncommitted_count += (
+                    partition.partition_stats.partition_end
+                    - partition.partition_consumer_stats.committed_offset
+                )
+            return uncommitted_count
         finally:
             driver.stop()
 

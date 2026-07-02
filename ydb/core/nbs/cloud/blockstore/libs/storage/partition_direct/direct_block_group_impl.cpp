@@ -1289,12 +1289,12 @@ void TDirectBlockGroup::OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId)
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "OnNodeDisconnected %s, host %s, nodeId: %d",
+        "%s OnNodeDisconnected, %s, nodeId: %d",
         LogTitle.GetWithTime().c_str(),
         PrintHostIndex(hostIndex).c_str(),
         nodeId);
 
-    Oracle.OnHostDisconnected(hostIndex, TInstant::Now());
+    Oracle.OnDDiskDisconnected(hostIndex, TInstant::Now());
     // OnNodeDisconnected may be called only for DDisk
     ReEstablishDDiskConnection(hostIndex, EConnectionType::DDisk);
 }

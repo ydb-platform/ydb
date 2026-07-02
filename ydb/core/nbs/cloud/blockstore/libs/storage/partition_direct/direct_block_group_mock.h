@@ -34,7 +34,8 @@ struct TOracleMock: public IOracle
         EOperation operation,
         TInstant now) override;
 
-    void OnHostDisconnected(THostIndex hostIndex, TInstant now) override;
+    void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) override;
+    void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
 
     void OnRequestCancelled(
         THostIndex hostIndex,

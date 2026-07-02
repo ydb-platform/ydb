@@ -33,7 +33,12 @@ void TOracleMock::OnRequestFailed(
     Y_UNUSED(hostIndex, operation, now);
 }
 
-void TOracleMock::OnHostDisconnected(THostIndex hostIndex, TInstant now)
+void TOracleMock::OnDDiskDisconnected(THostIndex hostIndex, TInstant now)
+{
+    Y_UNUSED(hostIndex, now);
+}
+
+void TOracleMock::OnDDiskConnected(THostIndex hostIndex, TInstant now)
 {
     Y_UNUSED(hostIndex, now);
 }

@@ -195,7 +195,12 @@ void TOracle::OnRequestFailed(
     HostStatistics[hostIndex].OnError(now, operation);
 }
 
-void TOracle::OnHostDisconnected(THostIndex hostIndex, TInstant now)
+void TOracle::OnDDiskDisconnected(THostIndex hostIndex, TInstant now)
+{
+    Y_UNUSED(hostIndex, now);
+}
+
+void TOracle::OnDDiskConnected(THostIndex hostIndex, TInstant now)
 {
     Y_UNUSED(hostIndex, now);
 }

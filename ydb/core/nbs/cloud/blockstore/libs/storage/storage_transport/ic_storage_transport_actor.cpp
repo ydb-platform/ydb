@@ -1124,7 +1124,7 @@ void TICStorageTransportActor::RejectAllSessionRequestsForNode(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "ALl session's requests for node #%lu were rejected",
+        "All session's requests for node #%lu were rejected",
         nodeId);
 
     RejectRequestsForNode<NDDisk::TEvReadResult>(ReadFromDDiskRequests, nodeId);
@@ -1138,7 +1138,6 @@ void TICStorageTransportActor::HandleICNodeDisconnected(
     const TEvInterconnect::TEvNodeDisconnected::TPtr& ev,
     const TActorContext& ctx)
 {
-    Y_UNUSED(ctx);
     const ui32 nodeId = ev->Get()->NodeId;
 
     LOG_WARN(

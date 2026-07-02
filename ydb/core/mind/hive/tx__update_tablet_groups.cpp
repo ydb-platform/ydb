@@ -297,6 +297,12 @@ public:
             }
         }
 
+        if (tablet->ChannelProfileNewGroup.none()) {
+            if (std::exchange(tablet->IsMarkedForReassign, false)) {
+                Self->UpdateCounterTabletsReassigning(-1);
+            }
+        }
+
         db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(newTabletState);
         Self->RecordTabletEvent(*tablet, EHiveEventType::GroupsReassigned, EHiveEventReason::StorageReassign,
             TStringBuilder() << "reassignReason=" << NKikimrHive::TEvReassignTablet::EHiveReassignReason_Name(tablet->ChannelProfileReassignReason)

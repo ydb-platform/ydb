@@ -36,6 +36,12 @@ class TestSqsTopicChangeMessageVisibility(KikimrSqsTopicTestBase):
             VisibilityTimeout=1,
         )
 
+        response = self._boto_client.receive_message(
+            QueueUrl=self._queue_url,
+            WaitTimeSeconds=20,
+            MaxNumberOfMessages=1,
+        )
+
         messages = response.get('Messages')
         assert_that(messages, not_none())
         assert_that(messages, has_length(1))
@@ -68,6 +74,12 @@ class TestSqsTopicChangeMessageVisibility(KikimrSqsTopicTestBase):
             QueueUrl=self._queue_url,
             ReceiptHandle=receipt_handle,
             VisibilityTimeout=1,
+        )
+
+        response = self._boto_client.receive_message(
+            QueueUrl=self._queue_url,
+            WaitTimeSeconds=20,
+            MaxNumberOfMessages=1,
         )
 
         messages = response.get('Messages')

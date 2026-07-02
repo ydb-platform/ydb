@@ -291,9 +291,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         if self.__encryption_key is not None:
             command.extend(["--key-file", self.__encryption_key])
 
-        if self.__configurator.feature_flags_file_path is not None:
-            command.append("--feature-flags-file=%s" % self.__configurator.feature_flags_file_path)
-
         if self.sqs_port is not None:
             command.extend(["--sqs-port=%d" % self.sqs_port])
 

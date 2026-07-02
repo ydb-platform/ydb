@@ -307,8 +307,6 @@ class KikimrConfigGenerator(object):
         self.node_kind = node_kind
         self.yq_tenant = yq_tenant
         self.dc_mapping = dc_mapping
-        self.feature_flags_file_content = None
-        self.feature_flags_file_path = None
 
         self.tiny_mode = tiny_mode
 
@@ -874,10 +872,6 @@ class KikimrConfigGenerator(object):
         self.write_tls_data()
         with open(os.path.join(configs_path, "config.yaml"), "w") as writer:
             writer.write(yaml.safe_dump(self.full_config))
-        if self.feature_flags_file_content is not None:
-            self.feature_flags_file_path = os.path.join(configs_path, "feature_flags.txt")
-            with open(self.feature_flags_file_path, "w") as writer:
-                writer.write(self.feature_flags_file_content)
 
     def clone_grpc_as_ext_endpoint(self, port, endpoint_id=None):
         cur_grpc_config = copy.deepcopy(self.yaml_config['grpc_config'])

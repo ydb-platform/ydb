@@ -30,33 +30,31 @@ from concurrent import futures
 DEFAULT_VISIBILITY_TIMEOUT = 30
 DEFAULT_TABLES_FORMAT = 1
 
+# Feature flag keys use the dense snake_case form produced by the YAML config
+# parser (NProtobufJson::ToSnakeCaseDense): the acronym "SQS" keeps no underscore
+# before the following "Migration", so EnableSQSMigrationTopicCreation becomes
+# enable_sqsmigration_topic_creation.
 SQS_MIGRATION_FEATURE_FLAGS = [
-    'enable_sqs_migration_topic_creation',
-    'enable_sqs_migration_compatibility',
-    'enable_sqs_migration_finished',
+    'enable_sqsmigration_topic_creation',
+    'enable_sqsmigration_compatibility',
+    'enable_sqsmigration_finished',
 ]
-
-SQS_MIGRATION_FEATURE_FLAG_PROTO_NAMES = {
-    'enable_sqs_migration_topic_creation': 'EnableSQSMigrationTopicCreation',
-    'enable_sqs_migration_compatibility': 'EnableSQSMigrationCompatibility',
-    'enable_sqs_migration_finished': 'EnableSQSMigrationFinished',
-}
 
 SQS_MIGRATION_STAGES = {
     'topic_creation': {
-        'enable_sqs_migration_topic_creation': True,
-        'enable_sqs_migration_compatibility': False,
-        'enable_sqs_migration_finished': False,
+        'enable_sqsmigration_topic_creation': True,
+        'enable_sqsmigration_compatibility': False,
+        'enable_sqsmigration_finished': False,
     },
     'compatibility': {
-        'enable_sqs_migration_topic_creation': True,
-        'enable_sqs_migration_compatibility': True,
-        'enable_sqs_migration_finished': False,
+        'enable_sqsmigration_topic_creation': True,
+        'enable_sqsmigration_compatibility': True,
+        'enable_sqsmigration_finished': False,
     },
     'finished': {
-        'enable_sqs_migration_topic_creation': True,
-        'enable_sqs_migration_compatibility': True,
-        'enable_sqs_migration_finished': True,
+        'enable_sqsmigration_topic_creation': True,
+        'enable_sqsmigration_compatibility': True,
+        'enable_sqsmigration_finished': True,
     },
 }
 
@@ -318,16 +316,6 @@ class KikimrSqsTestBase(object):
         return SQS_MIGRATION_STAGES[stage]
 
     @classmethod
-    def _build_sqs_migration_feature_flags_file_content(cls):
-        migration_flags = cls._get_sqs_migration_feature_flags()
-        lines = []
-        for flag in SQS_MIGRATION_FEATURE_FLAGS:
-            proto_name = SQS_MIGRATION_FEATURE_FLAG_PROTO_NAMES[flag]
-            value = 'true' if migration_flags[flag] else 'false'
-            lines.append('{}: {}'.format(proto_name, value))
-        return '\n'.join(lines) + '\n'
-
-    @classmethod
     def _setup_config_generator(cls):
         config_generator = KikimrConfigGenerator(
             erasure=cls.erasure,
@@ -335,7 +323,8 @@ class KikimrSqsTestBase(object):
             additional_log_configs={'SQS': LogLevels.TRACE},
             enable_sqs=True,
         )
-        config_generator.feature_flags_file_content = cls._build_sqs_migration_feature_flags_file_content()
+        for flag, enabled in cls._get_sqs_migration_feature_flags().items():
+            config_generator.yaml_config['feature_flags'][flag] = enabled
         config_generator.yaml_config['sqs_config']['root'] = cls.sqs_root
         config_generator.yaml_config['sqs_config']['enable_queue_master'] = True
         config_generator.yaml_config['sqs_config']['masters_describer_update_time_ms'] = 2000

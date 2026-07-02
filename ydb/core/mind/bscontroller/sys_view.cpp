@@ -136,11 +136,14 @@ public:
         GroupReserveMin = msg->GroupReserveMin;
         GroupReservePart = msg->GroupReservePart;
 
-        if (State && std::exchange(InitialCalculation, false)) {
-            // First time we receive complete BSC state, we need to run storage stats calculator.
-            // We do it here to avoid running it before we have all the data.
-            // Consecutive runs will be scheduled by TEvCalculateStorageStatsRequest event.
-            RunStorageStatsCalculator();
+        if (InitialCalculation) {
+            if (State && HostRecords) {
+                // First time we receive complete BSC state, we need to run storage stats calculator.
+                // We do it here to avoid running it before we have all the data.
+                // Consecutive runs will be scheduled by TEvCalculateStorageStatsRequest event.
+                InitialCalculation = false;
+                RunStorageStatsCalculator();
+            }
         }
     }
 

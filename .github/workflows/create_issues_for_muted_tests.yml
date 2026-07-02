@@ -33,7 +33,7 @@ jobs:
     outputs:
       base_branch: ${{ steps.resolve.outputs.base_branch }}
       matrix_build_types: ${{ steps.resolve.outputs.matrix_build_types }}
-      should_run: ${{ steps.resolve.outputs.should_run }}
+      should_create_issues: ${{ steps.resolve.outputs.should_create_issues }}
     steps:
       - name: Checkout config
         uses: actions/checkout@v5
@@ -74,16 +74,16 @@ jobs:
           fi
           echo "base_branch=$BASE_BRANCH" >> "$GITHUB_OUTPUT"
 
-          # Deduplicate issue creation.
+          # Deduplicate issue creation without dropping per-build-type DB refresh.
           # update_muted_ya.yml opens one PR per build type
           # (update-muted-ya_<base>_<buildtype>: relwithdebinfo, release-asan, release-tsan,
           # release-msan), all labeled mute-unmute and all targeting main. Every merge triggers
-          # this workflow. To avoid every build-type PR creating the SAME issues (duplicates
-          # opened seconds apart), each PR creates issues only for ITS OWN build type. The issue
-          # script skips build types that are not in mute_issue_and_digest_config.json, so PRs of
-          # non-configured build types (asan/tsan/msan today) become no-ops. should_run lets us
-          # skip such runs entirely instead of spinning up a runner just to no-op.
-          SHOULD_RUN=true
+          # this workflow. The job always runs for the triggering PR's OWN build type (so the DB /
+          # history / test-monitor steps refresh that build type post-merge), but issue creation
+          # is gated on should_create_issues so only build types listed in
+          # mute_issue_and_digest_config.json (relwithdebinfo today) open issues. This way each
+          # build-type PR handles only itself and issues are never created twice.
+          SHOULD_CREATE_ISSUES=true
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             if [ -n "$DISPATCH_BUILD_TYPE" ]; then
               MATRIX_BUILD_TYPES="[\"$DISPATCH_BUILD_TYPE\"]"
@@ -96,10 +96,10 @@ jobs:
                 TRIGGER_BUILD_TYPE="${PR_HEAD_REF##*_}"
                 MATRIX_BUILD_TYPES="[\"$TRIGGER_BUILD_TYPE\"]"
                 if issue_build_types "$BASE_BRANCH" | is_in_json_array "$TRIGGER_BUILD_TYPE"; then
-                  echo "Trigger build type '$TRIGGER_BUILD_TYPE' is configured for issues — proceeding"
+                  echo "Trigger build type '$TRIGGER_BUILD_TYPE' is configured for issues — will create issues"
                 else
-                  SHOULD_RUN=false
-                  echo "Skipping: trigger build type '$TRIGGER_BUILD_TYPE' is not configured for issues"
+                  SHOULD_CREATE_ISSUES=false
+                  echo "Trigger build type '$TRIGGER_BUILD_TYPE' is not configured for issues — DB refresh only, no issues"
                 fi
                 ;;
               *)
@@ -111,13 +111,15 @@ jobs:
             esac
           fi
           echo "matrix_build_types=$MATRIX_BUILD_TYPES" >> "$GITHUB_OUTPUT"
-          echo "should_run=$SHOULD_RUN" >> "$GITHUB_OUTPUT"
+          echo "should_create_issues=$SHOULD_CREATE_ISSUES" >> "$GITHUB_OUTPUT"
 
   create-issues-for-muted-tests:
     needs: resolve-build-types
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    # Runs for the triggering PR's own build type to refresh DB / history / test-monitor.
+    # Issue creation itself is gated per-step on should_create_issues so only configured
+    # build types open issues (avoids duplicates across build-type PRs).
     if: |
-      needs.resolve-build-types.outputs.should_run == 'true' &&
       ((github.event_name == 'pull_request' &&
         github.event.pull_request.merged == true &&
         contains(github.event.pull_request.labels.*.name, 'mute-unmute')) ||
@@ -159,18 +161,21 @@ jobs:
 
       - name: Create issues for muted tests
         id: create_issues
+        if: needs.resolve-build-types.outputs.should_create_issues == 'true'
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
           ENABLE_NEED_AI_REVIEW_LABEL: ${{ vars.ENABLE_NEED_AI_REVIEW_LABEL || '' }}
         run: .github/scripts/tests/mute/create_new_muted_ya.py create_issues --file_path="${{ env.MUTED_YA_FILE_PATH }}" --branch=${{ env.BASE_BRANCH }} --build-type=${{ matrix.build_type }}
 
       - name: Add issues to PR
+        if: needs.resolve-build-types.outputs.should_create_issues == 'true'
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
         run: python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number || github.event.inputs.pr_number  }} --body=${{ steps.create_issues.outputs.created_issues_file }}
 
       - name: Comment PR
+        if: needs.resolve-build-types.outputs.should_create_issues == 'true'
         uses: actions/github-script@v8
         with:
           github-token: ${{ env.GH_TOKEN }}
@@ -204,8 +209,9 @@ jobs:
   sync-manual-fast-unmute:
     needs: [resolve-build-types, create-issues-for-muted-tests]
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    # Issue-state sync — only meaningful when issues were (re)created for a configured build type.
     if: |
-      needs.resolve-build-types.outputs.should_run == 'true' &&
+      needs.resolve-build-types.outputs.should_create_issues == 'true' &&
       ((github.event_name == 'pull_request' &&
         github.event.pull_request.merged == true &&
         contains(github.event.pull_request.labels.*.name, 'mute-unmute')) ||

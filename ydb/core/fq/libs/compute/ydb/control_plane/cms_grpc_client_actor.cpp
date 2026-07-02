@@ -269,7 +269,7 @@ private:
 
         auto* grant = forwardRequest->Request.add_actions()->mutable_grant();
         grant->set_subject(TStringBuilder() << "ydb.databases.connect-" << databaseId << "@as");
-        grant->add_permission_names("ydb.generic.connect");
+        grant->add_permission_names("ydb.generic.use");
 
         SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
         TEvPrivate::TEvModifyPermissionsRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvModifyPermissionsRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);

@@ -478,19 +478,7 @@ common:
     to: /analyst/datasets/$1
 
 
-ru:
-  - from: /postgresql/index.md
-    to: /postgresql/intro.md
-  - from: /db/terraform.md
-    to: /dev/terraform.md
-  - from: /postgresql/docker-connect.md
-    to: /postgresql/connect.md
-  - from: /maintenance/manual/replacing_nodes.md
-    to: /devops/configuration-management/configuration-v1/replacing-nodes.md
-  - from: /maintenance/manual/cluster_expansion.md
-    to: /devops/configuration-management/configuration-v1/cluster-expansion.md
-  - from: /concepts/topic.md
-    to: /concepts/datamodel/topic.md
+  # Redirects for query_execution
 
   - from: /concepts/query_execution.md
     to: /concepts/query_execution/index.md
@@ -508,8 +496,6 @@ ru:
     to: /concepts/query_execution/scan_query.md
   - from: /reference/ydb-cli/commands/scan-query.md
     to: /reference/ydb-cli/scan-query.md
-  - from: /yql/reference/syntax/analyze.md
-    to: /concepts/query_execution/optimizer.md
   - from: /concepts/federated_query/(.*)$
     to: /concepts/query_execution/federated_query/$1
 
@@ -567,7 +553,6 @@ en:
   - from: /devops/manual/initial-deployment.md
     to: /devops/deployment-options/manual/initial-deployment/index.md
 
-en:
   - from: /cluster/system-requirements.md
     to: /devops/system-requirements.md
   - from: /devops/observability/initial-deployment.md

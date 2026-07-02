@@ -74,16 +74,6 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         const TVersionedIndex* vIndex = Self->GetIndexOptional() ? &Self->GetIndexOptional()->GetVersionedIndex() : nullptr;
         AFL_VERIFY(vIndex);
         {
-            auto readSchema = read.TableMetadataAccessor->GetSnapshotSchemaVerified(
-                Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedSchemas(), read.GetSnapshot());
-
-            // it is not possible anymore, keep it just in case
-            if (request.SchemaVersion && readSchema->GetVersion() != *request.SchemaVersion) {
-                return SendError("schema version mismatch",
-                    TStringBuilder() << "request_schema_version=" << *request.SchemaVersion
-                                     << "; snapshot_schema_version=" << readSchema->GetVersion() << "; snapshot=" << read.GetSnapshot(), ctx);
-            }
-
             TProgramContainer pContainer;
             pContainer.OverrideProcessingColumns(read.ColumnIds);
             read.SetProgram(std::move(pContainer));

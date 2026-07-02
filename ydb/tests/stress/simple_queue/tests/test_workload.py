@@ -45,9 +45,8 @@ class TestYdbWorkload(StressFixture):
             }
         )
 
-    def _assert_cluster_alive(self, mode):
-        dead = [node_id for node_id, node in self.cluster.nodes.items() if not node.is_alive()]
-        assert not dead, "cluster node(s) died during '{}' workload (VERIFY/crash?): nodes={}".format(mode, dead)
+    def _dead_nodes(self):
+        return [node_id for node_id, node in self.cluster.nodes.items() if not node.is_alive()]
 
     @pytest.mark.parametrize('mode', ['row', 'column'])
     @pytest.mark.parametrize('profile', ['heavy', 'light'])
@@ -78,15 +77,31 @@ class TestYdbWorkload(StressFixture):
         # While the workloads run, poll cluster health so we fail fast on a node crash
         # (a tablet VERIFY aborts the ydbd process) instead of waiting out the duration.
         deadline = time.time() + duration + 300
-        while time.time() < deadline and any(t.is_alive() for t in threads):
-            self._assert_cluster_alive(mode)
-            time.sleep(2)
+        cluster_dead = []
+        try:
+            while time.time() < deadline and any(t.is_alive() for t in threads):
+                cluster_dead = self._dead_nodes()
+                if cluster_dead:
+                    break
+                time.sleep(2)
+        finally:
+            # Always join, even after spotting a dead node: when a crash was triggered by a
+            # specific workload op, that worker's own exception (captured in `errors`) is the
+            # actual root cause, and we don't want it lost behind the cluster-death signal.
+            for t in threads:
+                t.join(timeout=120)
 
-        for t in threads:
-            t.join(timeout=120)
-
+        if not cluster_dead:
+            cluster_dead = self._dead_nodes()
         stuck = [t.name for t in threads if t.is_alive()]
-        assert not stuck, "workload thread(s) did not finish (hang?): {}".format(stuck)
 
-        self._assert_cluster_alive(mode)
-        assert not errors, "workload thread(s) failed:\n" + "\n\n".join(errors)
+        # Report everything we found together, so a node crash and the worker error that caused
+        # it show up in the same failure message.
+        problems = []
+        if cluster_dead:
+            problems.append("cluster node(s) died during '{}' workload (VERIFY/crash?): nodes={}".format(mode, cluster_dead))
+        if stuck:
+            problems.append("workload thread(s) did not finish (hang?): {}".format(stuck))
+        if errors:
+            problems.append("workload thread(s) failed:\n" + "\n\n".join(errors))
+        assert not problems, "\n\n".join(problems)

@@ -56,6 +56,11 @@ jobs:
               --profiles-config ".github/config/mute_issue_and_digest_config.json" \
               --branch "$1"
           }
+          json_array() { python3 -c "import json,sys; print(json.dumps(sys.argv[1:]))" "$@"; }
+          emit() {  # newline-safe GITHUB_OUTPUT writer: emit <name> <value>
+            local d="d_${RANDOM}${RANDOM}"
+            { printf '%s<<%s\n' "$1" "$d"; printf '%s\n' "$2"; printf '%s\n' "$d"; } >> "$GITHUB_OUTPUT"
+          }
 
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             BASE_BRANCH="$DISPATCH_BASE_BRANCH"
@@ -66,21 +71,21 @@ jobs:
               exit 1
             fi
           fi
-          echo "base_branch=$BASE_BRANCH" >> "$GITHUB_OUTPUT"
+          emit base_branch "$BASE_BRANCH"
 
           # Run only for the triggering PR's own build type (create_new_muted_ya.py skips
           # build types not configured for issues), so build-type PRs don't duplicate issues.
           if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$DISPATCH_BUILD_TYPE" ]; then
-            MATRIX_BUILD_TYPES="[\"$DISPATCH_BUILD_TYPE\"]"
+            MATRIX_BUILD_TYPES="$(json_array "$DISPATCH_BUILD_TYPE")"
           elif [ "$EVENT_NAME" = "pull_request" ]; then
             case "$PR_HEAD_REF" in
-              update-muted-ya_*) MATRIX_BUILD_TYPES="[\"${PR_HEAD_REF##*_}\"]" ;;
+              update-muted-ya_*) MATRIX_BUILD_TYPES="$(json_array "${PR_HEAD_REF##*_}")" ;;
               *)                 MATRIX_BUILD_TYPES="$(issue_build_types "$BASE_BRANCH")" ;;
             esac
           else
             MATRIX_BUILD_TYPES="$(issue_build_types "$BASE_BRANCH")"
           fi
-          echo "matrix_build_types=$MATRIX_BUILD_TYPES" >> "$GITHUB_OUTPUT"
+          emit matrix_build_types "$MATRIX_BUILD_TYPES"
 
   create-issues-for-muted-tests:
     needs: resolve-build-types

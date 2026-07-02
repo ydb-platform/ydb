@@ -258,13 +258,8 @@ class TestDatetime2(MixedClusterFixture):
         """
         Pin a driver to each node. This forces the query to be compiled on every binary version in the cluster.
         """
-        seen_binaries = set()
         pinned_drivers = []
-        for node_id, node in self.cluster.nodes.items():
-            binary_path = self.config.get_binary_path(node_id)
-            if binary_path in seen_binaries:
-                continue
-            seen_binaries.add(binary_path)
+        for node in self.cluster.nodes.values():
             pinned_drivers.append(self.create_pinned_driver(node.port))
 
         try:

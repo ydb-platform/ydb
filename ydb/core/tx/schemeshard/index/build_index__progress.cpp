@@ -503,8 +503,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextRowIdSrcP
     auto& op = *modifyScheme.MutableCreateTable();
 
     THashSet<TString> dataColumns(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end());
+    // Index columns are [prefix..., text]; the indexed text/JSON column is the last one. JSON builds carry
+    // no fulltext settings, so the column name must be taken from here rather than the index description.
+    Y_ENSURE(!buildInfo.IndexColumns.empty());
     op = CalcFulltextRowIdSrcImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
         dataColumns,
+        buildInfo.IndexColumns.back(),
         NKikimrSchemeOp::TTableDescription(),
         std::get<NKikimrSchemeOp::TFulltextIndexDescription>(buildInfo.SpecializedIndexDescription));
 

@@ -22,6 +22,20 @@ TKikimrRunner KikimrJsonRowId() {
     return TKikimrRunner(settings);
 }
 
+// Same as KikimrJsonRowId() plus the compact-index flag, so a JSON index is materialized as a compact
+// (delta/posting) index. Combined with __ydb_row_id this exercises the compact-JSON-in-rowid-mode path
+// (EIndexTypeGlobalJsonCompact), which must obtain its doc_id from __ydb_row_id just like plain JSON.
+TKikimrRunner KikimrJsonRowIdCompact() {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableJsonIndex(true);
+    featureFlags.SetEnableAddUniqueIndex(true);
+    featureFlags.SetEnableFulltextIndexRowId(true);
+    featureFlags.SetEnableCompactFulltextIndex(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    return TKikimrRunner(settings);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
@@ -268,6 +282,138 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
     }
 
+    Y_UNIT_TEST(NonIntegerPkRowIdCompact) {
+        // Same as NonIntegerPkRowId but with the compact-index flag on, so the JSON index is built as a
+        // compact index (EIndexTypeGlobalJsonCompact). The compact type must still enter __ydb_row_id
+        // doc_id mode over a non-integer PK; before the fix it fell back to requiring a single integer PK
+        // and the ADD INDEX below was rejected.
+        auto kikimr = KikimrJsonRowIdCompact();
+        auto db = kikimr.GetQueryClient();
+
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        {
+            std::string query = R"(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Utf8 NOT NULL,
+                    Text Json,
+                    Data Utf8,
+                    __ydb_row_id Uint64 NOT NULL,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__ydb_row_id);
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                UPSERT INTO `/Root/TestTable` (Key, Text, Data) VALUES
+                    ("a"u, Json('{"k1": 1}'),  "d1"u),
+                    ("b"u, Json('{"k1": 2}'),  "d2"u),
+                    ("c"u, Json('{"k2": 3}'),  "d3"u),
+                    ("d"u, Json('{"k1": 10}'), "d4"u);
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            // Row "d" has k1 == 10; doc_id -> PK resolution must return its Utf8 key.
+            std::string query = R"(
+                SELECT Key FROM `/Root/TestTable` VIEW json_idx
+                WHERE JSON_VALUE(Text, '$.k1' RETURNING Int64) == 10
+                ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 1);
+        }
+
+        {
+            std::string query = R"(
+                SELECT Key FROM `/Root/TestTable` VIEW json_idx
+                WHERE JSON_EXISTS(Text, '$.k2')
+                ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 1);
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableInlineCompactRowId) {
+        // Inline CREATE TABLE with a compact JSON index over a non-integer PK: the KQP DDL layer emits the
+        // compact index type (EnableCompactFulltextIndex), and the schemeshard create-table path must
+        // auto-provision __ydb_row_id + its unique index and build the compact index in rowid mode.
+        auto kikimr = KikimrJsonRowIdCompact();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            std::string query = R"(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Utf8 NOT NULL,
+                    Text Json,
+                    PRIMARY KEY (Key),
+                    INDEX json_idx GLOBAL USING json ON (Text)
+                );
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                UPSERT INTO `/Root/TestTable` (Key, Text) VALUES
+                    ("a"u, Json('{"k1": 1}')),
+                    ("b"u, Json('{"k1": 2}')),
+                    ("c"u, Json('{"k2": 3}')),
+                    ("d"u, Json('{"k1": 10}'));
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                SELECT Key FROM `/Root/TestTable` VIEW json_idx
+                WHERE JSON_VALUE(Text, '$.k1' RETURNING Int64) == 10
+                ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 1);
+        }
+
+        {
+            std::string query = R"(
+                SELECT Key FROM `/Root/TestTable` VIEW json_idx
+                WHERE JSON_EXISTS(Text, '$.k2')
+                ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 1);
+        }
+    }
+
     Y_UNIT_TEST(AlterTableJsonIndex_PK_Int32) {
         TestJsonIndexAlterTableWithIntegerPk("Int32");
     }
@@ -349,6 +495,71 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         {
             // __ydb_row_id is generated by YDB; create the JSON index first so its sequence is
             // provisioned, then insert without naming the system column.
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                UPSERT INTO `/Root/TestTable` (Key1, Key2, Text) VALUES
+                    (1, 1, Json('{"k1": 1}')),
+                    (1, 2, Json('{"k1": 2}')),
+                    (2, 1, Json('{"k2": 3}')),
+                    (2, 2, Json('{"k1": 10}'));
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            // Three rows have k1; doc_id -> (Key1, Key2) resolution must return all of them.
+            std::string query = R"(
+                SELECT Key1, Key2 FROM `/Root/TestTable` VIEW json_idx
+                WHERE JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key1, Key2;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3);
+        }
+    }
+
+    Y_UNIT_TEST(CompositePkRowIdCompact) {
+        // Same as CompositePkRowId but with the compact-index flag on: a composite-PK table hosts a compact
+        // JSON index (EIndexTypeGlobalJsonCompact) that resolves the synthetic __ydb_row_id doc_id back to
+        // the (Key1, Key2) primary key.
+        auto kikimr = KikimrJsonRowIdCompact();
+        auto db = kikimr.GetQueryClient();
+
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        {
+            std::string query = R"(
+                CREATE TABLE `/Root/TestTable` (
+                    Key1 Uint64 NOT NULL,
+                    Key2 Uint64 NOT NULL,
+                    Text Json,
+                    __ydb_row_id Uint64 NOT NULL,
+                    PRIMARY KEY (Key1, Key2)
+                );
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__ydb_row_id);
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
             std::string query = R"(
                 ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
             )";

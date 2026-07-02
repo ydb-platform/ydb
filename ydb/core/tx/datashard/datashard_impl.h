@@ -2767,9 +2767,9 @@ private:
                 TItem* item = it->second.First;
                 while (item) {
                     TItem* next = item->NextForTxId;
-                    onCancelled(*item);
                     item->Unlink();
                     --Count;
+                    onCancelled(*item);  // now Size() is accurate
                     delete item;
                     item = next;
                 }

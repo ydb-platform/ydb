@@ -5,8 +5,6 @@
 
 #include <ydb/library/formats/arrow/size_calcer.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
-
 namespace NKikimr::NOlap {
 
 void TPortionMetaConstructor::FillMetaInfo(const NArrow::TFirstLastSpecialKeys& primaryKeys, const ui32 deletionsCount,
@@ -47,11 +45,8 @@ TPortionMeta TPortionMetaConstructor::Build() {
     static TAtomicCounter sumValuesMeta = 0;
     static TAtomicCounter countValues = 0;
     //    FirstAndLastPK->Reallocate();
-    YDB_LOG_DEBUG("",
-        {"memorySize", FirstAndLastPK->GetMemorySize()},
-        {"dataSize", FirstAndLastPK->GetDataSize()},
-        {"sum", sumValues.Add(FirstAndLastPK->GetMemorySize())},
-        {"count", countValues.Inc()});
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_size", FirstAndLastPK->GetMemorySize())("data_size", FirstAndLastPK->GetDataSize())(
+        "sum", sumValues.Add(FirstAndLastPK->GetMemorySize()))("count", countValues.Inc());
     TMemoryProfileGuard mGuard("meta_construct/others", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     AFL_VERIFY(RecordSnapshotMin);
     AFL_VERIFY(RecordSnapshotMax);
@@ -68,12 +63,8 @@ TPortionMeta TPortionMetaConstructor::Build() {
     result.IndexRawBytes = *TValidator::CheckNotNull(IndexRawBytes);
     result.IndexBlobBytes = *TValidator::CheckNotNull(IndexBlobBytes);
     result.NumSlices = *TValidator::CheckNotNull(NumSlices);
-    YDB_LOG_DEBUG("",
-        {"memorySize", result.GetMemorySize()},
-        {"dataSize", result.GetDataSize()},
-        {"sum", sumValuesMeta.Add(result.GetMemorySize())},
-        {"count", countValues.Inc()},
-        {"sizeOfMeta", sizeof(TPortionMeta)});
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_size", result.GetMemorySize())("data_size", result.GetDataSize())(
+        "sum", sumValuesMeta.Add(result.GetMemorySize()))("count", countValues.Inc())("size_of_meta", sizeof(TPortionMeta));
 
     return result;
 }

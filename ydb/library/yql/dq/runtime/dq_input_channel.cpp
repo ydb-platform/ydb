@@ -99,10 +99,15 @@ private:
 
 public:
     TDqInputChannel(const TDqChannelSettings& settings, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv)
+<<<<<<<
         : Impl(settings.ChannelId, settings.SrcStageId, settings.RowType, settings.MaxStoredBytes, settings.Level, settings.ChannelQuotaManager)
         , DataSerializer(typeEnv, *settings.HolderFactory, settings.TransportVersion, settings.PackerVersion)
         , QuotaManager(settings.ChannelQuotaManager)
     {
+=======
+        : Impl(settings.ChannelId, settings.SrcStageId, settings.RowType, settings.MaxStoredBytes, settings.Level)
+        , DataSerializer(typeEnv, *settings.HolderFactory, settings.TransportVersion, settings.PackerVersion, settings.DatumValidationMode) {
+>>>>>>>
     }
 
     ~TDqInputChannel() override {

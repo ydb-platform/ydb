@@ -117,23 +117,27 @@ def calc_diff(main_val, current_val):
 
 def calc_significance(main_mean, current_mean, main_stddev, current_stddev, main_n, current_n):
     # Check statistical significance using 3-sigma rule on the difference of means.
-    # Uses pooled standard error: SE = sqrt(s1^2/n1 + s2^2/n2)
+    # Uses pooled standard error: SE = sqrt(s1^2/n1 + s2^2/n2).
+    # Returns (verdict_str, n_sigmas_or_None, is_significant_or_None).
     if main_mean in ("N/A", None) or current_mean in ("N/A", None):
-        return "N/A"
+        return "N/A", None, None
     if main_n < 2 or current_n < 2:
-        return "N/A (need >= 2 iterations)"
+        return "N/A (need >= 2 iterations)", None, None
 
     se = (main_stddev ** 2 / main_n + current_stddev ** 2 / current_n) ** 0.5
     diff = current_mean - main_mean
     absdiff = abs(diff)
     threshold = 3 * se
     pct = (diff / main_mean * 100) if main_mean != 0 else 0
-    if threshold > 0 and absdiff > threshold:
-        return "SIGNIFICANT (%+.1f%%, |diff|=%.1f > 3sigma=%.1f)" % (pct, absdiff, threshold)
-    elif threshold > 0:
-        return "not significant (%+.1f%%, |diff|=%.1f <= 3sigma=%.1f)" % (pct, absdiff, threshold)
+    if se == 0:
+        return "N/A (zero variance)", None, None
+    n_sigmas = absdiff / se
+    significant = absdiff > threshold
+    if significant:
+        verdict = "SIGNIFICANT (%+.1f%%, %.1fσ > 3σ)" % (pct, n_sigmas)
     else:
-        return "N/A (zero variance)"
+        verdict = "not significant (%+.1f%%, %.1fσ ≤ 3σ)" % (pct, n_sigmas)
+    return verdict, n_sigmas, significant
 
 
 def fmt_num(val):
@@ -215,9 +219,12 @@ class TestCompareIndexPerformance:
         # iteration. perf record --pid of another process needs
         # perf_event_paranoid <= 1 or sudo; on failure the test fails loudly.
         # NOTE: perf adds overhead, so measured Txs/Sec are perturbed when on.
+        self.baseline_sha = yatest.common.get_param('compare_baseline_sha', default='')
+        self.current_sha = yatest.common.get_param('compare_current_sha', default='')
+
         self.flamegraph = _truthy(yatest.common.get_param('compare_flamegraph', default=''))
         self.perf_sudo = _truthy(yatest.common.get_param('compare_perf_sudo', default=''))
-        self.perf_freq = yatest.common.get_param('compare_perf_freq', default='50')
+        self.perf_freq = yatest.common.get_param('compare_perf_freq', default='9')
         self.flame_tool = (
             yatest.common.source_path("contrib/tools/flame-graph") if self.flamegraph else None)
 
@@ -444,13 +451,22 @@ class TestCompareIndexPerformance:
         }
         res["main_detail"] = format_values(res["main_txs"], main_values)
         res["current_detail"] = format_values(res["current_txs"], current_values)
-        res["significance"] = calc_significance(
+        verdict, n_sigmas, significant = calc_significance(
             res["main_mean"], res["current_mean"],
             res["main_stddev"], res["current_stddev"],
             len(main_values), len(current_values),
         )
+        res["significance"] = verdict
+        res["n_sigmas"] = n_sigmas
+        res["significant"] = significant
         res["diff"] = calc_diff(res["main_txs"], res["current_txs"])
         return res
+
+    def _sha_link(self, sha, repo_url):
+        # Short linked SHA for use in markdown, or plain label if no SHA.
+        if not sha:
+            return None
+        return f"[{sha[:7]}]({repo_url}/commit/{sha})"
 
     def _report(self, slug, workload_name, res):
         current_label = self._current_label()
@@ -470,18 +486,39 @@ class TestCompareIndexPerformance:
               f"(mean={fmt_num(res['current_mean'])}, σ={fmt_num(res['current_stddev'])})")
         print(f"  3σ test: {res['significance']}")
 
+        # Emoji indicator: green = significant positive, red = significant negative,
+        # grey = not significant or not enough data.
+        significant = res.get("significant")
+        diff_str = res["diff"]
+        if significant is True:
+            negative = diff_str.startswith("-") if diff_str not in ("N/A", "N/A (zero base)") else False
+            emoji = "🔴" if negative else "🟢"
+        else:
+            emoji = "⚪"
+        diff_cell = f"{emoji} {diff_str}"
+
+        # Build SHA links for baseline and current if available.
+        repo_url = "https://github.com/ydb-platform/ydb"
+        baseline_sha_link = self._sha_link(self.baseline_sha, repo_url)
+        current_sha_link = self._sha_link(self.current_sha, repo_url)
+        baseline_heading = f"`{self.ref}`" + (f" {baseline_sha_link}" if baseline_sha_link else "")
+        current_heading = f"`{current_label}`" + (f" {current_sha_link}" if current_sha_link else "")
+
         # One report file per workload method: yatest output_path is shared
         # across test methods, so a fixed name would let the second method
         # overwrite the first.
         report_file = yatest.common.output_path(f"report_{slug}.md")
         with open(report_file, "w") as f:
-            f.write(f"### Performance Comparison: `{self.ref}` vs `{current_label}` ({workload_name})\n\n")
+            f.write(f"#### Performance Comparison: {baseline_heading} vs {current_heading} ({workload_name})\n\n")
             f.write(f"**Build preset:** `{self.build_preset}` | **Duration:** {self.duration}s "
                     f"per workload | **Iterations:** {self.iterations} (median reported)\n\n")
-            f.write(f"| Workload | {self.ref} (Txs/Sec) | {current_label} (Txs/Sec) | Diff | 3σ significance |\n")
-            f.write("|---|---|---|---|---|\n")
-            f.write(f"| {workload_name} | {res['main_detail']} | {res['current_detail']} "
-                    f"| {res['diff']} | {res['significance']} |\n")
+            n_sigmas = res["n_sigmas"]
+            sigmas_cell = ("%.2fσ" % n_sigmas) if n_sigmas is not None else "N/A"
+            f.write(f"| Workload | {self.ref} (Txs/Sec) | {current_label} (Txs/Sec)"
+                    f" | Diff | Sigmas | 3σ significance |\n")
+            f.write("|---|---|---|---|---|---|\n")
+            f.write(f"| {workload_name} | {res['main_detail']} | {res['current_detail']}"
+                    f" | {diff_cell} | {sigmas_cell} | {res['significance']} |\n")
             if self.flamegraph:
                 svgs = [f"{slug}_{side}_{i}.svg"
                         for i in range(1, self.iterations + 1)

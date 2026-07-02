@@ -1,5 +1,5 @@
 TEST_SRCS(
-    test.py
+    ydb/tests/functional/sqs/merge_split_common_table/fifo/test.py
 )
 
 DATA(

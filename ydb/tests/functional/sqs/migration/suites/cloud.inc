@@ -1,8 +1,8 @@
 TEST_SRCS(
-    test_common.py
-    test_yandex_cloud_mode.py
-    test_yandex_cloud_queue_counters.py
-    test_yandex_audit.py
+    ydb/tests/functional/sqs/cloud/test_common.py
+    ydb/tests/functional/sqs/cloud/test_yandex_cloud_mode.py
+    ydb/tests/functional/sqs/cloud/test_yandex_cloud_queue_counters.py
+    ydb/tests/functional/sqs/cloud/test_yandex_audit.py
 )
 
 DATA(

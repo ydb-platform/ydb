@@ -1,6 +1,6 @@
 TEST_SRCS(
-    test_multinode_cluster.py
-    test_recompiles_requests.py
+    ydb/tests/functional/sqs/multinode/test_multinode_cluster.py
+    ydb/tests/functional/sqs/multinode/test_recompiles_requests.py
 )
 
 DATA(

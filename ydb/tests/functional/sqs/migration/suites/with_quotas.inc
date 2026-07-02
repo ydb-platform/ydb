@@ -1,5 +1,5 @@
 TEST_SRCS(
-    test_quoting.py
+    ydb/tests/functional/sqs/with_quotas/test_quoting.py
 )
 
 DATA(

@@ -1,7 +1,7 @@
 TEST_SRCS(
-    test_generic_messaging.py
-    test_fifo_messaging.py
-    test_polling.py
+    ydb/tests/functional/sqs/messaging/test_generic_messaging.py
+    ydb/tests/functional/sqs/messaging/test_fifo_messaging.py
+    ydb/tests/functional/sqs/messaging/test_polling.py
 )
 
 DATA(

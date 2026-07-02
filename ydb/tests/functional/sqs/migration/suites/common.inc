@@ -1,16 +1,16 @@
 TEST_SRCS(
-    test_account_actions.py
-    test_acl.py
-    test_counters.py
-    test_garbage_collection.py
-    test_multiplexing_tables_format.py
-    test_ping.py
-    test_queue_attributes_validation.py
-    test_queues_managing.py
-    test_format_without_version.py
-    test_throttling.py
-    test_queue_counters.py
-    test_queue_tags.py
+    ydb/tests/functional/sqs/common/test_account_actions.py
+    ydb/tests/functional/sqs/common/test_acl.py
+    ydb/tests/functional/sqs/common/test_counters.py
+    ydb/tests/functional/sqs/common/test_garbage_collection.py
+    ydb/tests/functional/sqs/common/test_multiplexing_tables_format.py
+    ydb/tests/functional/sqs/common/test_ping.py
+    ydb/tests/functional/sqs/common/test_queue_attributes_validation.py
+    ydb/tests/functional/sqs/common/test_queues_managing.py
+    ydb/tests/functional/sqs/common/test_format_without_version.py
+    ydb/tests/functional/sqs/common/test_throttling.py
+    ydb/tests/functional/sqs/common/test_queue_counters.py
+    ydb/tests/functional/sqs/common/test_queue_tags.py
 )
 
 DATA(

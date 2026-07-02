@@ -1,5 +1,5 @@
 TEST_SRCS(
-    test_leader_start_inflight.py
+    ydb/tests/functional/sqs/large/test_leader_start_inflight.py
 )
 
 DATA(

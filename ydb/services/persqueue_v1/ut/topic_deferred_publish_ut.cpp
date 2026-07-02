@@ -46,6 +46,14 @@ constexpr TStringBuf WriterBuiltinUser = "writer@builtin";
 constexpr size_t MaxDeferredPublishStringLength = 2048;
 constexpr ui32 MaxDeferredPublishPendingQueueSize = 100;
 
+void TestSleep(NActors::TTestActorRuntime& runtime, TDuration duration) {
+    if (runtime.IsRealThreads()) {
+        Sleep(duration);
+    } else {
+        runtime.SimulateSleep(duration);
+    }
+}
+
 void FillClientContext(
     grpc::ClientContext& context,
     const TString& database,
@@ -215,7 +223,7 @@ void AssertDestinationRowCount(
         if (status->GetStatus() != NYdb::EStatus::SCHEME_ERROR) {
             break;
         }
-        Sleep(TDuration::MilliSeconds(100));
+        TestSleep(*server.CleverServer->GetRuntime(), TDuration::MilliSeconds(100));
     }
     UNIT_ASSERT(status.Defined());
     UNIT_ASSERT_C(status->IsSuccess(), status->GetIssues().ToString());
@@ -265,11 +273,7 @@ void WaitDatabaseRunning(NActors::TTestActorRuntime& runtime, const TString& pat
                 return;
             }
         }
-        if (runtime.IsRealThreads()) {
-            Sleep(TDuration::MilliSeconds(100));
-        } else {
-            runtime.SimulateSleep(TDuration::MilliSeconds(100));
-        }
+        TestSleep(runtime, TDuration::MilliSeconds(100));
     }
     UNIT_FAIL(TStringBuilder() << "Database " << path << " is not RUNNING, last status:\n" << status.DebugString());
 }
@@ -319,11 +323,7 @@ TVector<Ydb::StatusIds::StatusCode> WaitRegistryBeginPublicationResponses(
         if (allReceived) {
             break;
         }
-        if (runtime.IsRealThreads()) {
-            Sleep(TDuration::MilliSeconds(10));
-        } else {
-            runtime.SimulateSleep(TDuration::MilliSeconds(10));
-        }
+        TestSleep(runtime, TDuration::MilliSeconds(10));
     }
 
     TVector<Ydb::StatusIds::StatusCode> result;
@@ -409,11 +409,7 @@ void CreateServerlessDatabase(
 
     WaitDatabaseRunning(runtime, serverlessPath);
 
-    if (!server.CleverServer->GetSettings().UseRealThreads) {
-        runtime.SimulateSleep(TDuration::Seconds(1));
-    } else {
-        Sleep(TDuration::Seconds(1));
-    }
+    TestSleep(runtime, TDuration::Seconds(1));
 }
 
 } // namespace
@@ -773,11 +769,7 @@ Y_UNIT_TEST(RegistrySurvivesLateTablesCreationFinishedDuringShutdown) {
                 || ev->Get()->Status == Ydb::StatusIds::ABORTED);
             return;
         }
-        if (runtime->IsRealThreads()) {
-            Sleep(TDuration::MilliSeconds(10));
-        } else {
-            runtime->SimulateSleep(TDuration::MilliSeconds(10));
-        }
+        TestSleep(*runtime, TDuration::MilliSeconds(10));
     }
     UNIT_FAIL("Missing BeginPublication response after late TEvTablesCreationFinished");
 }

@@ -224,7 +224,7 @@ void AssertPurgeOK(NActors::TTestActorRuntime& runtime, TDuration timeout) {
         Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::SUCCESS), response->ErrorDescription);
 }
 
-void WriteMany(std::shared_ptr<TTopicSdkTestSetup> setup, const std::string& topic, ui32 partitionId, size_t messageSize, size_t messageCount) {
+static void WriteManyImpl(std::shared_ptr<TTopicSdkTestSetup> setup, const std::string& topic, ui32 partitionId, size_t messageSize, size_t messageCount, size_t groupsCount) {
     TTopicClient client(setup->MakeDriver());
 
     TWriteSessionSettings settings;
@@ -237,11 +237,22 @@ void WriteMany(std::shared_ptr<TTopicSdkTestSetup> setup, const std::string& top
     auto session = client.CreateSimpleBlockingWriteSession(settings);
 
     for(; messageCount; --messageCount) {
-        auto message = NUnitTest::RandomString(messageSize);
-        UNIT_ASSERT(session->Write(message));
+        TString payload = NUnitTest::RandomString(messageSize);
+        std::optional<TString> group = groupsCount ? std::make_optional(ToString(messageCount % groupsCount)) : std::nullopt;
+        TWriteMessage message = group.has_value() ? TWriteMessage{*group, payload} : TWriteMessage{payload};
+        UNIT_ASSERT(session->Write(std::move(message)));
     }
 
     session->Close();
+}
+
+void WriteMany(std::shared_ptr<TTopicSdkTestSetup> setup, const std::string& topic, ui32 partitionId, size_t messageSize, size_t messageCount) {
+    WriteManyImpl(setup, topic, partitionId, messageSize, messageCount, 0);
+}
+
+void WriteManyGroups(std::shared_ptr<TTopicSdkTestSetup> setup, const std::string& topic, ui32 partitionId, size_t messageSize, size_t messageCount, size_t groupsCount) {
+    Y_ASSERT(groupsCount > 0);
+    WriteManyImpl(setup, topic, partitionId, messageSize, messageCount, groupsCount);
 }
 
 ui64 GetTabletId(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic, ui32 partitionId) {

@@ -47,14 +47,6 @@ bool HasResidualRenameFromChangedName(
     return false;
 }
 
-void RewriteResidualTopMapInputs(TVector<TMapElement>& elements, const TRenameMap& renameMap) {
-    for (auto& element : elements) {
-        if (!element.IsRename()) {
-            element.SetExpression(element.GetExpression().ApplyRenames(renameMap));
-        }
-    }
-}
-
 } // anonymous namespace
 
 TIntrusivePtr<IOperator>
@@ -119,7 +111,11 @@ TPushMapElementsIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
         return input;
     }
 
-    RewriteResidualTopMapInputs(topElements, renameMap);
+    for (auto& element : topElements) {
+        if (!element.IsRename()) {
+            element.SetExpression(element.GetExpression().ApplyRenames(renameMap));
+        }
+    }
     bottomMap->MapElements = std::move(bottomElements);
     props.Subplans.RenameReferences(renameMap, ctx.ExprCtx);
 

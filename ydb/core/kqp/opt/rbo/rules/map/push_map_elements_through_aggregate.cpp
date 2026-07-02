@@ -52,14 +52,6 @@ bool HasResidualRenameFromChangedKey(const TVector<TMapElement>& topElements, co
     return false;
 }
 
-void RewriteResidualTopMapInputs(TVector<TMapElement>& elements, const TRenameMap& renameMap) {
-    for (auto& element : elements) {
-        if (!element.IsRename()) {
-            element.SetExpression(element.GetExpression().ApplyRenames(renameMap));
-        }
-    }
-}
-
 bool CanPushToAggregateInput(
     const TOpAggregate& aggregate,
     const TVector<TInfoUnit>& aggregateInputIUs,
@@ -151,7 +143,11 @@ TPushMapElementsThroughAggregateRule::SimpleMatchAndApply(const TIntrusivePtr<IO
         return input;
     }
 
-    RewriteResidualTopMapInputs(topElements, renameMap);
+    for (auto& element : topElements) {
+        if (!element.IsRename()) {
+            element.SetExpression(element.GetExpression().ApplyRenames(renameMap));
+        }
+    }
 
     auto pushedMap = MakeIntrusive<TOpMap>(aggregateInput, topMap->Pos, pushedElements);
     aggregate->SetInput(pushedMap);

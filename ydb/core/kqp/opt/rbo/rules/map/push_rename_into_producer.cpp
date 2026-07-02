@@ -19,18 +19,7 @@ namespace {
 
 using TRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>;
 
-struct TRenameCandidate {
-    size_t Index = 0;
-    TInfoUnit From;
-    TInfoUnit To;
-};
-
-bool CanRewriteResidualTopMap(
-    const TIntrusivePtr<TOpMap>& topMap,
-    size_t renameIdx,
-    const TInfoUnit& from,
-    const TInfoUnit& to)
-{
+bool CanRewriteResidualTopMap(const TIntrusivePtr<TOpMap>& topMap, size_t renameIdx, const TInfoUnit& from, const TInfoUnit& to) {
     for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
         if (idx == renameIdx) {
             continue;
@@ -46,16 +35,13 @@ bool CanRewriteResidualTopMap(
     return true;
 }
 
-TVector<TMapElement> BuildResidualTopMapElements(
-    const TIntrusivePtr<TOpMap>& topMap,
-    const TRenameCandidate& candidate)
-{
-    const TRenameMap renameMap{{candidate.From, candidate.To}};
+TVector<TMapElement> BuildResidualTopMapElements(const TIntrusivePtr<TOpMap>& topMap, size_t renameIdx, const TInfoUnit& from, const TInfoUnit& to) {
+    const TRenameMap renameMap{{from, to}};
 
     TVector<TMapElement> residualElements;
     residualElements.reserve(topMap->MapElements.size() - 1);
     for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
-        if (idx == candidate.Index) {
+        if (idx == renameIdx) {
             continue;
         }
 
@@ -69,23 +55,14 @@ TVector<TMapElement> BuildResidualTopMapElements(
     return residualElements;
 }
 
-bool ProducesAggregateResult(const TIntrusivePtr<TOpAggregate>& aggregate, const TInfoUnit& iu) {
-    for (const auto& traits : aggregate->AggregationTraitsList) {
-        if (traits.ResultColName == iu) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool TryRenameReadOutput(const TIntrusivePtr<TOpRead>& read, const TRenameCandidate& candidate) {
+bool TryRenameReadOutput(const TIntrusivePtr<TOpRead>& read, const TInfoUnit& from, const TInfoUnit& to) {
     if (!read->IsSingleConsumer()) {
         return false;
     }
 
     for (auto& output : read->OutputIUs) {
-        if (output == candidate.From) {
-            output = candidate.To;
+        if (output == from) {
+            output = to;
             return true;
         }
     }
@@ -93,8 +70,8 @@ bool TryRenameReadOutput(const TIntrusivePtr<TOpRead>& read, const TRenameCandid
     return false;
 }
 
-bool TryRenameMapOutput(const TIntrusivePtr<TOpMap>& map, const TRenameCandidate& candidate, TExprContext& ctx) {
-    auto* outputElement = map->FindOutputElement(candidate.From);
+bool TryRenameMapOutput(const TIntrusivePtr<TOpMap>& map, const TInfoUnit& from, const TInfoUnit& to, TExprContext& ctx) {
+    auto* outputElement = map->FindOutputElement(from);
     if (!map->IsSingleConsumer() || !outputElement) {
         return false;
     }
@@ -103,52 +80,41 @@ bool TryRenameMapOutput(const TIntrusivePtr<TOpMap>& map, const TRenameCandidate
     // name may be hidden there by another semantic rename.
     if (!outputElement->IsRename() &&
         outputElement->IsColumnAccess() &&
-        outputElement->GetColumnAccess() == candidate.To) {
+        outputElement->GetColumnAccess() == to) {
         return false;
     }
 
-    map->RenameProducedIUs({{candidate.From, candidate.To}}, ctx);
+    map->RenameProducedIUs({{from, to}}, ctx);
     return true;
 }
 
-bool TryRenameAggregateResult(const TIntrusivePtr<TOpAggregate>& aggregate, const TRenameCandidate& candidate, TExprContext& ctx) {
-    if (!aggregate->IsSingleConsumer() || !ProducesAggregateResult(aggregate, candidate.From)) {
+bool TryRenameAggregateResult(const TIntrusivePtr<TOpAggregate>& aggregate, const TInfoUnit& from, const TInfoUnit& to, TExprContext& ctx) {
+    if (!aggregate->IsSingleConsumer()) {
         return false;
     }
 
-    aggregate->RenameProducedIUs({{candidate.From, candidate.To}}, ctx);
+    bool producesResult = false;
+    for (const auto& traits : aggregate->AggregationTraitsList) {
+        producesResult |= traits.ResultColName == from;
+    }
+    if (!producesResult) {
+        return false;
+    }
+
+    aggregate->RenameProducedIUs({{from, to}}, ctx);
     return true;
 }
 
-bool TryRenameProducerOutput(
-    const TIntrusivePtr<IOperator>& producer,
-    const TRenameCandidate& candidate,
-    TExprContext& ctx)
-{
+bool TryRenameProducerOutput(const TIntrusivePtr<IOperator>& producer, const TInfoUnit& from, const TInfoUnit& to, TExprContext& ctx) {
     switch (producer->Kind) {
         case EOperator::Source:
-            return TryRenameReadOutput(CastOperator<TOpRead>(producer), candidate);
+            return TryRenameReadOutput(CastOperator<TOpRead>(producer), from, to);
         case EOperator::Map:
-            return TryRenameMapOutput(CastOperator<TOpMap>(producer), candidate, ctx);
+            return TryRenameMapOutput(CastOperator<TOpMap>(producer), from, to, ctx);
         case EOperator::Aggregate:
-            return TryRenameAggregateResult(CastOperator<TOpAggregate>(producer), candidate, ctx);
+            return TryRenameAggregateResult(CastOperator<TOpAggregate>(producer), from, to, ctx);
         default:
             return false;
-    }
-}
-
-void FinishRenamePush(
-    TIntrusivePtr<IOperator>& input,
-    const TIntrusivePtr<TOpMap>& topMap,
-    const TRenameCandidate& candidate,
-    TRBOContext& ctx,
-    TPlanProps& props)
-{
-    topMap->MapElements = BuildResidualTopMapElements(topMap, candidate);
-    props.Subplans.RenameReferences({{candidate.From, candidate.To}}, ctx.ExprCtx);
-
-    if (topMap->MapElements.empty()) {
-        input = topMap->GetInput();
     }
 }
 
@@ -169,13 +135,12 @@ bool TPushRenameIntoProducerRule::MatchAndApply(TIntrusivePtr<IOperator>& input,
 
     for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
         const auto& element = topMap->MapElements[idx];
-        TRenameCandidate candidate;
-        candidate.Index = idx;
-        candidate.To = element.GetElementName();
+        const auto to = element.GetElementName();
+        TInfoUnit from;
 
         if (element.IsRename()) {
-            candidate.From = element.GetRename();
-            if (!liveOut.contains(candidate.To) && !forbidden.contains(candidate.From)) {
+            from = element.GetRename();
+            if (!liveOut.contains(to) && !forbidden.contains(from)) {
                 continue;
             }
         } else {
@@ -183,19 +148,23 @@ bool TPushRenameIntoProducerRule::MatchAndApply(TIntrusivePtr<IOperator>& input,
                 continue;
             }
 
-            candidate.From = element.GetColumnAccess();
-            if (!liveOut.contains(candidate.To) || liveOut.contains(candidate.From)) {
+            from = element.GetColumnAccess();
+            if (!liveOut.contains(to) || liveOut.contains(from)) {
                 continue;
             }
         }
 
-        if (candidate.From == candidate.To ||
-            !CanRewriteResidualTopMap(topMap, candidate.Index, candidate.From, candidate.To) ||
-            !TryRenameProducerOutput(topMap->GetInput(), candidate, ctx.ExprCtx)) {
+        if (from == to ||
+            !CanRewriteResidualTopMap(topMap, idx, from, to) ||
+            !TryRenameProducerOutput(topMap->GetInput(), from, to, ctx.ExprCtx)) {
             continue;
         }
 
-        FinishRenamePush(input, topMap, candidate, ctx, props);
+        topMap->MapElements = BuildResidualTopMapElements(topMap, idx, from, to);
+        props.Subplans.RenameReferences({{from, to}}, ctx.ExprCtx);
+        if (topMap->MapElements.empty()) {
+            input = topMap->GetInput();
+        }
         return true;
     }
 

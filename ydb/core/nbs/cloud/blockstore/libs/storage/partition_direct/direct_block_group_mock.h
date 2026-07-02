@@ -18,6 +18,7 @@ struct TOracleMock: public IOracle
     EWriteMode WriteMode = EWriteMode::DirectWrite;
     TDuration FlushRequestTimeout;
     TDuration EraseRequestTimeout;
+    TVector<THostStat> HostStatistics;
 
     void OnRequestStarted(
         THostIndex hostIndex,
@@ -29,6 +30,10 @@ struct TOracleMock: public IOracle
         TInstant now,
         TDuration executionTime) override;
     void OnRequestFailed(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now) override;
+    void OnRequestCancelled(
         THostIndex hostIndex,
         EOperation operation,
         TInstant now) override;
@@ -46,6 +51,8 @@ struct TOracleMock: public IOracle
     [[nodiscard]] TDuration GetEraseRequestTimeout() const override;
     [[nodiscard]] EWriteMode GetWriteMode() const override;
 
+    [[nodiscard]] const THostStat& GetHostStatistics(
+        THostIndex hostIndex) const override;
     [[nodiscard]] TString Dump() const override;
 };
 
@@ -88,7 +95,7 @@ public:
     using TWriteBlocksToManyPBuffersHandler = std::function<void(
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
-        TVector<THostIndex> hostIndexes,
+        THostMask hostIndexes,
         ui64 lsn,
         TBlockRange64 range,
         TDuration replyTimeout,
@@ -104,9 +111,8 @@ public:
             const NWilson::TTraceId& traceId)>;
     using TBatchEraseFromPBufferHandler =
         std::function<NThreading::TFuture<TDBGEraseResponse>(
-            ui32 vChunkIndex,
             THostIndex hostIndex,
-            const TVector<TPBufferSegment>& segments,
+            const TEraseSegments& segments,
             const NWilson::TTraceId& traceId)>;
     using TDBGRestoreHandler =
         std::function<NThreading::TFuture<TDBGRestoreResponse>(
@@ -182,7 +188,7 @@ public:
     void WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
-        TVector<THostIndex> hostIndexes,
+        THostMask hostIndexes,
         ui64 lsn,
         TBlockRange64 range,
         TDuration replyTimeout,
@@ -198,9 +204,8 @@ public:
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGEraseResponse> BatchEraseFromPBuffer(
-        ui32 vChunkIndex,
         THostIndex hostIndex,
-        const TVector<TPBufferSegment>& segments,
+        const TEraseSegments& segments,
         const NWilson::TTraceId& traceId) override;
 
     void BarrierEraseFromPBuffer(ui64 lsn) override;

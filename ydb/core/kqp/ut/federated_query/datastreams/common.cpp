@@ -1,5 +1,6 @@
 #include "common.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
@@ -115,6 +116,7 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
             .LogSettings = LogSettings,
             .UseLocalCheckpointsInStreamingQueries = true,
             .InternalInitFederatedQuerySetupFactory = InternalInitFederatedQuerySetupFactory,
+            .NeedsStatsCollectors = NeedsStatsCollectors,
             .StoragePoolTypes = StoragePoolTypes,
         });
 
@@ -193,6 +195,10 @@ void TStreamingTestFixture::KillTopicPqrbTablet(const std::string& topicPath) {
 
     const auto& persQueueGroup = describeResult->Record.GetPathDescription().GetPersQueueGroup();
     tabletClient->KillTablet(GetKikimrRunner()->GetTestServer(), persQueueGroup.GetBalancerTabletID());
+}
+
+TIntrusivePtr<NMonitoring::TDynamicCounters> TStreamingTestFixture::GetCounters(const TString& svc, ui32 nodeIdx) {
+    return NKikimr::GetServiceCounters(GetRuntime().GetAppData(nodeIdx).Counters, svc);
 }
 
 // External YDB recipe
@@ -683,6 +689,7 @@ NKikimrKqp::TQueryPhysicalGraph TStreamingTestFixture::LoadPhysicalGraph(const s
 
     const auto& graphProto = graph->Get()->PhysicalGraph;
     UNIT_ASSERT(graphProto);
+    UNIT_ASSERT_VALUES_EQUAL(graphProto->GetPreparedQuery().GetVersion(), static_cast<ui32>(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1));
 
     return *graphProto;
 }
@@ -826,23 +833,6 @@ void TStreamingTestFixture::SetupMockConnectorTableData(std::shared_ptr<TConnect
         readSplitsBuilder.Result()
             .AddResponse(settings.ResultFactory(), NYql::NConnector::NewSuccess());
     }
-}
-
-// Other helpers
-
-std::function<void(const std::string&)> TStreamingTestFixture::AstChecker(ui64 txCount, ui64 stagesCount) {
-    const auto stringCounter = [](const std::string& str, const std::string& subStr) {
-        ui64 count = 0;
-        for (size_t i = str.find(subStr); i != std::string::npos; i = str.find(subStr, i + subStr.size())) {
-            ++count;
-        }
-        return count;
-    };
-
-    return [txCount, stagesCount, stringCounter](const std::string& ast) {
-        UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "KqpPhysicalTx"), txCount);
-        UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "DqPhyStage"), stagesCount);
-    };
 }
 
 void TStreamingTestFixture::EnsureNotInitialized(const std::string& info) {

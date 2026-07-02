@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     autopartitioning_manager.cpp
-    partitioning_keys_manager.cpp
     consumer_offset_tracker.cpp
     deduplication_write_queue.cpp
     message_id_deduplicator.cpp

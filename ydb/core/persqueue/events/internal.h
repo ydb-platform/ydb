@@ -7,6 +7,8 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/common/blob_refcounter.h>
 #include <ydb/core/persqueue/common/key.h>
+#include <ydb/core/persqueue/common/write_stats.h>
+#include <ydb/core/persqueue/common/partitioning_keys_manager.h>
 #include <ydb/core/persqueue/common/metering.h>
 #include <ydb/core/persqueue/common/sourceid_info.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
@@ -1104,20 +1106,21 @@ struct TEvPQ {
     };
 
     struct TEvConsumed : public TEventLocal<TEvConsumed, EvConsumed> {
-        TEvConsumed(ui64 consumedBytes, ui64 consumedDeduplicationIds, ui64 requestCookie, const TString& consumer)
+        TEvConsumed(ui64 consumedBytes, ui64 consumedMessages, ui64 requestCookie, const TString& consumer)
             : ConsumedBytes(consumedBytes)
-            , ConsumedDeduplicationIds(consumedDeduplicationIds)
+            , ConsumedMessages(consumedMessages)
             , RequestCookie(requestCookie)
             , Consumer(consumer)
         {}
 
         TEvConsumed(ui64 consumedBytes)
             : ConsumedBytes(consumedBytes)
+            , ConsumedMessages(0)
             , IsOverhead(true)
         {}
 
         ui64 ConsumedBytes;
-        ui64 ConsumedDeduplicationIds;
+        ui64 ConsumedMessages;
         ui64 RequestCookie;
         TString Consumer;
         bool IsOverhead = false;
@@ -1245,8 +1248,8 @@ struct TEvPQ {
 
         NPQ::TSourceIdMap SrcIdInfo;
         std::deque<NPQ::TDataKey> BodyKeys;
-        // SourceId->WritenBytes
-        std::vector<std::pair<TString, ui64>> WrittenBytes;
+        // Tag -> (SourceId -> metric value) + Keys stats
+        NPQ::TWriteStats WriteStats;
 
         ui64 BytesWrittenTotal;
         ui64 BytesWrittenGrpc;

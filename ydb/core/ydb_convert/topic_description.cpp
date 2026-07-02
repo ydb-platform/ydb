@@ -135,6 +135,8 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     out.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_down_utilization_percent(config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent());
     out.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent());
 
+    out.set_content_based_deduplication(config.GetContentBasedDeduplication());
+
     if (!config.GetRequireAuthWrite()) {
         (*out.mutable_attributes())["_allow_unauthenticated_write"] = "true";
     }
@@ -175,6 +177,12 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     if (local || pqConfig.GetTopicsAreFirstClassCitizen()) {
         out.set_partition_write_speed_bytes_per_second(partConfig.GetWriteSpeedInBytesPerSecond());
         out.set_partition_write_burst_bytes(partConfig.GetBurstSize());
+        if (partConfig.GetWriteSpeedInMessagesPerSecond() > 0) {
+            out.set_partition_write_speed_messages_per_second(partConfig.GetWriteSpeedInMessagesPerSecond());
+        }
+        if (partConfig.GetBurstSizeInMessages() > 0) {
+            out.set_partition_write_burst_messages(partConfig.GetBurstSizeInMessages());
+        }
     }
 
     if (pqConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota()) {

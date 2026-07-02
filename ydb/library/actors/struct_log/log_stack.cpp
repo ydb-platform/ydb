@@ -7,7 +7,7 @@ namespace NActors::NStructuredLog {
 namespace {
     struct TStackItem {
         TStructuredMessage Message;
-        TMaybe<NActors::NLog::EComponent> Component;
+        std::optional<NActors::NLog::EComponent> Component;
     };
     thread_local std::vector<TStackItem> LogStack;
 }
@@ -19,12 +19,12 @@ TStructuredMessage& TLogStack::GetTop() {
     return LogStack.back().Message;
 }
 
-void TLogStack::Push(const TMaybe<NActors::NLog::EComponent>& component) {
+void TLogStack::Push(const std::optional<NActors::NLog::EComponent>& component) {
     if (LogStack.empty()) {
         LogStack.push_back({});
     }
     auto topItem = LogStack.back();
-    if (component.Defined()) {
+    if (component.has_value()) {
         topItem.Component = component;
     }
     LogStack.push_back(topItem);
@@ -40,7 +40,7 @@ NActors::NLog::EComponent TLogStack::GetComponent(NActors::NLog::EComponent defa
     if (LogStack.empty()) {
         return defaultComponent;
     }
-    return LogStack.back().Component.GetOrElse(defaultComponent);
+    return LogStack.back().Component.value_or(defaultComponent);
 }
 
 }  // namespace NActors::NStructuredLog

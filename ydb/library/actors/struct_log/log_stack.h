@@ -3,20 +3,21 @@
 #include "structured_message.h"
 
 #include <ydb/library/actors/core/log_iface.h>
-#include <util/generic/maybe.h>
+
+#include <optional>
 
 namespace NActors::NStructuredLog {
 
 class TLogStack {
 public:
     static TStructuredMessage& GetTop();
-    static void Push(const TMaybe<NActors::NLog::EComponent>& component = {});
+    static void Push(const std::optional<NActors::NLog::EComponent>& component = {});
     static void Pop();
     static NActors::NLog::EComponent GetComponent(NActors::NLog::EComponent defaultComponent = 0);
 
     class TLogGuard {
     public:
-        TLogGuard(const TMaybe<NActors::NLog::EComponent>& component = {}) {
+        TLogGuard(const std::optional<NActors::NLog::EComponent>& component = {}) {
             Push(component);
         }
 

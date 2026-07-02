@@ -52,6 +52,17 @@ jobs:
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
+
+          issue_build_types() {
+            python3 .github/scripts/tests/mute/mute_helper.py issue-build-types \
+              --profiles-config ".github/config/mute_issue_and_digest_config.json" \
+              --branch "$1"
+          }
+          is_in_json_array() {
+            # $1 = value, stdin = JSON array
+            python3 -c "import json,sys; sys.exit(0 if sys.argv[1] in json.load(sys.stdin) else 1)" "$1"
+          }
+
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             BASE_BRANCH="$DISPATCH_BASE_BRANCH"
           else
@@ -63,41 +74,43 @@ jobs:
           fi
           echo "base_branch=$BASE_BRANCH" >> "$GITHUB_OUTPUT"
 
-          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$DISPATCH_BUILD_TYPE" ]; then
-            MATRIX_BUILD_TYPES="[\"$DISPATCH_BUILD_TYPE\"]"
-          else
-            MATRIX_BUILD_TYPES="$(python3 .github/scripts/tests/mute/mute_helper.py issue-build-types \
-              --profiles-config ".github/config/mute_issue_and_digest_config.json" \
-              --branch "$BASE_BRANCH")"
-          fi
-          echo "matrix_build_types=$MATRIX_BUILD_TYPES" >> "$GITHUB_OUTPUT"
-
-          # Guard against duplicate issue creation.
-          # update_muted_ya.yml opens one PR per build type (relwithdebinfo, release-asan,
-          # release-tsan, release-msan), all labeled mute-unmute and all targeting main. Every
-          # merge triggers this workflow, but the issue matrix is always taken from the config
-          # (relwithdebinfo only), so each trigger would create the SAME relwithdebinfo issues
-          # -> duplicate issues opened seconds apart. Only proceed when the triggering PR's own
-          # build type is one we create issues for, so exactly one PR drives issue creation.
+          # Deduplicate issue creation.
+          # update_muted_ya.yml opens one PR per build type
+          # (update-muted-ya_<base>_<buildtype>: relwithdebinfo, release-asan, release-tsan,
+          # release-msan), all labeled mute-unmute and all targeting main. Every merge triggers
+          # this workflow. To avoid every build-type PR creating the SAME issues (duplicates
+          # opened seconds apart), each PR creates issues only for ITS OWN build type. The issue
+          # script skips build types that are not in mute_issue_and_digest_config.json, so PRs of
+          # non-configured build types (asan/tsan/msan today) become no-ops. should_run lets us
+          # skip such runs entirely instead of spinning up a runner just to no-op.
           SHOULD_RUN=true
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            HEAD_REF="$PR_HEAD_REF"
-            case "$HEAD_REF" in
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ -n "$DISPATCH_BUILD_TYPE" ]; then
+              MATRIX_BUILD_TYPES="[\"$DISPATCH_BUILD_TYPE\"]"
+            else
+              MATRIX_BUILD_TYPES="$(issue_build_types "$BASE_BRANCH")"
+            fi
+          else
+            case "$PR_HEAD_REF" in
               update-muted-ya_*)
-                TRIGGER_BUILD_TYPE="${HEAD_REF##*_}"
-                if printf '%s' "$MATRIX_BUILD_TYPES" | python3 -c "import json,sys; sys.exit(0 if sys.argv[1] in json.load(sys.stdin) else 1)" "$TRIGGER_BUILD_TYPE"; then
-                  echo "Trigger build type '$TRIGGER_BUILD_TYPE' is in issue build types $MATRIX_BUILD_TYPES — proceeding"
+                TRIGGER_BUILD_TYPE="${PR_HEAD_REF##*_}"
+                MATRIX_BUILD_TYPES="[\"$TRIGGER_BUILD_TYPE\"]"
+                if issue_build_types "$BASE_BRANCH" | is_in_json_array "$TRIGGER_BUILD_TYPE"; then
+                  echo "Trigger build type '$TRIGGER_BUILD_TYPE' is configured for issues — proceeding"
                 else
                   SHOULD_RUN=false
-                  echo "Skipping: trigger build type '$TRIGGER_BUILD_TYPE' is not in issue build types $MATRIX_BUILD_TYPES"
+                  echo "Skipping: trigger build type '$TRIGGER_BUILD_TYPE' is not configured for issues"
                 fi
                 ;;
               *)
-                # Non auto-mute PR carrying the mute-unmute label: keep previous behavior.
-                echo "Head ref '$HEAD_REF' is not an update-muted-ya branch — proceeding"
+                # Non auto-mute PR carrying the mute-unmute label: keep previous behavior
+                # (create issues for all configured build types).
+                MATRIX_BUILD_TYPES="$(issue_build_types "$BASE_BRANCH")"
+                echo "Head ref '$PR_HEAD_REF' is not an update-muted-ya branch — using configured build types"
                 ;;
             esac
           fi
+          echo "matrix_build_types=$MATRIX_BUILD_TYPES" >> "$GITHUB_OUTPUT"
           echo "should_run=$SHOULD_RUN" >> "$GITHUB_OUTPUT"
 
   create-issues-for-muted-tests:

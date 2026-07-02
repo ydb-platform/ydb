@@ -1028,6 +1028,9 @@ void THive::Handle(TEvHive::TEvReassignTablet::TPtr &ev) {
                 }
                 groups[i].SetGroupID(record.GetForcedGroupIDs(i));
             }
+            if (!std::exchange(tablet->IsMarkedForReassign, true)) {
+                UpdateCounterTabletsReassigning(+1);
+            }
             Execute(CreateUpdateTabletGroups(tablet->Id, std::move(groups)));
         } else {
             Execute(CreateReassignGroups(tablet->Id, ev.Get()->Sender, channelProfileNewGroup, ev->Get()->Record.GetAsync()));
@@ -1797,6 +1800,14 @@ void THive::UpdateCounterTabletsDeleting() {
     if (TabletCounters != nullptr) {
         auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_DELETING];
         counter.Set(DeleteTabletInProgress);
+    }
+}
+
+void THive::UpdateCounterTabletsReassigning(i64 tabletsReassigningDiff) {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_REASSIGNING];
+        auto newValue = counter.Get() + tabletsReassigningDiff;
+        counter.Set(newValue);
     }
 }
 

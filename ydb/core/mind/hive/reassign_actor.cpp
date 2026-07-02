@@ -169,6 +169,7 @@ public:
 
     void Bootstrap() {
         ++Hive->ReassignsRunning;
+        Hive->TabletCounters->Cumulative()[NHive::COUNTER_REASSIGN_EXECUTED].Increment(1);
         Become(&TThis::StateWork);
         ReassignNextTablet();
         return CheckCompletion();

@@ -5,10 +5,16 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_mem_info.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
@@ -124,6 +130,86 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithAbsentNullColumns(const TKi
 
     auto columnList = Build<TCoAtomList>(ctx, pos)
         .Add(writeColumns)
+        .Done();
+
+    return {writeData, columnList};
+}
+
+TExprBase BuildYqlLiteralFromTypedValue(const Ydb::TypedValue& proto, TPositionHandle pos, TExprContext& ctx) {
+    NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+    NMiniKQL::TTypeEnvironment typeEnv(alloc);
+    NMiniKQL::TMemoryUsageInfo memInfo("BuildYqlLiteralFromTypedValue");
+    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo);
+
+    auto guard = typeEnv.BindAllocator();
+    auto [mkqlType, unboxedValue] = NMiniKQL::ImportValueFromProto(proto.type(), proto.value(), typeEnv, holderFactory);
+    const TTypeAnnotationNode* typeAnnotation = NYql::NCommon::ConvertMiniKQLType(ctx.GetPosition(pos), mkqlType, ctx);
+    return TExprBase(NYql::NCommon::ValueToExprLiteral(typeAnnotation, unboxedValue, ctx, pos));
+}
+
+// Appends DEFAULT_KIND_LITERAL column values to every row in the input stream.
+std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithDefaultLiteralColumns(const TExprBase& input, const TCoAtomList& inputColumns,
+    const TCoAtomList& literalDefaultColumns, const TKikimrTableDescription& tableDesc, TPositionHandle pos, TExprContext& ctx)
+{
+    if (literalDefaultColumns.Ref().ChildrenSize() == 0) {
+        return {input, inputColumns};
+    }
+
+    auto rowArg = Build<TCoArgument>(ctx, pos).Name("row").Done();
+
+    TVector<TCoAtom> allColumns;
+    TVector<TExprBase> allMembers;
+
+    for (const auto& col : inputColumns) {
+        allColumns.push_back(col);
+        allMembers.push_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name(col)
+                .Value<TCoMember>()
+                    .Struct(rowArg)
+                    .Name().Build(col.Value())
+                    .Build()
+                .Done());
+    }
+
+    for (const auto& col : literalDefaultColumns) {
+        TString colName = TString(col.Value());
+        const auto* colMeta = tableDesc.Metadata->Columns.FindPtr(colName);
+        YQL_ENSURE(colMeta && colMeta->IsDefaultFromLiteral());
+
+        TExprBase literalExpr = BuildYqlLiteralFromTypedValue(colMeta->DefaultFromLiteral, pos, ctx);
+
+        const auto* colType = tableDesc.GetColumnType(colName);
+        YQL_ENSURE(colType);
+
+        TExprBase memberValue = literalExpr;
+        if (colType->IsOptionalOrNull()) {
+            memberValue = Build<TCoJust>(ctx, pos)
+                .Input(literalExpr)
+                .Done();
+        }
+
+        auto nameAtom = TCoAtom(ctx.NewAtom(pos, colName));
+        allColumns.push_back(nameAtom);
+        allMembers.push_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name(nameAtom)
+                .Value(memberValue)
+                .Done());
+    }
+
+    auto writeData = Build<TCoMap>(ctx, pos)
+        .Input(input)
+        .Lambda()
+            .Args({rowArg})
+            .Body<TCoAsStruct>()
+                .Add(allMembers)
+                .Build()
+            .Build()
+        .Done();
+
+    auto columnList = Build<TCoAtomList>(ctx, pos)
+        .Add(allColumns)
         .Done();
 
     return {writeData, columnList};
@@ -315,22 +401,51 @@ std::pair<TExprBase, TCoAtomList> BuildWriteInput(const TKiWriteTable& write, co
     const TCoAtomList& inputColumns, const TCoAtomList& autoIncrement, const bool /*isSink*/,
     TPositionHandle pos, TExprContext& ctx, TKqpOptimizeContext& kqpCtx)
 {
-    auto input = write.Input();
+    TExprBase input = write.Input();
+    std::optional<TCoAtomList> inputCols;
 
-    TCoAtomList inputCols = BuildUpsertInputColumns(inputColumns, autoIncrement, pos, ctx);
+    // Split autoIncrement into sequence columns (handled at runtime by TKqlSequencer) and
+    // literal defaults (inlined at compile time into the row struct via TCoMap/TCoAsStruct).
+    if (kqpCtx.Config->GetEnableCompileTimeDefaults()) {
+        TVector<TExprNode::TPtr> sequenceColNodes;
+        TVector<TExprNode::TPtr> literalDefaultColNodes;
 
-    if (autoIncrement.Ref().ChildrenSize() > 0) {
-        input = BuildKqlSequencer(input, table, inputCols, autoIncrement, pos, ctx);
+        for (const auto& colAtom : autoIncrement) {
+            const auto* colMeta = table.Metadata->Columns.FindPtr(TString(colAtom.Value()));
+            if (colMeta && colMeta->IsDefaultFromLiteral() && !colMeta->DefaultFromLiteral.type().has_pg_type()) {
+                literalDefaultColNodes.push_back(colAtom.Ptr());
+            } else {
+                sequenceColNodes.push_back(colAtom.Ptr());
+            }
+        }
+
+        auto sequenceCols = Build<TCoAtomList>(ctx, pos).Add(sequenceColNodes).Done();
+        auto literalDefaultCols = Build<TCoAtomList>(ctx, pos).Add(literalDefaultColNodes).Done();
+
+        TCoAtomList inputColsAfterSequencer = BuildUpsertInputColumns(inputColumns, sequenceCols, pos, ctx);
+
+        if (sequenceCols.Ref().ChildrenSize() > 0) {
+            input = BuildKqlSequencer(input, table, inputColsAfterSequencer, sequenceCols, pos, ctx);
+        }
+
+        std::tie(input, inputCols) = ExtendInputRowsWithDefaultLiteralColumns(input, inputColsAfterSequencer,
+            literalDefaultCols, table, pos, ctx);
+    } else {
+        inputCols = BuildUpsertInputColumns(inputColumns, autoIncrement, pos, ctx);
+        if (autoIncrement.Ref().ChildrenSize() > 0) {
+            input = BuildKqlSequencer(input, table, inputCols.value(), autoIncrement, pos, ctx);
+        }
     }
 
-    std::tie(input, inputCols) = ExtendInputRowsWithAbsentNullColumns(write, input, inputCols, table, write.Pos(), ctx, kqpCtx);
+    YQL_ENSURE(inputCols.has_value());
+    std::tie(input, inputCols) = ExtendInputRowsWithAbsentNullColumns(write, input, inputCols.value(), table, write.Pos(), ctx, kqpCtx);
 
     auto baseInput = Build<TKqpWriteConstraint>(ctx, pos)
         .Input(input)
         .Columns(GetPgNotNullColumns(table, pos, ctx))
         .Done();
 
-    return {baseInput, inputCols};
+    return {baseInput, inputCols.value()};
 }
 
 
@@ -1260,7 +1375,7 @@ bool CheckDisabledWriteToUniqIndex(const TExprBase& write, const NYql::TKikimrTa
 
 bool ValidateBatchOperation(const NYql::TKikimrTableDescription& tableData, const TExprBase& expr, TExprContext& ctx, TKqpOptimizeContext& kqpCtx)
 {
-    const bool allowBatchUpdates = kqpCtx.Config->GetEnableBatchUpdates() && kqpCtx.Config->GetEnableOltpSink();
+    const bool allowBatchUpdates = kqpCtx.Config->GetEnableOltpSink();
     const bool enabledIndexStreamWrite = kqpCtx.Config->GetEnableIndexStreamWrite();
 
     if (!allowBatchUpdates) {

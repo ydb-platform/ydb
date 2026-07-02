@@ -1,5 +1,6 @@
 #include "fulltext.h"
 #include "fulltext_query.h"
+#include "table_index.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/xrange.h>
@@ -7,6 +8,38 @@
 namespace NKikimr::NFulltext {
 
 Y_UNIT_TEST_SUITE(NFulltext) {
+
+    // The compact rowid-mode doc-id layout: __ydb_row_id carries a dense seq in its low bits and a
+    // bit-reversed spread bucket in its high bits. RowIdFromSeq must be a bijection (SeqFromRowId is its
+    // left inverse) and consecutive seq values must spread across distinct high-bit buckets.
+    Y_UNIT_TEST(RowIdSeqRoundTrip) {
+        using namespace NKikimr::NTableIndex::NFulltext;
+
+        // Round-trip across a range, around the bucket-cycle boundary, and for large/high-bit seq values.
+        for (ui64 seq : xrange<ui64>(0, 5000)) {
+            UNIT_ASSERT_VALUES_EQUAL(SeqFromRowId(RowIdFromSeq(seq)), seq);
+        }
+        for (ui64 seq : {ui64(0), ui64(1), ui64((1ull << RowIdSpreadBits) - 1), ui64(1ull << RowIdSpreadBits),
+                         ui64(123456789), RowIdSeqMask - 1, RowIdSeqMask}) {
+            ui64 rowId = RowIdFromSeq(seq);
+            UNIT_ASSERT_VALUES_EQUAL_C(SeqFromRowId(rowId), seq, "seq=" << seq << " rowId=" << rowId);
+            // seq lives strictly in the low (64 - RowIdSpreadBits) bits.
+            UNIT_ASSERT_VALUES_EQUAL(seq & ~RowIdSeqMask, 0u);
+        }
+
+        // Injectivity + spread: a run of consecutive seq must map to distinct row ids, and the high-bit
+        // bucket must take many different values (not a monotonic tail) over a full bucket cycle.
+        THashSet<ui64> rowIds;
+        THashSet<ui64> buckets;
+        const ui64 cycle = 1ull << RowIdSpreadBits;
+        for (ui64 seq : xrange<ui64>(0, cycle)) {
+            ui64 rowId = RowIdFromSeq(seq);
+            UNIT_ASSERT(rowIds.insert(rowId).second);
+            buckets.insert(rowId >> (64 - RowIdSpreadBits));
+        }
+        // bit-reversal of the low RowIdSpreadBits is itself a bijection over [0, cycle), so every bucket appears.
+        UNIT_ASSERT_VALUES_EQUAL(buckets.size(), cycle);
+    }
 
     Y_UNIT_TEST(MultiDeltaReader1) {
         TDeltaWriter wr;

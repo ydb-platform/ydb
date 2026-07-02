@@ -119,16 +119,24 @@ protected:
     }
 
     static void DoRunOperation(TPtr self) {
-        self->RunOperation().Subscribe(
-            [self](const TAsyncStatusType& result) {
-                [[maybe_unused]] auto attemptScope = self->ActivateAttemptSpan();
-                try {
-                    HandleStatusAsync(self, result.GetValue());
-                } catch (...) {
-                    HandleExceptionAsync(self, std::current_exception());
+        try {
+            self->RunOperation().Subscribe(
+                [self](const TAsyncStatusType& result) {
+                    [[maybe_unused]] auto attemptScope = self->ActivateAttemptSpan();
+                    try {
+                        HandleStatusAsync(self, result.GetValue());
+                    } catch (const NStatusHelpers::TYdbRangeErrorException& e) {
+                        HandleStatusAsync(self, MakeRetryResultFromStatus<TStatusType>(TStatus(e.GetStatus())));
+                    } catch (...) {
+                        HandleExceptionAsync(self, std::current_exception());
+                    }
                 }
-            }
-        );
+            );
+        } catch (const NStatusHelpers::TYdbRangeErrorException& e) {
+            HandleStatusAsync(self, MakeRetryResultFromStatus<TStatusType>(TStatus(e.GetStatus())));
+        } catch (...) {
+            HandleExceptionAsync(self, std::current_exception());
+        }
     }
 
 protected:
@@ -219,7 +227,8 @@ public:
                     try {
                         auto& result = resultFuture.GetValue();
                         if (!result.IsSuccess()) {
-                            return TRetryContextAsync::HandleStatusAsync(self, TStatusType(TStatus(result)));
+                            return TRetryContextAsync::HandleStatusAsync(
+                                self, MakeRetryResultFromStatus<TStatusType>(TStatus(result)));
                         }
 
                         self->Session_ = result.GetSession();

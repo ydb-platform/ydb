@@ -380,7 +380,7 @@ message TTableServiceConfig {
 
     optional bool EnableSnapshotIsolationRW = 76 [default = true, (InvalidateCompileCache) = true];
     optional bool EnableStreamWrite = 77 [default = false, (InvalidateCompileCache) = true];
-    optional bool EnableBatchUpdates = 78 [default = true];
+    optional bool EnableBatchUpdates = 78 [default = true, deprecated = true];
 
     optional bool AllowMultiBroadcasts = 79 [default = true, (InvalidateCompileCache) = true];
 
@@ -488,6 +488,12 @@ message TTableServiceConfig {
 
     optional bool EnableDqSourceStreamLookupJoin = 121 [default = false, (InvalidateCompileCache) = true];
 
+    // Emit the fixed (v1) stream lookup join RowSeqNo cookie format. Keep disabled
+    // until every node in the cluster is upgraded, then enable to fix RowSeqNo
+    // collisions across distributed tasks (taskId >= 16). InvalidateCompileCache
+    // ensures cached query plans are recompiled with the new format when toggled.
+    optional bool EnableStreamLookupJoinCookieV2 = 138 [default = false, (InvalidateCompileCache) = true];
+
     message TCompileCacheWarmupConfig {
         optional uint32 SoftDeadlineSeconds = 1 [default = 10];        // Soft deadline: stops new compilations, waits for in-flight ones to finish
         optional uint32 MaxConcurrentCompilations = 2 [default = 5];
@@ -537,4 +543,9 @@ message TTableServiceConfig {
     // KqpRewriteHybridRankTopSort logical rewrite, so it changes the compiled plan shape and must
     // invalidate the compile cache when toggled.
     optional bool EnableHybridSearch = 135 [default = true, (InvalidateCompileCache) = true];
+
+    optional bool EnableStrictSerializableIsolation = 136 [default = false, (InvalidateCompileCache) = true];
+
+    // Remove KqpSequencer from query plan for tables with DEFAULT columns during write operations.
+    optional bool EnableCompileTimeDefaults = 137 [default = false, (InvalidateCompileCache) = true];
 };

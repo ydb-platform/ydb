@@ -218,9 +218,10 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
             try {
                 auto isBillable = IsBillablelStatus(request.status(), internal.status_code());
                 if (!isBillable) {
-                    CPS_LOG_AS_N(*actorSystem, "Query " << request.query_id().value() << " is NOT billable, status: "
-                    << FederatedQuery::QueryMeta::ComputeStatus_Name(request.status())
-                    << ", statusCode: " << NYql::NDqProto::StatusIds_StatusCode_Name(internal.status_code()));
+                    YDB_LOG_NOTICE_CTX_COMP(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "Query is NOT billable",
+                        {"queryId", request.query_id().value()},
+                        {"status", FederatedQuery::QueryMeta::ComputeStatus_Name(request.status())},
+                        {"statusCode", NYql::NDqProto::StatusIds_StatusCode_Name(internal.status_code())});
                 }
                 auto statistics = request.statistics();
                 if (!statistics) {
@@ -232,7 +233,8 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
                 auto records = GetMeteringRecords(statistics, isBillable, jobId, request.scope(), HostName());
                 meteringRecords->swap(records);
             } catch (const std::exception&) {
-                CPS_LOG_AS_E(*actorSystem, "Error on statistics meterification: " << CurrentExceptionMessage());
+                YDB_LOG_ERROR_CTX_COMP(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "Error on statistics",
+                    {"meterification", CurrentExceptionMessage()});
             }
         }
 
@@ -423,7 +425,13 @@ void TControlPlaneStorageBase::UpdateTaskInfo(
                 issues->AddIssue(issue);
             }
         }
-        CPS_LOG_AS_D(*actorSystem, "PingTaskRequest (resign): " << (!policyFound ? " DEFAULT POLICY" : "") << (owner ? " FAILURE " : " ") << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code()) << " " << retryLimiter.RetryCount << " " << retryLimiter.RetryCounterUpdatedAt << " " << backoff);
+        YDB_LOG_DEBUG_CTX_COMP(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "PingTaskRequest",
+            {"policy", (!policyFound ? " DEFAULT POLICY" : "")},
+            {"pingResult", (owner ? " FAILURE " : " ")},
+            {"statusCode", NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code())},
+            {"retryCount", retryLimiter.RetryCount},
+            {"retryCounterUpdatedAt", retryLimiter.RetryCounterUpdatedAt},
+            {"backoff", backoff});
     }
 
     if (queryStatus) {
@@ -465,7 +473,8 @@ void TControlPlaneStorageBase::UpdateTaskInfo(
             try {
                 statistics = GetPrettyStatistics(statistics);
             } catch (const std::exception&) {
-                CPS_LOG_AS_E(*actorSystem, "Error on statistics prettification: " << CurrentExceptionMessage());
+                YDB_LOG_ERROR_CTX_COMP(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "Error on statistics",
+                    {"prettification", CurrentExceptionMessage()});
             }
         }
         *query.mutable_statistics()->mutable_json() = statistics;
@@ -647,10 +656,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     requestCounters.Common->RequestBytes->Add(ev->Get()->GetByteSize());
     const TString queryId = request.query_id().value();
 
-    CPS_LOG_T("PingTaskRequest: {" << request.DebugString() << "}");
+    YDB_LOG_TRACE_COMP(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "PingTaskRequest",
+        {"request", request.DebugString()});
 
     if (const auto& issues = ValidateRequest(ev)) {
-        CPS_LOG_W("PingTaskRequest: {" << request.DebugString() << "} validation FAILED: " << issues.ToOneLineString());
+        YDB_LOG_WARN_COMP(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "PingTaskRequest: validation",
+            {"request", request.DebugString()},
+            {"FAILED", issues.ToOneLineString()});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvPingTaskResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(PingTaskRequest, queryId, delta, false);
@@ -705,13 +717,17 @@ void TControlPlaneStorageBase::Handle(TEvControlPlaneStorage::TEvFinalStatusRepo
 
     if (IsFailedStatus(event.Status)) {
         FailedStatusCodeCounters->IncByScopeAndStatusCode(event.Scope, event.StatusCode, event.Issues);
-        LOG_YQ_AUDIT_SERVICE_INFO("FinalFailedStatus: cloud id: [" << event.CloudId  << "], scope: [" << event.Scope << "], query id: [" <<
-                                event.QueryId << "], job id: [" << event.JobId << "], query type: [" << FederatedQuery::QueryContent::QueryType_Name(event.QueryType) << "], "
-                                "status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status) <<
-                                ", label: " << LabelNameFromStatusCodeAndIssues(event.StatusCode, event.Issues) <<
-                                ", status code: " << NYql::NDqProto::StatusIds::StatusCode_Name(event.StatusCode) <<
-                                ", issues: " << event.Issues.ToOneLineString() <<
-                                ", transient issues " << event.TransientIssues.ToOneLineString());
+        YDB_LOG_INFO_COMP(::NKikimrServices::YQ_AUDIT, "FinalFailedStatus: cloud id: scope: query id: job id: query type: status, transient issues",
+            {"cloudId", event.CloudId},
+            {"scope", event.Scope},
+            {"queryId", event.QueryId},
+            {"jobId", event.JobId},
+            {"queryType", FederatedQuery::QueryContent::QueryType_Name(event.QueryType)},
+            {"status", FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status)},
+            {"label", LabelNameFromStatusCodeAndIssues(event.StatusCode, event.Issues)},
+            {"code", NYql::NDqProto::StatusIds::StatusCode_Name(event.StatusCode)},
+            {"issues", event.Issues.ToOneLineString()},
+            {"transientIssues", event.TransientIssues.ToOneLineString()});
     }
 
     if (HasIssuesCode(event.Issues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE) || HasIssuesCode(event.TransientIssues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE)) {
@@ -721,9 +737,16 @@ void TControlPlaneStorageBase::Handle(TEvControlPlaneStorage::TEvFinalStatusRepo
     Counters.GetFinalStatusCounters(event.CloudId, event.Scope)->IncByStatus(event.Status);
 
     TStatistics statistics{event.Statistics};
-    LOG_YQ_AUDIT_SERVICE_INFO("FinalStatus: cloud id: [" << event.CloudId  << "], scope: [" << event.Scope << "], query id: [" <<
-                              event.QueryId << "], job id: [" << event.JobId << "], query type: [" << FederatedQuery::QueryContent::QueryType_Name(event.QueryType) << "], " << statistics << ", " <<
-                              "status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status));
+    TStringBuilder statisticsBuf;
+    statisticsBuf << statistics;
+    YDB_LOG_INFO_COMP(::NKikimrServices::YQ_AUDIT, "FinalStatus",
+        {"cloudId", event.CloudId},
+        {"scope", event.Scope},
+        {"queryId", event.QueryId},
+        {"jobId", event.JobId},
+        {"queryType", FederatedQuery::QueryContent::QueryType_Name(event.QueryType)},
+        {"statistics", statisticsBuf},
+        {"status", FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status)});
 }
 
 } // NFq

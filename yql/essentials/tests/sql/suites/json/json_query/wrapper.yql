@@ -1,6 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
-
 $json = CAST(@@{
     "object": {"key": 123},
     "multi_object": [{"key": 123}, {"key": 456}, {"key": 789}],

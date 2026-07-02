@@ -236,14 +236,14 @@ TUnboxedValuePod ConvertToListImpl(TUnboxedValuePod x, const IValueBuilder* valu
                         values.reserve(size);
                         for (ui32 i = 0U; i < size; ++i) {
                             if (auto converted = Converter(elements[i], valueBuilder, pos)) {
-                                values.emplace_back(std::move(converted));
+                                values.emplace_back(converted);
                             }
                         }
                     } else {
                         const auto it = x.GetListIterator();
                         for (TUnboxedValue v; it.Next(v);) {
                             if (auto converted = Converter(v.Release(), valueBuilder, pos)) {
-                                values.emplace_back(std::move(converted));
+                                values.emplace_back(converted);
                             }
                         }
                     }
@@ -287,7 +287,7 @@ TUnboxedValuePod ConvertToDictImpl(TUnboxedValuePod x, const IValueBuilder* valu
                     const auto it = x.GetDictIterator();
                     for (TUnboxedValue key, payload; it.NextPair(key, payload);) {
                         if (auto converted = Converter(payload, valueBuilder, pos)) {
-                            pairs.emplace_back(std::move(key), std::move(converted));
+                            pairs.emplace_back(std::move(key), converted);
                         }
                     }
                     if (pairs.empty()) {

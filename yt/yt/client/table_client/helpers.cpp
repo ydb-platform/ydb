@@ -17,6 +17,8 @@
 
 #include <library/cpp/yt/coding/varint.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
 namespace NYT::NTableClient {
@@ -826,8 +828,8 @@ void ProtobufToUnversionedValueImpl(
     auto* wireBuffer = pool->AllocateUnaligned(byteSize);
     YT_VERIFY(value.SerializePartialToArray(wireBuffer, byteSize));
     ArrayInputStream inputStream(wireBuffer, byteSize);
-    TString ysonBytes;
-    TStringOutput outputStream(ysonBytes);
+    std::string ysonBytes;
+    TStdStringOutput outputStream(ysonBytes);
     TYsonWriter ysonWriter(&outputStream);
     ParseProtobuf(&ysonWriter, &inputStream, type);
     *unversionedValue = rowBuffer->CaptureValue(MakeUnversionedAnyValue(ysonBytes, id, flags));
@@ -873,8 +875,8 @@ void ListToUnversionedValueImpl(
     int id,
     EValueFlags flags)
 {
-    TString ysonBytes;
-    TStringOutput outputStream(ysonBytes);
+    std::string ysonBytes;
+    TStdStringOutput outputStream(ysonBytes);
     NYT::NYson::TYsonWriter writer(&outputStream);
     writer.OnBeginList();
 
@@ -1185,8 +1187,8 @@ void MapToUnversionedValueImpl(
     int id,
     EValueFlags flags)
 {
-    TString ysonBytes;
-    TStringOutput outputStream(ysonBytes);
+    std::string ysonBytes;
+    TStdStringOutput outputStream(ysonBytes);
     NYT::NYson::TYsonWriter writer(&outputStream);
     writer.OnBeginMap();
 
@@ -1576,9 +1578,9 @@ void UnversionedValueToYson(TUnversionedValue unversionedValue, IYsonConsumer* c
 
 TYsonString UnversionedValueToYson(TUnversionedValue unversionedValue, bool enableRaw)
 {
-    TString data;
+    std::string data;
     data.reserve(GetYsonSize(unversionedValue));
-    TStringOutput output(data);
+    TStdStringOutput output(data);
     TYsonWriter writer(&output, EYsonFormat::Binary, EYsonType::Node, /* enableRaw */ enableRaw);
     UnversionedValueToYson(unversionedValue, &writer);
     return TYsonString(std::move(data));

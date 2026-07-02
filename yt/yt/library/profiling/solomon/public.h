@@ -12,6 +12,8 @@ namespace NYT::NProfiling {
 DECLARE_REFCOUNTED_STRUCT(TShardConfig)
 DECLARE_REFCOUNTED_STRUCT(TSolomonExporterConfig)
 DECLARE_REFCOUNTED_STRUCT(TSolomonProxyConfig)
+DECLARE_REFCOUNTED_STRUCT(TSolomonRegistryConfig)
+DECLARE_REFCOUNTED_STRUCT(TSolomonRegistryDynamicConfig)
 
 DECLARE_REFCOUNTED_CLASS(TSolomonExporter)
 YT_DECLARE_TYPEID(TSolomonExporter)

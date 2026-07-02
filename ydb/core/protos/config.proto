@@ -528,6 +528,8 @@ message TInterconnectConfig {
     optional bool CollectSubscriptionStackTrace = 59 [default = false];
     optional uint32 RdmaPayloadCopySizeThreshold = 60 [default = 65536]; // 0 disables copying RDMA payload to regular memory
     optional uint32 MaxRdmaRetryBackoffLevel = 61 [default = 8]; // 5s * 2^8 = 1280s, about 21 minutes by default
+    optional bool UseUring = 62 [default = false];
+    optional bool EnableUringSQPOLL = 63 [default = false]; // only effective when UseUring is set
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;
@@ -1254,6 +1256,7 @@ message TStreamingQueriesConfig {
     reserved 2;
     optional TExternalStorageConfig ExternalStorage = 3;
     optional TExternalTopicsSettings TopicSdkSettings = 4;
+    optional bool ForbidYqlSysColumnsAndSystemMetadata = 5 [default = true];
 }
 
 message TQueryServiceConfig {
@@ -1652,7 +1655,7 @@ message TImmediateControlsConfig {
             Description: "Allow cutting large TEvLocalSyncLogData messages into smaller chunks",
             MinValue: 0,
             MaxValue: 1,
-            DefaultValue: 0 }];
+            DefaultValue: 1 }];
         optional uint64 EnableSyncLogChunkCompressionHDD = 2 [(ControlOptions) = {
             Description: "Compress SyncLog chunks before writing to log, setting for HDD",
             MinValue: 0,
@@ -1673,6 +1676,16 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1024,
             DefaultValue: 10 }];
+        optional uint64 SyncLogMaxDiskAmount = 49 [(ControlOptions) = {
+            Description: "Maximum amount of SyncLog data stored on disk in bytes; effective chunk count is max(2, amount / PDisk chunk size)",
+            MinValue: 0,
+            MaxValue: 1099511627776,
+            DefaultValue: 0 }];
+        optional uint64 SyncLogMaxMemAmount = 50 [(ControlOptions) = {
+            Description: "Maximum amount of SyncLog data stored in memory in bytes; effective page count is max(2, amount / append block size)",
+            MinValue: 0,
+            MaxValue: 1073741824,
+            DefaultValue: 67108864 }];
 
         optional uint64 BurstThresholdNsHDD = 6 [(ControlOptions) = {
             Description: "Minumum operation queue size that is considered a burst, setting for HDD",
@@ -2341,6 +2354,40 @@ message TImmediateControlsConfig {
             DefaultValue: 1 }];
     }
     optional TQuoterControls QuoterControls = 21;
+
+    message TRetroTracingControls {
+        optional uint64 EnableStorageGeneration = 1 [(ControlOptions) = {
+            Description: "Enable generation of retro traces at the storage (DSProxy) level",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 EnableStorageCollectionSlowRequests = 2 [(ControlOptions) = {
+            Description: "Enable collection of retro traces for slow DSProxy requests",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 MaxBatchSize = 3 [(ControlOptions) = {
+            Description: "Maximum number of trace ids batched by the distributed retro collector before flush",
+            MinValue: 1,
+            MaxValue: 100000,
+            DefaultValue: 64 }];
+        optional uint64 BatchFlushIntervalMs = 4 [(ControlOptions) = {
+            Description: "Interval (ms) between batch flushes of the distributed retro collector",
+            MinValue: 1,
+            MaxValue: 3600000,
+            DefaultValue: 500 }];
+        optional uint64 DeduplicationTTLSec = 5 [(ControlOptions) = {
+            Description: "Time (sec) a recently observed trace id is remembered to deduplicate retro trace demands",
+            MinValue: 1,
+            MaxValue: 3600,
+            DefaultValue: 10 }];
+        optional uint64 RootBatchIntervalSec = 6 [(ControlOptions) = {
+            Description: "Interval (sec) between root-side (distconf) retro trace batch processing",
+            MinValue: 1,
+            MaxValue: 3600,
+            DefaultValue: 10 }];
+    }
+    optional TRetroTracingControls RetroTracingControls = 23;
 };
 
 message TMeteringConfig {
@@ -2811,6 +2858,16 @@ message TCompactionConfig {
 
         // maximum time of unpersisted batch of shards
         optional uint32 PersistBatchMaxTimeMs = 6 [default = 100];
+
+        // The maximum number of stored operations regardless of status.
+        // Creating an operation beyond this limit fails, unless AutoForgetOperations is enabled.
+        // 0 means unlimited.
+        optional uint32 StoredOperationsLimit = 7 [default = 1000];
+
+        // When the StoredOperationsLimit is reached, automatically forget the oldest finished
+        // (Done or Cancelled) operations to make room for a new one instead of failing the request.
+        // If there are still not enough finished operations to forget, the request fails.
+        optional bool AutoForgetOperations = 8 [default = true];
     }
 
     optional TBackgroundCompactionConfig BackgroundCompactionConfig = 1;
@@ -3014,6 +3071,7 @@ message TLocalPgWireConfig {
     optional string SslCertificate = 5 [(Ydb.sensitive) = true];
     optional string Address = 6 [default = "::"];
     optional bool TcpNotDelay = 7 [default = true];
+    optional bool EnableLocalPgWire = 8 [default = false];
 }
 
 message TKafkaProxyConfig {

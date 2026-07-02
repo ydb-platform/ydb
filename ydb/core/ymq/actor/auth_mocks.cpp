@@ -51,7 +51,16 @@ public:
             status = NYdbGrpc::TGrpcStatus("Unavailable", grpc::StatusCode::UNAVAILABLE, false);
         } else {
             if (request.has_iam_token()) {
-                status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
+                TStringBuf id = request.iam_token();
+                if (id.SkipPrefix(SERVICE_ACCOUNT_PREFIX)) {
+                    auto& serviceAccount = *response.mutable_subject()->mutable_service_account();
+                    serviceAccount.set_id(TString(id));
+                    serviceAccount.set_folder_id(TString::Join("FOLDER_", id));
+                } else if (id.SkipPrefix(USER_ACCOUNT_PREFIX)) {
+                    response.mutable_subject()->mutable_user_account()->set_id(TString(id));
+                } else {
+                    status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
+                }
             } else {
                 TString idStr = request.signature().access_key_id();
 

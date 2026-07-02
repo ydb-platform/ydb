@@ -107,9 +107,9 @@ namespace {
             } else {
                 return IsConstantExpr(input->Child(1)) || IsConstantUdf(input->Child(1));
             }
-        } else if (TCoApply::Match(input->Child(1)))(
+        } else if (TCoApply::Match(input->Child(1))){
             return IsConstantUdf(input->ChildPtr(1));
-        )
+        }
         return false;
     }
 

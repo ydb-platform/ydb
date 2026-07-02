@@ -293,6 +293,14 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxDropLocalIndex = 225 [(CounterOpts) = {Name: "InFlightOps/DropLocalIndex"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterLocalIndex = 226 [(CounterOpts) = {Name: "InFlightOps/AlterLocalIndex"}];
     COUNTER_IN_FLIGHT_OPS_TxMoveLocalIndex = 227 [(CounterOpts) = {Name: "InFlightOps/MoveLocalIndex"}];
+
+    COUNTER_SMALL_BLOBS_VOLUME_BYTES = 228               [(CounterOpts) = {Name: "SmallBlobsVolumeBytes"}];
+    COUNTER_SMALL_BLOBS_COUNT = 229                      [(CounterOpts) = {Name: "SmallBlobsCount"}];
+    COUNTER_SMALL_BLOBS_VOLUME_HARD_QUOTA_BYTES = 230    [(CounterOpts) = {Name: "SmallBlobsVolumeHardQuotaBytes"}];
+    COUNTER_SMALL_BLOBS_VOLUME_SOFT_QUOTA_BYTES = 231    [(CounterOpts) = {Name: "SmallBlobsVolumeSoftQuotaBytes"}];
+    COUNTER_SMALL_BLOBS_COUNT_HARD_QUOTA = 232           [(CounterOpts) = {Name: "SmallBlobsCountHardQuota"}];
+    COUNTER_SMALL_BLOBS_COUNT_SOFT_QUOTA = 233           [(CounterOpts) = {Name: "SmallBlobsCountSoftQuota"}];
+    COUNTER_SMALL_BLOBS_QUOTA_EXCEEDED = 234             [(CounterOpts) = {Name: "SmallBlobsQuotaExceeded"}];
 }
 
 enum ECumulativeCounters {

@@ -2187,10 +2187,16 @@ public:
     void ChangeDiskSpaceTablesTotalBytes(i64 delta) override;
     void AddDiskSpaceTables(EUserFacingStorageType storageType, ui64 data, ui64 index) override;
     void ChangeDiskSpaceTopicsTotalBytes(ui64 value) override;
-    void ChangeDiskSpaceQuotaExceeded(i64 delta) override;
     void ChangeDiskSpaceHardQuotaBytes(i64 delta) override;
     void ChangeDiskSpaceSoftQuotaBytes(i64 delta) override;
     void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) override;
+    void ChangeSmallBlobsVolumeBytes(i64 delta) override;
+    void ChangeSmallBlobsCount(i64 delta) override;
+    void ChangeSmallBlobsVolumeHardQuotaBytes(i64 delta) override;
+    void ChangeSmallBlobsVolumeSoftQuotaBytes(i64 delta) override;
+    void ChangeSmallBlobsCountHardQuota(i64 delta) override;
+    void ChangeSmallBlobsCountSoftQuota(i64 delta) override;
+    void ChangeSimpleCounter(ESimpleCounters counter, i64 delta) override;
     void ChangePathCount(i64 delta) override;
     void SetPathCount(ui64 value) override;
     void SetPathsQuota(ui64 value) override;

@@ -565,6 +565,7 @@ namespace Tests {
             MERGE_CFG_FROM_APP_CFG(HiveConfig);
             MERGE_CFG_FROM_APP_CFG(DataShardConfig);
             MERGE_CFG_FROM_APP_CFG(ColumnShardConfig);
+            MERGE_CFG_FROM_APP_CFG(SmallBlobsQuotaConfig);
             MERGE_CFG_FROM_APP_CFG(SchemeShardConfig);
             MERGE_CFG_FROM_APP_CFG(MeteringConfig);
             MERGE_CFG_FROM_APP_CFG(CompactionConfig);

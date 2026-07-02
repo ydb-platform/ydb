@@ -1570,6 +1570,11 @@
                 "ColumnId": 32,
                 "ColumnName": "ColumnTableColumnsLimit",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 33,
+                "ColumnName": "SmallBlobsQuotaExceeded",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -1607,7 +1612,8 @@
                     29,
                     30,
                     31,
-                    32
+                    32,
+                    33
                 ],
                 "RoomID": 0,
                 "Codec": 0,

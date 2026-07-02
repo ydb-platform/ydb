@@ -36,7 +36,6 @@ public:
             TagKeys_.push_back(key);
         }
 
-        SourceAddress_ = Request().GetSourceAddress();
         IsCloudEventsEnabled = Cfg().HasCloudEventsConfig() && Cfg().GetCloudEventsConfig().GetEnableCloudEvents();
     }
 
@@ -169,7 +168,6 @@ private:
     TVector<TString> TagKeys_;
     bool IsCloudEventsEnabled;
     TString CustomQueueName_ = "";
-    TString SourceAddress_ = "";
 };
 
 IActor* CreateUntagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

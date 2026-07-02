@@ -191,7 +191,8 @@ public:
     virtual std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const ISnapshotHolders& snapshotHolders,
         const std::map<TSnapshot, THashSet<TInternalPathId>>& pathsToDrop,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
-    virtual std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(const THashSet<TInternalPathId>& pathsToDrop) noexcept = 0;
+    virtual std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(
+        const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
     virtual std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept = 0;
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;

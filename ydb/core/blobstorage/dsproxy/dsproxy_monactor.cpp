@@ -116,7 +116,7 @@ public:
 
                                                     bool ok = true;
                                                     GroupQueues->DisksByOrderNumber[vdisk.OrderNumber]->Queues.ForEachQueue([&](auto& q) {
-                                                        if (!q.IsConnected) {
+                                                        if (!q.IsConnected.load(std::memory_order_relaxed)) {
                                                             ok = false;
                                                         }
                                                     });
@@ -182,7 +182,7 @@ public:
                                             TABLED() { str << Info->GetActorId(num).NodeId(); }
                                             TABLED() {
                                                 fdom.VDisks[vdisk].Queues.ForEachQueue([&](auto& q) {
-                                                    str << (q.IsConnected ? '+' : '0');
+                                                    str << (q.IsConnected.load(std::memory_order_relaxed) ? '+' : '0');
                                                 });
                                             }
                                         }

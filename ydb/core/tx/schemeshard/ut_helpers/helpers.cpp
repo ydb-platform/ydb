@@ -1126,6 +1126,10 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery)
 
+    // test shard
+    GENERIC_HELPERS(CreateTestShardSet, NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet, &NKikimrSchemeOp::TModifyScheme::MutableCreateTestShardSet)
+    GENERIC_HELPERS(DropTestShardSet, NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS
@@ -1226,6 +1230,18 @@ namespace NSchemeShardUT_Private {
     {
         AsyncAssignBlockStoreVolume(runtime, txId, parentPath, name, mountToken, tokenVersion);
         TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    TString CreateTestShardSetConfig(const TString& name, ui64 count) {
+        return TStringBuilder() << R"(
+                Name: ")" << name << R"("
+                Count: )" << count << R"(
+                StorageConfig {
+                }
+                CmdInitialize {
+                    MaxDataBytes: 1000
+                }
+            )";
     }
 
     TEvSchemeShard::TEvCancelTx *CancelTxRequest(ui64 txId, ui64 targetTxId) {
@@ -3471,12 +3487,17 @@ namespace NSchemeShardUT_Private {
         const TString& dbName,
         const TString& tablePath,
         const TVector<TString>& notNullColumns,
+        const TString& userSID,
         bool skipSettings)
     {
         // We can't do `GetRequest`, because it is not implemented at the time of writing the test
         auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>();
         request->Record.SetTxId(txId);
         request->Record.SetDatabaseName(dbName);
+
+        if (userSID != "") {
+            request->Record.SetUserSID(userSID);
+        }
 
         if (!skipSettings) {
             NKikimrSetColumnConstraint::TSetColumnConstraintSettings settings;
@@ -3495,6 +3516,40 @@ namespace NSchemeShardUT_Private {
         auto* event = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvCreateResponse>(handle);
         UNIT_ASSERT(event);
         return event->Record;
+    }
+
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        ui64 schemeShard,
+        const TString& dbName,
+        const TString& tablePath,
+        const TVector<TString>& notNullColumns)
+    {
+        return TestSetColumnConstraint(runtime, txId, schemeShard, dbName, tablePath, notNullColumns, "", false);
+    }
+
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraintWithoutSettings(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        ui64 schemeShard,
+        const TString& dbName,
+        const TString& tablePath,
+        const TVector<TString>& notNullColumns)
+    {
+        return TestSetColumnConstraint(runtime, txId, schemeShard, dbName, tablePath, notNullColumns, "", true);
+    }
+
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        ui64 schemeShard,
+        const TString& dbName,
+        const TString& tablePath,
+        const TVector<TString>& notNullColumns,
+        const TString& userSID)
+    {
+        return TestSetColumnConstraint(runtime, txId, schemeShard, dbName, tablePath, notNullColumns, userSID, false);
     }
 
     void AsyncSetColumnConstraint(

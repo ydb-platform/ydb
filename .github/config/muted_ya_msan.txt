@@ -132,7 +132,6 @@ ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-3_to_stable-26-2-1-0-8388608-COLUMN]
 ydb/tests/compatibility/streaming test_scalar_topic_write.py.TestScalarTopicWriteRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3-False]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3-False]
-ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3-True]
 ydb/tests/fq/s3 test_statistics.py.TestS3.test_aborted_by_user[v2-client0]
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/nbs py3test.sole chunk
@@ -157,6 +156,10 @@ ydb/tests/functional/sqs/cloud test_yandex_audit.py.TestCloudEvents.test_create_
 ydb/tests/functional/sqs/cloud test_yandex_audit.py.TestCloudEvents.test_create_update_delete_one_queue[tables_format_v0-std]
 ydb/tests/functional/sqs/cloud test_yandex_audit.py.TestCloudEvents.test_create_update_delete_one_queue[tables_format_v1-fifo]
 ydb/tests/functional/sqs/cloud test_yandex_audit.py.TestCloudEvents.test_create_update_delete_one_queue[tables_format_v1-std]
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_empty_access_key_id[tables_format_v0]
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_empty_access_key_id[tables_format_v1]
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_retryable_iam_error[tables_format_v0]
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_retryable_iam_error[tables_format_v1]
 ydb/tests/functional/sqs/merge_split_common_table/std test.py.TestSqsSplitMergeStdTables.test_std_merge_split
 ydb/tests/functional/sqs/messaging test_fifo_messaging.py.TestSqsFifoMessagingWithPath.test_can_read_from_different_groups[tables_format_v0]
 ydb/tests/functional/sqs/messaging test_fifo_messaging.py.TestSqsFifoMessagingWithPath.test_can_read_from_different_groups[tables_format_v1]

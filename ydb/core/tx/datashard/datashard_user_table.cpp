@@ -327,7 +327,9 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     IsBackup = descr.GetIsBackup();
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
     IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
-    UniqueIndexKeySize = descr.GetUniqueIndexKeySize();
+    if (descr.GetPartitionConfig().HasUniqueIndexKeySize()) {
+        UniqueIndexKeySize = descr.GetPartitionConfig().GetUniqueIndexKeySize();
+    }
     if (descr.HasTableType()) {
         TableType = descr.GetTableType();
     }

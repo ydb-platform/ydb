@@ -110,7 +110,7 @@ public:
         Resume();
 
         for (auto& loaded : ev->Get()->Pages) {
-            partPages.emplace(location.Offset, TPinnedPageRef(loaded.Page).GetData());
+            partPages.emplace(loaded.Location.Offset, TPinnedPageRef(loaded.Page).GetData());
             PageRefs.emplace_back(std::move(loaded.Page));
         }
 

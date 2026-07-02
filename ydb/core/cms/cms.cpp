@@ -109,7 +109,7 @@ void TCms::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext 
     Y_UNUSED(ev);
 
     YDB_LOG_INFO_CTX(ctx, "OnTabletDead",
-        {"tabletID", TabletID()});
+        {"tabletId", TabletID()});
 
     Die(ctx);
 }
@@ -370,7 +370,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
     }
 
     YDB_LOG_INFO_CTX(ctx, "Check request",
-        {"request", request});
+        {"request", request.ShortDebugString()});
 
     switch (request.GetAvailabilityMode()) {
     case MODE_MAX_AVAILABILITY:
@@ -428,7 +428,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         TErrorInfo error;
 
         YDB_LOG_DEBUG_CTX(ctx, "Checking action",
-            {"action", action});
+            {"action", action.ShortDebugString()});
 
         bool prepared = !request.GetEvictVDisks();
         if (!prepared) {
@@ -453,8 +453,8 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             }
         } else {
             YDB_LOG_DEBUG_CTX(ctx, "Result",
-                {"error", ToString(error.Code).data()},
-                {"reason", error.Reason.GetMessage().data()});
+                {"error", ToString(error.Code)},
+                {"reason", error.Reason.GetMessage()});
 
             if (CodesRate[response.GetStatus().GetCode()] > CodesRate[error.Code]) {
                 response.MutableStatus()->SetCode(error.Code);
@@ -1337,7 +1337,7 @@ TVector<TString> TCms::FindEmptyTasks(const THashMap<TString, TTaskInfo> &tasks,
         const auto &task = entry.second;
         if (!State->ScheduledRequests.contains(task.RequestId) && task.Permissions.empty()) {
             YDB_LOG_DEBUG_CTX(ctx, "Found empty task",
-                {"taskId", task.TaskId.data()});
+                {"taskId", task.TaskId});
             tasksToRemove.push_back(task.TaskId);
         }
     }
@@ -1433,9 +1433,8 @@ void TCms::GetPermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool all,
     const auto &rec = ev->Get()->Record;
     const TString &user = rec.GetUser();
 
-    YDB_LOG_INFO_CTX(ctx, "Get permissions",
-        {"requests", all ? "all" : "selected"},
-        {"user", user.data()});
+    YDB_LOG_INFO_CTX(ctx, TStringBuilder() << "Get " << (all ? "all" : "selected") << " permissions",
+        {"user", user});
 
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
     if (all) {
@@ -1467,8 +1466,8 @@ void TCms::GetPermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool all,
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "Resulting status",
-        {"status", TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data()},
-        {"response", resp->Record.GetStatus().GetReason().data()});
+        {"status", TStatus::ECode_Name(resp->Record.GetStatus().GetCode())},
+        {"reason", resp->Record.GetStatus().GetReason()});
 
     Reply(ev, std::move(resp), ctx);
 }
@@ -1479,10 +1478,10 @@ void TCms::RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool d
     const auto &rec = ev->Get()->Record;
     const TString &user = rec.GetUser();
 
-    YDB_LOG_INFO_CTX(ctx, "User permissions",
-        {"user", user.data()},
-        {"done", done ? "done" : "rejected"},
-        {"permissions", ToString(rec.GetPermissions()).data()});
+    YDB_LOG_INFO_CTX(ctx, "User permissions are removed",
+        {"user", user},
+        {"outcome", done ? "done" : "rejected"},
+        {"permissions", ToString(rec.GetPermissions())});
 
     TVector<TString> ids;
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
@@ -1505,8 +1504,8 @@ void TCms::RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool d
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "Resulting status",
-        {"status", TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data()},
-        {"response", resp->Record.GetStatus().GetReason().data()});
+        {"status", TStatus::ECode_Name(resp->Record.GetStatus().GetCode())},
+        {"reason", resp->Record.GetStatus().GetReason()});
 
     if (!rec.GetDryRun() && resp->Record.GetStatus().GetCode() == TStatus::OK) {
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
@@ -1522,9 +1521,8 @@ void TCms::GetRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, bool all, const
     const auto &rec = ev->Get()->Record;
     const TString &user = rec.GetUser();
 
-    YDB_LOG_INFO_CTX(ctx, "Get requests",
-        {"requests", all ? "all" : "selected"},
-        {"user", user.data()});
+    YDB_LOG_INFO_CTX(ctx, TStringBuilder() << "Get " << (all ? "all" : "selected") << " requests",
+        {"user", user});
 
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
     if (all) {
@@ -1550,8 +1548,8 @@ void TCms::GetRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, bool all, const
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "Resulting status",
-        {"status", TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data()},
-        {"reason", resp->Record.GetStatus().GetReason().data()});
+        {"status", TStatus::ECode_Name(resp->Record.GetStatus().GetCode())},
+        {"reason", resp->Record.GetStatus().GetReason()});
 
     Reply(ev, std::move(resp), ctx);
 }
@@ -1564,8 +1562,8 @@ void TCms::RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActor
     const TString &id = rec.GetRequestId();
 
     YDB_LOG_INFO_CTX(ctx, "User removes request",
-        {"user", user.data()},
-        {"id", id.data()});
+        {"user", user},
+        {"requestId", id});
 
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
     auto it = State->ScheduledRequests.find(id);
@@ -1588,8 +1586,8 @@ void TCms::RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActor
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "Resulting status",
-        {"status", TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data()},
-        {"reason", resp->Record.GetStatus().GetReason().data()});
+        {"status", TStatus::ECode_Name(resp->Record.GetStatus().GetCode())},
+        {"reason", resp->Record.GetStatus().GetReason()});
 
     if (!rec.GetDryRun() && resp->Record.GetStatus().GetCode() == TStatus::OK) {
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
@@ -1711,9 +1709,8 @@ void TCms::GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool
     const auto &rec = ev->Get()->Record;
     const TString &user = rec.GetUser();
 
-    YDB_LOG_INFO_CTX(ctx, "Get notifications",
-        {"requests", all ? "all" : "selected"},
-        {"user", user.data()});
+    YDB_LOG_INFO_CTX(ctx, TStringBuilder() << "Get " << (all ? "all" : "selected") << " notifications",
+        {"user", user});
 
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
     if (all) {
@@ -1739,8 +1736,8 @@ void TCms::GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "Resulting status",
-        {"status", ToString(resp->Record.GetStatus().GetCode()).data()},
-        {"reason", resp->Record.GetStatus().GetReason().data()});
+        {"status", ToString(resp->Record.GetStatus().GetCode())},
+        {"reason", resp->Record.GetStatus().GetReason()});
 
     Reply(ev, std::move(resp), ctx);
 }
@@ -1882,9 +1879,9 @@ void TCms::PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx
         auto row = db.Table<Schema::NodeTenant>().Key(nodeId);
         row.Update(NIceDb::TUpdate<Schema::NodeTenant::Tenant>(tenant));
 
-        YDB_LOG_TRACE_CTX(ctx, "Persist node tenant",
+        YDB_LOG_TRACE_CTX(ctx, "Persist tenant node",
             {"nodeId", nodeId},
-            {"tenant", tenant.data()});
+            {"tenant", tenant});
     }
 }
 
@@ -2492,7 +2489,7 @@ bool TCms::CheckNotification(const TNotification &notification,
         TErrorInfo error;
 
         YDB_LOG_DEBUG_CTX(ctx, "Processing notification for action",
-            {"action", action});
+            {"action", action.ShortDebugString()});
 
         if (!IsValidNotificationAction(action, time, error, ctx)) {
             resp.MutableStatus()->SetCode(error.Code);
@@ -2519,7 +2516,7 @@ void TCms::Handle(TEvCms::TEvManageNotificationRequest::TPtr &ev, const TActorCo
     auto &rec = ev->Get()->Record;
 
     YDB_LOG_INFO_CTX(ctx, "Notification management",
-        {"request", rec});
+        {"request", rec.ShortDebugString()});
 
     if (!rec.GetUser()) {
         return ReplyWithError<TEvCms::TEvManageNotificationResponse>(
@@ -2666,8 +2663,8 @@ void TCms::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
 {
     auto &rec = ev->Get()->Record;
     if (rec.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
-        YDB_LOG_ERROR_CTX(ctx, "Cannot subscribe for config",
-            {"updates", rec.GetStatus().GetCode()},
+        YDB_LOG_ERROR_CTX(ctx, "Cannot subscribe for config updates",
+            {"status", rec.GetStatus().GetCode()},
             {"reason", rec.GetStatus().GetReason()});
 
         SubscribeForConfig(ctx);

@@ -445,8 +445,8 @@ void TClusterInfo::ApplyInitialNodeTenants(const TActorContext& ctx, const THash
         TString tenant = pr.second;
 
         if (!HasNode(nodeId)) {
-            YDB_LOG_ERROR_CTX(ctx, "Forgotten node tenant at node. Node is unknown",
-                {"tenant", tenant.data()},
+            YDB_LOG_ERROR_CTX(ctx, "Forgotten tenant node. Node is unknown",
+                {"tenant", tenant},
                 {"nodeId", nodeId});
             continue;
         }
@@ -454,8 +454,8 @@ void TClusterInfo::ApplyInitialNodeTenants(const TActorContext& ctx, const THash
         TNodeInfo& node = NodeRef(nodeId);
         node.PreviousTenant = tenant;
 
-        YDB_LOG_DEBUG_CTX(ctx, "Initial node tenant at node",
-            {"tenant", tenant.data()},
+        YDB_LOG_DEBUG_CTX(ctx, "Initial tenant node",
+            {"tenant", tenant},
             {"nodeId", nodeId});
     }
 }
@@ -732,7 +732,7 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
     if (ActionRequiresHost(action) && !HasNode(action.GetHost())) {
         if (ctx)
             YDB_LOG_ERROR_CTX(*ctx, "FindLockedItems: unknown host",
-                {"host", action.GetHost().data()});
+                {"host", action.GetHost()});
         return res;
     }
 
@@ -765,14 +765,14 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
                 res.insert(item);
             else if (ctx)
                 YDB_LOG_ERROR_CTX(*ctx, "FindLockedItems: unknown device",
-                    {"device", device.data()});
+                    {"device", device});
         }
         break;
 
     default:
         if (ctx) {
             YDB_LOG_ERROR_CTX(*ctx, "FindLockedItems: action is not supported",
-                {"action", TAction::EType_Name(action.GetType()).data()});
+                {"action", TAction::EType_Name(action.GetType())});
         }
         break;
     }
@@ -806,9 +806,9 @@ ui64 TClusterInfo::AddLocks(const TPermissionInfo &permission, const TActorConte
         if (lock) {
             if (ctx)
                 YDB_LOG_INFO_CTX(*ctx, "Adding lock",
-                    {"item", item->PrettyItemName().data()},
-                    {"permissionId", permission.PermissionId.data()},
-                    {"until", permission.Deadline.ToStringLocalUpToSeconds().data()});
+                    {"item", item->PrettyItemName()},
+                    {"permissionId", permission.PermissionId},
+                    {"deadline", permission.Deadline.ToStringLocalUpToSeconds()});
             item->AddLock(permission);
             ++locks;
         }
@@ -829,7 +829,7 @@ ui64 TClusterInfo::AddExternalLocks(const TNotificationInfo &notification, const
         for (auto item : items) {
             if (ctx)
                 YDB_LOG_INFO_CTX(*ctx, "Adding external lock",
-                    {"item", item->PrettyItemName().data()});
+                    {"item", item->PrettyItemName()});
 
             item->AddExternalLock(notification, action);
         }

@@ -122,7 +122,7 @@ private:
 TVector<TToken> Tokenize(IHighlighter& highlighter, TStringBuf text) {
     TVector<TToken> tokens;
     highlighter.Tokenize(text, [&](TToken&& token) {
-        tokens.emplace_back(std::move(token));
+        tokens.emplace_back(token);
     });
     return tokens;
 }

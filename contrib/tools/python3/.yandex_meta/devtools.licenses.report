@@ -566,7 +566,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/gary-s-brown.LICENSE
     Files with this license:
-        Modules/binascii.c [633:634]
+        Modules/binascii.c [641:642]
 
 KEEP     Python-2.0           6a19cf8041a37669b2cd07b9cd3eace3
 BELONGS ya.make
@@ -1245,7 +1245,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
     Files with this license:
-        Modules/selectmodule.c [1734:1753]
+        Modules/selectmodule.c [1735:1754]
 
 KEEP     X11-Hanson           fee24880a028f5d50965c0ed93a7a806
 BELONGS ya.make

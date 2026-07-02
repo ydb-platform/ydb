@@ -3084,11 +3084,11 @@ private:
 
 class TCreateTransfer final: public TTransfer {
 public:
-    explicit TCreateTransfer(TPosition pos, const TString& id, const TString&& source, const TString&& target,
-                             const TString&& transformLambda,
+    explicit TCreateTransfer(TPosition pos, TString id, TString source, TString target,
+                             TString transformLambda,
                              std::map<TString, TNodePtr>&& settings,
                              const TObjectOperatorContext& context)
-        : TTransfer(pos, id, "create", context)
+        : TTransfer(std::move(pos), std::move(id), "create", context)
         , Source_(std::move(source))
         , Target_(std::move(target))
         , TransformLambda_(std::move(transformLambda))
@@ -3125,12 +3125,12 @@ private:
 
 }; // TCreateTransfer
 
-TNodePtr BuildCreateTransfer(TPosition pos, const TString& id, const TString&& source, const TString&& target,
-                             const TString&& transformLambda,
+TNodePtr BuildCreateTransfer(TPosition pos, const TString& id, const TString& source, const TString& target,
+                             const TString& transformLambda,
                              std::map<TString, TNodePtr>&& settings,
                              const TObjectOperatorContext& context)
 {
-    return new TCreateTransfer(pos, id, std::move(source), std::move(target), std::move(transformLambda), std::move(settings), context);
+    return new TCreateTransfer(pos, id, source, target, transformLambda, std::move(settings), context);
 }
 
 class TDropTransfer final: public TTransfer {

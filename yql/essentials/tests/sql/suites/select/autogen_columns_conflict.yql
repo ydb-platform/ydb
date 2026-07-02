@@ -1,7 +1,6 @@
 /* dq can not */
 /* dqfile can not */
 /* yt can not */
-/* postgres can not */
 
 $src = select <|column0:1|> as x;
 

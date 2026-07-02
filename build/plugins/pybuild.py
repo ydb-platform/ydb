@@ -303,6 +303,7 @@ def PY_SRCS(unit: ymake.Unit, *args: tuple[str, ...]):
     pyxs_c_api_h = []
     pyxs_cpp = []
     pyxs_cpp_h = []
+    pyxs_cpp_api_h = []
     pyxs = pyxs_cpp
     swigs_c = []
     swigs_cpp = []
@@ -342,6 +343,8 @@ def PY_SRCS(unit: ymake.Unit, *args: tuple[str, ...]):
             pyxs = pyxs_cpp
         elif arg == 'CYTHON_CPP_H':
             pyxs = pyxs_cpp_h
+        elif arg == 'CYTHON_CPP_API_H':
+            pyxs = pyxs_cpp_api_h
         elif arg == 'CYTHON_DIRECTIVE':
             cython_directives += ['-X', next(args)]
         elif arg == 'CYTHONIZE_PY':
@@ -483,6 +486,7 @@ def PY_SRCS(unit: ymake.Unit, *args: tuple[str, ...]):
             (pyxs_c_api_h, unit.on_buildwith_cython_c_api_h, f"{cython_suff}.c", None),
             (pyxs_cpp, unit.on_buildwith_cython_cpp_dep, f"{cython_suff}.cpp", obj_suff),
             (pyxs_cpp_h, unit.on_buildwith_cython_cpp_h, f"{cython_suff}.cpp", None),
+            (pyxs_cpp_api_h, unit.on_buildwith_cython_cpp_api_h, f"{cython_suff}.cpp", None),
         ]:
             for path, mod in pyxs:
                 filename = rootrel_arc_src(path, unit)

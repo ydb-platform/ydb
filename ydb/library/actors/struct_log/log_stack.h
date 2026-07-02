@@ -16,7 +16,9 @@ public:
 
     class TLogGuard {
     public:
-        TLogGuard(const TMaybe<NActors::NLog::EComponent>& component = {}) { Push(component); }
+        TLogGuard(const TMaybe<NActors::NLog::EComponent>& component = {}) {
+            Push(component);
+        }
 
         TLogGuard(const TLogGuard&) = delete;
         TLogGuard(TLogGuard&&) = delete;

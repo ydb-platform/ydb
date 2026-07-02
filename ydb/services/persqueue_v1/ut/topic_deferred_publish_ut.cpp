@@ -342,20 +342,22 @@ void PoisonDeferredPublishRegistry(NPersQueue::TTestServer& server, ui32 nodeIdx
     auto* runtime = server.CleverServer->GetRuntime();
     const NActors::TActorId edgeActor = runtime->AllocateEdgeActor(nodeIdx);
 
-    runtime->Send(new NActors::IEventHandle(
+    runtime->Send(
         NPQ::NDeferredPublish::MakeDeferredPublishRegistryActorId(),
         edgeActor,
-        new NActors::TEvents::TEvPoison()));
+        new NActors::TEvents::TEvPoison(),
+        nodeIdx);
 }
 
 void RestartDeferredPublishRegistry(NPersQueue::TTestServer& server, ui32 nodeIdx = 0) {
     auto* runtime = server.CleverServer->GetRuntime();
     const NActors::TActorId edgeActor = runtime->AllocateEdgeActor(nodeIdx);
 
-    runtime->Send(new NActors::IEventHandle(
+    runtime->Send(
         NPQ::NDeferredPublish::MakeDeferredPublishRegistryActorId(),
         edgeActor,
-        new NActors::TEvents::TEvPoison()));
+        new NActors::TEvents::TEvPoison(),
+        nodeIdx);
     runtime->DispatchEvents();
 
     const ui32 userPoolId = runtime->GetAppData(nodeIdx).UserPoolId;

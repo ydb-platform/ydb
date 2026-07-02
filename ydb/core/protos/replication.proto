@@ -22,6 +22,7 @@ message TReplicationDefaults {
         optional string ServiceId = 2;
         optional string MicroserviceId = 3;
         optional string ResourceType = 4;
+        optional bool EnableSsl = 5 [default = true];
     }
 
     message TLocalMetadataService {

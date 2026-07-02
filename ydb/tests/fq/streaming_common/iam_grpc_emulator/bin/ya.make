@@ -6,7 +6,7 @@ PY_SRCS(
 
 PEERDIR(
     contrib/python/grpcio
-    ydb/public/api/client/yc_public/iam
+    ydb/public/api/client/yc_private/iam
 )
 
 END()

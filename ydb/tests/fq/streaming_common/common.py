@@ -76,11 +76,12 @@ def get_ydb_config(request):
                 "endpoint": os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666"),
                 "service_id": "ydb",
                 "microservice_id": "data-plane",
-                "resource_type": "resource-manager.cloud"
+                "resource_type": "resource-manager.cloud",
+                "enable_ssl": False
             },
             "local_metadata_service": {
                 "host": os.environ.get("VM_METADATA_EMULATOR_HOST", "localhost"),
-                "port":os.environ.get("VM_METADATA_EMULATOR_PORT", 80)
+                "port": os.environ.get("VM_METADATA_EMULATOR_PORT", 80)
             }
         },
         default_clusteradmin="root@builtin",

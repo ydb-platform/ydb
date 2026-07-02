@@ -1,7 +1,8 @@
 PY3TEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/iam_emulator/recipe/recipe.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/vm_metadata_emulator/recipe/recipe.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/iam_grpc_emulator/recipe/recipe.inc)
 
 TEST_SRCS(
     test_iam.py
@@ -19,7 +20,7 @@ ENDIF()
 PY_SRCS(
     conftest.py
 )
-
+TIMEOUT(80)
 
 REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE)
@@ -31,6 +32,7 @@ ELSE()
     FORK_SUBTESTS()
 ENDIF()
 
+TIMEOUT(80)
 PEERDIR(
     ydb/tests/library
     ydb/tests/library/test_meta

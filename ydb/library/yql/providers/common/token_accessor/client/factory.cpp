@@ -101,8 +101,15 @@ std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFact
         TString serviceAccountId;
         TString resourceId;
         parser.GetIamAuth(serviceAccountId, resourceId);
-        iamParams.SystemServiceAccountCredentials = NYdb::CreateIamCredentialsProviderFactory();
+
+        NYdb::TIamHost vmMetadataParams;
+        if (NKikimr::AppData()->ReplicationConfig.HasLocalMetadataService()) {
+            vmMetadataParams.Host = NKikimr::AppData()->ReplicationConfig.GetLocalMetadataService().GetHost();
+            vmMetadataParams.Port = NKikimr::AppData()->ReplicationConfig.GetLocalMetadataService().GetPort();
+        }
+        iamParams.SystemServiceAccountCredentials = NYdb::CreateIamCredentialsProviderFactory(vmMetadataParams);
         iamParams.Endpoint = serviceControl.GetEndpoint();
+        iamParams.EnableSsl = serviceControl.GetEnableSsl();
         iamParams.ServiceId = serviceControl.GetServiceId();
         iamParams.MicroserviceId = serviceControl.GetMicroserviceId();
         iamParams.ResourceType = serviceControl.GetResourceType();

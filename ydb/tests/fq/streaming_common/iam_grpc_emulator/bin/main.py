@@ -6,13 +6,13 @@ from concurrent import futures
 import grpc
 from google.protobuf import timestamp_pb2
 
-from ydb.public.api.client.yc_public.iam import iam_token_service_pb2
-from ydb.public.api.client.yc_public.iam import iam_token_service_pb2_grpc
+from ydb.public.api.client.yc_private.iam import iam_token_service_pb2
+from ydb.public.api.client.yc_private.iam import iam_token_service_pb2_grpc
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
-DEFAULT_TOKEN = "test-iam-token"
+DEFAULT_TOKEN = "root@builtin"
 DEFAULT_EXPIRES_IN = 3600
 
 
@@ -47,6 +47,13 @@ class IamTokenServicer(iam_token_service_pb2_grpc.IamTokenServiceServicer):
 
     def CreateForServiceAccount(self, request, context):
         logger.debug("IamTokenService.CreateForServiceAccount called, sa_id=%s", request.service_account_id)
+        return make_response(self.token, self.expires_in)
+
+    def CreateForService(self, request, context):
+        logger.debug(
+            "IamTokenService.CreateForService called, service_id=%s microservice_id=%s resource_id=%s target_sa=%s",
+            request.service_id, request.microservice_id, request.resource_id, request.target_service_account_id,
+        )
         return make_response(self.token, self.expires_in)
 
 

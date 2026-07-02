@@ -262,12 +262,10 @@ class TestDatetime2(MixedClusterFixture):
         for node in self.cluster.nodes.values():
             pinned_drivers.append(self.create_pinned_driver(node.port))
 
-        try:
-            for driver in pinned_drivers:
-                with ydb.QuerySessionPool(driver) as session_pool:
-                    for query in queries:
-                        result = session_pool.execute_with_retries(query)
-                        assert len(result[0].rows) > 0
-        finally:
-            for driver in pinned_drivers:
-                driver.stop()
+        for driver in pinned_drivers:
+            with ydb.QuerySessionPool(driver) as session_pool:
+                for query in queries:
+                    result = session_pool.execute_with_retries(query)
+                    assert len(result[0].rows) > 0
+        for driver in pinned_drivers:
+            driver.stop()

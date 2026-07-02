@@ -173,18 +173,13 @@ jobs:
           PR_NUMBER: ${{ inputs.pull_number }}
           BUILD_PRESET: ${{ inputs.build_preset || 'release' }}
           GITHUB_TOKEN: ${{ github.token }}
-          CURRENT_SHA: ${{ steps.resolve-ref.outputs.checkout_ref }}
         run: |
           pip install PyGithub
           RESULTS_DIR=ydb/tests/stress/compare_index_performance/tests/test-results
           REPORTS=$(find -L "$RESULTS_DIR" -name 'report_*.md' -path "*/testing_out_stuff/*" 2>/dev/null | sort)
           run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          current_url="https://github.com/${GITHUB_REPOSITORY}/commit/${CURRENT_SHA}"
-          short_sha="${CURRENT_SHA:0:10}"
           {
             echo "### Index performance comparison"
-            echo ""
-            echo "[${short_sha}](${current_url}) | [Workflow run](${run_url})"
             echo ""
             if [[ -n "$REPORTS" ]]; then
               for r in $REPORTS; do
@@ -194,6 +189,7 @@ jobs:
             else
               echo "No report generated."
             fi
+            echo "[Workflow run](${run_url})"
           } | .github/scripts/tests/comment-pr.py --rewrite --no-timestamp
 
       - name: Upload benchmark logs

@@ -16,6 +16,8 @@
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/charset/utf8.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
+
 namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace PersQueue::V1;
@@ -135,7 +137,11 @@ void TPartitionActor::MakeCommit(const TActorContext& ctx) {
         return;
     }
     NextCommits.erase(NextCommits.begin(), it);
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " commit request from " << ReadIdCommitted + 1 << " to " << readId << " in " << Partition);
+    YDB_LOG_DEBUG_CTX(ctx, "Commit request",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"readIdCommittedPlus1", ReadIdCommitted + 1},
+        {"readId", readId},
+        {"partition", Partition});
 
     ui64 startReadId = ReadIdCommitted + 1;
 
@@ -209,9 +215,13 @@ void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TAc
         AFL_ENSURE(!Session.empty());
         commit->SetSessionId(Session);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                            << " committing to position " << offset << " prev " << CommittedOffset
-                            << " end " << EndOffset << " by cookie " << readId);
+        YDB_LOG_DEBUG_CTX(ctx, "Committing to position prev end by cookie",
+            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {"partition", Partition},
+            {"offset", offset},
+            {"committedOffset", CommittedOffset},
+            {"endOffset", EndOffset},
+            {"readId", readId});
 
         TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
         req->Record.Swap(&request);
@@ -275,8 +285,10 @@ void TPartitionActor::SendPublishDirectRead(const ui64 directReadId, const TActo
     publish->MutableSessionKey()->SetSessionId(Session);
     publish->MutableSessionKey()->SetPartitionSessionId(Partition.AssignId);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                        << " publishing direct read with id " << directReadId);
+    YDB_LOG_DEBUG_CTX(ctx, "Publishing direct read with id",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition},
+        {"directReadId", directReadId});
 
     TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
     req->Record.Swap(&request);
@@ -300,8 +312,10 @@ void TPartitionActor::SendForgetDirectRead(const ui64 directReadId, const TActor
     publish->MutableSessionKey()->SetSessionId(Session);
     publish->MutableSessionKey()->SetPartitionSessionId(Partition.AssignId);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                        << " forgetting " << directReadId);
+    YDB_LOG_DEBUG_CTX(ctx, "Forgetting",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition},
+        {"directReadId", directReadId});
 
     TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
     req->Record.Swap(&request);
@@ -317,8 +331,12 @@ void TPartitionActor::RestartPipe(const TActorContext& ctx, const TString& reaso
 
     NTabletPipe::CloseClient(ctx, PipeClient);
 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                                                                  << " schedule pipe restart attempt " << PipeGeneration << " reason: " << reason << ", current pipe: " << PipeClient.ToString());
+    YDB_LOG_INFO_CTX(ctx, "Schedule pipe restart attempt current",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition},
+        {"pipeGeneration", PipeGeneration},
+        {"reason", reason},
+        {"pipe", PipeClient});
     PipeClient = TActorId{};
     if (errorCode != NPersQueue::NErrorCode::OVERLOAD)
         ++PipeGeneration;
@@ -346,14 +364,16 @@ void TPartitionActor::Handle(TEvPQProxy::TEvDirectReadAck::TPtr& ev, const TActo
     if (DirectReadRestoreStage != EDirectReadRestoreStage::None) {
         if (RestoredDirectReadId == ev->Get()->DirectReadId) {
             // This direct read is already being restored. Have to forget it later.
-            LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Got ack for direct read " << ev->Get()->DirectReadId
-                    << " while restoring, store it to forget further");
+            YDB_LOG_DEBUG_CTX(ctx, "Got ack for direct read while restoring, store it to forget further",
+                {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                {"directReadId", ev->Get()->DirectReadId});
             DirectReadsToForget.insert(ev->Get()->DirectReadId);
             return;
         }
         if (DirectReadsToRestore.contains(ev->Get()->DirectReadId)) {
-            LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Got ack for direct read " << ev->Get()->DirectReadId
-                    << " while restoring, remove it from restore list");
+            YDB_LOG_DEBUG_CTX(ctx, "Got ack for direct read while restoring, remove it from restore list",
+                {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                {"directReadId", ev->Get()->DirectReadId});
             // This direct read is pending for restore. No need to foreget - not yet prepared, just erase it;
             DirectReadsToRestore.erase(ev->Get()->DirectReadId);
             DirectReadsToPublish.erase(ev->Get()->DirectReadId);
@@ -385,9 +405,16 @@ void TPartitionActor::Handle(const TEvPQProxy::TEvRestartPipe::TPtr&, const TAct
     PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletID, clientConfig));
     AFL_ENSURE(TabletID);
 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                            << " pipe restart attempt " << PipeGeneration << " RequestInfly " << RequestInfly << " ReadOffset " << ReadOffset << " EndOffset " << EndOffset
-                            << " InitDone " << InitDone << " WaitForData " << WaitForData << ", pipe: " << PipeClient);
+    YDB_LOG_INFO_CTX(ctx, "Pipe restart attempt RequestInfly ReadOffset EndOffset InitDone WaitForData",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition},
+        {"pipeGeneration", PipeGeneration},
+        {"requestInfly", RequestInfly},
+        {"readOffset", ReadOffset},
+        {"endOffset", EndOffset},
+        {"initDone", InitDone},
+        {"waitForData", WaitForData},
+        {"pipe", PipeClient});
 
     if (InitDone && DirectRead) {
         DirectReadsToRestore = DirectReadResults;
@@ -411,8 +438,10 @@ void TPartitionActor::ResendRecentRequests() {
 
     const auto& ctx = ActorContext();
     if (RequestInfly) { //got read infly
-        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                            << " resend " << CurrentRequest);
+        YDB_LOG_INFO_CTX(ctx, "Resend",
+            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {"partition", Partition},
+            {"currentRequest", CurrentRequest});
 
         TAutoPtr<TEvPersQueue::TEvRequest> event(new TEvPersQueue::TEvRequest);
         event->Record = CurrentRequest;
@@ -533,8 +562,11 @@ bool FillBatchedData(
         TString sourceId;
         if (!r.GetSourceId().empty()) {
             if (!NPQ::NSourceIdEncoding::IsValidEncoded(r.GetSourceId())) {
-                LOG_ERROR_S(ctx, NKikimrServices::PQ_READ_PROXY, "read bad sourceId from " << Partition
-                                                                                           << " offset " << r.GetOffset() << " seqNo " << r.GetSeqNo() << " sourceId '" << r.GetSourceId() << "'");
+                YDB_LOG_ERROR_CTX(ctx, "Read bad sourceId from offset seqNo sourceId",
+                    {"partition", Partition},
+                    {"offset", r.GetOffset()},
+                    {"seqNo", r.GetSeqNo()},
+                    {"sourceId", r.GetSourceId()});
             }
             sourceId = NPQ::NSourceIdEncoding::Decode(r.GetSourceId());
         }
@@ -626,8 +658,10 @@ void TPartitionActor::Handle(TEvPQProxy::TEvParentCommitedToFinish::TPtr& ev, co
 void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionResponse& result, const TActorContext& ctx) {
     AFL_ENSURE(DirectReadRestoreStage == EDirectReadRestoreStage::None);
     if (result.GetCookie() != InitCookie) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                        << " unwaited response in init with cookie " << result.GetCookie());
+        YDB_LOG_DEBUG_CTX(ctx, "Unwaited response in init with cookie",
+            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {"partition", Partition},
+            {"cookie", result.GetCookie()});
         return;
     }
     AFL_ENSURE(RequestInfly);
@@ -651,8 +685,12 @@ void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionRespons
 
     InitDone = true;
     PipeGeneration = 0; //reset tries counter - all ok
-    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " INIT DONE " << Partition
-                        << " EndOffset " << EndOffset << " readOffset " << ReadOffset << " committedOffset " << CommittedOffset);
+    YDB_LOG_INFO_CTX(ctx, "INIT DONE EndOffset readOffset committedOffset",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition},
+        {"endOffset", EndOffset},
+        {"readOffset", ReadOffset},
+        {"committedOffset", CommittedOffset});
 
 
     if (!StartReading) {
@@ -671,11 +709,15 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
             return;
         case EDirectReadRestoreStage::Session:
             if (result.GetCookie() != InitCookie || !result.HasCmdRestoreDirectReadResult()) {
-                LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Direct read - session restarted for partition "
-                    << Partition << " with unwaited cookie " << result.GetCookie());
+                YDB_LOG_DEBUG_CTX(ctx, "Direct read - session restarted for partition with unwaited cookie",
+                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {"partition", Partition},
+                    {"cookie", result.GetCookie()});
                 return;
             }
-            LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Direct read - session restarted for partition " << Partition);
+            YDB_LOG_DEBUG_CTX(ctx, "Direct read - session restarted for partition",
+                {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                {"partition", Partition});
             if (!SendNextRestorePrepareOrForget()) {
                 OnDirectReadsRestored();
             }
@@ -683,8 +725,10 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
         case EDirectReadRestoreStage::Prepare:
             AFL_ENSURE(RestoredDirectReadId != 0);
             if (!result.HasCmdPrepareReadResult() || DirectReadsToRestore.empty() || DirectReadsToRestore.begin()->first != result.GetCmdPrepareReadResult().GetDirectReadId()) {
-                LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Invalid response on direct read restore for "
-                    << Partition << ": expect PrepareReadResult, got " << result.GetCookie());
+                YDB_LOG_DEBUG_CTX(ctx, "Invalid response on direct read restore for expect PrepareReadResult, got",
+                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {"partition", Partition},
+                    {"cookie", result.GetCookie()});
                 return;
             }
 
@@ -739,8 +783,13 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
 
     DirectReadResults[DirectReadId] = res;
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " after direct read state " << Partition
-                << " EndOffset " << EndOffset << " ReadOffset " << ReadOffset << " ReadGuid " << ReadGuid << " with direct read id " << DirectReadId);
+    YDB_LOG_DEBUG_CTX(ctx, "After direct read state EndOffset ReadOffset ReadGuid with direct read id",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition},
+        {"endOffset", EndOffset},
+        {"readOffset", ReadOffset},
+        {"readGuid", ReadGuid},
+        {"directReadId", DirectReadId});
 
     SendPublishDirectRead(DirectReadId, ctx);
 
@@ -779,9 +828,14 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
     bool isInFlightMemoryOk = PartitionInFlightMemoryController.Add(dr.GetReadOffset(), dr.GetBytesSizeEstimate());
     ReadOffset = dr.GetLastOffset() + 1;
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " after publish direct read " << Partition
-                << " EndOffset " << EndOffset << " ReadOffset " << ReadOffset << " ReadGuid " << ReadGuid << " with direct read id " << DirectReadId
-                << " isInFlightMemoryOk " << isInFlightMemoryOk);
+    YDB_LOG_DEBUG_CTX(ctx, "After publish direct read EndOffset ReadOffset ReadGuid with direct read id isInFlightMemoryOk",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition},
+        {"endOffset", EndOffset},
+        {"readOffset", ReadOffset},
+        {"readGuid", ReadGuid},
+        {"directReadId", DirectReadId},
+        {"isInFlightMemoryOk", isInFlightMemoryOk});
 
     AFL_ENSURE(!RequestInfly);
 
@@ -837,9 +891,14 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
     }
 
     auto isMemoryLimitReached = PartitionInFlightMemoryController.IsMemoryLimitReached();
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                        << " isMemoryLimitReached " << isMemoryLimitReached << " EndOffset " << EndOffset << " ReadOffset " << ReadOffset << " MaxOffset " << ClientMaxOffset
-                        << " read result size " << res.ResultSize());
+    YDB_LOG_DEBUG_CTX(ctx, "IsMemoryLimitReached EndOffset ReadOffset MaxOffset read result size",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition},
+        {"isMemoryLimitReached", isMemoryLimitReached},
+        {"endOffset", EndOffset},
+        {"readOffset", ReadOffset},
+        {"clientMaxOffset", ClientMaxOffset},
+        {"resultSize", res.ResultSize()});
     if (!isMemoryLimitReached && IsPartitionDataReady()) {
         SendPartitionReady(ctx);
     } else if (IsNeedMorePartitionData()) {
@@ -852,8 +911,13 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
         ++ReadIdToResponse;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " after read state " << Partition
-                << " EndOffset " << EndOffset << " ReadOffset " << ReadOffset << " ReadGuid " << ReadGuid << " has messages " << hasData);
+    YDB_LOG_DEBUG_CTX(ctx, "After read state EndOffset ReadOffset ReadGuid has messages",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition},
+        {"endOffset", EndOffset},
+        {"readOffset", ReadOffset},
+        {"readGuid", ReadGuid},
+        {"hasData", hasData});
 
     ReadGuid = TString();
 
@@ -927,8 +991,11 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
             return resp;
         };
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                        << " initDone " << InitDone << " event " << MaskResult(result));
+    YDB_LOG_DEBUG_CTX(ctx, "InitDone event",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition},
+        {"initDone", InitDone},
+        {"result", MaskResult(result)});
 
 
     if (!InitDone) {
@@ -960,9 +1027,12 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
     }
 
     if (result.GetCookie() != (ui64)ReadOffset) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                    << " unwaited read-response with cookie " << result.GetCookie()
-                    << "; waiting for " << ReadOffset << "; current read guid is " << ReadGuid);
+        YDB_LOG_DEBUG_CTX(ctx, "Unwaited read-response with cookie waiting for current read guid is",
+            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {"partition", Partition},
+            {"cookie", result.GetCookie()},
+            {"readOffset", ReadOffset},
+            {"readGuid", ReadGuid});
         return;
     }
 
@@ -984,15 +1054,20 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
 void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
     if (CommitsInfly.empty()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                        << " unwaited commit-response with cookie " << cookie << "; waiting for nothing");
+        YDB_LOG_DEBUG_CTX(ctx, "Unwaited commit-response with cookie waiting for nothing",
+            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {"partition", Partition},
+            {"cookie", cookie});
         return;
     }
     ui64 readId = CommitsInfly.front().first;
 
     if (cookie != readId) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                        << " unwaited commit-response with cookie " << cookie << "; waiting for " << readId);
+        YDB_LOG_DEBUG_CTX(ctx, "Unwaited commit-response with cookie waiting",
+            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {"partition", Partition},
+            {"cookie", cookie},
+            {"readId", readId});
         return;
     }
 
@@ -1013,8 +1088,11 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
     bool wasMemoryLimitReached = PartitionInFlightMemoryController.IsMemoryLimitReached();
     bool isMemoryOkNow = PartitionInFlightMemoryController.Remove(CommittedOffset);
     if (wasMemoryLimitReached && isMemoryOkNow && IsPartitionDataReady()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                        << " ready for read after commit with readOffset " << ReadOffset << " endOffset " << EndOffset);
+        YDB_LOG_DEBUG_CTX(ctx, "Ready for read after commit with readOffset endOffset",
+            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {"partition", Partition},
+            {"readOffset", ReadOffset},
+            {"endOffset", EndOffset});
         SendPartitionReady(ctx);
     }
 
@@ -1024,16 +1102,23 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
     Kqps.erase(CommitsInfly.front().first);
     CommitsInfly.pop_front();
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                    << " commit done to position " << CommittedOffset << " endOffset " << EndOffset << " with cookie " << readId);
+    YDB_LOG_DEBUG_CTX(ctx, "Commit done to position endOffset with cookie",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition},
+        {"committedOffset", CommittedOffset},
+        {"endOffset", EndOffset},
+        {"readId", readId});
 
     PipeGeneration = 0; //reset tries counter - all ok
     MakeCommit(ctx);
 }
 
 void TPartitionActor::SendPartitionReady(const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                        << " ready for read with readOffset " << ReadOffset << " endOffset " << EndOffset);
+    YDB_LOG_DEBUG_CTX(ctx, "Ready for read with readOffset endOffset",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition},
+        {"readOffset", ReadOffset},
+        {"endOffset", EndOffset});
     if (FirstRead) {
         ctx.Send(ParentId, new TEvPQProxy::TEvReadingStarted(Topic->GetInternalName(), Partition.Partition));
         FirstRead = false;
@@ -1045,9 +1130,14 @@ void TPartitionActor::SendPartitionReady(const TActorContext& ctx) {
 void TPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                            << " pipe restart attempt " << PipeGeneration << " pipe creation result: " << msg->Status
-                            << " TabletId: " << msg->TabletId << " Generation: " << msg->Generation << ", pipe: " << PipeClient.ToString());
+    YDB_LOG_INFO_CTX(ctx, "Pipe restart attempt pipe creation",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition},
+        {"pipeGeneration", PipeGeneration},
+        {"result", msg->Status},
+        {"tabletId", msg->TabletId},
+        {"generation", msg->Generation},
+        {"pipe", PipeClient});
 
     if (msg->Status != NKikimrProto::OK) {
         RestartPipe(ctx, TStringBuilder() << "pipe to tablet is dead " << msg->TabletId, NPersQueue::NErrorCode::TABLET_PIPE_DISCONNECTED);
@@ -1069,8 +1159,10 @@ void TPartitionActor::Handle(TEvPQProxy::TEvGetStatus::TPtr&, const TActorContex
 void TPartitionActor::Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr&, const TActorContext& ctx) {
     auto inFlightLimitReachedDuration = PartitionInFlightMemoryController.GetLimitReachedDuration();
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " update read metrics " << Partition
-                        << " inFlightLimitReachedDuration " << inFlightLimitReachedDuration.MilliSeconds());
+    YDB_LOG_DEBUG_CTX(ctx, "Update read metrics inFlightLimitReachedDuration",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition},
+        {"inFlightLimitReachedDurationMilliSeconds", inFlightLimitReachedDuration.MilliSeconds()});
 
     TAutoPtr<TEvPersQueue::TEvPartitionUpdateReadMetrics> persqueueRequest(new TEvPersQueue::TEvPartitionUpdateReadMetrics);
     persqueueRequest->Record.SetPartition(Partition.Partition);
@@ -1078,7 +1170,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr&, const TAct
     persqueueRequest->Record.MutableUpdateReadMetrics()->SetClientId(ClientId);
 
     ctx.Schedule(READ_METRICS_UPDATE_INTERVAL, new TEvPQProxy::TEvUpdateReadMetrics());
-    if (!PipeClient) 
+    if (!PipeClient)
         return;
 
     NTabletPipe::SendData(ctx, PipeClient, persqueueRequest.Release());
@@ -1104,10 +1196,15 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
 
     AFL_ENSURE(AllPrepareInited);
     AFL_ENSURE(!WaitForData);
-    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Start reading " << Partition
-                        << " EndOffset " << EndOffset << " readOffset " << ReadOffset << " committedOffset " << CommittedOffset
-                        << " clientCommitOffset " << ClientCommitOffset
-                        << " clientReadOffset " << ClientReadOffset << " clientMaxOffset " << ClientMaxOffset);
+    YDB_LOG_INFO_CTX(ctx, "Start reading EndOffset readOffset committedOffset clientCommitOffset clientReadOffset clientMaxOffset",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition},
+        {"endOffset", EndOffset},
+        {"readOffset", ReadOffset},
+        {"committedOffset", CommittedOffset},
+        {"clientCommitOffset", ClientCommitOffset},
+        {"clientReadOffset", ClientReadOffset},
+        {"clientMaxOffset", ClientMaxOffset});
 
     Counters.PartitionsToBeLocked.Dec();
     LockCounted = false;
@@ -1247,7 +1344,9 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
         PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletID, clientConfig));
         auto request = MakeCreateSessionRequest(true, ++InitCookie);
 
-        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " INITING " << Partition);
+        YDB_LOG_INFO_CTX(ctx, "INITING",
+            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {"partition", Partition});
 
         TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
         AFL_ENSURE(!RequestInfly);
@@ -1267,7 +1366,9 @@ void TPartitionActor::RestartDirectReadSession() {
     const auto& ctx = ActorContext();
     DirectReadRestoreStage = EDirectReadRestoreStage::Session;
     auto request = MakeCreateSessionRequest(false, ++InitCookie);
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Re-init direct read session for " << Partition);
+    YDB_LOG_DEBUG_CTX(ctx, "Re-init direct read session",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition});
     TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
     req->Record.Swap(&request);
     NTabletPipe::SendData(ctx, PipeClient, req.Release());
@@ -1284,14 +1385,19 @@ bool TPartitionActor::SendNextRestorePrepareOrForget() {
     if (shouldForget) {
         // We have something to forget from what was already restored; Do NOT change RestoredDirectReadId
         DirectReadRestoreStage = EDirectReadRestoreStage::Forget;
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Restore direct read, forget id "
-                    << *DirectReadsToForget.begin() << " for partition " << Partition);
+        YDB_LOG_DEBUG_CTX(ctx, "Restore direct read, forget id for partition",
+            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {"forgetId", *DirectReadsToForget.begin()},
+            {"partition", Partition});
         SendForgetDirectRead(*DirectReadsToForget.begin(), ctx);
         return true;
     } else {
         auto& dr = DirectReadsToRestore.begin()->second;
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Resend prepare direct read id " << prepareId
-                    << " (internal id: " << dr.GetDirectReadId() << ") for partition " << Partition);
+        YDB_LOG_DEBUG_CTX(ctx, "Resend prepare direct read id (internal for partition",
+            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {"prepareId", prepareId},
+            {"id", dr.GetDirectReadId()},
+            {"partition", Partition});
         AFL_ENSURE(prepareId != 0);
 
         //Restore;
@@ -1322,8 +1428,10 @@ bool TPartitionActor::SendNextRestorePublishRequest() {
         return false;
     }
     auto id = *DirectReadsToPublish.begin();
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << "Resend publish direct read on restore, id: "
-                << id << " for partition " << Partition);
+    YDB_LOG_DEBUG_CTX(ctx, "Resend publish direct read on restore, for partition",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"id", id},
+        {"partition", Partition});
 
     AFL_ENSURE(RestoredDirectReadId == id);
     DirectReadRestoreStage = EDirectReadRestoreStage::Publish;
@@ -1340,8 +1448,9 @@ void TPartitionActor::OnDirectReadsRestored() {
     DirectReadRestoreStage = EDirectReadRestoreStage::None;
 
     const auto& ctx = ActorContext();
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                            << "Restore direct reads done, continue working");
+    YDB_LOG_DEBUG_CTX(ctx, "Restore direct reads done, continue working",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition});
 
     if (InitDone) {
         ctx.Send(ParentId, new TEvPQProxy::TEvUpdateSession(Partition, NodeId, TabletGeneration));
@@ -1381,8 +1490,11 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     }
 
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY,
-            PQ_LOG_PREFIX << " " << Partition << " wait data in partition inited, cookie " << WaitDataCookie << " from offset " << ReadOffset);
+    YDB_LOG_DEBUG_CTX(ctx, "Wait data in partition inited, cookie from offset",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition},
+        {"waitDataCookie", WaitDataCookie},
+        {"readOffset", ReadOffset});
 
     NTabletPipe::SendData(ctx, PipeClient, event.Release());
 
@@ -1398,8 +1510,10 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
 
     auto it = WaitDataInfly.find(ev->Get()->Record.GetCookie());
     if (it == WaitDataInfly.end()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                        << " unwaited response for WaitData " << ev->Get()->Record);
+        YDB_LOG_DEBUG_CTX(ctx, "Unwaited response for WaitData",
+            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {"partition", Partition},
+            {"record", ev->Get()->Record});
         return;
     }
     WaitDataInfly.erase(it);
@@ -1414,10 +1528,18 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     AFL_ENSURE(EndOffset <= record.GetEndOffset()); //end offset could not be changed if no data arrived, but signal will be sended anyway after timeout
     AFL_ENSURE(MaxTimeLagMs || ReadTimestampMs || IsNeedMorePartitionData()); //otherwise no WaitData were needed
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                    << " wait for data done: " << " readOffset " << ReadOffset << " EndOffset " << EndOffset << " newEndOffset "
-                    << record.GetEndOffset() << " commitOffset " << CommittedOffset << " clientCommitOffset " << ClientCommitOffset << " clientMaxOffset " << ClientMaxOffset
-                    << " cookie " << ev->Get()->Record.GetCookie() << " readingFinished " << record.GetReadingFinished() << " firstRead " << FirstRead);
+    YDB_LOG_DEBUG_CTX(ctx, "Wait for data done: readOffset EndOffset newEndOffset commitOffset clientCommitOffset clientMaxOffset cookie readingFinished firstRead",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition},
+        {"readOffset", ReadOffset},
+        {"endOffset", EndOffset},
+        {"recordEndOffset", record.GetEndOffset()},
+        {"committedOffset", CommittedOffset},
+        {"clientCommitOffset", ClientCommitOffset},
+        {"clientMaxOffset", ClientMaxOffset},
+        {"recordCookie", ev->Get()->Record.GetCookie()},
+        {"recordReadingFinished", record.GetReadingFinished()},
+        {"firstRead", FirstRead});
 
     EndOffset = record.GetEndOffset();
     SizeLag = record.GetSizeLag();
@@ -1500,12 +1622,19 @@ NKikimrClient::TPersQueueRequest TPartitionActor::MakeReadRequest(
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " READ FROM " << Partition
-                    << " maxCount " << ev->Get()->MaxCount << " maxSize " << ev->Get()->MaxSize << " maxTimeLagMs "
-                    << ev->Get()->MaxTimeLagMs << " readTimestampMs " << ev->Get()->ReadTimestampMs
-                    << " readOffset " << ReadOffset << " EndOffset " << EndOffset << " ClientCommitOffset "
-                    << ClientCommitOffset << " committedOffset " << CommittedOffset << " ClientMaxOffset " << ClientMaxOffset
-                    << " Guid " << ev->Get()->Guid);
+    YDB_LOG_DEBUG_CTX(ctx, "READ FROM maxCount maxSize maxTimeLagMs readTimestampMs readOffset EndOffset ClientCommitOffset committedOffset ClientMaxOffset Guid",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"partition", Partition},
+        {"maxCount", ev->Get()->MaxCount},
+        {"maxSize", ev->Get()->MaxSize},
+        {"maxTimeLagMs", ev->Get()->MaxTimeLagMs},
+        {"readTimestampMs", ev->Get()->ReadTimestampMs},
+        {"readOffset", ReadOffset},
+        {"endOffset", EndOffset},
+        {"clientCommitOffset", ClientCommitOffset},
+        {"committedOffset", CommittedOffset},
+        {"clientMaxOffset", ClientMaxOffset},
+        {"guid", ev->Get()->Guid});
 
     AFL_ENSURE(ReadGuid.empty());
     AFL_ENSURE(!RequestInfly);
@@ -1522,8 +1651,9 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
         return;
 
     if (DirectReadRestoreStage != EDirectReadRestoreStage::None) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " READ FROM " << Partition
-                    << " store this request utill direct read is restored");
+        YDB_LOG_DEBUG_CTX(ctx, "READ FROM store this request utill direct read is restored",
+            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {"partition", Partition});
         return;
     }
 
@@ -1559,7 +1689,10 @@ void TPartitionActor::Handle(TEvPQProxy::TEvCommitCookie::TPtr& ev, const TActor
             ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(TStringBuilder() << "double commit of cookie " << readId << " in " << Partition, PersQueue::ErrorCode::BAD_REQUEST));
             return;
         }
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " commit request from client for " << readId << " in " << Partition);
+        YDB_LOG_DEBUG_CTX(ctx, "Commit request from client",
+            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {"readId", readId},
+            {"partition", Partition});
     }
 
     MakeCommit(ctx);

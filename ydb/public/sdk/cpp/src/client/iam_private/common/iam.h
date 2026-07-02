@@ -2,8 +2,6 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/common/generic_provider.h>
 
-#include <util/string/join.h>
-
 namespace NYdb::inline Dev {
 
 template<typename TRequest, typename TResponse, typename TService>
@@ -74,15 +72,15 @@ public:
     }
 
     std::string GetClientIdentity() const override final {
-        return TStringBuilder() << JoinSeq('\t', std::initializer_list<std::string_view> {
-                "TIamServiceCredentialsProviderFactory",
-                Params_.ServiceId,
-                Params_.MicroserviceId,
-                Params_.ResourceId,
-                Params_.ResourceType,
-                Params_.TargetServiceAccountId,
-                Params_.SystemServiceAccountCredentials->GetClientIdentity()
-        });
+        return TStringBuilder()
+                << "TIamServiceCredentialsProviderFactory"
+                << '\t' << Params_.ServiceId
+                << '\t' << Params_.MicroserviceId
+                << '\t' << Params_.ResourceId
+                << '\t' << Params_.ResourceType
+                << '\t' << Params_.TargetServiceAccountId
+                << '\t' << Params_.SystemServiceAccountCredentials->GetClientIdentity()
+                ;
     }
 
 private:

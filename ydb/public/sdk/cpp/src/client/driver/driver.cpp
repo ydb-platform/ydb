@@ -13,7 +13,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 #include <util/stream/file.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_ca.h>
-
+#include <thread>
 namespace NYdb::inline Dev {
 
 using NYdbGrpc::TGRpcClientLow;
@@ -361,7 +361,12 @@ TDriver::TDriver(const TDriverConfig& config) {
         ythrow yexception() << "Invalid config object";
     }
 
-    Impl_.reset(new TGRpcConnectionsImpl(config.Impl_));
+    Impl_ = std::shared_ptr<TGRpcConnectionsImpl>(new TGRpcConnectionsImpl(config.Impl_), [] (TGRpcConnectionsImpl* impl) {
+        std::thread([impl] {
+            impl->Stop(true);
+            delete impl;
+        }).detach();
+    });
 }
 
 void TDriver::Stop(bool wait) {

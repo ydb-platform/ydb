@@ -4,7 +4,6 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NDataReader {
 
@@ -93,12 +92,8 @@ public:
     }
 
     STATEFN(StateFunc) {
-        YDB_LOG_CREATE_CONTEXT(
-            {"tabletId", RestoreTask->GetTabletId()},
-            {"tabletActorId", RestoreTask->GetTabletActorId()},
-            {"this", (ui64)this},
-            {"activity", RestoreTask->IsActive()},
-            {"taskId", RestoreTask->GetTaskId()});
+        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", RestoreTask->GetTabletId())("tablet_actor_id",
+            RestoreTask->GetTabletActorId())("this", (ui64)this)("activity", RestoreTask->IsActive())("task_id", RestoreTask->GetTaskId());
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NKqp::TEvKqpCompute::TEvScanInitActor, HandleExecute);

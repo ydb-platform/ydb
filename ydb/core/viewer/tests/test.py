@@ -1942,8 +1942,6 @@ class TestViewer(object):
 
     @classmethod
     def test_storage_stats(cls):
-        cls.get_viewer_cluster_with_calculated_storage_stats()
-
         result = {}
         tries = 15
         while tries > 0:

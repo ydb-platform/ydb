@@ -18,16 +18,25 @@ YDB provides an AI-powered documentation writing skill that helps developers cre
 
 ### Quick Start with the Skill
 
-Run `ruler apply` to generate agent configurations:
+1. **Prepare your material first** - gather all information about what needs to be documented:
+   - Description and purpose
+   - Parameters, options, configurations
+   - Code examples and usage patterns
+   - Limitations and constraints
+   - Links to PR/Issue where it was implemented
+
+2. **Run `ruler apply`** to generate agent configurations:
 
 ```bash
 npm install -g @intellectronica/ruler
 ruler apply
 ```
 
-Then in any IDE (Cursor, VSCode, JetBrains, Copilot, etc.), ask: **"Help me write documentation for..."**
+3. **In any IDE** (Cursor, VSCode, JetBrains, Copilot, etc.), provide the information and ask the skill to create documentation
 
 The skill will guide you through a 5-stage workflow to create fully-integrated documentation with glossary, reference, recipes, cross-links, and TOC updates — all in Russian and English.
+
+**Important:** The skill cannot invent technical details. Provide complete information for best results.
 
 ### Key Resources
 

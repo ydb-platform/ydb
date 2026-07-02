@@ -1,0 +1,461 @@
+# DOCUMENTATION_MODEL.yaml
+# Машинообработаемая модель структуры документации YDB
+#
+# Эта модель описывает иерархию документации, целевую аудиторию, жанры и назначение каждого раздела.
+# Используется документаторским скиллом и другими автоматизированными инструментами для:
+# - Понимания где размещать новый контент
+# - Валидации структуры PR-ов с документацией
+# - Генерации статей по шаблонам
+#
+# Поля:
+#   id: уникальный идентификатор раздела (используется в путях и ссылках)
+#   title: название раздела (как видит пользователь)
+#   path: относительный путь в репозитории (без языка)
+#   genres: тип контента [theory, guide, reference, faq, recipe, release-notes, links]
+#   audience: целевая аудитория [all, newcomers, decision-makers, app-developers, devops, security-engineers, contributors, analysts, integrations]
+#   purpose: назначение раздела (для чего он нужен)
+#   for_whom: для кого написан (описание аудитории)
+#   subsections: разделы третьего уровня (если есть)
+
+documentation:
+  primary_sections:
+
+    # ===== Начинающие пользователи =====
+    - id: quickstart
+      title: Начало работы
+      path: core/quickstart
+      genres: [guide]
+      audience: [newcomers]
+      purpose: Пошаговое введение в YDB для новых пользователей
+      for_whom: Люди, впервые работающие с YDB, которые хотят быстро настроить сервер и написать первые запросы
+      subsections: []
+
+    # ===== Концепции и архитектура =====
+    - id: concepts
+      title: Концепции
+      path: core/concepts
+      genres: [theory]
+      audience: [all, decision-makers, newcomers]
+      purpose: Высокоуровневый теоретический обзор YDB, её функций, терминологии и архитектуры
+      for_whom: Широкая аудитория с минимальными предварительными знаниями, включая руководителей
+      subsections:
+        - id: concepts-analytics
+          title: Аналитика
+          path: core/concepts/analytics
+          purpose: Концепции аналитического анализа данных в YDB
+        - id: concepts-datamodel
+          title: Модель данных
+          path: core/concepts/datamodel
+          purpose: Основные концепции структуры данных и моделирования в YDB
+        - id: concepts-query-execution
+          title: Выполнение запросов
+          path: core/concepts/query_execution
+          purpose: Как YDB выполняет запросы и оптимизирует их
+
+    # ===== Для разработчиков приложений =====
+    - id: dev
+      title: Для разработчиков приложений
+      path: core/dev
+      genres: [guide, theory]
+      audience: [app-developers]
+      purpose: Практические руководства и теория для разработчиков приложений, работающих с YDB
+      for_whom: Разработчики приложений, интегрирующие YDB в свои проекты
+      subsections:
+        - id: dev-example-app
+          title: Пример приложения
+          path: core/dev/example-app
+          purpose: Полнофункциональный пример приложения с использованием YDB
+        - id: dev-local-indexes
+          title: Локальные индексы
+          path: core/dev/local-indexes
+          purpose: Использование локальных индексов для оптимизации запросов
+        - id: dev-primary-key
+          title: Первичный ключ
+          path: core/dev/primary-key
+          purpose: Выбор и проектирование первичного ключа
+        - id: dev-query-optimization
+          title: Оптимизация запросов
+          path: core/dev/query-execution-optimization
+          purpose: Техники оптимизации производительности запросов
+        - id: dev-streaming
+          title: Потоковые запросы
+          path: core/dev/streaming-query
+          purpose: Работа с потоками данных в реальном времени
+        - id: dev-yql-tutorial
+          title: Учебник YQL
+          path: core/dev/yql-tutorial
+          purpose: Пошаговое введение в язык YQL
+
+    # ===== Для DevOps =====
+    - id: devops
+      title: Для DevOps
+      path: core/devops
+      genres: [guide, theory]
+      audience: [devops]
+      purpose: Руководства для DevOps-инженеров по развёртыванию, конфигурации и эксплуатации кластеров YDB
+      for_whom: DevOps-инженеры, отвечающие за настройку и эксплуатацию кластеров
+      subsections:
+        - id: devops-backup
+          title: Резервное копирование и восстановление
+          path: core/devops/backup-and-recovery
+          purpose: Стратегии и процедуры резервного копирования и восстановления данных
+        - id: devops-concepts
+          title: Концепции для DevOps
+          path: core/devops/concepts
+          purpose: Архитектурные концепции, важные для операции кластеров
+        - id: devops-configuration
+          title: Управление конфигурацией
+          path: core/devops/configuration-management
+          purpose: Как конфигурировать и управлять параметрами YDB
+        - id: devops-deployment
+          title: Варианты развёртывания
+          path: core/devops/deployment-options
+          purpose: Различные способы развёртывания YDB (Ansible, Kubernetes, ручное и т.д.)
+        - id: devops-enterprise
+          title: Enterprise Manager
+          path: core/devops/enterprise-manager
+          purpose: Управление YDB через Enterprise Manager
+        - id: devops-observability
+          title: Мониторинг и наблюдаемость
+          path: core/devops/observability
+          purpose: Мониторинг здоровья кластера, сбор метрик и логов
+
+    # ===== Безопасность =====
+    - id: security
+      title: Для инженеров безопасности
+      path: core/security
+      genres: [guide, theory]
+      audience: [security-engineers]
+      purpose: Руководства по защите и аудиту кластеров YDB и приложений
+      for_whom: Инженеры по безопасности, отвечающие за защиту кластеров и данных
+      subsections:
+        - id: security-encryption
+          title: Шифрование
+          path: core/security/encryption
+          purpose: Механизмы шифрования данных в YDB
+
+    # ===== Для контрибьюторов =====
+    - id: contributor
+      title: Для контрибьюторов
+      path: core/contributor
+      genres: [theory, guide]
+      audience: [contributors]
+      purpose: Документация для участников разработки YDB, объясняющая процессы и компоненты
+      for_whom: Члены основной команды разработки и внешние контрибьюторы
+      subsections:
+        - id: contributor-docs
+          title: Документация
+          path: core/contributor/documentation
+          purpose: Как писать и структурировать документацию YDB
+        - id: contributor-testing
+          title: Тестирование
+          path: core/contributor/testing
+          purpose: Как тестировать изменения в YDB
+
+    # ===== Справочная информация =====
+    - id: reference
+      title: Справка
+      path: core/reference
+      genres: [reference]
+      audience: [all]
+      purpose: Подробный справочник API, синтаксиса, параметров и конфигурации
+      for_whom: Все пользователи, ищущие точную техническую информацию через поиск
+      subsections:
+        - id: reference-ai
+          title: AI функции
+          path: core/reference/ai
+          purpose: Справка по AI функциям и векторным операциям
+        - id: reference-config
+          title: Конфигурация
+          path: core/reference/configuration
+          purpose: Полный справочник всех конфигурационных параметров
+        - id: reference-docker
+          title: Docker
+          path: core/reference/docker
+          purpose: Справочник Docker образов и параметров запуска
+        - id: reference-embedded-ui
+          title: Встроенный UI
+          path: core/reference/embedded-ui
+          purpose: Документация встроенного веб-интерфейса
+        - id: reference-kafka-api
+          title: Kafka API
+          path: core/reference/kafka-api
+          purpose: Справочник Kafka API совместимости
+        - id: reference-languages
+          title: Языки и API
+          path: core/reference/languages-and-apis
+          purpose: Справочник по SDK и драйверам для различных языков программирования
+        - id: reference-observability
+          title: Мониторинг и метрики
+          path: core/reference/observability
+          purpose: Справочник метрик, логов и точек наблюдаемости
+        - id: reference-sqs-api
+          title: SQS API
+          path: core/reference/sqs-api
+          purpose: Справочник SQS API совместимости
+        - id: reference-ydb-cli
+          title: YDB CLI
+          path: core/reference/ydb-cli
+          purpose: Полный справочник команд YDB CLI
+        - id: reference-ydb-dstool
+          title: YDB DSTool
+          path: core/reference/ydb-dstool
+          purpose: Справочник утилиты YDB DSTool для управления диском
+        - id: reference-ydb-sdk
+          title: YDB SDK
+          path: core/reference/ydb-sdk
+          purpose: Справочник YDB SDK для различных языков
+        - id: reference-ydbops
+          title: YDBOps
+          path: core/reference/ydbops
+          purpose: Справочник утилиты YDBOps
+
+    # ===== Рецепты =====
+    - id: recipes
+      title: Рецепты
+      path: core/recipes
+      genres: [guide, recipe]
+      audience: [app-developers, devops]
+      purpose: Мини-руководства для конкретных задач с примерами кода
+      for_whom: Разработчики и DevOps, решающие типовые задачи
+      subsections:
+        - id: recipes-backup-collections
+          title: Сборки бэкапов
+          path: core/recipes/backup-collections
+          purpose: Рецепты для создания коллекций резервных копий
+        - id: recipes-bloom-skip
+          title: Bloom Skip индексы
+          path: core/recipes/bloom-skip-indexes
+          purpose: Использование Bloom Skip индексов для оптимизации
+        - id: recipes-fulltext
+          title: Полнотекстовый поиск
+          path: core/recipes/fulltext-search
+          purpose: Реализация полнотекстового поиска
+        - id: recipes-json-search
+          title: Поиск по JSON
+          path: core/recipes/json-search
+          purpose: Поиск и работа с JSON данными
+        - id: recipes-local-indexes
+          title: Локальные индексы
+          path: core/recipes/local-indexes
+          purpose: Практические рецепты использования локальных индексов
+        - id: recipes-nfs-backup
+          title: NFS бэкапы
+          path: core/recipes/nfs-backup
+          purpose: Резервное копирование на NFS хранилище
+        - id: recipes-streaming
+          title: Потоковые запросы
+          path: core/recipes/streaming_queries
+          purpose: Рецепты для работы с потоковыми запросами
+        - id: recipes-system-tablet
+          title: Системные таблетки
+          path: core/recipes/system-tablet-backup
+          purpose: Резервное копирование системных таблеток
+        - id: recipes-transfer
+          title: Передача данных
+          path: core/recipes/transfer
+          purpose: Рецепты для передачи данных между системами
+        - id: recipes-vector-search
+          title: Поиск по векторам
+          path: core/recipes/vector-search
+          purpose: Использование векторного поиска в YDB
+        - id: recipes-ydb-cli
+          title: YDB CLI
+          path: core/recipes/ydb-cli
+          purpose: Полезные рецепты использования YDB CLI
+        - id: recipes-ydb-sdk
+          title: YDB SDK
+          path: core/recipes/ydb-sdk
+          purpose: Рецепты использования YDB SDK
+
+    # ===== Диагностика и решение проблем =====
+    - id: troubleshooting
+      title: Диагностика проблем
+      path: core/troubleshooting
+      genres: [theory, guide]
+      audience: [devops, app-developers]
+      purpose: Теория о потенциальных проблемах и практические руководства по их диагностике и устранению
+      for_whom: DevOps и разработчики, решающие проблемы в production
+      subsections:
+        - id: troubleshooting-examples
+          title: Примеры проблем
+          path: core/troubleshooting/examples
+          purpose: Примеры типовых проблем и их решения
+        - id: troubleshooting-performance
+          title: Проблемы производительности
+          path: core/troubleshooting/performance
+          purpose: Диагностика и решение проблем с производительностью
+        - id: troubleshooting-spilling
+          title: Spilling
+          path: core/troubleshooting/spilling
+          purpose: Диагностика и решение проблем со spillingом данных
+
+    # ===== Часто задаваемые вопросы =====
+    - id: faq
+      title: Вопросы и ответы
+      path: core/faq
+      genres: [faq]
+      audience: [all]
+      purpose: Коллекция часто задаваемых вопросов в стиле StackOverflow
+      for_whom: Все пользователи, ищущие ответы на типовые вопросы
+      subsections: []
+
+    # ===== Интеграции =====
+    - id: integrations
+      title: Интеграции
+      path: core/integrations
+      genres: [guide]
+      audience: [app-developers]
+      purpose: Руководства по интеграции YDB с внешними системами и инструментами
+      for_whom: Разработчики, интегрирующие YDB с другими платформами
+      subsections:
+        - id: integrations-migration
+          title: Миграция данных
+          path: core/integrations/data-migration
+          purpose: Инструменты и методы миграции данных в YDB
+        - id: integrations-gui
+          title: GUI инструменты
+          path: core/integrations/gui
+          purpose: Графические интерфейсы и инструменты для работы с YDB
+        - id: integrations-ingestion
+          title: Ingestion
+          path: core/integrations/ingestion
+          purpose: Методы загрузки и приёма данных в YDB
+        - id: integrations-orm
+          title: ORM и фреймворки
+          path: core/integrations/orm
+          purpose: Интеграция с ORM и веб-фреймворками
+        - id: integrations-orchestration
+          title: Оркестрация
+          path: core/integrations/orchestration
+          purpose: Интеграция с системами оркестрации (Airflow, K8s, и т.д.)
+        - id: integrations-query-engines
+          title: Query engines
+          path: core/integrations/query-engines
+          purpose: Интеграция с системами анализа данных
+        - id: integrations-sql-translation
+          title: SQL трансляция
+          path: core/integrations/sql-translation
+          purpose: Трансляция SQL из других систем в YQL
+        - id: integrations-vectorsearch
+          title: Vector Search
+          path: core/integrations/vectorsearch
+          purpose: Интеграция с системами векторного поиска
+        - id: integrations-visualization
+          title: Визуализация
+          path: core/integrations/visualization
+          purpose: Инструменты визуализации данных из YDB
+
+    # ===== Обслуживание =====
+    - id: maintenance
+      title: Обслуживание
+      path: core/maintenance
+      genres: [guide]
+      audience: [devops]
+      purpose: Процедуры и инструменты для обслуживания и управления кластерами
+      for_whom: DevOps-инженеры, выполняющие операционные задачи
+      subsections:
+        - id: maintenance-manual
+          title: Ручное обслуживание
+          path: core/maintenance/manual
+          purpose: Процедуры ручного управления и обслуживания
+
+    # ===== PostgreSQL совместимость =====
+    - id: postgresql
+      title: PostgreSQL совместимость
+      path: core/postgresql
+      genres: [reference, guide]
+      audience: [app-developers]
+      purpose: Информация о совместимости YDB с PostgreSQL и отличиях
+      for_whom: Разработчики, мигрирующие с PostgreSQL на YDB
+      subsections:
+        - id: postgresql-mechanisms
+          title: Механизмы
+          path: core/postgresql/mechanisms
+          purpose: Механизмы и компоненты PostgreSQL в YDB
+        - id: postgresql-statements
+          title: Команды SQL
+          path: core/postgresql/statements
+          purpose: Справочник команд SQL в режиме совместимости
+
+    # ===== YQL язык =====
+    - id: yql
+      title: YQL язык
+      path: core/yql
+      genres: [reference]
+      audience: [app-developers]
+      purpose: Полный справочник языка запросов YQL
+      for_whom: Разработчики, пишущие запросы на YQL
+      subsections:
+        - id: yql-reference
+          title: Справочник YQL
+          path: core/yql/reference
+          purpose: Полный справочник синтаксиса и функций YQL
+
+    # ===== Аналитика =====
+    - id: analyst
+      title: Для аналитиков
+      path: core/analyst
+      genres: [guide, theory]
+      audience: [analysts]
+      purpose: Руководства и концепции для аналитиков, работающих с данными в YDB
+      for_whom: Аналитики данных и business intelligence специалисты
+      subsections:
+        - id: analyst-datasets
+          title: Наборы данных
+          path: core/analyst/datasets
+          purpose: Работа с датасетами и подготовка данных для анализа
+        - id: analyst-guides
+          title: Практические руководства
+          path: core/analyst/practical-guides
+          purpose: Практические рецепты для типовых аналитических задач
+
+    # ===== Публичные материалы =====
+    - id: public-materials
+      title: Публичные материалы
+      path: core/public-materials
+      genres: [links]
+      audience: [all]
+      purpose: Коллекция ссылок на видео, статьи и материалы о YDB
+      for_whom: Все желающие узнать о YDB из внешних источников
+      subsections:
+        - id: public-materials-publications
+          title: Статьи и публикации
+          path: core/public-materials/publications
+          purpose: Ссылки на статьи и публикации о YDB
+        - id: public-materials-videos
+          title: Видео
+          path: core/public-materials/videos
+          purpose: Ссылки на видео о YDB и её использовании
+
+    # ===== Загрузки =====
+    - id: downloads
+      title: Загрузки
+      path: core/downloads
+      genres: [links]
+      audience: [all]
+      purpose: Коллекция ссылок на загрузку исполняемых файлов и образов YDB
+      for_whom: Все, кто хочет загрузить и установить YDB
+      subsections: []
+
+  # Жанры документации (из genres.md)
+  genres:
+    theory: "Теоретический материал, объясняющий концепции и принципы"
+    guide: "Практическое руководство с пошаговыми инструкциями"
+    reference: "Справочник, полный каталог функций, параметров, синтаксиса"
+    recipe: "Мини-руководство для конкретной задачи с примерами"
+    faq: "Часто задаваемый вопрос и ответ"
+    links: "Коллекция ссылок на внешние ресурсы"
+    release-notes: "Заметки о выпуске, что нового в версии"
+
+  # Аудитории
+  audiences:
+    all: "Все пользователи"
+    newcomers: "Новые пользователи, впервые работающие с YDB"
+    decision-makers: "Руководители и лица, принимающие решения"
+    app-developers: "Разработчики приложений, использующие YDB"
+    devops: "DevOps-инженеры, управляющие кластерами"
+    security-engineers: "Инженеры по безопасности"
+    contributors: "Разработчики и контрибьюторы YDB"
+    analysts: "Аналитики данных и BI специалисты"
+    integrations: "Специалисты по интеграции с внешними системами"

@@ -5,7 +5,7 @@ PRNG management routines, thin wrappers.
 from OpenSSL._util import lib as _lib
 
 
-def add(buffer, entropy):
+def add(buffer: bytes, entropy: int) -> None:
     """
     Mix bytes from *string* into the PRNG state.
 
@@ -31,7 +31,7 @@ def add(buffer, entropy):
     _lib.RAND_add(buffer, len(buffer), entropy)
 
 
-def status():
+def status() -> int:
     """
     Check whether the PRNG has been seeded with enough data.
 

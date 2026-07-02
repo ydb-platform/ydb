@@ -5,12 +5,14 @@
     "endpointPrefix":"transcribe",
     "jsonVersion":"1.1",
     "protocol":"json",
+    "protocols":["json"],
     "serviceFullName":"Amazon Transcribe Service",
     "serviceId":"Transcribe",
     "signatureVersion":"v4",
     "signingName":"transcribe",
     "targetPrefix":"Transcribe",
-    "uid":"transcribe-2017-10-26"
+    "uid":"transcribe-2017-10-26",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "CreateCallAnalyticsCategory":{
@@ -737,6 +739,10 @@
         "ja-JP"
       ]
     },
+    "CallAnalyticsFeature":{
+      "type":"string",
+      "enum":["GENERATIVE_SUMMARIZATION"]
+    },
     "CallAnalyticsJob":{
       "type":"structure",
       "members":{
@@ -747,6 +753,10 @@
         "CallAnalyticsJobStatus":{
           "shape":"CallAnalyticsJobStatus",
           "documentation":"<p>Provides the status of the specified Call Analytics job.</p> <p>If the status is <code>COMPLETED</code>, the job is finished and you can find the results at the location specified in <code>TranscriptFileUri</code> (or <code>RedactedTranscriptFileUri</code>, if you requested transcript redaction). If the status is <code>FAILED</code>, <code>FailureReason</code> provides details on why your transcription job failed.</p>"
+        },
+        "CallAnalyticsJobDetails":{
+          "shape":"CallAnalyticsJobDetails",
+          "documentation":"<p>Provides detailed information about a call analytics job, including information about skipped analytics features.</p>"
         },
         "LanguageCode":{
           "shape":"LanguageCode",
@@ -796,9 +806,23 @@
         "ChannelDefinitions":{
           "shape":"ChannelDefinitions",
           "documentation":"<p>Indicates which speaker is on which channel.</p>"
+        },
+        "Tags":{
+          "shape":"TagList",
+          "documentation":"<p>The tags, each in the form of a key:value pair, assigned to the specified call analytics job.</p>"
         }
       },
       "documentation":"<p>Provides detailed information about a Call Analytics job.</p> <p>To view the job's status, refer to <code>CallAnalyticsJobStatus</code>. If the status is <code>COMPLETED</code>, the job is finished. You can find your completed transcript at the URI specified in <code>TranscriptFileUri</code>. If the status is <code>FAILED</code>, <code>FailureReason</code> provides details on why your transcription job failed.</p> <p>If you enabled personally identifiable information (PII) redaction, the redacted transcript appears at the location specified in <code>RedactedTranscriptFileUri</code>.</p> <p>If you chose to redact the audio in your media file, you can find your redacted media file at the location specified in the <code>RedactedMediaFileUri</code> field of your response.</p>"
+    },
+    "CallAnalyticsJobDetails":{
+      "type":"structure",
+      "members":{
+        "Skipped":{
+          "shape":"CallAnalyticsSkippedFeatureList",
+          "documentation":"<p>Contains information about any skipped analytics features during the analysis of a call analytics job.</p> <p>This array lists all the analytics features that were skipped, along with their corresponding reason code and message.</p>"
+        }
+      },
+      "documentation":"<p>Contains details about a call analytics job, including information about skipped analytics features.</p>"
     },
     "CallAnalyticsJobName":{
       "type":"string",
@@ -881,12 +905,45 @@
           "shape":"CallAnalyticsJobStatus",
           "documentation":"<p>Provides the status of your Call Analytics job.</p> <p>If the status is <code>COMPLETED</code>, the job is finished and you can find the results at the location specified in <code>TranscriptFileUri</code> (or <code>RedactedTranscriptFileUri</code>, if you requested transcript redaction). If the status is <code>FAILED</code>, <code>FailureReason</code> provides details on why your transcription job failed.</p>"
         },
+        "CallAnalyticsJobDetails":{
+          "shape":"CallAnalyticsJobDetails",
+          "documentation":"<p>Provides detailed information about a call analytics job, including information about skipped analytics features.</p>"
+        },
         "FailureReason":{
           "shape":"FailureReason",
           "documentation":"<p>If <code>CallAnalyticsJobStatus</code> is <code>FAILED</code>, <code>FailureReason</code> contains information about why the Call Analytics job failed. See also: <a href=\"https://docs.aws.amazon.com/transcribe/latest/APIReference/CommonErrors.html\">Common Errors</a>.</p>"
         }
       },
       "documentation":"<p>Provides detailed information about a specific Call Analytics job.</p>"
+    },
+    "CallAnalyticsSkippedFeature":{
+      "type":"structure",
+      "members":{
+        "Feature":{
+          "shape":"CallAnalyticsFeature",
+          "documentation":"<p>Indicates the type of analytics feature that was skipped during the analysis of a call analytics job.</p>"
+        },
+        "ReasonCode":{
+          "shape":"CallAnalyticsSkippedReasonCode",
+          "documentation":"<p>Provides a code indicating the reason why a specific analytics feature was skipped during the analysis of a call analytics job.</p>"
+        },
+        "Message":{
+          "shape":"String",
+          "documentation":"<p>Contains additional information or a message explaining why a specific analytics feature was skipped during the analysis of a call analytics job.</p>"
+        }
+      },
+      "documentation":"<p>Represents a skipped analytics feature during the analysis of a call analytics job.</p> <p>The <code>Feature</code> field indicates the type of analytics feature that was skipped.</p> <p>The <code>Message</code> field contains additional information or a message explaining why the analytics feature was skipped.</p> <p>The <code>ReasonCode</code> field provides a code indicating the reason why the analytics feature was skipped.</p>"
+    },
+    "CallAnalyticsSkippedFeatureList":{
+      "type":"list",
+      "member":{"shape":"CallAnalyticsSkippedFeature"}
+    },
+    "CallAnalyticsSkippedReasonCode":{
+      "type":"string",
+      "enum":[
+        "INSUFFICIENT_CONVERSATION_CONTENT",
+        "FAILED_SAFETY_GUIDELINES"
+      ]
     },
     "CategoryName":{
       "type":"string",
@@ -912,6 +969,10 @@
         "LastUpdateTime":{
           "shape":"DateTime",
           "documentation":"<p>The date and time the specified Call Analytics category was last updated.</p> <p>Timestamps are in the format <code>YYYY-MM-DD'T'HH:MM:SS.SSSSSS-UTC</code>. For example, <code>2022-05-05T12:45:32.691000-07:00</code> represents 12:45 PM UTC-7 on May 5, 2022.</p>"
+        },
+        "Tags":{
+          "shape":"TagList",
+          "documentation":"<p>The tags, each in the form of a key:value pair, assigned to the specified call analytics category.</p>"
         },
         "InputType":{
           "shape":"InputType",
@@ -993,6 +1054,10 @@
         "Rules":{
           "shape":"RuleList",
           "documentation":"<p>Rules define a Call Analytics category. When creating a new category, you must create between 1 and 20 rules for that category. For each rule, you specify a filter you want applied to the attributes of a call. For example, you can choose a sentiment filter that detects if a customer's sentiment was positive during the last 30 seconds of the call.</p>"
+        },
+        "Tags":{
+          "shape":"TagList",
+          "documentation":"<p>Adds one or more custom tags, each in the form of a key:value pair, to a new call analytics category at the time you start this new job.</p> <p>To learn more about using tags with Amazon Transcribe, refer to <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/tagging.html\">Tagging resources</a>.</p>"
         },
         "InputType":{
           "shape":"InputType",
@@ -2207,7 +2272,7 @@
     },
     "MaxSpeakers":{
       "type":"integer",
-      "max":10,
+      "max":30,
       "min":2
     },
     "Media":{
@@ -2910,6 +2975,10 @@
         "Settings":{
           "shape":"CallAnalyticsJobSettings",
           "documentation":"<p>Specify additional optional settings in your request, including content redaction; allows you to apply custom language models, vocabulary filters, and custom vocabularies to your Call Analytics job.</p>"
+        },
+        "Tags":{
+          "shape":"TagList",
+          "documentation":"<p>Adds one or more custom tags, each in the form of a key:value pair, to a new call analytics job at the time you start this new job.</p> <p>To learn more about using tags with Amazon Transcribe, refer to <a href=\"https://docs.aws.amazon.com/transcribe/latest/dg/tagging.html\">Tagging resources</a>.</p>"
         },
         "ChannelDefinitions":{
           "shape":"ChannelDefinitions",

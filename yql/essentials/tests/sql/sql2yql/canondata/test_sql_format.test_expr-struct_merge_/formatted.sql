@@ -1,4 +1,3 @@
-/* syntax version 1 */
 $merge = ($_name, $l, $r) -> {
     RETURN Coalesce($l, 0) + Coalesce($r, 0);
 };

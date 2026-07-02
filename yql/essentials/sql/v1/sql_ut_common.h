@@ -5118,6 +5118,26 @@ Y_UNIT_TEST(ShowCreateView) {
     UNIT_ASSERT_VALUES_EQUAL(elementStat["showCreateView"], 1);
 }
 
+Y_UNIT_TEST(ShowCreateExternalDataSource) {
+    NYql::TAstParseResult res = SqlToYql(R"(
+            USE plato;
+            SHOW CREATE EXTERNAL DATA SOURCE source;
+        )");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Read") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "showCreateExternalDataSource");
+        }
+    };
+
+    TWordCountHive elementStat = {{"Read"}, {"showCreateExternalDataSource"}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["Read"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["showCreateExternalDataSource"], 1);
+}
+
 Y_UNIT_TEST(OptionalAliases) {
     UNIT_ASSERT(SqlToYql("USE plato; SELECT foo FROM (SELECT key foo FROM Input);").IsOk());
     UNIT_ASSERT(SqlToYql("USE plato; SELECT a.x FROM Input1 a JOIN Input2 b ON a.key = b.key;").IsOk());

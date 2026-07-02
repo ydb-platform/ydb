@@ -18,6 +18,7 @@ END()
 
 RECURSE(
     common
+    deferred_publish
     events
     pqrb
     pqtablet

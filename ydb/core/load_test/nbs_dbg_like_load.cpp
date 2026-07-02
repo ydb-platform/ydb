@@ -12,6 +12,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <library/cpp/histogram/hdr/histogram.h>
 #include <library/cpp/json/writer/json_value.h>
@@ -98,6 +100,26 @@ struct TInflightEntry {
     ui32 SizeBytes = 0;
     NHPTimer::STime SentAt = 0;
     bool IsRead = false;
+    NWilson::TSpan Span;
+
+    TInflightEntry() = default;
+
+    TInflightEntry(ui64 address, ui32 sizeBytes, NHPTimer::STime sentAt, bool isRead,
+                   const char* spanName, NActors::TActorSystem* actorSystem)
+        : Address(address)
+        , SizeBytes(sizeBytes)
+        , SentAt(sentAt)
+        , IsRead(isRead)
+        , Span(TWilsonNbs::NbsBasic,
+               NWilson::TTraceId::NewTraceId(TWilsonNbs::NbsBasic, Max<ui32>()),
+               spanName,
+               NWilson::EFlags::NONE,
+               actorSystem)
+    {
+        Span
+            .Attribute("addr", static_cast<i64>(address))
+            .Attribute("size", static_cast<i64>(sizeBytes));
+    }
 };
 
 // Summary info resolved by the proxy (from GetSummary + validation).
@@ -449,21 +471,33 @@ private:
         }
     }
 
+    void EndAllInflightSpans() {
+        for (ui64 idx = Inflight.FrontIndex(); idx < Inflight.NextIndex(); ++idx) {
+            if (auto* e = Inflight.Find(idx)) {
+                if (e->Span) {
+                    e->Span.EndError("abandoned");
+                }
+            }
+        }
+    }
+
     // Returns false if the inflight queue was full (slot occupied by stuck entry).
     bool IssueWrite() {
         const ui32 size = IoSizeBytes;
         const ui64 addr = PickAddress(size);
         NHPTimer::STime sentAt = 0;
         NHPTimer::GetTime(&sentAt);
-        auto res = Inflight.Emplace(addr, size, sentAt, /*IsRead=*/false);
+        auto res = Inflight.Emplace(addr, size, sentAt, /*IsRead=*/false,
+            "NbsDbgLikeLoad.Write", TActivationContext::ActorSystem());
         if (!res) {
             LOG_D("IssueWrite queue full Tag# " << Tag << " " << res.error());
             return false;
         }
-        const ui64 cookie = res.value();
+        const ui64 cookie = res->first;
+        NWilson::TTraceId traceId = res->second->Span.GetTraceId();
         auto ev = std::make_unique<TEvLoad::TEvNbsWrite>(addr, size);
         ev->Payload = TRope(WritePayload);
-        NTabletPipe::SendData(SelfId(), PipeClient, ev.release(), cookie);
+        NTabletPipe::SendData(SelfId(), PipeClient, ev.release(), cookie, std::move(traceId));
         ++WriteInFlight;
         LOG_T("IssueWrite Cookie# " << cookie << " Addr# " << addr << " Size# " << size << " WriteInFlight# " << WriteInFlight);
         ++WritesIssued;
@@ -482,14 +516,16 @@ private:
         const ui64 addr = PickAddress(size);
         NHPTimer::STime sentAt = 0;
         NHPTimer::GetTime(&sentAt);
-        auto res = Inflight.Emplace(addr, size, sentAt, /*IsRead=*/true);
+        auto res = Inflight.Emplace(addr, size, sentAt, /*IsRead=*/true,
+            "NbsDbgLikeLoad.Read", TActivationContext::ActorSystem());
         if (!res) {
             LOG_D("IssueRead queue full Tag# " << Tag << " " << res.error());
             return false;
         }
-        const ui64 cookie = res.value();
+        const ui64 cookie = res->first;
+        NWilson::TTraceId traceId = res->second->Span.GetTraceId();
         auto ev = std::make_unique<TEvLoad::TEvNbsRead>(addr, size);
-        NTabletPipe::SendData(SelfId(), PipeClient, ev.release(), cookie);
+        NTabletPipe::SendData(SelfId(), PipeClient, ev.release(), cookie, std::move(traceId));
         ++ReadInFlight;
         LOG_T("IssueRead Cookie# " << cookie << " Addr# " << addr << " Size# " << size << " ReadInFlight# " << ReadInFlight);
         ++ReadsIssued;
@@ -516,7 +552,9 @@ private:
                 << " Cookie# " << cookie << " expected write but IsRead=true");
             Y_DEBUG_ABORT_UNLESS(false, "cookie type mismatch in HandleWriteResult");
             const ui32 sizeBytes = entry->SizeBytes;
+            NWilson::TSpan span = std::move(entry->Span);
             Inflight.Erase(cookie);
+            span.EndError("cookie type mismatch");
             if (ReadInFlight > 0) {
                 --ReadInFlight;
             }
@@ -526,13 +564,18 @@ private:
             CheckDrainComplete();
             return;
         }
-        const TInflightEntry e = *entry;
+        TInflightEntry e = std::move(*entry);
         Inflight.Erase(cookie);
 
         NHPTimer::STime now = 0;
         NHPTimer::GetTime(&now);
         const ui64 latencyUs = LatencyUsFromHPTimer(now - e.SentAt);
         const bool ok = ev->Get()->Record.GetStatus() == NBSIO_OK;
+        if (ok) {
+            e.Span.EndOk();
+        } else {
+            e.Span.EndError(ev->Get()->Record.GetReason());
+        }
         const bool measure = InMeasurementWindow();
         LOG_T("HandleWriteResult Cookie# " << cookie << " Status# "
             << ENbsIoResultStatus_Name(ev->Get()->Record.GetStatus()) << " LatencyUs# "
@@ -605,7 +648,9 @@ private:
                 << " Cookie# " << cookie << " expected read but IsRead=false");
             Y_DEBUG_ABORT_UNLESS(false, "cookie type mismatch in HandleReadResult");
             const ui32 sizeBytes = entry->SizeBytes;
+            NWilson::TSpan span = std::move(entry->Span);
             Inflight.Erase(cookie);
+            span.EndError("cookie type mismatch");
             if (WriteInFlight > 0) {
                 --WriteInFlight;
             }
@@ -615,13 +660,18 @@ private:
             CheckDrainComplete();
             return;
         }
-        const TInflightEntry e = *entry;
+        TInflightEntry e = std::move(*entry);
         Inflight.Erase(cookie);
 
         NHPTimer::STime now = 0;
         NHPTimer::GetTime(&now);
         const ui64 latencyUs = LatencyUsFromHPTimer(now - e.SentAt);
         const bool ok = ev->Get()->Record.GetStatus() == NBSIO_OK;
+        if (ok) {
+            e.Span.EndOk();
+        } else {
+            e.Span.EndError(ev->Get()->Record.GetReason());
+        }
         const bool measure = InMeasurementWindow();
         LOG_T("HandleReadResult Cookie# " << cookie << " Status# "
             << ENbsIoResultStatus_Name(ev->Get()->Record.GetStatus()) << " LatencyUs# " << latencyUs
@@ -741,6 +791,8 @@ private:
             NTabletPipe::CloseClient(SelfId(), PipeClient);
             PipeClient = TActorId();
         }
+
+        EndAllInflightSpans();
 
         const NActors::TMonotonic now = MonotonicNow();
         const ui64 durationMs = (TestStartTime != NActors::TMonotonic::Zero() && now > TestStartTime)

@@ -844,6 +844,13 @@ Y_UNIT_TEST(Order_NoneCommittedBeforeSplit) {
     });
 }
 
+Y_UNIT_TEST(Order_NoneCommittedBeforeSplitSmall) {
+    PartitionSplitWithMessageGroupOrdering({
+        {"group-A", {.Root = {.WriteCount = 2}, .LastSplit = {.WriteCount = 1}}},
+        {"group-B", {.Root = {.WriteCount = 1}, .LastSplit = {.WriteCount = 1}}},
+    });
+}
+
 // Case 3: All messages of group-A and group-B committed before split.
 //         None of group-C committed before split.
 // Expected: child messages for A and B available; C blocked until parent committed.

@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 pragma sampleselect;
 
 select sum(length(value)) as s, m0, m1, m2

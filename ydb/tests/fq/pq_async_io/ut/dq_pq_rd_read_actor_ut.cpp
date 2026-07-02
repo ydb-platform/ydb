@@ -175,7 +175,7 @@ public:
         });
         UNIT_ASSERT_C(typeMkql, "Failed to create multi type");
 
-        NKikimr::NMiniKQL::TValuePackerTransport<true> packer(typeMkql, NKikimr::NMiniKQL::EValuePackerVersion::V0);
+        NKikimr::NMiniKQL::TValuePackerTransport<true> packer(typeMkql, NKikimr::NMiniKQL::EValuePackerVersion::V0, NYql::DefaultDatumTestValidationMode);
 
         if (item) {
             auto values = TVector<NUdf::TUnboxedValue>{

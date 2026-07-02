@@ -8,6 +8,8 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
+struct TStickyPreloadState;
+
 using namespace NSharedCache;
 
 class TPrivatePageCache {
@@ -150,6 +152,9 @@ public:
         // storing sticky pages used refs guarantees that they won't be offload from Shared Cache
         THashMap<TPageOffset, TSharedPageRef> StickyPages;
         ECacheMode CacheMode = ECacheMode::Regular;
+
+    public:
+        TStickyPreloadState* PreloadByIndex = nullptr;
     };
 
 public:

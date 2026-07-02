@@ -37,6 +37,7 @@ namespace NWriter {
         TVector<TGroup> Groups; /* Per-group page collection settings */
         TVector<TSlot> Slots;   /* Storage slots, referred by rooms */
         bool StickyFlatIndex = true;
+        bool WriteBTreeIndexV2 = false;
     };
 
 }

@@ -13,9 +13,49 @@
 #include "flat_page_txidstat.h"
 #include "flat_page_txstatus.h"
 
+#include <variant>
+
 namespace NKikimr {
 namespace NTable {
     struct IPages;
+
+    /// Resolves the root TPageLocation from btree meta through page collections.
+    /// For v2 roots (byte-offset), returns the inline location directly.
+    /// For v1 roots (page-index), resolves through the appropriate page collection.
+    /// When LevelCount==0 the root IS a data page (use groupPages);
+    /// when LevelCount>0 the root is a btree index page (use indexPages).
+    inline NPage::TPageLocation GetBTreeRootLocation(
+        const NPage::TBtreeIndexMeta& meta,
+        const NPageCollection::IPageCollection* indexPages,
+        const NPageCollection::IPageCollection* groupPages)
+    {
+        if (meta.HasV2Root()) return meta.V2Root;
+        return (meta.LevelCount == 0 ? *groupPages : *indexPages).GetLocation(meta.RootPageIdV1());
+    }
+
+    /// Universal page reference — either a V1 page ID or a V2 byte-offset location.
+    struct TPageRef : std::variant<NPage::TPageId, NPage::TPageLocation> {
+        using TBase = std::variant<NPage::TPageId, NPage::TPageLocation>;
+        using TBase::variant;
+
+        bool IsValid() const noexcept {
+            return !(std::holds_alternative<NPage::TPageLocation>(*this) && !std::get<NPage::TPageLocation>(*this));
+        }
+
+        bool operator==(const TPageRef& other) const {
+            return IsValid() && static_cast<const TBase&>(*this) == static_cast<const TBase&>(other);
+        }
+        bool operator!=(const TPageRef& other) const { return !(*this == other); }
+    };
+
+    /// Version-agnostic child reference builder — works for V1 and V2 nodes.
+    inline TPageRef BuildPageRef(const NPage::TBtreeIndexNode& node, NPage::TRecIdx pos, bool isLeafLevel) {
+        if (node.GetStoredVersion() == NPage::TBtreeIndexNode::FormatVersionV2) {
+            auto type = isLeafLevel ? NPage::EPage::DataPage : NPage::EPage::BTreeIndex;
+            return node.GetChildLocationV2(pos, type);
+        }
+        return node.GetChildPageId(pos);
+    }
 
     /**
      * Cold parts are parts that don't have any metadata loaded into memory,
@@ -82,6 +122,18 @@ namespace NTable {
                     Y_ENSURE(groupId.Index < FlatGroups.size());
                     return FlatGroups[groupId.Index];
                 }
+            }
+
+            /// Resolves the root TPageLocation from the btree meta through the part's page collection.
+            /// When LevelCount==0 the root IS a data page (resolved via groupId),
+            /// when LevelCount>0 the root is a btree index page (resolved via index collection 0).
+            using TMetaRef = NPage::TBtreeIndexMeta;
+            using TPages = NPageCollection::IPageCollection;
+            NPage::TPageLocation GetRootLocation(const TPart* part, TGroupId groupId) const {
+                const auto& meta = GetBTree(groupId);
+                return ::NKikimr::NTable::GetBTreeRootLocation(meta,
+                    part->GetPageCollection(0),
+                    part->GetPageCollection(groupId.Index));
             }
         };
 
@@ -170,6 +222,7 @@ namespace NTable {
         virtual ui64 GetPageSize(ELargeObj lob, ui64 ref) const = 0;
         virtual NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const = 0;
         virtual NPage::TPageLocation GetPageLocation(NPage::TPageId pageId, NPage::TGroupId groupId) const = 0;
+        virtual const NPageCollection::IPageCollection* GetPageCollection(ui32 room) const = 0;
         virtual ui8 GetGroupChannel(NPage::TGroupId groupId) const = 0;
         virtual ui8 GetPageChannel(ELargeObj lob, ui64 ref) const = 0;
 
@@ -238,6 +291,18 @@ namespace NTable {
         const TEpoch Epoch;
         const TIntrusiveConstPtr<NPage::TTxStatusPage> TxStatusPage;
     };
+
+    /// Resolve a TPageRef to a concrete TPageLocation through the part's page collections.
+    inline NPage::TPageLocation ResolvePageLocation(const TPart* part, const TPageRef& ref, NPage::TGroupId groupId) {
+        return std::visit([&](const auto& val) -> NPage::TPageLocation {
+            using T = std::decay_t<decltype(val)>;
+            if constexpr (std::is_same_v<T, NPage::TPageId>) {
+                return part->GetPageLocation(val, groupId);
+            } else {
+                return val;
+            }
+        }, ref);
+    }
 
 }
 }

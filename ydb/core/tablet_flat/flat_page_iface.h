@@ -150,6 +150,7 @@ namespace NPage {
         TxIdStats = 11, /* Stats for uncommitted TxIds at compaction time */
         TxStatus = 12, /* Status of committed/removed transactions */
         BTreeIndex = 13,
+        Skip = 14,  /* v2: absorbs the byte range of excluded data/btree pages in TMeta */
     };
 
     struct TPageLocation {
@@ -182,14 +183,12 @@ namespace NPage {
         /** Access the offset as a page index — asserts the location was built from FromPageIndex */
         ui32 GetPageIndex() const { return Offset.AsPageIndex(); }
 
-        /** Ordering by Offset only */
+        /** In theory pages in different rooms may share same offset but differ in Type */
         auto operator<=>(const TPageLocation& rhs) const {
-            // 2 different pages at the same offset is impossible
-            Y_ENSURE(Offset != rhs.Offset || (Size == rhs.Size && Type == rhs.Type && Crc32 == rhs.Crc32),
-                "TPageLocation at same offset but differs (Size: " << Size << " vs " << rhs.Size << ", Type: " << Type
-                                                                   << " vs " << rhs.Type << ", Crc32: " << Crc32
-                                                                   << " vs " << rhs.Crc32 << ")");
-            return Offset <=> rhs.Offset;
+            if (auto cmp = Offset <=> rhs.Offset; cmp != 0) return cmp;
+            if (auto cmp = static_cast<ui16>(Type) <=> static_cast<ui16>(rhs.Type); cmp != 0) return cmp;
+            if (Size != rhs.Size) return Size <=> rhs.Size;
+            return Crc32 <=> rhs.Crc32;
         }
 
         bool operator==(const TPageLocation& rhs) const noexcept { return (operator<=>(rhs)) == 0; }

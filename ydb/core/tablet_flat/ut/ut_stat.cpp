@@ -18,13 +18,15 @@ namespace {
     struct TTouchEnv : public NTest::TTestEnv {
         const TSharedData* TryGetPage(const TPart *part, TPageLocation location, TGroupId groupId) override
         {
-            auto pageId = location.GetPageIndex();
             auto page = NTest::TTestEnv::TryGetPage(part, location, groupId);
 
-            bool newTouch = Touched[{part, groupId}].insert(pageId).second;
+            bool newTouch = Touched[{part, groupId}].insert(location.Offset).second;
 
             if (newTouch) {
-                auto type = part->GetPageType(pageId, groupId);
+                auto type = location.Type;
+                if (type == EPage::Undef && location.Offset.IsPageIndex()) {
+                    type = part->GetPageType(location.Offset.AsPageIndex(), groupId);
+                }
                 if (type == EPage::DataPage) {
                     auto dataPage = NPage::TDataPage(page);
 
@@ -44,7 +46,7 @@ namespace {
                 : page;
         }
 
-        TMap<std::pair<const TPart*, TGroupId>, TSet<TPageId>> Touched;
+        TMap<std::pair<const TPart*, TGroupId>, TSet<TPageOffset>> Touched;
         bool Faulty = true;
         ui64 TouchedBytes = 0, TouchedRows = 0, TouchedIndexBytes = 0, TouchedIndexPages = 0;
     };
@@ -1148,6 +1150,146 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
 
             Check(*subset, mode, 10, false, false);
         }
+    }
+}
+
+// ========================================================================
+// Section 3.4: V2 twin stats tests
+// ========================================================================
+
+Y_UNIT_TEST_SUITE(BuildStatsBTreeIndexV2) {
+    using namespace NTest;
+
+    NPage::TConf PageConfV2(size_t groups) {
+        NPage::TConf conf{ true, 2 * 1024 };
+
+        conf.Groups.resize(groups);
+        for (size_t group : xrange(groups)) {
+            conf.Group(group).IndexMin = 1024;
+            conf.Group(group).BTreeIndexNodeTargetSize = 512;
+        }
+        conf.SmallEdge = 19;
+        conf.LargeEdge = 29;
+        conf.CutIndexKeys = false;
+        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV2 = true;
+        conf.WriteFlatIndex = false;
+
+        return conf;
+    }
+
+    void CheckBTreeIndexV2(const TSubset& subset, ui64 expectedRows, ui64 expectedData, ui64 expectedIndex, ui32 histogramBucketsCount = 10) {
+        TStats stats;
+        TTouchEnv env;
+
+        const ui32 attempts = 25;
+        for (ui32 attempt : xrange(attempts)) {
+            if (NTable::BuildStatsBTreeIndex(subset, stats, histogramBucketsCount, &env, [](){})) {
+                break;
+            }
+            UNIT_ASSERT_C(attempt + 1 < attempts, "Too many attempts");
+        }
+
+        if (subset.Flatten.begin()->Slices->size() == 1) {
+            ui64 byIndexBytes = 0;
+            for (const auto& part : subset.Flatten) {
+                auto &root = part->IndexPages.GetBTree({});
+                byIndexBytes += root.GetDataSize() + root.GetGroupDataSize();
+            }
+            UNIT_ASSERT_VALUES_EQUAL(byIndexBytes, expectedData);
+        }
+
+        Cerr << "V2 Got     : " << stats.RowCount << " " << stats.DataSize.Size << " " << stats.IndexSize.Size << " " << stats.DataSizeHistogram.size() << " " << stats.RowCountHistogram.size() << Endl;
+        Cerr << "V2 Expected: " << expectedRows << " " << expectedData << " " << expectedIndex << " " << stats.DataSizeHistogram.size() << " " << stats.RowCountHistogram.size() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(stats.RowCount, expectedRows);
+        UNIT_ASSERT_VALUES_EQUAL(stats.DataSize.Size, expectedData);
+        UNIT_ASSERT_VALUES_EQUAL(stats.IndexSize.Size, expectedIndex);
+    }
+
+    // V1 conf for twin tests
+    NPage::TConf PageConfV1(size_t groups) {
+        NPage::TConf conf{ true, 2 * 1024 };
+
+        conf.Groups.resize(groups);
+        for (size_t group : xrange(groups)) {
+            conf.Group(group).IndexMin = 1024;
+            conf.Group(group).BTreeIndexNodeTargetSize = 512;
+        }
+        conf.SmallEdge = 19;
+        conf.LargeEdge = 29;
+        conf.CutIndexKeys = false;
+        conf.WriteBTreeIndex = true;
+
+        return conf;
+    }
+
+    // Twin test: write same data in v1 and v2, compare stats
+    void CheckTwin(const NTest::TMass& mass, ui32 partsCount, bool history = false) {
+        auto v1Conf = PageConfV1(mass.Model->Scheme->Families.size());
+        auto v2Conf = PageConfV2(mass.Model->Scheme->Families.size());
+
+        auto v1Subset = TMake(mass, v1Conf).Mixed(0, partsCount, TMixerOne{ }, history ? 0.3 : 0);
+        auto v2Subset = TMake(mass, v2Conf).Mixed(0, partsCount, TMixerOne{ }, history ? 0.3 : 0);
+
+        TStats v1Stats, v2Stats;
+        TTouchEnv v1Env, v2Env;
+
+        const ui32 attempts = 50;
+        for (ui32 attempt : xrange(attempts)) {
+            bool v1Ready = NTable::BuildStatsBTreeIndex(*v1Subset, v1Stats, 10, &v1Env, [](){});
+            bool v2Ready = NTable::BuildStatsBTreeIndex(*v2Subset, v2Stats, 10, &v2Env, [](){});
+            if (v1Ready && v2Ready) break;
+            UNIT_ASSERT_C(attempt + 1 < attempts, "Too many attempts");
+        }
+
+        // Row count must match between v1 and v2
+        UNIT_ASSERT_VALUES_EQUAL(v1Stats.RowCount, v2Stats.RowCount);
+
+        // Data size must match between v1 and v2
+        UNIT_ASSERT_VALUES_EQUAL(v1Stats.DataSize.Size, v2Stats.DataSize.Size);
+    }
+
+    Y_UNIT_TEST(Single_V2) {
+        auto subset = TMake(Mass0, PageConfV2(Mass0.Model->Scheme->Families.size())).Mixed(0, 1, TMixerOne{ });
+        CheckBTreeIndexV2(*subset, 24000, 2106439, 66171);
+    }
+
+    Y_UNIT_TEST(Single_Slices_V2) {
+        auto subset = TMake(Mass0, PageConfV2(Mass0.Model->Scheme->Families.size())).Mixed(0, 1, TMixerOne{ }, 0, 13);
+        subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
+        CheckBTreeIndexV2(*subset, 12816, 1121048, 66171);
+    }
+
+    Y_UNIT_TEST(Single_History_V2) {
+        auto subset = TMake(Mass0, PageConfV2(Mass0.Model->Scheme->Families.size())).Mixed(0, 1, TMixerOne{ }, 0.3);
+        CheckBTreeIndexV2(*subset, 24000, 3547100, 110814);
+    }
+
+    Y_UNIT_TEST(Single_Groups_V2) {
+        auto subset = TMake(Mass1, PageConfV2(Mass1.Model->Scheme->Families.size())).Mixed(0, 1, TMixerOne{ });
+        CheckBTreeIndexV2(*subset, 24000, 2460139, 33819);
+    }
+
+    Y_UNIT_TEST(Single_Groups_History_V2) {
+        auto subset = TMake(Mass1, PageConfV2(Mass1.Model->Scheme->Families.size())).Mixed(0, 1, TMixerOne{ }, 0.3);
+        CheckBTreeIndexV2(*subset, 24000, 4054050, 66039);
+    }
+
+    Y_UNIT_TEST(Single_Twin_V2) {
+        // Twin: v1 and v2 produce same stats
+        CheckTwin(Mass0, 1);
+    }
+
+    Y_UNIT_TEST(Single_History_Twin_V2) {
+        CheckTwin(Mass0, 1, true);
+    }
+
+    Y_UNIT_TEST(Single_Groups_Twin_V2) {
+        CheckTwin(Mass1, 1);
+    }
+
+    Y_UNIT_TEST(Single_Groups_History_Twin_V2) {
+        CheckTwin(Mass1, 1, true);
     }
 }
 

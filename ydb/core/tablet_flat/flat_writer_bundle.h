@@ -34,10 +34,11 @@ namespace NWriter {
 
             Blocks.resize(Groups.size() + 1);
             for (size_t group : xrange(Groups.size())) {
-                Blocks[group].Reset(
-                    new TBlocks(this, Groups[group].Channel, Groups[group].Cache, Groups[group].CacheMode, Groups[group].MaxBlobSize, conf.StickyFlatIndex));
+                Blocks[group].Reset(new TBlocks(this, Groups[group].Channel, Groups[group].Cache,
+                                                Groups[group].CacheMode, Groups[group].MaxBlobSize,
+                                                conf.StickyFlatIndex, false, conf.WriteBTreeIndexV2));
             }
-            // Outer Blob Collection
+            // Outer Blob Collection (v2 — still uses page-index addressing)
             Blocks[Groups.size()].Reset(new TBlocks(this, conf.OuterChannel, none, regular, Groups[0].MaxBlobSize, conf.StickyFlatIndex, true));
 
             Growth = new NTable::TScreen::TCook;
@@ -63,7 +64,7 @@ namespace NWriter {
         }
 
     private:
-        TPageOffset Write(TSharedData page, EPage type, ui32 group) override
+        TPageLocation Write(TSharedData page, EPage type, ui32 group) override
         {
             return Blocks.at(group)->Write(std::move(page), type);
         }

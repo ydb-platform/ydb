@@ -67,6 +67,14 @@ namespace {
             : Part(std::move(part))
             , Room(room)
         {
+            // Build byte-offset to pageId map
+            for (ui32 i = 0; i < Total(); i++) {
+                auto type = Part->Store->GetPageType(Room, i);
+                if (NTest::TStore::IsByteOffsetType(type)) {
+                    auto loc = Part->Store->GetPageLocation(Room, i);
+                    ByteOffsetToPageId[loc.Offset.AsByteOffset()] = i;
+                }
+            }
         }
 
         const TLogoBlobID& Label() const noexcept override
@@ -92,6 +100,15 @@ namespace {
         }
 
         NPageCollection::TBorder Bounds(TPageLocation location) const override {
+            if (location.Offset.IsByteOffset()) {
+                auto it = ByteOffsetToPageId.find(location.Offset.AsByteOffset());
+                if (it == ByteOffsetToPageId.end()) {
+                    return { 0, { Max<ui32>(), 0 }, { Max<ui32>(), 0 } };
+                }
+                ui32 pageId = it->second;
+                ui32 pageSize = Part->Store->GetPageSize(Room, pageId);
+                return { pageSize, { pageId, 0 }, { pageId, pageSize } };
+            }
             return Bounds(location.Offset.AsPageIndex());
         }
 
@@ -116,12 +133,13 @@ namespace {
 
         NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override
         {
-            return NTable::NPage::TPageLocation::FromPageIndex(pageId, Page(pageId).Size, NTable::NPage::EPage::Undef, Part->Store->GetPageChecksum(Room, pageId));
+            return Part->Store->GetPageLocation(Room, pageId);
         }
 
     private:
         TIntrusiveConstPtr<NTest::TPartStore> Part;
         ui32 Room;
+        THashMap<ui64, ui32> ByteOffsetToPageId;
     };
 
     struct TCheckResult {
@@ -169,9 +187,8 @@ namespace {
                 result.Pages += fetch.Pages.size();
 
                 for (auto& location : fetch.Pages) {
-                    auto pageId = location.GetPageIndex();
-                    auto* page = part->Store->GetPage(0, pageId);
-                    UNIT_ASSERT_C(page, "TLoader wants a missing page " << pageId);
+                    auto* page = part->Store->GetPage(0, location.Offset);
+                    UNIT_ASSERT_C(page, "TLoader wants a missing page at offset " << location.Offset);
                     env.Save({ location, NSharedCache::TSharedPageRef::MakePrivate(*page) });
                 }
             } else {

@@ -9,7 +9,9 @@
 #include <ydb/core/tablet_flat/util_fmt_abort.h>
 
 #include <util/generic/xrange.h>
+#include <util/generic/hash.h>
 #include <array>
+#include <util/system/backtrace.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -21,6 +23,10 @@ namespace NTest {
         };
 
     public:
+        static bool IsByteOffsetType(NPage::EPage type) noexcept {
+            return type == NPage::EPage::DataPage || type == NPage::EPage::BTreeIndex;
+        }
+
         using TData = const TSharedData;
 
         struct TEggs {
@@ -60,19 +66,42 @@ namespace NTest {
 
             if (page == Max<TPageId>()) return nullptr;
 
+            if (page >= PageCollections.at(room).size()) {
+                Cerr << "GetPage OOB: room=" << room << " page=" << page
+                     << " size=" << PageCollections.at(room).size() << Endl;
+                PrintBackTrace();
+            }
             return &PageCollections.at(room).at(page);
         }
 
         const TSharedData* GetPage(ui32 room, NPage::TPageOffset offset) const
         {
             Y_ENSURE(room < PageCollections.size(), "Room is out of bounds");
-            // TStore stores pages indexed by page index.
-            return &PageCollections.at(room).at(offset.AsPageIndex());
+            TPageId pageId;
+            if (offset.IsByteOffset()) {
+                auto it = ByteOffsetToPageId[room].find(offset.AsByteOffset());
+                Y_ENSURE(it != ByteOffsetToPageId[room].end(),
+                    "Byte offset " << offset.AsByteOffset() << " not found in room " << room);
+                pageId = it->second;
+            } else {
+                pageId = offset.AsPageIndex();
+            }
+            if (pageId >= PageCollections.at(room).size()) {
+                Cerr << "GetPage(offset) OOB: room=" << room << " pageId=" << pageId
+                     << " size=" << PageCollections.at(room).size()
+                     << " offset=" << offset.AsPageIndex()
+                     << " isByteOffset=" << offset.IsByteOffset() << Endl;
+                PrintBackTrace();
+            }
+            return &PageCollections.at(room).at(pageId);
         }
 
         size_t GetPageSize(ui32 room, ui32 page) const
         {
             Y_ENSURE(room < PageCollections.size(), "Room is out of bounds");
+            Y_ENSURE(page < PageCollections.at(room).size(),
+                "GetPageSize index " << page << " out of range for room " << room
+                << " (size=" << PageCollections.at(room).size() << ")");
 
             return PageCollections.at(room).at(page).size();
         }
@@ -80,6 +109,9 @@ namespace NTest {
         NPage::EPage GetPageType(ui32 room, ui32 page) const
         {
             Y_ENSURE(room < PageCollections.size(), "Room is out of bounds");
+            Y_ENSURE(page < PageTypes.at(room).size(),
+                "GetPageType index " << page << " out of range for room " << room
+                << " (size=" << PageTypes.at(room).size() << ")");
 
             return PageTypes.at(room).at(page);
         }
@@ -87,6 +119,9 @@ namespace NTest {
         ui32 GetPageChecksum(ui32 room, ui32 page) const
         {
             Y_ENSURE(room < PageCrc32.size(), "Room is out of bounds");
+            Y_ENSURE(page < PageCrc32.at(room).size(),
+                "GetPageChecksum index " << page << " out of range for room " << room
+                << " (size=" << PageCrc32.at(room).size() << ")");
 
             return PageCrc32.at(room).at(page);
         }
@@ -236,7 +271,7 @@ namespace NTest {
             return pageId;
         }
 
-        TPageOffset Write(TSharedData page, EPage type, ui32 group)
+        TPageLocation Write(TSharedData page, EPage type, ui32 group)
         {
             Y_ENSURE(group < PageCollections.size() - 1, "Invalid column group");
             Y_ENSURE(!Finished, "This store is already finished");
@@ -246,9 +281,18 @@ namespace NTest {
                 DataBytes[group] += page.size();
             }
             TPageId pageId = PageCollections[group].size();
+            ui64 byteOffset = CumulativeOffset[group]; // byte offset in cumulative stream
+
+            CumulativeOffset[group] += page.size();
+            PageOffset[group].push_back(byteOffset);
+
             PageCollections[group].emplace_back(std::move(page));
             PageTypes[group].push_back(type);
             PageCrc32[group].push_back(crc32);
+
+            if (IsByteOffsetType(type)) {
+                ByteOffsetToPageId[group][byteOffset] = pageId;
+            }
 
             if (group == 0) {
                 switch (type) {
@@ -274,7 +318,12 @@ namespace NTest {
                 }
             }
 
-            return TPageOffset::FromPageIndex(pageId);
+            auto size = PageCollections[group][pageId].size();
+            if (IsByteOffsetType(type)) {
+                return TPageLocation::FromByteOffset(byteOffset, size, type, crc32);
+            } else {
+                return TPageLocation::FromPageIndex(pageId, size, type, crc32);
+            }
         }
 
         void WriteInplace(TPageId page, TArrayRef<const char> body)
@@ -310,13 +359,36 @@ namespace NTest {
             Finished = true;
         }
 
+        TPageId ResolveByteOffset(ui32 room, ui64 offset) const
+        {
+            auto it = ByteOffsetToPageId[room].find(offset);
+            Y_ENSURE(it != ByteOffsetToPageId[room].end(),
+                "Byte offset " << offset << " not found in room " << room);
+            return it->second;
+        }
+
+        NTable::NPage::TPageLocation GetPageLocation(ui32 room, TPageId pageId) const
+        {
+            auto type = GetPageType(room, pageId);
+            auto size = GetPageSize(room, pageId);
+            auto crc32 = GetPageChecksum(room, pageId);
+            if (IsByteOffsetType(type)) {
+                auto byteOffset = PageOffset.at(room).at(pageId);
+                return NTable::NPage::TPageLocation::FromByteOffset(byteOffset, size, type, crc32);
+            }
+            return NTable::NPage::TPageLocation::FromPageIndex(pageId, size, type, crc32);
+        }
+
         explicit TStore(size_t groups, ui32 globOffset = 0)
             : Groups(groups)
             , GlobOffset(globOffset)
             , PageCollections(groups + 2)
             , PageTypes(groups + 2)
             , PageCrc32(groups + 2)
+            , PageOffset(groups + 2)
             , DataBytes(groups + 2)
+            , CumulativeOffset(groups + 2, 0)
+            , ByteOffsetToPageId(groups + 2)
         { }
 
         ui32 NextGlobOffset() const {
@@ -330,7 +402,10 @@ namespace NTest {
         TVector<TVector<TSharedData>> PageCollections;
         TVector<TVector<EPage>> PageTypes;
         TVector<TVector<ui32>> PageCrc32;
+        TVector<TVector<ui64>> PageOffset;
         TVector<ui64> DataBytes;
+        TVector<ui64> CumulativeOffset;
+        mutable TVector<THashMap<ui64, TPageId>> ByteOffsetToPageId;
 
         /*_ Sometimes will be replaced just with one root TPageId */
 
@@ -342,6 +417,70 @@ namespace NTest {
         TSharedData Meta;
         bool Rooted = false;
         bool Finished = false;
+    };
+
+    class TStorePageCollection : public NPageCollection::IPageCollection {
+        TIntrusiveConstPtr<TStore> Store;
+        ui32 Room;
+    public:
+        TStorePageCollection(TIntrusiveConstPtr<TStore> store, ui32 room)
+            : Store(std::move(store)), Room(room)
+        {}
+
+        const TLogoBlobID& Label() const noexcept override {
+            static TLogoBlobID dummy(0, 0, 0, 0, 0, 0);
+            return dummy;
+        }
+
+        ui32 Total() const noexcept override {
+            return Store->PageCollectionPagesCount(Room);
+        }
+
+        NPageCollection::TInfo Page(ui32 page) const override {
+            return {Store->GetPageSize(Room, page), 0};
+        }
+
+        NPageCollection::TBorder Bounds(ui32 page) const override {
+            ui32 size = Store->GetPageSize(Room, page);
+            return { size, { page, 0 }, { page, size } };
+        }
+
+        NPageCollection::TBorder Bounds(TPageLocation location) const override {
+            TPageId pageId;
+            if (location.Offset.IsByteOffset()) {
+                pageId = Store->ResolveByteOffset(Room, location.Offset.AsByteOffset());
+            } else {
+                pageId = location.Offset.AsPageIndex();
+            }
+            ui32 size = Store->GetPageSize(Room, pageId);
+            return { size, { pageId, 0 }, { pageId, size } };
+        }
+
+        NPageCollection::TGlobId Glob(ui32) const override {
+            Y_TABLET_ERROR("Not implemented");
+        }
+
+        bool Verify(ui32, TArrayRef<const char>) const override {
+            return true;
+        }
+
+        bool Verify(TPageLocation location, TArrayRef<const char> data) const override {
+            return data.size() == location.Size;
+        }
+
+        size_t BackingSize() const noexcept override {
+            return Store->PageCollectionBytes(Room);
+        }
+
+        NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override {
+            Y_ENSURE(pageId < Store->PageCollectionPagesCount(Room),
+                "GetLocation OOB: pageId=" << pageId << " room=" << Room
+                << " total=" << Store->PageCollectionPagesCount(Room));
+            auto type = Store->GetPageType(Room, pageId);
+            auto size = Store->GetPageSize(Room, pageId);
+            auto crc32 = Store->GetPageChecksum(Room, pageId);
+            return NTable::NPage::TPageLocation::FromPageIndex(pageId, size, type, crc32);
+        }
     };
 
 }

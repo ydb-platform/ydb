@@ -2,6 +2,7 @@
 
 #include "flat_sausage_record.h"
 #include "flat_sausage_grind.h"
+#include "flat_page_iface.h"
 #include "util_basics.h"
 
 namespace NKikimr {
@@ -9,11 +10,12 @@ namespace NPageCollection {
 
     class TWriter {
     public:
-        TWriter(TCookieAllocator &cookieAllocator, ui8 channel, ui32 maxBlobSize)
+        TWriter(TCookieAllocator &cookieAllocator, ui8 channel, ui32 maxBlobSize, bool v2Mode = false)
             : MaxBlobSize(maxBlobSize)
             , Channel(channel)
             , CookieAllocator(cookieAllocator)
             , Record(cookieAllocator.GroupBy(channel))
+            , V2Mode(v2Mode)
         {
 
         }
@@ -40,13 +42,42 @@ namespace NPageCollection {
                 }
             }
 
+            /* In v2 mode, data/btree pages are not recorded individually.
+               Their bytes go to the blob buffer but no TEntry/TExtra entry
+               is created. The cumulative byte range is captured later by a
+               skip entry via PushSkipEntry(), which also records how many
+               pages it absorbs. The count is carried out of the writer so
+               the page collection can report the real page count (structural
+               + skip-absorbed) to the shared cache, which exceeds the shrunk
+               TMeta structural count. The on-disk TMeta blob itself stays
+               structural-only — v1 and v2 share the same header/layout. */
+            if (V2Mode && (type == ui32(NTable::NPage::EPage::DataPage) || type == ui32(NTable::NPage::EPage::BTreeIndex))) {
+                SkippedBytes += body.size();
+                SkippedPages += 1;
+                if (crc32)
+                    *crc32 = Checksum(body);
+                return Max<ui32>();
+            }
+
             return Record.Push(type, body, crc32);
+        }
+
+        void PushSkipEntry()
+        {
+            Y_ENSURE(V2Mode);
+
+            if (SkippedBytes > 0) {
+                Record.PushSkip(SkippedBytes, (ui32)NTable::NPage::EPage::Skip, SkippedPages);
+                SkippedBytes = 0;
+                SkippedPages = 0;
+            }
         }
 
         void AddInplace(ui32 page, TArrayRef<const char> body)
         {
             Record.PushInplace(page, body);
         }
+
 
         TSharedData Finish(bool empty)
         {
@@ -104,6 +135,9 @@ namespace NPageCollection {
         TCookieAllocator &CookieAllocator;
         TVector<TGlob> Blobs;
         NPageCollection::TRecord Record;
+        bool V2Mode = false;
+        ui64 SkippedBytes = 0;
+        ui32 SkippedPages = 0;
     };
 
 }

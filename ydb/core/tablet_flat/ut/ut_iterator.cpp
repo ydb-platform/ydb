@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(TIterator) {
         }
 
         const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override {
-            auto pageId = location.GetPageIndex();
+            auto pageId = ResolvePageId(part, location, groupId);
             if (AutoLoad) {
                 if (Loaded[groupId].insert(pageId).second) {
                     return nullptr;

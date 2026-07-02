@@ -166,58 +166,6 @@ namespace NTest {
         ui32 Offset = Max<ui32>();
     };
 
-    class TStorePageCollection : public NPageCollection::IPageCollection {
-        TIntrusiveConstPtr<TStore> Store;
-        ui32 Room;
-    public:
-        TStorePageCollection(TIntrusiveConstPtr<TStore> store, ui32 room)
-            : Store(std::move(store)), Room(room)
-        {}
-
-        const TLogoBlobID& Label() const noexcept override {
-            static TLogoBlobID dummy(0, 0, 0, 0, 0, 0);
-            return dummy;
-        }
-
-        ui32 Total() const noexcept override {
-            return Store->PageCollectionPagesCount(Room);
-        }
-
-        NPageCollection::TInfo Page(ui32 page) const override {
-            return {Store->GetPageSize(Room, page), 0};
-        }
-
-        NPageCollection::TBorder Bounds(ui32 page) const override {
-            ui32 size = Store->GetPageSize(Room, page);
-            return { size, { page, 0 }, { page, size } };
-        }
-
-        NPageCollection::TBorder Bounds(TPageLocation location) const override {
-            return Bounds(location.Offset.AsPageIndex());
-        }
-
-        NPageCollection::TGlobId Glob(ui32) const override {
-            Y_TABLET_ERROR("Not implemented");
-        }
-
-        bool Verify(ui32, TArrayRef<const char>) const override {
-            return true;
-        }
-
-        bool Verify(TPageLocation location, TArrayRef<const char> data) const override {
-            return data.size() == location.Size;
-        }
-
-        size_t BackingSize() const noexcept override {
-            return Store->PageCollectionBytes(Room);
-        }
-
-        NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override {
-            auto* data = Store->GetPage(Room, pageId);
-            return NTable::NPage::TPageLocation::FromPageIndex(pageId, data->size(), NTable::NPage::EPage::Undef, Store->GetPageChecksum(Room, pageId));
-        }
-    };
-
     class TForwardEnv : public IPages {
         using TPageLocation = NTable::NPage::TPageLocation;
 

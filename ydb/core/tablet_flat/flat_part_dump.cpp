@@ -177,7 +177,7 @@ namespace {
         if (part.IndexPages.HasBTree()) {
             auto meta = part.IndexPages.GetBTree({});
             if (meta.LevelCount) {
-                BTreeIndexNode(part, meta);
+                BTreeIndexNode(part, meta.ToChild());
             } else {
                 Out
                     << " + BTreeIndex{Empty, "

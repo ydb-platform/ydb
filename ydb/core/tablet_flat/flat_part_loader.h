@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.h"
 #include "flat_part_store.h"
+#include "flat_part_walker.h"
 #include "flat_sausagecache.h"
 #include "shared_cache_events.h"
 #include "util_fmt_abort.h"
@@ -315,5 +316,6 @@ namespace NTable {
         NProto::TRoot Root;
         TPartView PartView;
         THolder<TLoaderEnv> LoaderEnv;
+        TVector<THolder<TBTreePartWalker>> PreloadBTreeWalkers;
     };
 }}

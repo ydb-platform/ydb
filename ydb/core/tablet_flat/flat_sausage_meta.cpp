@@ -81,6 +81,8 @@ ui64 TMeta::GetPageSize(ui32 pageId) const
 NTable::NPage::TPageLocation TMeta::GetLocation(ui32 pageId) const
 {
     Y_ENSURE(pageId < Header->Pages);
+    Y_ENSURE(Extra[pageId].Type != ui32(NTable::NPage::EPage::Skip),
+        "Cannot get location for skip page entry by pageId");
 
     const ui64 offset = (pageId == 0) ? 0 : Index[pageId - 1].Page;
     const ui64 size = Index[pageId].Page - offset;
@@ -109,6 +111,24 @@ TStringBuf TMeta::GetPageInplaceData(ui32 pageId) const
     const ui64 begin = (pageId == 0) ? 0 : Index[pageId - 1].Inplace;
 
     return TStringBuf(InboundData + begin, InboundData + end);
+}
+
+ui32 TMeta::SkippedPages() const noexcept
+{
+    if (!Extra || !Header->Pages)
+        return 0;
+
+    ui32 skipped = 0;
+    /* Skip entries are contiguous at the start — the writer flushes
+       pending skip ranges before any structural page entry.
+       Crc32 stores the net page contribution (pages - 1) for new-format
+       entries, or 0 for old-format entries with no info. */
+    for (ui32 i = 0; i < Header->Pages; i++) {
+        if (Extra[i].Type != ui32(NTable::NPage::EPage::Skip))
+            break;
+        skipped += Extra[i].Crc32;
+    }
+    return skipped;
 }
 
 ui32 Checksum(TArrayRef<const char> body) noexcept

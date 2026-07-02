@@ -7,6 +7,7 @@
 #include <ydb/core/tablet_flat/flat_page_other.h>
 #include <ydb/core/tablet_flat/flat_page_frames.h>
 #include <ydb/core/tablet_flat/flat_page_blobs.h>
+#include <ydb/core/tablet_flat/flat_page_btree_index.h>
 #include <ydb/core/tablet_flat/flat_fwd_blobs.h>
 #include <ydb/core/tablet_flat/flat_fwd_sieve.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_steps.h>
@@ -1594,6 +1595,494 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCache) {
             {1382, 956, 577, 0, 143});
         wrap.To(12).Fill({22, 26, 0, 1, 2, 7, 8, 9, 11, 12, 13},
             {1782, 1782, 577, 0, 143});
+    }
+}
+
+// ========================================================================
+// Section 3.3: V2 forward cache test infrastructure and twin tests
+// ========================================================================
+
+// V2 b-tree layout discovery: walks the b-tree from root and collects
+// page offsets, sizes, and types for each page at each level.
+struct TV2PageEntry {
+    NFwd::TPageOffset Offset;
+    EPage Type;
+    ui64 Size;      // logical page size (from meta/child location, not stored body size)
+    ui64 StoredSize; // actual stored data body size (from TStore::GetPage)
+
+    bool operator<(const TV2PageEntry& other) const { return Offset < other.Offset; }
+};
+
+static TVector<TVector<TV2PageEntry>> DiscoverV2Layout(const TPartStore& part, const NPage::TBtreeIndexMeta& meta) {
+    TVector<TVector<TV2PageEntry>> layout;
+    layout.resize(meta.LevelCount + 1);
+
+    // Root level [0] — use meta.V2Root.Size (logical page size from index meta)
+    auto rootLoc = meta.V2Root;
+    EPage rootType = meta.LevelCount > 0 ? EPage::BTreeIndex : EPage::DataPage;
+    auto* rootData = part.Store->GetPage(0, rootLoc.Offset);
+    UNIT_ASSERT(rootData);
+    layout[0].push_back({rootLoc.Offset, rootType, rootLoc.Size, rootData->size()});
+
+    // Walk down the tree level by level
+    for (ui32 level = 0; level < meta.LevelCount; level++) {
+        for (auto& entry : layout[level]) {
+            auto* blob = part.Store->GetPage(0, entry.Offset);
+            UNIT_ASSERT(blob);
+            NPage::TBtreeIndexNode node(*blob);
+
+            bool isLeafLevel = (level + 1 >= meta.LevelCount);
+            for (auto pos : xrange(node.GetChildrenCount())) {
+                auto ref = BuildPageRef(node, pos, isLeafLevel);
+                auto childLoc = ResolvePageLocation(&part, ref, NPage::TGroupId{0});
+
+                EPage childType = isLeafLevel ? EPage::DataPage : EPage::BTreeIndex;
+                auto* childData = part.Store->GetPage(0, childLoc.Offset);
+                UNIT_ASSERT(childData);
+                // Use childLoc.Size (logical page size from TChildV2) rather than
+                // childData->size() (stored body size) — the cache tracks logical sizes.
+                layout[level + 1].push_back({childLoc.Offset, childType, childLoc.Size, childData->size()});
+            }
+        }
+    }
+
+    return layout;
+}
+
+// V2-aware forward cache test wrapper — uses TPageOffset (byte-offset) directly.
+struct TCacheWrapV2 : public NTest::TSteps<TCacheWrapV2>, protected NFwd::IPageLoadingQueue {
+    using TPartStore = NTable::NTest::TPartStore;
+
+    TCacheWrapV2(TIntrusiveConstPtr<TPartStore> part, TIntrusiveConstPtr<TSlices> slices, ui64 aLo, ui64 aHi)
+        : Part(std::move(part))
+        , TestPageCollection(new TTestPageCollection(Part->Store, 0))
+        , Cache(NFwd::CreateCache(Part.Get(), IndexPageLocator, {}, slices, TestPageCollection, TestPageCollection))
+        , AheadLo(aLo)
+        , AheadHi(aHi)
+    {}
+
+    ui64 AddToQueue(NFwd::TPageOffset offset, EPage type, ui64 size, ui32 crc32) override
+    {
+        Queue.emplace_back(offset, size, type, crc32);
+        return size;
+    }
+
+    TCacheWrapV2& Get(NFwd::TPageOffset offset, EPage type, bool has, bool grow, bool need)
+    {
+        auto got = Cache->Get(this, offset, type, AheadLo);
+
+        if (has != bool(got.Page) || grow != got.Grow || need != got.Need) {
+            Log()
+                << "Page offset " << offset << " lookup got"
+                << " data="  << bool(got.Page) << "(" << has << ")"
+                << ", grow=" << got.Grow << "(" << grow << ")"
+                << ", need=" << got.Need << "(" << need << ")"
+                << Endl;
+            UNIT_ASSERT(false);
+        }
+
+        Grow = Grow || got.Grow;
+        return *this;
+    }
+
+    TCacheWrapV2& Fill(const TVector<NFwd::TPageOffset>& offsets)
+    {
+        if (std::exchange(Grow, false)) {
+            Cache->Forward(this, AheadHi);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(Queue.size(), offsets.size(), CurrentStepStr());
+
+        TVector<NPageCollection::TLoadedPage> load;
+        NTest::TTestEnv testEnv;
+        size_t i = 0;
+        for (auto& loc : std::exchange(Queue, TDeque<NPage::TPageLocation>{})) {
+            UNIT_ASSERT_VALUES_EQUAL_C(loc.Offset, offsets[i++], CurrentStepStr());
+            load.emplace_back(loc, *testEnv.TryGetPage(Part.Get(), loc, { }));
+        }
+
+        Shuffle(load.begin(), load.end(), Rnd);
+
+        for (auto &page : load) {
+            Cache->Fill(page, {}, page.Location.Type);
+        }
+
+        return *this;
+    }
+
+    TCacheWrapV2& Forward(const TVector<NFwd::TPageOffset>& offsets)
+    {
+        UNIT_ASSERT_VALUES_EQUAL_C(Queue.size(), offsets.size(), CurrentStepStr());
+        for (size_t i = 0; i < Queue.size(); i++) {
+            UNIT_ASSERT_VALUES_EQUAL_C(Queue[i].Offset, offsets[i], CurrentStepStr());
+        }
+
+        return *this;
+    }
+
+    TCacheWrapV2& Apply(const TVector<NFwd::TPageOffset>& offsets)
+    {
+        TVector<NPageCollection::TLoadedPage> load;
+        NTest::TTestEnv testEnv;
+        for (auto offset : offsets) {
+            NPage::TPageLocation location;
+            bool found = false;
+            for (auto it = Queue.begin(); it != Queue.end(); it++) {
+                if (it->Offset == offset) {
+                    found = true;
+                    location = *it;
+                    Queue.erase(it);
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(found, CurrentStepStr());
+            load.emplace_back(location, *testEnv.TryGetPage(Part.Get(), location, { }));
+        }
+
+        Shuffle(load.begin(), load.end(), Rnd);
+
+        for (auto &page : load) {
+            Cache->Fill(page, {}, page.Location.Type);
+        }
+
+        return *this;
+    }
+
+    TCacheWrapV2& CheckLocator(TVector<NFwd::TPageOffset> offsets)
+    {
+        TVector<NFwd::TPageOffset> actual;
+        for (const auto& it : IndexPageLocator.GetMap()) {
+            actual.push_back(it.first);
+        }
+
+        std::sort(offsets.begin(), offsets.end());
+
+        UNIT_ASSERT_VALUES_EQUAL_C(actual, offsets, CurrentStepStr());
+
+        return *this;
+    }
+
+    TIntrusiveConstPtr<TPartStore> Part;
+    TIntrusiveConstPtr<TTestPageCollection> TestPageCollection;
+    NFwd::TIndexPageLocator IndexPageLocator;
+    TAutoPtr<NFwd::IPageLoadingLogic> Cache;
+    const ui64 AheadLo;
+    const ui64 AheadHi;
+    bool Grow = false;
+
+private:
+    TDeque<NPage::TPageLocation> Queue;
+    TMersenne<ui64> Rnd;
+};
+
+// Build a V2 part with the same structure as the V1 CookPart() in NFwd_TBTreeIndexCache:
+// 40 rows, btree with PageRows=2, BTreeIndexNodeKeysMin=Max=2.
+// This creates:
+//   20 data pages, 2 internal nodes at level 1, 1 root node at level 0.
+static TPartEggs CookPartV2() {
+    NPage::TConf conf;
+
+    conf.WriteBTreeIndex = true;
+    conf.WriteBTreeIndexV2 = true;
+    conf.WriteFlatIndex = false;
+    conf.Group(0).PageRows = 2;
+    conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
+
+    TLayoutCook lay;
+
+    lay
+        .Col(0, 0,  NScheme::NTypeIds::Uint32)
+        .Col(0, 1,  NScheme::NTypeIds::Uint32)
+        .Key({0});
+
+    TPartCook cook(lay, conf);
+
+    for (ui32 i : xrange<ui32>(0, 40)) {
+        cook.Add(*TSchemedCookRow(*lay).Col(i, i * 100));
+    }
+
+    return cook.Finish();
+}
+
+Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
+    using namespace NFwd;
+    using namespace NTest;
+
+    // Simple single-level V2 iteration test
+    Y_UNIT_TEST(V2_Iteration_Simple)
+    {
+        NPage::TConf conf;
+        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV2 = true;
+        conf.WriteFlatIndex = false;
+        conf.Group(0).PageRows = 999;
+
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::Uint32)
+            .Key({0});
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange<ui32>(0, 10)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i, i * 100));
+        }
+        TPartEggs eggs = cook.Finish();
+
+        const auto& meta = eggs.Lone()->IndexPages.BTreeGroups[0];
+        UNIT_ASSERT_C(meta.HasV2Root(), "V2 part must have V2 root");
+        UNIT_ASSERT_C(meta.V2Root.Offset.IsByteOffset(), "V2 root must be byte offset");
+
+        TTestEnv env;
+        auto index = CreateIndexIter(eggs.Lone().Get(), &env, {});
+        ui64 count = 0;
+        for (size_t i = 0; ; i++) {
+            auto ready = i == 0 ? index->Seek(0) : index->Next();
+            if (ready != EReady::Data) {
+                Y_ENSURE(ready != EReady::Page, "Unexpected page fault");
+                break;
+            }
+            count++;
+        }
+        UNIT_ASSERT_C(count > 0, "V2 part iteration must return pages");
+    }
+
+    // Multi-level V2: load root, walk through all btree levels to data.
+    // Follows the same pattern as V1: only Get the first page at each level,
+    // then Fill all pages (Forward adds remaining from queue).
+    Y_UNIT_TEST(V2_MultiLevel)
+    {
+        const auto eggs = CookPartV2();
+        const auto part = eggs.Lone();
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+        UNIT_ASSERT_C(meta.LevelCount >= 1, "Need multi-level btree");
+
+        auto layout = DiscoverV2Layout(*part, meta);
+        TCacheWrapV2 wrap(part, nullptr, 200, Max<ui64>());
+
+        int step = 0;
+
+        // Level 0 (root): request and fill
+        const auto& root = layout[0][0];
+        wrap.To(step++).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(step++).Fill({root.Offset});
+        wrap.To(step++).Get(root.Offset, EPage::BTreeIndex, true, false, true);
+
+        // Btree index levels: only Get the first page; Fill handles the rest via Forward
+        for (ui32 lev = 1; lev < layout.size() - 1; lev++) {
+            TVector<TPageOffset> offsets;
+            for (auto& c : layout[lev]) offsets.push_back(c.Offset);
+
+            // Request first page at this level → queue has entries → grow=true
+            wrap.To(step++).Get(layout[lev][0].Offset, EPage::BTreeIndex, false, true, true);
+            // Fill all pages at this level (Forward adds remaining from queue)
+            wrap.To(step++).Fill(offsets);
+            // Verify first is now cached
+            wrap.To(step++).Get(layout[lev][0].Offset, EPage::BTreeIndex, true, false, true);
+        }
+
+        // Last level (data pages)
+        ui32 dataLev = layout.size() - 1;
+        if (!layout[dataLev].empty()) {
+            const auto& data0 = layout[dataLev][0];
+            wrap.To(step++).Get(data0.Offset, EPage::DataPage, false, true, true);
+
+            TVector<TPageOffset> dataOffsets;
+            for (auto& c : layout[dataLev]) dataOffsets.push_back(c.Offset);
+            wrap.To(step++).Fill(dataOffsets);
+            wrap.To(step++).Get(data0.Offset, EPage::DataPage, true, false, true);
+        }
+    }
+
+    // Locator: after Fill(root) it must track root + full L1 child offsets
+    Y_UNIT_TEST(V2_IndexPagesLocator)
+    {
+        const auto eggs = CookPartV2();
+        const auto part = eggs.Lone();
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+
+        auto layout = DiscoverV2Layout(*part, meta);
+        TCacheWrapV2 wrap(part, nullptr, 200, 350);
+
+        // After Fill(root): locator tracks root + L1 children (added via AdvancePending)
+        wrap.To(0).Get(layout[0][0].Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(1).Fill({layout[0][0].Offset});
+
+        // Build expected: only root + L1 (AdvancePending from root only adds L1)
+        TVector<TPageOffset> expected = { layout[0][0].Offset };
+        if (layout.size() > 1) {
+            for (auto& c : layout[1]) {
+                if (c.Type == EPage::BTreeIndex) {
+                    expected.push_back(c.Offset);
+                }
+            }
+        }
+        std::sort(expected.begin(), expected.end());
+        wrap.To(2).CheckLocator(expected);
+    }
+
+    // GetTwice: same page requested twice
+    Y_UNIT_TEST(V2_GetTwice)
+    {
+        const auto eggs = CookPartV2();
+        const auto part = eggs.Lone();
+        UNIT_ASSERT(part->IndexPages.BTreeGroups[0].HasV2Root());
+
+        auto layout = DiscoverV2Layout(*part, part->IndexPages.BTreeGroups[0]);
+        TCacheWrapV2 wrap(part, nullptr, 200, 350);
+        const auto& root = layout[0][0];
+
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(1).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(2).Fill({root.Offset});
+        wrap.To(3).Get(root.Offset, EPage::BTreeIndex, true, false, true);
+        wrap.To(4).Get(root.Offset, EPage::BTreeIndex, true, false, true);
+    }
+
+    // Forward_OnlyUsed: only the used page gets loaded (no Forward for L1)
+    Y_UNIT_TEST(V2_Forward_OnlyUsed)
+    {
+        const auto eggs = CookPartV2();
+        const auto part = eggs.Lone();
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+
+        auto layout = DiscoverV2Layout(*part, meta);
+        // Use AheadHi=0 to prevent Forward from adding extra pages
+        TCacheWrapV2 wrap(part, nullptr, 200, 0);
+        const auto& root = layout[0][0];
+
+        // Level 0: load root
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(1).Fill({root.Offset});
+
+        // Level 1: request first child only
+        if (layout.size() > 1 && !layout[1].empty()) {
+            const auto& first = layout[1][0];
+            // After Fill(root), L1 queue has children → grow=true
+            wrap.To(2).Get(first.Offset, EPage::BTreeIndex, false, true, true);
+            // Fill only first child (Forward won't add more with AheadHi=0)
+            wrap.To(3).Fill({first.Offset});
+            // Verify first is cached; queue still has remaining entries → grow=true
+            wrap.To(4).Get(first.Offset, EPage::BTreeIndex, true, true, true);
+        }
+    }
+
+    // Skip_Done: skip past a page that's already loaded
+    Y_UNIT_TEST(V2_Skip_Done)
+    {
+        const auto eggs = CookPartV2();
+        const auto part = eggs.Lone();
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+
+        auto layout = DiscoverV2Layout(*part, meta);
+        TCacheWrapV2 wrap(part, nullptr, 200, 350);
+        const auto& root = layout[0][0];
+
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(1).Fill({root.Offset});
+
+        if (layout.size() > 1 && layout[1].size() > 1) {
+            const auto& first = layout[1][0];
+            const auto& second = layout[1][1];
+
+            // Request first L1 → Forward will add rest on Fill
+            wrap.To(2).Get(first.Offset, EPage::BTreeIndex, false, true, true);
+            // Fill all L1 pages (Forward adds second, queue has both)
+            TVector<TPageOffset> allL1;
+            for (auto& c : layout[1]) allL1.push_back(c.Offset);
+            wrap.To(3).Fill(allL1);
+
+            // Now both are cached; skip to second
+            wrap.To(4).Get(second.Offset, EPage::BTreeIndex, true, false, true);
+        }
+    }
+
+    // Trace_BTree
+    Y_UNIT_TEST(V2_Trace_BTree)
+    {
+        const auto eggs = CookPartV2();
+        const auto part = eggs.Lone();
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+
+        auto layout = DiscoverV2Layout(*part, meta);
+        TCacheWrapV2 wrap(part, nullptr, 200, 350);
+        const auto& root = layout[0][0];
+
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(1).Fill({root.Offset});
+        wrap.To(2).Get(root.Offset, EPage::BTreeIndex, true, false, true);
+
+        if (layout.size() > 1 && !layout[1].empty()) {
+            // Request first L1 page → grow=true (queue has entries)
+            TVector<TPageOffset> l1Offsets;
+            for (auto& c : layout[1]) l1Offsets.push_back(c.Offset);
+            wrap.To(3).Get(layout[1][0].Offset, EPage::BTreeIndex, false, true, true);
+            // Fill all L1 pages (Forward adds remaining from queue)
+            wrap.To(4).Fill(l1Offsets);
+            wrap.To(5).Get(layout[1][0].Offset, EPage::BTreeIndex, true, false, true);
+        }
+    }
+
+    // End-of-data
+    Y_UNIT_TEST(V2_End)
+    {
+        const auto eggs = CookPartV2();
+        const auto part = eggs.Lone();
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+
+        auto layout = DiscoverV2Layout(*part, meta);
+        TCacheWrapV2 wrap(part, nullptr, 200, 350);
+        const auto& root = layout[0][0];
+
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(1).Fill({root.Offset});
+        wrap.To(2).Get(root.Offset, EPage::BTreeIndex, true, false, true);
+    }
+
+    // Slices
+    Y_UNIT_TEST(V2_Slices)
+    {
+        const auto eggs = CookPartV2();
+        const auto part = eggs.Lone();
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+
+        auto layout = DiscoverV2Layout(*part, meta);
+        TIntrusivePtr<TSlices> slices = new TSlices;
+        if (layout.size() > 2) {
+            slices->emplace_back(TSlice({}, {}, 10, 16, true, false));
+            slices->emplace_back(TSlice({}, {}, 20, 23, true, true));
+        }
+
+        TCacheWrapV2 wrap(part, slices, 1000, 1000);
+        const auto& root = layout[0][0];
+
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(1).Fill({root.Offset});
+        wrap.To(2).Get(root.Offset, EPage::BTreeIndex, true, false, true);
+    }
+
+    // ManyApplies: apply pages one by one
+    Y_UNIT_TEST(V2_ManyApplies)
+    {
+        const auto eggs = CookPartV2();
+        const auto part = eggs.Lone();
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+
+        auto layout = DiscoverV2Layout(*part, meta);
+        TCacheWrapV2 wrap(part, nullptr, 1000, 1000);
+        const auto& root = layout[0][0];
+
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(1).Fill({root.Offset});
+
+        if (layout.size() > 1 && !layout[1].empty()) {
+            TVector<TPageOffset> l1Offsets;
+            for (auto& c : layout[1]) l1Offsets.push_back(c.Offset);
+
+            // Get first child to populate queue; grow=true (queue has entries)
+            wrap.To(2).Get(layout[1][0].Offset, EPage::BTreeIndex, false, true, true);
+            wrap.To(3).Apply({layout[1][0].Offset});
+        }
     }
 }
 

@@ -18,6 +18,7 @@ namespace NWriter {
         using EPage = NTable::NPage::EPage;
         using TPageId = NTable::NPage::TPageId;
         using TPageOffset = NTable::NPage::TPageOffset;
+        using TPageLocation = NTable::NPage::TPageLocation;
         using TPageCollection = TPrivatePageCache::TPageCollection;
 
         struct TResult : TMoveOnly {
@@ -26,14 +27,15 @@ namespace NWriter {
             TVector<NPageCollection::TLoadedPage> StickyPages;
         };
 
-        TBlocks(ICone *cone, ui8 channel, ECache cache, ECacheMode cacheMode, ui32 block, bool stickyFlatIndex, bool isOuter = false)
+        TBlocks(ICone *cone, ui8 channel, ECache cache, ECacheMode cacheMode, ui32 block, bool stickyFlatIndex, bool isOuter = false, bool v2Mode = false)
             : Cone(cone)
             , Channel(channel)
             , Cache(cache)
             , CacheMode(cacheMode)
             , StickyFlatIndex(stickyFlatIndex)
             , IsOuter(isOuter)
-            , Writer(Cone->CookieRange(1), Channel, block)
+            , V2Mode(v2Mode && !isOuter)
+            , Writer(Cone->CookieRange(1), Channel, block, V2Mode)
         {
         }
 
@@ -44,6 +46,15 @@ namespace NWriter {
 
         TResult Finish()
         {
+            /* In v2 mode, flush any pending skip range. This handles the case
+               where only data/btree pages were written (e.g. non-main group
+               page collections) — the skip entry still needs to be present for
+               byte-offset continuity. PushSkipEntry() is idempotent: a no-op
+               when there is no pending skip range. */
+            if (V2Mode) {
+                Writer.PushSkipEntry();
+            }
+
             if (auto meta = Writer.Finish(false /* omit empty page collection */)) {
                 for (auto &glob : Writer.Grab()) {
                     Cone->Put(std::move(glob));
@@ -65,11 +76,15 @@ namespace NWriter {
             return std::exchange(Result, {});
         }
 
-        TPageOffset Write(TSharedData raw, EPage type)
+        TPageLocation Write(TSharedData raw, EPage type)
         {
             ui32 crc32 = 0;
 
-            Writer.AddPage(raw, (ui32)type, &crc32);
+            if (V2Mode && type != EPage::DataPage && type != EPage::BTreeIndex) {
+                Writer.PushSkipEntry();
+            }
+
+            auto pageId = Writer.AddPage(raw, (ui32)type, &crc32);
 
             for (auto &glob : Writer.Grab()) {
                 Cone->Put(std::move(glob));
@@ -84,6 +99,7 @@ namespace NWriter {
             }
             Offset += raw.size();
             WrittenPageCount++;
+            LastPageId = pageId;
 
             if (NTable::TLoader::NeedIn(type) || Cache == ECache::Ever || StickyFlatIndex && type == EPage::FlatIndex) {
                 Result.StickyPages.emplace_back(location, std::move(raw));
@@ -93,12 +109,16 @@ namespace NWriter {
                 Result.RegularPages.emplace_back(location, std::move(raw));
             }
 
-            return location.Offset;
+            return location;
         }
 
         ui32 GetWrittenPageId(ui32 /*group*/) const noexcept
         {
-            return WrittenPageCount - 1;
+            /* LastPageId captures the most recent AddPage() return value.
+               In v2 mode, for structural pages, it returns the correct compacted index (1-based after skip entry).
+               For DataPage/BTreeIndex ir returns Max<ui32>() (no TEntry entry).
+               */
+            return LastPageId;
         }
 
         void WriteInplace(TPageId page, TArrayRef<const char> body)
@@ -119,11 +139,13 @@ namespace NWriter {
         const ECacheMode CacheMode = ECacheMode::Regular;
         const bool StickyFlatIndex;
         const bool IsOuter;
+        const bool V2Mode;
 
         NPageCollection::TWriter Writer;
         TResult Result;
         ui64 Offset = 0;
         ui32 WrittenPageCount = 0;
+        ui32 LastPageId = Max<ui32>();
     };
 }
 }

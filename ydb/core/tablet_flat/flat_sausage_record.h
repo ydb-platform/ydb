@@ -47,6 +47,23 @@ namespace NPageCollection {
             return Index.size() - 1;
         }
 
+        ui32 PushSkip(ui64 totalOffset, ui32 type, ui32 pages)
+        {
+            Y_ENSURE(totalOffset >= Offset,
+                "PushSkip: totalOffset " << totalOffset << " less than current Offset " << Offset);
+
+            Index.push_back({ totalOffset, Inbound.size() });
+            /* Crc32 stores the net page contribution beyond the skip entry
+               itself: (pages - 1) when pages > 0, or 0 for old-format entries.
+               Skip entries have no data to checksum, so the field is repurposed.
+               The total with skipped pages is MetaPages + sum(Crc32). */
+            Extra.push_back({ type, pages ? pages - 1 : 0 });
+
+            Offset = totalOffset;
+
+            return Index.size() - 1;
+        }
+
         void PushInplace(ui32 page, TArrayRef<const char> body)
         {
             Y_ENSURE(Index && page == Index.size() - 1);

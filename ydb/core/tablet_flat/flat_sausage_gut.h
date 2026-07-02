@@ -14,6 +14,8 @@ namespace NPageCollection {
 
         virtual const TLogoBlobID& Label() const noexcept = 0;
         virtual ui32 Total() const noexcept = 0;
+        /* Number of structural pages addressable by TPageId */
+        virtual ui32 MetaPages() const noexcept { return Total(); }
         virtual TInfo Page(ui32 page) const = 0;
         virtual TBorder Bounds(ui32 page) const = 0;
         /// Maps a page location to the blob storage range containing it

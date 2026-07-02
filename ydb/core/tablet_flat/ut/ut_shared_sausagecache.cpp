@@ -562,6 +562,71 @@ Y_UNIT_TEST(BigCache_BTreeIndex) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 118);
 }
 
+// Section 3.5: V2 shared cache test.
+// V2 parts absorb data/btree pages into EPage::Skip entries, so TMeta only
+// declares structural pages. The page collection carries the real page count
+// (structural + skip-absorbed) so the shared cache accounts for every page
+// saved via TEvSaveCompactedPages, and TryKeepInMemory enumeration walks only
+// the structural TMeta pages (skipping EPage::Skip). This test exercises the
+// real compaction -> shared cache round-trip with V2 enabled, which used to
+// crash at "Saved more pages N than collection declares M".
+Y_UNIT_TEST(BigCache_BTreeIndex_V2) {
+    TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+    auto counters = GetSharedPageCounters(env);
+
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2(true);
+    env->GetAppData().FeatureFlags.SetPreferLocalDBBtreeIndexV2(true);
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
+
+    SetupSharedCache(env, 20_MB, true);
+
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(key, std::move(value)) });
+    }
+
+    Cerr << "...compacting (v2)" << Endl;
+    env.SendSync(new NFake::TEvCompact(TableId));
+    Cerr << "...waiting until compacted (v2)" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+
+    LogCounters(counters);
+    // The compaction must not crash the shared cache. After compaction all
+    // compacted pages are resident (active), nothing passive or evicted.
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 0);
+    UNIT_ASSERT_GT(counters->ActivePages->Val(), 0);
+
+    // Reads should be served from the resident compacted pages (cache hits).
+    TRetriedCounters retried;
+    for (i64 key = 99; key >= 0; --key) {
+        DoReadRows(env, new TTxReadRows(key, retried));
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 0);
+
+    // After a cache restart, reads must re-fetch from blob storage and
+    // repopulate the cache — the V2 page collection must still declare the
+    // right page count so TEvRequest/TEvResult round-trips correctly.
+    RestartAndClearCache(env);
+    LogCounters(counters);
+    retried = {};
+    for (i64 key = 99; key >= 0; --key) {
+        DoReadRows(env, new TTxReadRows(key, retried), true);
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_GT(counters->CacheMissPages->Val(), 0);
+    UNIT_ASSERT_GT(counters->ActivePages->Val(), 0);
+}
+
 Y_UNIT_TEST(BigCache_FlatIndex) {
     TMyEnvBase env;
     env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
@@ -1680,8 +1745,14 @@ Y_UNIT_TEST(Compaction) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 122);
 
     env->SimulateSleep(TDuration::Seconds(3));
-    // nothing should crash    
+    // nothing should crash
 }
+
+// Section 3.5: V2 shared cache support implemented (see BigCache_BTreeIndex_V2).
+// V2 page collections carry the real page count (structural + skip-absorbed
+// data/btree pages) into the shared cache, and TryKeepInMemory enumeration
+// walks only the structural TMeta pages (skipping EPage::Skip). The on-disk
+// TMeta blob stays structural-only — v1 and v2 share the same header/layout.
 
 }
 

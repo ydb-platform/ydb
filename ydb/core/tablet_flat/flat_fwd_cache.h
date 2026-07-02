@@ -308,16 +308,9 @@ namespace NFwd {
     public:
         using TGroupId = NPage::TGroupId;
 
-        static TPageLocation GetRootLocation(const NPage::TBtreeIndexMeta& meta,
-            const IPageCollection* indexPageCollection, const IPageCollection* groupPageCollection)
-        {
-            return meta.LevelCount
-                ? indexPageCollection->GetLocation(meta.PageId_)
-                : groupPageCollection->GetLocation(meta.PageId_);
-        }
-
         TBTreeIndexCache(const TPart* part, TIndexPageLocator& indexPageLocator, TGroupId groupId, const TIntrusiveConstPtr<TSlices>& slices, TIntrusiveConstPtr<IPageCollection> groupPageCollection, TIntrusiveConstPtr<IPageCollection> indexPageCollection)
             : Meta(part->IndexPages.GetBTree(groupId))
+            , Part(part)
             , GroupId(groupId)
             , GroupPageCollection(std::move(groupPageCollection))
             , IndexPageCollection(std::move(indexPageCollection))
@@ -331,7 +324,7 @@ namespace NFwd {
                 EndRowId = Max<TRowId>();
             }
 
-            auto rootLoc = GetRootLocation(Meta, IndexPageCollection.Get(), GroupPageCollection.Get());
+            auto rootLoc = GetBTreeRootLocation(Meta, IndexPageCollection.Get(), GroupPageCollection.Get());
             Levels.resize(Meta.LevelCount + 1);
             Levels[0].Queue.push_back({rootLoc.Offset, rootLoc.Size, Meta.GetDataSize(), rootLoc.Crc32});
             Levels[0].BeginOffset = rootLoc.Offset;
@@ -403,9 +396,9 @@ namespace NFwd {
             if (levelId + 2 < Levels.size()) { // next level is index
                 NPage::TBtreeIndexNode node(page.Data);
                 for (auto pos : xrange(node.GetChildrenCount())) {
-                    auto& child = node.GetShortChild(pos);
-                    auto childOffset = IndexPageCollection->GetLocation(child.GetPageId()).Offset;
-                    IndexPageLocator.Add(childOffset, GroupId, levelId + 1);
+                    auto ref = BuildPageRef(node, pos, /* isLeafLevel */ false);
+                    auto childLoc = ResolvePageLocation(Part, ref, TGroupId{0});
+                    IndexPageLocator.Add(childLoc.Offset, GroupId, levelId + 1);
                 }
             }
 
@@ -472,17 +465,20 @@ namespace NFwd {
                 if (levelId + 1 < Levels.size() && page) {
                     NPage::TBtreeIndexNode node(page.Data);
                     auto& nextLevel = Levels[levelId + 1];
+                    bool isLeaf = (levelId + 1) == Levels.size() - 1;
                     for (auto pos : xrange(node.GetChildrenCount())) {
-                        auto& child = node.GetShortChild(pos);
-                        if (child.GetRowCount() <= BeginRowId) {
+                        if (node.GetChildRowCount(pos) <= BeginRowId) {
                             continue;
                         }
-                        auto childLoc = PageCollectionForLevel(levelId + 1)->GetLocation(child.GetPageId());
+                        auto ref = BuildPageRef(node, pos, isLeaf);
+                        auto locGroup = isLeaf ? GroupId : TGroupId{0};
+                        auto childLoc = ResolvePageLocation(Part, ref, locGroup);
                         Y_ENSURE(!nextLevel.Queue || nextLevel.Queue.back().Offset < childLoc.Offset);
-                        nextLevel.Queue.push_back({childLoc.Offset, childLoc.Size, child.GetDataSize(), childLoc.Crc32});
+                        nextLevel.Queue.push_back(
+                            {childLoc.Offset, childLoc.Size, node.GetChildDataSize(pos), childLoc.Crc32});
                         nextLevel.BeginOffset = Min(nextLevel.BeginOffset, childLoc.Offset);
                         nextLevel.EndOffset = Max(nextLevel.EndOffset, childLoc.Offset);
-                        if (child.GetRowCount() >= EndRowId) {
+                        if (node.GetChildRowCount(pos) >= EndRowId) {
                             break;
                         }
                     }
@@ -553,6 +549,7 @@ namespace NFwd {
 
     private:
         const NPage::TBtreeIndexMeta& Meta;
+        const TPart* Part;
         const TGroupId GroupId;
         TIntrusiveConstPtr<IPageCollection> GroupPageCollection;
         TIntrusiveConstPtr<IPageCollection> IndexPageCollection;

@@ -152,18 +152,23 @@ namespace NTest {
                 indexHistoricPages.push_back(pageId);
             }
 
+            auto loadMeta = [](const NProto::TBTreeIndexMeta& proto) -> NPage::TBtreeIndexMeta {
+                auto rootType = proto.GetLevelCount() == 0 ? NPage::EPage::DataPage : NPage::EPage::BTreeIndex;
+                auto v1Root = proto.HasRootPageId()
+                    ? proto.GetRootPageId()
+                    : Max<TPageId>();
+                auto v2Root = proto.HasRootOffset()
+                    ? NPage::TBtreeIndexMeta::RootLocationV2(proto.GetRootOffset(), proto.GetRootSize(), proto.GetRootCrc32(), rootType)
+                    : NPage::TPageLocation::Max();
+                return {v1Root, v2Root, proto.GetRowCount(), proto.GetDataSize(), proto.GetGroupDataSize(),
+                        proto.GetErasedRowCount(),
+                        proto.GetLevelCount(),
+                        proto.GetIndexSize()};
+            };
             TVector<NPage::TBtreeIndexMeta> BTreeGroupIndexes, BTreeHistoricIndexes;
             for (bool history : {false, true}) {
                 for (const auto &meta : history ? lay.GetBTreeHistoricIndexes() : lay.GetBTreeGroupIndexes()) {
-                    NPage::TBtreeIndexMeta converted{{
-                        meta.GetRootPageId(),
-                        meta.GetRowCount(),
-                        meta.GetDataSize(),
-                        meta.GetGroupDataSize(),
-                        meta.GetErasedRowCount()}, 
-                        meta.GetLevelCount(), 
-                        meta.GetIndexSize()};
-                    (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
+                    (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(loadMeta(meta));
                 }
             }
 
@@ -220,7 +225,7 @@ namespace NTest {
             return Back().WriteOuter(blob);
         }
 
-        TPageOffset Write(TSharedData page, EPage type, ui32 group) override
+        TPageLocation Write(TSharedData page, EPage type, ui32 group) override
         {
             return Back().Write(page, type, group);
         }

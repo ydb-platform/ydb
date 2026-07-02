@@ -55,7 +55,7 @@ namespace {
 
         const TSharedData* TryGetPage(const TPart *part, TPageLocation location, TGroupId groupId) override
         {
-            auto pageId = location.GetPageIndex();
+            auto pageId = ResolvePageId(part, location, groupId);
             Touched[groupId].insert(pageId);
 
             if (!Fail || Sticky.contains({groupId, pageId})) {
@@ -427,10 +427,10 @@ namespace {
             }
 
             for (auto &x : pages.BTreeGroups) {
-                result.insert({mainGroupId, x.GetPageId()});
+                result.insert({mainGroupId, x.RootPageIdV1()});
             }
             for (auto &x : pages.BTreeHistoric) {
-                result.insert({mainGroupId, x.GetPageId()});
+                result.insert({mainGroupId, x.RootPageIdV1()});
             }
 
             return result;

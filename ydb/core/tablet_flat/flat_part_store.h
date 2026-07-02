@@ -98,6 +98,12 @@ public:
         return PageCollections[groupId.Index]->PageCollection->GetLocation(pageId);
     }
 
+    const NPageCollection::IPageCollection* GetPageCollection(ui32 room) const override
+    {
+        Y_ENSURE(room < PageCollections.size());
+        return PageCollections[room]->PageCollection.Get();
+    }
+
     ui8 GetGroupChannel(NPage::TGroupId groupId) const override
     {
         Y_ENSURE(groupId.Index < PageCollections.size());
@@ -149,6 +155,8 @@ public:
 
         TVector<TPageLocation> pages(Reserve(total));
         for (ui32 i = 0; i < total; ++i) {
+            if (pageCollection.Page(i).Type == ui32(EPage::Skip))
+                continue;
             pages.push_back(pageCollection.GetLocation(i));
         }
 

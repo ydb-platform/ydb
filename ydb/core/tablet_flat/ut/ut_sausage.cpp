@@ -719,6 +719,149 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
                 TArrayRef<const char>(page->data(), page->size())));
         }
     }
+
+    Y_UNIT_TEST(SkipEntry)
+    {
+        /* Test the v2 skip-entry mechanism in TRecord:
+           - PushSkip records a cumulative byte offset for the skip range
+           - Subsequent structural pages have correct offsets
+           - TotalPages reflects the compacted count */
+
+        NPageCollection::TRecord meta(0);
+
+        meta.Push(Blobs);
+
+        // Simulate v2 write: data+btree pages are NOT individually recorded.
+        // Instead, a single skip entry absorbs their byte range.
+        // Data pages: 5 pages of sizes {50, 30, 80, 60, 40} = 260 total bytes
+        // Then structural pages follow.
+
+        // Skip entry: cumulative byte offset after all data/btree pages
+        // 5 data pages of sizes {50, 30, 80, 60, 40} = 260 total bytes
+        meta.PushSkip(260, (ui32)NKikimr::NTable::NPage::EPage::Skip, 5);
+
+        // Structural pages: Frames (100 bytes), Schem2 (50 bytes)
+        TString framesPage(100, 'F');
+        TString schemPage(50, 'S');
+        meta.Push(0, framesPage);  // pageId 1, offset 260..360
+        meta.Push(0, schemPage);   // pageId 2, offset 360..410
+
+        auto raw = meta.Finish();
+        const TMeta tmeta(raw, 0);
+
+        // TotalPages: 1 skip + 2 structural = 3
+        UNIT_ASSERT_VALUES_EQUAL(tmeta.TotalPages(), 3);
+
+        // Skip entry (pageId 0): byte range [0, 260), type=Skip
+        UNIT_ASSERT_VALUES_EQUAL(tmeta.GetPageSize(0), 260);
+        UNIT_ASSERT_VALUES_EQUAL(tmeta.GetPageType(0), (ui32)NTable::NPage::EPage::Skip);
+
+        // GetLocation(0) should assert — test by checking the type instead
+        // (calling GetLocation(0) would trigger Y_ENSURE for Skip type)
+
+        // Structural page 1 (Frames): byte range [260, 360)
+        auto loc1 = tmeta.GetLocation(1);
+        UNIT_ASSERT_VALUES_EQUAL(loc1.GetByteOffset(), 260);
+        UNIT_ASSERT_VALUES_EQUAL(loc1.Size, 100);
+        UNIT_ASSERT(loc1.Type == NTable::NPage::EPage::Undef);  // type=0 in Push
+
+        // Structural page 2 (Schem2): byte range [360, 410)
+        auto loc2 = tmeta.GetLocation(2);
+        UNIT_ASSERT_VALUES_EQUAL(loc2.GetByteOffset(), 360);
+        UNIT_ASSERT_VALUES_EQUAL(loc2.Size, 50);
+
+        // Bounds(TPageLocation) for a data page within the skip range
+        // should work via TAlign — it doesn't need TEntry
+        // Blobs: sizes 100, 120, 40, 60, 140, 170, 150
+        // Steps: {100, 220, 260, 320, 460, 630, 780}
+        auto dataLoc = NTable::NPage::TPageLocation::FromByteOffset(50, 30, NTable::NPage::EPage::DataPage, 0);
+        auto bounds = tmeta.Bounds(dataLoc);
+        // offset 50 is within blob 0 (0..100)
+        UNIT_ASSERT(bounds.Lo.Blob == 0);
+        UNIT_ASSERT(bounds.Lo.Skip == 50);
+        UNIT_ASSERT_VALUES_EQUAL(bounds.Bytes, 30);
+
+        // Bounds for structural page via TPageLocation
+        // Frames page at offset 260, size 100 → range [260, 360)
+        // Steps[2]=260, UpperBound(260) finds Steps[3]=320 → blob 3
+        // So offset 260 starts at blob 3, skip 0 (blob 3 starts at 260)
+        auto bounds1 = tmeta.Bounds(loc1);
+        UNIT_ASSERT(bounds1.Lo.Blob == 3);
+        UNIT_ASSERT_VALUES_EQUAL(bounds1.Lo.Skip, 0);
+        UNIT_ASSERT_VALUES_EQUAL(bounds1.Bytes, 100);
+
+        // SkippedInMeta: 5 absorbed pages stored as Crc32 = 5-1 = 4
+        UNIT_ASSERT_VALUES_EQUAL(tmeta.SkippedPages(), 4);
+    }
+
+    Y_UNIT_TEST(TWriter_V2Mode)
+    {
+        /* Test TWriter in v2 mode:
+           - DataPage/BTreeIndex pages are not individually recorded
+           - Their bytes go to the blob buffer
+           - PushSkipEntry creates the skip entry
+           - Structural pages have correct TEntry indices */
+
+        TCookieAllocator cookieAllocator(10, (ui64(20) << 32) | 30, { 0, 999 }, {{ 1, 777 }});
+
+        TWriter writer(cookieAllocator, 1, 8192 * 1024, true /* v2Mode */);
+
+        // Data page 1 (100 bytes) — should NOT create TEntry entry
+        TString dataPage1(100, 'D');
+        ui32 crc1 = 0;
+        auto r1 = writer.AddPage(dataPage1, (ui32)NTable::NPage::EPage::DataPage, &crc1);
+        UNIT_ASSERT_VALUES_EQUAL(r1, Max<ui32>());  // no page ID
+        UNIT_ASSERT(crc1 != 0);  // CRC still computed
+
+        // Data page 2 (200 bytes) — also skipped
+        TString dataPage2(200, 'D');
+        ui32 crc2 = 0;
+        auto r2 = writer.AddPage(dataPage2, (ui32)NTable::NPage::EPage::DataPage, &crc2);
+        UNIT_ASSERT_VALUES_EQUAL(r2, Max<ui32>());
+
+        // BTree index page (50 bytes) — also skipped
+        TString btreePage(50, 'B');
+        auto r3 = writer.AddPage(btreePage, (ui32)NTable::NPage::EPage::BTreeIndex);
+        UNIT_ASSERT_VALUES_EQUAL(r3, Max<ui32>());
+
+        // Push skip entry — absorbs 350 bytes (100+200+50)
+        writer.PushSkipEntry();
+
+        // Structural page: Frames (80 bytes) — creates TEntry
+        TString framesPage(80, 'F');
+        auto r4 = writer.AddPage(framesPage, (ui32)NTable::NPage::EPage::Frames);
+        UNIT_ASSERT_VALUES_EQUAL(r4, 1);  // pageId 1 (0 is skip)
+
+        // Structural page: Schem2 (40 bytes) — creates TEntry
+        TString schemPage(40, 'S');
+        auto r5 = writer.AddPage(schemPage, (ui32)NTable::NPage::EPage::Schem2);
+        UNIT_ASSERT_VALUES_EQUAL(r5, 2);  // pageId 2
+
+        auto blob = writer.Finish(true);
+        const TMeta meta(blob, 0);
+
+        // TotalPages: 1 skip + 2 structural = 3 (not 5!)
+        UNIT_ASSERT_VALUES_EQUAL(meta.TotalPages(), 3);
+
+        // Skip entry: byte range [0, 350)
+        UNIT_ASSERT_VALUES_EQUAL(meta.GetPageType(0), (ui32)NTable::NPage::EPage::Skip);
+        UNIT_ASSERT_VALUES_EQUAL(meta.GetPageSize(0), 350);
+
+        // Frames: byte range [350, 430)
+        auto loc4 = meta.GetLocation(1);
+        UNIT_ASSERT_VALUES_EQUAL(loc4.GetByteOffset(), 350);
+        UNIT_ASSERT_VALUES_EQUAL(loc4.Size, 80);
+        UNIT_ASSERT(loc4.Type == NTable::NPage::EPage::Frames);
+
+        // Schem2: byte range [430, 470)
+        auto loc5 = meta.GetLocation(2);
+        UNIT_ASSERT_VALUES_EQUAL(loc5.GetByteOffset(), 430);
+        UNIT_ASSERT_VALUES_EQUAL(loc5.Size, 40);
+        UNIT_ASSERT(loc5.Type == NTable::NPage::EPage::Schem2);
+
+        // SkippedInMeta: 3 absorbed pages stored as Crc32 = 3-1 = 2
+        UNIT_ASSERT_VALUES_EQUAL(meta.SkippedPages(), 2);
+    }
 }
 
 }

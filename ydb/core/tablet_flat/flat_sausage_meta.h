@@ -41,6 +41,11 @@ namespace NPageCollection {
         ui64 GetPageSize(ui32 pageId) const;
         TStringBuf GetPageInplaceData(ui32 pageId) const;
 
+        /* Number of data/btree pages absorbed into EPage::Skip entries.
+           Recovered from the Crc32 field of each skip entry. Zero for v1
+           metas and old-format v2 blobs. */
+        ui32 SkippedPages() const noexcept;
+
         TBorder Bounds(NTable::NPage::TPageLocation location) const;
         TPageLocation GetLocation(ui32 pageId) const;
 

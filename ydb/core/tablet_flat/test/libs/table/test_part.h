@@ -25,6 +25,7 @@ namespace NTest {
             : TPart(src, epoch)
             , Store(src.Store)
             , Slices(src.Slices)
+            , PageColls(src.PageColls)
         { }
 
     public:
@@ -34,7 +35,9 @@ namespace NTest {
             , Store(std::move(store))
             , Slices(std::move(slices))
         {
-
+            for (ui32 room : xrange(Store->GetRoomCount())) {
+                PageColls.emplace_back(new TStorePageCollection(Store, room));
+            }
         }
 
         ui64 DataSize() const noexcept override
@@ -66,10 +69,8 @@ namespace NTest {
 
         NPage::TPageLocation GetPageLocation(NPage::TPageId pageId, NPage::TGroupId groupId) const override
         {
-            auto size = Store->GetPageSize(groupId.Index, pageId);
-            auto type = Store->GetPageType(groupId.Index, pageId);
-            auto crc32 = Store->GetPageChecksum(groupId.Index, pageId);
-            return NPage::TPageLocation::FromPageIndex(pageId, size, type, crc32);
+            auto* coll = static_cast<const TStorePageCollection*>(GetPageCollection(groupId.Index));
+            return coll->GetLocation(pageId);
         }
 
         ui8 GetGroupChannel(NPage::TGroupId groupId) const override
@@ -85,6 +86,12 @@ namespace NTest {
             return 0;
         }
 
+        const NPageCollection::IPageCollection* GetPageCollection(ui32 room) const override
+        {
+            Y_ENSURE(room < PageColls.size());
+            return PageColls[room].Get();
+        }
+
         TIntrusiveConstPtr<NTable::TPart> CloneWithEpoch(NTable::TEpoch epoch) const override
         {
             return new TPartStore(*this, epoch);
@@ -92,6 +99,7 @@ namespace NTest {
 
         const TIntrusiveConstPtr<TStore> Store;
         const TIntrusiveConstPtr<TSlices> Slices;
+        mutable TVector<TIntrusiveConstPtr<NPageCollection::IPageCollection>> PageColls;
     };
 
     class TTestEnv: public IPages {
@@ -118,8 +126,15 @@ namespace NTest {
 
         const TSharedData* TryGetPage(const TPart *part, TPageLocation location, TGroupId groupId) override
         {
-            auto pageId = location.GetPageIndex();
-            return Get(part, groupId.Index, pageId);
+            return CheckedCast<const TPartStore*>(part)->Store->GetPage(groupId.Index, location.Offset);
+        }
+
+    protected:
+        ui32 ResolvePageId(const TPart *part, TPageLocation location, TGroupId groupId) const {
+            if (location.Offset.IsByteOffset()) {
+                return CheckedCast<const TPartStore*>(part)->Store->ResolveByteOffset(groupId.Index, location.Offset.AsByteOffset());
+            }
+            return location.Offset.AsPageIndex();
         }
 
     private:

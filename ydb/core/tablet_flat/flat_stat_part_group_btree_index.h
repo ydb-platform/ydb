@@ -58,7 +58,7 @@ public:
 
         bool ready = true;
         TVector<TNodeState> nextNodes;
-        Nodes.emplace_back(Meta.GetPageId(), 0, GetEndRowId(), EmptyKey, 0, Meta.GetDataSize());
+        Nodes.emplace_back(Meta.RootPageIdV1(), 0, GetEndRowId(), EmptyKey, 0, Meta.GetDataSize());
 
         for (ui32 height = 0; height < Meta.LevelCount; height++) {
             bool hasChanges = false;

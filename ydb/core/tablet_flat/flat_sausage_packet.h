@@ -12,9 +12,11 @@ namespace NPageCollection {
     public:
         TPageCollection() = delete;
 
-        TPageCollection(TLargeGlobId largeGlobId, TSharedData raw)
+        /* `skippedInMeta` is the number of data/btree pages absorbed into EPage::Skip */
+        TPageCollection(TLargeGlobId largeGlobId, TSharedData raw, ui32 skippedInMeta = Max<ui32>())
             : LargeGlobId(largeGlobId)
             , Meta(std::move(raw), LargeGlobId.Group)
+            , SkippedInMeta(skippedInMeta == Max<ui32>() ? Meta.SkippedPages() : skippedInMeta)
         {
             if (!Meta.Raw || LargeGlobId.Bytes != Meta.Raw.size() || LargeGlobId.Group == TLargeGlobId::InvalidGroup) {
                 Y_TABLET_ERROR("Invalid TLargeGlobId of page collection meta blob");
@@ -27,6 +29,14 @@ namespace NPageCollection {
         }
 
         ui32 Total() const noexcept override
+        {
+            return MetaPages() + SkippedInMeta;
+        }
+
+        /* Structural pages addressable by TPageId (enumerated in TMeta).
+           Total() may exceed MetaPages() for shrunk v2 collections. SkippedInMeta
+           carries the number of extra pages beyond MetaPages. */
+        ui32 MetaPages() const noexcept override
         {
             return Meta.TotalPages();
         }
@@ -86,6 +96,7 @@ namespace NPageCollection {
 
         const TLargeGlobId LargeGlobId;
         const TMeta Meta;
+        const ui32 SkippedInMeta;
     };
 
     /// Page-index TPageOffset to satisfy forward cache

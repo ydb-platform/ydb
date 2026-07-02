@@ -725,7 +725,10 @@ public:
         , FuncRegistry(funcRegistry)
         , Alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
         , TypeEnv(Alloc)
-        , KqlCtx(cluster, optimizeCtx.Tables, TypeEnv, FuncRegistry)
+        // 1 == StreamLookupJoinCookieVersionV1 (see kqp_stream_lookup_join_helpers.h);
+        // kept as a literal to avoid a runtime PEERDIR from the compiler.
+        , KqlCtx(cluster, optimizeCtx.Tables, TypeEnv, FuncRegistry,
+            config->GetEnableStreamLookupJoinCookieV2() ? 1u : 0u)
         , KqlCompiler(CreateKqlCompiler(KqlCtx, typesCtx))
         , TypesCtx(typesCtx)
         , OptimizeCtx(optimizeCtx)
@@ -2824,6 +2827,11 @@ private:
             auto settings = TKqpStreamLookupSettings::Parse(streamLookup);
             streamLookupProto.SetLookupStrategy(GetStreamLookupStrategy(settings.Strategy));
             streamLookupProto.SetKeepRowsOrder(Config->OrderPreservingLookupJoinEnabled());
+            if (Config->GetEnableStreamLookupJoinCookieV2()) {
+                // 1 == StreamLookupJoinCookieVersionV1 (see kqp_stream_lookup_join_helpers.h);
+                // kept as a literal to avoid a runtime PEERDIR from the compiler.
+                streamLookupProto.SetCookieFormatVersion(1);
+            }
             if (settings.AllowNullKeysPrefixSize) {
                 streamLookupProto.SetAllowNullKeysPrefixSize(*settings.AllowNullKeysPrefixSize);
             }

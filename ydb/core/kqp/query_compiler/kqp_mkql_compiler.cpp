@@ -423,7 +423,8 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
             auto input = MkqlBuildExpr(indexLookupJoin.Input().Ref(), buildCtx);
 
-            return ctx.PgmBuilder().KqpIndexLookupJoin(input, joinType, leftLabel, rightLabel);
+            return ctx.PgmBuilder().KqpIndexLookupJoin(input, joinType, leftLabel, rightLabel,
+                ctx.StreamLookupJoinCookieVersion());
         });
 
     compiler->AddCallable(TDqBlockHashJoinCore::CallableName(),

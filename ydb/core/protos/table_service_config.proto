@@ -488,6 +488,12 @@ message TTableServiceConfig {
 
     optional bool EnableDqSourceStreamLookupJoin = 121 [default = false, (InvalidateCompileCache) = true];
 
+    // Emit the fixed (v1) stream lookup join RowSeqNo cookie format. Keep disabled
+    // until every node in the cluster is upgraded, then enable to fix RowSeqNo
+    // collisions across distributed tasks (taskId >= 16). InvalidateCompileCache
+    // ensures cached query plans are recompiled with the new format when toggled.
+    optional bool EnableStreamLookupJoinCookieV2 = 138 [default = false, (InvalidateCompileCache) = true];
+
     message TCompileCacheWarmupConfig {
         optional uint32 SoftDeadlineSeconds = 1 [default = 10];        // Soft deadline: stops new compilations, waits for in-flight ones to finish
         optional uint32 MaxConcurrentCompilations = 2 [default = 5];

@@ -825,67 +825,54 @@ private:
         TVector<TKqpSinkEffect> externalEffects;
 
         for (const auto& expr : list) {
-            if (auto sinkEffect = expr.Maybe<TKqpSinkEffect>()) {
-                const auto sinkSettings = GetStageSinkSettings(sinkEffect.Cast());
-                if (!sinkSettings) {
-                    const auto dqSink = GetStageSink(sinkEffect.Cast());
-                    AFL_ENSURE(dqSink);
-                    AFL_ENSURE(!kqpCtx.UsePessimisticLocks);
-                    externalEffects.emplace_back(sinkEffect.Cast());
-                } else {
-                    // Two table sinks can't be executed in one physical transaction if they write into same table and have same priority.
-
-                    const bool needSingleEffect = sinkSettings.Cast().Mode() == "fill_table"
-                        || sinkSettings.Cast().InconsistentWrite().Value() == "true"sv
-                        || (kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Olap)
-                        || kqpCtx.UsePessimisticLocks;
-
-                    // At current time Read Committed (pessimistic locks) support only one effect per query.
-                    AFL_ENSURE(!kqpCtx.UsePessimisticLocks || effectsInfos.empty());
-
-                    if (needSingleEffect) {
-                        const TStringBuf tablePathId = sinkSettings.Cast().Table().PathId().Value();
-
-                        auto it = std::find_if(
-                            std::begin(effectsInfos),
-                            std::end(effectsInfos),
-                            [&tablePathId](const auto& effectsInfo) {
-                                return effectsInfo.Type == TEffectsInfo::EType::KQP_SINK
-                                    && !effectsInfo.TablesPathIds.contains(tablePathId);
-                            });
-                        if (it == std::end(effectsInfos)) {
-                            effectsInfos.emplace_back();
-                            it = std::prev(std::end(effectsInfos));
-                            it->Type = TEffectsInfo::EType::KQP_SINK;
-                        }
-                        it->TablesPathIds.insert(tablePathId);
-                        it->AddExpr(expr.Ptr());
-                    } else {
-                        auto it = std::find_if(
-                            std::begin(effectsInfos),
-                            std::end(effectsInfos),
-                            [](const auto& effectsInfo) { return effectsInfo.Type == TEffectsInfo::EType::KQP_BATCH_SINK; });
-                        if (it == std::end(effectsInfos)) {
-                            effectsInfos.emplace_back();
-                            it = std::prev(std::end(effectsInfos));
-                            it->Type = TEffectsInfo::EType::KQP_BATCH_SINK;
-                        }
-                        it->AddExpr(expr.Ptr());
-                    }
-                }
-            } else {
+            auto sinkEffect = expr.Maybe<TKqpSinkEffect>();
+            AFL_ENSURE(sinkEffect);
+            const auto sinkSettings = GetStageSinkSettings(sinkEffect.Cast());
+            if (!sinkSettings) {
+                const auto dqSink = GetStageSink(sinkEffect.Cast());
+                AFL_ENSURE(dqSink);
                 AFL_ENSURE(!kqpCtx.UsePessimisticLocks);
-                // Table effects are executed all in one physical transaction.
-                auto it = std::find_if(
-                    std::begin(effectsInfos),
-                    std::end(effectsInfos),
-                    [](const auto& effectsInfo) { return effectsInfo.Type == TEffectsInfo::EType::KQP_EFFECT; });
-                if (it == std::end(effectsInfos)) {
-                    effectsInfos.emplace_back();
-                    it = std::prev(std::end(effectsInfos));
-                    it->Type = TEffectsInfo::EType::KQP_EFFECT;
+                externalEffects.emplace_back(sinkEffect.Cast());
+            } else {
+                // Two table sinks can't be executed in one physical transaction if they write into same table and have same priority.
+
+                const bool needSingleEffect = sinkSettings.Cast().Mode() == "fill_table"
+                    || sinkSettings.Cast().InconsistentWrite().Value() == "true"sv
+                    || (kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Olap)
+                    || kqpCtx.UsePessimisticLocks;
+
+                // At current time Read Committed (pessimistic locks) support only one effect per query.
+                AFL_ENSURE(!kqpCtx.UsePessimisticLocks || effectsInfos.empty());
+
+                if (needSingleEffect) {
+                    const TStringBuf tablePathId = sinkSettings.Cast().Table().PathId().Value();
+
+                    auto it = std::find_if(
+                        std::begin(effectsInfos),
+                        std::end(effectsInfos),
+                        [&tablePathId](const auto& effectsInfo) {
+                            return effectsInfo.Type == TEffectsInfo::EType::KQP_SINK
+                                && !effectsInfo.TablesPathIds.contains(tablePathId);
+                        });
+                    if (it == std::end(effectsInfos)) {
+                        effectsInfos.emplace_back();
+                        it = std::prev(std::end(effectsInfos));
+                        it->Type = TEffectsInfo::EType::KQP_SINK;
+                    }
+                    it->TablesPathIds.insert(tablePathId);
+                    it->AddExpr(expr.Ptr());
+                } else {
+                    auto it = std::find_if(
+                        std::begin(effectsInfos),
+                        std::end(effectsInfos),
+                        [](const auto& effectsInfo) { return effectsInfo.Type == TEffectsInfo::EType::KQP_BATCH_SINK; });
+                    if (it == std::end(effectsInfos)) {
+                        effectsInfos.emplace_back();
+                        it = std::prev(std::end(effectsInfos));
+                        it->Type = TEffectsInfo::EType::KQP_BATCH_SINK;
+                    }
+                    it->AddExpr(expr.Ptr());
                 }
-                it->AddExpr(expr.Ptr());
             }
         }
 
@@ -1037,16 +1024,14 @@ private:
 
     bool HasTableEffects(const TExprList& effectsList) const {
         for (const TExprBase& effect : effectsList) {
-            if (auto maybeSinkEffect = effect.Maybe<TKqpSinkEffect>()) {
-                // Both TDqSink and TDqTransform derive from TDqOutputAnnotationBase,
-                // so the DataSink is read from the base uniformly for sinks and transforms.
-                const auto output = GetStageOutput(maybeSinkEffect.Cast());
-                AFL_ENSURE(output);
-                auto dataSink = TCoDataSink(output.Cast().DataSink().Ptr());
-                if (dataSink.Category() == YdbProviderName || dataSink.Category() == KikimrProviderName) {
-                    return true;
-                }
-            } else { // Not a SinkEffect, => a YDB table effect
+            auto maybeSinkEffect = effect.Maybe<TKqpSinkEffect>();
+            AFL_ENSURE(maybeSinkEffect);
+            // Both TDqSink and TDqTransform derive from TDqOutputAnnotationBase,
+            // so the DataSink is read from the base uniformly for sinks and transforms.
+            const auto output = GetStageOutput(maybeSinkEffect.Cast());
+            AFL_ENSURE(output);
+            auto dataSink = TCoDataSink(output.Cast().DataSink().Ptr());
+            if (dataSink.Category() == YdbProviderName || dataSink.Category() == KikimrProviderName) {
                 return true;
             }
         }

@@ -44,23 +44,30 @@ public:
     {}
 
     void Bootstrap() {
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_NODE, "[%u] Bootstrap", NodeId);
+        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "Bootstrap",
+            {"nodeId", NodeId});
         Connect();
         Become(&TThis::StateFunc);
     }
 
     void Connect() {
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_NODE, "[%u] Connect", NodeId);
+        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "Connect",
+            {"nodeId", NodeId});
         UNIT_ASSERT(!PipeClient);
         PipeClient = Register(NTabletPipe::CreateClient(SelfId(), TabletId, {}));
     }
 
     void Handle(TEvCheckState::TPtr ev) {
         auto& msg = *ev->Get();
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_NODE, "[%u] CheckState from %s expected %u current %u",
-            NodeId, ev->Sender.ToString().data(), msg.State, CurrentState);
+        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "CheckState from expected current",
+            {"nodeId", NodeId},
+            {"sender", ev->Sender},
+            {"state", msg.State},
+            {"currentState", CurrentState});
         if (CurrentState == msg.State) {
-            LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_NODE, "[%u] sending Done to %s", NodeId, ev->Sender.ToString().data());
+            YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "Sending Done",
+                {"nodeId", NodeId},
+                {"sender", ev->Sender});
             Send(ev->Sender, new TEvDone);
         } else {
             Queue.emplace(msg.State, ev->Sender);
@@ -68,12 +75,16 @@ public:
     }
 
     void SwitchToState(EState state) {
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_NODE, "[%u] State switched from %u to %u", NodeId,
-            CurrentState, state);
+        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "State switched",
+            {"nodeId", NodeId},
+            {"currentState", CurrentState},
+            {"state", state});
         CurrentState = state;
         auto r = Queue.equal_range(CurrentState);
         for (auto it = r.first; it != r.second; ++it) {
-            LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_NODE, "[%u] sending Done to %s", NodeId, it->second.ToString().data());
+            YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "Sending Done",
+                {"nodeId", NodeId},
+                {"value", it->second});
             Send(it->second, new TEvDone);
         }
         Queue.erase(r.first, r.second);
@@ -81,10 +92,13 @@ public:
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
         auto& msg = *ev->Get();
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_NODE, "[%u] ClientConnected Sender# %s Status# %s"
-            " ClientId# %s ServerId# %s PipeClient# %s", NodeId, ev->Sender.ToString().data(),
-            NKikimrProto::EReplyStatus_Name(msg.Status).data(), msg.ClientId.ToString().data(),
-            msg.ServerId.ToString().data(), PipeClient.ToString().data());
+        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "ClientConnected",
+            {"nodeId", NodeId},
+            {"sender", ev->Sender},
+            {"status", NKikimrProto::EReplyStatus_Name(msg.Status).data()},
+            {"clientId", msg.ClientId},
+            {"serverId", msg.ServerId},
+            {"pipeClient", PipeClient});
         if (ev->Sender == PipeClient) {
             if (msg.Status != NKikimrProto::OK) {
                 NTabletPipe::CloseAndForgetClient(SelfId(), PipeClient);
@@ -116,8 +130,12 @@ public:
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
         auto& msg = *ev->Get();
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_NODE, "[%u] ClientDestroyed Sender# %s"
-            " ClientId# %s ServerId# %s PipeClient# %s", NodeId, ev->Sender.ToString().data(), msg.ClientId.ToString().data(), msg.ServerId.ToString().data(), PipeClient.ToString().data());
+        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "ClientDestroyed",
+            {"nodeId", NodeId},
+            {"sender", ev->Sender},
+            {"clientId", msg.ClientId},
+            {"serverId", msg.ServerId},
+            {"pipeClient", PipeClient});
         if (ev->Sender == PipeClient) {
             PipeClient = {};
             Connected = false;
@@ -128,7 +146,8 @@ public:
 
     void Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr ev) {
         auto& msg = *ev->Get();
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_NODE, "[%u] NodeServiceSetUpdate", NodeId);
+        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "NodeServiceSetUpdate",
+            {"nodeId", NodeId});
 
         const auto& ss = msg.Record.GetServiceSet();
 

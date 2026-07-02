@@ -5,6 +5,8 @@
 
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER_AUDIT
+
 namespace NKikimr::NBsController {
 
         class TBlobStorageController::TNodeWardenUpdateNotifier {
@@ -313,11 +315,12 @@ namespace NKikimr::NBsController {
                     const TVSlotInfo& prevSlot = *prev.VDisksInGroup[i];
                     const TVSlotInfo& curSlot = *cur.VDisksInGroup[i];
                     if (prevSlot.VSlotId != curSlot.VSlotId) {
-                        STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA05, "VDisk moved",
-                            (UniqueId, State.UniqueId),
-                            (PrevSlot, prevSlot.VSlotId),
-                            (CurSlot, curSlot.VSlotId),
-                            (VDiskId, curSlot.GetVDiskId()));
+                        YDB_LOG_INFO("VDisk moved",
+                            {"marker", "BSCA05"},
+                            {"uniqueId", State.UniqueId},
+                            {"prevSlot", prevSlot.VSlotId},
+                            {"curSlot", curSlot.VSlotId},
+                            {"VDiskId", curSlot.GetVDiskId()});
                     }
                 }
             }

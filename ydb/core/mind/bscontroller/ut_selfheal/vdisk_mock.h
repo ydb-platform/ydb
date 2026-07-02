@@ -45,15 +45,20 @@ public:
         , VSlotId(vslotId)
         , PDiskGuid(pdiskGuid)
     {
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_NODE, "[%u] VDiskId# %s PDiskId# %u VSlotId# %u created",
-            NodeId, VDiskId.ToString().data(), PDiskId, VSlotId);
+        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "Created",
+            {"nodeId", NodeId},
+            {"VDiskId", VDiskId},
+            {"PDiskId", PDiskId},
+            {"VSlotId", VSlotId});
         auto *actorSystem = TActivationContext::ActorSystem();
         actorSystem->RegisterLocalService(GetActorId(), actorSystem->Register(new TVDiskMockActor(*this)));
     }
 
     void StopActor() {
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, GetActorId(), {}, {}, 0));
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_NODE, "[%u] VDiskId# %s destroyed", NodeId, VDiskId.ToString().data());
+        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "Destroyed",
+            {"nodeId", NodeId},
+            {"VDiskId", VDiskId});
     }
 
     void UpdateVDiskId(const TVDiskID& newVDiskId) {
@@ -62,8 +67,10 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(VDiskId.FailRealm, newVDiskId.FailRealm);
             UNIT_ASSERT_VALUES_EQUAL(VDiskId.FailDomain, newVDiskId.FailDomain);
             UNIT_ASSERT_VALUES_EQUAL(VDiskId.VDisk, newVDiskId.VDisk);
-            LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_NODE, "[%u] VDiskId# %s -> %s",
-                NodeId, VDiskId.ToString().data(), newVDiskId.ToString().data());
+            YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "->",
+                {"nodeId", NodeId},
+                {"VDiskId", VDiskId},
+                {"vdiskId", newVDiskId});
             VDiskId = newVDiskId;
         }
     }
@@ -84,8 +91,10 @@ public:
     TInstant HandleStatusChange(const TInstant now) {
         if (now >= NextStatusChange) {
             const TDuration duration = OnStatusChange();
-            LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_NODE, "[%u] VDiskId# %s status changed to %s",
-                NodeId, VDiskId.ToString().data(), EVDiskStatus_Name(Status).data());
+            YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "Status changed",
+                {"nodeId", NodeId},
+                {"VDiskId", VDiskId},
+                {"vdiskStatus", EVDiskStatus_Name(Status).data()});
             NextStatusChange = duration != TDuration::Max() ? now + duration : TInstant::Max();
         }
         return NextStatusChange;

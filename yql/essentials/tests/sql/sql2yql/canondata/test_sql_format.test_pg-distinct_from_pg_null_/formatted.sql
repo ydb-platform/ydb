@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 SELECT
     Nothing(pgint8) IS DISTINCT FROM NULL,
     Nothing(pgint8) IS NOT DISTINCT FROM NULL,

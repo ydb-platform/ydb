@@ -18,7 +18,7 @@ $input =
             k String,
             v Uint64
         )
-        , WATERMARK = SystemMetadata("write_time") - Interval("PT8S")
+        , WATERMARK = __ydb_write_time - Interval("PT8S")
         , WATERMARK_GRANULARITY = "PT11S"
     );
 

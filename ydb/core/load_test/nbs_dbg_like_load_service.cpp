@@ -1198,8 +1198,10 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
             // Shared workload parameter form rows (used by both the per-tablet
             // card and the combined multi-tablet card). All ids are scoped by
             // the card prefix p ("nbs-<inst>-"); inst is needed for the inline
-            // button handlers.
-            function nbsRunFormFieldsHtml(p, inst) {
+            // button handlers. Pass multi=true for the combined card to show
+            // "per tablet" qualifiers on the in-flight labels.
+            function nbsRunFormFieldsHtml(p, inst, multi) {
+                const perTablet = multi ? " per tablet" : "";
                 return "" +
                     "<div class='row'>" +
                       "<div class='col-sm-4'><div class='form-group'><label>Tag (0 = auto-assign):</label>" +
@@ -1207,19 +1209,19 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                       "<div class='col-sm-4'><div class='form-group'><label>DurationSeconds:</label>" +
                         "<input id='" + p + "duration' class='form-control' type='number' min='0' step='1' value='60' /></div></div>" +
                       "<div class='col-sm-4'><div class='form-group'><label>Measure after (warmup s):</label>" +
-                        "<input id='" + p + "delay-before' class='form-control' type='number' min='0' step='1' value='15' /></div></div>" +
+                        "<input id='" + p + "delay-before' class='form-control' type='number' min='0' step='1' value='0' /></div></div>" +
                     "</div>" +
                     "<div class='row'>" +
                       "<div class='col-sm-4'><div class='form-group'><label>Trials per InFlight:</label>" +
                         "<input id='" + p + "trials' class='form-control' type='number' min='1' step='2' value='1' />" +
                         "<p class='help-block'>1 = single run. Values &gt; 1 must be odd.</p></div></div>" +
-                      "<div class='col-sm-4'><div class='form-group'><label>MaxInFlight (single run):</label>" +
+                      "<div class='col-sm-4'><div class='form-group'><label>MaxInFlight" + perTablet + " (single run):</label>" +
                         "<input id='" + p + "max-inflight' class='form-control' type='number' min='1' step='1' value='32' /></div></div>" +
                     "</div>" +
                     "<div class='row'>" +
-                      "<div class='col-sm-4'><div class='form-group'><label>InFlightFrom (sweep start):</label>" +
+                      "<div class='col-sm-4'><div class='form-group'><label>InFlightFrom" + perTablet + " (sweep start):</label>" +
                         "<input id='" + p + "inflight-from' class='form-control' type='number' min='1' step='1' placeholder='e.g. 1' /></div></div>" +
-                      "<div class='col-sm-4'><div class='form-group'><label>InFlightTo (sweep end):</label>" +
+                      "<div class='col-sm-4'><div class='form-group'><label>InFlightTo" + perTablet + " (sweep end):</label>" +
                         "<input id='" + p + "inflight-to' class='form-control' type='number' min='1' step='1' placeholder='e.g. 128' />" +
                         "<p class='help-block'>If both set, sweeps MaxInFlight x2 per step.</p></div></div>" +
                     "</div>" +
@@ -1294,7 +1296,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                       "<input id='" + p + "targets' class='form-control' type='text' placeholder='e.g. 72075186224037888, 72075186224037889' />" +
                       "<p class='help-block'>Each tablet's node is resolved from the list above; its load actor runs on that node. The results below combine all tablets, plus a per-tablet breakdown.</p>" +
                     "</div>" +
-                    nbsRunFormFieldsHtml(p, inst) +
+                    nbsRunFormFieldsHtml(p, inst, true) +
                     "<div class='form-group'>" +
                       "<button type='button' id='" + p + "run-btn' onclick='nbsTabletSweepInst(\"" + inst + "\")' class='btn btn-primary'>Run</button> " +
                       "<span id='" + p + "status' class='text-muted' style='margin-left:10px'></span>" +

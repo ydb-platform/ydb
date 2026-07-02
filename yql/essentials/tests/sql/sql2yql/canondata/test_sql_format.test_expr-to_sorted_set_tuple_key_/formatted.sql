@@ -1,4 +1,3 @@
-/* postgres can not */
 $l = AsList(
     AsTuple(AsTuple(), Void()),
     AsTuple(AsTuple(), Void()),

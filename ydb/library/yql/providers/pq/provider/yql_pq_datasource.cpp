@@ -115,13 +115,23 @@ public:
         }
 
         TVector<TCoNameValueTuple> sourceMetadata;
-        for (auto sysColumn : GetAllowedPqMetaSysColumns(
-                 State_->AddTransparentPrefixToTransparentSystemColumns,
-                 State_->EnableUserAttributesInTopicQuery))
-        {
+        if (!State_->ForbidYqlSysColumnsAndSystemMetadata) {
+            for (auto sysColumn : GetAllowedPqMetaSysColumns(
+                     State_->AddTransparentPrefixToTransparentSystemColumns,
+                     State_->EnableUserAttributesInTopicQuery))
+            {
+                sourceMetadata.push_back(Build<TCoNameValueTuple>(ctx, read.Pos())
+                    .Name().Build("system")
+                    .Value<TCoAtom>().Build(sysColumn)
+                    .Done());
+            }
+        }
+
+        // Also register __ydb_-prefixed system columns
+        for (auto ydbColumn : GetAllowedYdbSysColumns(State_->EnableUserAttributesInTopicQuery)) {
             sourceMetadata.push_back(Build<TCoNameValueTuple>(ctx, read.Pos())
                 .Name().Build("system")
-                .Value<TCoAtom>().Build(sysColumn)
+                .Value<TCoAtom>().Build(ydbColumn)
                 .Done());
         }
 

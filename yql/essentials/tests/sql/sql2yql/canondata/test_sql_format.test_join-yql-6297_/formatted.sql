@@ -1,6 +1,5 @@
 PRAGMA DisableSimpleColumns;
 
-/* postgres can not */
 $input = (
     SELECT
         2 AS id,

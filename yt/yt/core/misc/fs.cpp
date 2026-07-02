@@ -458,7 +458,20 @@ i64 GetDirectoriesSize(const std::vector<std::string>& paths, bool ignoreUnavail
         wrapNoEntryError([&] {
             auto subdirectories = EnumerateDirectories(directory);
             for (const auto& subdirectory : subdirectories) {
-                directories.push(CombinePaths(directory, subdirectory));
+                auto subpath = CombinePaths(directory, subdirectory);
+                if (checkDeviceId) {
+                    // Skip subdirectories residing on a different device (e.g. overlay mounts
+                    // such as a root volume) to avoid traversing them unnecessarily.
+                    wrapNoEntryError([&] {
+                        auto subStat = GetPathStatistics(subpath);
+                        if (deviceId && subStat.DeviceId != *deviceId) {
+                            return;
+                        }
+                        directories.push(subpath);
+                    });
+                } else {
+                    directories.push(subpath);
+                }
             }
         });
 

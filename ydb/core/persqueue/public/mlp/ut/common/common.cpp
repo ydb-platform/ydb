@@ -245,6 +245,7 @@ void WriteMany(std::shared_ptr<TTopicSdkTestSetup> setup, const std::string& top
 }
 
 void WriteManyGroups(const std::shared_ptr<TTopicSdkTestSetup>& setup, const std::string& topic, size_t messageSize, size_t messageCount, size_t groupCount) {
+    Y_ASSERT(groupCount > 0);
     std::vector<TWriterSettings::TMessage> messages;
     messages.reserve(messageCount);
     for (size_t i = 0; i < messageCount; ++i) {

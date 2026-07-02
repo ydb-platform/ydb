@@ -92,6 +92,7 @@ class TSystemViewsCollector : public TActorBootstrapped<TSystemViewsCollector> {
 
     std::vector<NKikimrSysView::TStorageStatsEntry> StorageStats;
     TActorId StorageStatsCalculatorId;
+    bool InitialCalculation = true;
     static constexpr TDuration StorageStatsUpdatePeriod = TDuration::Minutes(10);
 
 public:
@@ -109,7 +110,6 @@ public:
 
     void Bootstrap(const TActorContext&) {
         Become(&TThis::StateWork);
-        RunStorageStatsCalculator();
     }
 
     STRICT_STFUNC(StateWork,
@@ -134,6 +134,16 @@ public:
         HostRecords = std::move(msg->HostRecords);
         GroupReserveMin = msg->GroupReserveMin;
         GroupReservePart = msg->GroupReservePart;
+
+        if (InitialCalculation) {
+            if (State && HostRecords) {
+                // First time we receive complete BSC state, we need to run storage stats calculator.
+                // We do it here to avoid running it before we have all the data.
+                // Consecutive runs will be scheduled by TEvCalculateStorageStatsRequest event.
+                InitialCalculation = false;
+                RunStorageStatsCalculator();
+            }
+        }
     }
 
     void PassAway() override {

@@ -1095,6 +1095,28 @@ TFulltextRowIdClassification ClassifyFulltextRowId(
     // Used in user-facing error messages so a JSON index build does not talk about "Fulltext".
     const TStringBuf indexKind = (indexType == NKikimrSchemeOp::EIndexTypeGlobalJson) ? "JSON" : "Fulltext";
 
+    // Feature-flag gate: when __ydb_row_id support is disabled, no row_id column or unique index is
+    // used or auto-provisioned. Only the legacy doc_id=PK layout is allowed, which requires a single
+    // integer primary key.
+    if (!AppData()->FeatureFlags.GetEnableFulltextIndexRowId()) {
+        const TTableColumns baseTableColumns = ExtractInfo(tableInfo);
+        TColumnTypes baseColumnTypes;
+        if (!ExtractTypes(tableInfo, baseColumnTypes, error)) {
+            result.Plan = EFulltextRowIdPlan::Error;
+            return result;
+        }
+        TString legacyError;
+        if (CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, indexKind, legacyError)) {
+            result.Plan = EFulltextRowIdPlan::LegacyIntegerPk;
+        } else {
+            error = TStringBuilder()
+                << indexKind << " index over a table without a single integer primary key requires the"
+                << " __ydb_row_id doc_id feature, which is disabled (feature flag EnableFulltextIndexRowId)";
+            result.Plan = EFulltextRowIdPlan::Error;
+        }
+        return result;
+    }
+
     // Look for a live __ydb_row_id column on the main table.
     const NSchemeShard::TTableInfo::TColumn* rowIdColumn = nullptr;
     for (const auto& [_, column] : tableInfo->Columns) {
@@ -1211,6 +1233,27 @@ TFulltextRowIdClassification ClassifyFulltextRowIdForCreate(
     const TStringBuf indexKind = (indexType == NKikimrSchemeOp::EIndexTypeGlobalJson) ? "JSON" : "Fulltext";
 
     const auto& tableDesc = createConfig.GetTableDescription();
+
+    // Feature-flag gate: mirror ClassifyFulltextRowId. When __ydb_row_id support is disabled, no row_id
+    // column or unique index is used or provisioned; only the legacy single-integer-PK layout is allowed.
+    if (!AppData()->FeatureFlags.GetEnableFulltextIndexRowId()) {
+        const TTableColumns baseTableColumns = ExtractInfo(tableDesc);
+        TColumnTypes baseColumnTypes;
+        if (!ExtractTypes(tableDesc, baseColumnTypes, error)) {
+            result.Plan = EFulltextRowIdPlan::Error;
+            return result;
+        }
+        TString legacyError;
+        if (CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, indexKind, legacyError)) {
+            result.Plan = EFulltextRowIdPlan::LegacyIntegerPk;
+        } else {
+            error = TStringBuilder()
+                << indexKind << " index over a table without a single integer primary key requires the"
+                << " __ydb_row_id doc_id feature, which is disabled (feature flag EnableFulltextIndexRowId)";
+            result.Plan = EFulltextRowIdPlan::Error;
+        }
+        return result;
+    }
 
     // Look for a __ydb_row_id column declared on the table being created.
     const NKikimrSchemeOp::TColumnDescription* rowIdColumn = nullptr;

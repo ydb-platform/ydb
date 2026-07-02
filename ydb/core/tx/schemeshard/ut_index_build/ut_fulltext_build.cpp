@@ -636,6 +636,49 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         });
     }
 
+    Y_UNIT_TEST(RowIdDisabled_RejectsCustomPkBuild) {
+        // With EnableFulltextIndexRowId off, building a fulltext index over a custom (non single integer)
+        // PK cannot use or auto-provision __ydb_row_id, so the build is rejected (mirrors the CREATE TABLE
+        // path in TFulltextIndexTests::CreateTableRowIdDisabled).
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        auto& appData = runtime.GetAppData();
+        appData.FeatureFlags.SetEnableUniqConstraint(true);
+        // The gate reads this flag live at classify time, so setting it here disables rowid doc_id mode.
+        appData.FeatureFlags.SetEnableFulltextIndexRowId(false);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "texts"
+            Columns { Name: "pk" Type: "Utf8" NotNull: true }
+            Columns { Name: "text" Type: "String" }
+            Columns { Name: "data" Type: "String" }
+            KeyColumnNames: ["pk"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::Table::TableIndex index = FulltextIndexConfig(false);
+        AsyncBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+        {
+            TAutoPtr<IEventHandle> handle;
+            auto* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
+            UNIT_ASSERT(event);
+            UNIT_ASSERT_VALUES_EQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST,
+                event->Record.GetIssues());
+            UNIT_ASSERT_STRING_CONTAINS(event->Record.DebugString(),
+                "requires the __ydb_row_id doc_id feature, which is disabled (feature flag EnableFulltextIndexRowId)");
+        }
+
+        // No __ydb_row_id unique index (nor the fulltext index) was provisioned.
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathNotExist,
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx"), {
+            NLs::PathNotExist,
+        });
+    }
+
     // Helpers for the auto-provisioning tests below: a table with a custom (Utf8) PK and NO __ydb_row_id
     // column / unique index - the schemeshard provisions both when the fulltext index is built.
 

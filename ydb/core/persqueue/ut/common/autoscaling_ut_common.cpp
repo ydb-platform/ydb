@@ -100,13 +100,26 @@ void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionL
     DoRequest(setup, txId, scheme);
 }
 
+void AlterTopicMessageWriteSpeed(TTopicSdkTestSetup& setup, ui64 writeSpeedInMessagesPerSecond) {
+    auto client = setup.MakeClient();
+    TAlterTopicSettings settings;
+    settings.SetPartitionWriteSpeedMessagesPerSecond(writeSpeedInMessagesPerSecond);
+    settings.SetPartitionWriteBurstMessages(writeSpeedInMessagesPerSecond);
+    auto result = client.AlterTopic(TEST_TOPIC, settings).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
 TWriteMessage Msg(const TString& data, ui64 seqNo) {
     TWriteMessage msg(data);
     msg.SeqNo(seqNo);
     return msg;
 }
 
-TTopicSdkTestSetup CreateSetup(NActors::NLog::EPriority priority, bool enableTopicPartitionSplitBasedOnKllSketch) {
+TTopicSdkTestSetup CreateSetup(
+    NActors::NLog::EPriority priority,
+    bool enableTopicPartitionSplitBasedOnKllSketch,
+    bool enableTopicPartitionSplitBasedOnMessages)
+{
     NKikimrConfig::TFeatureFlags ff;
     ff.SetEnableTopicSplitMerge(true);
     ff.SetEnableTopicServiceTx(true);
@@ -114,6 +127,9 @@ TTopicSdkTestSetup CreateSetup(NActors::NLog::EPriority priority, bool enableTop
     ff.SetEnableTopicAutopartitioningForReplication(true);
     if (enableTopicPartitionSplitBasedOnKllSketch) {
         ff.SetEnableTopicPartitionSplitBasedOnKllSketch(true);
+    }
+    if (enableTopicPartitionSplitBasedOnMessages) {
+        ff.SetEnableTopicPartitionSplitBasedOnMessages(true);
     }
 
     auto settings = TTopicSdkTestSetup::MakeServerSettings();

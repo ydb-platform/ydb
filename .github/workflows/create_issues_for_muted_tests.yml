@@ -42,12 +42,20 @@ jobs:
 
       - name: Resolve build types matrix
         id: resolve
+        # Interpolate untrusted / event inputs via env (not directly into the shell script)
+        # to avoid shell injection through crafted branch names or dispatch inputs.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_BASE_BRANCH: ${{ github.event.inputs.base_branch }}
+          DISPATCH_BUILD_TYPE: ${{ github.event.inputs.build_type }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref || github.base_ref }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            BASE_BRANCH="${{ github.event.inputs.base_branch }}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            BASE_BRANCH="$DISPATCH_BASE_BRANCH"
           else
-            BASE_BRANCH="${{ github.event.pull_request.base.ref || github.base_ref }}"
+            BASE_BRANCH="$PR_BASE_REF"
             if [ -z "$BASE_BRANCH" ]; then
               echo "BASE_BRANCH is empty for pull_request event" >&2
               exit 1
@@ -55,8 +63,8 @@ jobs:
           fi
           echo "base_branch=$BASE_BRANCH" >> "$GITHUB_OUTPUT"
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.build_type }}" ]; then
-            MATRIX_BUILD_TYPES='["${{ github.event.inputs.build_type }}"]'
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$DISPATCH_BUILD_TYPE" ]; then
+            MATRIX_BUILD_TYPES="[\"$DISPATCH_BUILD_TYPE\"]"
           else
             MATRIX_BUILD_TYPES="$(python3 .github/scripts/tests/mute/mute_helper.py issue-build-types \
               --profiles-config ".github/config/mute_issue_and_digest_config.json" \
@@ -72,8 +80,8 @@ jobs:
           # -> duplicate issues opened seconds apart. Only proceed when the triggering PR's own
           # build type is one we create issues for, so exactly one PR drives issue creation.
           SHOULD_RUN=true
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            HEAD_REF="${{ github.event.pull_request.head.ref }}"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            HEAD_REF="$PR_HEAD_REF"
             case "$HEAD_REF" in
               update-muted-ya_*)
                 TRIGGER_BUILD_TYPE="${HEAD_REF##*_}"
@@ -98,6 +106,7 @@ jobs:
     if: |
       needs.resolve-build-types.outputs.should_run == 'true' &&
       ((github.event_name == 'pull_request' &&
+        github.event.pull_request.merged == true &&
         contains(github.event.pull_request.labels.*.name, 'mute-unmute')) ||
        github.event_name == 'workflow_dispatch')
     strategy:
@@ -185,6 +194,7 @@ jobs:
     if: |
       needs.resolve-build-types.outputs.should_run == 'true' &&
       ((github.event_name == 'pull_request' &&
+        github.event.pull_request.merged == true &&
         contains(github.event.pull_request.labels.*.name, 'mute-unmute')) ||
        github.event_name == 'workflow_dispatch')
     steps:

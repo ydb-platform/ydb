@@ -1,12 +1,14 @@
 #include "accessor_subscribe.h"
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
+
 namespace NKikimr::NMetadata::NProvider {
 
 void TDSAccessorNotifier::OnSnapshotModified() {
     auto snapshot = GetCurrentSnapshot();
     if (!snapshot) {
-        ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot construct snapshot";
+        YDB_LOG_ERROR("Cannot construct snapshot");
         return;
     }
 
@@ -20,7 +22,7 @@ void TDSAccessorNotifier::Handle(TEvSubscribe::TPtr& ev) {
     if (TBase::IsReady()) {
         auto snapshot = GetCurrentSnapshot();
         if (!snapshot) {
-            ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot construct snapshot";
+            YDB_LOG_ERROR("Cannot construct snapshot");
             return;
         }
         Sender<TEvRefreshSubscriberData>(snapshot).SendTo(ev->Get()->GetSubscriberId());
@@ -41,7 +43,7 @@ void TDSAccessorNotifier::OnSnapshotRefresh() {
     for (auto it = Asked.begin(); it != Asked.end(); ) {
         if (it->first <= snapshot->GetActuality()) {
             if (!snapshot) {
-                ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot construct snapshot on refresh";
+                YDB_LOG_ERROR("Cannot construct snapshot on refresh");
                 return;
             }
             for (auto&& s : it->second) {

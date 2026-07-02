@@ -20,6 +20,7 @@ from hamcrest import assert_that, equal_to, not_none, has_item, has_items, is_no
 from hamcrest import raises, greater_than, not_, less_than
 from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_test_with_sqs_tenant_installation
 from ydb.tests.library.sqs.test_base import IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
+from ydb.tests.library.sqs.requests_client import REQUEST_TIMEOUT
 
 
 ANOTHER_TABLES_FORMAT_PARAMS = {
@@ -106,12 +107,21 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
         credentials = Credentials(access_key_id, secret_access_key, token='unused')
         SigV4Auth(credentials, 'sqs', SQS_REGION).add_auth(request)
         prepared = request.prepare()
-        return requests.post(prepared.url, data=prepared.body, headers=dict(prepared.headers))
+        return requests.post(
+            prepared.url,
+            data=prepared.body,
+            headers=dict(prepared.headers),
+            timeout=REQUEST_TIMEOUT,
+        )
 
     def _signed_sqs_request_or_raise(self, access_key_id, secret_access_key, action, **params):
         response = self._signed_sqs_request(access_key_id, secret_access_key, action, **params)
         if response.status_code != 200:
-            raise RuntimeError(response.text)
+            raise RuntimeError(
+                "Action {} failed with status {} and text {}".format(
+                    action, response.status_code, response.text
+                )
+            )
         return response
 
     @staticmethod

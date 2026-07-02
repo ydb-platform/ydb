@@ -361,6 +361,7 @@ public:
         bool HasExpectedSlotCount = false;
         ui64 ExpectedSlotSize = 0;
         bool HasExpectedSlotSize = false;
+        ui32 MaxSlots = 0;
         ui32 NumActiveSlots = 0; // sum of owners weights allocated on this PDisk
         ui32 SlotSizeInUnits = 0;
         TMap<Schema::VSlot::VSlotID::Type, TIndirectReferable<TVSlotInfo>::TPtr> VSlotsOnPDisk; // vslots over this PDisk
@@ -473,6 +474,7 @@ public:
             HasExpectedSlotCount = false;
             ExpectedSlotSize = 0;
             HasExpectedSlotSize = false;
+            MaxSlots = 0;
             SlotSizeInUnits = 0;
 
             NKikimrBlobStorage::TPDiskConfig pdiskConfig;
@@ -487,6 +489,9 @@ public:
                 if (pdiskConfig.HasExpectedSlotSize() && pdiskConfig.GetExpectedSlotSize()) {
                     ExpectedSlotSize = pdiskConfig.GetExpectedSlotSize();
                     HasExpectedSlotSize = true;
+                }
+                if (pdiskConfig.HasMaxSlots()) {
+                    MaxSlots = pdiskConfig.GetMaxSlots();
                 }
                 if (HasExpectedSlotSize && !HasExpectedSlotCount) {
                     ExpectedSlotCount = 0;

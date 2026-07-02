@@ -414,9 +414,9 @@ public:
                         storageConsumed += record.GetAllocatedSize();
                         auto itPDisk = pDisksIdx.find(std::make_pair(nodeId, record.GetPDiskId()));
                         if (itPDisk != pDisksIdx.end()) {
-                            auto slotSize = itPDisk->second.GetEnforcedDynamicSlotSize();
+                            auto slotSize = itPDisk->second.GetExpectedSlotSize();
                             if (!slotSize) {
-                                slotSize = itPDisk->second.GetExpectedSlotSize();
+                                slotSize = itPDisk->second.GetEnforcedDynamicSlotSize();
                             }
                             if (!slotSize) {
                                 auto slotCount = itPDisk->second.GetExpectedSlotCount();

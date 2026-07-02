@@ -48,6 +48,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         pdisk->SetExpectedSlotCount(4);
         pdisk->SetExpectedSlotSize(100);
         pdisk->MutablePDiskConfig()->SetExpectedSlotSize(100);
+        pdisk->MutablePDiskConfig()->SetMaxSlots(4);
         pdisk->MutablePDiskMetrics()->SetTotalSize(1000);
         pdisk->MutablePDiskMetrics()->SetAvailableSize(1000);
 

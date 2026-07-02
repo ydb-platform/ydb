@@ -152,6 +152,38 @@ hosts:
         UNIT_CHECK_GENERATED_EXCEPTION(Parse(withSlotSizeInUnits, true), yexception);
     }
 
+    Y_UNIT_TEST(ExpectedSlotSizeRequiresMaxSlots) {
+        TString withoutMaxSlots = R"(
+host_configs:
+- host_config_id: 1
+  drive:
+  - path: disk1
+    type: SSD
+    expected_slot_size: 100000
+hosts:
+- host: fqdn1
+  host_config_id: 1
+)";
+        UNIT_CHECK_GENERATED_EXCEPTION(Parse(withoutMaxSlots, true), yexception);
+
+        TString withMaxSlots = R"(
+host_configs:
+- host_config_id: 1
+  drive:
+  - path: disk1
+    type: SSD
+    expected_slot_size: 100000
+    max_slots: 8
+hosts:
+- host: fqdn1
+  host_config_id: 1
+)";
+        NKikimrConfig::TAppConfig cfg = Parse(withMaxSlots, true);
+        const auto& drive = cfg.GetBlobStorageConfig().GetDefineHostConfig(0).GetDrive(0);
+        UNIT_ASSERT_VALUES_EQUAL(drive.GetPDiskConfig().GetExpectedSlotSize(), 100000);
+        UNIT_ASSERT_VALUES_EQUAL(drive.GetPDiskConfig().GetMaxSlots(), 8);
+    }
+
     Y_UNIT_TEST(StoragePoolTypesWithDefaultDomainName) {
         TString config = R"(
 storage_pool_types:

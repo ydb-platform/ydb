@@ -232,6 +232,7 @@ void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb
                 : hostConfig.GetDefaultHostPDiskConfig();
             if (pdiskConfig.GetExpectedSlotSize()) {
                 newDrive->set_expected_slot_size(pdiskConfig.GetExpectedSlotSize());
+                newDrive->set_max_slots(pdiskConfig.GetMaxSlots());
             } else {
                 newDrive->set_expected_slot_count(pdiskConfig.GetExpectedSlotCount());
             }

@@ -167,21 +167,39 @@ namespace NKikimr::NStorage {
         const bool hasExpectedSlotCount = pdiskConfig->ExpectedSlotCount != 0;
         const bool hasSlotSizeInUnits = pdiskConfig->SlotSizeInUnits != 0;
         const bool hasExpectedSlotSize = pdiskConfig->ExpectedSlotSize != 0;
+        const bool hasMaxSlots = pdiskConfig->MaxSlots != 0;
         if (hasExpectedSlotSize && (hasExpectedSlotCount || hasSlotSizeInUnits)) {
             const TString warning = TStringBuilder()
                 << "PDiskConfig has ExpectedSlotSize with ExpectedSlotCount or SlotSizeInUnits; "
-                << "ExpectedSlotSize takes precedence for slot count calculation when drive size is available"
+                << "ExpectedSlotSize and MaxSlots take precedence for slot count calculation "
+                << "when drive size is available"
                 << " ExpectedSlotCount# " << pdiskConfig->ExpectedSlotCount
                 << " SlotSizeInUnits# " << pdiskConfig->SlotSizeInUnits
-                << " ExpectedSlotSize# " << pdiskConfig->ExpectedSlotSize;
+                << " ExpectedSlotSize# " << pdiskConfig->ExpectedSlotSize
+                << " MaxSlots# " << pdiskConfig->MaxSlots;
             YDB_LOG_ERROR("PDiskConfig has ExpectedSlotSize with ExpectedSlotCount or SlotSizeInUnits",
                 {"marker", "NW113"},
                 {"PDiskId", pdiskID},
                 {"path", path},
                 {"expectedSlotCount", pdiskConfig->ExpectedSlotCount},
                 {"slotSizeInUnits", pdiskConfig->SlotSizeInUnits},
-                {"expectedSlotSize", pdiskConfig->ExpectedSlotSize});
+                {"expectedSlotSize", pdiskConfig->ExpectedSlotSize},
+                {"maxSlots", pdiskConfig->MaxSlots});
             if (configWarning) {
+                *configWarning = warning;
+            }
+        }
+        if (hasExpectedSlotSize && !hasMaxSlots) {
+            const TString warning = TStringBuilder()
+                << "PDiskConfig has ExpectedSlotSize without MaxSlots; "
+                << "slot count calculation requires MaxSlots"
+                << " ExpectedSlotSize# " << pdiskConfig->ExpectedSlotSize;
+            YDB_LOG_ERROR("PDiskConfig has ExpectedSlotSize without MaxSlots",
+                {"marker", "NW117"},
+                {"PDiskId", pdiskID},
+                {"path", path},
+                {"expectedSlotSize", pdiskConfig->ExpectedSlotSize});
+            if (configWarning && configWarning->empty()) {
                 *configWarning = warning;
             }
         }
@@ -224,8 +242,12 @@ namespace NKikimr::NStorage {
         if (pdiskConfig->ExpectedSlotSize) {
             pdiskConfig->ExpectedSlotCount = 0;
             pdiskConfig->SlotSizeInUnits = 0;
-            const ui64 size = getDriveSize();
-            if (!size) {
+            if (!pdiskConfig->MaxSlots) {
+                YDB_LOG_ERROR("Unable to calculate PDisk slot count without MaxSlots",
+                    {"marker", "NW118"},
+                    {"path", path},
+                    {"expectedSlotSize", pdiskConfig->ExpectedSlotSize});
+            } else if (const ui64 size = getDriveSize(); !size) {
                 YDB_LOG_ERROR("Unable to determine drive size for calculating PDisk slot count",
                     {"marker", "NW115"},
                     {"path", path},
@@ -233,13 +255,14 @@ namespace NKikimr::NStorage {
                     {"details", driveSizeDetails});
             } else {
                 pdiskConfig->ExpectedSlotCount = CalculateExpectedSlotCountFromSlotSize(
-                    size, pdiskConfig->ExpectedSlotSize, 0);
+                    size, pdiskConfig->ExpectedSlotSize, pdiskConfig->MaxSlots);
                 YDB_LOG_DEBUG("Calculated PDisk slot count from expected slot size",
                     {"marker", "NW102"},
                     {"path", path},
                     {"slotCount", pdiskConfig->ExpectedSlotCount},
                     {"expectedSlotSize", pdiskConfig->ExpectedSlotSize},
-                    {"fromDriveSize", size});
+                    {"fromDriveSize", size},
+                    {"fromMaxSlots", pdiskConfig->MaxSlots});
             }
         } else if (validInferSettings && inferSettings.SlotSize) {
             if ((pdiskConfig->ExpectedSlotCount || pdiskConfig->SlotSizeInUnits)
@@ -728,6 +751,7 @@ namespace NKikimr::NStorage {
                     localPDisk.SlotSizeInUnits = newSlotSizeInUnits;
                     localPDisk.ExpectedSlotSize = newExpectedSlotSize;
                 }
+                localPDisk.Record = pdisk;
             } else {
                 StartLocalPDisk(pdisk, false);
             }

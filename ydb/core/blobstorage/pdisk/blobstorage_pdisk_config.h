@@ -146,6 +146,7 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 ExpectedSlotCount = 0;
     ui32 SlotSizeInUnits = 0;
     ui64 ExpectedSlotSize = 0;
+    ui32 MaxSlots = 0;
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
     ui32 ChunkBaseLimit = 130;
@@ -337,6 +338,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " IoPieceSizeBytes# " << IoPieceSizeBytes << x;
         str << " ExpectedSlotCount# " << ExpectedSlotCount << x;
         str << " ExpectedSlotSize# " << ExpectedSlotSize << x;
+        str << " MaxSlots# " << MaxSlots << x;
         str << " SlotSizeInUnits# " << SlotSizeInUnits << x;
 
         str << " ReserveLogChunksMultiplier# " << ReserveLogChunksMultiplier << x;
@@ -435,6 +437,10 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasExpectedSlotSize()) {
             ExpectedSlotSize = cfg->GetExpectedSlotSize();
+        }
+
+        if (cfg->HasMaxSlots()) {
+            MaxSlots = cfg->GetMaxSlots();
         }
 
         if (cfg->HasChunkBaseLimit()) {

@@ -84,7 +84,8 @@ namespace NKikimr::NBsController {
                 if (prev.Mood != cur.Mood ||
                         prev.ExpectedSlotCount != cur.ExpectedSlotCount ||
                         prev.SlotSizeInUnits != cur.SlotSizeInUnits ||
-                        prev.ExpectedSlotSize != cur.ExpectedSlotSize) {
+                        prev.ExpectedSlotSize != cur.ExpectedSlotSize ||
+                        prev.MaxSlots != cur.MaxSlots) {
                     CreatePDiskEntry(pdiskId, cur);
                 }
             }

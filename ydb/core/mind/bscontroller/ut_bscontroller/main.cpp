@@ -5,6 +5,7 @@
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/bscontroller/indir.h>
 #include <ydb/core/mind/bscontroller/impl.h>
+#include <ydb/core/mind/bscontroller/sys_view.h>
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/mind/bscontroller/ut_helpers.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
@@ -1679,27 +1680,39 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 return env.Invoke(request);
             };
 
-            auto expectInvalid = [](const NKikimrBlobStorage::TConfigResponse& response) {
+            auto expectInvalid = [](const NKikimrBlobStorage::TConfigResponse& response, TStringBuf error) {
                 Cerr << (TStringBuilder() << response.DebugString() << Endl);
                 UNIT_ASSERT(!response.GetSuccess());
                 UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
                 UNIT_ASSERT(!response.GetStatus(0).GetSuccess());
-                UNIT_ASSERT_C(response.GetStatus(0).GetErrorDescription().Contains(
-                    "ExpectedSlotSize is mutually exclusive with ExpectedSlotCount and SlotSizeInUnits"),
+                UNIT_ASSERT_C(response.GetStatus(0).GetErrorDescription().Contains(error),
                     response.DebugString());
             };
 
             expectInvalid(invoke(1, [](NKikimrBlobStorage::TPDiskConfig& config) {
                 config.SetExpectedSlotCount(4);
                 config.SetExpectedSlotSize(100ull << 30);
-            }));
+            }), "ExpectedSlotSize is mutually exclusive with ExpectedSlotCount and SlotSizeInUnits");
 
             expectInvalid(invoke(2, [](NKikimrBlobStorage::TPDiskConfig& config) {
                 config.SetSlotSizeInUnits(4);
                 config.SetExpectedSlotSize(100ull << 30);
-            }));
+            }), "ExpectedSlotSize is mutually exclusive with ExpectedSlotCount and SlotSizeInUnits");
 
-            NKikimrBlobStorage::TConfigResponse response = invoke(3, [](NKikimrBlobStorage::TPDiskConfig& config) {
+            expectInvalid(invoke(3, [](NKikimrBlobStorage::TPDiskConfig& config) {
+                config.SetExpectedSlotSize(100ull << 30);
+            }), "ExpectedSlotSize requires MaxSlots");
+
+            NKikimrBlobStorage::TConfigResponse response = invoke(4, [](NKikimrBlobStorage::TPDiskConfig& config) {
+                config.SetExpectedSlotSize(100ull << 30);
+                config.SetMaxSlots(16);
+            });
+            Cerr << (TStringBuilder() << response.DebugString() << Endl);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+            UNIT_ASSERT(response.GetStatus(0).GetSuccess());
+
+            response = invoke(5, [](NKikimrBlobStorage::TPDiskConfig& config) {
                 config.SetExpectedSlotCount(4);
                 config.SetSlotSizeInUnits(2);
             });
@@ -1713,6 +1726,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
     Y_UNIT_TEST(ExpectedSlotSizeWithoutSlotCountMetricsKeepsZeroSlotCount) {
         NKikimrBlobStorage::TPDiskConfig config;
         config.SetExpectedSlotSize(1ull << 30);
+        config.SetMaxSlots(16);
 
         TString serializedConfig;
         UNIT_ASSERT(config.SerializeToString(&serializedConfig));
@@ -1762,6 +1776,25 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_VALUES_EQUAL(slotCount, 64);
         UNIT_ASSERT_VALUES_EQUAL(slotSizeInUnits, 0);
         UNIT_ASSERT_VALUES_EQUAL(pdisk.GetEffectiveExpectedSlotCount(), 64);
+    }
+
+    Y_UNIT_TEST(GroupUsagePrefersExpectedSlotSizeOverDynamicSlotSize) {
+        NKikimrBlobStorage::TPDiskMetrics pdiskMetrics;
+        pdiskMetrics.SetEnforcedDynamicSlotSize(1000);
+        pdiskMetrics.SetSlotSizeInUnits(1);
+
+        NKikimrBlobStorage::TVDiskMetrics vdiskMetrics;
+        vdiskMetrics.SetAllocatedSize(25);
+
+        NKikimrSysView::TGroupInfo info;
+        CalculateGroupUsageStats(
+            &info,
+            {{&pdiskMetrics, &vdiskMetrics, 10, 100}},
+            TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
+            2);
+
+        UNIT_ASSERT_VALUES_EQUAL(info.GetAllocatedSize(), 25);
+        UNIT_ASSERT_VALUES_EQUAL(info.GetAvailableSize(), 75);
     }
 
     Y_UNIT_TEST(ZeroExpectedSlotSizeDoesNotDisableDefaultSlotCount) {

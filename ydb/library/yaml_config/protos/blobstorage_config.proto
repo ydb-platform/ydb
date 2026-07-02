@@ -70,10 +70,13 @@ message Drive {
     // nontransparent user-defined kind used for filtering when picking up groups
     uint64 kind = 5;
     // expected_slot_count and expected_slot_size are mutually exclusive.
+    // expected_slot_size requires max_slots.
     // Number of slots to calculate per-vdisk disk space limit.
     uint64 expected_slot_count = 6;
     // Per-vdisk disk space limit.
     uint64 expected_slot_size = 7;
+    // Upper bound for expected_slot_count inferred from expected_slot_size.
+    uint32 max_slots = 8;
 }
 
 message HostConfig {

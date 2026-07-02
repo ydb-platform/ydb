@@ -758,6 +758,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         TStorageGroups::TPDisk pdisk;
         pdisk.ExpectedSlotSize = 100;
+        pdisk.EnforcedDynamicSlotSize = 1000;
         pdisk.SlotSizeInUnits = 1;
         pdisk.TotalSize = 10000;
         pdisk.AvailableSize = 9000;

@@ -89,6 +89,7 @@ message TPDiskConfig {
     optional uint64 InsaneLogChunksMultiplier = 2000;  // Log of cutThreshold * InsaneLogChunksMultiplier is insane
 
     // ExpectedSlotSize is mutually exclusive with ExpectedSlotCount and SlotSizeInUnits in config.
+    // When ExpectedSlotSize is set, MaxSlots is required as an upper bound for inferred ExpectedSlotCount.
     optional uint64 ExpectedSlotCount = 2001; // Number of slots to calculate per-vdisk disk space limit.
 
     optional uint32 ChunkBaseLimit = 2002; // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
@@ -101,4 +102,5 @@ message TPDiskConfig {
     optional bool UseBytesFlightControl = 2008;
     optional uint32 IoPieceSizeBytes = 2009;
     optional uint64 ExpectedSlotSize = 2010; // Per-vdisk disk space limit.
+    optional uint32 MaxSlots = 2011; // Upper bound for ExpectedSlotCount inferred from ExpectedSlotSize.
 };

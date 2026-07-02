@@ -4,6 +4,7 @@
 #include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
+#include <ydb/core/protos/blobstorage_pdisk_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
@@ -559,6 +560,34 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         res = ValidateConfig(proposed, err);
         UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
         UNIT_ASSERT_C(err[0].Contains("SlotSize is mutually exclusive with UnitSize"), err[0]);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+
+    Y_UNIT_TEST(ValidateConfigExpectedSlotSizeRequiresMaxSlots) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* pdiskConfig = proposed.MutableBlobStorageConfig()
+            ->AddDefineHostConfig()
+            ->AddDrive()
+            ->MutablePDiskConfig();
+        pdiskConfig->SetExpectedSlotSize(600ull << 30);
+
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+        UNIT_ASSERT_C(err[0].Contains("ExpectedSlotSize requires MaxSlots"), err[0]);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+
+        pdiskConfig->SetMaxSlots(16);
+        err.clear();
+        res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 0);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+
+        pdiskConfig->SetExpectedSlotCount(4);
+        err.clear();
+        res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+        UNIT_ASSERT_C(err[0].Contains("ExpectedSlotSize is mutually exclusive with ExpectedSlotCount"), err[0]);
         UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
     }
 

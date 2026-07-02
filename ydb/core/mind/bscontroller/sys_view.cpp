@@ -61,10 +61,10 @@ void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vecto
 
         const auto& pdiskMetrics = *disk.PDiskMetrics;
         ui64 slotSize = 0;
-        if (pdiskMetrics.HasEnforcedDynamicSlotSize()) {
-            slotSize = pdiskMetrics.GetEnforcedDynamicSlotSize();
-        } else if (disk.ExpectedSlotSize) {
+        if (disk.ExpectedSlotSize) {
             slotSize = disk.ExpectedSlotSize;
+        } else if (pdiskMetrics.HasEnforcedDynamicSlotSize()) {
+            slotSize = pdiskMetrics.GetEnforcedDynamicSlotSize();
         } else if (pdiskMetrics.GetTotalSize() && disk.ExpectedSlotCount) {
             slotSize = pdiskMetrics.GetTotalSize() / disk.ExpectedSlotCount;
         }

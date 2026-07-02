@@ -1368,6 +1368,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         NKikimrBlobStorage::TPDiskConfig pdiskConfig;
         pdiskConfig.SetExpectedSlotSize(expectedSlotSize);
+        pdiskConfig.SetMaxSlots(8);
         CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
             &pdiskConfig, realNodeWarden);
         CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
@@ -1385,7 +1386,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
             &pdiskConfig, realNodeWarden);
         CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
-            pdiskId, 2400u, 0u, smallExpectedSlotSize);
+            pdiskId, 8u, 0u, smallExpectedSlotSize);
     }
 
     CUSTOM_UNIT_TEST(TestExpectedSlotSettingsTransitions) {
@@ -1413,12 +1414,14 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         pdiskConfig.ClearExpectedSlotCount();
         pdiskConfig.ClearSlotSizeInUnits();
         pdiskConfig.SetExpectedSlotSize(expectedSlotSize);
+        pdiskConfig.SetMaxSlots(8);
         CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
             &pdiskConfig, realNodeWarden);
         CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
             pdiskId, 4, 0u, expectedSlotSize);
 
         pdiskConfig.ClearExpectedSlotSize();
+        pdiskConfig.ClearMaxSlots();
         pdiskConfig.SetExpectedSlotCount(9);
         pdiskConfig.SetSlotSizeInUnits(3);
         CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
@@ -1445,6 +1448,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         pdiskConfig.SetExpectedSlotCount(17);
         pdiskConfig.SetSlotSizeInUnits(7);
         pdiskConfig.SetExpectedSlotSize(expectedSlotSize);
+        pdiskConfig.SetMaxSlots(8);
         CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
             &pdiskConfig, realNodeWarden);
         CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
@@ -1463,7 +1467,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         UNIT_ASSERT_C(out.Str().Contains("PDiskConfig has ExpectedSlotSize"), out.Str());
         UNIT_ASSERT_C(out.Str().Contains("ExpectedSlotCount# 17"), out.Str());
         UNIT_ASSERT_C(out.Str().Contains("SlotSizeInUnits# 7"), out.Str());
-        UNIT_ASSERT_C(out.Str().Contains("ExpectedSlotSize takes precedence"), out.Str());
+        UNIT_ASSERT_C(out.Str().Contains("ExpectedSlotSize and MaxSlots take precedence"), out.Str());
     }
 
     CUSTOM_UNIT_TEST(TestInferPDiskSlotCountWithRealNodeWarden) {

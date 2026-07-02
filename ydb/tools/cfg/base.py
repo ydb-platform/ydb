@@ -63,12 +63,19 @@ def merge_with_default(dft, override):
 
 
 class KiKiMRDrive(object):
-    def __init__(self, type, path, shared_with_os=False, expected_slot_count=None, kind=None, pdisk_config=None):
+    def __init__(self, type, path, shared_with_os=False, expected_slot_count=None,
+                 expected_slot_size=None, max_slots=None, kind=None, pdisk_config=None):
+        if expected_slot_size is not None and expected_slot_count is not None:
+            raise ValueError("expected_slot_size is mutually exclusive with expected_slot_count")
+        if expected_slot_size is not None and max_slots is None:
+            raise ValueError("expected_slot_size requires max_slots")
         self.type = type
         self.path = path
         self.shared_with_os = shared_with_os
         self.pdisk_config = pdisk_config
         self.expected_slot_count = expected_slot_count
+        self.expected_slot_size = expected_slot_size
+        self.max_slots = max_slots
         self.kind = kind
 
     def __eq__(self, other):
@@ -77,12 +84,23 @@ class KiKiMRDrive(object):
             and self.path == other.path
             and self.shared_with_os == other.shared_with_os
             and self.expected_slot_count == other.expected_slot_count
+            and self.expected_slot_size == other.expected_slot_size
+            and self.max_slots == other.max_slots
             and self.kind == other.kind
             and self.pdisk_config == other.pdisk_config
         )
 
     def __hash__(self):
-        return hash("\0".join(map(str, (self.type, self.path, self.shared_with_os, self.expected_slot_count, self.kind, self.pdisk_config))))
+        return hash("\0".join(map(str, (
+            self.type,
+            self.path,
+            self.shared_with_os,
+            self.expected_slot_count,
+            self.expected_slot_size,
+            self.max_slots,
+            self.kind,
+            self.pdisk_config,
+        ))))
 
 
 Domain = collections.namedtuple(

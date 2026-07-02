@@ -14,9 +14,15 @@ namespace NKikimr {
             const bool hasExpectedSlotCount = config.HasExpectedSlotCount() && config.GetExpectedSlotCount();
             const bool hasSlotSizeInUnits = config.HasSlotSizeInUnits() && config.GetSlotSizeInUnits();
             const bool hasExpectedSlotSize = config.HasExpectedSlotSize() && config.GetExpectedSlotSize();
+            const bool hasMaxSlots = config.HasMaxSlots() && config.GetMaxSlots();
             if (hasExpectedSlotSize && (hasExpectedSlotCount || hasSlotSizeInUnits)) {
                 throw TExError() << context
                     << " ExpectedSlotSize is mutually exclusive with ExpectedSlotCount and SlotSizeInUnits"
+                    << " in PDiskConfig";
+            }
+            if (hasExpectedSlotSize && !hasMaxSlots) {
+                throw TExError() << context
+                    << " ExpectedSlotSize requires MaxSlots"
                     << " in PDiskConfig";
             }
         }

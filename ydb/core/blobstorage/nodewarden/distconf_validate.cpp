@@ -9,9 +9,14 @@ namespace NKikimr::NStorage {
         const bool hasExpectedSlotCount = config.HasExpectedSlotCount() && config.GetExpectedSlotCount();
         const bool hasSlotSizeInUnits = config.HasSlotSizeInUnits() && config.GetSlotSizeInUnits();
         const bool hasExpectedSlotSize = config.HasExpectedSlotSize() && config.GetExpectedSlotSize();
+        const bool hasMaxSlots = config.HasMaxSlots() && config.GetMaxSlots();
         if (hasExpectedSlotSize && (hasExpectedSlotCount || hasSlotSizeInUnits)) {
             return TStringBuilder() << context
                 << " PDiskConfig has ExpectedSlotSize with ExpectedSlotCount or SlotSizeInUnits";
+        }
+        if (hasExpectedSlotSize && !hasMaxSlots) {
+            return TStringBuilder() << context
+                << " PDiskConfig has ExpectedSlotSize without MaxSlots";
         }
         return {};
     }

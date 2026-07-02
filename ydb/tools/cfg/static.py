@@ -696,11 +696,17 @@ class StaticConfigGenerator(object):
                     # inside config.yaml we should use field drive in host_configs section
                     host_config['drive'] = host_config.pop('drives')
                     for drive in host_config['drive']:
+                        pdisk_config = {}
                         if 'expected_slot_count' in drive:
                             # inside config.yaml we should use pdisk_config section for expected_slot_count
-                            drive['pdisk_config'] = {
-                                'expected_slot_count': drive.pop('expected_slot_count')
-                            }
+                            pdisk_config['expected_slot_count'] = drive.pop('expected_slot_count')
+                        if 'expected_slot_size' in drive:
+                            # inside config.yaml we should use pdisk_config section for expected_slot_size/max_slots
+                            pdisk_config['expected_slot_size'] = drive.pop('expected_slot_size')
+                        if 'max_slots' in drive:
+                            pdisk_config['max_slots'] = drive.pop('max_slots')
+                        if pdisk_config:
+                            drive.setdefault('pdisk_config', {}).update(pdisk_config)
 
                         # support type-safe `pdisk_config` directly in `host_configs`, for example:
                         # - path: /dev/disk/by-partlabel/ydb_disk_hdd_04
@@ -1011,7 +1017,14 @@ class StaticConfigGenerator(object):
                             vdisk_location['pdisk_category'] = int(vdisk_location['pdisk_category'])
                             if 'pdisk_config' in vdisk_location:
                                 if 'expected_slot_count' in vdisk_location['pdisk_config']:
-                                    vdisk_location['pdisk_config']['expected_slot_count'] = int(vdisk_location['pdisk_config']['expected_slot_count'])
+                                    vdisk_location['pdisk_config']['expected_slot_count'] = int(
+                                        vdisk_location['pdisk_config']['expected_slot_count'])
+                                if 'expected_slot_size' in vdisk_location['pdisk_config']:
+                                    vdisk_location['pdisk_config']['expected_slot_size'] = int(
+                                        vdisk_location['pdisk_config']['expected_slot_size'])
+                                if 'max_slots' in vdisk_location['pdisk_config']:
+                                    vdisk_location['pdisk_config']['max_slots'] = int(
+                                        vdisk_location['pdisk_config']['max_slots'])
 
         if self.__cluster_details.channel_profile_config is not None:
             normalized_config["channel_profile_config"] = self.__cluster_details.channel_profile_config
@@ -1299,6 +1312,9 @@ class StaticConfigGenerator(object):
 
                 if drive.expected_slot_count is not None:
                     drive_pb.PDiskConfig.ExpectedSlotCount = drive.expected_slot_count
+                if drive.expected_slot_size is not None:
+                    drive_pb.PDiskConfig.ExpectedSlotSize = drive.expected_slot_size
+                    drive_pb.PDiskConfig.MaxSlots = drive.max_slots
 
                 # Full support of `pdisk_config`, not just copying selected fields manually
                 # from other non-typed locations
@@ -1379,6 +1395,9 @@ class StaticConfigGenerator(object):
 
                 if drive.expected_slot_count is not None:
                     drive_pb.PDiskConfig.ExpectedSlotCount = drive.expected_slot_count
+                if drive.expected_slot_size is not None:
+                    drive_pb.PDiskConfig.ExpectedSlotSize = drive.expected_slot_size
+                    drive_pb.PDiskConfig.MaxSlots = drive.max_slots
 
             my_group = self._read_generated_bs_config(
                 group.get("erasure"),

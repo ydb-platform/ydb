@@ -44,14 +44,6 @@ void AddReadExpressionMemberDeps(const TOpRead& read, const TExprNode::TPtr& nod
     }
 }
 
-void AddReadOriginalPredicateDeps(const TOpRead& read, TInfoUnitSet& requiredColumns) {
-    if (!read.OriginalPredicate) {
-        return;
-    }
-
-    AddReadExpressionMemberDeps(read, read.OriginalPredicate->Node, requiredColumns);
-}
-
 TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const TInfoUnitSet& liveOut, const TInfoUnitSet& keepKeyColumns = {}) {
     TVector<bool> keep(map->MapElements.size(), false);
     for (size_t idx = 0; idx < map->MapElements.size(); ++idx) {
@@ -98,24 +90,18 @@ TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const
     return newElements;
 }
 
-TVector<TInfoUnit> KeepLiveColumns(const TVector<TInfoUnit>& columns, const TInfoUnitSet& liveOut, const TInfoUnitSet& keepKeyColumns = {}) {
-    TVector<TInfoUnit> newColumns;
-    newColumns.reserve(columns.size());
-
-    for (const auto& column : columns) {
-        if (liveOut.contains(column) || keepKeyColumns.contains(column)) {
-            newColumns.push_back(column);
+bool NarrowReadColumns(const TIntrusivePtr<TOpRead>& read, const TInfoUnitSet& liveOut, const TInfoUnitSet& keepKeyColumns = {}) {
+    TInfoUnitSet requiredColumns;
+    for (const auto& outputIU : read->OutputIUs) {
+        if (liveOut.contains(outputIU) || keepKeyColumns.contains(outputIU)) {
+            AddInfoUnit(requiredColumns, outputIU);
         }
     }
 
-    return newColumns;
-}
-
-bool NarrowReadColumns(const TIntrusivePtr<TOpRead>& read, const TVector<TInfoUnit>& liveOutput) {
-    TInfoUnitSet requiredColumns;
-    AddInfoUnits(requiredColumns, liveOutput);
     AddReadLambdaDeps(*read, read->OlapFilterLambda, requiredColumns);
-    AddReadOriginalPredicateDeps(*read, requiredColumns);
+    if (read->OriginalPredicate) {
+        AddReadExpressionMemberDeps(*read, read->OriginalPredicate->Node, requiredColumns);
+    }
 
     TVector<TString> newColumns;
     TVector<TInfoUnit> newOutputIUs;
@@ -144,14 +130,11 @@ bool NarrowReadColumns(const TIntrusivePtr<TOpRead>& read, const TVector<TInfoUn
     return true;
 }
 
-bool PruneAggregateTraits(const TIntrusivePtr<TOpAggregate>& aggregate, const TVector<TInfoUnit>& liveOutput) {
-    TInfoUnitSet liveOutputSet;
-    AddInfoUnits(liveOutputSet, liveOutput);
-
+bool PruneAggregateTraits(const TIntrusivePtr<TOpAggregate>& aggregate, const TInfoUnitSet& liveOut) {
     TVector<TOpAggregationTraits> newTraits;
     newTraits.reserve(aggregate->AggregationTraitsList.size());
     for (const auto& traits : aggregate->AggregationTraitsList) {
-        if (liveOutputSet.contains(traits.ResultColName)) {
+        if (liveOut.contains(traits.ResultColName)) {
             newTraits.push_back(traits);
         }
     }
@@ -219,8 +202,7 @@ bool TPruneDeadReadColumnsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
         }
     }
 
-    const auto liveOutput = KeepLiveColumns(read->GetOutputIUs(), liveOut, keepKeyColumns);
-    return NarrowReadColumns(read, liveOutput);
+    return NarrowReadColumns(read, liveOut, keepKeyColumns);
 }
 
 bool TPruneDeadAggregateTraitsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
@@ -234,9 +216,7 @@ bool TPruneDeadAggregateTraitsRule::MatchAndApply(TIntrusivePtr<IOperator>& inpu
     auto aggregate = CastOperator<TOpAggregate>(input);
     const auto& liveOut = GetLiveOut(aggregate.get());
 
-    // Key columns will be preserved in the aggregate anyway
-    const auto liveOutput = KeepLiveColumns(aggregate->GetOutputIUs(), liveOut);
-    return PruneAggregateTraits(aggregate, liveOutput);
+    return PruneAggregateTraits(aggregate, liveOut);
 }
 
 } // namespace NKqp

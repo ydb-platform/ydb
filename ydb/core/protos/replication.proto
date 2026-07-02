@@ -24,9 +24,15 @@ message TReplicationDefaults {
         optional string ResourceType = 4;
     }
 
+    message TLocalMetadataService {
+        optional string Host = 1 [default = "169.254.169.254"];
+        optional uint64 Port = 2 [default = 80];
+    }
+
     optional int32 RetentionPeriodSeconds = 1 [default = 86400]; // 1d
     optional TSchemeOperationLimits SchemeOperationLimits = 2;
     optional TIamServiceControl IamServiceControl = 3;
+    optional TLocalMetadataService LocalMetadataService = 4;
 }
 
 message TStaticCredentials {

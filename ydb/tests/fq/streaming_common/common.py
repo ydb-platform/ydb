@@ -43,6 +43,7 @@ def get_ydb_config(request):
         "enable_streaming_queries_counters",
         "enable_topics_sql_io_operations",
         "enable_streaming_queries_pq_sink_deduplication",
+        "enable_external_data_source_auth_method_iam"
     }
     if enable_shared_reading_in_streaming_queries:
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
@@ -69,6 +70,18 @@ def get_ydb_config(request):
             "enable_watermarks": enable_watermarks,
             "enable_watermarks_advanced": enable_watermarks_advanced,
             "enable_streaming_partition_balancing": enable_streaming_partition_balancing,
+        },
+        replication_config={
+            "iam_service_control": {
+                "endpoint": os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666"),
+                "service_id": "ydb",
+                "microservice_id": "data-plane",
+                "resource_type": "resource-manager.cloud"
+            },
+            "local_metadata_service": {
+                "host": os.environ.get("VM_METADATA_EMULATOR_HOST", "localhost"),
+                "port":os.environ.get("VM_METADATA_EMULATOR_PORT", 80)
+            }
         },
         default_clusteradmin="root@builtin",
         use_in_memory_pdisks=False,

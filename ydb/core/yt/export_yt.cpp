@@ -345,7 +345,7 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
             return true;
         }
 
-        YDB_LOG_ERROR("[Export] [yt] Error",
+        YDB_LOG_ERROR("[Export] [yt] Error at marker",
             {"marker", marker},
             {"self", SelfId()},
             {"error", ToString(result)});

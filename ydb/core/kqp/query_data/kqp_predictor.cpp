@@ -49,9 +49,6 @@ void TStagePredictor::Scan(const NYql::TExprNode::TPtr& stageNode) {
             HasCondenseFlag = true;
         } else if (node.Maybe<NYql::NNodes::TKqpWideReadTable>()) {
             HasRangeScanFlag = true;
-        } else if (node.Maybe<NYql::NNodes::TKqpUpsertRows>()) {
-        } else if (node.Maybe<NYql::NNodes::TKqpDeleteRows>()) {
-
         } else if (node.Maybe<NYql::NNodes::TKqpWideReadTableRanges>() || node.Maybe<NYql::NNodes::TKqpWideReadOlapTableRanges>()) {
             HasRangeScanFlag = true;
         } else if (node.Maybe<NYql::NNodes::TCoSort>()) {

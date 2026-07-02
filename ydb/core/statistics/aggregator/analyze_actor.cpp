@@ -133,10 +133,10 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = request.ResultSet.front();
 
     if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-        YDB_LOG_WARN("Navigate request failed with",
+        YDB_LOG_WARN("Navigate request failed",
             {"selfId", SelfId()},
             {"status", entry.Status},
-            {"operationId", OperationId},
+            {"operationId", OperationId.Quote()},
             {"pathId", PathId},
             {"databaseName", DatabaseName});
 
@@ -234,10 +234,10 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& 
     const NSchemeCache::TSchemeCacheRequest::TEntry& entry = request.ResultSet.front();
 
     if (entry.Status != NSchemeCache::TSchemeCacheRequest::EStatus::OkData) {
-        YDB_LOG_WARN("Resolve request failed with",
+        YDB_LOG_WARN("Resolve request failed",
             {"selfId", SelfId()},
             {"status", entry.Status},
-            {"operationId", OperationId},
+            {"operationId", OperationId.Quote()},
             {"pathId", PathId},
             {"databaseName", DatabaseName});
 

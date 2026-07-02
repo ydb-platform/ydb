@@ -28,7 +28,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_ANALYZE_TABLE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("TTxAnalyze::Execute. ReplyToActorId Record",
+        YDB_LOG_DEBUG("TTxAnalyze::Execute",
             {"tabletId", Self->TabletID()},
             {"replyToActorId", ReplyToActorId},
             {"record", Record()});
@@ -49,11 +49,11 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
         // opId-only lookup (Current*, MarkFinished, etc.).
         auto* existingOperation = Self->ForceTraversalOperation(operationId);
         if (existingOperation && existingOperation->DatabaseName != Record().GetDatabase()) {
-            YDB_LOG_WARN("now",
+            YDB_LOG_WARN("TTxAnalyze::Execute. Replacing force traversal with same OperationId from different database",
                 {"tabletId", Self->TabletID()},
-                {"operationId", operationId},
-                {"#_existingOperation->DatabaseName", existingOperation->DatabaseName},
-                {"#_Record().GetDatabase", Record().GetDatabase()});
+                {"operationId", operationId.Quote()},
+                {"existingOperationDatabase", existingOperation->DatabaseName},
+                {"requestDatabase", Record().GetDatabase()});
             Self->DeleteForceTraversalOperation(operationId, db);
             existingOperation = nullptr;
         }
@@ -64,9 +64,9 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
                 // Idempotent retry: the operation already finished. Don't redo the
                 // analyze; replay the cached terminal status in Complete() so the
                 // requester sees a stable result and the history entry is preserved.
-                YDB_LOG_DEBUG("TTxAnalyze::Execute. Replay terminal response. OperationId ReplyToActorId",
+                YDB_LOG_DEBUG("TTxAnalyze::Execute. Replay terminal response.",
                     {"tabletId", Self->TabletID()},
-                    {"operationId", operationId},
+                    {"operationId", operationId.Quote()},
                     {"replyToActorId", ReplyToActorId});
                 switch (existingOperation->State) {
                     case Ydb::Table::AnalyzeState::STATE_DONE:
@@ -82,16 +82,16 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
                 TerminalReplayIssues = existingOperation->Issues;
                 return true;
             } else if (existingOperation->ReplyToActorId == Event->Sender) {
-                YDB_LOG_DEBUG("TTxAnalyze::Execute. Reattach to existing force traversal. OperationId ReplyToActorId",
+                YDB_LOG_DEBUG("TTxAnalyze::Execute. Reattach to existing force traversal.",
                     {"tabletId", Self->TabletID()},
-                    {"operationId", operationId},
+                    {"operationId", operationId.Quote()},
                     {"replyToActorId", ReplyToActorId});
                 existingOperation->RequestingActorReattached = true;
                 return true;
             } else {
-                YDB_LOG_DEBUG("TTxAnalyze::Execute. Delete broken force traversal. OperationId ReplyToActorId",
+                YDB_LOG_DEBUG("TTxAnalyze::Execute. Delete broken force traversal.",
                     {"tabletId", Self->TabletID()},
-                    {"operationId", operationId},
+                    {"operationId", operationId.Quote()},
                     {"replyToActorId", ReplyToActorId});
                 Self->DeleteForceTraversalOperation(operationId, db);
             }
@@ -100,9 +100,9 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
         const TString types = JoinVectorIntoString(TVector<ui32>(Record().GetTypes().begin(), Record().GetTypes().end()), ",");
         const TString& databaseName = Record().GetDatabase();
 
-        YDB_LOG_DEBUG("TTxAnalyze::Execute. Create new force traversal operation DatabaseName: `",
+        YDB_LOG_DEBUG("TTxAnalyze::Execute. Create new force traversal operation",
             {"tabletId", Self->TabletID()},
-            {"operationId", operationId},
+            {"operationId", operationId.Quote()},
             {"databaseName", databaseName},
             {"types", types});
 
@@ -127,7 +127,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
 
             YDB_LOG_DEBUG("TTxAnalyze::Execute. Create new force traversal table",
                 {"tabletId", Self->TabletID()},
-                {"operationId", operationId},
+                {"operationId", operationId.Quote()},
                 {"pathId", pathId},
                 {"columnTags", columnTagsStr});
 

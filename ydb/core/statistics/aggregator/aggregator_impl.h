@@ -258,7 +258,7 @@ private:
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
-                    YDB_LOG_CRIT_CTX_COMP(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS, "TStatisticsAggregator StateWork unexpected event 0x%08x",
+                    YDB_LOG_CRIT_CTX_COMP(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS, "TStatisticsAggregator StateWork unexpected event",
                         {"eventType", ev->GetTypeRewrite()});
                 }
         }

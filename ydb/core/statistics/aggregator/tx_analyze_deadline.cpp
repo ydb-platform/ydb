@@ -62,7 +62,7 @@ struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {
         for (const auto& operationId : toDelete) {
             YDB_LOG_DEBUG("TTxAnalyzeDeadline: deleting expired history",
                 {"tabletId", Self->TabletID()},
-                {"operationId", operationId});
+                {"operationId", operationId.Quote()});
             Self->DeleteForceTraversalOperation(operationId, db);
         }
 

@@ -485,14 +485,14 @@ void TStatisticsAggregator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
                     }
                 }
             }
-            YDB_LOG_CRIT("TEvDeliveryProblem with unexpected tablet",
+            YDB_LOG_CRIT("TEvDeliveryProblem to unexpected tablet",
                 {"tabletId", TabletID()},
-                {"tabletId", tabletId});
+                {"destinationTabletId", tabletId});
         }
     } else {
-        YDB_LOG_ERROR("TEvDeliveryProblem with",
+        YDB_LOG_ERROR("TEvDeliveryProblem to DataShard",
             {"tabletId", TabletID()},
-            {"dataShard", tabletId});
+            {"dataShardId", tabletId});
         if (DatashardRanges.empty()) {
             return;
         }
@@ -538,7 +538,7 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev) {
         }
     }
 
-    YDB_LOG_DEBUG("Send TEvStatistics::TEvAnalyzeStatusResponse. Status",
+    YDB_LOG_DEBUG("Send TEvStatistics::TEvAnalyzeStatusResponse",
         {"tabletId", TabletID()},
         {"status", outRecord.GetStatus()});
 
@@ -635,14 +635,14 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeActorResult::TPtr& e
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeCancel::TPtr& ev) {
     const auto& operationId = ev->Get()->Record.GetOperationId();
     if (operationId != ForceTraversalOperationId) {
-        YDB_LOG_NOTICE("Got unexpected TEvAnalyzeCancel with ignoring",
-            {"operationId", operationId},
-            {"expected", ForceTraversalOperationId});
+        YDB_LOG_NOTICE("Got unexpected TEvAnalyzeCancel, ignoring",
+            {"operationId", operationId.Quote()},
+            {"expected", ForceTraversalOperationId.Quote()});
         return;
     }
 
     YDB_LOG_DEBUG("Got TEvAnalyzeCancel,",
-        {"operationId", operationId});
+        {"operationId", operationId.Quote()});
     DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED);
 }
 
@@ -765,12 +765,12 @@ void TStatisticsAggregator::SaveStatisticsToTable() {
 
     SaveQueryActorId = Register(
         CreateSaveStatisticsQuery(SelfId(), Database, TraversalPathId, std::move(items)));
-    YDB_LOG_DEBUG("Dispatched SaveStatisticsQuery actor items data items",
+    YDB_LOG_DEBUG("Dispatched SaveStatisticsQuery",
         {"tabletId", TabletID()},
-        {"id", SaveQueryActorId},
-        {"size", itemsSize},
-        {"humanReadableDataSize", HumanReadableSize(dataSize, ESizeFormat::SF_BYTES)},
-        {"left", StatisticsToSave.size()});
+        {"actorId", SaveQueryActorId},
+        {"itemsSize", itemsSize},
+        {"dataSize", HumanReadableSize(dataSize, ESizeFormat::SF_BYTES)},
+        {"itemsLeft", StatisticsToSave.size()});
 }
 
 void TStatisticsAggregator::DeleteStatisticsFromTable() {
@@ -841,10 +841,10 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
                 AnalyzeActorId = ctx.Register(new TAnalyzeActor(
                     SelfId(), operation.OperationId, operation.DatabaseName, operationTable.PathId,
                     operationTable.ColumnTags, analyzeActorConfig));
-                YDB_LOG_DEBUG("ScheduleNextAnalyze. started analyzing",
+                YDB_LOG_DEBUG("ScheduleNextAnalyze. started analyzing table",
                     {"tabletId", TabletID()},
-                    {"operationId", operation.OperationId},
-                    {"table", operationTable.PathId},
+                    {"operationId", operation.OperationId.Quote()},
+                    {"pathId", operationTable.PathId},
                     {"analyzeActorId", AnalyzeActorId});
 
                 return;
@@ -853,7 +853,7 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
 
         YDB_LOG_DEBUG("ScheduleNextAnalyze. All the force traversal tables sent the requests",
             {"tabletId", TabletID()},
-            {"operationId", operation.OperationId});
+            {"operationId", operation.OperationId.Quote()});
         continue;
     }
 
@@ -1006,7 +1006,7 @@ std::optional<bool> TStatisticsAggregator::IsColumnTable(const TPathId& pathId) 
     auto itPath = ScheduleTraversals.find(pathId);
     if (itPath != ScheduleTraversals.end()) {
         bool ret = itPath->second.IsColumnTable;
-        YDB_LOG_DEBUG("IsColumnTable. Path is table",
+        YDB_LOG_DEBUG("IsColumnTable",
             {"tabletId", TabletID()},
             {"pathId", pathId},
             {"tableType", (ret ? "column" : "datashard")});

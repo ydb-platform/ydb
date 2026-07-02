@@ -6,7 +6,7 @@
 
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_value_utils.h>
-#include <util/generic/guid.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <arrow/array/array_binary.h>
 #include <arrow/chunked_array.h>
@@ -39,32 +39,6 @@ public:
         }
 
         return TBlockItem(value.Get<T>());
-    }
-};
-
-template <bool Nullable>
-class TFixedSizeBlockItemConverter<TGUID, Nullable>: public IBlockItemConverter {
-public:
-    NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
-        Y_UNUSED(holderFactory);
-        if constexpr (Nullable) {
-            if (!item) {
-                return {};
-            }
-        }
-
-        const auto ref = item.AsStringRef();
-        return MakeString(NUdf::TStringRef(ref.Data(), ref.Size()));
-    }
-
-    TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
-        if constexpr (Nullable) {
-            if (!value) {
-                return {};
-            }
-        }
-
-        return TBlockItem(value.AsStringRef());
     }
 };
 
@@ -189,6 +163,13 @@ private:
     const NUdf::IPgBuilder* PgBuilder_ = nullptr;
     ui32 PgTypeId_ = 0;
     i32 TypeLen_ = 0;
+};
+
+template <bool Nullable>
+using TUuidBlockItemConverter = TStringBlockItemConverter<arrow::BinaryType, Nullable, NUdf::EPgStringType::None>;
+
+template <bool Nullable>
+class TFixedSizeBlockItemConverter<NUdf::TUuid, Nullable>: public TUuidBlockItemConverter<Nullable> {
 };
 
 template <bool IsNull>

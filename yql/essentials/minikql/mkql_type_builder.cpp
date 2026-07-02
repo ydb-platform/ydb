@@ -1556,7 +1556,7 @@ bool ConvertArrowTypeImpl(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>
             return true;
         }
         case NUdf::EDataSlot::Uuid: {
-            type = arrow::fixed_size_binary(GuidBinarySize);
+            type = arrow::fixed_size_binary(UuidBinarySize);
             return true;
         }
         case NUdf::EDataSlot::Decimal: {
@@ -2653,7 +2653,7 @@ size_t CalcMaxBlockItemSize(const TType* type) {
             case NUdf::EDataSlot::TzTimestamp64:
                 return sizeof(typename NUdf::TDataType<NUdf::TTzTimestamp64>::TLayout) + sizeof(NYql::NUdf::TTimezoneId);
             case NUdf::EDataSlot::Uuid: {
-                return GuidBinarySize;
+                return UuidBinarySize;
             }
             case NUdf::EDataSlot::Decimal: {
                 return sizeof(NYql::NDecimal::TInt128);

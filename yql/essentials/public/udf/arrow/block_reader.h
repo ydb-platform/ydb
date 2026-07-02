@@ -8,8 +8,8 @@
 #include <arrow/datum.h>
 
 #include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/public/udf/udf_value_utils.h>
-#include <util/generic/guid.h>
 
 namespace NYql::NUdf {
 
@@ -57,6 +57,11 @@ protected:
 
 template <typename T, bool Nullable, typename TDerived>
 class TFixedSizeBlockReaderBase: public TBlockReaderBase {
+    static constexpr bool IsUuid = std::is_same_v<T, TUuid>;
+    static constexpr bool IsStoredAsStringRef = IsUuid;
+    static constexpr bool IsNotEmbeddedSuitableFixedSize = std::is_same_v<T, NYql::NDecimal::TInt128>;
+    static constexpr size_t FixedBinarySize = IsUuid ? UUID_SIZE : sizeof(T);
+
 public:
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
         if constexpr (Nullable) {
@@ -64,10 +69,10 @@ public:
                 return {};
             }
         }
-        if constexpr (std::is_same_v<T, TGUID>) {
-            const auto byteOffset = (data.offset + static_cast<int64_t>(index)) * static_cast<int64_t>(sizeof(T));
+        if constexpr (IsStoredAsStringRef) {
+            const auto byteOffset = (data.offset + static_cast<int64_t>(index)) * static_cast<int64_t>(FixedBinarySize);
             const auto* ptr = reinterpret_cast<const char*>(data.GetValues<uint8_t>(1, byteOffset));
-            return TBlockItem(TStringRef(ptr, sizeof(T)));
+            return TBlockItem(TStringRef(ptr, FixedBinarySize));
         } else {
             return static_cast<TDerived*>(this)->MakeBlockItem(data.GetValues<T>(1)[index]);
         }
@@ -82,11 +87,11 @@ public:
             }
         }
 
-        if constexpr (std::is_same_v<T, TGUID>) {
+        if constexpr (IsStoredAsStringRef) {
             auto& fixedScalar = checked_cast<const arrow::FixedSizeBinaryScalar&>(scalar);
             return TBlockItem(TStringRef(
                 reinterpret_cast<const char*>(fixedScalar.value->data()),
-                sizeof(T)));
+                FixedBinarySize));
         } else if constexpr (std::is_same_v<T, NYql::NDecimal::TInt128>) {
             auto& fixedScalar = checked_cast<const arrow::FixedSizeBinaryScalar&>(scalar);
             T value;
@@ -114,9 +119,9 @@ public:
 
     ui64 GetDefaultValueWeight() const final {
         if constexpr (Nullable) {
-            return 1 + sizeof(T);
+            return 1 + FixedBinarySize;
         }
-        return sizeof(T);
+        return FixedBinarySize;
     }
 
     void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
@@ -127,7 +132,15 @@ public:
             out.PushChar(1);
         }
 
-        if constexpr (std::is_same_v<T, NYql::NDecimal::TInt128> || std::is_same_v<T, TGUID>) {
+        if constexpr (IsUuid) {
+            const auto byteOffset = (data.offset + static_cast<int64_t>(index)) * static_cast<int64_t>(FixedBinarySize);
+            struct {
+                ui64 Lo;
+                ui64 Hi;
+            } value;
+            std::memcpy(&value, data.GetValues<uint8_t>(1, byteOffset), FixedBinarySize);
+            out.PushNumber(value);
+        } else if constexpr (IsNotEmbeddedSuitableFixedSize) {
             T value;
             const auto byteOffset = (data.offset + static_cast<int64_t>(index)) * static_cast<int64_t>(sizeof(T));
             std::memcpy(&value, data.GetValues<uint8_t>(1, byteOffset), sizeof(T));
@@ -145,7 +158,15 @@ public:
             out.PushChar(1);
         }
 
-        if constexpr (std::is_same_v<T, NYql::NDecimal::TInt128> || std::is_same_v<T, TGUID>) {
+        if constexpr (IsUuid) {
+            auto& fixedScalar = arrow::internal::checked_cast<const arrow::FixedSizeBinaryScalar&>(scalar);
+            struct {
+                ui64 Lo;
+                ui64 Hi;
+            } value;
+            memcpy(&value, fixedScalar.value->data(), FixedBinarySize);
+            out.PushNumber(value);
+        } else if constexpr (IsNotEmbeddedSuitableFixedSize) {
             auto& fixedScalar = arrow::internal::checked_cast<const arrow::FixedSizeBinaryScalar&>(scalar);
             T value;
             memcpy((void*)&value, fixedScalar.value->data(), sizeof(T));
@@ -157,7 +178,7 @@ public:
 
 private:
     ui64 GetDataWeightImpl(int64_t dataLength) const {
-        ui64 size = sizeof(T) * dataLength;
+        ui64 size = FixedBinarySize * dataLength;
         if constexpr (Nullable) {
             size += GetBitmaskDataWeight(dataLength);
         }

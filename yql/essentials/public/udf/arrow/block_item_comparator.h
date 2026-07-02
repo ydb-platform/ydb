@@ -7,7 +7,7 @@
 #include <yql/essentials/public/udf/udf_ptr.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_type_size_check.h>
-#include <util/generic/guid.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 namespace NYql::NUdf {
 
@@ -164,10 +164,10 @@ public:
 };
 
 template <bool Nullable>
-using TGuidBlockItemComparator = TStringBlockItemComparator<arrow::BinaryType, Nullable>;
+using TUuidBlockItemComparator = TStringBlockItemComparator<arrow::BinaryType, Nullable>;
 
 template <bool Nullable>
-class TFixedSizeBlockItemComparator<TGUID, Nullable>: public TGuidBlockItemComparator<Nullable> {
+class TFixedSizeBlockItemComparator<TUuid, Nullable>: public TUuidBlockItemComparator<Nullable> {
 };
 
 class TSingularTypeBlockItemComparator: public TBlockItemComparatorBase<TSingularTypeBlockItemComparator, /*Nullable=*/false> {

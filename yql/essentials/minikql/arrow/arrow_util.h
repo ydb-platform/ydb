@@ -11,7 +11,7 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/arrow/mkql_bit_utils.h>
 #include <yql/essentials/public/udf/arrow/util.h>
-#include <util/generic/guid.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -203,7 +203,7 @@ struct TPrimitiveDataType<NYql::NDecimal::TInt128> {
     };
 };
 
-inline constexpr size_t GuidBinarySize = sizeof(TGUID);
+inline constexpr size_t UuidBinarySize = NYql::NUdf::UUID_SIZE;
 
 std::shared_ptr<arrow::DataType> GetGuidArrowType();
 

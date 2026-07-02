@@ -8,7 +8,7 @@
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_type_ops.h>
 #include <yql/essentials/public/udf/udf_type_size_check.h>
-#include <util/generic/guid.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 namespace NYql::NUdf {
 
@@ -80,10 +80,10 @@ public:
 };
 
 template <bool Nullable>
-using TGuidBlockItemHasher = TStringBlockItemHasher<arrow::BinaryType, Nullable>;
+using TUuidBlockItemHasher = TStringBlockItemHasher<arrow::BinaryType, Nullable>;
 
 template <bool Nullable>
-class TFixedSizeBlockItemHasher<TGUID, Nullable>: public TGuidBlockItemHasher<Nullable> {
+class TFixedSizeBlockItemHasher<TUuid, Nullable>: public TUuidBlockItemHasher<Nullable> {
 };
 
 class TSingularTypeBlockItemHaser: public TBlockItemHasherBase<TSingularTypeBlockItemHaser, /*Nullable=*/false> {

@@ -11,6 +11,8 @@
 #include <yql/essentials/public/udf/udf_value_builder.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 
+#include <util/generic/guid.h>
+
 #include <arrow/array/array_base.h>
 #include <arrow/datum.h>
 #include <arrow/c/bridge.h>
@@ -589,8 +591,8 @@ public:
 };
 
 template <bool Nullable>
-class TFixedSizeArrayBuilder<TGUID, Nullable> final: public TFixedSizeArrayBuilderBase<TGUID, Nullable, TFixedSizeArrayBuilder<TGUID, Nullable>> {
-    using TSelf = TFixedSizeArrayBuilder<TGUID, Nullable>;
+class TFixedSizeArrayBuilder<TUuid, Nullable> final: public TFixedSizeArrayBuilderBase<TGUID, Nullable, TFixedSizeArrayBuilder<TUuid, Nullable>> {
+    using TSelf = TFixedSizeArrayBuilder<TUuid, Nullable>;
     using TBase = TFixedSizeArrayBuilderBase<TGUID, Nullable, TSelf>;
     using TParams = TArrayBuilderBase::TParams;
 

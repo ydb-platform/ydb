@@ -74,7 +74,7 @@ on:
 
 jobs:
   compare:
-    name: Compare performance (${{ inputs.ref || 'main' }} vs ${{ inputs.pull_number && format('PR #{0}', inputs.pull_number) || 'current' }})
+    name: Compare performance (${{ inputs.ref || 'main' }} vs ${{ inputs.pull_number && format('PR {0}', inputs.pull_number) || 'current' }})
     runs-on: [ self-hosted, auto-provisioned, "build-preset-${{ inputs.build_preset || 'release' }}" ]
     timeout-minutes: 1200
     steps:

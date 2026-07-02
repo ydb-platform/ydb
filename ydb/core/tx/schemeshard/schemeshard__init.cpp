@@ -1670,7 +1670,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     domainInfo->SetSecurityStateVersion(rowset.GetValueOrDefault<Schema::SubDomains::SecurityStateVersion>());
                     domainInfo->SetDiskQuotaExceeded(rowset.GetValueOrDefault<Schema::SubDomains::DiskQuotaExceeded>(false));
                     if (domainInfo->GetDiskQuotaExceeded()) {
-                        Self->ChangeDiskSpaceQuotaExceeded(+1);
+                        Self->ChangeSimpleCounter(COUNTER_DISK_SPACE_QUOTA_EXCEEDED, +1);
+                    }
+                    domainInfo->SetSmallBlobsQuotaExceeded(rowset.GetValueOrDefault<Schema::SubDomains::SmallBlobsQuotaExceeded>(false));
+                    if (domainInfo->GetSmallBlobsQuotaExceeded()) {
+                        Self->ChangeSimpleCounter(COUNTER_SMALL_BLOBS_QUOTA_EXCEEDED, +1);
                     }
 
                     if (rowset.HaveValue<Schema::SubDomains::AuditSettings>()) {
@@ -2992,7 +2996,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto it = Self->Topics.find(pathId);
                 Y_ABORT_UNLESS(it != Self->Topics.end());
 
-                alterData->TotalPartitionCount = it->second->GetTotalPartitionCountWithAlter();
+                alterData->TotalPartitionCount = 0;
+                alterData->ActivePartitionCount = 0;
+                for (const auto& [_, partition] : it->second->Partitions) {
+                    if (partition->AlterVersion <= alterData->AlterVersion) {
+                        ++alterData->TotalPartitionCount;
+                        if (partition->Status == NKikimrPQ::ETopicPartitionStatus::Active) {
+                            ++alterData->ActivePartitionCount;
+                        }
+                    }
+                }
                 alterData->BalancerTabletID = it->second->BalancerTabletID;
                 alterData->BalancerShardIdx = it->second->BalancerShardIdx;
                 it->second->AlterData = alterData;
@@ -5514,6 +5527,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     operationInfo->OperationState = TSetColumnConstraintOperationInfo::EOperationState(
                         rowset.GetValue<Schema::SetColumnConstraint::OperationState>()
                     );
+
+                    operationInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::SetColumnConstraint::StartTime>(0));
+                    operationInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::SetColumnConstraint::EndTime>(0));
+                    if (rowset.HaveValue<Schema::SetColumnConstraint::UserSID>()) {
+                        operationInfo->UserSID = rowset.GetValue<Schema::SetColumnConstraint::UserSID>();
+                    }
 
                     TTxId subStateTxId = rowset.GetValueOrDefault<Schema::SetColumnConstraint::SubStateTxId>(TTxId());
                     NKikimrScheme::EStatus subStateTxStatus = rowset.GetValueOrDefault<Schema::SetColumnConstraint::SubStateTxStatus>(NKikimrScheme::StatusSuccess);

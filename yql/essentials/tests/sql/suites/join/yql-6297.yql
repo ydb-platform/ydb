@@ -1,5 +1,4 @@
 PRAGMA DisableSimpleColumns;
-/* postgres can not */
 $input = (
 select 2 as id,
 3 as taskId,

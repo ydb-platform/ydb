@@ -984,7 +984,7 @@ TNodePtr TSqlExpression::RowPatternVarAccess(TString var, const TRule_unary_sube
                     switch (idOrType.GetAltCase()) {
                         case TRule_id_or_type::kAltIdOrType1: {
                             const auto column = Id(idOrType.GetAlt_id_or_type1().GetRule_id1(), *this);
-                            return BuildMatchRecognizeColumnAccess(Ctx_.Pos(), std::move(var), std::move(column));
+                            return BuildMatchRecognizeColumnAccess(Ctx_.Pos(), std::move(var), column);
                         }
                         case TRule_id_or_type::kAltIdOrType2:
                             break;
@@ -1200,7 +1200,7 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
                 if (auto result = call.BuildCall()) {
                     lastExpr = std::move(*result);
                     if (auto* call = lastExpr->GetCallNode(); call && call->GetOpName() == "DataType") {
-                        lastExpr = AddOptionals(std::move(lastExpr), tail.Count);
+                        lastExpr = AddOptionals(lastExpr, tail.Count);
                     }
                 } else {
                     return std::unexpected(result.error());
@@ -2252,7 +2252,7 @@ TNodeResult TSqlExpression::YqlXorSubExpr(
             std::move(hints),
         };
 
-        TNodeResult result = BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "In", std::move(args), /*isYqlSelect=*/true);
+        TNodeResult result = BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "In", args, /*isYqlSelect=*/true);
         if (!result) {
             return std::unexpected(result.error());
         }
@@ -2305,7 +2305,7 @@ TSQLResult<TSqlExpression::TCaseBranch> TSqlExpression::ReduceCaseBranches(TVect
         return std::unexpected(right.error());
     }
 
-    TNodePtr pred = new TCallNodeImpl(Ctx_.Pos(), "Or", CloneContainer(std::move(preds)));
+    TNodePtr pred = new TCallNodeImpl(Ctx_.Pos(), "Or", CloneContainer(preds));
 
     TNodeResult value = BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "If", {left->Pred, left->Value, right->Value},
                                          /*isYqlSelect=*/IsYqlSelectProduced_);

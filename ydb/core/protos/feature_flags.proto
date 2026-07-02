@@ -295,7 +295,7 @@ message TFeatureFlags {
     optional bool UseRealUserIpForBlackbox = 256 [default = false];
     optional bool EnableNodeShutdownHints = 257 [default = false];
     optional bool EnableTopicPartitionSplitBasedOnMessages = 258 [default = false];
-    optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
+    reserved 259; // ForbidDiscoveryInnerDbPaths
     optional bool EnableStreamingQueryDisposition = 260 [default = true];
     // Skip persisting partition rows that are not affected by a split/merge operation.
     optional bool EnableSplitMergePartialPersistence = 261 [default = true];
@@ -326,6 +326,8 @@ message TFeatureFlags {
     optional bool EnableAccessServiceV2Interface = 283 [default = true, (RequireRestart) = true];
     optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
     optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
-    // Enables include/exclude and path-based export/import API (source_path, prefixes, SchemaMapping).
-    optional bool EnableExportFiltering = 286 [default = false];
+    optional bool EnableTopicDeferredPublish = 286 [default = false];
+    optional bool EnableConfiguredBootstrapper = 287 [default = false, (RequireRestart) = true];
+    optional bool EnableSmallBlobsQuotaEnforcement = 288 [default = false];
+    optional bool EnableExportFiltering = 289 [default = false];
 }

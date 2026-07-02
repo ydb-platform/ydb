@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     kafka.h
     kafka_log.h
-    kafka_log_impl.h
     kafka_messages_int.cpp
     kafka_messages_int.h
     kafka_records.cpp
@@ -15,11 +14,8 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(kafka.h)
 
 PEERDIR(
-    ydb/core/protos
     library/cpp/streams/zstd
-    ydb/library/actors/core
-    ydb/library/services
-    yql/essentials/public/decimal
+    ydb/public/sdk/cpp/src/library/decimal
 )
 
 END()

@@ -1826,22 +1826,20 @@ partitioning_settings {
         )", S3Port()));
 
         Runtime().WaitFor("put object request from 01 partition", [&]{ return blockPartition01.size() >= 1; });
-        bool isCompleted = false;
 
-        while (!isCompleted) {
+        bool found = false;
+        for (int attempt = 0; attempt < 100 && !found; ++attempt) {
+            Runtime().SimulateSleep(TDuration::MilliSeconds(100));
             const auto desc = TestGetExport(Runtime(), txId, "/MyRoot");
-            const auto entry = desc.GetResponse().GetEntry();
-            const auto& item = entry.GetItemsProgress(0);
-
+            const auto& item = desc.GetResponse().GetEntry().GetItemsProgress(0);
             if (item.parts_completed() > 0) {
-                isCompleted = true;
+                found = true;
                 UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 1);
                 UNIT_ASSERT(item.has_start_time());
-            } else {
-                Runtime().SimulateSleep(TDuration::Seconds(1));
             }
         }
+        UNIT_ASSERT_C(found, "partition 00 export didn't complete in time");
 
         blockPartition01.Stop();
         blockPartition01.Unblock();

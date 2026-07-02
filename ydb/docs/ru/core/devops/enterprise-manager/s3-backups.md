@@ -26,9 +26,8 @@ backup_targets:
         - "em"
     settings:
       s3:
-        endpoint: s3.mds.yandex.net
-        bucket: enterprise-manager-backups-test
-        scheme: 1
+        endpoint: s3.example.net
+        bucket: ydb-em-backups
         access_key: "<encrypted access key>"
         secret_key: "<encrypted secret key>"
         compression: "zstd"
@@ -40,10 +39,14 @@ backup_targets:
 `tags.locations` | Список `location_id`, для которых применяется этот target. База данных будет копироваться в этот target, если ее `location_id` есть в списке. Для YDB EM обычно используется значение `em`, соответствующее `locations[].database_location_id` и `meta_location_id`.
 `settings.s3.endpoint` | Адрес S3-совместимого хранилища.
 `settings.s3.bucket` | Имя бакета для резервных копий.
-`settings.s3.scheme` | Протокол подключения: `1` — HTTP, `2` — HTTPS. Если параметр не задан, используется HTTPS. Для внутреннего MDS `s3.mds.yandex.net` обычно используется HTTP.
-`settings.s3.access_key` | Зашифрованный ключ доступа к S3.
-`settings.s3.secret_key` | Зашифрованный секретный ключ доступа к S3.
+`settings.s3.scheme` | Протокол подключения: `1` — HTTP, `2` — HTTPS. Если параметр не задан, используется HTTPS.
+`settings.s3.access_key` | Зашифрованный [ключ доступа к S3](#master-key).
+`settings.s3.secret_key` | Зашифрованный [секретный ключ доступа к S3](#master-key).
 `settings.s3.compression` | Алгоритм сжатия экспортируемых данных. По умолчанию используется `zstd`. Удалите параметр, если сжатие не требуется.
+
+**Location** — это логическая группа баз данных в YDB EM, к которой каждая база привязана через идентификатор `location_id`. Как правило, одна location соответствует одной зоне размещения баз данных — например, дата-центру или зоне доступности, в которой они работают, — но location можно использовать и для логического разделения, например по окружениям (`prod`, `test`). Например, если базы данных развёрнуты в двух дата-центрах, им можно назначить разные location и направлять резервные копии из каждого дата-центра в своё S3-хранилище. Для типовой установки YDB EM используется единственная location со значением `em`, которому соответствуют поля `locations[].database_location_id` и `meta_location_id` в конфигурации Control Plane.
+
+`tags.locations` нужен, когда один Control Plane управляет базами из нескольких location и для разных location нужно использовать разные хранилища резервных копий. Worker выбирает target по `location_id` базы: если `location_id` базы входит в `tags.locations`, для резервного копирования используется этот target. Так можно, например, направлять бэкапы из разных зон или окружений в разные S3-бакеты.
 
 {% note info %}
 
@@ -86,7 +89,7 @@ ydb-em-cp admin crypto decrypt --body '<encrypted value>' --cfg-file <ydb-em-cp-
 
 ## Настройка расписания и срока хранения {#schedule-and-ttl}
 
-Target определяет, куда сохранять резервные копии. Расписание и срок хранения задаются отдельно, в блоке `locations[].default_backup_config`:
+Target определяет, куда сохранять резервные копии. Расписание и срок хранения задаются отдельно, в блоке `locations[].default_backup_config`. Это конфигурация резервного копирования по умолчанию для баз данных в указанной location. Если для конкретной базы данных в YDB EM задана индивидуальная конфигурация резервного копирования, она может отличаться от этих значений по умолчанию.
 
 ```yaml
 locations:

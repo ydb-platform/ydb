@@ -8,13 +8,20 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 
 class Workload:
-    def __init__(self, driver, endpoint):
-        self.driver = driver
-        self.endpoint = endpoint
+    def __init__(self, fixture):
+        self.fixture = fixture
         self.id = f"{uuid.uuid1()}".replace("-", "_")
         self.topic_name = f"source_topic_{self.id}"
         self.message_count = 0
         self.processed_message_count = 0
+
+    @property
+    def driver(self):
+        return self.fixture.driver
+
+    @property
+    def endpoint(self):
+        return self.fixture.endpoint
 
     def create_topic(self, *, availability_period=None, partition_count=1):
         consumer_extra_options = []
@@ -113,7 +120,7 @@ class TestTopicRollingUpdate(RollingUpgradeAndDowngradeFixture):
         yield from self.setup_cluster()
 
     def test_write_and_read(self):
-        utils = Workload(self.driver, self.endpoint)
+        utils = Workload(self)
 
         utils.create_topic()
 
@@ -125,11 +132,12 @@ class TestTopicRollingUpdate(RollingUpgradeAndDowngradeFixture):
         utils.read_from_topic()
 
     def test_write_and_read_with_long_live_consumer(self):
-        utils = Workload(self.driver, self.endpoint)
+        utils = Workload(self)
 
         utils.create_topic()
 
-        with self.driver.topic_client.reader(utils.topic_name, consumer='test-consumer') as reader:
+        stable_driver = self.create_driver()
+        with stable_driver.topic_client.reader(utils.topic_name, consumer='test-consumer') as reader:
             utils.write_to_topic()
             for _ in self.roll():
                 utils.read_from_topic(topic_reader=reader)
@@ -138,11 +146,12 @@ class TestTopicRollingUpdate(RollingUpgradeAndDowngradeFixture):
             utils.read_from_topic(topic_reader=reader)
 
     def test_write_and_read_with_long_live_producer(self):
-        utils = Workload(self.driver, self.endpoint)
+        utils = Workload(self)
 
         utils.create_topic()
 
-        with self.driver.topic_client.writer(utils.topic_name, producer_id="producer-id") as writer:
+        stable_driver = self.create_driver()
+        with stable_driver.topic_client.writer(utils.topic_name, producer_id="producer-id") as writer:
             utils.write_to_topic(topic_writer=writer)
             for _ in self.roll():
                 utils.read_from_topic()
@@ -161,7 +170,7 @@ class TestTopicRollingDowngrade(RollingDowngradeAndUpgradeFixture):
         if self.versions[0] < string_version_to_tuple(MIN_SUPPORTED_VERSION):
             pytest.skip(f"Only available since {MIN_SUPPORTED_VERSION}")
 
-        utils = Workload(self.driver, self.endpoint)
+        utils = Workload(self)
 
         utils.create_topic(availability_period='PT2H')
 
@@ -179,7 +188,7 @@ class TestTopicTransaction(RollingUpgradeAndDowngradeFixture):
         yield from self.setup_cluster()
 
     def test_write_and_read_in_transaction(self):
-        utils = Workload(self.driver, self.endpoint)
+        utils = Workload(self)
 
         utils.create_topic(partition_count=2)
 
@@ -199,7 +208,7 @@ class TestTopicTransaction(RollingUpgradeAndDowngradeFixture):
             )
 
     def test_mixed_write_transaction_and_regular(self):
-        utils = Workload(self.driver, self.endpoint)
+        utils = Workload(self)
 
         utils.create_topic(partition_count=2)
 

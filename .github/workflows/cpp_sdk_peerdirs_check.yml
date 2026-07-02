@@ -36,6 +36,18 @@ jobs:
               throw e;
             }
 
+      - name: Comment if waiting on ok-to-test
+        if: steps.gate.outputs.result == 'false' && github.event.action == 'opened'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: 'Hi! The C++ SDK PEERDIRs check will run after a maintainer adds an `ok-to-test` label to this PR. Thank you for your patience!'
+            });
+
       - uses: actions/checkout@v5
         if: github.event_name != 'pull_request_target' || steps.gate.outputs.result == 'true'
         with:

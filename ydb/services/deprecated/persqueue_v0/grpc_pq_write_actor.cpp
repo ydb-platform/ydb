@@ -17,6 +17,8 @@
 #include <util/string/vector.h>
 #include <util/string/escape.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_WRITE_PROXY
+
 using namespace NActors;
 using namespace NKikimrClient;
 
@@ -133,7 +135,9 @@ void TWriteSessionActor::Die(const TActorContext& ctx) {
         BytesInflightTotal.Dec(BytesInflightTotal_);
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session cookie: " << Cookie << " sessionId: " << OwnerCookie << " is DEAD");
+    YDB_LOG_INFO_CTX(ctx, "Session is DEAD",
+        {"cookie", Cookie},
+        {"sessionId", OwnerCookie});
 
     if (PartitionChooser) {
         ctx.Send(PartitionChooser,  new TEvents::TEvPoison());
@@ -161,7 +165,9 @@ void TWriteSessionActor::CheckFinish(const TActorContext& ctx) {
 }
 
 void TWriteSessionActor::Handle(TEvPQProxy::TEvDone::TPtr&, const TActorContext& ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session cookie: " << Cookie << " sessionId: " << OwnerCookie << " got TEvDone");
+    YDB_LOG_INFO_CTX(ctx, "Session got TEvDone",
+        {"cookie", Cookie},
+        {"sessionId", OwnerCookie});
     WritesDone = true;
     CheckFinish(ctx);
 }
@@ -231,7 +237,11 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     event->Request.ClearCredentials();
     Y_PROTOBUF_SUPPRESS_NODISCARD Auth.SerializeToString(&AuthStr);
 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session request cookie: " << Cookie << " " << init << ", Database: '" << Database << "' from " << PeerName);
+    YDB_LOG_INFO_CTX(ctx, "Session request Database",
+        {"cookie", Cookie},
+        {"init", init},
+        {"database", Database},
+        {"peerName", PeerName});
     UserAgent = init.GetVersion();
     LogSession(ctx);
 
@@ -402,8 +412,10 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
 
     if (Auth.GetCredentialsCase() == NPersQueueCommon::TCredentials::CREDENTIALS_NOT_SET) {
         //ACLCheckInProgress is still true - no recheck will be done
-        LOG_WARN_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session without AuthInfo : " << DiscoveryConverter->GetPrintableString()
-                                                         << " sourceId " << SourceId << " from " << PeerName);
+        YDB_LOG_WARN_CTX(ctx, "Session without AuthInfo sourceId",
+            {"discoveryConverter", DiscoveryConverter->GetPrintableString()},
+            {"sourceId", SourceId},
+            {"peerName", PeerName});
         SessionsWithoutAuth.Inc();
         if (FirstACLCheck) {
             FirstACLCheck = false;
@@ -445,9 +457,10 @@ void TWriteSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr&
     Y_ABORT_UNLESS(ACLCheckInProgress);
     TString ticket = ev->Get()->Ticket;
     TString maskedTicket = ticket.size() > 5 ? (ticket.substr(0, 5) + "***" + ticket.substr(ticket.size() - 5)) : "***";
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "CheckACL ticket " << maskedTicket << " got result from TICKET_PARSER response: error: "
-                            << ev->Get()->Error << " user: "
-                            << (!ev->Get()->HasError() ? ev->Get()->Token->GetUserSID() : ""));
+    YDB_LOG_INFO_CTX(ctx, "CheckACL ticket got result from TICKET_PARSER response",
+        {"maskedTicket", maskedTicket},
+        {"error", ev->Get()->Error},
+        {"user", (!ev->Get()->HasError() ? ev->Get()->Token->GetUserSID() : "")});
 
     if (ev->Get()->HasError()) {
         if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
@@ -459,7 +472,9 @@ void TWriteSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr&
 
 
     Y_ABORT_UNLESS(ACLCheckInProgress);
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session cookie: " << Cookie << " sessionId: " << OwnerCookie << " describe result for acl check");
+    YDB_LOG_INFO_CTX(ctx, "Session describe result for acl check",
+        {"cookie", Cookie},
+        {"sessionId", OwnerCookie});
     CheckACL(ctx);
 }
 
@@ -548,13 +563,17 @@ void TWriteSessionActor::CloseSession(const TString& errorReason, const NPersQue
         error->SetDescription(errorReason);
         error->SetCode(errorCode);
 
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY,
-                   "session error cookie: " << Cookie << " reason: \"" << errorReason << "\" code: "
-                                            << EErrorCode_Name(errorCode) << " sessionId: " << OwnerCookie);
+        YDB_LOG_INFO_CTX(ctx, "Session error reason",
+            {"cookie", Cookie},
+            {"errorReason", errorReason},
+            {"code", EErrorCode_Name(errorCode)},
+            {"sessionId", OwnerCookie});
 
         Handler->Reply(std::move(result));
     } else {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session closed cookie: " << Cookie << " sessionId: " << OwnerCookie);
+        YDB_LOG_INFO_CTX(ctx, "Session closed",
+            {"cookie", Cookie},
+            {"sessionId", OwnerCookie});
     }
 
     Die(ctx);
@@ -586,8 +605,11 @@ void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev
     Y_ABORT_UNLESS(FullConverter);
     init->SetTopic(FullConverter->GetClientsideName());
 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session inited cookie: " << Cookie << " partition: " << Partition
-                            << " MaxSeqNo: " << maxSeqNo << " sessionId: " << OwnerCookie);
+    YDB_LOG_INFO_CTX(ctx, "Session inited",
+        {"cookie", Cookie},
+        {"partition", Partition},
+        {"maxSeqNo", maxSeqNo},
+        {"sessionId", OwnerCookie});
 
     Handler->Reply(std::move(response));
 
@@ -886,9 +908,13 @@ void TWriteSessionActor::HandlePoison(TEvPQProxy::TEvDieCommand::TPtr& ev, const
 
 void TWriteSessionActor::LogSession(const TActorContext& ctx) {
 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "write session:  cookie=" << Cookie << " sessionId=" << OwnerCookie
-                            << " userAgent=\"" << UserAgent << "\" ip=" << PeerName << " proto=v0 "
-                            << " topic=" << DiscoveryConverter->GetPrintableString() << " durationSec=" << (ctx.Now() - StartTime).Seconds());
+    YDB_LOG_INFO_CTX(ctx, "Write session: userAgent= proto=v0",
+        {"cookie", Cookie},
+        {"sessionId", OwnerCookie},
+        {"userAgent", UserAgent},
+        {"ip", PeerName},
+        {"topic", DiscoveryConverter->GetPrintableString()},
+        {"durationSec", (ctx.Now() - StartTime).Seconds()});
 
     LogSessionDeadline = ctx.Now() + TDuration::Hours(1) + TDuration::Seconds(rand() % 60);
 }

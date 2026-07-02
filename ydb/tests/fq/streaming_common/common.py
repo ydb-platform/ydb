@@ -37,6 +37,7 @@ def get_ydb_config(request):
     enable_streaming_queries = param.get("enable_streaming_queries", True)
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
+    enable_kqp_constraints_transformer = param.get("enable_kqp_constraints_transformer", True)
 
     extra_feature_flags = {
         "enable_external_data_sources",
@@ -48,6 +49,8 @@ def get_ydb_config(request):
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
     if enable_streaming_queries:
         extra_feature_flags.add("enable_streaming_queries")
+    if enable_kqp_constraints_transformer:
+        extra_feature_flags.add("enable_kqp_constraints_transformer")
 
     disabled_feature_flags = []
     if enable_user_attributes_in_topic_query:

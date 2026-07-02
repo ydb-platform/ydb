@@ -39,8 +39,15 @@ public:
         if (const auto status = UpdateAllChildLambdasConstraints(node.Ref()); status != TStatus::Ok) {
             return status;
         }
-        if (ReadInStreamingMode(node.Cast<TPqReadTopic>().Settings().Ptr(), "streaming"sv)) {
-            node.MutableRaw()->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
+
+        const auto pqReadTopic = node.Cast<TPqReadTopic>();
+        if (ReadInStreamingMode(pqReadTopic.Settings().Ptr(), "streaming"sv)) {
+            if (const auto maybeWatermark = pqReadTopic.Watermark().Maybe<TCoLambda>()) {
+                const auto watermark = maybeWatermark.Cast();
+                node.MutableRaw()->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>(BuildEventTimeDescriptor(watermark.Raw())));
+            } else {
+                node.MutableRaw()->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
+            }
         }
         return TStatus::Ok;
     }
@@ -49,8 +56,14 @@ public:
         if (const auto status = UpdateAllChildLambdasConstraints(node.Ref()); status != TStatus::Ok) {
             return status;
         }
-        if (ReadInStreamingMode(node.Cast<TDqPqTopicSource>().Settings().Ptr(), StreamingTopicRead)) {
-            node.MutableRaw()->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
+        const auto pqTopicSource = node.Cast<TDqPqTopicSource>();
+        if (ReadInStreamingMode(pqTopicSource.Settings().Ptr(), StreamingTopicRead)) {
+            if (const auto maybeWatermark = pqTopicSource.WatermarkExpr()) {
+                const auto watermark = maybeWatermark.Cast();
+                node.MutableRaw()->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>(BuildEventTimeDescriptor(watermark.Raw())));
+            } else {
+                node.MutableRaw()->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
+            }
         }
         return TStatus::Ok;
     }

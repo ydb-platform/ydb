@@ -20,6 +20,7 @@ class TestYdbWorkload(StressFixture):
                 "enable_external_data_sources": True,
                 "enable_streaming_queries": True,
                 "enable_topics_sql_io_operations": True,
+                "enable_kqp_constraints_transformer": True,
             },
             additional_log_configs={
                 'KQP_COMPUTE': LogLevels.DEBUG,
@@ -27,7 +28,12 @@ class TestYdbWorkload(StressFixture):
                 'STREAMS_STORAGE_SERVICE': LogLevels.DEBUG,
                 'FQ_ROW_DISPATCHER': LogLevels.DEBUG,
                 'KQP_PROXY': LogLevels.DEBUG,
-                'KQP_EXECUTER': LogLevels.DEBUG}
+                'KQP_EXECUTER': LogLevels.DEBUG,
+            },
+            table_service_config={
+                "enable_watermarks": True,
+                "enable_watermarks_advanced": True,
+            },
         )
 
     def test(self):

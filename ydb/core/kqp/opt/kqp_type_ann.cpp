@@ -1938,7 +1938,7 @@ TStatus AnnotateKqpPredicateClosure(const TExprNode::TPtr& node, TExprContext& c
 }
 
 TStatus AnnotateKqpProgram(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureArgsCount(*node, 2, ctx)) {
+    if (!EnsureMinMaxArgsCount(*node, 2, 3, ctx)) {
         return TStatus::Error;
     }
 
@@ -1966,6 +1966,12 @@ TStatus AnnotateKqpProgram(const TExprNode::TPtr& node, TExprContext& ctx) {
 
     auto& lambda = node->ChildRef(TKqpProgram::idx_Lambda);
     if (!EnsureLambda(*lambda, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (node->ChildrenSize() > TKqpProgram::idx_ArgsConstraints
+        && !EnsureTupleOfAtoms(*node->Child(TKqpProgram::idx_ArgsConstraints), ctx))
+    {
         return TStatus::Error;
     }
 

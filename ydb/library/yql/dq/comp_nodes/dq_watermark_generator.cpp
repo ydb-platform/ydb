@@ -115,9 +115,6 @@ public:
         IComputationNode* watermarkExtractor,
         IComputationNode* partitionKeyExtractor,
         IComputationNode* partitionKeys,
-        TDuration lateArrivalDelay,
-        TDuration granularity,
-        TDuration idleTimeout,
         TWatermark& watermark,
         NYql::NDq::TDqWatermarkGeneratorTracker* watermarkTracker
     )
@@ -127,9 +124,6 @@ public:
         , WatermarkExtractor_(watermarkExtractor)
         , PartitionKeyExtractor_(partitionKeyExtractor)
         , Partitions_(partitionKeys)
-        , LateArrivalDelay_(lateArrivalDelay)
-        , Granularity_(granularity)
-        , IdleTimeout_(idleTimeout)
         , Watermark_(watermark)
         , WatermarkTracker_(watermarkTracker)
     {
@@ -198,9 +192,6 @@ private:
     IComputationNode* const PartitionKeyExtractor_;
     IComputationNode* const Partitions_;
 
-    TDuration LateArrivalDelay_;
-    TDuration Granularity_;
-    TDuration IdleTimeout_;
     TWatermark& Watermark_;
     NYql::NDq::TDqWatermarkGeneratorTracker* WatermarkTracker_;
 };
@@ -240,7 +231,7 @@ IComputationNode* WrapDqWatermarkGenerator(
     }
 
     if (watermarkTracker) {
-        watermarkTracker->SetSettings(granularity, true, TDuration::Zero(), idleTimeout);
+        watermarkTracker->SetSettings(granularity, true, lateArrivalDelay, idleTimeout);
     }
 
     return new TDqWatermarkGenerator(
@@ -250,9 +241,6 @@ IComputationNode* WrapDqWatermarkGenerator(
         watermarkExtractor,
         partitionKeyExtractor,
         partitionKeys,
-        lateArrivalDelay,
-        granularity,
-        idleTimeout,
         watermark,
         watermarkTracker
     );

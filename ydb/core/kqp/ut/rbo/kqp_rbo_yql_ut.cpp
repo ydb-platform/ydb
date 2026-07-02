@@ -87,6 +87,7 @@ double TimeQuery(NKikimr::NKqp::TKikimrRunner& kikimr, TString query, int nItera
 double TimeQuery(TString schema, TString query, int nIterations) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+    appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
     TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -397,6 +398,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(Select) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
 
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
@@ -415,6 +417,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     void TestFilter(bool columnTables) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
@@ -511,6 +514,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     NKikimrConfig::TAppConfig CreateExplainPlanTestAppConfig() {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         return appConfig;
     }
@@ -733,6 +737,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(Explain) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
 
@@ -788,6 +793,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     NKikimrConfig::TAppConfig CreateExpressionPrintingTestAppConfig() {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         return appConfig;
     }
@@ -1223,6 +1229,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(ReplaceAliasSubqueryDoesNotDuplicateVisibleColumns) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -1265,6 +1272,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(CorrelatedScalarAggregateReuseDoesNotDuplicateVisibleColumns) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -1319,6 +1327,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(DistinctAllTypeMatchesLogicalOutputColumns) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -1389,6 +1398,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
      void TestParams(bool columnTables) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
 
@@ -1479,6 +1489,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     void TestMultiConsumer(bool columnTables) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
 
@@ -1552,6 +1563,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     void TestRangePushdown(bool columnTables) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
 
@@ -1748,6 +1760,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(RangePushdownExplain) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
 
@@ -1794,6 +1807,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     void TestConstantFolding(bool columnTables) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -1862,6 +1876,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     void TestAggregation(bool columnStore) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -2301,6 +2316,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     void BasicHashJoinTest(bool useBlockHashJoin) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(useBlockHashJoin);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
@@ -2459,6 +2475,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(JoinFilters) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -2566,6 +2583,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(OlapPredicatePushdown) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
@@ -2680,6 +2698,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     void RunTPCHBenchmark(bool columnStore, std::vector<ui32> queries, bool newRbo) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -2806,6 +2825,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                              std::set<ui32>&& queriesWithoutCboCheck = {}) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -2895,6 +2915,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     void RunTPC_YqlTest(const EBenchType type, ui32 queryId, const bool columnStore, const bool newRbo) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -2985,6 +3006,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(CorrelatedScalarSubqueryCBO4KeepsOuterJoinKey) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -3113,6 +3135,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(TPCH_YQL_CBO4_ColumnLineageMapping) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -3143,6 +3166,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(MapAliasCleanupComplexQuery) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -3265,6 +3289,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(MapAliasCleanupSemanticRenameAndDeadSortKey) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -5908,6 +5933,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(ExpressionSubquery) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -6005,6 +6031,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(CorrelatedSubquery) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -6109,6 +6136,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(OrderBy) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -6174,6 +6202,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(MapJoin) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
@@ -6250,6 +6279,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(JoinOptionalKeys) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -6311,6 +6341,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(LeftJoins) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -6396,6 +6427,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(RightJoins) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -6457,6 +6489,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(FullOuterJoin) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -6515,6 +6548,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(Having) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -6628,6 +6662,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST_TWIN(ColumnStatistics, ColumnStore) {
         auto enableNewRbo = [](Tests::TServerSettings& settings) {
             settings.AppConfig->MutableTableServiceConfig()->SetEnableNewRBO(true);
+            settings.AppConfig->MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
             // Fallback is enabled, because analyze uses UDAF which are not supported in NEW RBO.
             settings.AppConfig->MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
             settings.AppConfig->MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
@@ -6691,6 +6726,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     void TestQueryClient(bool columnTables) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
@@ -6774,6 +6810,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     void TestOlapProjectionPushdown(bool explain) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         // Fallback is enabled to be able to insert values by `INSERT VALUES`.
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(!explain);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
@@ -6931,6 +6968,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     void TestLimit(bool columnTables) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
 
@@ -7015,6 +7053,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(PropagateLimitThroughStages) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
 
@@ -7123,6 +7162,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(PropagateTopSortThroughStages) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
 
@@ -7269,6 +7309,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(FilterPushdownThroughJoin) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
 
@@ -7411,6 +7452,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(PropagateAggregateThroughStages) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
 
@@ -7504,6 +7546,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                            const std::vector<std::pair<ui32, ui32>>& expectedCompileCounters, const std::vector<bool>& expectedResult) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(fallbackToYqlEnabled);
 
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
@@ -7770,6 +7813,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     std::pair<TString, TString> ExplainHashCompatibilityQueryWithAst(const TVector<TString>& tables, const TString& query, bool blockChannelsAuto = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -7812,6 +7856,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(ShuffleEliminationSimpleJoin) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -7889,6 +7934,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(ShuffleEliminationTPCHQ5CompositeJoinKeys) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -7972,6 +8018,7 @@ PRAGMA ydb.OptimizerHints = '
     Y_UNIT_TEST(ShuffleEliminationSimpleJoinKeysBothSides) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -8056,6 +8103,7 @@ PRAGMA ydb.OptimizerHints = '
     Y_UNIT_TEST(ShuffleEliminationTwoJoinsHashFuncCompatibility) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -8180,6 +8228,7 @@ PRAGMA ydb.OptimizerHints = '
     Y_UNIT_TEST(ShuffleEliminationCompositeSourceSubsetKeyExecute) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -8443,6 +8492,7 @@ PRAGMA ydb.OptimizerHints = '
     void AliasesRenamesTest(bool newRbo) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -8514,6 +8564,7 @@ PRAGMA ydb.OptimizerHints = '
     Y_UNIT_TEST(PredicatePushdownLeftJoin) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -8599,6 +8650,7 @@ PRAGMA ydb.OptimizerHints = '
     Y_UNIT_TEST(UnionAll) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -8692,6 +8744,7 @@ PRAGMA ydb.OptimizerHints = '
     Y_UNIT_TEST(Bench_Select) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
 
         auto time = TimeQuery(kikimr, R"(
@@ -8707,6 +8760,7 @@ PRAGMA ydb.OptimizerHints = '
     Y_UNIT_TEST(Bench_Filter) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -8731,6 +8785,7 @@ PRAGMA ydb.OptimizerHints = '
     Y_UNIT_TEST(Bench_CrossFilter) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -8761,6 +8816,7 @@ PRAGMA ydb.OptimizerHints = '
     Y_UNIT_TEST(Bench_JoinFilter) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -8791,6 +8847,7 @@ PRAGMA ydb.OptimizerHints = '
     Y_UNIT_TEST(Bench_10Joins) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -8889,6 +8946,7 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
     Y_UNIT_TEST(AggregateKeyColumnsNotLeakedToInputMap) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -8934,6 +8992,7 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
     Y_UNIT_TEST(UnionAll) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -9020,6 +9079,7 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
     Y_UNIT_TEST(SetOps) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -9096,6 +9156,7 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
     Y_UNIT_TEST(Rollup) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

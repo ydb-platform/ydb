@@ -151,6 +151,7 @@ void AssertPublicationRow(
     params.AddParam("$ext").Utf8(extPublicationId).Build();
 
     const auto query = TStringBuilder()
+        << "DECLARE $ext AS Text; "
         << "SELECT ext_publication_id, writer_identity, created_by, created_at "
         << "FROM `" << PublicationsTableRelativePath << "` "
         << "WHERE ext_publication_id = $ext;";
@@ -194,6 +195,7 @@ void AssertDestinationRowCount(
     params.AddParam("$int_publication_id").Uint64(intPublicationId).Build();
 
     const auto query = TStringBuilder()
+        << "DECLARE $int_publication_id AS Uint64; "
         << "SELECT COUNT(*) AS `count` "
         << "FROM `" << DestinationsTableRelativePath << "` "
         << "WHERE int_publication_id = $int_publication_id;";

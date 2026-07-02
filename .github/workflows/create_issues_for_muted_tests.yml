@@ -61,26 +61,36 @@ jobs:
             local d="d_${RANDOM}${RANDOM}"
             { printf '%s<<%s\n' "$1" "$d"; printf '%s\n' "$2"; printf '%s\n' "$d"; } >> "$GITHUB_OUTPUT"
           }
+          # build_type is interpolated raw into later run: steps, so require a safe, non-empty value.
+          validate_build_type() {
+            case "$1" in
+              ""|*[!a-zA-Z0-9._-]*) echo "invalid build_type: '$1'" >&2; exit 1 ;;
+            esac
+          }
 
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             BASE_BRANCH="$DISPATCH_BASE_BRANCH"
           else
             BASE_BRANCH="$PR_BASE_REF"
-            if [ -z "$BASE_BRANCH" ]; then
-              echo "BASE_BRANCH is empty for pull_request event" >&2
-              exit 1
-            fi
+          fi
+          if [ -z "$BASE_BRANCH" ]; then
+            echo "BASE_BRANCH is empty (event=$EVENT_NAME)" >&2
+            exit 1
           fi
           emit base_branch "$BASE_BRANCH"
 
           # Run only for the triggering PR's own build type (create_new_muted_ya.py skips
           # build types not configured for issues), so build-type PRs don't duplicate issues.
           if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$DISPATCH_BUILD_TYPE" ]; then
+            validate_build_type "$DISPATCH_BUILD_TYPE"
             MATRIX_BUILD_TYPES="$(json_array "$DISPATCH_BUILD_TYPE")"
           elif [ "$EVENT_NAME" = "pull_request" ]; then
             case "$PR_HEAD_REF" in
-              update-muted-ya_*) MATRIX_BUILD_TYPES="$(json_array "${PR_HEAD_REF##*_}")" ;;
-              *)                 MATRIX_BUILD_TYPES="$(issue_build_types "$BASE_BRANCH")" ;;
+              update-muted-ya_*)
+                BUILD_TYPE="${PR_HEAD_REF##*_}"
+                validate_build_type "$BUILD_TYPE"
+                MATRIX_BUILD_TYPES="$(json_array "$BUILD_TYPE")" ;;
+              *) MATRIX_BUILD_TYPES="$(issue_build_types "$BASE_BRANCH")" ;;
             esac
           else
             MATRIX_BUILD_TYPES="$(issue_build_types "$BASE_BRANCH")"

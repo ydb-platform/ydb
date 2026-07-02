@@ -64,6 +64,7 @@ ydb/core/blobstorage/ut_mirror3of4 Mirror3of4.ReplicationSmall
 ydb/core/blobstorage/ut_mirror3of4 unittest.sole chunk
 ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.LocalSyncDataUnsuccessfulFullRecoveryDoesNotExhaustLogChunks
+ydb/core/http_proxy/ut/sqs_topic_ut unittest.[*/*] chunk
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery01
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery03
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery04
@@ -85,6 +86,7 @@ ydb/core/kqp/ut/batch_operations KqpBatchDelete.ManyPartitions_1
 ydb/core/kqp/ut/batch_operations unittest.[*/*] chunk
 ydb/core/kqp/ut/opt unittest.[*/*] chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
+ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpAnalyzeOperations.AnalyzeOperationsLifecycle
 ydb/core/kqp/ut/query KqpLimits.ComputeNodeMemoryLimit
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
@@ -111,10 +113,12 @@ ydb/core/kqp/ut/runtime KqpScanLogs.GraceJoin-EnabledLogs
 ydb/core/kqp/ut/runtime unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme KqpAcl.AclForOltpAndOlap+isOlap
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddColumnSimpleReader
+ydb/core/kqp/ut/scheme KqpOlapScheme.InsertDropAddColumn
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpOlapTypes.Decimal35
 ydb/core/kqp/ut/scheme KqpOlapTypes.PgFloat4Column
 ydb/core/kqp/ut/scheme KqpOlapTypes.PgInt2Column
+ydb/core/kqp/ut/scheme KqpOlapTypes.PgMultipleTypesColumn
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublicApi+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublicApi-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql+EnableIndexStreamWrite
@@ -144,6 +148,8 @@ ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedu
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_MixedGroup_PartialOverlap
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_NoSplit_NoGroup
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_TripleSplit_6min
+ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_WithGroup_PartialOverlapWithNonDedup
+ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_WithGroup_SameIds_3min
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicNotCanonizedPath
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithoutDatabase
 ydb/core/persqueue/public/describer/ut unittest.sole chunk
@@ -154,31 +160,59 @@ ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Date
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Decimal
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Double
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int16
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int32
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int64
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int8
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Utf8_LongValue
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.DropColumn
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_Attributes
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_CreateTimestamp
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_MessageGroupId
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_Partition
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_ProducerId
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_SeqNo
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_WriteTimestamp
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingCDCMessage
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingJsonMessage
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingTargetTable
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingTargetTableOtherType
 ydb/core/transfer/ut/column_table unittest.sole chunk
 ydb/core/transfer/ut/functional Transfer.AlterBatchSize
 ydb/core/transfer/ut/functional Transfer.AlterFlushInterval
+ydb/core/transfer/ut/functional Transfer.AlterLambdaOnWork
+ydb/core/transfer/ut/functional Transfer.AlterTargetDirectory
+ydb/core/transfer/ut/functional Transfer.Alter_WithSecret
+ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote
+ydb/core/transfer/ut/functional Transfer.CheckCommittedOffset_Remote
+ydb/core/transfer/ut/functional Transfer.CheckCurrentDateTime
+ydb/core/transfer/ut/functional Transfer.CheckCurrentDateTime_withParams
+ydb/core/transfer/ut/functional Transfer.CreateAndAlterTransferInDirectory
+ydb/core/transfer/ut/functional Transfer.CreateAndDropConsumer
+ydb/core/transfer/ut/functional Transfer.CreateTransferSourceDirNotExists
+ydb/core/transfer/ut/functional Transfer.CreateTransferSourceDirNotExists_LocalTopic
+ydb/core/transfer/ut/functional Transfer.CreateTransferSourceIsNotTopic
+ydb/core/transfer/ut/functional Transfer.CreateTransferSourceIsNotTopic_LocalTopic
 ydb/core/transfer/ut/functional Transfer.CreateTransferSourceNotExists
+ydb/core/transfer/ut/functional Transfer.CreateTransferSourceNotExists_LocalTopic
+ydb/core/transfer/ut/functional Transfer.CreateTransferTargetIsNotTable
+ydb/core/transfer/ut/functional Transfer.CreateTransferTargetNotExists
 ydb/core/transfer/ut/functional Transfer.CustomConsumer
+ydb/core/transfer/ut/functional Transfer.CustomConsumer_NotExists_Local
 ydb/core/transfer/ut/functional Transfer.CustomConsumer_NotExists_Remote
+ydb/core/transfer/ut/functional Transfer.CustomFlushInterval
+ydb/core/transfer/ut/functional Transfer.DescribeError_OnLambdaCompilation
+ydb/core/transfer/ut/functional Transfer.DescribeTransferWithErrorTopicNotFound
+ydb/core/transfer/ut/functional Transfer.DropTransfer
+ydb/core/transfer/ut/functional Transfer.ErrorInMultiLine
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
+ydb/core/transfer/ut/functional Transfer.MessageField_Attributes_Local
+ydb/core/transfer/ut/functional Transfer.MessageField_Attributes_Remote
+ydb/core/transfer/ut/functional Transfer.MessageField_CreateTimestamp_Local
+ydb/core/transfer/ut/functional Transfer.MessageField_CreateTimestamp_Remote
+ydb/core/transfer/ut/functional Transfer.MessageField_Key
+ydb/core/transfer/ut/functional Transfer.MessageField_Key_Empty
+ydb/core/transfer/ut/functional Transfer.MessageField_Partition_Local
+ydb/core/transfer/ut/functional Transfer.MessageField_Partition_Remote
+ydb/core/transfer/ut/functional Transfer.MessageField_WriteTimestamp_Local
+ydb/core/transfer/ut/functional Transfer.MessageField_WriteTimestamp_Remote
+ydb/core/transfer/ut/functional Transfer.PauseAndResumeTransfer
+ydb/core/transfer/ut/functional Transfer.PausedAfterError
+ydb/core/transfer/ut/functional Transfer.ReadFromCDC_Local
+ydb/core/transfer/ut/functional Transfer.ReadFromCDC_Remote
+ydb/core/transfer/ut/functional Transfer.TargetTableWithoutDirectory
+ydb/core/transfer/ut/functional Transfer.TargetTableWriteInsideDirectory
+ydb/core/transfer/ut/functional Transfer.TargetTableWriteOutsideDirectory
+ydb/core/transfer/ut/functional Transfer.TransferSourceDropped
+ydb/core/transfer/ut/functional Transfer.TransferSourceDropped_LocalTopic
+ydb/core/transfer/ut/functional Transfer.WriteToNotExists
+ydb/core/transfer/ut/functional Transfer.WriteToNotTable
 ydb/core/transfer/ut/functional unittest.sole chunk
 ydb/core/transfer/ut/row_table Transfer_RowTable.DropColumn
 ydb/core/transfer/ut/row_table Transfer_RowTable.ProcessingCDCMessage
@@ -792,6 +826,7 @@ ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpAdHoc.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpTpchS0_1.test
 ydb/tests/functional/tpc/medium/tpch py3test.[test_decimal.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch py3test.[test_duplicates.py */*] chunk
+ydb/tests/functional/tpc/medium/tpch py3test.[test_parallel.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch py3test.[test_s1.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch py3test.[test_s_float.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch test_decimal.py.TestTpchS0_1DecimalNative.test_tpch[10]
@@ -1009,6 +1044,7 @@ ydb/tests/stress/s3_backups/tests py3test.sole chunk
 ydb/tests/stress/s3_backups/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/scheme_board/pile_promotion/tests test_scheme_board_workload.py.TestSchemeBoard.test_scheme_board
 ydb/tests/stress/show_create/table/tests test_workload.py.TestYdbWorkload.test_show_create_table_workload[30-None]
+ydb/tests/stress/show_create/table/tests test_workload.py.TestYdbWorkload.test_show_create_table_workload[30-test_sct]
 ydb/tests/stress/show_create/view/tests py3test.sole chunk
 ydb/tests/stress/show_create/view/tests test_workload.py.TestYdbWorkload.test_show_create_view_workload[30-None]
 ydb/tests/stress/show_create/view/tests test_workload.py.TestYdbWorkload.test_show_create_view_workload[30-test_scv]

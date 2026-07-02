@@ -16,7 +16,7 @@
 - Управление [правами доступа (ACL)](../../security/authorization.md#right): выдача, отзыв, просмотр разрешений.
 - Управление [потоковыми запросами](../../concepts/glossary.md#streaming-query): просмотр, изменение, запуск, остановка.
 - [Федеративные запросы](../../concepts/query_execution/federated_query/index.md) через внешние источники данных (S3, базы данных).
-- [Конвертер SQL-запросов](../sql-dialect-converter.md) из других диалектов (PostgreSQL, MySQL, ClickHouse и других) в YQL.
+- [Конвертер SQL-запросов](../sql-translation/sql-dialect-converter.md) из других диалектов (PostgreSQL, MySQL, ClickHouse и других) в YQL.
 - Специализированные редакторы для типов данных `JSON`, `JSONDOCUMENT`, `YSON`.
 
 ## Требования {#requirements}
@@ -234,7 +234,7 @@ VALUES (1, "Alice", CurrentUtcDatetime());
 1. Нажмите **Convert**. Результат появится в нижнем поле.
 1. Нажмите **Copy**, чтобы скопировать результат в буфер обмена.
 
-Подробнее о принципах работы конвертера, поддерживаемых диалектах и ограничениях см. в статье [Конвертер SQL-диалектов в YQL](../sql-dialect-converter.md).
+Подробнее о принципах работы конвертера, поддерживаемых диалектах и ограничениях см. в статье [Конвертер SQL-диалектов в YQL](../sql-translation/sql-dialect-converter.md).
 
 {% note warning %}
 

@@ -54,8 +54,9 @@ class TestEncoding(RollingUpgradeAndDowngradeFixture):
             VALUES {",".join(values)};
             """
 
+        retry_settings = ydb.RetrySettings(idempotent=True)
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            session_pool.execute_with_retries(query)
+            session_pool.execute_with_retries(query, retry_settings=retry_settings)
 
     def _get_queries(self):
         queries = []

@@ -14,7 +14,6 @@ def safe_upload_results(
     result: StressUtilTestResults,
     run_config: RunConfigInfo,
     node_errors: list[NodeErrors],
-    verify_errors: dict
 ) -> None:
     """Safely upload test results with error handling and Allure reporting.
 
@@ -22,7 +21,6 @@ def safe_upload_results(
         result: Stress test results object
         run_config: Run configuration info
         node_errors: List of node error objects
-        verify_errors: Dictionary of verification errors
     """
     with allure.step("Upload results to YDB"):
         if not ResultsProcessor.send_results:
@@ -34,7 +32,7 @@ def safe_upload_results(
             suite_name = 'SingleStressUtil' if len(result.stress_util_runs.keys()) == 1 else 'ParallelStressUtil'
             # Upload aggregated results
             for workload_name, runs in result.stress_util_runs.items():
-                _upload_results(runs, run_config, node_errors, verify_errors, suite_name, workload_name)
+                _upload_results(runs, run_config, node_errors, suite_name, workload_name)
                 with allure.step(f"Process {workload_name} results"):
 
                     # Informative message about what was uploaded
@@ -76,7 +74,6 @@ def _upload_results(
     result: StressUtilResult,
     run_config: RunConfigInfo,
     node_errors: list[NodeErrors],
-    verify_errors: dict,
     suite_name: str,
     workload_name: str
 ) -> None:
@@ -86,7 +83,6 @@ def _upload_results(
         result: Stress utility results
         run_config: Run configuration info
         node_errors: List of node errors
-        verify_errors: Verification errors dict
         suite_name: Test suite name
         workload_name: Workload name
     """
@@ -144,11 +140,6 @@ def _upload_results(
         aggregated_errors.append(f'Collected coredumps: {coredump_count}')
     if had_oom:
         aggregated_errors.append('OOM occurred')
-
-    for error_summary, detailed_info in verify_errors.items():
-        aggregated_errors.append(f'VERIFY {error_summary} appeared on')
-        for host, hosts_count in detailed_info['hosts_count'].items():
-            aggregated_errors.append(f'  {host}: {hosts_count}')
 
     stats["with_errors"] = len(aggregated_errors) > 0
     stats["node_errors"] = len(aggregated_errors) > 0

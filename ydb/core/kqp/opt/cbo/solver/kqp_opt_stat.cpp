@@ -91,7 +91,7 @@ namespace {
             return false;
         }
 
-        if (input->ChildrenSize() != 2 || input->ChildrenSize() != 3) {
+        if (input->ChildrenSize() != 2 && input->ChildrenSize() != 3) {
             return false;
         }
         if (input->Child(0)->IsCallable("Udf")) {

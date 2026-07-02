@@ -1,7 +1,6 @@
 #include "constructor_accessor.h"
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap {
 
@@ -52,8 +51,7 @@ std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::Build(const b
     if (needChunksNormalization) {
         ReorderChunks();
     }
-    YDB_LOG_CREATE_CONTEXT(
-        {"portionId", PortionInfo->GetPortionIdVerified()});
+    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("portion_id", PortionInfo->GetPortionIdVerified());
     if (BlobIdxs.size()) {
         auto itRecord = Records.begin();
         auto itIndex = Indexes.begin();

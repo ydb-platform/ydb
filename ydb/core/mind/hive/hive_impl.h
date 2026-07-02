@@ -718,6 +718,7 @@ public:
     void UpdateCounterNodesFrozen(i64 nodesFrozenDiff);
     void UpdateCounterDeleteTabletQueueSize();
     void UpdateCounterTabletsDeleting();
+    void UpdateCounterTabletsReassigning(i64 tabletsReassigningDiff);
     // details are appended to the "from=X to=Y" of the Moved event
     void RecordTabletMove(const TTabletMoveInfo& info, EHiveEventReason reason, TString details = {});
     // details is the variable part of the description, reason covers the constant part

@@ -157,28 +157,6 @@ class TPushMapElementsThroughAggregateRule : public ISimplifiedRule {
 };
 
 /**
- * Compatibility wrapper for focused tests: applies one alias-append topology per rule firing.
- */
-class TPushAppendRule : public ISimplifiedRule {
-  public:
-    TPushAppendRule()
-        : ISimplifiedRule("Push append map elements", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
-
-    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
-};
-
-/**
- * Compatibility wrapper for focused tests: applies one expression-append topology per rule firing.
- */
-class TPushAppendExpressionRule : public ISimplifiedRule {
-  public:
-    TPushAppendExpressionRule()
-        : ISimplifiedRule("Push append expressions", ERuleProperties::RequireParents | ERuleProperties::RequireNameConstraints) {}
-
-    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
-};
-
-/**
  * Convert semantic renames to append aliases when the original name may stay visible.
  */
 class TRenameToAppendRule : public IRule {

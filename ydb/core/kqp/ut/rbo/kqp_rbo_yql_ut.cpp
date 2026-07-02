@@ -364,9 +364,11 @@ void AddMapAliasRulesForTest(TVector<std::unique_ptr<IRule>>& rules) {
     rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
     rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
     rules.emplace_back(std::make_unique<TRenameToAppendRule>());
-    rules.emplace_back(std::make_unique<TPushAppendRule>());
+    rules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
+    rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
+    rules.emplace_back(std::make_unique<TPushMapElementsThroughAggregateRule>());
     rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
-    AddPushRenameRulesForTest(rules);
+    rules.emplace_back(std::make_unique<TPushRenameIntoProducerRule>());
 }
 
 TVector<std::unique_ptr<IRule>> MakeMapAliasCleanupRulesForTest() {
@@ -3830,7 +3832,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(aliasMap, pos, {"alias_key", "sum_value", "sale_type"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushAppendRule>());
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughAggregateRule>());
         TRuleBasedStage pushAppend("Focused push append", std::move(rules));
         ComputeLogicalTestProps(root);
         pushAppend.RunStage(root, testContext.RboCtx);
@@ -3875,7 +3877,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(aliasMap, pos, {"alias_key", "other_key"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushAppendRule>());
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughAggregateRule>());
         TRuleBasedStage pushAppend("Focused push append", std::move(rules));
         ComputeLogicalTestProps(root);
         pushAppend.RunStage(root, testContext.RboCtx);
@@ -3921,7 +3923,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(aliasMap, pos, {"key", "alias_key", "sum_value"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushAppendRule>());
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughAggregateRule>());
         TRuleBasedStage pushAppend("Focused push append", std::move(rules));
         ComputeLogicalTestProps(root);
         pushAppend.RunStage(root, testContext.RboCtx);
@@ -4905,7 +4907,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(aliasMap, pos, {"a", "payload", "l_a"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushAppendRule>());
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
         TRuleBasedStage pushAppend("Focused push append", std::move(rules));
         ComputeLogicalTestProps(root);
         pushAppend.RunStage(root, testContext.RboCtx);
@@ -4941,7 +4943,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(aliasMap, pos, {"a", "l_a"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushAppendRule>());
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
         TRuleBasedStage pushAppend("Focused push append", std::move(rules));
         ComputeLogicalTestProps(root);
         pushAppend.RunStage(root, testContext.RboCtx);
@@ -4975,7 +4977,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(aliasMap, pos, {"a", "b", "l_a"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushAppendRule>());
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
         TRuleBasedStage pushAppend("Focused push append", std::move(rules));
         ComputeLogicalTestProps(root);
         pushAppend.RunStage(root, testContext.RboCtx);
@@ -5012,7 +5014,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(appendMap, pos, {"a", "one"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushAppendExpressionRule>());
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>(/*pushExpressions*/ true));
         TRuleBasedStage pushAppend("Focused push append expressions", std::move(rules));
         ComputeLogicalTestProps(root);
         pushAppend.RunStage(root, testContext.RboCtx);
@@ -5044,7 +5046,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(appendMap, pos, {"a", "b", "one"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushAppendExpressionRule>());
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>(/*pushExpressions*/ true));
         TRuleBasedStage pushAppend("Focused push append expressions", std::move(rules));
         ComputeLogicalTestProps(root);
         pushAppend.RunStage(root, testContext.RboCtx);
@@ -5121,7 +5123,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(appendMap, pos, {"a", "b", "one"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushAppendExpressionRule>());
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>(/*pushExpressions*/ true));
         TRuleBasedStage pushAppend("Focused push append expressions", std::move(rules));
         ComputeLogicalTestProps(root);
         pushAppend.RunStage(root, testContext.RboCtx);

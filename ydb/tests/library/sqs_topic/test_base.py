@@ -136,3 +136,22 @@ class KikimrSqsTopicTestBase(object):
             assert_that(describe_topic, raises(ydb.SchemeError))
         finally:
             driver.stop()
+
+    def _read_message_from_topic_without_consumer(self, topic_path, timeout=10):
+        driver = self._make_ydb_driver()
+        try:
+            topic_description = driver.topic_client.describe_topic(topic_path, include_stats=False)
+            partition_ids = [partition.partition_id for partition in topic_description.partitions]
+
+            topic_selector = ydb.TopicReaderSelector(
+                path=topic_path,
+                partitions=partition_ids,
+            )
+            with driver.topic_client.reader(
+                topic_selector,
+                consumer=None,
+                event_handler=ydb.TopicReaderEvents.EventHandler(),
+            ) as reader:
+                return reader.receive_message(timeout=timeout)
+        finally:
+            driver.stop()

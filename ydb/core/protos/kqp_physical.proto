@@ -766,6 +766,7 @@ message TKqpPhyQuery {
 
     repeated TKqpTableInfo ViewInfos = 11;
 
+    reserved 12;
     optional bool EnableOlapSink = 13;
     optional bool EnableHtapTx = 14;
     optional bool ForceImmediateEffectsExecution = 15;

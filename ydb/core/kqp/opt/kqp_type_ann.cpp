@@ -887,25 +887,19 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
     TCoAtomList columns{node->ChildPtr(TKqlUpsertRowsBase::idx_Columns)};
 
-    const TTypeAnnotationNode* itemType = nullptr;
-    bool isStream;
 
     auto* input = node->Child(TKqlUpsertRowsBase::idx_Input);
 
-    {
+    YQL_ENSURE(
+        TKqlUpsertRows::Match(node.Get()) ||
+        TKqlUpsertRowsIndex::Match(node.Get()) ||
+        TKqlInsertOnConflictUpdateRows::Match(node.Get())
+    );
 
-        YQL_ENSURE(
-            TKqlUpsertRows::Match(node.Get()) ||
-            TKqlUpsertRowsIndex::Match(node.Get()) ||
-            TKqlInsertOnConflictUpdateRows::Match(node.Get())
-        );
-
-        if (!EnsureListType(*input, ctx)) {
-            return TStatus::Error;
-        }
-        itemType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-        isStream = false;
+    if (!EnsureListType(*input, ctx)) {
+        return TStatus::Error;
     }
+    const TTypeAnnotationNode* itemType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
 
     if (!EnsureStructType(input->Pos(), *itemType, ctx)) {
         return TStatus::Error;
@@ -998,11 +992,7 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
 
     auto effectType = MakeKqpEffectType(ctx);
-    if (isStream) {
-        node->SetTypeAnn(ctx.MakeType<TStreamExprType>(effectType));
-    } else {
-        node->SetTypeAnn(ctx.MakeType<TListExprType>(effectType));
-    }
+    node->SetTypeAnn(ctx.MakeType<TListExprType>(effectType));
     return TStatus::Ok;
 }
 
@@ -1173,19 +1163,13 @@ TStatus AnnotateDeleteRows(const TExprNode::TPtr& node, TExprContext& ctx, const
         return TStatus::Error;
     }
 
-    const TTypeAnnotationNode* itemType = nullptr;
-    bool isStream = false;
-
     auto* input = node->Child(TKqlDeleteRowsBase::idx_Input);
 
-    {
-        YQL_ENSURE(TKqlDeleteRows::Match(node.Get()) || TKqlDeleteRowsIndex::Match(node.Get()));
-        if (!EnsureListType(*input, ctx)) {
-            return TStatus::Error;
-        }
-        itemType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-        isStream = false;
+    YQL_ENSURE(TKqlDeleteRows::Match(node.Get()) || TKqlDeleteRowsIndex::Match(node.Get()));
+    if (!EnsureListType(*input, ctx)) {
+        return TStatus::Error;
     }
+    const TTypeAnnotationNode* itemType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
 
     if (!EnsureStructType(input->Pos(), *itemType, ctx)) {
         return TStatus::Error;
@@ -1201,11 +1185,7 @@ TStatus AnnotateDeleteRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
 
     auto effectType = MakeKqpEffectType(ctx);
-    if (isStream) {
-        node->SetTypeAnn(ctx.MakeType<TStreamExprType>(effectType));
-    } else {
-        node->SetTypeAnn(ctx.MakeType<TListExprType>(effectType));
-    }
+    node->SetTypeAnn(ctx.MakeType<TListExprType>(effectType));
     return TStatus::Ok;
 }
 

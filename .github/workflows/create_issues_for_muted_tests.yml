@@ -92,7 +92,6 @@ jobs:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     if: |
       ((github.event_name == 'pull_request' &&
-        github.event.pull_request.merged == true &&
         contains(github.event.pull_request.labels.*.name, 'mute-unmute')) ||
        github.event_name == 'workflow_dispatch')
     strategy:
@@ -182,7 +181,6 @@ jobs:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     if: |
       ((github.event_name == 'pull_request' &&
-        github.event.pull_request.merged == true &&
         contains(github.event.pull_request.labels.*.name, 'mute-unmute')) ||
        github.event_name == 'workflow_dispatch')
     steps:

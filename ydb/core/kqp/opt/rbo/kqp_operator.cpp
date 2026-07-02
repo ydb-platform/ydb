@@ -17,6 +17,14 @@ TString FormatMapElementName(const TInfoUnit& iu) {
     return IsGeneratedIgnoreIU(iu) ? "_" : iu.GetFullName();
 }
 
+void EnsureDisjointJoinInputs(const TIntrusivePtr<IOperator>& leftInput, const TIntrusivePtr<IOperator>& rightInput) {
+    // Join-local references are renamed by IU name, without a side tag. Keep
+    // input outputs disjoint so each local name identifies exactly one side.
+    Y_ENSURE(
+        IUSetIntersect(leftInput->GetOutputIUs(), MakeInfoUnitSet(rightInput->GetOutputIUs())).empty(),
+        "Join inputs must have disjoint output IUs");
+}
+
 TString FormatSortElements(const TVector<TSortElement>& sortElements) {
     TStringBuilder result;
     for (size_t i = 0; i < sortElements.size(); ++i) {
@@ -605,11 +613,15 @@ NJson::TJsonValue TOpFilter::ToJson(ui32 explainFlags) {
 
 TOpJoin::TOpJoin(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos, TString joinKind,
                  const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys)
-    : IBinaryOperator(EOperator::Join, pos, leftInput, rightInput), JoinKind(joinKind), JoinKeys(joinKeys) {}
+    : IBinaryOperator(EOperator::Join, pos, leftInput, rightInput), JoinKind(joinKind), JoinKeys(joinKeys) {
+    EnsureDisjointJoinInputs(leftInput, rightInput);
+}
 
 TOpJoin::TOpJoin(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos, TString joinKind,
                  const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys, const TVector<TExpression>& joinFilters)
-    : IBinaryOperator(EOperator::Join, pos, leftInput, rightInput), JoinKind(joinKind), JoinKeys(joinKeys), JoinFilters(joinFilters) {}
+    : IBinaryOperator(EOperator::Join, pos, leftInput, rightInput), JoinKind(joinKind), JoinKeys(joinKeys), JoinFilters(joinFilters) {
+    EnsureDisjointJoinInputs(leftInput, rightInput);
+}
 
 TVector<TInfoUnit> TOpJoin::GetLHSKeys() const {
     TVector<TInfoUnit> lhsKeys;

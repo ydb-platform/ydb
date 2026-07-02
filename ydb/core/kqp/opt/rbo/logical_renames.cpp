@@ -249,9 +249,9 @@ void TOpAggregate::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit:
 }
 
 void TOpCBOTree::RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    for (auto op : TreeNodes) {
-        op->RenameProducedIUs(renameMap, ctx);
-    }
+    Y_UNUSED(renameMap);
+    Y_UNUSED(ctx);
+    Y_ENSURE(false, "TOpCBOTree::RenameProducedIUs must not be used directly");
 }
 
 } // namespace NKqp

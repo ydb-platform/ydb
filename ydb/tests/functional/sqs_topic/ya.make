@@ -4,6 +4,8 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 TEST_SRCS(
     test_create_queue.py
     test_get_queue_url.py
+    test_get_queue_attributes.py
+    test_set_queue_attributes.py
     test_delete_queue.py
     test_send_message.py
     test_send_message_batch.py

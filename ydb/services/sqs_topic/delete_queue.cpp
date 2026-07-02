@@ -85,6 +85,10 @@ namespace NKikimr::NSqsTopic::V1 {
             if (!FormalValidQueueUrl()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
+            if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                return ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION,
+                    "DeleteQueue is not supported"));
+            }
 
             SendDescribeProposeRequest(ctx);
             Become(&TDeleteQueueActor::StateWork);
@@ -120,7 +124,7 @@ namespace NKikimr::NSqsTopic::V1 {
             Y_ABORT_UNLESS(response.PQGroupInfo);
             PQGroup = response.PQGroupInfo->Description;
             SelfInfo = response.Self->Info;
-            ConsumerConfig = GetConsumerConfig(PQGroup.GetPQTabletConfig(), QueueUrl_->Consumer);
+            ConsumerConfig = GetConsumerConfig(PQGroup.GetPQTabletConfig(), QueueUrl_->Consumer, ActorContext());
             if (!ConsumerConfig) {
                 return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist (consumer: \"{}\")", QueueUrl_->Consumer.c_str())));
             }

@@ -2,22 +2,19 @@
 
 #include <ydb/core/tx/columnshard/data_sharing/modification/events/change_owning.h>
 #include <ydb/core/tx/columnshard/data_sharing/modification/tasks/modification.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
 bool TTxApplyLinksModification::DoExecute(TTransactionContext& txc, const TActorContext&) {
-    YDB_LOG_CREATE_CONTEXT(
-        {"tabletId", Self->TabletID()},
-        {"txState", "execute"});
+    NActors::TLogContextGuard logGuard =
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "execute");
     Task->ApplyForDB(txc, Self->GetStoragesManager()->GetSharedBlobsManager());
     return true;
 }
 
 void TTxApplyLinksModification::DoComplete(const TActorContext& /*ctx*/) {
-    YDB_LOG_CREATE_CONTEXT(
-        {"tabletId", Self->TabletID()},
-        {"txState", "complete"});
+    NActors::TLogContextGuard logGuard =
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "complete");
     Task->ApplyForRuntime(Self->GetStoragesManager()->GetSharedBlobsManager());
 
     auto ev = std::make_unique<NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished>(Task->GetTabletId(), SessionId, PackIdx);

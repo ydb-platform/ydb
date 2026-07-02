@@ -65,12 +65,8 @@ public:
                 "incorrect packIdx received for AckData: " + ::ToString(packIdxReceived) + " but expected: " + ::ToString(PackIdx));
         }
         AckReceivedForPackIdx = packIdxReceived;
-        YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
-            {"event", "SourceAckData"},
-            {"pack", PackIdx},
-            {"packAck", AckReceivedForPackIdx},
-            {"linksReady", LinksModifiedTablets.size()},
-            {"linksWaiting", Links.size()});
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "SourceAckData")("pack", PackIdx)("pack_ack", AckReceivedForPackIdx)(
+            "links_ready", LinksModifiedTablets.size())("links_waiting", Links.size());
         return TConclusionStatus::Success();
     }
 
@@ -81,12 +77,8 @@ public:
         }
         AFL_VERIFY(Links.contains(tabletId));
         if (LinksModifiedTablets.emplace(tabletId).second) {
-            YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
-                {"event", "SourceAckData"},
-                {"pack", PackIdx},
-                {"packAck", AckReceivedForPackIdx},
-                {"linksReady", LinksModifiedTablets.size()},
-                {"linksWaiting", Links.size()});
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "SourceAckData")("pack", PackIdx)("pack_ack", AckReceivedForPackIdx)(
+                "links_ready", LinksModifiedTablets.size())("links_waiting", Links.size());
             return TConclusionStatus::Success();
         } else {
             return TConclusionStatus::Fail("AckLinks repeated table");

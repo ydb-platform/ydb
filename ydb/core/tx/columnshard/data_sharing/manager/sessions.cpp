@@ -5,14 +5,11 @@
 #include <ydb/core/tx/columnshard/data_sharing/source/transactions/tx_start_to_source.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
 void TSessionsManager::Start(NColumnShard::TColumnShard& shard) const {
-    YDB_LOG_CREATE_CONTEXT(
-        {"sessions", "start"},
-        {"tabletId", shard.TabletID()});
+    NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("sessions", "start")("tablet_id", shard.TabletID());
     for (auto&& i : SourceSessions) {
         if (i.second->IsReadyForStarting()) {
             i.second->PrepareToStart(shard);

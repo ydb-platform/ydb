@@ -2,8 +2,6 @@
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
-
 namespace NKikimr::NOlap::NDataSharing {
 
 bool TTxStartToSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
@@ -16,8 +14,7 @@ bool TTxStartToSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, 
 }
 
 void TTxStartToSource::DoComplete(const TActorContext& /*ctx*/) {
-    YDB_LOG_DEBUG("",
-        {"info", "TTxStartToSource::Complete"});
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("info", "TTxStartToSource::Complete");
     AFL_VERIFY(Sessions->emplace(Session->GetSessionId(), Session).second);
 }
 

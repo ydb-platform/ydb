@@ -123,7 +123,7 @@ Here `tpch/s10/lineitem` is the name of the target table in {{ ydb-short-name }}
 
 ## Export and import with Apache Spark™ {#spark}
 
-Using the [connector](../integrations/ingestion/spark.md) for {{ ydb-short-name }} and Apache Spark™ is a flexible and scalable way to export and import large volumes of data.
+Using the [connector](../integrations/query-engines/spark.md) for {{ ydb-short-name }} and Apache Spark™ is a flexible and scalable way to export and import large volumes of data.
 
 ### Prerequisites
 

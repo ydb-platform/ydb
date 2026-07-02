@@ -3,7 +3,7 @@
 namespace NYql::NLog {
 
 TForwardingLogBackend::TForwardingLogBackend(TAutoPtr<TLogBackend> child)
-    : Child_(std::move(child))
+    : Child_(child)
 {
 }
 
@@ -28,7 +28,7 @@ size_t TForwardingLogBackend::QueueSize() const {
 }
 
 void TForwardingLogBackend::SetChild(TAutoPtr<TLogBackend> child) {
-    Child_ = std::move(child);
+    Child_ = child;
 }
 
 TAutoPtr<TLogBackend> TForwardingLogBackend::GetChild() const {

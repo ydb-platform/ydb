@@ -1,5 +1,6 @@
 #include "change_message_visibility.h"
 #include "actor.h"
+#include "config.h"
 #include "error.h"
 #include "limits.h"
 #include "receipt.h"
@@ -146,7 +147,7 @@ namespace NKikimr::NSqsTopic::V1 {
             NPQ::NMLP::TMessageDeadlineChangerSettings changerSettings{
                 .DatabasePath = this->QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
-                .Consumer = this->QueueUrl_->Consumer,
+                .Consumer = ResolveConsumerNameFromQueueUrl(this->QueueUrl_->Consumer, ctx),
                 .Messages = std::move(messages),
                 .Deadlines = std::move(deadlines),
                 .UserToken = this->Request_->GetInternalToken(),

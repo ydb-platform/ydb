@@ -156,7 +156,7 @@ void TFlushRequestExecutor::OnRequestTimeout()
         "%s OnRequestTimeout.",
         LogTitle.GetWithTime().c_str());
 
-    Reply({}, Hint.MakeLsnVector());
+    Reply({}, MakeLsnVector(Hint.Segments));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

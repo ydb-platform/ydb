@@ -1685,19 +1685,12 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
             return PartitionId == rhs.PartitionId
                 && GroupId == rhs.GroupId;
         }
-
-        struct THash {
-            inline size_t operator()(const TPartitionToAdd& obj) const {
-                const ::THash<ui32> hashFn;
-                return CombineHashes(hashFn(obj.PartitionId), hashFn(obj.GroupId));
-            }
-        };
     };
 
     ui64 TotalGroupCount = 0;
     ui64 TotalPartitionCount = 0;
     ui32 NextPartitionId = 0;
-    THashSet<TPartitionToAdd, TPartitionToAdd::THash> PartitionsToAdd;
+    TVector<TPartitionToAdd> PartitionsToAdd;
     THashSet<ui32> PartitionsToDelete;
     THashMap<ui32, TMaybe<TTopicTabletInfo::TKeyRange>> KeyRangesToChange;
     ui32 MaxPartsPerTablet = 0;
@@ -1752,14 +1745,6 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     bool FillKeySchema(const TString& tabletConfig);
 
     bool HasBalancer() const { return bool(BalancerTabletID); }
-
-    ui32 GetTotalPartitionCountWithAlter() const {
-        ui32 res = 0;
-        for (const auto& shard : Shards) {
-            res += shard.second->PartsCount();
-        }
-        return res;
-    }
 
     ui32 ExpectedShardCount() const {
 

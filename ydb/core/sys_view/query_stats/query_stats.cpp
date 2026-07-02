@@ -400,6 +400,14 @@ private:
             insert({TSchema::RequestUnits::ColumnId, [] (const TEntry& entry) {
                 return TCell::Make<ui64>(entry.GetStats().GetRequestUnits());
             }});
+            insert({TSchema::TraceId::ColumnId, [] (const TEntry& entry) {
+                const auto& stats = entry.GetStats();
+                if (!stats.HasTraceId()) {
+                    return TCell();
+                }
+                const auto& traceId = stats.GetTraceId();
+                return TCell(traceId.data(), traceId.size());
+            }});
         }
     };
 

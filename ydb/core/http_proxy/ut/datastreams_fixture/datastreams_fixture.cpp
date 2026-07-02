@@ -479,7 +479,7 @@ TMaybe<NYdb::TResultSet> THttpProxyTestMock::RunYqlDataQuery(TString query) {
 void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
     AuthFactory = std::make_shared<NKikimr::NHttpProxy::TIamAuthFactory>();
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
+    appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(initParameters.TopicsAreFirstClassCitizen);
     appConfig.MutablePQConfig()->SetEnabled(true);
     appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(128);
     appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(512);
@@ -536,9 +536,17 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
     limit->SetMinStorageMegabytes(50_KB);
     limit->SetMaxStorageMegabytes(1_MB);
 
+    if (!initParameters.TopicsAreFirstClassCitizen) {
+        auto* pqConfig = appConfig.MutablePQConfig();
+        pqConfig->SetRoot("/Root/PQ");
+        pqConfig->SetClusterTablePath("/Root/PQ/Config/V2/Cluster");
+        pqConfig->SetVersionTablePath("/Root/PQ/Config/V2/Versions");
+        pqConfig->SetTestDatabaseRoot("/Root/federation");
+    }
+
     NYdb::TKikimrWithGrpcAndRootSchema* server =
         new NYdb::TKikimrWithGrpcAndRootSchema(std::move(appConfig), {}, {}, false, nullptr,
-            [this](NYdb::TServerSettings& settings) -> void {
+            [this, initParameters](NYdb::TServerSettings& settings) -> void {
                 settings.SetDataStreamsAuthFactory(AuthFactory);
                 settings.CreateTicketParser = CreateTicketParser;
                 Y_ABORT_UNLESS(AccessServiceEndpoint);
@@ -546,6 +554,10 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
                 settings.AuthConfig.SetUseAccessService(true);
                 settings.AuthConfig.SetUseAccessServiceTLS(false);
                 settings.AppConfig->MutableSqsConfig()->SetUserSettingsUpdateTimeMs(100);
+                if (!initParameters.TopicsAreFirstClassCitizen) {
+                    settings.PQClusterDiscoveryConfig.SetEnabled(true);
+                    settings.PQClusterDiscoveryConfig.SetTimedCountersUpdateIntervalSeconds(1);
+                }
             }, 0, 1);
 
     server->ServerSettings->SetUseRealThreads(false);
@@ -875,6 +887,44 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
         "root@builtin"
     );
 
+    if (!initParameters.TopicsAreFirstClassCitizen) {
+        client.MkDir("/Root", "federation");
+        client.MkDir("/Root/PQ", "Config");
+        client.MkDir("/Root/PQ/Config", "V2");
+        client.CreateTable("/Root/PQ/Config/V2",
+            "Name: \"Cluster\""
+            "Columns { Name: \"name\"     Type: \"Utf8\"}"
+            "Columns { Name: \"balancer\" Type: \"Utf8\"}"
+            "Columns { Name: \"local\"    Type: \"Bool\"}"
+            "Columns { Name: \"enabled\"  Type: \"Bool\"}"
+            "Columns { Name: \"weight\"   Type: \"Uint64\"}"
+            "KeyColumnNames: [\"name\"]",
+            TDuration::Seconds(5000),
+            "root@builtin"
+        );
+        client.CreateTable("/Root/PQ/Config/V2",
+            "Name: \"Topics\""
+            "Columns { Name: \"path\" Type: \"Utf8\"}"
+            "Columns { Name: \"dc\"   Type: \"Utf8\"}"
+            "KeyColumnNames: [\"path\", \"dc\"]",
+            TDuration::Seconds(5000),
+            "root@builtin"
+        );
+        client.CreateTable("/Root/PQ/Config/V2",
+            "Name: \"Versions\""
+            "Columns { Name: \"name\"    Type: \"Utf8\"}"
+            "Columns { Name: \"version\" Type: \"Int64\"}"
+            "KeyColumnNames: [\"name\"]",
+            TDuration::Seconds(5000),
+            "root@builtin"
+        );
+        RunYqlDataQuery(
+            "UPSERT INTO `/Root/PQ/Config/V2/Cluster` (name, balancer, local, enabled, weight) "
+            "VALUES (\"dc1\", \"localhost\", true, true, 1000);"
+            "UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) VALUES (\"Cluster\", 1), (\"Topics\", 0);"
+        );
+    }
+
     client.Grant("/", "Root", "root@builtin", NACLib::EAccessRights::GenericFull);
 }
 
@@ -885,7 +935,9 @@ void THttpProxyTestMock::InitAccessServiceService(bool enableAccessServiceV2Inte
     const auto setupAccessServiceMock = [&](auto& asMock) {
         asMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
         asMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
-        // asMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        asMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        asMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
+        asMock.AuthenticateData["user@builtin"].Response.mutable_subject()->mutable_user_account()->set_id("user1_id");
 
         asMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
         asMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
@@ -897,15 +949,15 @@ void THttpProxyTestMock::InitAccessServiceService(bool enableAccessServiceV2Inte
         asMock.AuthorizeData["proxy_sa@builtin-ydb.databases.list-database4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
     };
 
-    if (enableAccessServiceV2Interface) {
-        // V2 mock setup
-        setupAccessServiceMock(AccessServiceMockV2);
-        builder.AddListeningPort(AccessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&AccessServiceMockV2);
-    } else {
-        // V1 mock setup
+    builder.AddListeningPort(AccessServiceEndpoint, grpc::InsecureServerCredentials());
+
+    if (!enableAccessServiceV2Interface) {
         setupAccessServiceMock(AccessServiceMock);
-        builder.AddListeningPort(AccessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&AccessServiceMock);
+        builder.RegisterService(&AccessServiceMock);
     }
+    // We always should setup v2, because bulkAuthorization works only in v2 and EnableBulkAuthorization=true will call it
+    setupAccessServiceMock(AccessServiceMockV2);
+    builder.RegisterService(&AccessServiceMockV2);
 
     AccessServiceServer = builder.BuildAndStart();
 }

@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/kafka
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic
 )
 

@@ -8,6 +8,8 @@
 #include <ydb/library/yaml_json/yaml_to_json.h>
 #include <library/cpp/streams/zstd/zstd.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
+
 namespace NKikimr::NStorage {
     constexpr ui32 defaultReplicasSpecificVolume = 200;
 
@@ -250,7 +252,8 @@ namespace NKikimr::NStorage {
                 return;
             }
         }
-        STLOG(PRI_DEBUG, BS_NODE, NW103, "TStateStoragePerPileGenerator::PickNodesByState without limits");
+        YDB_LOG_DEBUG("TStateStoragePerPileGenerator::PickNodesByState without limits",
+            {"marker", "NW103"});
         Y_ABORT_UNLESS(PickNodesSimpleStrategy(group, NodeStatesSize, true));
     }
 }

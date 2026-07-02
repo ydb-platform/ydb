@@ -562,6 +562,20 @@ message TEvLoadTestRequest {
 
         optional TWorkloadConfig WorkloadConfig = 102;
         optional uint64 Tag = 100;
+
+        // One target tablet for a multi-tablet run. NodeId is the node that
+        // currently hosts the tablet (from Hive); the coordinator places the
+        // per-tablet load actor on that node so it is co-located with the tablet.
+        message TNbsTabletTarget {
+            optional uint64 TabletId = 1;
+            optional uint32 NodeId = 2;
+        }
+
+        // When non-empty the load runs in multi-tablet coordinator mode:
+        // CreateNbsDbgLikeLoadActor returns the coordinator actor, which fans
+        // the shared WorkloadConfig out to one single-tablet child run per
+        // target (each child sets NbsDbgLikeTabletId and clears Targets).
+        repeated TNbsTabletTarget Targets = 103;
     }
 
     message TInterconnectLoad {
@@ -683,6 +697,37 @@ message TEvNodeFinishResponse {
         repeated float Percentiles = 4;
     }
 
+    // Compact serialization of an NHdr::THistogram as (value, count) pairs for
+    // the recorded buckets. Reconstructed with RecordValues(value, count),
+    // which is exact within the histogram's resolution. Used to ship NBS-DBG
+    // latency histograms across nodes so a multi-tablet coordinator can merge
+    // them into an exact combined result.
+    message TNbsDbgLikeHistogram {
+        optional int64 Lowest = 1;
+        optional int64 Highest = 2;
+        optional int32 SignificantDigits = 3;
+        repeated int64 Values = 4 [packed = true];
+        repeated int64 Counts = 5 [packed = true];
+    }
+
+    // Per-tablet NBS-DBG-like measured stats, attached only by NBS-DBG-like
+    // runs so a coordinator on another node can merge them exactly. Empty for
+    // all other load types.
+    message TNbsDbgLikeNodeStats {
+        optional uint64 TabletId = 1;
+        optional uint32 NodeId = 2;
+        optional uint64 WritesOk = 3;
+        optional uint64 WriteBytes = 4;
+        optional uint64 WritesErr = 5;
+        optional uint64 ReadsOk = 6;
+        optional uint64 ReadBytes = 7;
+        optional uint64 ReadsErr = 8;
+        optional uint64 MeasuredMs = 9;
+        optional uint32 MaxInFlight = 10;
+        optional TNbsDbgLikeHistogram WriteLatencyUs = 11;
+        optional TNbsDbgLikeHistogram ReadLatencyUs = 12;
+    }
+
     optional string Uuid = 1;
     optional uint32 NodeId = 2;
     optional bool Success = 3;
@@ -691,4 +736,5 @@ message TEvNodeFinishResponse {
     optional TNodeStats Stats = 6;
     optional string LastHtmlPage = 7;
     optional string JsonResult = 8;
+    optional TNbsDbgLikeNodeStats NbsDbgLikeStats = 9;
 }

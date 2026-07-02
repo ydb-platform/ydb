@@ -244,7 +244,7 @@ class WorkloadStats(object):
 
 class YdbQueue(object):
     def __init__(self, idx, database, stats, driver, pool, mode, in_memory):
-        self.working_dir = os.path.join(database, socket.gethostname().split('.')[0].replace('-', '_') + "_" + str(idx))
+        self.working_dir = os.path.join(database, socket.gethostname().split('.')[0].replace('-', '_') + f"_{mode}_" + str(idx))
         self.copies_dir = os.path.join(self.working_dir, 'copies')
         self.table_name = self.table_name_with_timestamp()
         self.queries = {}

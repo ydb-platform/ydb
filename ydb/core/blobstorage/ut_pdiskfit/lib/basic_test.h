@@ -95,7 +95,7 @@ public:
     }
 
     void Finish(const TActorContext& ctx) {
-        LOG_NOTICE(ctx, NActorsServices::TEST, "TBasicTest::Finish called");
+        YDB_LOG_NOTICE_CTX_COMP(ctx, NActorsServices::TEST, "TBasicTest::Finish called");
         Die(ctx);
         Y_ABORT_UNLESS(StopEvent);
         StopEvent->Signal();

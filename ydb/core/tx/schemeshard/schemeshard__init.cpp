@@ -4812,6 +4812,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             case ETabletType::BackupController:
                 Self->TabletCounters->Simple()[COUNTER_BACKUP_CONTROLLER_TABLET_COUNT].Add(1);
                 break;
+            case ETabletType::TestShard:
+                Self->TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Add(1);
+                break;
             default:
                 LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "dont know how to interpret tablet type"
@@ -5867,6 +5870,49 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         {
             if (!Self->BackgroundSessionsManager->LoadIdempotency(txc)) {
                 return false;
+            }
+        }
+
+        // Read test shard sets
+        {
+            auto rowset = db.Table<Schema::TestShardSet>().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::TestShardSet::PathId>());
+                ui64 alterVersion = rowset.GetValue<Schema::TestShardSet::AlterVersion>();
+                TString serializedTestShards = rowset.GetValue<Schema::TestShardSet::TestShards>();
+                TString serializedCmdInitialize = rowset.GetValue<Schema::TestShardSet::CmdInitialize>();
+
+                TTestShardSetInfo::TPtr testShardSetInfo = new TTestShardSetInfo(alterVersion);
+
+                if (!serializedTestShards.empty()) {
+                    NKikimrSchemeOp::TTestShardSetDescription description;
+                    Y_PROTOBUF_SUPPRESS_NODISCARD description.ParseFromString(serializedTestShards);
+                    for (const auto& shardDesc : description.GetShards()) {
+                        TLocalShardIdx localShardIdx(ui64(shardDesc.GetShardIdx()));
+                        TShardIdx shardIdx(Self->TabletID(), localShardIdx);
+                        TTabletId tabletId(ui64(shardDesc.GetTabletId()));
+                        if (auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx)) {
+                            tabletId = shardInfo->TabletID;
+                        }
+                        testShardSetInfo->TestShards[shardIdx] = tabletId;
+                    }
+                }
+
+                if (!serializedCmdInitialize.empty()) {
+                    Y_PROTOBUF_SUPPRESS_NODISCARD testShardSetInfo->CmdInitialize.ParseFromString(serializedCmdInitialize);
+                }
+
+                Self->TestShardSets[pathId] = testShardSetInfo;
+                Self->IncrementPathDbRefCount(pathId);
+                Self->TabletCounters->Simple()[COUNTER_TEST_SHARD_SET_COUNT].Add(1);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
             }
         }
 

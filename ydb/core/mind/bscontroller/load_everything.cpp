@@ -6,8 +6,6 @@
 
 #include <ydb/library/yaml_config/yaml_config.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
-
 namespace NKikimr {
 namespace NBsController {
 
@@ -20,8 +18,7 @@ public:
     TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_LOAD_EVERYTHING; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("TTxLoadEverything Execute",
-            {"marker", "BSCTXLE01"});
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE01, "TTxLoadEverything Execute");
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -308,12 +305,9 @@ public:
                 for (auto it = box.Hosts.begin(); it != box.Hosts.end(); ) {
                     const auto& [host, value] = *it;
                     if (!resolveBoxHost(host, value)) {
-                        YDB_LOG_DEBUG("Skipping stale Box host for unresolvable node during load",
-                            {"marker", "BSCTXLE06"},
-                            {"boxId", boxId},
-                            {"fqdn", host.Fqdn},
-                            {"icPort", host.IcPort},
-                            {"enforcedNodeId", value.EnforcedNodeId});
+                        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE06, "skipping stale Box host for unresolvable node during load",
+                            (BoxId, boxId), (Fqdn, host.Fqdn), (IcPort, host.IcPort),
+                            (EnforcedNodeId, value.EnforcedNodeId));
                         Self->StaleBoxHostKeys.emplace_back(host.BoxId, host.Fqdn, host.IcPort);
                         it = box.Hosts.erase(it);
                     } else {
@@ -376,10 +370,8 @@ public:
                 if (const auto& x = Self->HostRecords->GetHostId(disks.GetValue<T::NodeID>())) {
                     hostId = *x;
                 } else if (selfManagementConfigEnabled) {
-                    YDB_LOG_DEBUG("Skipping stale PDisk for unresolvable node during load",
-                        {"marker", "BSCTXLE07"},
-                        {"nodeId", disks.GetValue<T::NodeID>()},
-                        {"PDiskId", disks.GetValue<T::PDiskID>()});
+                    STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE07, "skipping stale PDisk for unresolvable node during load",
+                        (NodeId, disks.GetValue<T::NodeID>()), (PDiskId, disks.GetValue<T::PDiskID>()));
                     Self->StalePDiskKeys.emplace_back(disks.GetValue<T::NodeID>(), disks.GetValue<T::PDiskID>());
                     if (!disks.Next())
                         return false;
@@ -449,9 +441,7 @@ public:
                 const TVSlotId& vslotId(slot.GetKey());
                 TPDiskInfo *pdisk = Self->FindPDisk(vslotId.ComprisingPDiskId());
                 if (!pdisk && selfManagementConfigEnabled) {
-                    YDB_LOG_DEBUG("Skipping stale VSlot for missing PDisk during load",
-                        {"marker", "BSCTXLE08"},
-                        {"VSlotId", vslotId});
+                    STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE08, "skipping stale VSlot for missing PDisk during load", (VSlotId, vslotId));
                     Self->StaleVSlotKeys.push_back(vslotId);
                     if (!slot.Next())
                         return false;
@@ -540,9 +530,7 @@ public:
                         groupInfo->LatencyStats.GetFast = TDuration::MicroSeconds(groupLatencies.GetValue<Table::GetFastLatencyUs>());
                     }
                 } else {
-                    YDB_LOG_ERROR("Nonexistent group in GroupLatencies",
-                        {"marker", "BSCTXLE02"},
-                        {"groupId", groupId});
+                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXLE02, "Nonexistent group in GroupLatencies", (GroupId, groupId));
                 }
 
                 if (!groupLatencies.Next()) {
@@ -766,22 +754,19 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        YDB_LOG_DEBUG("TTxLoadEverything Complete",
-            {"marker", "BSCTXLE03"});
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE03, "TTxLoadEverything Complete");
         Self->LoadFinished();
         if (Self->EnableConfigV2) {
             Self->PendingV2MigrationCheck = true;
         }
         if (!Self->SelfManagementEnabled) {
-            YDB_LOG_DEBUG("TTxLoadEverything StartConsoleInteraction",
-                {"marker", "BSCTXLE05"});
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE05, "TTxLoadEverything StartConsoleInteraction");
             Self->ConsoleInteraction->Start();
         }
         if (!Self->StaleBoxHostKeys.empty() || !Self->StalePDiskKeys.empty() || !Self->StaleVSlotKeys.empty()) {
             Self->Execute(Self->CreateTxCleanupStaleStorageEntries());
         }
-        YDB_LOG_DEBUG("TTxLoadEverything InitQueue processed",
-            {"marker", "BSCTXLE04"});
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE04, "TTxLoadEverything InitQueue processed");
     }
 };
 

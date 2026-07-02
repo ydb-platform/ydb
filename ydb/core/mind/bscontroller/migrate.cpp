@@ -1,8 +1,6 @@
 #include "impl.h"
 #include <ydb/core/base/feature_flags.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
-
 
 namespace NKikimr {
 namespace NBsController {
@@ -36,17 +34,13 @@ class TBlobStorageController::TTxMigrate : public TTransactionBase<TBlobStorageC
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             auto& front = Queue.front();
-            YDB_LOG_DEBUG("Execute tx from queue",
-                {"marker", "BSCTXM03"},
-                {"type", TypeName(*front)});
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXM03, "Execute tx from queue", (Type, TypeName(*front)));
             return front->Execute(txc);
         }
 
         void Complete(const TActorContext&) override {
             auto& front = Queue.front();
-            YDB_LOG_DEBUG("Complete tx from queue",
-                {"marker", "BSCTXM04"},
-                {"type", TypeName(*front)});
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXM04, "Complete tx from queue", (Type, TypeName(*front)));
             front->Complete();
             Queue.pop_front();
             if (Queue) {
@@ -185,8 +179,7 @@ public:
     TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_MIGRATE; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("Execute tx",
-            {"marker", "BSCTXM01"});
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXM01, "Execute tx");
         Queue.clear();
 
         NIceDb::TNiceDb db(txc.DB);
@@ -243,13 +236,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("Complete tx",
-            {"marker", "BSCTXM02"},
-            {"incompatibleData", IncompatibleData});
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXM02, "Complete tx", (IncompatibleData, IncompatibleData));
         if (IncompatibleData) {
-            YDB_LOG_ALERT("CompatibilityInfo check failed",
-                {"marker", "BSCTXM00"},
-                {"errorReason", CompatibilityError});
+            STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXM00, "CompatibilityInfo check failed", (ErrorReason, CompatibilityError));
             ctx.Send(new IEventHandle(TEvents::TSystem::Poison, 0, Self->SelfId(), {}, nullptr, 0));
         } else {
             Self->Execute(new TTxQueue(Self, std::move(Queue)));

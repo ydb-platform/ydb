@@ -399,9 +399,7 @@ namespace NKikimr {
                         if ((State.Self.IsGroupLayoutSanitizerEnabled() && replacedSlots.size() == 1 && hasMissingSlots && !layoutIsValid) ||
                                 (replacedSlots.empty() && sanitizingRequest)) {
 
-                            YDB_LOG_INFO_COMP(BS_CONTROLLER, "Attempt to sanitize group layout",
-                                {"marker", "BSCFG01"},
-                                {"groupId", groupId});
+                            STLOG(PRI_INFO, BS_CONTROLLER, BSCFG01, "Attempt to sanitize group layout", (GroupId, groupId));
                             // Use group layout sanitizing algorithm on direct requests or when initial group layout is invalid
                             auto result = AllocateOrSanitizeGroup(groupId, group, {}, std::move(forbid), groupSizeInUnits, requiredSpace,
                                 AllowUnusableDisks, groupInfo->BridgePileId, &TGroupGeometryInfo::SanitizeGroup);
@@ -533,12 +531,10 @@ namespace NKikimr {
                             }
                             return static_cast<TString>(s << "]");
                         };
-                        YDB_LOG_INFO_COMP(BS_CONTROLLER_AUDIT, "ReconfigGroup",
-                            {"marker", "BSCA04"},
-                            {"uniqueId", State.UniqueId},
-                            {"groupId", groupInfo->ID},
-                            {"groupGeneration", groupInfo->Generation},
-                            {"replacements", makeReplacements()});
+                        STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA04, "ReconfigGroup", (UniqueId, State.UniqueId),
+                            (GroupId, groupInfo->ID),
+                            (GroupGeneration, groupInfo->Generation),
+                            (Replacements, makeReplacements()));
                     }
 
                     for (const TVSlotId& vslotId : donors) {

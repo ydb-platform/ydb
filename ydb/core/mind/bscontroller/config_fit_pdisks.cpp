@@ -3,8 +3,6 @@
 #include <util/generic/string.h>
 #include <util/system/types.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
-
 namespace NKikimr {
     namespace NBsController {
 
@@ -373,19 +371,14 @@ namespace NKikimr {
                         info->Guid = guid;
                     }
 
-                    YDB_LOG_NOTICE("Create new pdisk",
-                        {"marker", "BSCFP02"},
-                        {"PDiskId", pdiskId},
-                        {"path", disk.Path});
+                    STLOG(PRI_NOTICE, BS_CONTROLLER, BSCFP02, "Create new pdisk", (PDiskId, pdiskId), (Path, disk.Path));
                 }
 
                 state.PDisksToRemove.erase(pdiskId);
             }
 
             for (const auto& pdiskId : state.PDisksToRemove) {
-                YDB_LOG_NOTICE("PDisk to remove",
-                    {"marker", "BSCFP03"},
-                    {"PDiskId", pdiskId});
+                STLOG(PRI_NOTICE, BS_CONTROLLER, BSCFP03, "PDisk to remove:", (PDiskId, pdiskId));
             }
             state.CheckConsistency();
         }

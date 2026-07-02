@@ -8,8 +8,6 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/debug_tools/operation_log.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT BS_SELFHEAL
-
 namespace NKikimr::NBsController {
     enum class EGroupRepairOperation {
         SelfHeal = 0,
@@ -75,9 +73,7 @@ namespace NKikimr::NBsController {
             SelfHealId = parent;
             Become(&TThis::StateFunc, TDuration::Seconds(60), new TEvents::TEvWakeup);
 
-            YDB_LOG_DEBUG("Reassigner starting",
-                {"marker", "BSSH01"},
-                {"groupId", GroupId});
+            STLOG(PRI_DEBUG, BS_SELFHEAL, BSSH01, "Reassigner starting", (GroupId, GroupId));
 
             for (const auto& [vdiskId, vdisk] : Group.VDisks) {
                 if (VDiskToReplace && vdiskId == *VDiskToReplace) {
@@ -101,11 +97,8 @@ namespace NKikimr::NBsController {
         }
 
         void ProcessVDiskReply(const TVDiskID& vdiskId, bool diskIsOk) {
-            YDB_LOG_DEBUG("Reassigner ProcessVDiskReply",
-                {"marker", "BSSH02"},
-                {"groupId", GroupId},
-                {"VDiskId", vdiskId},
-                {"diskIsOk", diskIsOk});
+            STLOG(PRI_DEBUG, BS_SELFHEAL, BSSH02, "Reassigner ProcessVDiskReply", (GroupId, GroupId),
+                (VDiskId, vdiskId), (DiskIsOk, diskIsOk));
             if (PendingVDisks.erase(vdiskId)) {
                 if (!diskIsOk) {
                     FailedGroupDisks |= {Topology.get(), vdiskId};
@@ -118,12 +111,9 @@ namespace NKikimr::NBsController {
 
         void Handle(TEvBlobStorage::TEvVStatusResult::TPtr& ev) {
             const auto& record = ev->Get()->Record;
-            YDB_LOG_DEBUG("Reassigner TEvVStatusResult",
-                {"marker", "BSSH03"},
-                {"groupId", GroupId},
-                {"status", record.GetStatus()},
-                {"joinedGroup", record.GetJoinedGroup()},
-                {"replicated", record.GetReplicated()});
+            STLOG(PRI_DEBUG, BS_SELFHEAL, BSSH03, "Reassigner TEvVStatusResult", (GroupId, GroupId),
+                (Status, record.GetStatus()), (JoinedGroup, record.GetJoinedGroup()),
+                (Replicated, record.GetReplicated()));
 
             bool diskIsOk = false;
             if (record.GetStatus() == NKikimrProto::RACE) {
@@ -137,10 +127,8 @@ namespace NKikimr::NBsController {
         void Handle(TEvInterconnect::TEvNodeConnected::TPtr&) {} // not interesting
 
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-            YDB_LOG_DEBUG("Reassigner TEvNodeDisconnected",
-                {"marker", "BSSH04"},
-                {"groupId", GroupId},
-                {"nodeId", ev->Get()->NodeId});
+            STLOG(PRI_DEBUG, BS_SELFHEAL, BSSH04, "Reassigner TEvNodeDisconnected", (GroupId, GroupId),
+                (NodeId, ev->Get()->NodeId));
             for (const auto& vdiskId : NodeToDiskMap[ev->Get()->NodeId]) {
                 ProcessVDiskReply(vdiskId, false);
             }
@@ -149,11 +137,8 @@ namespace NKikimr::NBsController {
         void Handle(TEvents::TEvUndelivered::TPtr& ev) {
             auto it = ActorToDiskMap.find(ev->Sender);
             Y_ABORT_UNLESS(it != ActorToDiskMap.end());
-            YDB_LOG_DEBUG("Reassigner TEvUndelivered",
-                {"marker", "BSSH05"},
-                {"groupId", GroupId},
-                {"sender", ev->Sender},
-                {"VDiskId", it->second});
+            STLOG(PRI_DEBUG, BS_SELFHEAL, BSSH05, "Reassigner TEvUndelivered", (GroupId, GroupId),
+                (Sender, ev->Sender), (VDiskId, it->second));
             ProcessVDiskReply(it->second, false);
             ActorToDiskMap.erase(it);
         }
@@ -161,16 +146,12 @@ namespace NKikimr::NBsController {
         void ProcessResult() {
             auto& checker = Topology->GetQuorumChecker();
             if (!checker.CheckFailModelForGroup(FailedGroupDisks)) {
-                YDB_LOG_DEBUG("Reassigner ProcessResult quorum checker failed",
-                    {"marker", "BSSH06"},
-                    {"groupId", GroupId});
+                STLOG(PRI_DEBUG, BS_SELFHEAL, BSSH06, "Reassigner ProcessResult quorum checker failed", (GroupId, GroupId));
                 return Finish(false, 0, "Reassigner ProcessResult quorum checker failed"); // this change will render group unusable
             }
 
             if (!VDiskToReplace && FailedGroupDisks) {
-                YDB_LOG_DEBUG("Cannot sanitize group with non-operational disks",
-                    {"marker", "BSSH10"},
-                    {"groupId", GroupId});
+                STLOG(PRI_DEBUG, BS_SELFHEAL, BSSH10, "Cannot sanitize group with non-operational disks", (GroupId, GroupId));
                 return Finish(false, 0, "Cannot sanitize group with non-operational disks");
             }
 
@@ -219,11 +200,8 @@ namespace NKikimr::NBsController {
         void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
             const auto& record = ev->Get()->Record;
             if (!record.GetResponse().GetSuccess()) {
-                YDB_LOG_WARN("Reassigner ReassignGroupDisk request failed",
-                    {"marker", "BSSH07"},
-                    {"groupId", GroupId},
-                    {"VDiskToReplace", VDiskToReplace},
-                    {"response", record});
+                STLOG(PRI_WARN, BS_SELFHEAL, BSSH07, "Reassigner ReassignGroupDisk request failed", (GroupId, GroupId),
+                    (VDiskToReplace, VDiskToReplace), (Response, record));
                 Finish(false, 0, record.GetResponse().GetErrorDescription());
             } else {
                 ui64 configTxSeqNo = record.GetResponse().GetConfigTxSeqNo();
@@ -233,11 +211,7 @@ namespace NKikimr::NBsController {
                     items = TStringBuilder() << VDiskIDFromVDiskID(item.GetVDiskId()) << ": "
                         << TVSlotId(item.GetFrom()) << " -> " << TVSlotId(item.GetTo());
                 }
-                YDB_LOG_INFO("Reassigner succeeded",
-                    {"marker", "BSSH09"},
-                    {"groupId", GroupId},
-                    {"items", items},
-                    {"configTxSeqNo", configTxSeqNo});
+                STLOG(PRI_INFO, BS_SELFHEAL, BSSH09, "Reassigner succeeded", (GroupId, GroupId), (Items, items), (ConfigTxSeqNo, configTxSeqNo));
                 Finish(true, configTxSeqNo);
             }
         }
@@ -248,10 +222,7 @@ namespace NKikimr::NBsController {
         }
 
         void Finish(bool success, ui64 configTxSeqNo, TString errorReason = "") {
-            YDB_LOG_DEBUG("Reassigner finished",
-                {"marker", "BSSH08"},
-                {"groupId", GroupId},
-                {"success", success});
+            STLOG(PRI_DEBUG, BS_SELFHEAL, BSSH08, "Reassigner finished", (GroupId, GroupId), (Success, success));
             auto operation = VDiskToReplace ? EGroupRepairOperation::SelfHeal : EGroupRepairOperation::GroupLayoutSanitizer;
             Send(SelfHealId, new TEvReassignerDone(GroupId, success, operation, configTxSeqNo, errorReason));
             PassAway();
@@ -748,10 +719,7 @@ namespace NKikimr::NBsController {
                     return ss.Str();
                 };
 
-                YDB_LOG_INFO("Group can't be reassigned right now",
-                    {"marker", "BSSH11"},
-                    {"log", log()},
-                    {"groupId", groupId});
+                STLOG(PRI_INFO, BS_SELFHEAL, BSSH11, "group can't be reassigned right now " << log(), (GroupId, groupId));
             }
             return false;
         }

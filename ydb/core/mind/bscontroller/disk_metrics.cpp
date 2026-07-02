@@ -1,7 +1,5 @@
 #include "impl.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
-
 namespace NKikimr::NBsController {
 
 class TBlobStorageController::TTxUpdateDiskMetrics : public TTransactionBase<TBlobStorageController> {
@@ -65,9 +63,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
     std::vector<TPDiskId> pdiskIds;
     std::vector<TVSlotId> vslotIds;
 
-    YDB_LOG_DEBUG("Updating disk status",
-        {"marker", "BSCTXUDM01"},
-        {"record", record});
+    STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXUDM01, "Updating disk status", (Record, record));
 
     // apply VDisk metrics update
     std::set<const TGroupInfo*> dirtyGroups;
@@ -124,9 +120,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
             SysViewChangedVSlots.insert(it->second);
             SysViewChangedGroups.insert(vdiskId.GroupID);
         } else {
-            YDB_LOG_NOTICE("VDisk not found",
-                {"marker", "BSCTXUDM02"},
-                {"VDiskId", vdiskId});
+            STLOG(PRI_NOTICE, BS_CONTROLLER, BSCTXUDM02, "VDisk not found", (VDiskId, vdiskId));
         }
     }
     for (const TGroupInfo *group : dirtyGroups) {
@@ -159,9 +153,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
             it->second.PDiskMetrics = m;
             it->second.PDiskMetricsUpdateTimestamp = now;
         } else {
-            YDB_LOG_NOTICE("PDisk not found",
-                {"marker", "BSCTXUDM03"},
-                {"PDiskId", pdiskId});
+            STLOG(PRI_NOTICE, BS_CONTROLLER, BSCTXUDM03, "PDisk not found", (PDiskId, pdiskId));
         }
     }
 

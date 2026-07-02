@@ -1,8 +1,6 @@
 #include "impl.h"
 #include "config.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
-
 namespace NKikimr::NBsController {
 
 class TBlobStorageController::TTxNodeReport
@@ -22,8 +20,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         TRequestCounter counter(Self->TabletCounters, NBlobStorageController::COUNTER_NODE_REPORT_USEC);
 
-        YDB_LOG_DEBUG("TTxNodeReport execute",
-            {"marker", "BSCTXNR01"});
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXNR01, "TTxNodeReport execute");
 
         if (!Self->ValidateIncomingNodeWardenEvent(*Event)) {
             return true;
@@ -113,10 +110,8 @@ public:
 
                         case NKikimrBlobStorage::TEvControllerNodeReport::TPDiskReport::kShredAborted:
                         case NKikimrBlobStorage::TEvControllerNodeReport::TPDiskReport::SHREDSTATE_NOT_SET:
-                            YDB_LOG_ERROR("Shred aborted due to error",
-                                {"marker", "BSCTXNR00"},
-                                {"PDiskId", pdiskId},
-                                {"errorReason", report.GetShredAborted()});
+                            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXNR00, "shred aborted due to error", (PDiskId, pdiskId),
+                                (ErrorReason, report.GetShredAborted()));
                             Self->ShredState.OnShredAborted(pdiskId, *pdisk);
                             break;
                     }
@@ -130,8 +125,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        YDB_LOG_DEBUG("TTxNodeReport complete",
-            {"marker", "BSCTXNR02"});
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXNR02, "TTxNodeReport complete");
         if (State) {
             State->ApplyConfigUpdates();
             State.reset();

@@ -1758,15 +1758,12 @@ private:
     void PassAway() override;
 
     void OnDetach(const TActorContext&) override {
-        YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "OnDetach",
-            {"marker", "BSC02"});
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC02, "OnDetach");
         PassAway();
     }
 
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext&) override {
-        YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "OnTabletDead",
-            {"marker", "BSC03"},
-            {"event", ev->Get()->ToString()});
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC03, "OnTabletDead", (Event, ev->Get()->ToString()));
         PassAway();
     }
 
@@ -1815,11 +1812,8 @@ private:
     void RenderGroupRow(IOutputStream& out, const TGroupInfo& group);
 
     void Enqueue(STFUNC_SIG) override {
-        YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "Enqueue",
-            {"marker", "BSC04"},
-            {"tabletId", TabletID()},
-            {"type", ev->GetTypeRewrite()},
-            {"event", ev->ToString()});
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC04, "Enqueue", (TabletID, TabletID()), (Type, ev->GetTypeRewrite()),
+            (Event, ev->ToString()));
         InitQueue.push_back(ev);
     }
 
@@ -2108,10 +2102,8 @@ public:
     ~TBlobStorageController();
 
     STFUNC(StateInit) {
-        YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "StateInit event",
-            {"marker", "BSC05"},
-            {"type", ev->GetTypeRewrite()},
-            {"event", ev->ToString()});
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC05, "StateInit event", (Type, ev->GetTypeRewrite()),
+            (Event, ev->ToString()));
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvNodeWardenStorageConfig, Handle);
@@ -2149,13 +2141,9 @@ public:
 
     bool ValidateIncomingNodeWardenEvent(const IEventHandle& ev) {
         auto makeError = [&](TString message) {
-            YDB_LOG_ERROR_COMP(BS_CONTROLLER, "ValidateIncomingNodeWardenEvent error",
-                {"marker", "BSC16"},
-                {"sender", ev.Sender},
-                {"pipeServerId", ev.Recipient},
-                {"interconnectSessionId", ev.InterconnectSession},
-                {"type", ev.GetTypeRewrite()},
-                {"message", message});
+            STLOG(PRI_ERROR, BS_CONTROLLER, BSC16, "ValidateIncomingNodeWardenEvent error",
+                (Sender, ev.Sender), (PipeServerId, ev.Recipient), (InterconnectSessionId, ev.InterconnectSession),
+                (Type, ev.GetTypeRewrite()), (Message, message));
             return false;
         };
 
@@ -2238,18 +2226,15 @@ public:
         }
 
         if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {
-            YDB_LOG_ERROR_COMP(BS_CONTROLLER, "ProcessControllerEvent event processing took too much time",
-                {"marker", "BSC07"},
-                {"type", type},
-                {"duration", time});
+            STLOG(PRI_ERROR, BS_CONTROLLER, BSC07, "ProcessControllerEvent event processing took too much time", (Type, type),
+                (Duration, time));
         }
     }
 
     STFUNC(StateWork);
 
     void LoadFinished() {
-        YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "LoadFinished",
-            {"marker", "BSC09"});
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC09, "LoadFinished");
         Become(&TThis::StateWork);
 
         ValidateInternalState();
@@ -2274,11 +2259,8 @@ public:
 
         for (; !InitQueue.empty(); InitQueue.pop_front()) {
             TAutoPtr<IEventHandle> &ev = InitQueue.front();
-            YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "Dequeue",
-                {"marker", "BSC08"},
-                {"tabletId", TabletID()},
-                {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString()});
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSC08, "Dequeue", (TabletID, TabletID()), (Type, ev->GetTypeRewrite()),
+                (Event, ev->ToString()));
             StateWork(ev);
         }
 

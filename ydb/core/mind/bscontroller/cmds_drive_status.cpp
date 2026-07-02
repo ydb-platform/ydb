@@ -1,7 +1,5 @@
 #include "config.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER_AUDIT
-
 namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TUpdateDriveStatus& cmd, TStatus& /*status*/) {
@@ -61,15 +59,14 @@ namespace NKikimr::NBsController {
             }
         }
 
-        YDB_LOG_INFO("UpdateDriveStatus",
-            {"marker", "BSCA01"},
-            {"uniqueId", UniqueId},
-            {"FQDN", host.GetFqdn()},
-            {"icPort", host.GetIcPort()},
-            {"nodeId", host.GetNodeId()},
-            {"path", cmd.GetPath()},
-            {"status", cmd.GetStatus()},
-            {"decommitStatus", cmd.GetDecommitStatus()});
+        STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA01, "UpdateDriveStatus",
+            (UniqueId, UniqueId),
+            (FQDN, host.GetFqdn()),
+            (IcPort, host.GetIcPort()),
+            (NodeId, host.GetNodeId()),
+            (Path, cmd.GetPath()),
+            (Status, cmd.GetStatus()),
+            (DecommitStatus, cmd.GetDecommitStatus()));
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReadDriveStatus& cmd, TStatus& status) {
@@ -142,11 +139,8 @@ namespace NKikimr::NBsController {
 
         Fit.Boxes.insert(cmd.GetBoxId());
 
-        YDB_LOG_INFO("AddDriveSerial",
-            {"marker", "BSCA00"},
-            {"uniqueId", UniqueId},
-            {"serial", serial},
-            {"boxId", cmd.GetBoxId()});
+        STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA00, "AddDriveSerial", (UniqueId, UniqueId), (Serial, serial),
+            (BoxId, cmd.GetBoxId()));
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TRemoveDriveSerial& cmd,
@@ -172,10 +166,7 @@ namespace NKikimr::NBsController {
 
         Fit.Boxes.insert(driveInfo->BoxId);
 
-        YDB_LOG_INFO("RemoveDriveSerial",
-            {"marker", "BSCA07"},
-            {"uniqueId", UniqueId},
-            {"serial", serial});
+        STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA07, "RemoveDriveSerial", (UniqueId, UniqueId), (Serial, serial));
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TForgetDriveSerial& cmd,

@@ -3,8 +3,6 @@
 #include <ydb/core/blobstorage/base/utility.h>
 #include "config.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
-
 namespace NKikimr::NBsController {
 
 class TBlobStorageController::TTxUpdateNodeDrives
@@ -32,10 +30,8 @@ class TBlobStorageController::TTxUpdateNodeDrives
             out << "]";
             return out.Str();
         };
-        YDB_LOG_DEBUG("Add devicesData from NodeWarden",
-            {"marker", "BSCTXRN05"},
-            {"nodeId", nodeId},
-            {"devices", createLog()});
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXRN05, "Add devicesData from NodeWarden",
+                (NodeId, nodeId), (Devices, createLog()));
 
         std::unordered_map<TString, TString> diskSerialNumberByPath;
         for (const auto& disk : Record.GetDrivesData()) {
@@ -77,12 +73,8 @@ class TBlobStorageController::TTxUpdateNodeDrives
                         break;
                     }
 
-                    YDB_LOG_ERROR(log.Str(),
-                        {"marker", "BSCTXRN06"},
-                        {"PDiskId", pdiskId},
-                        {"path", pdiskInfo.Path},
-                        {"oldSerial", pdiskInfo.ExpectedSerial},
-                        {"newSerial", serial});
+                    STLOG(NLog::PRI_ERROR, BS_CONTROLLER, BSCTXRN06, log.Str(), (PDiskId, pdiskId), (Path, pdiskInfo.Path),
+                        (OldSerial, pdiskInfo.ExpectedSerial), (NewSerial, serial));
                 }
             }
 
@@ -109,18 +101,14 @@ class TBlobStorageController::TTxUpdateNodeDrives
             if (auto info = state.DrivesSerials.FindForUpdate(serial)) {
                 if (info->LifeStage == NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL) {
                     if (info->NodeId.GetRef() != nodeId) {
-                        YDB_LOG_ERROR("Received drive from NewNodeId, but drive is reported as placed in OldNodeId",
-                            {"marker", "BSCTXRN03"},
-                            {"newNodeId", nodeId},
-                            {"oldNodeId", info->NodeId.GetRef()},
-                            {"serial", serial});
+                        STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN03,
+                            "Received drive from NewNodeId, but drive is reported as placed in OldNodeId",
+                            (NewNodeId, nodeId), (OldNodeId, info->NodeId.GetRef()), (Serial, serial));
                     }
                     if (info->Path.GetRef() != data.GetPath()) {
-                        YDB_LOG_ERROR("Received drive by NewPath, but drive is reported as placed by OldPath",
-                            {"marker", "BSCTXRN04"},
-                            {"newPath", data.GetPath()},
-                            {"oldPath", info->Path.GetRef()},
-                            {"serial", serial});
+                        STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN04,
+                            "Received drive by NewPath, but drive is reported as placed by OldPath",
+                            (NewPath, data.GetPath()), (OldPath, info->Path.GetRef()), (Serial, serial));
                     }
                 } else {
                     info->NodeId = nodeId;
@@ -183,9 +171,8 @@ public:
             updateIsSuccessful = false;
             auto& nodeInfo = Self->GetNode(nodeId);
             Self->EraseKnownDrivesOnDisconnected(&nodeInfo);
-            YDB_LOG_ERROR("Error during UpdateDevicesInfo after receiving TEvControllerRegisterNode",
-                {"marker", "BSCTXRN00"},
-                {"TExError", e.what()});
+            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN00,
+                    "Error during UpdateDevicesInfo after receiving TEvControllerRegisterNode", (TExError, e.what()));
         }
 
         bool validated = true;
@@ -228,9 +215,7 @@ public:
         TRequestCounter counter(Self->TabletCounters, NBlobStorageController::COUNTER_REGISTER_NODE_USEC);
 
         const auto& record = Request->Get()->Record;
-        YDB_LOG_DEBUG("Handle TEvControllerRegisterNode",
-            {"marker", "BSCTXRN01"},
-            {"request", record});
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXRN01, "Handle TEvControllerRegisterNode", (Request, record));
 
         if (!Self->ValidateIncomingNodeWardenEvent(*Request)) {
             return true;
@@ -238,10 +223,7 @@ public:
 
         const TNodeId nodeId = record.GetNodeID();
         if (nodeId != Request->Sender.NodeId()) {
-            YDB_LOG_ERROR("NodeId field mismatch",
-                {"marker", "BSCTXRN07"},
-                {"request", record},
-                {"sender", Request->Sender});
+            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN07, "NodeId field mismatch", (Request, record), (Sender, Request->Sender));
             return true;
         }
 
@@ -348,10 +330,8 @@ public:
 
                 case NKikimrBlobStorage::TEvControllerRegisterNode::TShredStatus::kShredAborted:
                 case NKikimrBlobStorage::TEvControllerRegisterNode::TShredStatus::SHREDSTATE_NOT_SET:
-                    YDB_LOG_ERROR("Shred aborted due to error",
-                        {"marker", "BSCTXRN08"},
-                        {"PDiskId", pdiskId},
-                        {"errorReason", status.GetShredAborted()});
+                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN08, "shred aborted due to error", (PDiskId, pdiskId),
+                        (ErrorReason, status.GetShredAborted()));
                     Self->ShredState.OnRegisterNode(pdiskId, std::nullopt, false, txc);
                     break;
 
@@ -369,15 +349,13 @@ public:
             if (record.GetMainConfigVersion() < configVersion) {
                 yamlConfig->SetCompressedMainConfig(CompressSingleConfig(*Self->YamlConfig));
             } else if (configVersion < record.GetMainConfigVersion()) {
-                YDB_LOG_ALERT("Main config version on node is greater than one known to BSC",
-                    {"marker", "BSCTXRN09"},
-                    {"nodeId", record.GetNodeID()},
-                    {"nodeVersion", record.GetMainConfigVersion()},
-                    {"storedVersion", configVersion});
+                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN09, "main config version on node is greater than one known to BSC",
+                    (NodeId, record.GetNodeID()),
+                    (NodeVersion, record.GetMainConfigVersion()),
+                    (StoredVersion, configVersion));
             } else if (record.GetMainConfigHash() != Self->YamlConfigHash) {
-                YDB_LOG_ALERT("Node main config hash mismatch",
-                    {"marker", "BSCTXRN11"},
-                    {"nodeId", record.GetNodeID()});
+                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN11, "node main config hash mismatch",
+                    (NodeId, record.GetNodeID()));
             }
         } else if (record.HasMainConfigVersion()) {
             // TODO(alexvru): report?
@@ -392,15 +370,13 @@ public:
             if (!record.HasStorageConfigVersion() || record.GetStorageConfigVersion() < configVersion) {
                 yamlConfig->SetCompressedStorageConfig(CompressStorageYamlConfig(*Self->StorageYamlConfig));
             } else if (configVersion < record.GetStorageConfigVersion()) {
-                YDB_LOG_ALERT("Storage config version on node is greater than one known to BSC",
-                    {"marker", "BSCTXRN10"},
-                    {"nodeId", record.GetNodeID()},
-                    {"nodeVersion", record.GetMainConfigVersion()},
-                    {"storedVersion", configVersion});
+                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN10, "storage config version on node is greater than one known to BSC",
+                    (NodeId, record.GetNodeID()),
+                    (NodeVersion, record.GetMainConfigVersion()),
+                    (StoredVersion, configVersion));
             } else if (record.GetStorageConfigHash() != Self->StorageYamlConfigHash) {
-                YDB_LOG_ALERT("Node storage config hash mismatch",
-                    {"marker", "BSCTXRN12"},
-                    {"nodeId", record.GetNodeID()});
+                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN12, "node storage config hash mismatch",
+                    (NodeId, record.GetNodeID()));
             }
         }
 
@@ -491,10 +467,8 @@ void TBlobStorageController::ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo
         pDisk->SetPDiskCategory(pdisk.Kind.GetRaw());
         pDisk->SetPDiskGuid(pdisk.Guid);
         if (pdisk.PDiskConfig && !pDisk->MutablePDiskConfig()->ParseFromString(pdisk.PDiskConfig)) {
-            YDB_LOG_CRIT("PDiskConfig invalid",
-                {"marker", "BSCTXRN02"},
-                {"nodeId", pdiskId.NodeId},
-                {"PDiskId", pdiskId.PDiskId});
+            STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXRN02, "PDiskConfig invalid", (NodeId, pdiskId.NodeId),
+                (PDiskId, pdiskId.PDiskId));
         }
     }
     pDisk->SetExpectedSerial(pdisk.ExpectedSerial);
@@ -690,10 +664,7 @@ void TBlobStorageController::SendToWarden(TNodeId nodeId, std::unique_ptr<IEvent
         }
         TActivationContext::Send(h.release());
     } else {
-        YDB_LOG_WARN("SendToWarden dropped event",
-            {"marker", "BSC17"},
-            {"nodeId", nodeId},
-            {"type", ev->Type()});
+        STLOG(PRI_WARN, BS_CONTROLLER, BSC17, "SendToWarden dropped event", (NodeId, nodeId), (Type, ev->Type()));
     }
 }
 

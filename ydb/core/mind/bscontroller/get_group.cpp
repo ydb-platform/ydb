@@ -1,7 +1,5 @@
 #include "impl.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
-
 namespace NKikimr::NBsController {
 
 class TBlobStorageController::TTxGetGroup : public TTransactionBase<TBlobStorageController> {
@@ -21,9 +19,7 @@ public:
         Self->TabletCounters->Cumulative()[NBlobStorageController::COUNTER_GET_GROUP_COUNT].Increment(1);
         TRequestCounter counter(Self->TabletCounters, NBlobStorageController::COUNTER_GET_GROUP_USEC);
 
-        YDB_LOG_DEBUG("Handle TEvControllerGetGroup",
-            {"marker", "BSCTXGG01"},
-            {"request", Request->Get()->Record});
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXGG01, "Handle TEvControllerGetGroup", (Request, Request->Get()->Record));
 
         NodeId = Request->Get()->Record.GetNodeID();
 
@@ -57,14 +53,9 @@ public:
 };
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerGetGroup::TPtr& ev) {
-    YDB_LOG_DEBUG("TEvControllerGetGroup",
-        {"marker", "BSCTXGG02"},
-        {"sender", ev->Sender},
-        {"cookie", ev->Cookie},
-        {"recipient", ev->Recipient},
-        {"recipientRewrite", ev->GetRecipientRewrite()},
-        {"request", ev->Get()->Record},
-        {"stopGivingGroups", StopGivingGroups});
+    STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXGG02, "TEvControllerGetGroup", (Sender, ev->Sender), (Cookie, ev->Cookie),
+        (Recipient, ev->Recipient), (RecipientRewrite, ev->GetRecipientRewrite()), (Request, ev->Get()->Record),
+        (StopGivingGroups, StopGivingGroups));
 
     if (!StopGivingGroups) {
         Execute(new TTxGetGroup(ev, this));

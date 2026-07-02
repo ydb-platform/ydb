@@ -1,7 +1,5 @@
 #include "impl.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
-
 namespace NKikimr {
 namespace NBsController {
 
@@ -27,16 +25,12 @@ public:
         const bool selfManagementConfigEnabled = Self->SelfManagementEnabled ||
             (Self->StorageConfig && Self->StorageConfig->GetSelfManagementConfig().GetEnabled());
         if (!selfManagementConfigEnabled) {
-            YDB_LOG_DEBUG("TTxCleanupStaleStorageEntries skipped, self-management disabled",
-                {"marker", "BSCTXCS01"});
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXCS01, "TTxCleanupStaleStorageEntries skipped, self-management disabled");
             return true;
         }
 
-        YDB_LOG_DEBUG("TTxCleanupStaleStorageEntries Execute",
-            {"marker", "BSCTXCS02"},
-            {"boxHosts", StaleBoxHostKeys.size()},
-            {"PDisks", StalePDiskKeys.size()},
-            {"VSlots", StaleVSlotKeys.size()});
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXCS02, "TTxCleanupStaleStorageEntries Execute",
+             (BoxHosts, StaleBoxHostKeys.size()), (PDisks, StalePDiskKeys.size()), (VSlots, StaleVSlotKeys.size()));
 
         NIceDb::TNiceDb db(txc.DB);
         for (const auto& [boxId, fqdn, icPort] : StaleBoxHostKeys) {

@@ -18,10 +18,6 @@
 #include <unordered_set>
 #include <vector>
 
-#define YDB_LOG_THIS_FILE_COMPONENT BS_CLUSTER_BALANCING
-
-#define YDB_LOG_THIS_FILE_COMPONENT BS_CLUSTER_BALANCING
-
 namespace NKikimr::NBsController {
 
     enum {
@@ -420,11 +416,7 @@ namespace NKikimr::NBsController {
             ui32 groupId = vslot->GetGroupId();
             ui32 vdiskIdx = vslot->GetVDiskIdx();
 
-            YDB_LOG_DEBUG("Trying to move VDisk",
-                {"marker", "BSCB07"},
-                {"groupId", groupId},
-                {"VDiskIdx", vdiskIdx},
-                {"VSlotId", vslotId});
+            STLOG(PRI_DEBUG, BS_CLUSTER_BALANCING, BSCB07, "Trying to move VDisk", (GroupId, groupId), (VDiskIdx, vdiskIdx), (VSlotId, vslotId));
 
             auto request = CreateReassignRequest(vslot);
 
@@ -434,11 +426,7 @@ namespace NKikimr::NBsController {
 
             // See TODO about coroutine timeout.
             // if (!ev) {
-            //     YDB_LOG_WARN("Failed to get response for reassign",
-            //         {"marker", "BSCB08"},
-            //         {"groupId", groupId},
-            //         {"VDiskIdx", vdiskIdx},
-            //         {"VSlotId", vslotId});
+            //     STLOG(PRI_WARN, BS_CLUSTER_BALANCING, BSCB08, "Failed to get response for reassign", (GroupId, groupId), (VDiskIdx, vdiskIdx), (VSlotId, vslotId));
             //     return ReassignResult::BscIssue;
             // }
 
@@ -447,12 +435,7 @@ namespace NKikimr::NBsController {
             if (!response.GetSuccess() || !response.StatusSize() || !response.GetStatus(0).GetSuccess()) {
                 if (response.GetStatus(0).GetFailReason() != NKikimrBlobStorage::TConfigResponse::TStatus::kReassignNotViable) {
                     // This is a real BSC error.
-                    YDB_LOG_WARN("Failed to move VDisk",
-                        {"marker", "BSCB09"},
-                        {"groupId", groupId},
-                        {"VDiskIdx", vdiskIdx},
-                        {"VSlotId", vslotId},
-                        {"response", record});
+                    STLOG(PRI_WARN, BS_CLUSTER_BALANCING, BSCB09, "Failed to move VDisk", (GroupId, groupId), (VDiskIdx, vdiskIdx), (VSlotId, vslotId), (Response, record));
                     return ReassignResult::BscIssue;
                 }
                 // This means that there was no better PDisk to reassign the VDisk to.
@@ -464,13 +447,8 @@ namespace NKikimr::NBsController {
             // TODO: Add expectedConfigTxSeqNo as a parameter for ReassignRequest, so that BSC only proceed if
             // expectedConfigTxSeqNo is equal to NextConfigTxSeqNo.
             if (newConfigTxSeqNo != actualConfigTxSeqNo) {
-                YDB_LOG_WARN("BS config might have changed during balancing iteration",
-                    {"marker", "BSCB10"},
-                    {"groupId", groupId},
-                    {"VDiskIdx", vdiskIdx},
-                    {"VSlotId", vslotId},
-                    {"expectedConfigTxSeqNo", newConfigTxSeqNo},
-                    {"actualConfigTxSeqNo", actualConfigTxSeqNo});
+                STLOG(PRI_WARN, BS_CLUSTER_BALANCING, BSCB10, "BS config might have changed during balancing iteration",
+                    (GroupId, groupId), (VDiskIdx, vdiskIdx), (VSlotId, vslotId), (ExpectedConfigTxSeqNo, newConfigTxSeqNo), (ActualConfigTxSeqNo, actualConfigTxSeqNo));
             }
 
             const auto& status = response.GetStatus(0);
@@ -479,13 +457,7 @@ namespace NKikimr::NBsController {
             TPDiskId pdiskFrom(reassigned.GetFrom().GetNodeId(), reassigned.GetFrom().GetPDiskId());
             TPDiskId pdiskTo(reassigned.GetTo().GetNodeId(), reassigned.GetTo().GetPDiskId());
 
-            YDB_LOG_INFO("Moving VDisk succeeded",
-                {"marker", "BSCB11"},
-                {"groupId", groupId},
-                {"VDiskIdx", vdiskIdx},
-                {"VSlotId", vslotId},
-                {"PDiskTo", pdiskTo},
-                {"PDiskFrom", pdiskFrom});
+            STLOG(PRI_INFO, BS_CLUSTER_BALANCING, BSCB11, "Moving VDisk succeeded", (GroupId, groupId), (VDiskIdx, vdiskIdx), (VSlotId, vslotId), (PDiskTo, pdiskTo), (PDiskFrom, pdiskFrom));
 
             return ReassignResult::Reassigned;
         }
@@ -523,16 +495,13 @@ namespace NKikimr::NBsController {
 
             // See TODO about coroutine timeout.
             // if (!ev) {
-            //     YDB_LOG_DEBUG("Failed to get BSC config response",
-            //           {"marker", "BSCB12"});
+            //     STLOG(PRI_DEBUG, BS_CLUSTER_BALANCING, BSCB12, "Failed to get BSC config response");
             //     return;
             // }
 
             const auto& configResponse = bscResponse->Get()->Record.GetResponse();
             if (configResponse.StatusSize() < 2 || !configResponse.GetStatus(0).GetSuccess() || !configResponse.GetStatus(1).GetSuccess()) {
-                YDB_LOG_WARN("Failed to read base config or storage pools for cluster balancing",
-                    {"marker", "BSCB17"},
-                    {"response", configResponse});
+                STLOG(PRI_WARN, BS_CLUSTER_BALANCING, BSCB17, "Failed to read base config or storage pools for cluster balancing", (Response, configResponse));
                 return;
             }
             const auto& config = configResponse.GetStatus(0).GetBaseConfig();
@@ -541,22 +510,17 @@ namespace NKikimr::NBsController {
             const auto storageInfo = BuildStorageInfo(config, storagePoolsStatus);
 
             if (storageInfo.PDisksWithReplicatingVDisks > Settings.MaxReplicatingPDisks) {
-                YDB_LOG_DEBUG("Skip balancing, too many replicating PDisks",
-                    {"marker", "BSCB13"},
-                    {"replicatingPDisks", storageInfo.PDisksWithReplicatingVDisks});
+                STLOG(PRI_DEBUG, BS_CLUSTER_BALANCING, BSCB13, "Skip balancing, too many replicating PDisks", (ReplicatingPDisks, storageInfo.PDisksWithReplicatingVDisks));
                 return;
             }
 
             if (storageInfo.ReplicatingVDisks > Settings.MaxReplicatingVDisks) {
-                YDB_LOG_DEBUG("Skip balancing, too many replicating VDisks",
-                    {"marker", "BSCB14"},
-                    {"replicatingVDisks", storageInfo.ReplicatingVDisks});
+                STLOG(PRI_DEBUG, BS_CLUSTER_BALANCING, BSCB14, "Skip balancing, too many replicating VDisks", (ReplicatingVDisks, storageInfo.ReplicatingVDisks));
                 return;
             }
 
             if (storageInfo.BestTargetUsageAfterMoveByPool.empty()) {
-                YDB_LOG_DEBUG("Skip balancing, no storage pool has a PDisk that can accept a moved VDisk",
-                    {"marker", "BSCB15"});
+                STLOG(PRI_DEBUG, BS_CLUSTER_BALANCING, BSCB15, "Skip balancing, no storage pool has a PDisk that can accept a moved VDisk");
                 return;
             }
 
@@ -570,8 +534,7 @@ namespace NKikimr::NBsController {
 
             auto groupSlotsOrdered = OrderVSlotsByPDiskUsage(candidateVSlots, storageInfo);
             if (groupSlotsOrdered.empty()) {
-                YDB_LOG_DEBUG("Skip balancing, cluster is balanced enough",
-                    {"marker", "BSCB16"});
+                STLOG(PRI_DEBUG, BS_CLUSTER_BALANCING, BSCB16, "Skip balancing, cluster is balanced enough");
                 return;
             }
 

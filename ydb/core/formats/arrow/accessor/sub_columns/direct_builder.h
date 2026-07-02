@@ -8,7 +8,10 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
 #include <contrib/libs/xxhash/xxhash.h>
+#include <util/generic/hash_set.h>
 #include <util/string/join.h>
+
+#include <optional>
 #include <yql/essentials/types/binary_json/format.h>
 #include <yql/essentials/types/binary_json/write.h>
 
@@ -25,6 +28,7 @@ private:
     YDB_READONLY_DEF(std::vector<ui32>, RecordIndexes);
     YDB_READONLY(ui32, DataSize, 0);
     std::shared_ptr<IChunkedArray> Accessor;
+    mutable std::optional<ui32> DistinctCount;
 
 public:
     const std::shared_ptr<IChunkedArray>& GetAccessorVerified() const {
@@ -34,6 +38,20 @@ public:
 
     void BuildSparsedAccessor(const ui32 recordsCount);
     void BuildPlainAccessor(const ui32 recordsCount);
+    void BuildDictionaryAccessor(const ui32 recordsCount);
+
+    // Distinct count over the stored (BinaryJson) values; used to decide dictionary encoding.
+    ui32 GetDistinctCount() const {
+        if (!DistinctCount) {
+            THashSet<std::string_view> seen;
+            seen.reserve(Values.size());
+            for (const auto& v : Values) {
+                seen.emplace(std::string_view(v.data(), v.size()));
+            }
+            DistinctCount = seen.size();
+        }
+        return *DistinctCount;
+    }
 
     TColumnElements(const TStringBuf key)
         : KeyName(key) {
@@ -168,12 +186,19 @@ public:
         }
     };
 
-    TDictStats BuildStats(const std::vector<TColumnElements*>& keys, const TSettings& settings, const ui32 recordsCount) const {
+    // allowDictionary is set only for the separated columns (the Others store is always plain).
+    TDictStats BuildStats(
+        const std::vector<TColumnElements*>& keys, const TSettings& settings, const ui32 recordsCount, const bool allowDictionary) const {
         auto builder = TDictStats::MakeBuilder();
         for (auto&& i : keys) {
-            builder.Add(i->GetKeyName(), i->GetRecordIndexes().size(), i->GetDataSize(),
-                settings.IsSparsed(i->GetRecordIndexes().size(), recordsCount) ? IChunkedArray::EType::SparsedArray
-                                                                               : IChunkedArray::EType::Array);
+            const ui32 usageCount = i->GetRecordIndexes().size();
+            IChunkedArray::EType accessorType = IChunkedArray::EType::Array;
+            if (settings.IsSparsed(usageCount, recordsCount)) {
+                accessorType = IChunkedArray::EType::SparsedArray;
+            } else if (allowDictionary && settings.IsDictionary(i->GetDistinctCount(), usageCount)) {
+                accessorType = IChunkedArray::EType::Dictionary;
+            }
+            builder.Add(i->GetKeyName(), usageCount, i->GetDataSize(), accessorType);
         }
         return builder.Finish();
     }

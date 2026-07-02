@@ -16,6 +16,7 @@ private:
     YDB_ACCESSOR(ui32, ColumnsLimit, 1024);
     YDB_ACCESSOR(ui32, ChunkMemoryLimit, 50 * 1024 * 1024);
     YDB_READONLY(double, OthersAllowedFraction, 0.05);
+    YDB_ACCESSOR(double, DictionaryDetectorKff, 0);
     YDB_ACCESSOR_DEF(TDataAdapterContainer, DataExtractor);
 
 public:
@@ -49,11 +50,12 @@ public:
 
     TSettings() = default;
     TSettings(const ui32 sparsedDetectorKff, const ui32 columnsLimit, const ui32 chunkMemoryLimit, const double othersAllowedFraction,
-        const TDataAdapterContainer& dataExtractor)
+        const TDataAdapterContainer& dataExtractor, const double dictionaryDetectorKff = 0)
         : SparsedDetectorKff(sparsedDetectorKff)
         , ColumnsLimit(columnsLimit)
         , ChunkMemoryLimit(chunkMemoryLimit)
         , OthersAllowedFraction(othersAllowedFraction)
+        , DictionaryDetectorKff(dictionaryDetectorKff)
         , DataExtractor(dataExtractor) {
         AFL_VERIFY(!!DataExtractor);
         AFL_VERIFY(OthersAllowedFraction >= 0 && OthersAllowedFraction <= 1)("others_fraction", OthersAllowedFraction);
@@ -71,6 +73,7 @@ public:
         result.InsertValue("columns_limit", ColumnsLimit);
         result.InsertValue("memory_limit", ChunkMemoryLimit);
         result.InsertValue("others_allowed_fraction", OthersAllowedFraction);
+        result.InsertValue("dictionary_detector_kff", DictionaryDetectorKff);
         result.InsertValue("data_extractor", DataExtractor->DebugJson());
         return result;
     }
@@ -82,12 +85,20 @@ public:
         return false;
     }
 
+    // A separated column is dictionary-encoded when its distinct values are few
+    // relative to how many records reference it (distinctCount * Kff <= recordsCount).
+    // DictionaryDetectorKff < 1 disables the feature (default 0 = off; Kff == 1 always encodes).
+    bool IsDictionary(const ui32 distinctCount, const ui32 recordsCount) const {
+        return DictionaryDetectorKff >= 1 && distinctCount && distinctCount * DictionaryDetectorKff <= recordsCount;
+    }
+
     template <class TProto>
     void SerializeToProtoImpl(TProto& result) const {
         result.SetSparsedDetectorKff(SparsedDetectorKff);
         result.SetColumnsLimit(ColumnsLimit);
         result.SetChunkMemoryLimit(ChunkMemoryLimit);
         result.SetOthersAllowedFraction(OthersAllowedFraction);
+        result.SetDictionaryDetectorKff(DictionaryDetectorKff);
         DataExtractor.SerializeToProto(*result.MutableDataExtractor());
     }
 
@@ -97,6 +108,7 @@ public:
         ColumnsLimit = proto.GetColumnsLimit();
         ChunkMemoryLimit = proto.GetChunkMemoryLimit();
         OthersAllowedFraction = proto.GetOthersAllowedFraction();
+        DictionaryDetectorKff = proto.GetDictionaryDetectorKff();
         if (!proto.HasDataExtractor()) {
             AFL_VERIFY(DataExtractor.Initialize(TJsonScanExtractor::GetClassNameStatic()));
         } else if (!DataExtractor.DeserializeFromProto(proto.GetDataExtractor())) {

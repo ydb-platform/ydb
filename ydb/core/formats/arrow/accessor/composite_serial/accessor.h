@@ -73,12 +73,13 @@ public:
         AFL_VERIFY(Loader);
     }
 
-    TDeserializeChunkedArray(
-        const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, const TStringBuf data, const bool forLazyInitialization = false)
+    TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, const TStringBuf data,
+        const bool forLazyInitialization = false, std::shared_ptr<IAdditionalAccessorData> additionalAccessorData = nullptr)
         : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())
         , Loader(loader)
         , DataBuffer(data)
         , ForLazyInitialization(forLazyInitialization)
+        , AdditionalAccessorData(std::move(additionalAccessorData))
     {
         AFL_VERIFY(Loader);
     }

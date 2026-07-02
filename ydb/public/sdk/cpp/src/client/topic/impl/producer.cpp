@@ -2008,7 +2008,7 @@ void TProducer::GetSessionClosedEventAndDie(WrappedWriteSessionPtr wrappedSessio
 }
 
 TStringBuilder TProducer::LogPrefix() {
-    return TStringBuilder() << " Id: " << Id << " Epoch: " << Epoch.load() << " ";
+    return TStringBuilder() << " Id: " << Id << " Epoch: " << Epoch.load() << " TraceId: " << Settings.TraceId_ << " ";
 }
 
 void TProducer::NextEpoch() {
@@ -2308,4 +2308,4 @@ std::pair<std::uint32_t, std::string> TProducer::THashPartitionChooser::ChoosePa
     return {Partitions[hash % Partitions.size()], ""};
 }
 
-} // namespace NYdb::inline V3::NTopic
+} // namespace NYdb::inline Dev::NTopic

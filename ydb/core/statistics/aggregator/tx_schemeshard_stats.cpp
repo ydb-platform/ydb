@@ -22,12 +22,12 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
         NKikimrStat::TSchemeShardStats statRecord;
         Y_PROTOBUF_SUPPRESS_NODISCARD statRecord.ParseFromString(stats);
 
-        YDB_LOG_DEBUG("TTxSchemeShardStats::Execute: schemeshard stats byte entries are all stats",
+        YDB_LOG_DEBUG("TTxSchemeShardStats::Execute",
             {"tabletId", Self->TabletID()},
-            {"id", schemeShardId},
-            {"size", stats.size()},
-            {"count", statRecord.GetEntries().size()},
-            {"full", statRecord.GetAreAllStatsFull()});
+            {"schemeShardId", schemeShardId},
+            {"statsByteSize", stats.size()},
+            {"entriesCount", statRecord.GetEntries().size()},
+            {"areAllStatsFull", statRecord.GetAreAllStatsFull()});
 
         NIceDb::TNiceDb db(txc.DB);
 

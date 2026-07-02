@@ -209,9 +209,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 }
             }
 
-            YDB_LOG_DEBUG("Loaded ScheduleTraversals: table",
+            YDB_LOG_DEBUG("Loaded ScheduleTraversals",
                 {"tabletId", Self->TabletID()},
-                {"count", Self->ScheduleTraversals.size()});
+                {"tablesCount", Self->ScheduleTraversals.size()});
         }
 
         // ForceTraversalOperations
@@ -237,10 +237,10 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 if (Ydb::Table::AnalyzeState::State_IsValid(static_cast<int>(stateVal))) {
                     state = static_cast<Ydb::Table::AnalyzeState::State>(stateVal);
                 } else {
-                    YDB_LOG_WARN("For clamping to STATE_UNSPECIFIED",
+                    YDB_LOG_WARN("tx_init: invalid persisted AnalyzeState, clamping to STATE_UNSPECIFIED",
                         {"tabletId", Self->TabletID()},
                         {"analyzeState", stateVal},
-                        {"operationId", operationId});
+                        {"operationId", operationId.Quote()});
                 }
 
                 TForceTraversalOperation operation {
@@ -263,9 +263,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
             Self->RecalcForceTraversalsInflightSizeCounter();
 
-            YDB_LOG_DEBUG("Loaded ForceTraversalOperations: table",
+            YDB_LOG_DEBUG("Loaded ForceTraversalOperations",
                 {"tabletId", Self->TabletID()},
-                {"count", Self->ForceTraversals.size()});
+                {"tableCount", Self->ForceTraversals.size()});
         }
 
         // ForceTraversalTables
@@ -299,9 +299,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 if (forceTraversalOperation) {
                     forceTraversalOperation->Tables.emplace_back(operationTable);
                 } else {
-                    YDB_LOG_ERROR("ForceTraversalTables contains unknown",
+                    YDB_LOG_ERROR("ForceTraversalTables contains unknown operationId",
                         {"tabletId", Self->TabletID()},
-                        {"operationId", operationId});
+                        {"operationId", operationId.Quote()});
                 }
 
                 if (!rowset.Next()) {
@@ -309,9 +309,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 }
             }
 
-            YDB_LOG_DEBUG("Loaded ForceTraversalTables: table",
+            YDB_LOG_DEBUG("Loaded ForceTraversalTables",
                 {"tabletId", Self->TabletID()},
-                {"count", size});
+                {"tablesCount", size});
         }
 
         return true;
@@ -344,7 +344,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         }
 
         if (Self->TraversalPathId && Self->TraversalStartKey) {
-            YDB_LOG_DEBUG("TTxInit::Complete. Start navigate. PathId",
+            YDB_LOG_DEBUG("TTxInit::Complete. Start navigate.",
                 {"tabletId", Self->TabletID()},
                 {"traversalPathId", Self->TraversalPathId});
             Self->NavigateDatabase = Self->TraversalDatabase;

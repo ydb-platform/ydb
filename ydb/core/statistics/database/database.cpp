@@ -216,7 +216,7 @@ NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId
 void DispatchLoadStatisticsQuery(
         const TActorId& replyToActor, ui64 queryId,
         const TString& database, const TPathId& pathId, EStatType statType, std::optional<ui32> columnTag) {
-    YDB_LOG_DEBUG("[DispatchLoadStatisticsQuery] QueryId[ PathId[ StatType[ ColumnTag[",
+    YDB_LOG_DEBUG("[DispatchLoadStatisticsQuery]",
         {"queryId", queryId},
         {"pathId", pathId},
         {"statType", static_cast<ui32>(statType)},
@@ -259,8 +259,9 @@ void DispatchLoadStatisticsQuery(
             Y_ABORT_UNLESS(rowsCount < 2);
 
             if (rowsCount == 0) {
-                YDB_LOG_WARN("[ReadRowsResponse] QueryId[ RowsCount[ 0",
-                    {"queryId", queryId});
+                YDB_LOG_WARN("[ReadRowsResponse]",
+                    {"queryId", queryId},
+                    {"rowsCount", 0});
             }
 
             query_response->Success = rowsCount > 0;
@@ -273,7 +274,7 @@ void DispatchLoadStatisticsQuery(
                     : col.GetString();
                 }
         } else {
-            YDB_LOG_ERROR("[ReadRowsResponse] QueryId[",
+            YDB_LOG_ERROR("[ReadRowsResponse]",
                 {"queryId", queryId},
                 {"issues", NYql::IssuesFromMessageAsString(response.issues())});
             query_response->Success = false;

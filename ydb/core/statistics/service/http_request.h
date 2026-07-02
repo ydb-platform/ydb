@@ -59,8 +59,8 @@ private:
             hFunc(TEvStatistics::TEvGetStatisticsResult, Handle);
             IgnoreFunc(TEvStatistics::TEvAnalyzeResponse);
             default:
-                YDB_LOG_CRIT_COMP(NKikimrServices::STATISTICS, "NStat::THttpRequest: unexpected",
-                    {"event", ev->GetTypeRewrite()});
+                YDB_LOG_CRIT_COMP(NKikimrServices::STATISTICS, "NStat::THttpRequest: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 

@@ -43,7 +43,7 @@ def get_ydb_config(request):
         "enable_streaming_queries_counters",
         "enable_topics_sql_io_operations",
         "enable_streaming_queries_pq_sink_deduplication",
-        "enable_external_data_source_auth_method_iam"
+        "enable_external_data_source_auth_method_iam",
     }
     if enable_shared_reading_in_streaming_queries:
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
@@ -77,18 +77,20 @@ def get_ydb_config(request):
                 "service_id": "ydb",
                 "microservice_id": "data-plane",
                 "resource_type": "resource-manager.cloud",
-                "enable_ssl": False
+                "enable_ssl": False,
             },
-            "local_metadata_service": {
-                "host": os.environ.get("VM_METADATA_EMULATOR_HOST", "localhost"),
-                "port": os.environ.get("VM_METADATA_EMULATOR_PORT", 80)
-            }
         },
         default_clusteradmin="root@builtin",
         use_in_memory_pdisks=False,
     )
 
     config.yaml_config["log_config"]["default_level"] = 8
+    if "auth_config" not in config.yaml_config:
+        config.yaml_config["auth_config"] = {}
+    config.yaml_config["auth_config"]["local_metadata_service"] = {
+        "host": os.environ.get("VM_METADATA_EMULATOR_HOST", "localhost"),
+        "port": int(os.environ.get("VM_METADATA_EMULATOR_PORT", 80)),
+    }
     return config
 
 

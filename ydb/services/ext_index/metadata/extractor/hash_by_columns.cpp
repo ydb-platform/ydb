@@ -11,6 +11,8 @@
 #include <util/string/split.h>
 #include <util/string/join.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::EXT_INDEX
+
 namespace NKikimr::NMetadata::NCSIndex {
 
 THashByColumns::TFactory::TRegistrator<THashByColumns> THashByColumns::Registrator(THashByColumns::ClassName);
@@ -28,7 +30,7 @@ public:
     std::shared_ptr<arrow::Array> BuildColumn() {
         std::shared_ptr<arrow::StringArray> result;
         if (!ArrayBuilder.Finish(&result).ok()) {
-            ALS_ERROR(NKikimrServices::EXT_INDEX) << "cannot build array for hash calculation";
+            YDB_LOG_ERROR("Cannot build array for hash calculation");
             return nullptr;
         }
         return result;
@@ -56,7 +58,8 @@ std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow::Re
         auto c = batch->GetColumnByName(Fields[i].GetFieldId());
         auto f = schema->GetFieldByName(Fields[i].GetFieldId());
         if (!c || !f) {
-            ALS_ERROR(NKikimrServices::EXT_INDEX) << "incorrect field name in batch: " << Fields[i].GetFieldId();
+            YDB_LOG_ERROR("Incorrect field name",
+                {"fieldId", Fields[i].GetFieldId()});
             return {};
         }
         if (!Fields[i].GetJsonPath()) {
@@ -64,7 +67,8 @@ std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow::Re
             columns.emplace_back(c);
             fieldIds.emplace_back(f->name());
         } else if (c->type()->id() == arrow::Type::STRING) {
-            ALS_ERROR(NKikimrServices::EXT_INDEX) << "json have not been simple string. it must be JsonDocument for " << Fields[i].GetFieldId();
+            YDB_LOG_ERROR("Json have not been simple string. it must be JsonDocument",
+                {"fieldId", Fields[i].GetFieldId()});
             return {};
         } else if (c->type()->id() == arrow::Type::BINARY) {
             auto typedColumn = std::static_pointer_cast<arrow::BinaryArray>(c);
@@ -80,13 +84,15 @@ std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow::Re
                 NYql::TIssues issues;
                 const NYql::NJsonPath::TJsonPathPtr jsonPath = NYql::NJsonPath::ParseJsonPath(Fields[i].GetJsonPath(), issues, 100);
                 if (!issues.Empty()) {
-                    ALS_ERROR(NKikimrServices::EXT_INDEX) << "cannot parse path for json extraction: " << issues.ToString();
+                    YDB_LOG_ERROR("Cannot parse path for json",
+                        {"extraction", issues});
                     return {};
                 }
 
                 const auto result = NYql::NJsonPath::ExecuteJsonPath(jsonPath, binaryJsonRoot, NYql::NJsonPath::TVariablesMap{}, nullptr);
                 if (result.IsError()) {
-                    ALS_ERROR(NKikimrServices::EXT_INDEX) << "Runtime errors found on json path usage: " << result.GetError().ToString();
+                    YDB_LOG_ERROR("Runtime errors found on json path",
+                        {"usage", result.GetError()});
                     return {};
                 }
 
@@ -107,7 +113,7 @@ std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow::Re
                             break;
                         case NYql::NJsonPath::EValueType::Object:
                         case NYql::NJsonPath::EValueType::Array:
-                            ALS_ERROR(NKikimrServices::EXT_INDEX) << "Cannot use object and array as hash param for index construction";
+                            YDB_LOG_ERROR("Cannot use object and array as hash param for index construction");
                             return {};
                     }
                 }
@@ -118,14 +124,15 @@ std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow::Re
             fields.emplace_back(std::make_shared<arrow::Field>(Fields[i].GetFullId(), std::make_shared<arrow::StringType>()));
             columns.emplace_back(fetcher->BuildColumn());
         } else {
-            ALS_ERROR(NKikimrServices::EXT_INDEX) << "incorrect column type for json extraction: " << Fields[i].GetFieldId();
+            YDB_LOG_ERROR("Incorrect column type for json",
+                {"fieldId", Fields[i].GetFieldId()});
             return {};
         }
     }
     auto sBuilder = std::make_shared<arrow::SchemaBuilder>(fields);
     auto newSchema = sBuilder->Finish();
     if (!newSchema.ok()) {
-        ALS_ERROR(NKikimrServices::EXT_INDEX) << "cannot build new schema";
+        YDB_LOG_ERROR("Cannot build new schema");
         return {};
     }
     auto newBatch = arrow::RecordBatch::Make(*newSchema, batch->num_rows(), columns);
@@ -135,7 +142,8 @@ std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow::Re
         AFL_VERIFY(result);
         return *result;
     } else {
-        ALS_ERROR(NKikimrServices::EXT_INDEX) << "undefined hash type: " << HashType;
+        YDB_LOG_ERROR("Undefined hash",
+            {"type", HashType});
         return {};
     }
 }

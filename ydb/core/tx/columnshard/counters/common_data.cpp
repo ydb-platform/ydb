@@ -26,8 +26,7 @@ TLoadTimeSignals::TLoadTimer::~TLoadTimer() {
     } else {
         Signals.AddLoadingTime(duration);
     }
-    YDB_LOG_INFO_COMP(NKikimrServices::TX_COLUMNSHARD, "",
-        {Name, duration});
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)(Name, duration);
 }
 
 void TLoadTimeSignals::TLoadTimer::AddLoadingFail() {

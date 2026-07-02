@@ -119,6 +119,7 @@ public:
     bool IsPQGroup() const;
     bool IsDomainRoot() const;
     bool IsSubDomainRoot() const;
+    bool IsPlainSubDomainRoot() const;
     bool IsExternalSubDomainRoot() const;
     bool IsRtmrVolume() const;
     bool IsBlockStoreVolume() const;

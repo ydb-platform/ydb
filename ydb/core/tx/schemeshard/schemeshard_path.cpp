@@ -2026,7 +2026,8 @@ TString TPath::GetEffectiveACL() const {
                 auto prevIt = std::prev(item);
                 const auto& prevElement = *prevIt;
                 element->CachedEffectiveACL.Update(prevElement->CachedEffectiveACL,
-                    element->ACL, element->IsContainer(), /*isTenantRoot*/ element->IsExternalSubDomainRoot());
+                    element->ACL, element->IsContainer(),
+                    /*isTenantRoot*/ element->IsPlainSubDomainRoot() || element->IsExternalSubDomainRoot());
             }
             element->CachedEffectiveACLVersion = version;
         }

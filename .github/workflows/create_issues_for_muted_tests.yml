@@ -41,8 +41,7 @@ jobs:
 
       - name: Resolve build types matrix
         id: resolve
-        # Interpolate untrusted / event inputs via env (not directly into the shell script)
-        # to avoid shell injection through crafted branch names or dispatch inputs.
+        # Untrusted event inputs via env to avoid shell injection.
         env:
           EVENT_NAME: ${{ github.event_name }}
           DISPATCH_BASE_BRANCH: ${{ github.event.inputs.base_branch }}
@@ -69,11 +68,8 @@ jobs:
           fi
           echo "base_branch=$BASE_BRANCH" >> "$GITHUB_OUTPUT"
 
-          # Deduplicate issue creation. update_muted_ya.yml opens one PR per build type
-          # (update-muted-ya_<base>_<buildtype>), all labeled mute-unmute -> all trigger this
-          # workflow. Run only for the triggering PR's OWN build type; create_new_muted_ya.py
-          # skips build types absent from mute_issue_and_digest_config.json, so non-configured
-          # build types (asan/tsan/msan today) just refresh their DB data and create no issues.
+          # Run only for the triggering PR's own build type (create_new_muted_ya.py skips
+          # build types not configured for issues), so build-type PRs don't duplicate issues.
           if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$DISPATCH_BUILD_TYPE" ]; then
             MATRIX_BUILD_TYPES="[\"$DISPATCH_BUILD_TYPE\"]"
           elif [ "$EVENT_NAME" = "pull_request" ]; then
@@ -89,9 +85,6 @@ jobs:
   create-issues-for-muted-tests:
     needs: resolve-build-types
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
-    # Runs for the triggering PR's own build type to refresh DB / history / test-monitor.
-    # The create_issues script itself no-ops for build types not configured for issues,
-    # so non-configured build types just refresh data without opening issues.
     if: |
       ((github.event_name == 'pull_request' &&
         github.event.pull_request.merged == true &&
@@ -140,8 +133,7 @@ jobs:
         run: .github/scripts/tests/mute/create_new_muted_ya.py create_issues --file_path="${{ env.MUTED_YA_FILE_PATH }}" --branch=${{ env.BASE_BRANCH }} --build-type=${{ matrix.build_type }}
 
       - name: Add issues to PR
-        # created_issues_file is only set when the build type is configured for issues;
-        # skip for non-configured build types (create_issues no-ops there).
+        # created_issues_file is set only when issues were produced (configured build types).
         if: steps.create_issues.outputs.created_issues_file != ''
         continue-on-error: true
         env:

@@ -474,14 +474,10 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
                 settings.AuthConfig.SetAccessServiceEndpoint(AccessServiceEndpoint);
                 settings.AuthConfig.SetUseAccessService(true);
                 settings.AuthConfig.SetUseAccessServiceTLS(false);
-<<<<<<< HEAD
-=======
-                settings.AppConfig->MutableSqsConfig()->SetUserSettingsUpdateTimeMs(100);
                 if (!initParameters.TopicsAreFirstClassCitizen) {
                     settings.PQClusterDiscoveryConfig.SetEnabled(true);
                     settings.PQClusterDiscoveryConfig.SetTimedCountersUpdateIntervalSeconds(1);
                 }
->>>>>>> 5e204e22840 (Fixed MLP error for federation (#44926))
             }, 0, 1);
 
     server->ServerSettings->SetUseRealThreads(false);
@@ -805,8 +801,6 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
         TDuration::Seconds(5000),
         "root@builtin"
     );
-<<<<<<< HEAD
-=======
 
     if (!initParameters.TopicsAreFirstClassCitizen) {
         client.MkDir("/Root", "federation");
@@ -845,9 +839,6 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
             "UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) VALUES (\"Cluster\", 1), (\"Topics\", 0);"
         );
     }
-
-    client.Grant("/", "Root", "root@builtin", NACLib::EAccessRights::GenericFull);
->>>>>>> 5e204e22840 (Fixed MLP error for federation (#44926))
 }
 
 void THttpProxyTestMock::InitAccessServiceService() {

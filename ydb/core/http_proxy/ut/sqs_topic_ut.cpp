@@ -58,18 +58,6 @@ namespace {
         }
     };
 
-<<<<<<< HEAD
-=======
-    class TWithTopicBatchingFixture: public THttpProxyTestMock {
-    public:
-        void SetUp(NUnitTest::TTestContext&) override {
-            InitAll(TInitParameters{
-                .EnableSqsTopic = true,
-                .EnableTopicMessagesBatching = true,
-            });
-        }
-    };
-
     class TNonFirstClassCitizenFixture: public THttpProxyTestMock {
     public:
         static constexpr TStringBuf FederationDatabase = "/Root/federation";
@@ -82,7 +70,6 @@ namespace {
         }
     };
 
->>>>>>> 5e204e22840 (Fixed MLP error for federation (#44926))
     using NYdb::TDriver;
     using NYdb::NTopic::TTopicClient;
 

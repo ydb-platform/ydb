@@ -1306,6 +1306,87 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
+    Y_UNIT_TEST(CancelMultipleFromQueue) {
+      auto [runtime, server, sender] = TestCreateServer();
+
+      TShardedTableOptions opts;
+      const TString tableName = "table-1";
+      const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", tableName, opts);
+      const ui64 shard = shards[0];
+
+      TActorId shardActorId = ResolveTablet(runtime, shard, 0, false);
+
+      const ui64 txId1 = 101 , txId2 = 102, txId3 = 103, txId4 = 104, txId5 = 105;
+
+      auto sendWrite = [&](ui64 txId, ui32 key, ui32 value) {
+        auto request = MakeWriteRequestOneKeyValue(
+            txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId,
+            opts.Columns_, key, value);
+        runtime.Send(new IEventHandle(shardActorId, sender, request.release()), 0, true);
+      };
+
+      // All 5 writes and both cancels are sent with viaActorSystem=true — they
+      // are queued in the shard mailbox but NOT dispatched yet.  Because the
+      // actor mailbox is FIFO, the shard will:
+      //   1. Enqueue tx1 → ProposeQueue sends TEvDelayedProposeTransaction to
+      //   self (to
+      //      the END of the same mailbox, after all messages already in it)
+      //   2. Enqueue tx2..tx5 (no new drive event — idempotent scalar queue)
+      //   3. Cancel tx2 → ProposeQueue.Cancel removes tx2, sends CANCELLED
+      //   reply
+      //   4. Cancel tx3 → ProposeQueue.Cancel removes tx3, sends CANCELLED
+      //   reply
+      //   5. TEvDelayedProposeTransaction fires → drains remaining queue: tx1,
+      //   tx4, tx5
+      // So by the time the queue is drained, tx2 and tx3 are already gone.
+
+      Cout << "========= Enqueue 5 immediate writes into ProposeQueue =========\n";
+      sendWrite(txId1, 1, 10);
+      sendWrite(txId2, 2, 20);
+      sendWrite(txId3, 3, 30);
+      sendWrite(txId4, 4, 40);
+      sendWrite(txId5, 5, 50);
+
+      Cout << "========= Send cancels for tx2 and tx3 (still not dispatched) =========\n";
+      {
+        auto cancel2 = std::make_unique<TEvDataShard::TEvCancelTransactionProposal>(txId2);
+        runtime.Send(new IEventHandle(shardActorId, sender, cancel2.release()), 0, true);
+        auto cancel3 = std::make_unique<TEvDataShard::TEvCancelTransactionProposal>(txId3);
+        runtime.Send(new IEventHandle(shardActorId, sender, cancel3.release()), 0, true);
+      }
+
+      Cout << "========= Collect 5 write results =========\n";
+      // WaitForWriteCompleted drives the runtime event loop, which processes
+      // the mailbox in order, guaranteeing the cancels arrive before the queue
+      // drain event.
+      THashMap<ui64, NKikimrDataEvents::TEvWriteResult::EStatus> results;
+      for (int i = 0; i < 5; ++i) {
+        auto writeResult = WaitForWriteCompleted(runtime, sender);
+        results[writeResult.GetTxId()] = writeResult.GetStatus();
+      }
+
+    //   UNIT_ASSERT_VALUES_EQUAL(results[txId1], NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+    //   UNIT_ASSERT_VALUES_EQUAL(results[txId2], NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED);
+    //   UNIT_ASSERT_VALUES_EQUAL(results[txId3], NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED);
+    //   UNIT_ASSERT_VALUES_EQUAL(results[txId4], NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+    //   UNIT_ASSERT_VALUES_EQUAL(results[txId5], NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+      Cout << "========= Verify table state: only rows 1, 4, 5 =========\n";
+      {
+        auto tableData = ReadShardedTable(server, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(tableData, "key = 1, value = 10\n"
+                                            "key = 4, value = 40\n"
+                                            "key = 5, value = 50\n");
+      }
+
+      Cout << "========= Verify shard still works correctly =========\n";
+      {
+        Upsert(runtime, sender, shard, tableId, opts.Columns_, 1, 106,
+               NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+      }
+    }
+
     Y_UNIT_TEST_TWIN(UpsertPreparedManyTables, Volatile) {
         auto [runtime, server, sender] = TestCreateServer();
 

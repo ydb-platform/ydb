@@ -168,6 +168,76 @@ Y_UNIT_TEST(TableHints) {
     UNIT_ASSERT(SqlToYql("SELECT * FROM plato.Input WITH (INFER_SCHEMA)").IsOk());
 }
 
+Y_UNIT_TEST(SelectStarStripsConfiguredSystemColumnPrefixes) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.ExtraSystemColumnPrefixes = {"__ydb_row_id"};
+    auto res = SqlToYqlWithSettings("SELECT * FROM plato.Input;", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"RemoveSystemMembers", "RemovePrefixMembers"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemoveSystemMembers"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemovePrefixMembers"], 1);
+}
+
+Y_UNIT_TEST(SelectSystemColumnIsNotStrippedConfiguredSystemColumnPrefixes) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.ExtraSystemColumnPrefixes = {"__ydb_row_id"};
+    auto res = SqlToYqlWithSettings("SELECT __ydb_row_id FROM plato.Input;", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"RemoveSystemMembers", "RemovePrefixMembers"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemoveSystemMembers"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemovePrefixMembers"], 0);
+}
+
+Y_UNIT_TEST(SelectStarKeepsDefaultCleanupWithoutSystemColumnPrefixes) {
+    auto res = SqlToYql("SELECT * FROM plato.Input;");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"RemoveSystemMembers", "RemovePrefixMembers"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemoveSystemMembers"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemovePrefixMembers"], 0);
+}
+
+Y_UNIT_TEST(QualifiedAsteriskStripsConfiguredSystemColumnPrefixes) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.ExtraSystemColumnPrefixes = {"__ydb_row_id"};
+    auto res = SqlToYqlWithSettings(
+        "PRAGMA DisableSimpleColumns;"
+        "SELECT interested_table.* FROM plato.Input AS interested_table;",
+        settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "RemovePrefixMembers") {
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table._yql_"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table.__ydb_row_id"));
+        }
+    };
+    TWordCountHive stat = {{TString("RemovePrefixMembers"), 0}};
+    VerifyProgram(res, stat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemovePrefixMembers"], 1);
+}
+
+Y_UNIT_TEST(TableHintsValues) {
+    ExpectFailWithError(
+        R"sql(
+            SELECT * FROM (VALUES (1)) WITH XLOCK;
+        )sql",
+        "<main>:2:45: Error: Hint 'XLOCK' requires a table\n");
+
+    auto res = SqlToYql("SELECT * FROM (VALUES (1)) WITH WATERMARK = ts");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
 Y_UNIT_TEST(InNoHints) {
     TString query = "SELECT * FROM plato.Input WHERE key IN (1,2,3)";
 

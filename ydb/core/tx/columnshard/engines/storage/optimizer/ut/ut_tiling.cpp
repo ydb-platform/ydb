@@ -457,6 +457,47 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Candidates.size(), 0);
     }
 
+    // HasNoIntersections() drives forced (ALTER TABLE ... COMPACT) completion: it is true only when
+    // every portion has settled into the regular last level (no accumulator, no candidates, no middle).
+    Y_UNIT_TEST(TilingHasNoIntersections) {
+        TTestTiling::TilingSettings settings;
+        settings.AccumulatorPortionSizeLimit = 100;   // portions with >=100 bytes bypass the accumulator
+        settings.K = 2;
+        settings.MiddleLevelCount = 5;
+
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+
+        // Empty optimizer: nothing intersects.
+        UNIT_ASSERT(tiling.HasNoIntersections());
+
+        // Non-overlapping wide portions settle into LastLevel.Portions → still no intersections.
+        tiling.AddPortion(MakePortion(1, 0, 9, 1000));
+        tiling.AddPortion(MakePortion(2, 100, 109, 1000));
+        UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Portions.size(), 2);
+        UNIT_ASSERT(tiling.HasNoIntersections());
+
+        // An overlapping wide portion becomes a last-level candidate → intersections present.
+        tiling.AddPortion(MakePortion(3, 0, 9, 1000));
+        UNIT_ASSERT(tiling.LastLevel.CandidateIds.contains(3));
+        UNIT_ASSERT(!tiling.HasNoIntersections());
+        tiling.RemovePortion(MakePortion(3, 0, 9, 1000));
+        UNIT_ASSERT(tiling.HasNoIntersections());
+
+        // A small portion parked in the accumulator also counts as an intersection until compacted out.
+        tiling.AddPortion(MakePortion(4, 500, 509, 10));
+        UNIT_ASSERT_VALUES_EQUAL(tiling.Accumulator.Portions.size(), 1);
+        UNIT_ASSERT(!tiling.HasNoIntersections());
+        tiling.RemovePortion(MakePortion(4, 500, 509, 10));
+        UNIT_ASSERT(tiling.HasNoIntersections());
+
+        // A portion placed on a middle level (overlaps both baselines) is an intersection too.
+        tiling.AddPortion(MakePortion(5, 0, 109, 1000));
+        UNIT_ASSERT(!tiling.HasNoIntersections());
+        tiling.RemovePortion(MakePortion(5, 0, 109, 1000));
+        UNIT_ASSERT(tiling.HasNoIntersections());
+    }
+
     Y_UNIT_TEST(TilingAccumulatorTaskTargetsLevelZero) {
         TTestTiling::TilingSettings settings;
         settings.AccumulatorPortionSizeLimit = 100;

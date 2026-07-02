@@ -80,6 +80,20 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
             return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, "max_shards_in_flight must be greater than 0");
         }
 
+        if (tablePath.Base()->IsColumnTable()) {
+            if (settings.cascade()) {
+                return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, "Cascade compaction is not supported for column tables");
+            }
+            // Only standalone column tables are supported. Tables that belong to a column store share
+            // their shards, so forced compaction of a single such table is not supported (and enumerating
+            // its owned shards below would fail).
+            auto tableInfo = Self->ColumnTables.at(tablePath.Base()->PathId);
+            if (!tableInfo->IsStandalone()) {
+                return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST,
+                    "Forced compaction is not supported for tables in a column store");
+            }
+        }
+
         auto info = MakeIntrusive<TForcedCompactionInfo>();
         info->Id = id;
         info->State = TForcedCompactionInfo::EState::InProgress;

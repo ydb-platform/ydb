@@ -588,6 +588,17 @@ private:
 
     TActorId StatsReportPipe;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
+
+    // In-flight forced-compaction requests (ALTER TABLE ... COMPACT). Kept in memory only, mirroring
+    // DataShard's CompactionWaiters: on restart/move the SchemeShard's persisted queue re-sends
+    // TEvCompactTable. Each waiter is answered with OK once the table has no intersecting portions.
+    struct TForcedCompactionWaiter {
+        TActorId Sender;
+        ui64 Cookie = 0;
+        TPathId SchemePathId;
+    };
+
+    THashMap<TInternalPathId, std::vector<TForcedCompactionWaiter>> ForcedCompactionWaiters;
     ui32 JitterIntervalMS = 200;
     ui32 BaseStatsEvInflight = 0;
     ui32 ExecutorStatsEvInflight = 0;
@@ -634,6 +645,7 @@ private:
 
     void SetupCompaction(const std::set<TInternalPathId>& pathIds);
     void TryScheduleCompaction(const std::set<TInternalPathId>& pathIds);
+    void RecheckForcedCompactions(const TActorContext& ctx);
     void StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
     void StartCompactionTasksUpToLimit();
     void StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,

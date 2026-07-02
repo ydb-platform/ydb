@@ -497,6 +497,8 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SetupMetadata();
     SetupTtl();
     SetupGC();
+
+    RecheckForcedCompactions(NActors::TActivationContext::AsActorContext());
 }
 
 namespace {
@@ -1093,11 +1095,94 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
     const auto& record = ev->Get()->Record;
     const auto pathId = TPathId::FromProto(record.GetPathId());
 
-    LOG_S_WARN("Forced compaction is not implemented for column tables" << ": tablet# " << TabletID() << ", pathId# " << pathId
-                                                                        << ", requested from# " << ev->Sender);
+    const auto reply = [&](const NKikimrTxDataShard::TEvCompactTableResult::EStatus status) {
+        auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(TabletID(), pathId, status);
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    };
 
-    auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(TabletID(), pathId, NKikimrTxDataShard::TEvCompactTableResult::FAILED);
-    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    // Forced compaction is only supported for standalone column tables, not for column stores.
+    if (TablesManager.IsStoreTablet()) {
+        LOG_S_WARN("Forced compaction is not supported for column store: tablet# " << TabletID() << ", pathId# " << pathId
+                                                                                   << ", requested from# " << ev->Sender);
+        reply(NKikimrTxDataShard::TEvCompactTableResult::FAILED);
+        return;
+    }
+
+    if (!TablesManager.HasPrimaryIndex()) {
+        LOG_S_WARN("Forced compaction failed, no primary index: tablet# " << TabletID() << ", pathId# " << pathId << ", requested from# "
+                                                                          << ev->Sender);
+        reply(NKikimrTxDataShard::TEvCompactTableResult::FAILED);
+        return;
+    }
+
+    const auto internalPathId = TablesManager.ResolveInternalPathIdOptional(TSchemeShardLocalPathId::FromRawValue(pathId.LocalPathId), true);
+    auto& engine = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
+    auto granule = internalPathId ? engine.GetGranuleOptional(*internalPathId) : nullptr;
+    if (!granule) {
+        LOG_S_WARN("Forced compaction of unknown path: tablet# " << TabletID() << ", pathId# " << pathId << ", requested from# " << ev->Sender);
+        reply(NKikimrTxDataShard::TEvCompactTableResult::FAILED);
+        return;
+    }
+
+    const auto noIntersections = granule->GetOptimizerPlanner().CheckNoIntersections();
+    if (noIntersections.IsFail()) {
+        // The optimizer does not support forced compaction (i.e. it is not tiling++).
+        LOG_S_WARN("Forced compaction is not supported: tablet# " << TabletID() << ", pathId# " << pathId << ", reason# "
+                                                                  << noIntersections.GetErrorMessage() << ", requested from# " << ev->Sender);
+        reply(NKikimrTxDataShard::TEvCompactTableResult::FAILED);
+        return;
+    }
+
+    if (*noIntersections) {
+        LOG_S_DEBUG("Forced compaction already done: tablet# " << TabletID() << ", pathId# " << pathId << ", requested from# " << ev->Sender);
+        reply(NKikimrTxDataShard::TEvCompactTableResult::OK);
+        return;
+    }
+
+    // Portions still intersect: hold the request and reply once the table settles. Background
+    // compaction is kicked for this path; RecheckForcedCompactions() answers the waiter later.
+    LOG_S_DEBUG("Forced compaction registered: tablet# " << TabletID() << ", pathId# " << pathId << ", requested from# " << ev->Sender);
+    ForcedCompactionWaiters[*internalPathId].push_back({ ev->Sender, ev->Cookie, pathId });
+    SetupCompaction({ *internalPathId });
+}
+
+void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
+    if (ForcedCompactionWaiters.empty()) {
+        return;
+    }
+    if (!TablesManager.HasPrimaryIndex()) {
+        return;
+    }
+    auto& engine = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
+    std::vector<TInternalPathId> finished;
+    for (const auto& [internalPathId, waiters] : ForcedCompactionWaiters) {
+        auto granule = engine.GetGranuleOptional(internalPathId);
+        std::optional<NKikimrTxDataShard::TEvCompactTableResult::EStatus> status;
+        if (!granule) {
+            // The table has gone away (e.g. dropped): fail the pending requests.
+            status = NKikimrTxDataShard::TEvCompactTableResult::FAILED;
+        } else {
+            const auto noIntersections = granule->GetOptimizerPlanner().CheckNoIntersections();
+            if (noIntersections.IsFail()) {
+                status = NKikimrTxDataShard::TEvCompactTableResult::FAILED;
+            } else if (*noIntersections) {
+                status = NKikimrTxDataShard::TEvCompactTableResult::OK;
+            }
+        }
+        if (!status) {
+            continue;
+        }
+        for (const auto& waiter : waiters) {
+            LOG_S_DEBUG("Forced compaction finished: tablet# " << TabletID() << ", pathId# " << waiter.SchemePathId << ", status# "
+                                                               << (int)*status << ", reply to# " << waiter.Sender);
+            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(TabletID(), waiter.SchemePathId, *status);
+            ctx.Send(waiter.Sender, response.Release(), 0, waiter.Cookie);
+        }
+        finished.push_back(internalPathId);
+    }
+    for (const auto& internalPathId : finished) {
+        ForcedCompactionWaiters.erase(internalPathId);
+    }
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& /*ctx*/) {

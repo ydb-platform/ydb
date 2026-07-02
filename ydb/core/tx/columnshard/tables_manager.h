@@ -521,6 +521,18 @@ public:
         return SchemaPresetsIds;
     }
 
+    // Tables belonging to a column store carry a non-standalone schema preset (id != 0), whereas
+    // standalone column tables use an inline schema (their only preset, if any, is the id-0
+    // placeholder registered on load). So a non-zero preset id means this tablet backs a column store.
+    bool IsStoreTablet() const {
+        for (const ui32 presetId : SchemaPresetsIds) {
+            if (presetId != 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool HasPrimaryIndex() const {
         return !!PrimaryIndex;
     }

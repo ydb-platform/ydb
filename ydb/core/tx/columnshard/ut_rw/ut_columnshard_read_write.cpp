@@ -16,6 +16,7 @@
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_writer.h>
 #include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/library/actors/protos/unittests.pb.h>
 #include <ydb/library/formats/arrow/simple_builder/array.h>
@@ -1888,6 +1889,88 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TestTableDescription table;
         table.InStore = InStore;
         TestWriteOverload(table);
+    }
+
+    Y_UNIT_TEST(ForcedCompactionColumnStoreRejected) {
+        // Forced compaction (ALTER TABLE ... COMPACT) is not supported for tables that belong to a column
+        // store: the shard replies FAILED even though the request is well-formed.
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+            runtime.DispatchEvents(options);
+        }
+
+        const ui64 tableId = 1;
+        TestTableDescription table;   // InStore == true: created via a schema preset (a column store)
+        Y_UNUSED(SetupSchema(runtime, sender, tableId, table));
+
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCompactTable(/*ownerId=*/1, tableId));
+        auto ev = runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender);
+        UNIT_ASSERT(ev);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::FAILED);
+    }
+
+    Y_UNIT_TEST(ForcedCompactionHeldUntilNoIntersections) {
+        // A standalone tiling++ column table with intersecting portions: the shard holds the request until
+        // background compaction settles every portion into the regular last level, then replies OK.
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        csControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+            runtime.DispatchEvents(options);
+        }
+
+        const ui64 tableId = 1;
+        auto schema = TTestSchema::YdbSchema();
+        auto pk = TTestSchema::YdbPkSchema();
+        auto specials = TTestSchema::TTableSpecials().WithForcedCompaction(true);   // standalone + tiling++
+        TString txBody = TTestSchema::CreateStandaloneTableTxBody(tableId, schema, pk, specials);
+        Y_UNUSED(SetupSchema(runtime, sender, txBody, /*txId=*/10));
+
+        // Write several overlapping (identical key range) portions; with compaction disabled they stay
+        // intersecting, so the table is not yet fully compacted.
+        ui64 writeId = 0;
+        ui64 txId = 100;
+        const TString data = MakeTestBlob({ 0, 75 * 1000 }, schema);
+        for (ui32 i = 0; i < 5; ++i, ++txId) {
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, data, schema, true, &writeIds));
+            auto planStep = ProposeCommit(runtime, sender, txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+        // Let indexation move the committed data into engine portions (compaction remains disabled).
+        runtime.SimulateSleep(TDuration::Seconds(3));
+
+        // Portions still intersect -> the request is held, no result is produced yet.
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCompactTable(/*ownerId=*/1, tableId));
+        runtime.SimulateSleep(TDuration::Seconds(2));   // let the handler run (compaction still disabled)
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1)));
+
+        // Enable compaction and drive the background loop: each manual wakeup runs EnqueueBackgroundActivities
+        // (which starts a compaction and re-checks the held request); SimulateSleep lets the async compaction
+        // complete. Once every portion settles into the last level, RecheckForcedCompactions replies OK.
+        csControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        TEvDataShard::TEvCompactTableResult::TPtr ev;
+        for (int i = 0; i < 120 && !ev; ++i) {
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new NColumnShard::TEvPrivate::TEvPeriodicWakeup(true));
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            ev = runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1));
+        }
+        UNIT_ASSERT(ev);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
     }
 
     Y_UNIT_TEST(WriteReadDuplicate) {

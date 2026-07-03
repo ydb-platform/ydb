@@ -70,20 +70,21 @@ void AddVisibleDependencies(const TIntrusivePtr<IOperator>& op, TInfoUnitSet& de
         return;
     }
 
-    switch (op->Kind) {
-        case EOperator::AddDependencies: {
-            auto deps = CastOperator<TOpAddDependencies>(op);
-            AddInfoUnits(dependencies, deps->Dependencies);
-            AddVisibleDependencies(deps->GetInput(), dependencies);
-            break;
+    const auto visibleIUs = MakeInfoUnitSet(op->GetOutputIUs());
+
+    auto it = TOpIterator(op, nullptr);
+    for (; it != TOpIterator(nullptr); it++) {
+        auto currOp = (*it).Current;
+        if (currOp->Kind != EOperator::AddDependencies) {
+            continue;
         }
-        case EOperator::Filter:
-        case EOperator::Limit:
-        case EOperator::Sort:
-            AddVisibleDependencies(CastOperator<IUnaryOperator>(op)->GetInput(), dependencies);
-            break;
-        default:
-            break;
+
+        auto deps = CastOperator<TOpAddDependencies>(currOp);
+        for (const auto& dep : deps->Dependencies) {
+            if (visibleIUs.contains(dep)) {
+                AddInfoUnit(dependencies, dep);
+            }
+        }
     }
 }
 

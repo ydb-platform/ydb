@@ -1012,6 +1012,52 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(IsGeneratedIgnoreIU(convertedOutput[1]));
     }
 
+    Y_UNIT_TEST(ProjectedKqpOpMapKeepsVisibleDependenciesAcrossNestedMap) {
+        TMapRuleTestContext testContext;
+        TPlanProps planProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("payload")}, pos);
+        auto addDeps = MakeIntrusive<TOpAddDependencies>(
+            read,
+            pos,
+            TVector<TInfoUnit>{TInfoUnit("dep")},
+            TVector<const TTypeAnnotationNode*>{nullptr}
+        );
+        auto innerMap = MakeIntrusive<TOpMap>(addDeps, pos, TVector<TMapElement>{
+            MakeTestRename("projected", "payload", pos, testContext.ExprCtx, planProps),
+        });
+        auto sort = MakeIntrusive<TOpSort>(
+            innerMap,
+            pos,
+            TVector<TSortElement>{TSortElement(TInfoUnit("projected"), true, true)}
+        );
+
+        auto inputNode = testContext.ExprCtx.NewCallable(pos, "TestInput", {});
+        auto output = testContext.ExprCtx.NewAtom(pos, "out");
+        auto source = testContext.ExprCtx.NewAtom(pos, "projected");
+        auto mapElement = testContext.ExprCtx.NewCallable(pos, "KqpOpMapElementRename", {inputNode, output, source});
+        auto mapElements = testContext.ExprCtx.NewList(pos, {mapElement});
+        auto project = testContext.ExprCtx.NewAtom(pos, "true");
+        auto mapNode = testContext.ExprCtx.NewCallable(pos, "KqpOpMap", {inputNode, mapElements, project});
+
+        PlanConverter converter(testContext.TypeCtx, testContext.ExprCtx);
+        converter.Converted[inputNode.Get()] = sort;
+
+        auto converted = CastOperator<TOpMap>(converter.ConvertTKqpOpMap(mapNode));
+
+        UNIT_ASSERT_VALUES_EQUAL(converted->MapElements.size(), 1);
+        UNIT_ASSERT(converted->MapElements.front().GetElementName() == TInfoUnit("out"));
+
+        const auto convertedOutput = converted->GetOutputIUs();
+        UNIT_ASSERT_VALUES_EQUAL(convertedOutput.size(), 2);
+        UNIT_ASSERT(std::find(convertedOutput.begin(), convertedOutput.end(), TInfoUnit("dep")) != convertedOutput.end());
+        UNIT_ASSERT(std::find(convertedOutput.begin(), convertedOutput.end(), TInfoUnit("out")) != convertedOutput.end());
+        for (const auto& iu : convertedOutput) {
+            UNIT_ASSERT(!IsGeneratedIgnoreIU(iu));
+        }
+    }
+
     Y_UNIT_TEST(ReplaceAliasSubqueryDoesNotDuplicateVisibleColumns) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

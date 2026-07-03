@@ -202,7 +202,7 @@ TAttributeFilter::TAttributeFilter(std::vector<IAttributeDictionary::TKey> keys,
     , Universal_(false)
 { }
 
-TAttributeFilter::TAttributeFilter(std::initializer_list<TString> keys)
+TAttributeFilter::TAttributeFilter(std::initializer_list<std::string> keys)
     : Keys_({keys.begin(), keys.end()})
     , Universal_(false)
 { }

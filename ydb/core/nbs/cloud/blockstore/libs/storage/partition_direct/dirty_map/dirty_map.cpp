@@ -315,8 +315,29 @@ void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
             watermark ? *watermark / BlockSize : BlockCount);
     }
 
+    if (removed.Empty()) {
+        return;
+    }
+
     for (auto indx: removed) {
         DDiskStates[indx].SwitchOffline();
+    }
+
+    TVector<ui64> erased;
+    Inflight.Enumerate(
+        [&](TInflightMap::TFindItem& item)
+        {
+            TInflightInfo& inflightItem = item.Value;
+            inflightItem.RemoveHosts(removed);
+            if (inflightItem.GetState() == TInflightInfo::EState::PBufferErased)
+            {
+                erased.push_back(item.Key);
+            }
+            return TInflightMap::EEnumerateContinuation::Continue;
+        });
+
+    for (auto lsn: erased) {
+        Inflight.RemoveRange(lsn);
     }
 }
 
@@ -480,22 +501,20 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
 
         auto& val = item->Value;
 
-        for (THostIndex host: val.GetWriteRequested()) {
-            bool rangeRemoved = false;
-            if (val.RequestErase(host)) {
-                if (DisabledHosts.Get(host)) {
-                    // We can't handle this situation properly. Barrier cleanup
-                    // will help us.
-                    if (val.ConfirmErase(host)) {
-                        const bool removed = Inflight.RemoveRange(item->Key);
-                        Y_ABORT_UNLESS(removed);
-                        rangeRemoved = true;
-                    }
-                } else {
-                    result.AddHint(host, item->Key);
+        for (THostIndex host: val.GetEraseNeeded()) {
+            val.RequestErase(host);
+
+            if (DisabledHosts.Get(host)) {
+                // We can't handle this situation properly. Barrier cleanup
+                // will help us.
+                if (val.ConfirmErase(host)) {
+                    const bool removed = Inflight.RemoveRange(item->Key);
+                    Y_ABORT_UNLESS(removed);
+                    break;
                 }
+            } else {
+                result.AddHint(host, item->Key);
             }
-            Y_ABORT_IF(rangeRemoved && !result.Empty());
         }
     }
 

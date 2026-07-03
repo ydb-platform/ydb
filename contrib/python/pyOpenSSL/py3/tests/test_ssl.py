@@ -7,124 +7,125 @@ Unit tests for :mod:`OpenSSL.SSL`.
 
 import datetime
 import gc
+import select
 import sys
 import uuid
-
-from gc import collect, get_referrers
 from errno import (
     EAFNOSUPPORT,
     ECONNREFUSED,
     EINPROGRESS,
-    EWOULDBLOCK,
     EPIPE,
     ESHUTDOWN,
+    EWOULDBLOCK,
 )
-from sys import platform, getfilesystemencoding
-from socket import AF_INET, AF_INET6, MSG_PEEK, SHUT_RDWR, error, socket
+from gc import collect, get_referrers
 from os import makedirs
 from os.path import join
-from weakref import ref
+from socket import (
+    AF_INET,
+    AF_INET6,
+    MSG_PEEK,
+    SHUT_RDWR,
+    error,
+    socket,
+)
+from sys import getfilesystemencoding, platform
+from typing import Union
 from warnings import simplefilter
-
-import flaky
-
-import pytest
-
-from pretend import raiser
-
-from six import PY2, text_type
+from weakref import ref
 
 from cryptography import x509
-from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
+import flaky
 
-from OpenSSL.crypto import TYPE_RSA, FILETYPE_PEM
-from OpenSSL.crypto import PKey, X509, X509Extension, X509Store
-from OpenSSL.crypto import dump_privatekey, load_privatekey
-from OpenSSL.crypto import dump_certificate, load_certificate
-from OpenSSL.crypto import get_elliptic_curves
+from pretend import raiser
 
-from OpenSSL.SSL import (
-    OPENSSL_VERSION_NUMBER,
-    SSLEAY_VERSION,
-    SSLEAY_CFLAGS,
-    TLS_METHOD,
-    TLS1_3_VERSION,
-    TLS1_2_VERSION,
-    TLS1_1_VERSION,
-)
-from OpenSSL.SSL import SSLEAY_PLATFORM, SSLEAY_DIR, SSLEAY_BUILT_ON
-from OpenSSL.SSL import SENT_SHUTDOWN, RECEIVED_SHUTDOWN
-from OpenSSL.SSL import (
-    SSLv2_METHOD,
-    SSLv3_METHOD,
-    SSLv23_METHOD,
-    TLSv1_METHOD,
-    TLSv1_1_METHOD,
-    TLSv1_2_METHOD,
-)
-from OpenSSL.SSL import OP_SINGLE_DH_USE, OP_NO_SSLv2, OP_NO_SSLv3
-from OpenSSL.SSL import (
-    VERIFY_PEER,
-    VERIFY_FAIL_IF_NO_PEER_CERT,
-    VERIFY_CLIENT_ONCE,
-    VERIFY_NONE,
-)
+import pytest
 
 from OpenSSL import SSL
 from OpenSSL.SSL import (
-    SESS_CACHE_OFF,
-    SESS_CACHE_CLIENT,
-    SESS_CACHE_SERVER,
+    Connection,
+    Context,
+    DTLS_METHOD,
+    Error,
+    MODE_RELEASE_BUFFERS,
+    NO_OVERLAPPING_PROTOCOLS,
+    OPENSSL_VERSION_NUMBER,
+    OP_COOKIE_EXCHANGE,
+    OP_NO_COMPRESSION,
+    OP_NO_QUERY_MTU,
+    OP_NO_SSLv2,
+    OP_NO_SSLv3,
+    OP_NO_TICKET,
+    OP_SINGLE_DH_USE,
+    RECEIVED_SHUTDOWN,
+    SENT_SHUTDOWN,
     SESS_CACHE_BOTH,
+    SESS_CACHE_CLIENT,
     SESS_CACHE_NO_AUTO_CLEAR,
+    SESS_CACHE_NO_INTERNAL,
     SESS_CACHE_NO_INTERNAL_LOOKUP,
     SESS_CACHE_NO_INTERNAL_STORE,
-    SESS_CACHE_NO_INTERNAL,
-)
-
-from OpenSSL.SSL import (
-    Error,
+    SESS_CACHE_OFF,
+    SESS_CACHE_SERVER,
+    SSLEAY_BUILT_ON,
+    SSLEAY_CFLAGS,
+    SSLEAY_DIR,
+    SSLEAY_PLATFORM,
+    SSLEAY_VERSION,
+    SSL_CB_ACCEPT_EXIT,
+    SSL_CB_ACCEPT_LOOP,
+    SSL_CB_ALERT,
+    SSL_CB_CONNECT_EXIT,
+    SSL_CB_CONNECT_LOOP,
+    SSL_CB_EXIT,
+    SSL_CB_HANDSHAKE_DONE,
+    SSL_CB_HANDSHAKE_START,
+    SSL_CB_LOOP,
+    SSL_CB_READ,
+    SSL_CB_READ_ALERT,
+    SSL_CB_WRITE,
+    SSL_CB_WRITE_ALERT,
+    SSL_ST_ACCEPT,
+    SSL_ST_CONNECT,
+    SSL_ST_MASK,
+    SSLeay_version,
+    SSLv23_METHOD,
+    Session,
     SysCallError,
+    TLS1_1_VERSION,
+    TLS1_2_VERSION,
+    TLS1_3_VERSION,
+    TLS_METHOD,
+    TLSv1_1_METHOD,
+    TLSv1_2_METHOD,
+    TLSv1_METHOD,
+    VERIFY_CLIENT_ONCE,
+    VERIFY_FAIL_IF_NO_PEER_CERT,
+    VERIFY_NONE,
+    VERIFY_PEER,
     WantReadError,
     WantWriteError,
     ZeroReturnError,
+    _make_requires,
 )
-from OpenSSL.SSL import Context, Session, Connection, SSLeay_version
-from OpenSSL.SSL import _make_requires
-
 from OpenSSL._util import ffi as _ffi, lib as _lib
-
-from OpenSSL.SSL import (
-    OP_NO_QUERY_MTU,
-    OP_COOKIE_EXCHANGE,
-    OP_NO_TICKET,
-    OP_NO_COMPRESSION,
-    MODE_RELEASE_BUFFERS,
-    NO_OVERLAPPING_PROTOCOLS,
-)
-
-from OpenSSL.SSL import (
-    SSL_ST_CONNECT,
-    SSL_ST_ACCEPT,
-    SSL_ST_MASK,
-    SSL_CB_LOOP,
-    SSL_CB_EXIT,
-    SSL_CB_READ,
-    SSL_CB_WRITE,
-    SSL_CB_ALERT,
-    SSL_CB_READ_ALERT,
-    SSL_CB_WRITE_ALERT,
-    SSL_CB_ACCEPT_LOOP,
-    SSL_CB_ACCEPT_EXIT,
-    SSL_CB_CONNECT_LOOP,
-    SSL_CB_CONNECT_EXIT,
-    SSL_CB_HANDSHAKE_START,
-    SSL_CB_HANDSHAKE_DONE,
+from OpenSSL.crypto import (
+    FILETYPE_PEM,
+    PKey,
+    TYPE_RSA,
+    X509,
+    X509Extension,
+    X509Store,
+    dump_certificate,
+    dump_privatekey,
+    get_elliptic_curves,
+    load_certificate,
+    load_privatekey,
 )
 
 try:
@@ -142,15 +143,15 @@ try:
 except ImportError:
     OP_NO_TLSv1_3 = None
 
-from .util import WARNING_TYPE_EXPECTED, NON_ASCII, is_consistent_type
 from .test_crypto import (
     client_cert_pem,
     client_key_pem,
-    server_cert_pem,
-    server_key_pem,
     root_cert_pem,
     root_key_pem,
+    server_cert_pem,
+    server_key_pem,
 )
+from .util import NON_ASCII, WARNING_TYPE_EXPECTED, is_consistent_type
 
 
 # openssl dhparam 2048 -out dh-2048.pem
@@ -164,9 +165,6 @@ ITYG0KXySiCLi4UDlXTZTz7u/+OYczPEgqa/JPUddbM/kfvaRAnjY38cfQ7qXf8Y
 i5s5yYK7a/0eWxxRr2qraYaUj8RwDpH9CwIBAg==
 -----END DH PARAMETERS-----
 """
-
-
-skip_if_py3 = pytest.mark.skipif(not PY2, reason="Python 2 only")
 
 
 def socket_any_family():
@@ -197,7 +195,7 @@ def join_bytes_or_unicode(prefix, suffix):
         return join(prefix, suffix)
 
     # Otherwise, coerce suffix to the type of prefix.
-    if isinstance(prefix, text_type):
+    if isinstance(prefix, str):
         return join(prefix, suffix.decode(getfilesystemencoding()))
     else:
         return join(prefix, suffix.encode(getfilesystemencoding()))
@@ -220,6 +218,8 @@ def socket_pair():
     client.connect_ex((loopback_address(port), port.getsockname()[1]))
     client.setblocking(True)
     server = port.accept()[0]
+
+    port.close()
 
     # Let's pass some unencrypted data to make sure our socket connection is
     # fine.  Just one byte, so we don't have to worry about buffers getting
@@ -366,7 +366,7 @@ def interact_in_memory(client_conn, server_conn):
 
             # Give the side a chance to generate some more bytes, or succeed.
             try:
-                data = read.recv(2 ** 16)
+                data = read.recv(2**16)
             except WantReadError:
                 # It didn't succeed, so we'll hope it generated some output.
                 pass
@@ -407,7 +407,7 @@ def handshake_in_memory(client_conn, server_conn):
     interact_in_memory(client_conn, server_conn)
 
 
-class TestVersion(object):
+class TestVersion:
     """
     Tests for version information exposed by `OpenSSL.SSL.SSLeay_version` and
     `OpenSSL.SSL.OPENSSL_VERSION_NUMBER`.
@@ -444,17 +444,15 @@ def ca_file(tmpdir):
     """
     Create a valid PEM file with CA certificates and return the path.
     """
-    key = rsa.generate_private_key(
-        public_exponent=65537, key_size=2048, backend=default_backend()
-    )
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     public_key = key.public_key()
 
     builder = x509.CertificateBuilder()
     builder = builder.subject_name(
-        x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, u"pyopenssl.org")])
+        x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "pyopenssl.org")])
     )
     builder = builder.issuer_name(
-        x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, u"pyopenssl.org")])
+        x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "pyopenssl.org")])
     )
     one_day = datetime.timedelta(1, 0, 0)
     builder = builder.not_valid_before(datetime.datetime.today() - one_day)
@@ -466,9 +464,7 @@ def ca_file(tmpdir):
         critical=True,
     )
 
-    certificate = builder.sign(
-        private_key=key, algorithm=hashes.SHA256(), backend=default_backend()
-    )
+    certificate = builder.sign(private_key=key, algorithm=hashes.SHA256())
 
     ca_file = tmpdir.join("test.pem")
     ca_file.write_binary(
@@ -488,14 +484,14 @@ def context():
     return Context(SSLv23_METHOD)
 
 
-class TestContext(object):
+class TestContext:
     """
     Unit tests for `OpenSSL.SSL.Context`.
     """
 
     @pytest.mark.parametrize(
         "cipher_string",
-        [b"hello world:AES128-SHA", u"hello world:AES128-SHA"],
+        [b"hello world:AES128-SHA", "hello world:AES128-SHA"],
     )
     def test_set_cipher_list(self, context, cipher_string):
         """
@@ -525,15 +521,20 @@ class TestContext(object):
         """
         with pytest.raises(Error) as excinfo:
             context.set_cipher_list(b"imaginary-cipher")
-        assert excinfo.value.args == (
-            [
-                (
-                    "SSL routines",
-                    "SSL_CTX_set_cipher_list",
-                    "no cipher match",
-                )
-            ],
-        )
+        assert excinfo.value.args[0][0] in [
+            # 1.1.x
+            (
+                "SSL routines",
+                "SSL_CTX_set_cipher_list",
+                "no cipher match",
+            ),
+            # 3.0.x
+            (
+                "SSL routines",
+                "",
+                "no cipher match",
+            ),
+        ]
 
     def test_load_client_ca(self, context, ca_file):
         """
@@ -572,20 +573,27 @@ class TestContext(object):
         with pytest.raises(Error) as e:
             context.set_session_id(b"abc" * 1000)
 
-        assert [
+        assert e.value.args[0][0] in [
+            # 1.1.x
             (
                 "SSL routines",
                 "SSL_CTX_set_session_id_context",
                 "ssl session id context too long",
-            )
-        ] == e.value.args[0]
+            ),
+            # 3.0.x
+            (
+                "SSL routines",
+                "",
+                "ssl session id context too long",
+            ),
+        ]
 
     def test_set_session_id_unicode(self, context):
         """
         `Context.set_session_id` raises a warning if a unicode string is
         passed.
         """
-        pytest.deprecated_call(context.set_session_id, u"abc")
+        pytest.deprecated_call(context.set_session_id, "abc")
 
     def test_method(self):
         """
@@ -597,7 +605,7 @@ class TestContext(object):
         for meth in methods:
             Context(meth)
 
-        maybe = [SSLv2_METHOD, SSLv3_METHOD, TLSv1_1_METHOD, TLSv1_2_METHOD]
+        maybe = [TLSv1_1_METHOD, TLSv1_2_METHOD]
         for meth in maybe:
             try:
                 Context(meth)
@@ -609,24 +617,13 @@ class TestContext(object):
         with pytest.raises(TypeError):
             Context("")
         with pytest.raises(ValueError):
-            Context(10)
+            Context(13)
 
     def test_type(self):
         """
         `Context` can be used to create instances of that type.
         """
         assert is_consistent_type(Context, "Context", TLSv1_METHOD)
-
-    def test_use_privatekey(self):
-        """
-        `Context.use_privatekey` takes an `OpenSSL.crypto.PKey` instance.
-        """
-        key = PKey()
-        key.generate_key(TYPE_RSA, 1024)
-        ctx = Context(SSLv23_METHOD)
-        ctx.use_privatekey(key)
-        with pytest.raises(TypeError):
-            ctx.use_privatekey("")
 
     def test_use_privatekey_file_missing(self, tmpfile):
         """
@@ -680,37 +677,6 @@ class TestContext(object):
             tmpfile.decode(getfilesystemencoding()) + NON_ASCII,
             FILETYPE_PEM,
         )
-
-    def test_use_certificate_wrong_args(self):
-        """
-        `Context.use_certificate_wrong_args` raises `TypeError` when not passed
-        exactly one `OpenSSL.crypto.X509` instance as an argument.
-        """
-        ctx = Context(SSLv23_METHOD)
-        with pytest.raises(TypeError):
-            ctx.use_certificate("hello, world")
-
-    def test_use_certificate_uninitialized(self):
-        """
-        `Context.use_certificate` raises `OpenSSL.SSL.Error` when passed a
-        `OpenSSL.crypto.X509` instance which has not been initialized
-        (ie, which does not actually have any certificate data).
-        """
-        ctx = Context(SSLv23_METHOD)
-        with pytest.raises(Error):
-            ctx.use_certificate(X509())
-
-    def test_use_certificate(self):
-        """
-        `Context.use_certificate` sets the certificate which will be
-        used to identify connections created using the context.
-        """
-        # TODO
-        # Hard to assert anything.  But we could set a privatekey then ask
-        # OpenSSL if the cert and key agree using check_privatekey.  Then as
-        # long as check_privatekey works right we're good...
-        ctx = Context(SSLv23_METHOD)
-        ctx.use_certificate(load_certificate(FILETYPE_PEM, root_cert_pem))
 
     def test_use_certificate_file_wrong_args(self):
         """
@@ -1211,8 +1177,8 @@ class TestContext(object):
     def test_fallback_default_verify_paths(self, monkeypatch):
         """
         Test that we load certificates successfully on linux from the fallback
-        path. To do this we set the _CRYPTOGRAPHY_MANYLINUX1_CA_FILE and
-        _CRYPTOGRAPHY_MANYLINUX1_CA_DIR vars to be equal to whatever the
+        path. To do this we set the _CRYPTOGRAPHY_MANYLINUX_CA_FILE and
+        _CRYPTOGRAPHY_MANYLINUX_CA_DIR vars to be equal to whatever the
         current OpenSSL default is and we disable
         SSL_CTX_SET_default_verify_paths so that it can't find certs unless
         it loads via fallback.
@@ -1223,12 +1189,12 @@ class TestContext(object):
         )
         monkeypatch.setattr(
             SSL,
-            "_CRYPTOGRAPHY_MANYLINUX1_CA_FILE",
+            "_CRYPTOGRAPHY_MANYLINUX_CA_FILE",
             _ffi.string(_lib.X509_get_default_cert_file()),
         )
         monkeypatch.setattr(
             SSL,
-            "_CRYPTOGRAPHY_MANYLINUX1_CA_DIR",
+            "_CRYPTOGRAPHY_MANYLINUX_CA_DIR",
             _ffi.string(_lib.X509_get_default_cert_dir()),
         )
         context.set_default_verify_paths()
@@ -1332,20 +1298,20 @@ class TestContext(object):
         """
         serverSocket, clientSocket = socket_pair()
 
-        server = Connection(serverContext, serverSocket)
-        server.set_accept_state()
+        with serverSocket, clientSocket:
+            server = Connection(serverContext, serverSocket)
+            server.set_accept_state()
 
-        client = Connection(clientContext, clientSocket)
-        client.set_connect_state()
+            client = Connection(clientContext, clientSocket)
+            client.set_connect_state()
 
-        # Make them talk to each other.
-        # interact_in_memory(client, server)
-        for _ in range(3):
-            for s in [client, server]:
-                try:
-                    s.do_handshake()
-                except WantReadError:
-                    pass
+            # Make them talk to each other.
+            for _ in range(3):
+                for s in [client, server]:
+                    try:
+                        s.do_handshake()
+                    except WantReadError:
+                        select.select([client, server], [], [])
 
     def test_set_verify_callback_connection_argument(self):
         """
@@ -1361,7 +1327,7 @@ class TestContext(object):
         )
         serverConnection = Connection(serverContext, None)
 
-        class VerifyCallback(object):
+        class VerifyCallback:
             def callback(self, connection, *args):
                 self.connection = connection
                 return 1
@@ -1705,7 +1671,7 @@ class TestContext(object):
         """
         context = Context(SSLv23_METHOD)
         for curve in get_elliptic_curves():
-            if curve.name.startswith(u"Oakley-"):
+            if curve.name.startswith("Oakley-"):
                 # Setting Oakley-EC2N-4 and Oakley-EC2N-3 adds
                 # ('bignum routines', 'BN_mod_inverse', 'no inverse') to the
                 # error queue on OpenSSL 1.0.2.
@@ -1751,7 +1717,7 @@ class TestContext(object):
         """
         context = Context(SSLv23_METHOD)
         with pytest.raises(TypeError):
-            context.set_tlsext_use_srtp(text_type("SRTP_AES128_CM_SHA1_80"))
+            context.set_tlsext_use_srtp(str("SRTP_AES128_CM_SHA1_80"))
 
     def test_set_tlsext_use_srtp_invalid_profile(self):
         """
@@ -1773,7 +1739,7 @@ class TestContext(object):
         assert context.set_tlsext_use_srtp(b"SRTP_AES128_CM_SHA1_80") is None
 
 
-class TestServerNameCallback(object):
+class TestServerNameCallback:
     """
     Tests for `Context.set_tlsext_servername_callback` and its
     interaction with `Connection`.
@@ -1882,7 +1848,7 @@ class TestServerNameCallback(object):
         assert args == [(server, b"foo1.example.com")]
 
 
-class TestApplicationLayerProtoNegotiation(object):
+class TestApplicationLayerProtoNegotiation:
     """
     Tests for ALPN in PyOpenSSL.
     """
@@ -1927,14 +1893,13 @@ class TestApplicationLayerProtoNegotiation(object):
         assert server.get_alpn_proto_negotiated() == b"spdy/2"
         assert client.get_alpn_proto_negotiated() == b"spdy/2"
 
-    @pytest.mark.xfail(reason='https://github.com/pyca/pyopenssl/issues/1043')
     def test_alpn_call_failure(self):
         """
         SSL_CTX_set_alpn_protos does not like to be called with an empty
         protocols list. Ensure that we produce a user-visible error.
         """
         context = Context(SSLv23_METHOD)
-        with pytest.raises(Error):
+        with pytest.raises(ValueError):
             context.set_alpn_protos([])
 
     def test_alpn_set_on_connection(self):
@@ -2066,7 +2031,7 @@ class TestApplicationLayerProtoNegotiation(object):
 
         def invalid_cb(conn, options):
             invalid_cb_args.append((conn, options))
-            return u"can't return unicode"
+            return "can't return unicode"
 
         client_context = Context(SSLv23_METHOD)
         client_context.set_alpn_protos([b"http/1.1", b"spdy/2"])
@@ -2163,7 +2128,7 @@ class TestApplicationLayerProtoNegotiation(object):
         assert select_args == [(server, [b"http/1.1", b"spdy/2"])]
 
 
-class TestSession(object):
+class TestSession:
     """
     Unit tests for :py:obj:`OpenSSL.SSL.Session`.
     """
@@ -2177,7 +2142,77 @@ class TestSession(object):
         assert isinstance(new_session, Session)
 
 
-class TestConnection(object):
+@pytest.fixture(params=["context", "connection"])
+def ctx_or_conn(request) -> Union[Context, Connection]:
+    ctx = Context(SSLv23_METHOD)
+    if request.param == "context":
+        return ctx
+    else:
+        return Connection(ctx, None)
+
+
+class TestContextConnection:
+    """
+    Unit test for methods that are exposed both by Connection and Context
+    objects.
+    """
+
+    def test_use_privatekey(self, ctx_or_conn):
+        """
+        `use_privatekey` takes an `OpenSSL.crypto.PKey` instance.
+        """
+        key = PKey()
+        key.generate_key(TYPE_RSA, 1024)
+
+        ctx_or_conn.use_privatekey(key)
+        with pytest.raises(TypeError):
+            ctx_or_conn.use_privatekey("")
+
+    def test_use_privatekey_wrong_key(self, ctx_or_conn):
+        """
+        `use_privatekey` raises `OpenSSL.SSL.Error` when passed a
+        `OpenSSL.crypto.PKey` instance which has not been initialized.
+        """
+        key = PKey()
+        key.generate_key(TYPE_RSA, 1024)
+        ctx_or_conn.use_certificate(
+            load_certificate(FILETYPE_PEM, root_cert_pem)
+        )
+        with pytest.raises(Error):
+            ctx_or_conn.use_privatekey(key)
+
+    def test_use_certificate(self, ctx_or_conn):
+        """
+        `use_certificate` sets the certificate which will be
+        used to identify connections created using the context.
+        """
+        # TODO
+        # Hard to assert anything.  But we could set a privatekey then ask
+        # OpenSSL if the cert and key agree using check_privatekey.  Then as
+        # long as check_privatekey works right we're good...
+        ctx_or_conn.use_certificate(
+            load_certificate(FILETYPE_PEM, root_cert_pem)
+        )
+
+    def test_use_certificate_wrong_args(self, ctx_or_conn):
+        """
+        `use_certificate_wrong_args` raises `TypeError` when not passed
+        exactly one `OpenSSL.crypto.X509` instance as an argument.
+        """
+        with pytest.raises(TypeError):
+            ctx_or_conn.use_certificate("hello, world")
+
+    def test_use_certificate_uninitialized(self, ctx_or_conn):
+        """
+        `use_certificate` raises `OpenSSL.SSL.Error` when passed a
+        `OpenSSL.crypto.X509` instance which has not been initialized
+        (ie, which does not actually have any certificate data).
+        """
+        with pytest.raises(Error):
+            ctx_or_conn.use_certificate(X509())
+
+
+class TestConnection:
     """
     Unit tests for `OpenSSL.SSL.Connection`.
     """
@@ -2233,7 +2268,7 @@ class TestConnection(object):
         connection.bio_write(b"xy")
         connection.bio_write(bytearray(b"za"))
         with pytest.warns(DeprecationWarning):
-            connection.bio_write(u"deprecated")
+            connection.bio_write("deprecated")
 
     def test_get_context(self):
         """
@@ -2286,10 +2321,8 @@ class TestConnection(object):
         with pytest.raises(TypeError):
             conn.set_tlsext_host_name(b"with\0null")
 
-        if not PY2:
-            # On Python 3.x, don't accidentally implicitly convert from text.
-            with pytest.raises(TypeError):
-                conn.set_tlsext_host_name(b"example.com".decode("ascii"))
+        with pytest.raises(TypeError):
+            conn.set_tlsext_host_name(b"example.com".decode("ascii"))
 
     def test_pending(self):
         """
@@ -2629,6 +2662,52 @@ class TestConnection(object):
         server = Connection(ctx, None)
         assert None is server.get_verified_chain()
 
+    def test_set_verify_overrides_context(self):
+        context = Context(SSLv23_METHOD)
+        context.set_verify(VERIFY_PEER)
+        conn = Connection(context, None)
+        conn.set_verify(VERIFY_NONE)
+
+        assert context.get_verify_mode() == VERIFY_PEER
+        assert conn.get_verify_mode() == VERIFY_NONE
+
+        with pytest.raises(TypeError):
+            conn.set_verify(None)
+
+        with pytest.raises(TypeError):
+            conn.set_verify(VERIFY_PEER, "not a callable")
+
+    def test_set_verify_callback_reference(self):
+        """
+        The callback for certificate verification should only be forgotten if
+        the context and all connections created by it do not use it anymore.
+        """
+
+        def callback(conn, cert, errnum, depth, ok):  # pragma: no cover
+            return ok
+
+        tracker = ref(callback)
+
+        context = Context(SSLv23_METHOD)
+        context.set_verify(VERIFY_PEER, callback)
+        del callback
+
+        conn = Connection(context, None)
+        context.set_verify(VERIFY_NONE)
+
+        collect()
+        collect()
+        assert tracker()
+
+        conn.set_verify(VERIFY_PEER, lambda conn, cert, errnum, depth, ok: ok)
+        collect()
+        collect()
+        callback = tracker()
+        if callback is not None:  # pragma: nocover
+            referrers = get_referrers(callback)
+            if len(referrers) > 1:
+                pytest.fail("Some references remain: %r" % (referrers,))
+
     def test_get_session_unconnected(self):
         """
         `Connection.get_session` returns `None` when used with an object
@@ -2859,8 +2938,8 @@ class TestConnection(object):
             client.get_cipher_name(),
         )
 
-        assert isinstance(server_cipher_name, text_type)
-        assert isinstance(client_cipher_name, text_type)
+        assert isinstance(server_cipher_name, str)
+        assert isinstance(client_cipher_name, str)
 
         assert server_cipher_name == client_cipher_name
 
@@ -2884,8 +2963,8 @@ class TestConnection(object):
             client.get_cipher_version(),
         )
 
-        assert isinstance(server_cipher_version, text_type)
-        assert isinstance(client_cipher_version, text_type)
+        assert isinstance(server_cipher_version, str)
+        assert isinstance(client_cipher_version, str)
 
         assert server_cipher_version == client_cipher_version
 
@@ -2923,8 +3002,8 @@ class TestConnection(object):
         client_protocol_version_name = client.get_protocol_version_name()
         server_protocol_version_name = server.get_protocol_version_name()
 
-        assert isinstance(server_protocol_version_name, text_type)
-        assert isinstance(client_protocol_version_name, text_type)
+        assert isinstance(server_protocol_version_name, str)
+        assert isinstance(client_protocol_version_name, str)
 
         assert server_protocol_version_name == client_protocol_version_name
 
@@ -2979,7 +3058,7 @@ class TestConnection(object):
         assert 2 == len(data)
 
 
-class TestConnectionGetCipherList(object):
+class TestConnectionGetCipherList:
     """
     Tests for `Connection.get_cipher_list`.
     """
@@ -3002,10 +3081,10 @@ class VeryLarge(bytes):
     """
 
     def __len__(self):
-        return 2 ** 31
+        return 2**31
 
 
-class TestConnectionSend(object):
+class TestConnectionSend:
     """
     Tests for `Connection.send`.
     """
@@ -3067,20 +3146,8 @@ class TestConnectionSend(object):
         assert count == 2
         assert client.recv(2) == b"xy"
 
-    @skip_if_py3
-    def test_short_buffer(self):
-        """
-        When passed a buffer containing a small number of bytes,
-        `Connection.send` transmits all of them and returns the number
-        of bytes sent.
-        """
-        server, client = loopback()
-        count = server.send(buffer(b"xy"))  # noqa: F821
-        assert count == 2
-        assert client.recv(2) == b"xy"
-
     @pytest.mark.skipif(
-        sys.maxsize < 2 ** 31,
+        sys.maxsize < 2**31,
         reason="sys.maxsize < 2**31 - test requires 64 bit",
     )
     def test_buf_too_large(self):
@@ -3103,7 +3170,7 @@ def _make_memoryview(size):
     return memoryview(bytearray(size))
 
 
-class TestConnectionRecvInto(object):
+class TestConnectionRecvInto:
     """
     Tests for `Connection.recv_into`.
     """
@@ -3226,7 +3293,7 @@ class TestConnectionRecvInto(object):
         self._doesnt_overfill_test(_make_memoryview)
 
 
-class TestConnectionSendall(object):
+class TestConnectionSendall:
     """
     Tests for `Connection.sendall`.
     """
@@ -3274,17 +3341,6 @@ class TestConnectionSendall(object):
         server.sendall(memoryview(b"x"))
         assert client.recv(1) == b"x"
 
-    @skip_if_py3
-    def test_short_buffers(self):
-        """
-        When passed a buffer containing a small number of bytes,
-        `Connection.sendall` transmits all of them.
-        """
-        server, client = loopback()
-        count = server.sendall(buffer(b"xy"))  # noqa: F821
-        assert count == 2
-        assert client.recv(2) == b"xy"
-
     def test_long(self):
         """
         `Connection.sendall` transmits all the bytes in the string passed to it
@@ -3319,7 +3375,7 @@ class TestConnectionSendall(object):
             assert err.value.args[0] == EPIPE
 
 
-class TestConnectionRenegotiate(object):
+class TestConnectionRenegotiate:
     """
     Tests for SSL renegotiation APIs.
     """
@@ -3363,7 +3419,7 @@ class TestConnectionRenegotiate(object):
             pass
 
 
-class TestError(object):
+class TestError:
     """
     Unit tests for `OpenSSL.SSL.Error`.
     """
@@ -3376,7 +3432,7 @@ class TestError(object):
         assert Error.__name__ == "Error"
 
 
-class TestConstants(object):
+class TestConstants:
     """
     Tests for the values of constants exposed in `OpenSSL.SSL`.
 
@@ -3493,7 +3549,7 @@ class TestConstants(object):
         assert 0x300 == SESS_CACHE_NO_INTERNAL
 
 
-class TestMemoryBIO(object):
+class TestMemoryBIO:
     """
     Tests for `OpenSSL.SSL.Connection` using a memory BIO.
     """
@@ -3666,7 +3722,7 @@ class TestMemoryBIO(object):
 
         interact_in_memory(client, server)
 
-        size = 2 ** 15
+        size = 2**15
         sent = client.send(b"x" * size)
         # Sanity check.  We're trying to test what happens when the entire
         # input can't be sent.  If the entire input was sent, this test is
@@ -3917,7 +3973,7 @@ class TestMemoryBIO(object):
         self._check_client_ca_list(set_replaces_add_ca)
 
 
-class TestInfoConstants(object):
+class TestInfoConstants:
     """
     Tests for assorted constants exposed for use in info callbacks.
     """
@@ -3960,7 +4016,7 @@ class TestInfoConstants(object):
             assert const is None or isinstance(const, int)
 
 
-class TestRequires(object):
+class TestRequires:
     """
     Tests for the decorator factory used to conditionally raise
     NotImplementedError when older OpenSSLs are used.
@@ -3999,7 +4055,7 @@ class TestRequires(object):
         assert "Error text" in str(e.value)
 
 
-class TestOCSP(object):
+class TestOCSP:
     """
     Tests for PyOpenSSL's OCSP stapling support.
     """
@@ -4243,3 +4299,188 @@ class TestOCSP(object):
 
         with pytest.raises(TypeError):
             handshake_in_memory(client, server)
+
+
+class TestDTLS:
+    # The way you would expect DTLSv1_listen to work is:
+    #
+    # - it reads packets in a loop
+    # - when it finds a valid ClientHello, it returns
+    # - now the handshake can proceed
+    #
+    # However, on older versions of OpenSSL, it did something "cleverer". The
+    # way it worked is:
+    #
+    # - it "peeks" into the BIO to see the next packet without consuming it
+    # - if *not* a valid ClientHello, then it reads the packet to consume it
+    #   and loops around
+    # - if it *is* a valid ClientHello, it *leaves the packet in the BIO*, and
+    #   returns
+    # - then the handshake finds the ClientHello in the BIO and reads it a
+    #   second time.
+    #
+    # I'm not sure exactly when this switched over. The OpenSSL v1.1.1 in
+    # Ubuntu 18.04 has the old behavior. The OpenSSL v1.1.1 in Ubuntu 20.04 has
+    # the new behavior. There doesn't seem to be any mention of this change in
+    # the OpenSSL v1.1.1 changelog, but presumably it changed in some point
+    # release or another. Presumably in 2025 or so there will be only new
+    # OpenSSLs around we can delete this whole comment and the weird
+    # workaround. If anyone is still using this library by then, which seems
+    # both depressing and inevitable.
+    #
+    # Anyway, why do we care? The reason is that the old strategy has a
+    # problem: the "peek" operation is only defined on "DGRAM BIOs", which are
+    # a special type of object that is different from the more familiar "socket
+    # BIOs" and "memory BIOs". If you *don't* have a DGRAM BIO, and you try to
+    # peek into the BIO... then it silently degrades to a full-fledged "read"
+    # operation that consumes the packet. Which is a problem if your algorithm
+    # depends on leaving the packet in the BIO to be read again later.
+    #
+    # So on old OpenSSL, we have a problem:
+    #
+    # - we can't use a DGRAM BIO, because cryptography/pyopenssl don't wrap the
+    #   relevant APIs, nor should they.
+    #
+    # - if we use a socket BIO, then the first time DTLSv1_listen sees an
+    #   invalid packet (like for example... the challenge packet that *every
+    #   DTLS handshake starts with before the real ClientHello!*), it tries to
+    #   first "peek" it, and then "read" it. But since the first "peek"
+    #   consumes the packet, the second "read" ends up hanging or consuming
+    #   some unrelated packet, which is undesirable. So you can't even get to
+    #   the handshake stage successfully.
+    #
+    # - if we use a memory BIO, then DTLSv1_listen works OK on invalid packets
+    #   -- first the "peek" consumes them, and then it tries to "read" again to
+    #   consume them, which fails immediately, and OpenSSL ignores the failure.
+    #   So it works by accident. BUT, when we get a valid ClientHello, we have
+    #   a problem: DTLSv1_listen tries to "peek" it and then leave it in the
+    #   read BIO for do_handshake to consume. But instead "peek" consumes the
+    #   packet, so it's not there where do_handshake is expecting it, and the
+    #   handshake fails.
+    #
+    # Fortunately (if that's the word), we can work around the memory BIO
+    # problem. (Which is good, because in real life probably all our users will
+    # be using memory BIOs.) All we have to do is to save the valid ClientHello
+    # before calling DTLSv1_listen, and then after it returns we push *a second
+    # copy of it* of the packet memory BIO before calling do_handshake. This
+    # fakes out OpenSSL and makes it think the "peek" operation worked
+    # correctly, and we can go on with our lives.
+    #
+    # In fact, we push the second copy of the ClientHello unconditionally. On
+    # new versions of OpenSSL, this is unnecessary, but harmless, because the
+    # DTLS state machine treats it like a network hiccup that duplicated a
+    # packet, which DTLS is robust against.
+    def test_it_works_at_all(self):
+        # arbitrary number larger than any conceivable handshake volley
+        LARGE_BUFFER = 65536
+
+        s_ctx = Context(DTLS_METHOD)
+
+        def generate_cookie(ssl):
+            return b"xyzzy"
+
+        def verify_cookie(ssl, cookie):
+            return cookie == b"xyzzy"
+
+        s_ctx.set_cookie_generate_callback(generate_cookie)
+        s_ctx.set_cookie_verify_callback(verify_cookie)
+        s_ctx.use_privatekey(load_privatekey(FILETYPE_PEM, server_key_pem))
+        s_ctx.use_certificate(load_certificate(FILETYPE_PEM, server_cert_pem))
+        s_ctx.set_options(OP_NO_QUERY_MTU)
+        s = Connection(s_ctx)
+        s.set_accept_state()
+
+        c_ctx = Context(DTLS_METHOD)
+        c_ctx.set_options(OP_NO_QUERY_MTU)
+        c = Connection(c_ctx)
+        c.set_connect_state()
+
+        # These are mandatory, because openssl can't guess the MTU for a memory
+        # bio and will produce a mysterious error if you make it try.
+        c.set_ciphertext_mtu(1500)
+        s.set_ciphertext_mtu(1500)
+
+        latest_client_hello = None
+
+        def pump_membio(label, source, sink):
+            try:
+                chunk = source.bio_read(LARGE_BUFFER)
+            except WantReadError:
+                return False
+            # I'm not sure this check is needed, but I'm not sure it's *not*
+            # needed either:
+            if not chunk:  # pragma: no cover
+                return False
+            # Gross hack: if this is a ClientHello, save it so we can find it
+            # later. See giant comment above.
+            try:
+                # if ContentType == handshake and HandshakeType ==
+                # client_hello:
+                if chunk[0] == 22 and chunk[13] == 1:
+                    nonlocal latest_client_hello
+                    latest_client_hello = chunk
+            except IndexError:  # pragma: no cover
+                pass
+            print(f"{label}: {chunk.hex()}")
+            sink.bio_write(chunk)
+            return True
+
+        def pump():
+            # Raises if there was no data to pump, to avoid infinite loops if
+            # we aren't making progress.
+            assert pump_membio("s -> c", s, c) or pump_membio("c -> s", c, s)
+
+        c_handshaking = True
+        s_listening = True
+        s_handshaking = False
+        first = True
+        while c_handshaking or s_listening or s_handshaking:
+            if not first:
+                pump()
+            first = False
+
+            if c_handshaking:
+                try:
+                    c.do_handshake()
+                except WantReadError:
+                    pass
+                else:
+                    c_handshaking = False
+
+            if s_listening:
+                try:
+                    s.DTLSv1_listen()
+                except WantReadError:
+                    pass
+                else:
+                    s_listening = False
+                    s_handshaking = True
+                    # Write the duplicate ClientHello. See giant comment above.
+                    s.bio_write(latest_client_hello)
+
+            if s_handshaking:
+                try:
+                    s.do_handshake()
+                except WantReadError:
+                    pass
+                else:
+                    s_handshaking = False
+
+        s.write(b"hello")
+        pump()
+        assert c.read(100) == b"hello"
+        c.write(b"goodbye")
+        pump()
+        assert s.read(100) == b"goodbye"
+
+        # Check that the MTU set/query functions are doing *something*
+        c.set_ciphertext_mtu(1000)
+        try:
+            assert 500 < c.get_cleartext_mtu() < 1000
+        except NotImplementedError:  # OpenSSL 1.1.0 and earlier
+            pass
+        c.set_ciphertext_mtu(500)
+        try:
+            assert 0 < c.get_cleartext_mtu() < 500
+        except NotImplementedError:  # OpenSSL 1.1.0 and earlier
+            pass

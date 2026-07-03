@@ -57,7 +57,7 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
 
     PatternVarNames_.clear();
     PatternVars_ = BuildList(pos);
-    auto pattern = ParsePattern(pos, commonSyntax.GetRule_row_pattern5(), 0, true);
+    auto pattern = ParsePattern(pos, commonSyntax.GetRule_row_pattern5(), 0, /*output=*/true);
     if (!pattern) {
         return {};
     }
@@ -246,7 +246,7 @@ TNodePtr TSqlMatchRecognizeClause::ParseAfterMatchSkipTo(TPosition pos, const TR
         return {};
     }
     return BuildTuple(pos, {BuildQuotedAtom(skipToPos, "AfterMatchSkip_" + ToString(result->To)),
-                            BuildQuotedAtom(varPos, std::move(result->Var))});
+                            BuildQuotedAtom(varPos, result->Var)});
 }
 
 TNodePtr TSqlMatchRecognizeClause::BuildPatternFactor(TPosition pos, TNodePtr primary, std::tuple<ui64, ui64, bool, bool, bool> quantifier) {
@@ -380,7 +380,7 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternFactor(TPosition pos, const TRule
                 YQL_ENSURE(false, "Unreachable");
         }
     }();
-    return BuildPatternFactor(pos, std::move(primary), std::move(quantifier));
+    return BuildPatternFactor(pos, std::move(primary), quantifier);
 }
 
 TNodePtr TSqlMatchRecognizeClause::BuildPatternTerm(TPosition pos, std::vector<TNodePtr> term) {
@@ -437,7 +437,7 @@ TMaybe<TNodePtr> TSqlMatchRecognizeClause::ParseSubset(TPosition pos, const TRul
 TNamedFunction TSqlMatchRecognizeClause::ParseOneDefinition(const TRule_row_pattern_definition& node) {
     const auto& identifier = node.GetRule_row_pattern_definition_variable_name1().GetRule_row_pattern_variable_name1().GetRule_identifier1();
     auto defineName = Id(identifier, *this);
-    TColumnRefScope scope(Ctx_, EColumnRefState::MatchRecognizeDefine, true, defineName);
+    TColumnRefScope scope(Ctx_, EColumnRefState::MatchRecognizeDefine, /*isTopLevelExpr=*/true, defineName);
     const auto& searchCondition = node.GetRule_row_pattern_definition_search_condition3().GetRule_search_condition1().GetRule_expr1();
     auto callable = Unwrap(TSqlExpression(*this).Build(searchCondition));
     // Each define must be a predicate lambda, that accepts 3 args:

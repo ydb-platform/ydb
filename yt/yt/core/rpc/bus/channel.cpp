@@ -10,6 +10,8 @@
 #include <yt/yt/core/rpc/private.h>
 
 #include <yt/yt/core/bus/bus.h>
+#include <yt/yt/core/bus/helpers.h>
+#include <yt/yt/core/bus/message_handler.h>
 
 #include <yt/yt/core/bus/tcp/config.h>
 #include <yt/yt/core/bus/tcp/client.h>
@@ -226,10 +228,12 @@ private:
                     });
 
                 const auto& attrs = bus->GetEndpointAttributes();
+                // NB: Some bus backends (e.g. UCX) do not expose verification/encryption
+                // attributes, so read them optionally to avoid throwing here.
                 YT_LOG_DEBUG("Created bus (ConnectionType: Client, VerificationMode: %v, EncryptionMode: %v, Endpoint: %v)",
-                    attrs.Get<EVerificationMode>("verification_mode"),
-                    attrs.Get<EEncryptionMode>("encryption_mode"),
-                    attrs.Get<std::string>("address"));
+                    attrs.Find<EVerificationMode>("verification_mode"),
+                    attrs.Find<EEncryptionMode>("encryption_mode"),
+                    attrs.Find<std::string>("address"));
 
                 session->Initialize(bus);
                 bucket.Sessions.push_back(session);
@@ -282,10 +286,14 @@ private:
             : Session_(std::move(session))
         { }
 
-        void HandleMessage(TSharedRefArray message, IBusPtr replyBus) noexcept override
+        void HandleMessage(
+            TSharedRefArray message,
+            IBusPtr replyBus,
+            NYT::NBus::IDirectPlacementTransferPtr transfer,
+            NYT::NBus::TPacketId packetId) noexcept override
         {
             if (auto session_ = Session_.Lock()) {
-                session_->HandleMessage(std::move(message), std::move(replyBus));
+                session_->HandleMessage(std::move(message), std::move(replyBus), std::move(transfer), packetId);
             }
         }
 
@@ -620,14 +628,33 @@ private:
             Bus_->Terminate(error);
         }
 
-        void HandleMessage(TSharedRefArray message, IBusPtr /*replyBus*/) noexcept override
+        void HandleMessage(
+            TSharedRefArray message,
+            IBusPtr replyBus,
+            NYT::NBus::IDirectPlacementTransferPtr transfer,
+            NYT::NBus::TPacketId packetId) noexcept override
         {
             YT_ASSERT_THREAD_AFFINITY_ANY();
 
             auto messageType = GetMessageType(message);
+
+            // Only response attachments may arrive via direct placement transfer; the
+            // transfer is handed to the response handler, which exposes it lazily. Any
+            // other message type carrying a transfer is unexpected; fall back to
+            // materializing it inline.
+            if (transfer && messageType != EMessageType::Response) {
+                MaterializeTransferAndReinvoke(
+                    MakeStrong(this),
+                    std::move(message),
+                    std::move(replyBus),
+                    std::move(transfer),
+                    packetId);
+                return;
+            }
+
             switch (messageType) {
                 case EMessageType::Response:
-                    OnResponseMessage(std::move(message));
+                    OnResponseMessage(std::move(message), std::move(transfer), packetId);
                     break;
 
                 case EMessageType::StreamingPayload:
@@ -869,6 +896,15 @@ private:
             busOptions.ChecksummedPartCount = options.GenerateAttachmentChecksums
                 ? NBus::TSendOptions::AllParts
                 : 2; // RPC header + request body
+            if (request->RequestAttachmentsDptParameters().Enabled) {
+                // The request's attachments are the trailing parts of the message;
+                // deliver them via direct placement transfer.
+                busOptions.DirectPlacementTransferPartCount = GetMessageAttachmentCount(requestMessage);
+            }
+
+            // Pass RequestId to Bus layer so that RPC-level and Bus-level log entries
+            // can be correlated on both sender and receiver sides.
+            busOptions.RequestId = requestId;
             Bus_->Send(requestMessage, busOptions).Subscribe(BIND(
                 &TSession::OnAcknowledgement,
                 MakeStrong(this),
@@ -893,11 +929,11 @@ private:
         }
 
 
-        void OnResponseMessage(TSharedRefArray message)
+        void OnResponseMessage(TSharedRefArray message, NYT::NBus::IDirectPlacementTransferPtr transfer, NYT::NBus::TPacketId packetId)
         {
             NProto::TResponseHeader header;
             if (!TryParseResponseHeader(message, &header)) {
-                YT_LOG_ERROR("Error parsing response header");
+                YT_LOG_ERROR("Error parsing response header (PacketId: %v)", packetId);
                 return;
             }
 
@@ -911,8 +947,9 @@ private:
 
                 if (bucket->Terminated) {
                     YT_LOG_WARNING("Response received via a terminated channel "
-                        "(RequestId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
+                        "(RequestId: %v, PacketId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
                         requestId,
+                        packetId,
                         header.service(),
                         header.method(),
                         GetMessageBodySize(message),
@@ -925,8 +962,9 @@ private:
                 if (it == bucket->ActiveRequestMap.end()) {
                     // This may happen when the other party responds to an already timed-out request.
                     YT_LOG_DEBUG("Response for an incorrect or obsolete request received "
-                        "(RequestId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
+                        "(RequestId: %v, PacketId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
                         requestId,
+                        packetId,
                         header.service(),
                         header.method(),
                         GetMessageBodySize(message),
@@ -966,7 +1004,8 @@ private:
                         requestId,
                         requestControl,
                         responseHandler,
-                        std::move(message));
+                        std::move(message),
+                        std::move(transfer));
                 } else {
                     requestControl->ProfileError(error);
                     if (error.GetCode() == EErrorCode::PoisonPill) {
@@ -1157,7 +1196,8 @@ private:
             TRequestId requestId,
             const TClientRequestControlPtr& requestControl,
             const IClientResponseHandlerPtr& responseHandler,
-            TSharedRefArray message) noexcept
+            TSharedRefArray message,
+            NYT::NBus::IDirectPlacementTransferPtr transfer) noexcept
         {
             YT_LOG_DEBUG("Response received (RequestId: %v, Method: %v.%v, TotalTime: %v, AttachmentsSize: %v)",
                 requestId,
@@ -1166,7 +1206,10 @@ private:
                 requestControl->GetTotalTime(),
                 GetTotalMessageAttachmentSize(message));
 
-            responseHandler->HandleResponse(std::move(message), Bus_->GetEndpointAddress());
+            responseHandler->HandleResponse(
+                std::move(message),
+                Bus_->GetEndpointAddress(),
+                std::move(transfer));
         }
     };
 

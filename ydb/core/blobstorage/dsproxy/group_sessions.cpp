@@ -147,7 +147,7 @@ void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EV
             q.CostModel = nullptr;
         }
     }
-    q.IsConnected = connected;
+    q.IsConnected.store(connected, std::memory_order_release);
 
     if (updated) {
         auto iterate = [](auto& currentCostModel, const auto& next) {

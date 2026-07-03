@@ -88,7 +88,7 @@ public:
         YQL_CLOG(INFO, Core) << "NormalizeDependsOn";
         output = ctx.ReplaceNodes(std::move(input), replaces);
         ctx.Step.Done(TExprStep::NormalizeDependsOn);
-        return TStatus(IGraphTransformer::TStatus::Repeat, true);
+        return TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
     }
 
     void Rewind() override {

@@ -39,33 +39,33 @@ REGISTRY_ENDPOINT = os.environ.get("YA_REGISTRY_ENDPOINT", "https://devtools-reg
 PLATFORM_MAP = {
     "data": {
         "win32": {
-            "md5": "25162a68a980d03b47d7f410c3239d1f",
+            "md5": "758851db928ee7ce597e3927bfbb4f4e",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/12520644915"
+                f"{REGISTRY_ENDPOINT}/12646553828"
             ]
         },
         "darwin": {
-            "md5": "0cf77c4c930f416f3a62013dd40d6673",
+            "md5": "6bf14a3e13741e03447e246b4a249a13",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/12520643371"
+                f"{REGISTRY_ENDPOINT}/12646551819"
             ]
         },
         "darwin-arm64": {
-            "md5": "172832414ff77d4e838ff2eeaadb3f83",
+            "md5": "ae2933ce75f8aece0c89e5d36b433fbd",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/12520642036"
+                f"{REGISTRY_ENDPOINT}/12646549398"
             ]
         },
         "linux-aarch64": {
-            "md5": "81ffc4ad29b52771638cf9247dc3c200",
+            "md5": "189780ec8c3b3c2585f76acc3dba4a87",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/12520640353"
+                f"{REGISTRY_ENDPOINT}/12646546475"
             ]
         },
         "linux": {
-            "md5": "b52ef0ceb71b7cccd9085c1f95fe0090",
+            "md5": "97681f6d1dc884ccaf93e6cb48d9e072",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/12520647091"
+                f"{REGISTRY_ENDPOINT}/12646556665"
             ]
         }
     }
@@ -284,8 +284,8 @@ def _get_dir(urls, md5, ya_name):
             os.rename(tmp_dir, dest_dir)
         except OSError as e:
             import errno
-
-            if e.errno != errno.ENOTEMPTY:
+            # EEXIST - windows, ENOTEMPTY - linux, EEXIST is also permitted by POSIX
+            if e.errno not in (errno.ENOTEMPTY, errno.EEXIST):
                 raise
 
         return dest_dir

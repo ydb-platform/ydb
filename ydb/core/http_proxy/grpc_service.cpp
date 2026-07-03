@@ -13,6 +13,8 @@
 
 #include <util/generic/guid.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_PROXY
+
 namespace NKikimr::NHttpProxy {
 
 using namespace NGRpcService;
@@ -34,7 +36,9 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_SP_INFO_S(ctx, NKikimrServices::GRPC_PROXY, "got new request from " << ReqCtx->GetPeer());
+        YDB_LOG_INFO_CTX(ctx, "Got new request",
+            {"logPrefix", LogPrefix()},
+            {"peer", ReqCtx->GetPeer()});
         SendYdbDriverRequest(ctx);
         Become(&TGRpcRequestActor::StateWork);
     }
@@ -61,7 +65,8 @@ private:
             database = dynamic_cast<const Ydb::Discovery::ListEndpointsRequest*>(ReqCtx->GetRequest())->database();
         }
         request->DatabasePath = database;
-        LOG_SP_DEBUG_S(ctx, NKikimrServices::GRPC_PROXY, "Database discovery request sent");
+        YDB_LOG_DEBUG_CTX(ctx, "Database discovery request sent",
+            {"logPrefix", LogPrefix()});
 
         ctx.Send(MakeTenantDiscoveryID(), std::move(request));
     }
@@ -70,7 +75,9 @@ private:
 
         if (ev->Get()->DatabaseInfo) {
             auto& db = ev->Get()->DatabaseInfo;
-            LOG_SP_DEBUG_S(ctx, NKikimrServices::GRPC_PROXY, "Database discovery result " << db->Path);
+            YDB_LOG_DEBUG_CTX(ctx, "Database discovery result",
+                {"logPrefix", LogPrefix()},
+                {"dbPath", db->Path});
             SendGrpcRequest(ctx, db->Endpoint, db->Path);
         } else {
             return ReplyWithError(ctx, ev->Get()->Status, ev->Get()->Message);
@@ -79,7 +86,8 @@ private:
 
     void Handle(TEvServerlessProxy::TEvListEndpointsResponse::TPtr ev, const TActorContext& ctx) {
         if (ev->Get()->Record) {
-            LOG_SP_INFO_S(ctx, NKikimrServices::GRPC_PROXY, "Replying ok");
+            YDB_LOG_INFO_CTX(ctx, "Replying ok",
+                {"logPrefix", LogPrefix()});
 
             Ydb::Discovery::ListEndpointsResponse * resp = CreateResponseMessage();
             resp->CopyFrom(*(ev->Get()->Record.get()));
@@ -88,19 +96,26 @@ private:
             TBase::Die(ctx);
             return;
         } else if (ev->Get()->Status) {
-            LOG_SP_INFO_S(ctx, NKikimrServices::GRPC_PROXY, "Replying " << ev->Get()->Status->GRpcStatusCode << " error " << ev->Get()->Status->Msg);
+            YDB_LOG_INFO_CTX(ctx, "Replying error",
+                {"logPrefix", LogPrefix()},
+                {"grpcStatusCode", ev->Get()->Status->GRpcStatusCode},
+                {"statusMsg", ev->Get()->Status->Msg});
             if (ev->Get()->Status->GRpcStatusCode == grpc::StatusCode::NOT_FOUND)
                 return ReplyWithError(ctx, NYdb::EStatus::NOT_FOUND, TString{ev->Get()->Status->Msg});
             return ReplyWithError(ctx, NYdb::EStatus::INTERNAL_ERROR, TString{ev->Get()->Status->Msg});
         } else {
-            LOG_SP_INFO_S(ctx, NKikimrServices::GRPC_PROXY, "Replying INTERNAL ERROR");
+            YDB_LOG_INFO_CTX(ctx, "Replying INTERNAL ERROR",
+                {"logPrefix", LogPrefix()});
             return ReplyWithError(ctx, NYdb::EStatus::INTERNAL_ERROR, "Error happened while discovering database endpoint");
         }
     }
 
 
     void SendGrpcRequest(const TActorContext& ctx, const TString& endpoint, const TString& database) {
-        LOG_SP_DEBUG_S(ctx, NKikimrServices::GRPC_PROXY, "Send grpc request to " << database << " endpoint " << endpoint);
+        YDB_LOG_DEBUG_CTX(ctx, "Send grpc request to endpoint",
+            {"logPrefix", LogPrefix()},
+            {"database", database},
+            {"endpoint", endpoint});
         ctx.Send(MakeDiscoveryProxyID(), new TEvServerlessProxy::TEvListEndpointsRequest(endpoint, database));
     }
 

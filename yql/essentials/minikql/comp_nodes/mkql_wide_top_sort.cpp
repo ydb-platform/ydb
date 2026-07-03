@@ -95,9 +95,9 @@ struct TSpilledData {
 
     TSpilledData() = default;
 
-    void Open(ISpiller::TPtr spiller, const TMultiType* tupleMultiType, size_t packSize) {
+    void Open(ISpiller::TPtr spiller, const TMultiType* tupleMultiType, size_t packSize, NYql::EDatumValidationMode datumValidationMode) {
         MKQL_ENSURE(IsEmpty(), "SpilledData must be empty to Open");
-        Spiller = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, tupleMultiType, packSize);
+        Spiller = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, tupleMultiType, packSize, datumValidationMode);
         RowCount = 0;
         AsyncWriteOperation = std::nullopt;
         AsyncReadOperation = std::nullopt;
@@ -959,7 +959,7 @@ private:
                 break;
             case EOperatingMode::Spilling: {
                 ActiveSpill = std::make_shared<TSpilledData>();
-                ActiveSpill->Open(Spiller, TupleMultiType, PackSize);
+                ActiveSpill->Open(Spiller, TupleMultiType, PackSize, Ctx.RuntimeSettings.DatumValidation.Get());
                 break;
             }
             case EOperatingMode::MergeSpilled: {
@@ -1044,7 +1044,7 @@ private:
 
         Merge.emplace();
         Merge->Target = std::make_shared<TSpilledData>();
-        Merge->Target->Open(Spiller, TupleMultiType, PackSize);
+        Merge->Target->Open(Spiller, TupleMultiType, PackSize, Ctx.RuntimeSettings.DatumValidation.Get());
 
         Merge->Iterators.reserve(2);
         Merge->Iterators.emplace_back(LessFunc, SealedStates[src1], Indexes.size(), &Ctx);

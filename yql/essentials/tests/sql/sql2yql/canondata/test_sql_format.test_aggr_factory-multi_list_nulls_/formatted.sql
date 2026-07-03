@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 $data = AsList(
     AsStruct(AsList(1.0, 2.0) AS x),
     AsStruct(AsList(3.0, 4.0) AS x),

@@ -211,9 +211,32 @@ def new_table(full_name, file_path=None, yqlrun_file=None, content=None, res_dir
             content = b''
             exists = False
         else:
+            def _read_splitted(path):
+                """Return concatenated part-file bytes if path has a splitted attr, else None."""
+                attr_path = path + '.attr'
+                if not os.path.exists(attr_path):
+                    return None
+                with open(attr_path, 'rb') as attr_f:
+                    attr_bytes = attr_f.read()
+                if not attr_bytes:
+                    return None
+                num_parts = cyson.loads(attr_bytes).get(b'splitted')
+                if num_parts is None:
+                    return None
+                parts = []
+                for i in range(int(num_parts)):
+                    with open(path + '.part.{}'.format(i), 'rb') as f:
+                        parts.append(f.read())
+                return b''.join(parts)
+
             if os.path.exists(src_file):
                 with open(src_file, 'rb') as f:
                     content = f.read()
+                # Main file may be empty when data is in .part.N files (FMR splitted output).
+                if not content:
+                    splitted = _read_splitted(src_file)
+                    if splitted is not None:
+                        content = splitted
             elif src_file_alternative and os.path.exists(src_file_alternative):
                 with open(src_file_alternative, 'rb') as f:
                     content = f.read()

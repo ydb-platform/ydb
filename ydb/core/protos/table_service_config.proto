@@ -307,7 +307,7 @@ message TTableServiceConfig {
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 3, (InvalidateCompileCache) = true];
     reserved 59; //optional bool OldLookupJoinBehaviour = 59 [default = false];
 
-    optional bool EnableOltpSink = 60 [default = true, (InvalidateCompileCache) = true];
+    reserved 60; // EnableOltpSink
 
     enum EBlockChannelsMode {
         BLOCK_CHANNELS_SCALAR = 0;
@@ -488,6 +488,12 @@ message TTableServiceConfig {
 
     optional bool EnableDqSourceStreamLookupJoin = 121 [default = false, (InvalidateCompileCache) = true];
 
+    // Emit the fixed (v1) stream lookup join RowSeqNo cookie format. Keep disabled
+    // until every node in the cluster is upgraded, then enable to fix RowSeqNo
+    // collisions across distributed tasks (taskId >= 16). InvalidateCompileCache
+    // ensures cached query plans are recompiled with the new format when toggled.
+    optional bool EnableStreamLookupJoinCookieV2 = 138 [default = false, (InvalidateCompileCache) = true];
+
     message TCompileCacheWarmupConfig {
         optional uint32 SoftDeadlineSeconds = 1 [default = 10];        // Soft deadline: stops new compilations, waits for in-flight ones to finish
         optional uint32 MaxConcurrentCompilations = 2 [default = 5];
@@ -539,4 +545,7 @@ message TTableServiceConfig {
     optional bool EnableHybridSearch = 135 [default = true, (InvalidateCompileCache) = true];
 
     optional bool EnableStrictSerializableIsolation = 136 [default = false, (InvalidateCompileCache) = true];
+
+    // Remove KqpSequencer from query plan for tables with DEFAULT columns during write operations.
+    optional bool EnableCompileTimeDefaults = 137 [default = false, (InvalidateCompileCache) = true];
 };

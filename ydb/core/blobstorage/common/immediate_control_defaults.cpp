@@ -17,4 +17,10 @@ TControlWrapper LongRequestThresholdDefaultControl =
 TControlWrapper MaxPutTimeoutDefaultControl =
         TControlWrapper(DefaultMaxPutTimeout.Seconds(), 1, 1'000'000);
 
+TControlWrapper EnableStorageRetroTraceGenerationDefaultControl =
+        TControlWrapper(DefaultEnableStorageRetroTraceGeneration, false, true);
+
+TControlWrapper EnableStorageRetroTraceCollectionSlowRequestsDefaultControl =
+        TControlWrapper(DefaultEnableStorageRetroTraceCollectionSlowRequests, false, true);
+
 } // namespace NKikimr

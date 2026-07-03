@@ -15,6 +15,8 @@
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/fluent.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 namespace NYT::NYPath {
 
 using namespace NYTree;
@@ -390,8 +392,8 @@ void ParseRowRanges(NYson::TTokenizer& tokenizer, IAttributeDictionary* attribut
 
 void AppendAttributes(TStringBuilderBase* builder, const IAttributeDictionary& attributes, EYsonFormat ysonFormat, bool sortAttributes)
 {
-    TString attrString;
-    TStringOutput output(attrString);
+    std::string attrString;
+    TStdStringOutput output(attrString);
     TYsonWriter writer(&output, ysonFormat, EYsonType::MapFragment);
 
     if (sortAttributes) {

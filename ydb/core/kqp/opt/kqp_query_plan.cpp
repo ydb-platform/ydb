@@ -266,11 +266,7 @@ public:
 
         for (const auto& stage: Tx.Stages()) {
             TDqStageBase stageBase = stage.Cast<TDqStageBase>();
-            if (stageBase.Program().Body().Maybe<TKqpEffects>()) {
-                auto& planNode = AddPlanNode(phaseNode);
-                planNode.TypeName = "Effect";
-                Visit(TExprBase(stage), planNode);
-            } else if (stageBase.Outputs()) { // Sink
+            if (stageBase.Outputs()) { // Sink
                 auto& planNode = AddPlanNode(phaseNode);
                 Visit(TExprBase(stage), planNode);
             }
@@ -1425,10 +1421,6 @@ private:
             operatorId = Visit(maybeIter.Cast(), planNode);
         } else if (auto maybePartitionByKey = TMaybeNode<TCoPartitionByKey>(node)) {
             operatorId = Visit(maybePartitionByKey.Cast(), planNode);
-        } else if (auto maybeUpsert = TMaybeNode<TKqpUpsertRows>(node)) {
-            operatorId = Visit(maybeUpsert.Cast(), planNode);
-        } else if (auto maybeDelete = TMaybeNode<TKqpDeleteRows>(node)) {
-            operatorId = Visit(maybeDelete.Cast(), planNode);
         } else if (auto maybeArg = TMaybeNode<TCoArgument>(node)) {
             return {CurrentArgContext.AddArg(node.Get())};
         } else if (auto maybeCrossJoin = TMaybeNode<TDqPhyCrossJoin>(node)) {
@@ -1442,12 +1434,7 @@ private:
         }
 
         TVector<std::variant<ui32, TArgContext>> inputIds;
-        if (auto maybeEffects = TMaybeNode<TKqpEffects>(node)) {
-            for (const auto& effect : maybeEffects.Cast().Args()) {
-                auto ids = Visit(effect, planNode);
-                inputIds.insert(inputIds.end(), ids.begin(), ids.end());
-            }
-        } else {
+        {
             if (TMaybeNode<TCoFlatMapBase>(node)) {
                 auto flatMap = TExprBase(node).Cast<TCoFlatMapBase>();
                 auto flatMapInputs = Visit(flatMap, planNode);
@@ -1843,43 +1830,6 @@ private:
         }
 
         return AddOperator(planNode, "Aggregate", std::move(op));
-    }
-
-    std::variant<ui32, TArgContext> Visit(const TKqpUpsertRows& upsert, TQueryPlanNode& planNode) {
-        const auto tablePath = upsert.Table().Path().StringValue();
-
-        TOperator op;
-        op.Properties["Name"] = "Upsert";
-        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
-        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
-        op.Properties["Path"] = tablePath;
-
-        TTableWrite writeInfo;
-        writeInfo.Type = EPlanTableWriteType::MultiUpsert;
-        for (const auto& column : upsert.Columns()) {
-            writeInfo.Columns.push_back(TString(column.Value()));
-        }
-
-        SerializerCtx.Tables[tablePath].Writes.push_back(writeInfo);
-        planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
-        return AddOperator(planNode, "Upsert", std::move(op));
-    }
-
-    std::variant<ui32, TArgContext> Visit(const TKqpDeleteRows& del, TQueryPlanNode& planNode) {
-        const auto tablePath = del.Table().Path().StringValue();
-
-        TOperator op;
-        op.Properties["Name"] = "Delete";
-        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
-        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
-        op.Properties["Path"] = tablePath;
-
-        TTableWrite writeInfo;
-        writeInfo.Type = EPlanTableWriteType::MultiErase;
-
-        SerializerCtx.Tables[tablePath].Writes.push_back(writeInfo);
-        planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
-        return AddOperator(planNode, "Delete", std::move(op));
     }
 
     TString MakeJoinConditionString(const TCoAtomList& leftKeys, const TCoAtomList& rightKeys) {

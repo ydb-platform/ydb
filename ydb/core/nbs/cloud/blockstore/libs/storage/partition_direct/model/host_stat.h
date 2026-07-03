@@ -34,7 +34,8 @@ public:
     {
         TDuration FromFirstError;
         TDuration FromLastError;
-        size_t ErrorCount = 0;
+        size_t ConsecutiveErrorCount = 0;
+        size_t ConsecutiveSuccessCount = 0;
     };
 
     // Called right before a request is sent to the host for the given
@@ -47,10 +48,15 @@ public:
     // OnRequest.
     void OnSuccess(TInstant now, TDuration executionTime, EOperation operation);
     void OnError(TInstant now, EOperation operation);
+    void OnCancelled(TInstant now, EOperation operation);
 
     // Returns how much time has passed since the first error was received and
     // the number and total size of errors.
     [[nodiscard]] TErrorsInfo GetErrorsInfo(TInstant now) const;
+
+    // Number of consecutive successful completions since the last error
+    // (reset to 0 on the first error after a success streak).
+    [[nodiscard]] size_t GetConsecutiveSuccessCount() const;
 
     // Number of currently inflight requests of a given operation type for
     // this host (i.e. OnRequest calls without a matching OnSuccess/OnError).
@@ -65,7 +71,8 @@ private:
     TInstant LastSuccessAt;
     TInstant FirstErrorAt;
     TInstant LastErrorAt;
-    size_t ErrorCount = 0;
+    size_t ConsecutiveErrorCount = 0;
+    size_t ConsecutiveSuccessCount = 0;
 
     TVector<size_t> InflightByOperation = TVector<size_t>(OperationCount, 0);
 };

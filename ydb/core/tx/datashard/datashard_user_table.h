@@ -465,7 +465,7 @@ struct TUserTable : public TThrRefBase {
     TIncrementalBackupConfig IncrementalBackupConfig;
     bool IsBackup = false;
     ui32 UniqueIndexKeySize = 0;
-    NKikimrSchemeOp::ESpecialTableType TableType = NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeNone;
+    NKikimrSchemeOp::ESpecialTableType SpecialTableType = NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeNone;
 
     TMap<TPathId, TTableIndex> Indexes;
 

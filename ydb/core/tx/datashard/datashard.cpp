@@ -2388,6 +2388,11 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
                 return true;
             }
 
+            if (action == "send-read-set") {
+                HandleMonSendReadSetToSelf(ev, ctx);
+                return true;
+            }
+
             ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPNOTFOUND));
             return true;
         }

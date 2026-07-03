@@ -133,7 +133,7 @@ REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(NYT::NYson::NProt
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToHex(const TString& data)
+TString ToHex(const std::string& data)
 {
     TStringBuilder builder;
     for (char ch : data) {
@@ -895,7 +895,7 @@ TEST(TYsonToProtobufTest, ErrorProto)
 
     auto attribute = message.attributes().attributes()[0];
     EXPECT_EQ(attribute.key(), "host");
-    EXPECT_EQ(ConvertTo<TString>(TYsonString(attribute.value())), "localhost");
+    EXPECT_EQ(ConvertTo<std::string>(TYsonString(attribute.value())), "localhost");
 }
 
 TEST(TYsonToProtobufTest, SkipUnknownFields)
@@ -1036,7 +1036,7 @@ TEST(TYsonToProtobufTest, ValidUtf8StringCheck)
             SetProtobufInteropConfig(config);
             auto effectiveOption = option.value_or(configOption);
 
-            TString invalidUtf8 = "\xc3\x28";
+            std::string invalidUtf8 = "\xc3\x28";
             auto checkWrite = [&] {
                 TEST_PROLOGUE_WITH_OPTIONS(TMessage, TProtobufWriterOptions{.Utf8Check = option})
                     .BeginMap()

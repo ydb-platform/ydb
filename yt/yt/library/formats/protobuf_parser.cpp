@@ -15,6 +15,7 @@
 #include <yt/yt/core/misc/finally.h>
 
 #include <library/cpp/yt/coding/varint.h>
+#include <library/cpp/yt/string/stream.h>
 
 #include <util/generic/buffer.h>
 #include <util/generic/scope.h>
@@ -653,7 +654,7 @@ private:
 
     std::string GetPathString(int offset = 0)
     {
-        TStringStream stream;
+        TStdStringStream stream;
         stream << "<root>";
         YT_VERIFY(std::ssize(Path_) >= offset);
         for (int i = 0; i < std::ssize(Path_) - offset; ++i) {

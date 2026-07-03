@@ -25,6 +25,14 @@ inline bool DeserializeUserAttributes(Ydb::Ymq::V1::Message& message, std::unord
                     value.set_binary_value(std::move(attribute.binaryvalue()));
                 } else if (attribute.has_stringvalue()) {
                     value.set_string_value(std::move(attribute.stringvalue()));
+                } else if (attribute.stringlistvalues_size()) {
+                    for (const auto& item : attribute.stringlistvalues()) {
+                        value.add_string_list_values(item);
+                    }
+                } else if (attribute.binarylistvalues_size()) {
+                    for (const auto& item : attribute.binarylistvalues()) {
+                        value.add_binary_list_values(item);
+                    }
                 } else {
                     continue;
                 }
@@ -55,6 +63,14 @@ inline std::pair<std::unordered_multimap<TString, TString>, TString> SerializeUs
                 dstAttribute->SetStringValue(value);
             } else if (const auto& value = attrValue.binary_value()) {
                 dstAttribute->SetBinaryValue(value);
+            } else if (attrValue.string_list_values_size()) {
+                for (const auto& item : attrValue.string_list_values()) {
+                    dstAttribute->add_stringlistvalues(item);
+                }
+            } else if (attrValue.binary_list_values_size()) {
+                for (const auto& item : attrValue.binary_list_values()) {
+                    dstAttribute->add_binarylistvalues(item);
+                }
             }
             dstAttribute->SetDataType(attrValue.data_type());
         }

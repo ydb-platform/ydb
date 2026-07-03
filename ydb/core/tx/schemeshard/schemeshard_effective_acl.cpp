@@ -2,8 +2,24 @@
 
 #include <ydb/library/aclib/protos/identity/user_token.pb.h>
 
+#include <algorithm>
+
 namespace NKikimr {
 namespace NSchemeShard {
+
+TString TEffectiveACL::StripConnectRightACE(const TString& acl) {
+    NACLibProto::TSecurityObject obj;
+    Y_ABORT_UNLESS(obj.MutableACL()->ParseFromString(acl));
+
+    auto* aces = obj.MutableACL()->MutableACE();
+    aces->erase(
+        std::remove_if(aces->begin(), aces->end(), [](const NACLibProto::TACE& ace) {
+            return ace.GetAccessRight() == NACLib::EAccessRights::ConnectDatabase;
+        }),
+        aces->end());
+
+    return obj.GetACL().SerializeAsString();
+}
 
 void TEffectiveACL::Init(const TString &effectiveACL)
 {
@@ -20,12 +36,12 @@ void TEffectiveACL::Init(const TString &effectiveACL)
     ForSelf = effectiveACL;
 }
 
-void TEffectiveACL::Update(const TEffectiveACL &parent, const TString &selfACL, bool isContainer)
+void TEffectiveACL::Update(const TEffectiveACL &parent, const TString &selfACL, bool isContainer, bool isTenantRoot)
 {
     Y_DEBUG_ABORT_UNLESS(parent);
 
     if (!selfACL) {
-        InheritFrom(parent, isContainer);
+        InheritFrom(parent, isContainer, isTenantRoot);
         return;
     }
 
@@ -42,15 +58,31 @@ void TEffectiveACL::Update(const TEffectiveACL &parent, const TString &selfACL, 
     Inited = true;
     Split(effectiveObj);
     ForSelf = effectiveObj.GetACL().SerializeAsString();
+
+    if (isTenantRoot) {
+        // At the tenant boundary strip ConnectDatabase ACEs from children ACLs
+        // so that connect right does not leak into child objects of the tenant.
+        // ForSelf is kept as is: connect must be present on the tenant root.
+        ForContainers = StripConnectRightACE(ForContainers);
+        ForObjects = StripConnectRightACE(ForObjects);
+    }
 }
 
-void TEffectiveACL::InheritFrom(const TEffectiveACL &parent, bool isContainer) {
+void TEffectiveACL::InheritFrom(const TEffectiveACL &parent, bool isContainer, bool isTenantRoot) {
     Inited = parent.Inited;
 
     ForContainers = parent.ForContainers;
     ForObjects = parent.ForObjects;
 
-    ForSelf = isContainer ? ForContainers : ForObjects;
+    ForSelf = parent.GetForChildren(isContainer);
+
+    if (isTenantRoot) {
+        // At the tenant boundary strip ConnectDatabase ACEs from children ACLs
+        // so that connect right does not leak into child objects of the tenant.
+        // ForSelf is kept as is: connect must be present on the tenant root.
+        ForContainers = StripConnectRightACE(ForContainers);
+        ForObjects = StripConnectRightACE(ForObjects);
+    }
 }
 
 void TEffectiveACL::Split(const NACLibProto::TSecurityObject &obj) {

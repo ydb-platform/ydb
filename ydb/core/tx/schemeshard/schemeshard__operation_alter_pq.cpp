@@ -3,6 +3,7 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <library/cpp/containers/top_keeper/top_keeper.h>
 
 #include <ydb/core/base/subdomain.h>
@@ -45,6 +46,63 @@ std::expected<void, std::string> ValidateKeyRangeSequence(const auto& partitions
         });
     }
     return NKikimr::NPQ::ValidateKeyRangeSequence(bounds);
+}
+
+size_t CountTopicTotalPartitions(const TTopicInfo::TPtr& topic) {
+    return topic->Partitions.size();
+}
+
+size_t CountTopicActivePartitions(const TTopicInfo::TPtr& topic) {
+    size_t count = 0;
+    for (const auto& [_, partition] : topic->Partitions) {
+        if (partition->Status == NKikimrPQ::ETopicPartitionStatus::Active) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+size_t ComputeAlterActivePartitionCount(
+        const TTopicInfo::TPtr& topic,
+        const TTopicInfo::TPtr& alterData)
+{
+    size_t count = CountTopicActivePartitions(topic);
+    const auto& partitionsToAdd = alterData->PartitionsToAdd;
+    const size_t partitionsToAddCount = partitionsToAdd.size();
+
+    size_t parentCount = 0;
+    absl::flat_hash_set<ui32> addedPartitionIds;
+    addedPartitionIds.reserve(partitionsToAddCount * 2);
+    for (const auto& partition : partitionsToAdd) {
+        parentCount += partition.ParentPartitionIds.size();
+        addedPartitionIds.insert(partition.PartitionId);
+    }
+
+    absl::flat_hash_set<ui32> deactivatedParents;
+    deactivatedParents.reserve(parentCount * 2);
+    for (const auto& partition : partitionsToAdd) {
+        ++count;
+        for (const ui32 parentId : partition.ParentPartitionIds) {
+            if (deactivatedParents.emplace(parentId).second) {
+                const auto parentIt = topic->Partitions.find(parentId);
+                if (parentIt != topic->Partitions.end()
+                    && parentIt->second->Status == NKikimrPQ::ETopicPartitionStatus::Active) {
+                    --count;
+                } else if (addedPartitionIds.contains(parentId)) {
+                    --count;
+                }
+            }
+        }
+    }
+    return count;
+}
+
+void ComputeAlterPartitionCounts(
+        const TTopicInfo::TPtr& topic,
+        TTopicInfo::TPtr alterData)
+{
+    alterData->TotalPartitionCount = CountTopicTotalPartitions(topic) + alterData->PartitionsToAdd.size();
+    alterData->ActivePartitionCount = ComputeAlterActivePartitionCount(topic, alterData);
 }
 
 class TAlterPQ: public TSubOperation {
@@ -505,7 +563,9 @@ public:
                     << ", first new shardIdx " << startShardIdx
                     << " hasBalancer " << hasBalancer);
 
-        ReassignIds(pqGroup);
+        if (!pqGroup->AlterData->PartitionsToAdd.empty()) {
+            ReassignIds(pqGroup);
+        }
         return shardsToCreate > 0;
     }
 
@@ -638,8 +698,6 @@ public:
             return result;
         }
 
-        alterData->ActivePartitionCount = topic->ActivePartitionCount;
-
         bool splitMergeEnabled = NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
                 && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
 
@@ -735,14 +793,12 @@ public:
                         }
                         alterData->PartitionsToAdd.emplace_back(partitionIdIndex.value(), partitionIdIndex.value() + 1, range);
                         alterData->TotalGroupCount += 1;
-                        ++alterData->ActivePartitionCount;
                     }
                 }
             }
 
             for (const auto& split : alter.GetSplit()) {
                 alterData->TotalGroupCount += 2;
-                ++alterData->ActivePartitionCount;
 
                 const auto splittedPartitionId = split.GetPartition();
                 if (!topic->Partitions.contains(splittedPartitionId)) {
@@ -837,7 +893,6 @@ public:
             }
             for (const auto& merge : alter.GetMerge()) {
                 alterData->TotalGroupCount += 1;
-                --alterData->ActivePartitionCount;
 
                 const auto partitionId = merge.GetPartition();
                 if (!topic->Partitions.contains(partitionId)) {
@@ -916,10 +971,11 @@ public:
             }
 
             if (alter.HasPQTabletConfig() && alter.GetPQTabletConfig().HasPartitionStrategy()) {
+                size_t activePartitionCount = CountTopicActivePartitions(topic);
                 auto requestedMinPartitionCount = alter.GetPQTabletConfig().GetPartitionStrategy().GetMinPartitionCount();
-                if (requestedMinPartitionCount > alterData->ActivePartitionCount) {
+                if (requestedMinPartitionCount > activePartitionCount) {
                     // select exisisting active partitions for split
-                    auto numPartitionsToSplit = requestedMinPartitionCount - alterData->ActivePartitionCount;
+                    auto numPartitionsToSplit = requestedMinPartitionCount - activePartitionCount;
                     struct TPartitionsComparer {
                         bool operator()(const TTopicTabletInfo::TTopicPartitionInfo* lhs, const TTopicTabletInfo::TTopicPartitionInfo* rhs) const {
                             return lhs->ParentPartitionIds.size() < rhs->ParentPartitionIds.size(); // for now simply sort by number of parents
@@ -963,7 +1019,7 @@ public:
                             container.emplace_back(childPartitionId.value(), childPartitionId.value() + 1, range, parents);
                         }
                         alterData->TotalGroupCount += 2;
-                        ++alterData->ActivePartitionCount;
+                        ++activePartitionCount;
 
                         return {};
                     };
@@ -997,7 +1053,7 @@ public:
 
                     // repeat splitting
                     size_t startIdx = 0;
-                    while (requestedMinPartitionCount > alterData->ActivePartitionCount) {
+                    while (requestedMinPartitionCount > activePartitionCount) {
                         TVector<NKikimr::NSchemeShard::TTopicInfo::TPartitionToAdd> partitionsToAdd;
                         auto endIdx = alterData->PartitionsToAdd.size();
                         for (size_t i = startIdx; i < endIdx; ++i) {
@@ -1014,7 +1070,7 @@ public:
                                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                                 return result;
                             }
-                            if (requestedMinPartitionCount <= alterData->ActivePartitionCount) {
+                            if (requestedMinPartitionCount <= activePartitionCount) {
                                 break;
                             }
                         }
@@ -1048,9 +1104,14 @@ public:
             }
         }
 
-        alterData->TotalPartitionCount = topic->TotalPartitionCount + alterData->PartitionsToAdd.size();
-        if (!splitMergeEnabled) {
-            alterData->ActivePartitionCount = alterData->TotalPartitionCount;
+        ComputeAlterPartitionCounts(topic, alterData);
+
+        if (!(0 < alterData->ActivePartitionCount && alterData->ActivePartitionCount <= alterData->TotalPartitionCount)) {
+            errStr = TStringBuilder()
+                     << "Invalid active partition count: " << alterData->ActivePartitionCount
+                     << " vs total: " << alterData->TotalPartitionCount;
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+            return result;
         }
 
         alterData->NextPartitionId = topic->NextPartitionId;
@@ -1090,10 +1151,11 @@ public:
         }
 
         const auto& stats = topic->Stats;
+        const auto topicActivePartitionCount = CountTopicActivePartitions(topic);
         const PQGroupReserve reserve(newTabletConfig, alterData->ActivePartitionCount);
         const PQGroupReserve reserveForCheckLimit(newTabletConfig, alterData->ActivePartitionCount + involvedPartitions.size());
-        const PQGroupReserve oldReserve(tabletConfig, topic->ActivePartitionCount);
-        const PQGroupReserve oldReserveForCheckLimit(tabletConfig, topic->ActivePartitionCount, stats.DataSize);
+        const PQGroupReserve oldReserve(tabletConfig, topicActivePartitionCount);
+        const PQGroupReserve oldReserveForCheckLimit(tabletConfig, topicActivePartitionCount, stats.DataSize);
 
         const ui64 storageToReserve = reserveForCheckLimit.Storage > oldReserveForCheckLimit.Storage ? reserveForCheckLimit.Storage - oldReserveForCheckLimit.Storage : 0;
 

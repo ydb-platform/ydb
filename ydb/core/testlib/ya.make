@@ -53,6 +53,7 @@ PEERDIR(
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/keyvalue
+    ydb/core/test_tablet
     ydb/core/kqp
     ydb/core/kqp/federated_query
     ydb/services/scheme_secret
@@ -65,6 +66,7 @@ PEERDIR(
     ydb/core/mind/hive
     ydb/core/node_whiteboard
     ydb/core/persqueue
+    ydb/core/persqueue/deferred_publish
     ydb/core/protos
     ydb/core/security
     ydb/core/security/ldap_auth_provider

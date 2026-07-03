@@ -232,6 +232,7 @@ static TMaybe<TDuration> TryGetBackoffDuration(const TErrorResponse& errorRespon
         NRpc::Unavailable,
         NApi::RetriableArchiveError,
         NRpc::TransientFailure,
+        NScheduler::MasterDisconnected,
         Canceled,
         Timeout,
     }) {

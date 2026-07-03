@@ -1,25 +1,9 @@
 #include "distconf.h"
 
 #include <ydb/core/blobstorage/base/infer_pdisk_slot_count_settings.h>
+#include <ydb/core/blobstorage/base/pdisk_config_validation.h>
 
 namespace NKikimr::NStorage {
-
-    static std::optional<TString> ValidatePDiskConfig(
-            const NKikimrBlobStorage::TPDiskConfig& config, TStringBuf context) {
-        const bool hasExpectedSlotCount = config.HasExpectedSlotCount() && config.GetExpectedSlotCount();
-        const bool hasSlotSizeInUnits = config.HasSlotSizeInUnits() && config.GetSlotSizeInUnits();
-        const bool hasExpectedSlotSize = config.HasExpectedSlotSize() && config.GetExpectedSlotSize();
-        const bool hasMaxSlots = config.HasMaxSlots() && config.GetMaxSlots();
-        if (hasExpectedSlotSize && (hasExpectedSlotCount || hasSlotSizeInUnits)) {
-            return TStringBuilder() << context
-                << " PDiskConfig has ExpectedSlotSize with ExpectedSlotCount or SlotSizeInUnits";
-        }
-        if (hasExpectedSlotSize && !hasMaxSlots) {
-            return TStringBuilder() << context
-                << " PDiskConfig has ExpectedSlotSize without MaxSlots";
-        }
-        return {};
-    }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Inter-config validation
@@ -213,7 +197,7 @@ namespace NKikimr::NStorage {
             const ui32 pdiskId = pdisk.GetPDiskID();
             if (pdisk.HasPDiskConfig()) {
                 const TString context = TStringBuilder() << "pdisk NodeID# " << nodeId << " PDiskID# " << pdiskId;
-                if (auto error = ValidatePDiskConfig(pdisk.GetPDiskConfig(), context)) {
+                if (auto error = ::NKikimr::ValidatePDiskConfig(pdisk.GetPDiskConfig(), context)) {
                     return error;
                 }
             }

@@ -4,26 +4,16 @@
 #include "error.h"
 #include "impl.h"
 
+#include <ydb/core/blobstorage/base/pdisk_config_validation.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
 namespace NKikimr {
     namespace NBsController {
 
-        inline void ValidatePDiskConfigExpectedSlotSettings(const NKikimrBlobStorage::TPDiskConfig& config,
+        inline void ValidatePDiskConfig(const NKikimrBlobStorage::TPDiskConfig& config,
                 TStringBuf context) {
-            const bool hasExpectedSlotCount = config.HasExpectedSlotCount() && config.GetExpectedSlotCount();
-            const bool hasSlotSizeInUnits = config.HasSlotSizeInUnits() && config.GetSlotSizeInUnits();
-            const bool hasExpectedSlotSize = config.HasExpectedSlotSize() && config.GetExpectedSlotSize();
-            const bool hasMaxSlots = config.HasMaxSlots() && config.GetMaxSlots();
-            if (hasExpectedSlotSize && (hasExpectedSlotCount || hasSlotSizeInUnits)) {
-                throw TExError() << context
-                    << " ExpectedSlotSize is mutually exclusive with ExpectedSlotCount and SlotSizeInUnits"
-                    << " in PDiskConfig";
-            }
-            if (hasExpectedSlotSize && !hasMaxSlots) {
-                throw TExError() << context
-                    << " ExpectedSlotSize requires MaxSlots"
-                    << " in PDiskConfig";
+            if (auto error = ::NKikimr::ValidatePDiskConfig(config, context)) {
+                throw TExError() << *error;
             }
         }
 

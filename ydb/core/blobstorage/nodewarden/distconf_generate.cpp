@@ -165,26 +165,30 @@ namespace NKikimr::NStorage {
         struct TPDiskInfo {
             NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk Record;
             ui32 UsedSlots = 0;
-            ui32 ExpectedSlotCount = 0;
-            ui32 SlotSizeInUnits = 0;
-            ui64 ExpectedSlotSize = 0;
             bool Usable = true;
             TString WhyUnusable;
             i64 SpaceAvailable = 0;
             bool AdjustSpaceAvailable = false;
         };
 
-        THashMap<TPDiskId, TPDiskInfo> pdisks;
+        struct TPDiskMapperSettings {
+            ui32 SlotCount = 0;
+            ui32 SlotSizeInUnits = 0;
+            ui64 SlotSizeInBytes = 0;
+        };
 
-        auto applyPDiskConfig = [](TPDiskInfo& pdiskInfo, const NKikimrBlobStorage::TPDiskConfig& pdiskConfig) {
+        THashMap<TPDiskId, TPDiskInfo> pdisks;
+        THashMap<TPDiskId, TPDiskMapperSettings> pdiskMapperSettings;
+
+        auto applyPDiskConfig = [](TPDiskMapperSettings& settings, const NKikimrBlobStorage::TPDiskConfig& pdiskConfig) {
             if (pdiskConfig.HasExpectedSlotCount()) {
-                pdiskInfo.ExpectedSlotCount = pdiskConfig.GetExpectedSlotCount();
+                settings.SlotCount = pdiskConfig.GetExpectedSlotCount();
             }
             if (pdiskConfig.HasSlotSizeInUnits()) {
-                pdiskInfo.SlotSizeInUnits = pdiskConfig.GetSlotSizeInUnits();
+                settings.SlotSizeInUnits = pdiskConfig.GetSlotSizeInUnits();
             }
             if (pdiskConfig.HasExpectedSlotSize()) {
-                pdiskInfo.ExpectedSlotSize = pdiskConfig.GetExpectedSlotSize();
+                settings.SlotSizeInBytes = pdiskConfig.GetExpectedSlotSize();
             }
         };
 
@@ -260,13 +264,13 @@ namespace NKikimr::NStorage {
                         pdisk.GetKind()).GetRaw());
                     if (pdisk.HasPDiskConfig()) {
                         r.MutablePDiskConfig()->CopyFrom(pdisk.GetPDiskConfig());
-                        applyPDiskConfig(pdiskInfo, pdisk.GetPDiskConfig());
+                        applyPDiskConfig(pdiskMapperSettings[pdiskId], pdisk.GetPDiskConfig());
                     }
                     if (pdisk.GetExpectedSlotCount()) {
-                        pdiskInfo.ExpectedSlotCount = pdisk.GetExpectedSlotCount();
+                        pdiskMapperSettings[pdiskId].SlotCount = pdisk.GetExpectedSlotCount();
                     }
                     if (pdisk.GetExpectedSlotSize()) {
-                        pdiskInfo.ExpectedSlotSize = pdisk.GetExpectedSlotSize();
+                        pdiskMapperSettings[pdiskId].SlotSizeInBytes = pdisk.GetExpectedSlotSize();
                     }
 
                     // this 'usable' logic repeats the one in BS_CONTROLLER
@@ -284,11 +288,12 @@ namespace NKikimr::NStorage {
 
                     if (!ignoreVSlotQuotaCheck && pdiskInfo.Usable && pdisk.HasPDiskMetrics() && baseConfig->HasSettings()) {
                         const auto& m = pdisk.GetPDiskMetrics();
-                        if (pdiskInfo.ExpectedSlotSize && m.HasSlotCount()) {
-                            pdiskInfo.ExpectedSlotCount = m.GetSlotCount();
+                        auto& settings = pdiskMapperSettings[pdiskId];
+                        if (settings.SlotSizeInBytes && m.HasSlotCount()) {
+                            settings.SlotCount = m.GetSlotCount();
                         }
                         if (m.HasSlotSizeInUnits()) {
-                            pdiskInfo.SlotSizeInUnits = m.GetSlotSizeInUnits();
+                            settings.SlotSizeInUnits = m.GetSlotSizeInUnits();
                         }
                         if (m.HasEnforcedDynamicSlotSize() && pdiskSpaceColorBorder >= NKikimrBlobStorage::TPDiskSpaceColor::YELLOW) {
                             pdiskInfo.SpaceAvailable = m.GetEnforcedDynamicSlotSize() * (1000 - pdiskSpaceMarginPromille) / 1000;
@@ -402,7 +407,7 @@ namespace NKikimr::NStorage {
                         auto& r = pdiskInfo.Record;
                         r.CopyFrom(pdisk);
                         if (pdisk.HasPDiskConfig()) {
-                            applyPDiskConfig(pdiskInfo, pdisk.GetPDiskConfig());
+                            applyPDiskConfig(pdiskMapperSettings[pdiskId], pdisk.GetPDiskConfig());
                         }
                     }
                 }
@@ -458,7 +463,7 @@ namespace NKikimr::NStorage {
                         drive.GetKind()));
                     if (drive.HasPDiskConfig()) {
                         r.MutablePDiskConfig()->CopyFrom(drive.GetPDiskConfig());
-                        applyPDiskConfig(pdiskInfo, drive.GetPDiskConfig());
+                        applyPDiskConfig(pdiskMapperSettings[pdiskId], drive.GetPDiskConfig());
                     }
                 } else {
                     throw TExConfigError() << "duplicate PDiskId";
@@ -477,14 +482,18 @@ namespace NKikimr::NStorage {
                 throw TExConfigError() << "no location for node";
             }
 
+            const auto settingsIt = pdiskMapperSettings.find(pdiskId);
+            const TPDiskMapperSettings settings = settingsIt != pdiskMapperSettings.end()
+                ? settingsIt->second
+                : TPDiskMapperSettings();
+
             ui32 maxSlots = defaultMaxSlots;
-            if (item.ExpectedSlotCount) {
-                maxSlots = item.ExpectedSlotCount;
-            } else if (item.ExpectedSlotSize) {
-                // Slot count for byte-sized slots is calculated by NodeWarden/PDisk and arrives via metrics.
+            if (settings.SlotCount) {
+                maxSlots = settings.SlotCount;
+            } else if (settings.SlotSizeInBytes) {
+                // Slot count for byte-sized slots is calculated by NodeWarden and arrives via PDisk config or metrics.
                 maxSlots = 0;
             }
-            const ui32 slotSizeInUnits = item.SlotSizeInUnits;
 
             const bool pileFilter = !bridgePileId || allowedNodeIds.contains(pdiskId.NodeId);
 
@@ -494,8 +503,8 @@ namespace NKikimr::NStorage {
                 .Usable = item.Usable && pileFilter,
                 .NumSlots = item.UsedSlots,
                 .MaxSlots = maxSlots,
-                .SlotSizeInUnits = slotSizeInUnits,
-                .SlotSizeInBytes = item.ExpectedSlotSize,
+                .SlotSizeInUnits = settings.SlotSizeInUnits,
+                .SlotSizeInBytes = settings.SlotSizeInBytes,
                 .Groups{},
                 .SpaceAvailable = item.SpaceAvailable,
                 .Operational = true,

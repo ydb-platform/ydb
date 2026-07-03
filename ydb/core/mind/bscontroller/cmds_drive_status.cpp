@@ -131,7 +131,7 @@ namespace NKikimr::NBsController {
             driveInfoMutable->PDiskType = cmd.GetPDiskType();
         }
         const TString context = TStringBuilder() << "DriveSerial# " << serial;
-        ValidatePDiskConfigExpectedSlotSettings(cmd.GetPDiskConfig(), context);
+        ValidatePDiskConfig(cmd.GetPDiskConfig(), context);
         TString config;
         if (!cmd.GetPDiskConfig().SerializeToString(&config)) {
             throw TExError() << "Couldn't serialize PDiskConfig for disk with serial number" << TErrorParams::DiskSerialNumber(serial);

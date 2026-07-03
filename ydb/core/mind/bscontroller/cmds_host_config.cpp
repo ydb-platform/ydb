@@ -8,7 +8,7 @@ namespace NKikimr::NBsController {
 
         TMaybe<TString> defaultPDiskConfig;
         if (cmd.HasDefaultHostPDiskConfig()) {
-            ValidatePDiskConfigExpectedSlotSettings(cmd.GetDefaultHostPDiskConfig(),
+            ValidatePDiskConfig(cmd.GetDefaultHostPDiskConfig(),
                 "DefaultHostPDiskConfig");
             TString config;
             const bool success = cmd.GetDefaultHostPDiskConfig().SerializeToString(&config);
@@ -29,7 +29,7 @@ namespace NKikimr::NBsController {
             if (drive.HasPDiskConfig()) {
                 const TString context = TStringBuilder() << "HostConfigId# " << id
                     << " Path# " << drive.GetPath();
-                ValidatePDiskConfigExpectedSlotSettings(drive.GetPDiskConfig(), context);
+                ValidatePDiskConfig(drive.GetPDiskConfig(), context);
                 TString config;
                 const bool success = drive.GetPDiskConfig().SerializeToString(&config);
                 Y_ABORT_UNLESS(success);

@@ -41,19 +41,6 @@ bool OutputsBothJoinSides(const TString& joinKind) {
     return joinKind != "LeftOnly" && joinKind != "LeftSemi" && joinKind != "RightOnly" && joinKind != "RightSemi";
 }
 
-TInfoUnit MakeRightConflictReplacement(const TInfoUnit& conflict, TInfoUnitSet& usedIUs, TPlanProps& props) {
-    if (!IsGeneratedIgnoreIU(conflict)) {
-        return NMapRenames::MakeUniqueInternalIU(props.InternalVarIdx, usedIUs);
-    }
-
-    for (;;) {
-        const auto replacement = MakeGeneratedIgnoreIU(props);
-        if (AddInfoUnit(usedIUs, replacement)) {
-            return replacement;
-        }
-    }
-}
-
 NMapRenames::TRenameMap BuildRightOutputConflictRenames(
     const TIntrusivePtr<IOperator>& leftInput,
     const TIntrusivePtr<IOperator>& rightInput,
@@ -71,7 +58,7 @@ NMapRenames::TRenameMap BuildRightOutputConflictRenames(
             continue;
         }
 
-        const auto replacement = MakeRightConflictReplacement(rightIU, usedIUs, props);
+        const auto replacement = NMapRenames::MakeUniqueInternalIU(props.InternalVarIdx, usedIUs);
         rightRenames.emplace(rightIU, replacement);
     }
 

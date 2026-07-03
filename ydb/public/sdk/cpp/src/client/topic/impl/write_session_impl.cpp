@@ -102,7 +102,6 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
-    , PrevToken(DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo() : "")
     , MaxBlockMessageCount(Settings.BatchFlushMessageCount_)
     , InitSeqNoPromise(NThreading::NewPromise<uint64_t>())
     , WakeupInterval(
@@ -112,6 +111,11 @@ TWriteSessionImpl::TWriteSessionImpl(
                 TDuration::MilliSeconds(100)
     )
 {
+    try {
+        PrevToken = DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo() : "";
+    } catch (std::exception&) {
+        LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefixImpl() << "Write session: updating token failed: " << CurrentExceptionMessage());
+    }
     if (!Settings.RetryPolicy_) {
         Settings.RetryPolicy_ = IRetryPolicy::GetDefaultPolicy();
     }
@@ -1576,7 +1580,16 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
         return;
     }
 
-    auto token = DbDriverState->CredentialsProvider->GetAuthInfo();
+    std::string token;
+    try {
+        token = DbDriverState->CredentialsProvider->GetAuthInfo();
+    } catch (std::exception&) {
+        // XXX Backoff?
+        LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefixImpl() << "Write session: updating token failed: " << CurrentExceptionMessage());
+        return;
+    }
+    LastTokenUpdate = TInstant::Now();
+
     if (token == PrevToken) {
         return;
     }
@@ -1828,7 +1841,7 @@ void TWriteSessionImpl::HandleWakeUpImpl() {
         }
     };
     if (TInstant::Now() - LastTokenUpdate > UPDATE_TOKEN_PERIOD) {
-        LastTokenUpdate = TInstant::Now();
+        // XXX this call is ratelimited (once per hour); others are not; why?
         UpdateTokenIfNeededImpl();
     }
 

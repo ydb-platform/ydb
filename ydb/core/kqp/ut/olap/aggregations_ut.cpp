@@ -8,6 +8,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <contrib/libs/fmt/include/fmt/format.h>
 
+#include <algorithm>
+
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
@@ -186,7 +188,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             CompareYson(result, R"([[[0];4600u];[[1];4600u];[[2];4600u];[[3];4600u];[[4];4600u]])");
 
             // Check plan
-            CheckPlanForAggregatePushdown(query, tableClient, { "DqPhyHashCombine" }, "Aggregate-TableFullScan");
+            CheckPlanForAggregatePushdown(query, tableClient, { AGG_OPERATOR_NAMES }, "Aggregate-TableFullScan");
 //            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
         }
     }
@@ -229,9 +231,9 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
             auto plan = CollectStreamResult(res);
 
-            const auto expectedAggregateNodeName = AllowSpilling ? "DqPhyHashCombine" : "BlockMergeFinalizeHashed";
+            const auto expectedAggregateNodeNames = AllowSpilling ? AGG_OPERATOR_NAMES : "BlockMergeFinalizeHashed";
 
-            bool hasExpectedAggregateNode = plan.QueryStats->Getquery_ast().Contains(expectedAggregateNodeName);
+            bool hasExpectedAggregateNode = CheckOperatorPresentInAst(plan.QueryStats->Getquery_ast(), expectedAggregateNodeNames);
             UNIT_ASSERT_C(hasExpectedAggregateNode, plan.QueryStats->Getquery_ast());
         }
     }

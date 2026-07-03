@@ -51,7 +51,6 @@ TResult ValidateConfig(
     const EOperation operation
 );
 
-void InitTopicConfigVersion(NKikimrPQ::TPQTabletConfig& config);
 void BumpTopicConfigVersion(NKikimrPQ::TPQTabletConfig& config);
 void UpdateConsumerVersion(
     NKikimrPQ::TPQTabletConfig_TConsumer& consumer,

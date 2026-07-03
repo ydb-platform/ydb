@@ -419,10 +419,6 @@ TResult AddConsumer(
     return TResult();
 }
 
-void InitTopicConfigVersion(NKikimrPQ::TPQTabletConfig& config) {
-    config.SetTopicConfigVersion(0);
-}
-
 void BumpTopicConfigVersion(NKikimrPQ::TPQTabletConfig& config) {
     config.SetTopicConfigVersion(config.GetTopicConfigVersion() + 1);
 }

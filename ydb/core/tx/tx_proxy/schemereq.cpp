@@ -1566,6 +1566,14 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 }
             }
 
+            // RequireAccess and RequireAnyOfAccess are mutually exclusive: when
+            // RequireAnyOfAccess is set the RequireAccess bitmask is ignored below.
+            Y_DEBUG_ABORT_UNLESS(
+                requestIt->RequireAnyOfAccess.empty()
+                    || requestIt->RequireAccess == NACLib::EAccessRights::NoAccess,
+                "RequireAccess and RequireAnyOfAccess must not be set simultaneously"
+            );
+
             ui32 access = requestIt->RequireAccess;
 
             // request more rights if dst path is DB

@@ -350,10 +350,6 @@ TResult ApplyChangesInt( // create and alter
         return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
     }
 
-    if (operation == EOperation::Create) {
-        InitTopicConfigVersion(*pqTabletConfig);
-    }
-
     for (const auto& rr : settings.read_rules()) {
         auto r = AddConsumerImpl(pqTabletConfig, rr, &consumersAdvancedMonitoringSettings);
         if (!r) {

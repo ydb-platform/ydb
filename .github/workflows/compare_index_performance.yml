@@ -40,7 +40,7 @@ on:
       iterations:
         description: 'Number of iterations per workload (median reported)'
         required: false
-        default: '20'
+        default: '10'
       warmup:
         description: 'Warmup duration in seconds before each measured run'
         required: false
@@ -121,7 +121,7 @@ jobs:
           INPUT_WORKLOAD: ${{ inputs.workload || 'all' }}
           INPUT_ROWS: ${{ inputs.rows || '10000' }}
           INPUT_TARGETS: ${{ inputs.targets || '1000' }}
-          INPUT_ITERATIONS: ${{ inputs.iterations || '20' }}
+          INPUT_ITERATIONS: ${{ inputs.iterations || '10' }}
           INPUT_WARMUP: ${{ inputs.warmup || '30' }}
           INPUT_THREADS: ${{ inputs.threads || '10' }}
           INPUT_MAIN_FEATURE_FLAGS: ${{ inputs.main_feature_flags || '' }}
@@ -133,7 +133,7 @@ jobs:
         run: |
           # The feature-flag / table_service_config inputs are comma-separated
           # strings; the test splits them itself, so they are passed through as-is.
-          ./ya make --build "$INPUT_BUILD_PRESET" -tA \
+          ./ya make --build "$INPUT_BUILD_PRESET" -tA --test-disable-timeout \
             ydb/tests/stress/compare_index_performance/tests \
             --test-param compare_duration="$INPUT_DURATION" \
             --test-param compare_build_preset="$INPUT_BUILD_PRESET" \

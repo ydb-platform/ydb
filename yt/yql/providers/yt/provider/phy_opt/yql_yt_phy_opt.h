@@ -48,6 +48,8 @@ private:
 
     NNodes::TMaybeNode<NNodes::TExprBase> FillToMaterialize(NNodes::TExprBase node, TExprContext& ctx) const;
 
+    NNodes::TMaybeNode<NNodes::TExprBase> BypassPersistBeforePublish(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
+
     NNodes::TMaybeNode<NNodes::TExprBase> TakeOrSkip(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> Extend(NNodes::TExprBase node, TExprContext& ctx) const;

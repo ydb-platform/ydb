@@ -1,0 +1,5 @@
+use plato;
+
+-- $unused is never referenced; the materialization should be optimized away.
+MATERIALIZE Input INTO $unused;
+SELECT * FROM Input ORDER BY key;

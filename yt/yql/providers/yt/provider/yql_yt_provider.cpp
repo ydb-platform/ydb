@@ -545,6 +545,8 @@ struct TYtDataSinkFunctions {
         Names.insert(TYtPublish::CallableName());
         Names.insert(TYtEquiJoin::CallableName());
         Names.insert(TYtStatOut::CallableName());
+        Names.insert(TYtMaterialize::CallableName());
+        Names.insert(TYtPersist::CallableName());
     }
 };
 

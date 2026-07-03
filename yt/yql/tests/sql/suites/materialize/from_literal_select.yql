@@ -1,0 +1,5 @@
+use plato;
+
+-- Materialize a constant expression (no input table).
+MATERIALIZE (SELECT 1 AS a, "hello" AS b) INTO $result;
+SELECT * FROM $result;

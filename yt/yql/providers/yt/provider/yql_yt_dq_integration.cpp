@@ -730,7 +730,8 @@ public:
                     return nullptr;
                 }
                 const auto& content = maybeWrite.Cast().Content();
-                if (TYtMaterialize::Match(&SkipCallables(content.Ref(), {TCoSort::CallableName(), TCoTopSort::CallableName(), TCoAssumeSorted::CallableName(), TCoAssumeConstraints::CallableName()}))) {
+                const auto& clearContent = SkipCallables(content.Ref(), {TCoSort::CallableName(), TCoTopSort::CallableName(), TCoAssumeSorted::CallableName(), TCoAssumeConstraints::CallableName()});
+                if (TMaybeNode<TCoRight>(&clearContent).Input().Maybe<TYtMaterialize>()) {
                     return write;
                 }
                 TExprNode::TPtr newContent;
@@ -739,32 +740,38 @@ public:
                     // Duplicate AssumeSorted before YtMaterialize, because DQ cannot keep sort and so optimizes AssumeSorted as complete Sort
                     // Before: YtWrite -> AssumeSorted -> ...
                     // After: YtWrite -> AssumeConstraints -> YtMaterialize -> AssumeSorted -> ...
-                    newContent = Build<TYtMaterialize>(ctx, content.Pos())
-                        .World(materializeWorld)
-                        .DataSink(maybeWrite.Cast().DataSink())
-                        .Input(content)
-                        .Settings().Build()
+                    newContent = Build<TCoRight>(ctx, content.Pos())
+                        .Input<TYtMaterialize>()
+                            .World(materializeWorld)
+                            .DataSink(maybeWrite.Cast().DataSink())
+                            .Input(content)
+                            .Settings().Build()
+                        .Build()
                         .Done().Ptr();
                 } else if (content.Raw()->IsCallable({TCoSort::CallableName(), TCoTopSort::CallableName()}) && !content.Raw()->GetConstraint<TSortedConstraintNode>()) {
                     // For Sorts by non members lambdas do it on YT side because of aux columns
                     // Before: YtWrite -> Sort/TopSort -> ...
                     // After: YtWrite -> Sort/TopSort -> YtMaterialize -> ...
-                    auto materialize = Build<TYtMaterialize>(ctx, content.Pos())
-                        .World(materializeWorld)
-                        .DataSink(maybeWrite.Cast().DataSink())
-                        .Input(content.Cast<TCoInputBase>().Input())
-                        .Settings().Build()
-                        .Done();
-                    newContent = ctx.ChangeChild(content.Ref(), TCoInputBase::idx_Input, materialize.Ptr());
+                    TExprNode::TPtr materialize = Build<TCoRight>(ctx, content.Pos())
+                        .Input<TYtMaterialize>()
+                            .World(materializeWorld)
+                            .DataSink(maybeWrite.Cast().DataSink())
+                            .Input(content.Cast<TCoInputBase>().Input())
+                            .Settings().Build()
+                        .Build()
+                        .Done().Ptr();
+                    newContent = ctx.ChangeChild(content.Ref(), TCoInputBase::idx_Input, std::move(materialize));
                 } else {
                     // Materialize dq graph to yt table before YtWrite:
                     // Before: YtWrite -> Some callables ...
                     // After: YtWrite -> YtMaterialize -> Some callables ...
-                    newContent = Build<TYtMaterialize>(ctx, content.Pos())
-                        .World(materializeWorld)
-                        .DataSink(maybeWrite.Cast().DataSink())
-                        .Input(content)
-                        .Settings().Build()
+                    newContent = Build<TCoRight>(ctx, content.Pos())
+                        .Input<TYtMaterialize>()
+                            .World(materializeWorld)
+                            .DataSink(maybeWrite.Cast().DataSink())
+                            .Input(content)
+                            .Settings().Build()
+                        .Build()
                         .Done().Ptr();
                 }
                 auto constraintSet = content.Raw()->GetConstraintSet();

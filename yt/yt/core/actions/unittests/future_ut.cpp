@@ -8,6 +8,7 @@
 #include <yt/yt/core/concurrency/context_switch.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
+#include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/ref_counted_tracker.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 

@@ -144,7 +144,7 @@ namespace NKikimr::NYmq::V1 {
                 {"folderId", FolderId},
                 {"cloudId", CloudId},
                 {"userSid", UserSid},
-                {"requestId", RequestId;});
+                {"requestId", RequestId});
             TSqsRequest sqsRequest;
 
             sqsRequest.SetRequestId(RequestId);

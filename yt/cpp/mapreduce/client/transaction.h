@@ -49,6 +49,7 @@ public:
     void Abort();
     void Detach();
 
+
 private:
     enum class EStopAction
     {

@@ -412,13 +412,12 @@ public:
     IRawClientPtr Clone(const TClientContext& context) override;
 
 private:
-    void InitAsyncClient();
-    void PostAsync(const TString& command, TNode params);
+    void InitPingClient();
 
 private:
     const TClientContext Context_;
-    NHttp::IClientPtr AsyncHttpClient_;
-    std::once_flag AsyncHttpClientInitOnceFlag_;
+    NHttp::IClientPtr PingHttpClient_;
+    std::once_flag PingClientInitOnceFlag_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -18,6 +18,13 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FS_WRAPPER
 
+#define YDB_LOG_IF_ACTIVE(LOG_MACRO, ...) \
+    do {                                  \
+        if (TlsActivationContext) {       \
+            LOG_MACRO(__VA_ARGS__);       \
+        }                                 \
+    } while (false)
+
 namespace NKikimr::NWrappers::NExternalStorage {
 
 namespace {
@@ -212,27 +219,21 @@ public:
 
 private:
     void CleanupActiveSessions() {
-        if (TlsActivationContext) {
-            YDB_LOG_DEBUG("TFsOperationActor: cleaning up active MPU",
-                {"sessions", ActiveUploads.size()});
-        }
+        YDB_LOG_IF_ACTIVE(YDB_LOG_DEBUG, "TFsOperationActor: cleaning up active MPU",
+            {"sessions", ActiveUploads.size()});
         for (auto& [uploadId, session] : ActiveUploads) {
             try {
                 const TString filePath = session.Key;
                 NFs::Remove(filePath);
                 session.File.Close();
 
-                if (TlsActivationContext) {
-                    YDB_LOG_TRACE("TFsOperationActor: closed and deleted incomplete file",
-                        {"uploadId", uploadId},
-                        {"file", filePath});
-                }
+                YDB_LOG_IF_ACTIVE(YDB_LOG_TRACE, "TFsOperationActor: closed and deleted incomplete file",
+                    {"uploadId", uploadId},
+                    {"file", filePath});
             } catch (const std::exception& ex) {
-                if (TlsActivationContext) {
-                    YDB_LOG_WARN("Failed to cleanup MPU session",
-                        {"uploadId", uploadId},
-                        {"error", ex.what()});
-                }
+                YDB_LOG_IF_ACTIVE(YDB_LOG_WARN, "Failed to cleanup MPU session",
+                    {"uploadId", uploadId},
+                    {"error", ex.what()});
             }
         }
         ActiveUploads.clear();

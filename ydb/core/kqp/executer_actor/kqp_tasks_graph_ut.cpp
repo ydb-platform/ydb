@@ -1735,10 +1735,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 1);
     }
 
-<<<<<<< HEAD
     /*
-=======
->>>>>>> dc67420ff3e9df6f106b719e0e7eec7f80866068
     Y_UNIT_TEST_F(TpchQuery19, TKqpTasksGraphTpchFixture) {
         const TString& queryText = R"(
             $z1_12 = cast(1 as decimal(12,2));

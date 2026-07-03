@@ -234,6 +234,7 @@ private:
         ui32 CodecID = static_cast<ui32>(ECodec::RAW);
         mutable std::vector<std::string_view> OriginalDataRefs;
         mutable std::vector<TInstant> CreatedAt;
+        mutable std::vector<std::optional<std::string>> MessageKeys;
         mutable TBuffer Data;
         bool Compressed = false;
         mutable bool Valid = true;
@@ -252,12 +253,14 @@ private:
             CodecID = rhs.CodecID;
             OriginalDataRefs.swap(rhs.OriginalDataRefs);
             CreatedAt.swap(rhs.CreatedAt);
+            MessageKeys.swap(rhs.MessageKeys);
             Data.Swap(rhs.Data);
             Compressed = rhs.Compressed;
 
             rhs.Data.Clear();
             rhs.OriginalDataRefs.clear();
             rhs.CreatedAt.clear();
+            rhs.MessageKeys.clear();
         }
     };
 

@@ -1,5 +1,6 @@
 #include "consumer_batch_processor.h"
 
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
@@ -10,6 +11,17 @@ namespace NKikimr::NPQ::NBatching {
 
 namespace {
     constexpr TDuration CPUUsageFlushInterval = TDuration::Seconds(1);
+
+    TString GetCompactionKey(const NKikimrPQClient::TDataChunk& dataChunk) {
+        TString key;
+        for (const auto& metadata : dataChunk.GetMessageMeta()) {
+            if (metadata.key() == MESSAGE_ATTRIBUTE_KEY) {
+                key = metadata.value();
+                break;
+            }
+        }
+        return key;
+    }
 }
 
 TConsumerBatchProcessor::TConsumerBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId, TString user)
@@ -64,13 +76,13 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
         if (context.LastOffset != 0 && result.GetOffset() >= context.LastOffset) {
             return false;
         }
-        if (resultsCount >= context.Count) {
+        if (resultsCount >= context.Count && context.Count > 0) {
             return true;
         }
 
         resultsCount += result.GetLogicalMessageCount();
         readResult->AddResult()->Swap(&result);
-        return resultsCount >= context.Count;
+        return resultsCount >= context.Count && context.Count > 0;
     };
 
     for (auto& originalResult : originalResults) {
@@ -107,6 +119,42 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
     ctx.Send(context.ResponseActor, new TEvProcessBatchResult(std::move(context)));
 }
 
+void TConsumerBatchProcessor::Handle(TEvProcessBatchKeys::TPtr& ev, const NActors::TActorContext& ctx) {
+    auto& context = ev->Get()->Context;
+    CurrentCPUUsagePartitionId = context.PartitionId;
+    HasCurrentCPUUsagePartitionId = true;
+
+    THashMap<ui64, TString> offsetToKeys;
+
+    for (const auto& result : context.Results) {
+        if (result.GetData().empty()) {
+            continue;
+        }
+
+        auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
+        if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
+            continue;
+        }
+
+        if (!result.GetIsBatch()) {
+            auto key = GetCompactionKey(dataChunk);
+            offsetToKeys[result.GetOffset()] = std::move(key);
+            continue;
+        }
+
+        auto it = BatchCutters.find(dataChunk.GetCodec());
+        if (it != BatchCutters.end()) {
+            TBatchCutterData data(result, std::move(dataChunk));
+            auto batchKeys = it->second->GetKeys(data, result.GetOffset());
+            for (auto& [key, offset] : batchKeys) {
+                offsetToKeys[offset] = std::move(key);
+            }
+        }
+    }
+
+    ctx.Send(context.ResponseActor, new TEvProcessBatchKeysResult(std::move(offsetToKeys)));
+}
+
 void TConsumerBatchProcessor::FlushCPUUsageMetrics(const NActors::TActorContext& ctx, bool scheduleNext) {
     for (auto& [partitionId, cpuUsage] : CPUUsageMetricByPartition) {
         if (cpuUsage) {
@@ -138,6 +186,7 @@ STFUNC(TConsumerBatchProcessor::StateWork) {
 
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvProcessBatch, Handle);
+            HFunc(TEvProcessBatchKeys, Handle);
             HFunc(NActors::TEvents::TEvWakeup, Handle);
             HFunc(NActors::TEvents::TEvPoisonPill, Handle);
         default:

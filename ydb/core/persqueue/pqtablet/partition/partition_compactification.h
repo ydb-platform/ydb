@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/persqueue/common/key.h>
+#include <ydb/core/persqueue/pqtablet/batching/batch_processor.h>
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
@@ -65,6 +66,7 @@ public:
         ui64 NextPartNo = 0;
         THashMap<TString, ui64> TopicData; //Key -> Offset
         TMaybe<ui64> SkipOffset;
+        ui64 BatchKeysRequestsInflight = 0;
 
         TPartition* PartitionActor;
         TMaybe<NKikimrClient::TCmdReadResult::TResult> LastMessage;
@@ -73,6 +75,7 @@ public:
         TReadState(ui64 firstOffset, TPartition* partitionActor);
 
         bool ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
+        void ProcessResponse(NBatching::TEvProcessBatchKeysResult::TPtr& ev);
         EStep ContinueIfPossible(ui64 nextRequestCookie);
         THashMap<TString, ui64>&& GetData();
         ui64 GetLastOffset();
@@ -104,6 +107,9 @@ public:
         TVector<TClientBlob> CurrMsgPartsFromLastBatch;
         TVector<TKey> CurrMsgMiddleBlobKeys;
         ui64 BlobsToWriteInRequest = 0;
+        bool BatchKeysRequestInflight = false;
+        TMaybe<NKikimrClient::TCmdReadResult> PendingReadResult;
+        THashMap<ui64, TString> PendingBatchOffsetKeys;
 
         ui64 FirstHeadOffset;
         ui64 FirstHeadPartNo;
@@ -121,6 +127,9 @@ public:
 
         bool ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev);
         bool ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
+        bool ProcessResponse(NBatching::TEvProcessBatchKeysResult::TPtr& ev);
+        bool ProcessReadResult(NKikimrClient::TCmdReadResult& readResult);
+        bool MaybeRequestBatchKeys(const NKikimrClient::TCmdReadResult& readResult);
 
         EStep ContinueIfPossible(ui64 nextCookie);
         void RunKvRequest();
@@ -148,6 +157,7 @@ public:
     void ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
     void ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev);
     void ProcessResponse(TEvPQ::TEvError::TPtr& ev);
+    void ProcessResponse(NBatching::TEvProcessBatchKeysResult::TPtr& ev);
 
     TKeyCompactionCounters GetCounters() const;
     void UpdateSizeCounters();

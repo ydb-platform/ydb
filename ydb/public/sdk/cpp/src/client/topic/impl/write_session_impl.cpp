@@ -30,6 +30,18 @@ namespace {
 
 using TTxId = std::pair<std::string_view, std::string_view>;
 
+constexpr std::string_view MESSAGE_ATTRIBUTE_KEY = "__key";
+
+std::optional<std::string> GetMessageKey(const std::vector<std::pair<std::string, std::string>>& messageMeta) {
+    for (const auto& [key, value] : messageMeta) {
+        if (key == MESSAGE_ATTRIBUTE_KEY) {
+            return value;
+        }
+    }
+
+    return std::nullopt;
+}
+
 bool ValidateWriteSessionSettings(const TWriteSessionSettings& settings, NYdb::NIssue::TIssues& issues) {
     if (!settings.BatchInnerCodec_.has_value()) {
         return true;
@@ -1346,6 +1358,7 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
             .Codec = codec,
             .Payloads = blockPtr->OriginalDataRefs,
             .CreatedAt = blockPtr->CreatedAt,
+            .MessageKeys = blockPtr->MessageKeys,
             .Data = blockPtr->Data,
             .CodecID = blockPtr->CodecID,
             .Compressed = blockPtr->Compressed,
@@ -1508,6 +1521,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             block.OriginalMemoryUsage += datum.size();
             block.OriginalDataRefs.emplace_back(datum);
             block.CreatedAt.emplace_back(createTs);
+            block.MessageKeys.emplace_back(GetMessageKey(currMessage.MessageMeta));
             if (CurrentBatch.Messages[i].Codec.has_value()) {
                 Y_ABORT_UNLESS(CurrentBatch.Messages.size() == 1);
                 block.CodecID = static_cast<ui32>(*currMessage.Codec);

@@ -271,7 +271,14 @@ private:
     void Handle(NPQ::NMLP::TEvReadResponse::TPtr& ev) {
         const auto status = ev->Get()->Status;
         if (status != Ydb::StatusIds::SUCCESS) {
-            MakeError(Response_.MutableReceiveMessage(), NErrors::INTERNAL_FAILURE, ev->Get()->ErrorDescription);
+            if (status == Ydb::StatusIds::SCHEME_ERROR) {
+                // The topic is temporarily missing (the queue is being deleted or recreated
+                // and the leader is not updated yet). Report a generic retryable internal
+                // failure instead of leaking the internal topic path so clients retry.
+                MakeError(Response_.MutableReceiveMessage(), NErrors::INTERNAL_FAILURE);
+            } else {
+                MakeError(Response_.MutableReceiveMessage(), NErrors::INTERNAL_FAILURE, ev->Get()->ErrorDescription);
+            }
         } else {
             auto&& messages = ev->Get()->Messages;
             if (messages.empty()) {

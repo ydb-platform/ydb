@@ -197,7 +197,13 @@ private:
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             RLOG_SQS_ERROR("Get runtime queue attributes failed: " << ev->Get()->ErrorDescription);
-            MakeError(result, NErrors::INTERNAL_FAILURE, ev->Get()->ErrorDescription);
+            if (ev->Get()->Status == Ydb::StatusIds::SCHEME_ERROR) {
+                // The topic (and therefore the queue) no longer exists: the queue is being
+                // deleted. Report it as a non-existent queue instead of an internal failure.
+                MakeError(result, NErrors::NON_EXISTENT_QUEUE);
+            } else {
+                MakeError(result, NErrors::INTERNAL_FAILURE, ev->Get()->ErrorDescription);
+            }
             SendReplyAndDie();
             return;
         }

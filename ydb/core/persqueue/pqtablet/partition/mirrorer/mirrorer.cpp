@@ -594,7 +594,7 @@ enum class EStaleReadStatus {
 };
 
 EStaleReadStatus ReadSessionStaleStatus(const TActorContext& ctx, bool hasLastReadOffset, TInstant init, const NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent* streamStatus) {
-    if (hasLastReadOffset) { /* seen some data is this read session */
+    if (hasLastReadOffset) { /* seen some data in this read session */
         return EStaleReadStatus::NonStale;
     }
     if (!streamStatus) {

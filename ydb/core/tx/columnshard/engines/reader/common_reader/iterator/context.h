@@ -104,7 +104,8 @@ public:
     }
 
     virtual ~TSpecialReadContext() {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("fetching", DebugString());
+        YDB_LOG_INFO_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"fetching", DebugString()});
     }
 
     TString DebugString() const;

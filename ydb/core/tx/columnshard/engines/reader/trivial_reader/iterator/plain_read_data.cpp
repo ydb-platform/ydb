@@ -3,6 +3,8 @@
 #include <ydb/core/tx/columnshard/engines/reader/common/result.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
 namespace NKikimr::NOlap::NReader::NTrivial {
 
 TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
@@ -28,8 +30,11 @@ std::vector<std::unique_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyR
     AFL_VERIFY(count == ReadyResultsCount);
     ReadyResultsCount = 0;
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractReadyResults")("result", result.size())("count", count)(
-        "finished", Scanner->IsFinished());
+    YDB_LOG_DEBUG("",
+        {"event", "DoExtractReadyResults"},
+        {"result", result.size()},
+        {"count", count},
+        {"finished", Scanner->IsFinished()});
     return std::move(result);
 }
 

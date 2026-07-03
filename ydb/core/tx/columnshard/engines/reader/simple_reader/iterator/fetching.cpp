@@ -11,6 +11,8 @@
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
 namespace NKikimr::NOlap::NReader::NSimple {
 
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
@@ -383,11 +385,15 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
     auto resultBatch = BuildPageResultBatch(source);
     auto* sSource = source->MutableAs<IDataSource>();
     const ui32 recordsCount = resultBatch ? resultBatch->num_rows() : 0;
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TBuildResultStep")("source_idx", source->GetSourceIdx())("count", recordsCount);
+    YDB_LOG_DEBUG("",
+        {"event", "TBuildResultStep"},
+        {"sourceIdx", source->GetSourceIdx()},
+        {"count", recordsCount});
     context->GetCommonContext()->GetCounters().OnSourceFinished(source->GetRecordsCount(), sSource->GetUsedRawBytes(), recordsCount);
     sSource->MutableResultRecordsCount() += recordsCount;
     if (!resultBatch || !resultBatch->num_rows()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("empty_source", sSource->DebugJson().GetStringRobust());
+        YDB_LOG_DEBUG("",
+            {"emptySource", sSource->DebugJson().GetStringRobust()});
     }
     source->MutableStageResult().SetResultChunk(std::move(resultBatch), StartIndex, RecordsCount);
     ReportTracing(source, step, TMonotonic::Now() - startExecution);
@@ -420,12 +426,15 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
     for (auto&& i : source->GetStageResult().GetPagesToResultVerified()) {
         if (sSource->GetIsStartedByCursor() && !context->GetCommonContext()->GetScanCursor()->CheckSourceIntervalUsage(
                                                    source->GetSourceIdx(), i.GetIndexStart(), i.GetRecordsCount())) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep_SKIP_CURSOR")(
-                "source_idx", source->GetSourceIdx());
+            YDB_LOG_WARN("",
+                {"event", "TPrepareResultStep_ResultStep_SKIP_CURSOR"},
+                {"sourceIdx", source->GetSourceIdx()});
             source->MutableStageResult().ExtractPageForResult();
             continue;
         } else {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep")("source_idx", source->GetSourceIdx());
+            YDB_LOG_DEBUG("",
+                {"event", "TPrepareResultStep_ResultStep"},
+                {"sourceIdx", source->GetSourceIdx()});
         }
         acc.AddStep(std::make_shared<TBuildResultStep>(i.GetIndexStart(), i.GetRecordsCount()));
     }
@@ -450,8 +459,11 @@ void TDuplicateFilter::TFilterSubscriber::ReportTracing(const std::shared_ptr<NC
 
 void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& filter) {
     if (auto source = Source.lock()) {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "fetch_filter")("source", source->GetSourceIdx())(
-            "filter", filter.DebugString())("aborted", source->GetContext()->IsAborted());
+        YDB_LOG_TRACE("",
+            {"event", "fetch_filter"},
+            {"source", source->GetSourceIdx()},
+            {"filter", filter.DebugString()},
+            {"aborted", source->GetContext()->IsAborted()});
         if (source->GetContext()->IsAborted()) {
             return;
         }

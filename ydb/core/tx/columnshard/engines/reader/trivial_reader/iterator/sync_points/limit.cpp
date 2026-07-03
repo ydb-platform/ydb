@@ -60,13 +60,16 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
 
     if (UnfilledIterators.front().GetSourceIdx() != source->GetSourceIdx()) {
         for (auto it : UnfilledIterators) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("UnfilledIterators", it.DebugString());
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"unfilledIterators", it.DebugString()});
         }
         for (auto it : FilledIterators) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("FilledIterators", it.DebugString());
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"filledIterators", it.DebugString()});
         }
         for (auto it : SourcesSequentially) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("SourcesSequentially", it->GetSourceIdx());
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"sourcesSequentially", it->GetSourceIdx()});
         }
         if (FindIf(UnfilledIterators, [&](const auto& item) {
                 return item.GetSourceIdx() == source->GetSourceIdx();
@@ -107,8 +110,11 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
         } else {
             AFL_VERIFY(*PKPrefixSize == arrs.size())("prefix", PKPrefixSize)("arr", arrs.size());
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoOnSourceCheckLimitFillIterator")("source_idx", source->GetSourceIdx())(
-            "fetched", FetchedCount)("limit", Limit);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"event", "DoOnSourceCheckLimitFillIterator"},
+            {"sourceIdx", source->GetSourceIdx()},
+            {"fetched", FetchedCount},
+            {"limit", Limit});
         FilledIterators.emplace_back(arrs, source->GetStageResult().GetNotAppliedFilter(), source);
         AFL_VERIFY(FilledIterators.back().IsFilled());
         std::push_heap(FilledIterators.begin(), FilledIterators.end());

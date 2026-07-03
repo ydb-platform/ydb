@@ -3715,6 +3715,67 @@ Y_UNIT_TEST(ReadAttemptPurgeClearsReplayState) {
     UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(second), (std::vector<ui64>{10, 11, 12}));
 }
 
+Y_UNIT_TEST(ReadWithZeroVisibilityTimeoutUnlocksImmediately) {
+    // SQS VisibilityTimeout=0: messages are handed to the client but their lock is released right away,
+    // so they stay Unprocessed and can be received again immediately (with a growing receive count).
+    TUtils utils;
+    utils.Storage.SetMaxMessageProcessingCount(100);
+    utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED);
+    for (ui32 group = 0; group < 3; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    const auto first = utils.ReadMessages(10, {}, TDuration::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1, 2}));
+    UNIT_ASSERT_VALUES_EQUAL(first.front().ApproximateReceiveCount, 1u);
+
+    // Nothing is left in flight after the read.
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().LockedMessageCount, 0);
+    for (ui64 offset = 0; offset < 3; ++offset) {
+        auto message = utils.GetMessage(offset);
+        UNIT_ASSERT(message.has_value());
+        UNIT_ASSERT_VALUES_EQUAL_C(static_cast<int>(message->Status),
+            static_cast<int>(TStorage::EMessageStatus::Unprocessed), offset);
+    }
+
+    // The same messages are immediately available again; the receive count keeps growing.
+    const auto second = utils.ReadMessages(10, {}, TDuration::Zero());
+    auto secondOffsets = GetReadOffsets(second);
+    std::sort(secondOffsets.begin(), secondOffsets.end());
+    UNIT_ASSERT_VALUES_EQUAL(secondOffsets, (std::vector<ui64>{0, 1, 2}));
+    for (const auto& message : second) {
+        UNIT_ASSERT_VALUES_EQUAL(message.ApproximateReceiveCount, 2u);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().LockedMessageCount, 0);
+}
+
+Y_UNIT_TEST(ReadWithZeroVisibilityTimeoutMovesToDLQ) {
+    // Even with immediate unlock, the receive count still advances the message towards the DLQ once the
+    // configured receive limit is reached. The read that reaches the limit still returns the message.
+    TUtils utils;
+    utils.Storage.SetMaxMessageProcessingCount(3);
+    utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+    utils.AddMessageWithGroup(0, 0);
+
+    for (ui32 attempt = 1; attempt <= 3; ++attempt) {
+        const auto read = utils.ReadMessages(10, {}, TDuration::Zero());
+        UNIT_ASSERT_VALUES_EQUAL_C(GetReadOffsets(read), (std::vector<ui64>{0}), attempt);
+        UNIT_ASSERT_VALUES_EQUAL_C(read.front().ApproximateReceiveCount, attempt, attempt);
+    }
+
+    // After hitting the receive limit the message is scheduled to the DLQ and is no longer delivered.
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetDLQMessages().size(), 1);
+    {
+        auto message = utils.GetMessage(0);
+        UNIT_ASSERT(message.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(message->Status),
+            static_cast<int>(TStorage::EMessageStatus::DLQ));
+    }
+
+    const auto afterDlq = utils.ReadMessages(10, {}, TDuration::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(afterDlq.size(), 0);
+}
+
 }
 
 } // namespace NKikimr::NPQ::NMLP

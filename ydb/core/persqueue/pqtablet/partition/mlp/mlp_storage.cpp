@@ -399,6 +399,11 @@ std::deque<TReadMessage> TStorage::Read(
 ) {
     std::deque<TReadMessage> messages;
 
+    // SQS VisibilityTimeout=0 semantics: the messages are still delivered to the client (their receive
+    // count is incremented and they may be moved to the DLQ once the limit is reached), but their lock is
+    // released immediately so they become visible again right away instead of staying in flight.
+    const bool immediateUnlock = visibilityDeadline <= now;
+
     if (receiveAttemptId) {
         if (auto it = ReceiveAttempts_.find(receiveAttemptId); it != ReceiveAttempts_.end()) {
             auto& attempt = it->second;
@@ -408,6 +413,11 @@ std::deque<TReadMessage> TStorage::Read(
                 }
             }
             attempt.Expiry = now + ReceiveAttemptIdPeriod;
+            if (immediateUnlock) {
+                for (const auto& message : messages) {
+                    DoUnlock(message.Offset);
+                }
+            }
             return messages;
         }
     }
@@ -418,6 +428,15 @@ std::deque<TReadMessage> TStorage::Read(
             break;
         }
         messages.push_back(std::move(result.value()));
+    }
+
+    if (immediateUnlock) {
+        // Replaying via receive-attempt-id is meaningless when the messages are unlocked right away,
+        // so we do not record the attempt in that case.
+        for (const auto& message : messages) {
+            DoUnlock(message.Offset);
+        }
+        return messages;
     }
 
     if (receiveAttemptId && !messages.empty()) {

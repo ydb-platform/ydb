@@ -721,7 +721,9 @@ void TConsumerActor::ProcessEventQueue() {
     TStorage::TPosition position;
     std::deque<TEvPQ::TEvMLPReadRequest::TPtr> readRequestsQueue;
     for (auto& ev : ReadRequestsQueue) {
-        auto visibilityDeadline = ev->Get()->GetProcessingTimeout().ToDeadLine();
+        // Use the same `now` reference for the whole batch so that a zero VisibilityTimeout yields
+        // visibilityDeadline == now (i.e. the message is delivered but unlocked immediately).
+        auto visibilityDeadline = now + ev->Get()->GetProcessingTimeout();
 
         absl::flat_hash_set<ui32> skipMessageGroups; // TODO: remove after SQS migration finished
         skipMessageGroups.reserve(ev->Get()->Record.GetSkipMessageGroup().size());

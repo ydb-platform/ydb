@@ -38,31 +38,6 @@ TRenameSourceCounts CountRenameSources(const TOpMap& map) {
     return result;
 }
 
-bool WillExposeRenameSource(const TRenameSourceCounts& remainingRenameSourceCounts, const TInfoUnit& source) {
-    const auto it = remainingRenameSourceCounts.find(source);
-    Y_ENSURE(it != remainingRenameSourceCounts.end());
-    return it->second == 1;
-}
-
-bool CanConvertRenameToAppend(
-    const TMapElement& element,
-    const TRenameSourceCounts& remainingRenameSourceCounts,
-    const TInfoUnitSet& output,
-    const TInfoUnitConstraintSet& forbidden)
-{
-    const auto source = element.GetRename();
-    if (source == element.GetElementName()) {
-        // Identity renames are handled by identity-map cleanup.
-        return false;
-    }
-
-    if (!WillExposeRenameSource(remainingRenameSourceCounts, source)) {
-        return true;
-    }
-
-    return !output.contains(source) && !forbidden.contains(source);
-}
-
 } // anonymous namespace
 
 bool TRenameToAppendRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
@@ -89,7 +64,13 @@ bool TRenameToAppendRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOCon
         }
 
         const auto source = mapElement.GetRename();
-        if (!CanConvertRenameToAppend(mapElement, remainingRenameSourceCounts, output, forbidden)) {
+        if (source == mapElement.GetElementName()) {
+            // Identity renames are handled by identity-map cleanup.
+            continue;
+        }
+
+        const bool exposesSource = remainingRenameSourceCounts.at(source) == 1;
+        if (exposesSource && (output.contains(source) || forbidden.contains(source))) {
             continue;
         }
 

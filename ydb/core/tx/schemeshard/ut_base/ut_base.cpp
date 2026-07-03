@@ -686,9 +686,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                     UNIT_ASSERT_C(aclHasConnect(childACL.GetForChildren(/*isContainer*/ false)),
                         "connect right must keep propagating to objects, isContainer=" << isContainer);
                     UNIT_ASSERT_C(aclHasRead(childACL.GetForChildren(/*isContainer*/ true)),
-                        "ordinary right read right must survive in ForContainers, isContainer=" << isContainer);
+                        "ordinary read right must survive in ForContainers, isContainer=" << isContainer);
                     UNIT_ASSERT_C(aclHasRead(childACL.GetForChildren(/*isContainer*/ false)),
-                        "ordinary right read right must survive in ForObjects, isContainer=" << isContainer);
+                        "ordinary read right must survive in ForObjects, isContainer=" << isContainer);
                 }
             }
         }

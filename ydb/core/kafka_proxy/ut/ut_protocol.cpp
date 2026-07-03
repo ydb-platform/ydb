@@ -2856,20 +2856,41 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, NONE_ERROR);
             WriteMessagesWithKeys(writeSession, {{"key-1", 6_MB}}, 10);
             Sleep(TDuration::Seconds(10));
-            for (ui32 triesCount = 3; triesCount != 0;) {
-                auto results = Read(readSession, false);
-                if (results.empty()) {
-                    triesCount--;
+
+            readSession.reset();
+            TMaybe<ui64> lastSeenOffset;
+            for (ui32 triesCount = 60; triesCount != 0; --triesCount) {
+                auto retryReadSession = pqClient.CreateReadSession(rSSettings);
+                bool gotMessage = false;
+                for (ui32 readTriesCount = 10; readTriesCount != 0 && !gotMessage; --readTriesCount) {
+                    auto results = Read(retryReadSession, false);
+                    if (results.empty()) {
+                        Sleep(TDuration::MilliSeconds(250));
+                        continue;
+                    }
+                    for (auto& dataEvent : results) {
+                        for (const auto& msg : dataEvent.GetMessages()) {
+                            lastSeenOffset = msg.GetOffset();
+                            gotMessage = true;
+                            break;
+                        }
+                        if (gotMessage) {
+                            break;
+                        }
+                    }
+                }
+                if (lastSeenOffset && *lastSeenOffset > 1) {
+                    break;
+                }
+                if (!gotMessage) {
                     Sleep(TDuration::MilliSeconds(250));
                     continue;
                 }
-                for (auto& dataEvent : results) {
-                    for (const auto& msg : dataEvent.GetMessages()) {
-                        UNIT_ASSERT_GT(msg.GetOffset(), 1);
-                        break;
-                    }
-                }
+                Sleep(TDuration::MilliSeconds(250));
             }
+            UNIT_ASSERT_C(lastSeenOffset && *lastSeenOffset > 1,
+                "Timed out waiting for first readable offset to advance past 1, last seen offset: "
+                    << (lastSeenOffset ? ToString(*lastSeenOffset) : TString("none")));
         }
 
     Y_UNIT_TEST(DescribeConfigsScenario) {

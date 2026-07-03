@@ -42,7 +42,8 @@ enum EOperationType {
     Sort = 7,
     Reduce = 8,
     Pull = 9,
-    Fill = 10
+    Fill = 10,
+    MapReduce = 11
 };
 
 enum class ETaskType {
@@ -56,7 +57,8 @@ enum class ETaskType {
     LocalSort = 7,
     Reduce = 8,
     Pull = 9,
-    Fill = 10
+    Fill = 10,
+    MapReduceMap = 11
 };
 
 enum class EFmrComponent {
@@ -508,9 +510,32 @@ struct TReduceTaskParams {
     TReduceOperationSpec ReduceOperationSpec;
 };
 
-using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams, TSortOperationParams, TReduceOperationParams, TPullOperationParams, TFillOperationParams>;
+// Service column added by map stage to hash-route rows to the correct reducer.
+static constexpr TStringBuf YqlKeyHashColumn = "_yql_key_hash";
 
-using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TSortedMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams, TLocalSortTaskParams, TReduceTaskParams, TPullTaskParams, TFillTaskParams>;
+// Build sort columns for the MapReduceMap intermediate table:
+// _yql_key_hash first (integer comparison for routing), then the actual reduce-by columns.
+TSortingColumns MakeMapReduceIntermediateSortColumns(const TSortingColumns& reduceBy);
+
+struct TMapReduceOperationParams {
+    std::vector<TOperationTableRef> Input;
+    std::vector<TFmrTableRef> Output;
+    TString SerializedMapJobState;
+    TString SerializedReduceJobState;
+    TReduceOperationSpec ReduceOperationSpec;
+};
+
+// Task for the map stage: apply mapper, compute _yql_key_hash, local-sort by hash+keys.
+struct TMapReduceMapTaskParams {
+    TTaskTableInputRef Input;
+    TFmrTableOutputRef Output;           // intermediate FMR table (one per map task)
+    TString SerializedMapJobState;
+    TReduceOperationSpec ReduceOperationSpec; // tells worker which columns to hash and sort by
+};
+
+using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams, TSortOperationParams, TReduceOperationParams, TPullOperationParams, TFillOperationParams, TMapReduceOperationParams>;
+
+using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TSortedMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams, TLocalSortTaskParams, TReduceTaskParams, TPullTaskParams, TFillTaskParams, TMapReduceMapTaskParams>;
 
 struct TFileInfo {
     TString LocalPath; // Path to local file, filled in worker.

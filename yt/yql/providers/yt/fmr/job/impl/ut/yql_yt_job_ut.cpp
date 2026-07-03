@@ -435,6 +435,55 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
             UNIT_ASSERT(expected.Contains(line));
         }
     }
+
+    Y_UNIT_TEST(MapReduceMap) {
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+        TTempFileHandle file;
+        SetupTableDataServiceDiscovery(file, port);
+        auto tableDataServiceClient = MakeTableDataServiceClient(port);
+        auto tableDataServiceServer = MakeTableDataServiceServer(port);
+
+        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeFileYtJobService();
+        std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
+
+        TTempFileHandle ytInputFile;
+        {
+            TFileOutput out(ytInputFile.Name());
+            out.Write(TableContent_1.data(), TableContent_1.size());
+        }
+        auto richPath = NYT::TRichYPath("test_path").Cluster("test_cluster");
+        TYtTableTaskRef input = TYtTableTaskRef{.RichPaths = {richPath}, .FilePaths = {ytInputFile.Name()}};
+
+        TString outputTableId = "mr_output_table_id", partId = "test_part_id";
+        TSortingColumns reduceBy{.Columns = {"key"}, .SortOrders = {ESortOrder::Ascending}};
+        TFmrTableOutputRef output = TFmrTableOutputRef(outputTableId, partId);
+        output.SortingColumns = MakeMapReduceIntermediateSortColumns(reduceBy);
+
+        TMapReduceMapTaskParams params{
+            .Input = TTaskTableInputRef{.Inputs = {input}},
+            .Output = output,
+            .SerializedMapJobState = {},
+            .ReduceOperationSpec = TReduceOperationSpec{.ReduceBy = reduceBy, .SortBy = reduceBy}
+        };
+        TTask::TPtr task = MakeTask(ETaskType::MapReduceMap, "test_task_id", params, "test_session_id",
+                                    {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
+        ETaskStatus status = RunJob(task, MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher, cancelFlag).TaskStatus;
+
+        UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
+
+        auto resultMaybe = tableDataServiceClient->Get(GetTableDataServiceGroup(outputTableId, partId), "0").GetValueSync();
+        UNIT_ASSERT_C(resultMaybe, "MapReduceMap output is empty");
+
+        TString resultText = GetTextYson(*resultMaybe);
+        auto resultNodes = NYT::NodeFromYsonString(resultText, NYT::NYson::EYsonType::ListFragment);
+        UNIT_ASSERT_EQUAL(resultNodes.AsList().size(), 4u);
+        for (const auto& node : resultNodes.AsList()) {
+            UNIT_ASSERT_C(node.HasKey(TString(YqlKeyHashColumn)),
+                          "Row missing _yql_key_hash: " << NYT::NodeToYsonString(node));
+        }
+    }
 }
 
 } // namespace NYql

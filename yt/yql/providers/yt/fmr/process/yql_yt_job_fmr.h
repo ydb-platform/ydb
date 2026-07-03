@@ -108,6 +108,10 @@ public:
         ReduceOperationSpec_ = reduceOperationSpec;
     }
 
+    void SetIsMapReduceReducer(bool value) {
+        IsMapReduceReducer_ = value;
+    }
+
     void Save(IOutputStream& s) const override;
     void Load(IInputStream& s) override;
 
@@ -119,6 +123,8 @@ protected:
     TIntrusivePtr<NYT::IReaderImplBase> MakeMkqlJobReader() override;
 
     void ChangeMkqlIOSpecIfNeeded() override;
+
+    void PostInitMkqlIOSpec() override;
 
     bool NeedWriteStats() override {
         return false;
@@ -145,6 +151,7 @@ private:
     TMaybe<TFmrTvmJobSettings> TvmSettings_ = Nothing();
     TMaybe<TVanillaInfo> VanillaInfo_ = Nothing();
     TMaybe<TReduceOperationSpec> ReduceOperationSpec_;
+    bool IsMapReduceReducer_ = false;
     // End of serializable part
 
     // Non-serialized: set only for in-process execution via SetTableDataServiceDiscovery.

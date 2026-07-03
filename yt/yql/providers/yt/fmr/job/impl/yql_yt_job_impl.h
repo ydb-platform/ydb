@@ -106,4 +106,14 @@ void FillFillFmrJob(
     IYtJobService::TPtr jobService
 );
 
+void FillMapReduceMapFmrJob(
+    TFmrUserJob& mapReduceMapJob,
+    const TMapReduceMapTaskParams& params,
+    const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
+    ITableDataServiceDiscovery::TPtr discovery,
+    TMaybe<TVanillaInfo> vanillaInfo,
+    const TFmrUserJobSettings& userJobSettings,
+    IYtJobService::TPtr jobService
+);
+
 } // namespace NYql

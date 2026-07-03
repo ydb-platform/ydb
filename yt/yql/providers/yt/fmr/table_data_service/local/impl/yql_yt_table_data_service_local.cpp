@@ -31,7 +31,7 @@ public:
         TGuard<TMutex> guard(Mutex_);
         if (!Data_.contains(group) || !Data_.at(group).contains(chunkId)) {
             TMaybe<TString> emptyRes = Nothing();
-            YQL_CLOG(ERROR, FastMapReduce) << " Failed to get key with group " << group << " and chunkId " << chunkId;
+            YQL_CLOG(ERROR, FastMapReduce) << "Failed to get key with group " << group << " and chunkId " << chunkId;
             return NThreading::MakeFuture(emptyRes);
         }
         TMaybe<TString> value = Data_.at(group).at(chunkId);

@@ -22,6 +22,7 @@ PEERDIR(
     yt/yql/providers/yt/fmr/job/interface
     yt/yql/providers/yt/fmr/utils
     yt/yql/providers/yt/fmr/utils/comparator
+    yt/yql/providers/yt/fmr/utils/hasher
     yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl
     yt/yql/providers/yt/fmr/job_launcher
     yt/yql/providers/yt/fmr/table_data_service/client/impl

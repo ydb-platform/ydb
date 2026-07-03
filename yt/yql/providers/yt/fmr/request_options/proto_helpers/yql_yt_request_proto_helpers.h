@@ -201,6 +201,14 @@ NProto::TFillTaskParams FillTaskParamsToProto(const TFillTaskParams& fillTaskPar
 
 TFillTaskParams FillTaskParamsFromProto(const NProto::TFillTaskParams& protoFillTaskParams);
 
+NProto::TMapReduceOperationParams MapReduceOperationParamsToProto(const TMapReduceOperationParams& mapReduceOperationParams);
+
+TMapReduceOperationParams MapReduceOperationParamsFromProto(const NProto::TMapReduceOperationParams& protoMapReduceOperationParams);
+
+NProto::TMapReduceMapTaskParams MapReduceMapTaskParamsToProto(const TMapReduceMapTaskParams& mapReduceMapTaskParams);
+
+TMapReduceMapTaskParams MapReduceMapTaskParamsFromProto(const NProto::TMapReduceMapTaskParams& protoMapReduceMapTaskParams);
+
 NProto::TTaskResult TaskResultToProto(const TTaskResult& taskResult);
 
 TTaskResult TaskResultFromProto(const NProto::TTaskResult& protoTaskResult);

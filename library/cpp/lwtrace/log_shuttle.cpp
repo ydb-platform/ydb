@@ -22,7 +22,9 @@ namespace NLWTrace {
 
     template <class TDepot>
     bool TLogShuttle<TDepot>::DoFork(TShuttlePtr& child) {
-        if (child = Executor->RentShuttle()) {
+        if (auto shuttle = Executor->RentShuttle()) {
+            shuttle->SetNext(child);
+            child = shuttle;
             child->SetParentSpanId(GetSpanId());
             Executor->Cast(child)->SetIgnore(true);
             TParams params;

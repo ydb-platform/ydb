@@ -202,6 +202,7 @@ runs:
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
         IS_TEST_RESULT_IGNORED=0
+        DASHBOARD_SANITIZER=""
 
         case "$BUILD_PRESET" in
           debug)
@@ -217,11 +218,13 @@ runs:
             params+=(
               --build "release" --sanitize="address"
             )
+            DASHBOARD_SANITIZER="address"
             ;;
           release-tsan)
             params+=(
               --build "release" --sanitize="thread"
             )
+            DASHBOARD_SANITIZER="thread"
             if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1
             fi
@@ -231,6 +234,7 @@ runs:
             params+=(
               --build "release" --sanitize="memory"
             )
+            DASHBOARD_SANITIZER="memory"
             if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1
             fi
@@ -407,6 +411,14 @@ runs:
 
           monitor_memory &
           MONITOR_PID=$!
+
+          RESOURCES_JSONL="$CURRENT_PUBLIC_DIR/resources_monitor.jsonl"
+          rm -f "$RESOURCES_JSONL"
+          python3 .github/scripts/utils/metrics/monitor_resources.py \
+            --output "$RESOURCES_JSONL" \
+            --interval 1 &
+          MONITOR_RESOURCES_PID=$!
+
           if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
             GRAPH_OPTS="--build-custom-json=$GRAPH_PATH --custom-context=$CONTEXT_PATH"
           else
@@ -452,7 +464,14 @@ runs:
             echo "35 [OOM dmesg (try $RETRY)]($OOM_DMESG_LOG_URL)" >> $SUMMARY_LINKS
           fi
 
-          kill $MONITOR_PID
+          if [ -n "$MONITOR_PID" ] && kill -0 "$MONITOR_PID" 2>/dev/null; then
+            kill "$MONITOR_PID" 2>/dev/null || true
+            wait "$MONITOR_PID" 2>/dev/null || true
+          fi
+          if [ -n "$MONITOR_RESOURCES_PID" ] && kill -0 "$MONITOR_RESOURCES_PID" 2>/dev/null; then
+            kill "$MONITOR_RESOURCES_PID" 2>/dev/null || true
+            wait "$MONITOR_RESOURCES_PID" 2>/dev/null || true
+          fi
 
           .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
 
@@ -470,6 +489,46 @@ runs:
           # seems analyze-make don't have simple "output" parameter, so change cwd
           ya_dir=$(pwd)
           (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
+
+          # build tests resource dashboard with metrics overlay (CPU/RAM/disk)
+          TESTS_METRICS_DIR="$CURRENT_PUBLIC_DIR/tests_metrics"
+          mkdir -p "$TESTS_METRICS_DIR"
+          DASHBOARD_ARGS=()
+          if [ -n "$DASHBOARD_SANITIZER" ]; then
+            DASHBOARD_ARGS+=(--sanitizer "$DASHBOARD_SANITIZER")
+          fi
+          TRY_LINKS=""
+          for i in $(seq 1 $RETRY); do TRY_LINKS="${TRY_LINKS}try_$i/tests_metrics/dashboard.html,"; done
+          TRY_LINKS="${TRY_LINKS%,}"
+          DASHBOARD_OK=0
+          if ! python3 .github/scripts/utils/dashboard/test_metrics/tests_resource_dashboard.py \
+            --report "$CURRENT_REPORT" \
+            --evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
+            --top-n 500 \
+            --out-html "$TESTS_METRICS_DIR/dashboard.html" \
+            --out-trace "$TESTS_METRICS_DIR/trace.json" \
+            --out-stats "$TESTS_METRICS_DIR/stats.json" \
+            --resources-jsonl "$RESOURCES_JSONL" \
+            --runner "${{ runner.name }}" \
+            --pr "${{ github.event.number }}" \
+            --branch "${BRANCH_NAME}" \
+            --commit "${ORIGINAL_HEAD}" \
+            --artifacts-url "${PUBLIC_DIR_URL}" \
+            --try-links "$TRY_LINKS" \
+            --repo "${{ github.repository }}" \
+            --repo-root . \
+            "${DASHBOARD_ARGS[@]}" > "$TESTS_METRICS_DIR/dashboard_build.log" 2>&1; then
+            mv "$TESTS_METRICS_DIR/dashboard_build.log" "$TESTS_METRICS_DIR/dashboard_error.log"
+            echo "Dashboard generation failed (see dashboard_error.log in artifacts)"
+          else
+            rm -f "$TESTS_METRICS_DIR/dashboard_build.log"
+            DASHBOARD_OK=1
+          fi
+          cp -f "$RESOURCES_JSONL" "$TESTS_METRICS_DIR/resources_monitor.jsonl" 2>/dev/null || true
+          cp -f ram_usage.txt "$TESTS_METRICS_DIR/ram_usage_legacy.txt" 2>/dev/null || true
+          if [ "$DASHBOARD_OK" -eq 1 ]; then
+            echo "21 [Dashboard try $RETRY](${CURRENT_PUBLIC_DIR_URL}/tests_metrics/dashboard.html)" >> $SUMMARY_LINKS
+          fi
 
           # generate test_bloat
           ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true

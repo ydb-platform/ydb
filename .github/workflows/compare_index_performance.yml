@@ -65,6 +65,11 @@ on:
         description: 'Comma-separated table_service_config options for current branch (e.g. enable_vector_index_read=true)'
         required: false
         default: ''
+      build_baseline:
+        description: 'Build baseline ydbd from the exact resolved commit instead of downloading a prebuilt S3 binary'
+        required: false
+        type: boolean
+        default: true
       pull_number:
         description: 'Pull request number to test the current side against, ex: 12345 (empty = current branch)'
         required: false
@@ -113,6 +118,21 @@ jobs:
         with:
           ref: ${{ steps.resolve-ref.outputs.checkout_ref }}
 
+      - name: Build baseline ydbd
+        id: build-baseline
+        if: ${{ inputs.build_baseline != 'false' }}
+        env:
+          BASELINE_SHA: ${{ steps.resolve-ref.outputs.baseline_sha }}
+          INPUT_BUILD_PRESET: ${{ inputs.build_preset || 'release' }}
+        run: |
+          git fetch --depth=1 origin "$BASELINE_SHA"
+          git worktree add ../baseline "$BASELINE_SHA"
+          cd ../baseline
+          ./ya make --build "$INPUT_BUILD_PRESET" ydb/apps/ydbd
+          BINARY=$(find . -name ydbd -path '*/ydb/apps/ydbd/ydbd' -not -path '*/ydb/apps/ydbd/ydbd/*' 2>/dev/null | head -1)
+          BINARY=$(realpath "$BINARY")
+          echo "binary=$BINARY" >> "$GITHUB_OUTPUT"
+
       - name: Run performance comparison
         env:
           INPUT_DURATION: ${{ inputs.duration || '100' }}
@@ -130,9 +150,14 @@ jobs:
           INPUT_CURRENT_TABLE_SERVICE_CONFIG: ${{ inputs.current_table_service_config || '' }}
           INPUT_BASELINE_SHA: ${{ steps.resolve-ref.outputs.baseline_sha }}
           INPUT_CURRENT_SHA: ${{ steps.resolve-ref.outputs.checkout_ref }}
+          INPUT_BASELINE_YDBD: ${{ steps.build-baseline.outputs.binary }}
         run: |
           # The feature-flag / table_service_config inputs are comma-separated
           # strings; the test splits them itself, so they are passed through as-is.
+          EXTRA_PARAMS=""
+          if [[ -n "$INPUT_BASELINE_YDBD" ]]; then
+            EXTRA_PARAMS="--test-param compare_baseline_ydbd=$INPUT_BASELINE_YDBD"
+          fi
           ./ya make --build "$INPUT_BUILD_PRESET" -tA --test-disable-timeout \
             ydb/tests/stress/compare_index_performance/tests \
             --test-param compare_duration="$INPUT_DURATION" \
@@ -149,7 +174,8 @@ jobs:
             --test-param compare_baseline_table_service_config="$INPUT_MAIN_TABLE_SERVICE_CONFIG" \
             --test-param compare_current_table_service_config="$INPUT_CURRENT_TABLE_SERVICE_CONFIG" \
             --test-param compare_baseline_sha="$INPUT_BASELINE_SHA" \
-            --test-param compare_current_sha="$INPUT_CURRENT_SHA"
+            --test-param compare_current_sha="$INPUT_CURRENT_SHA" \
+            $EXTRA_PARAMS
 
       - name: Post results to job summary
         if: always()

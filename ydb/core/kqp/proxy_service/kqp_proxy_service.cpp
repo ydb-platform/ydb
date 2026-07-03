@@ -794,7 +794,7 @@ public:
             ev->Get()->SetWmSessionUpdater(sessionInfo->WmState);
         }
 
-        TryFillPoolInfoFromCache(ev, sessionInfo, requestId);
+        SetupWorkloadManagerQueryClassifier(ev, sessionInfo, requestId);
 
         TActorId targetId;
         if (sessionInfo) {
@@ -1623,7 +1623,7 @@ private:
         }
     }
 
-    void TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, const TKqpSessionInfo* sessionInfo, ui64 /*requestId*/) {
+    void SetupWorkloadManagerQueryClassifier(TEvKqp::TEvQueryRequest::TPtr& ev, const TKqpSessionInfo* sessionInfo, ui64 /*requestId*/) {
         ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
         const auto& databaseId = ev->Get()->GetDatabaseId();
 

@@ -1380,7 +1380,7 @@ public:
         const ui32 idx = value.GetVariantIndex();
         Y_ENSURE(idx < Children_.size(), "Variant index out of range");
         TypeCodes_->UnsafeAppend(static_cast<i8>(idx));
-        ValueOffsets_->UnsafeAdvance(1);
+        ValueOffsets_->UnsafeAppend(0);
         auto item = value.GetVariantItem();
         Children_[idx]->Add(item);
     }
@@ -1389,7 +1389,7 @@ public:
         const ui32 idx = value.GetVariantIndex();
         Y_ENSURE(idx < Children_.size(), "Variant index out of range");
         TypeCodes_->UnsafeAppend(static_cast<i8>(idx));
-        ValueOffsets_->UnsafeAdvance(1);
+        ValueOffsets_->UnsafeAppend(0);
         Children_[idx]->Add(value.GetVariantItem());
     }
 
@@ -1397,7 +1397,7 @@ public:
         const auto typeCode = static_cast<ui8>(input.PopChar());
         Y_ENSURE(typeCode < Children_.size(), "Variant type code out of range");
         TypeCodes_->UnsafeAppend(static_cast<i8>(typeCode));
-        ValueOffsets_->UnsafeAdvance(1);
+        ValueOffsets_->UnsafeAppend(0);
         Children_[typeCode]->Add(input);
     }
 
@@ -1414,7 +1414,7 @@ public:
         //
         // This is not implemented yet, but we may support it in the near future.
         TypeCodes_->UnsafeAppend(static_cast<i8>(0));
-        ValueOffsets_->UnsafeAdvance(1);
+        ValueOffsets_->UnsafeAppend(0);
         Children_[0]->AddDefault();
     }
 
@@ -1429,7 +1429,7 @@ public:
             i8 typeCode = typeCodes[i];
             const i32 valueOffset = valueOffsets[i];
             TypeCodes_->UnsafeAppend(i8{typeCode});
-            ValueOffsets_->UnsafeAdvance(1);
+            ValueOffsets_->UnsafeAppend(0);
             Children_[typeCode]->AddMany(*array.child_data[typeCode], valueOffset, 1);
             ++added;
         }
@@ -1442,7 +1442,7 @@ public:
             i8 typeCode = typeCodes[i];
             const i32 valueOffset = valueOffsets[i];
             TypeCodes_->UnsafeAppend(i8{typeCode});
-            ValueOffsets_->UnsafeAdvance(1);
+            ValueOffsets_->UnsafeAppend(0);
             Children_[typeCode]->AddMany(*array.child_data[typeCode], valueOffset, 1);
         }
     }
@@ -1455,7 +1455,7 @@ public:
             i8 typeCode = typeCodes[idx];
             const i32 valueOffset = valueOffsets[idx];
             TypeCodes_->UnsafeAppend(i8{typeCode});
-            ValueOffsets_->UnsafeAdvance(1);
+            ValueOffsets_->UnsafeAppend(0);
             Children_[typeCode]->AddMany(*array.child_data[typeCode], valueOffset, 1);
         }
     }

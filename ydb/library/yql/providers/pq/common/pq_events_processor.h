@@ -50,16 +50,12 @@ class TTopicEventProcessor {
             ActorSystem->Send(ExecuterId, new TTopicEvent(std::move(f)));
         }
 
-        void Shutdown() {
+        void Stop() final {
             Stopped.store(true);
         }
 
     private:
         void DoStart() final {
-        }
-
-        void Stop() final {
-            Shutdown();
         }
 
     private:
@@ -90,7 +86,7 @@ protected:
 
     void StopExecuterProxy() {
         if (ExecuterProxy) {
-            ExecuterProxy->Shutdown();
+            ExecuterProxy->Stop();
         }
     }
 

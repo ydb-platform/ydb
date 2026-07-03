@@ -560,6 +560,36 @@ TYPED_TEST(TAttachmentsTest, RegularAttachments)
     EXPECT_EQ("TTestProxy_", StringFromRef(attachments[2]));
 }
 
+TYPED_TEST(TNotGrpcTest, DirectPlacementAttachments)
+{
+    TTestProxy proxy(this->CreateChannel());
+    auto req = proxy.DirectPlacementAttachments();
+
+    // Direct placement transfer is requested per call (the server method declares
+    // support for it).
+    req->RequestAttachmentsDptParameters().Enabled = true;
+    req->ResponseAttachmentsDptParameters().Enabled = true;
+
+    req->Attachments().push_back(TSharedRef::FromString("Hello"));
+    req->Attachments().push_back(TSharedRef::FromString("from"));
+    req->Attachments().push_back(TSharedRef::FromString("TTestProxy"));
+
+    auto rspOrError = WaitForFast(req->Invoke());
+    EXPECT_TRUE(rspOrError.IsOK());
+    const auto& rsp = rspOrError.Value();
+
+    // The bus transports under test are not DPT-capable, so the attachments are
+    // delivered inline: no transfer is exposed and the attachments are immediately
+    // available. (Actual zero-copy DPT is exercised over RDMA-capable transports.)
+    EXPECT_FALSE(rsp->TryGetResponseAttachmentsTransfer());
+
+    const auto& attachments = rsp->Attachments();
+    EXPECT_EQ(3u, attachments.size());
+    EXPECT_EQ("Hello_", StringFromRef(attachments[0]));
+    EXPECT_EQ("from_", StringFromRef(attachments[1]));
+    EXPECT_EQ("TTestProxy_", StringFromRef(attachments[2]));
+}
+
 TYPED_TEST(TNotGrpcTest, TrackedRegularAttachments)
 {
     TTestProxy proxy(this->CreateChannel());

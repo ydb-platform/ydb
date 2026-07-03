@@ -58,7 +58,7 @@ struct TOrdering {
               std::move(items),
               std::vector<TItem::EDirection>{},
               type,
-              false)
+              /*isNatural=*/false)
     {
     }
 

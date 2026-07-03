@@ -11,6 +11,7 @@
 #include "stream.h"
 
 #include <yt/yt/core/bus/bus.h>
+#include <yt/yt/core/bus/direct_placement_transfer.h>
 
 #include <yt/yt/core/concurrency/delayed_executor.h>
 #include <yt/yt/core/concurrency/lease_manager.h>
@@ -237,6 +238,20 @@ auto TServiceBase::TMethodDescriptor::SetStreamingEnabled(bool value) const -> T
     return result;
 }
 
+auto TServiceBase::TMethodDescriptor::SetRequestAttachmentsDptEnabled(bool value) const -> TMethodDescriptor
+{
+    auto result = *this;
+    result.RequestAttachmentsDptEnabled = value;
+    return result;
+}
+
+auto TServiceBase::TMethodDescriptor::SetResponseAttachmentsDptEnabled(bool value) const -> TMethodDescriptor
+{
+    auto result = *this;
+    result.ResponseAttachmentsDptEnabled = value;
+    return result;
+}
+
 auto TServiceBase::TMethodDescriptor::SetPooled(bool value) const -> TMethodDescriptor
 {
     auto result = *this;
@@ -306,6 +321,7 @@ TServiceBase::TRuntimeMethodInfo::TRuntimeMethodInfo(
     const NProfiling::TProfiler& profiler)
     : ServiceId(std::move(serviceId))
     , Descriptor(std::move(descriptor))
+    , HandlerSpanName(Format("RpcServer:%v.%v", ServiceId.ServiceName, Descriptor.Method))
     , Profiler(profiler.WithTag("method", Descriptor.Method, -1))
     , DefaultRequestQueue(CreateRequestQueue("default"))
     , RequestLoggingAnchor(NLogging::TLogManager::Get()->RegisterDynamicAnchor(
@@ -372,6 +388,13 @@ public:
         YT_ASSERT(ReplyBus_);
         YT_ASSERT(Service_);
         YT_ASSERT(RuntimeInfo_);
+
+        // When the request's attachments are delivered via direct placement transfer
+        // (and the method opted in, see #DoHandleRequest), expose them lazily: they
+        // become available only once the service drives the transfer to completion.
+        if (incomingRequest.RequestAttachmentsTransfer) {
+            SetRequestAttachmentsTransfer(std::move(incomingRequest.RequestAttachmentsTransfer));
+        }
     }
 
     void InitializeRefCounted()
@@ -1010,6 +1033,15 @@ private:
             ? NBus::TSendOptions::AllParts
             : 2; // RPC header + response body
         busOptions.EnableSendCancelation = Cancelable_;
+
+        // Deliver the response attachments via direct placement transfer only when
+        // both the client requested it and the method supports it; otherwise they
+        // are sent inline (no DPT occurs).
+        if (RuntimeInfo_->Descriptor.ResponseAttachmentsDptEnabled &&
+            RequestHeader_->response_attachments_dpt_parameters().enabled())
+        {
+            busOptions.DirectPlacementTransferPartCount = GetMessageAttachmentCount(responseMessage);
+        }
 
         auto replySent = ReplyBus_->Send(responseMessage, busOptions);
         if (Cancelable_ && replySent) {
@@ -1756,7 +1788,8 @@ const TServiceId& TServiceBase::GetServiceId() const
 void TServiceBase::HandleRequest(
     std::unique_ptr<NProto::TRequestHeader> header,
     TSharedRefArray message,
-    IBusPtr replyBus)
+    IBusPtr replyBus,
+    NYT::NBus::IDirectPlacementTransferPtr requestAttachmentsTransfer)
 {
     SetActive();
 
@@ -1784,6 +1817,7 @@ void TServiceBase::HandleRequest(
         .UserTag = userTag,
         .Message = std::move(message),
         .MemoryUsageTracker = MemoryUsageTracker_,
+        .RequestAttachmentsTransfer = std::move(requestAttachmentsTransfer),
     });
 }
 
@@ -1801,6 +1835,16 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
         ReplyError(
             TError(NRpc::EErrorCode::NoSuchMethod, "Unknown method"),
             std::move(incomingRequest));
+        return;
+    }
+
+    // The client may request direct placement transfer of the request attachments
+    // for a method that does not support it. This is not an error: we simply
+    // materialize the attachments inline and proceed as usual (no DPT occurs).
+    if (incomingRequest.RequestAttachmentsTransfer &&
+        !incomingRequest.RuntimeInfo->Descriptor.RequestAttachmentsDptEnabled)
+    {
+        MaterializeRequestAttachmentsAndReinvoke(std::move(incomingRequest));
         return;
     }
 
@@ -1822,7 +1866,10 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
     }
 
     if (auto tracingMode = incomingRequest.RuntimeInfo->TracingMode.load(std::memory_order::relaxed); tracingMode != ERequestTracingMode::Disable) {
-        incomingRequest.TraceContext = GetOrCreateHandlerTraceContext(*incomingRequest.Header, tracingMode == ERequestTracingMode::Force);
+        incomingRequest.TraceContext = GetOrCreateHandlerTraceContext(
+            *incomingRequest.Header,
+            incomingRequest.RuntimeInfo->HandlerSpanName,
+            tracingMode == ERequestTracingMode::Force);
     }
 
     if (incomingRequest.TraceContext && incomingRequest.TraceContext->IsRecorded()) {
@@ -1893,6 +1940,56 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
             NYT::NRpc::EErrorCode::AuthenticationError,
             "Request is missing credentials"));
     }
+}
+
+namespace {
+
+struct TMaterializedRequestAttachmentsBufferTag
+{ };
+
+} // namespace
+
+void TServiceBase::MaterializeRequestAttachmentsAndReinvoke(TIncomingRequest&& incomingRequest)
+{
+    auto transfer = std::move(incomingRequest.RequestAttachmentsTransfer);
+
+    auto bufferSizes = transfer->GetExpectedBufferSizes();
+    std::vector<TSharedMutableRef> buffers;
+    buffers.reserve(bufferSizes.size());
+    for (auto size : bufferSizes) {
+        // Sizes are non-negative (a null part reports size zero); the transfer
+        // restores null parts as null refs.
+        buffers.push_back(TSharedMutableRef::Allocate<TMaterializedRequestAttachmentsBufferTag>(
+            size,
+            {.InitializeStorage = false}));
+    }
+
+    transfer->Run(std::move(buffers))
+        .AsUnique()
+        .Subscribe(BIND([this, this_ = MakeStrong(this)] (
+            TIncomingRequest&& incomingRequest,
+            TErrorOr<std::vector<TSharedRef>>&& partsOrError) mutable
+        {
+            if (!partsOrError.IsOK()) {
+                ReplyError(TError(partsOrError), std::move(incomingRequest));
+                return;
+            }
+
+            // Append the materialized attachments to the (header, body) message and
+            // re-dispatch inline. #RequestAttachmentsTransfer is now null, so the
+            // re-entry takes the regular path.
+            auto& parts = partsOrError.Value();
+            TSharedRefArrayBuilder builder(incomingRequest.Message.Size() + parts.size());
+            for (const auto& part : incomingRequest.Message) {
+                builder.Add(part);
+            }
+            for (auto& part : parts) {
+                builder.Add(std::move(part));
+            }
+            incomingRequest.Message = builder.Finish();
+
+            DoHandleRequest(std::move(incomingRequest));
+        }, Passed(std::move(incomingRequest))));
 }
 
 void TServiceBase::ReplyError(TError error, TIncomingRequest&& incomingRequest)

@@ -358,7 +358,9 @@ from_chars_float_advanced(UC const *first, UC const *last, T &value,
 // This is unfortunate.
 #ifdef __clang__
 #pragma clang diagnostic push
+#if (!defined(__APPLE_CC__) && __clang_major__ >= 10) || (__clang_major__ >= 13)
 #pragma clang diagnostic ignored "-Wc++20-extensions"
+#endif
 #endif
   if fastfloat_unlikely (pns.too_many_digits) {
     return parse_number_slow_path<T, UC>(first, last, value, options, bjf);

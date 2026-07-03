@@ -462,7 +462,8 @@ async def retry_operation(callee, retry_settings=None, *args, **kwargs):  # pyli
     opt_generator = ydb.retry_operation_impl(callee, retry_settings, *args, **kwargs)
     for next_opt in opt_generator:
         if isinstance(next_opt, ydb.YdbRetryOperationSleepOpt):
-            await asyncio.sleep(next_opt.timeout)
+            if next_opt.timeout > 0:
+                await asyncio.sleep(next_opt.timeout)
         else:
             try:
                 return await next_opt.result

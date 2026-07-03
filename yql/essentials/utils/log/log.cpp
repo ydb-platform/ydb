@@ -395,7 +395,7 @@ void InitLogger(const NProto::TLoggingConfig& config, bool startAsDaemon) {
 
         // Set stderr log destination if none was described in config
         if (config.LogDestSize() == 0) {
-            backends.emplace_back(CreateLogBackend("cerr", LOG_MAX_PRIORITY, false));
+            backends.emplace_back(CreateLogBackend("cerr", LOG_MAX_PRIORITY, /*threaded=*/false));
         }
 
         for (const auto& logDest : config.GetLogDest()) {
@@ -405,12 +405,12 @@ void InitLogger(const NProto::TLoggingConfig& config, bool startAsDaemon) {
                 case NProto::TLoggingConfig::STDOUT:
                 case NProto::TLoggingConfig::CONSOLE: {
                     if (!startAsDaemon) {
-                        backends.emplace_back(CreateLogBackend(ConvertDestinationType(logDest.GetType()), LOG_MAX_PRIORITY, false));
+                        backends.emplace_back(CreateLogBackend(ConvertDestinationType(logDest.GetType()), LOG_MAX_PRIORITY, /*threaded=*/false));
                     }
                     break;
                 }
                 case NProto::TLoggingConfig::FILE: {
-                    backends.emplace_back(CreateLogBackend(logDest.GetTarget(), LOG_MAX_PRIORITY, false));
+                    backends.emplace_back(CreateLogBackend(logDest.GetTarget(), LOG_MAX_PRIORITY, /*threaded=*/false));
                     break;
                 }
                 case NProto::TLoggingConfig::SYSLOG: {

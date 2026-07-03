@@ -909,6 +909,10 @@ public:
         ui64 tabletsTotal = 0;
         for (auto it = Self->Tablets.begin(); it != Self->Tablets.end(); ++it) {
             ++tabletsTotal;
+            if (it->second.ChannelProfileNewGroup.any()) {
+                it->second.IsMarkedForReassign = true;
+                Self->UpdateCounterTabletsReassigning(+1);
+            }
             for (const TTabletInfo& follower : it->second.Followers) {
                 ++tabletsTotal;
                 if (follower.IsLeader()) {

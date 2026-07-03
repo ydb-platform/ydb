@@ -46,7 +46,7 @@ static constinit const auto Profiler = TracingProfiler;
 ////////////////////////////////////////////////////////////////////////////////
 
 static const TString ServiceTicketMetadataName = "x-ya-service-ticket";
-static const TString TracingServiceAlias = "tracing";
+static const std::string TracingServiceAlias = "tracing";
 
 ////////////////////////////////////////////////////////////////////////////////
 

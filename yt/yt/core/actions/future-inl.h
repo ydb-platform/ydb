@@ -1825,12 +1825,11 @@ struct TAsyncViaHelper<R(TArgs...)>
                 };
         };
 
-        GuardedInvoke(
-            invoker,
-            makeOnSuccess(std::make_index_sequence<sizeof...(TArgs)>()),
-            [promise] {
+        invoker->Invoke(MakeGuardedCallback(
+            BIND_NO_PROPAGATE(makeOnSuccess(std::make_index_sequence<sizeof...(TArgs)>())),
+            BIND_NO_PROPAGATE([promise] {
                 promise.Set(TryExtractCancelationError());
-            });
+            })));
         return promise;
     }
 
@@ -1855,12 +1854,11 @@ struct TAsyncViaHelper<R(TArgs...)>
                 };
         };
 
-        GuardedInvoke(
-            invoker,
-            makeOnSuccess(std::make_index_sequence<sizeof...(TArgs)>()),
-            [promise, cancellationError = std::move(cancellationError)] {
+        invoker->Invoke(MakeGuardedCallback(
+            BIND_NO_PROPAGATE(makeOnSuccess(std::make_index_sequence<sizeof...(TArgs)>())),
+            BIND_NO_PROPAGATE([promise, cancellationError = std::move(cancellationError)] {
                 promise.Set(std::move(cancellationError));
-            });
+            })));
         return promise;
     }
 

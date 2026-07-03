@@ -74,6 +74,28 @@ on:
         required: false
         type: boolean
         default: true
+      vector_clusters:
+        description: 'Number of clusters in kmeans tree for vector index (empty = server auto-detect)'
+        required: false
+        default: ''
+      vector_levels:
+        description: 'Number of levels in kmeans tree for vector index (empty = server auto-detect)'
+        required: false
+        default: ''
+      flamegraph:
+        description: 'Collect CPU flamegraphs (requires perf_event_paranoid <= 1 or perf_sudo=true on the runner)'
+        required: false
+        type: boolean
+        default: false
+      perf_sudo:
+        description: 'Run perf under sudo (requires passwordless sudo on the runner)'
+        required: false
+        type: boolean
+        default: false
+      perf_freq:
+        description: 'perf record sampling frequency in Hz'
+        required: false
+        default: '9'
 
 jobs:
   compare:
@@ -151,12 +173,32 @@ jobs:
           INPUT_BASELINE_SHA: ${{ steps.resolve-ref.outputs.baseline_sha }}
           INPUT_CURRENT_SHA: ${{ steps.resolve-ref.outputs.checkout_ref }}
           INPUT_BASELINE_YDBD: ${{ steps.build-baseline.outputs.binary }}
+          INPUT_VECTOR_CLUSTERS: ${{ inputs.vector_clusters || '' }}
+          INPUT_VECTOR_LEVELS: ${{ inputs.vector_levels || '' }}
+          INPUT_FLAMEGRAPH: ${{ inputs.flamegraph || 'false' }}
+          INPUT_PERF_SUDO: ${{ inputs.perf_sudo || 'false' }}
+          INPUT_PERF_FREQ: ${{ inputs.perf_freq || '9' }}
         run: |
           # The feature-flag / table_service_config inputs are comma-separated
           # strings; the test splits them itself, so they are passed through as-is.
           EXTRA_PARAMS=""
           if [[ -n "$INPUT_BASELINE_YDBD" ]]; then
-            EXTRA_PARAMS="--test-param compare_baseline_ydbd=$INPUT_BASELINE_YDBD"
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_baseline_ydbd=$INPUT_BASELINE_YDBD"
+          fi
+          if [[ -n "$INPUT_VECTOR_CLUSTERS" ]]; then
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_vector_clusters=$INPUT_VECTOR_CLUSTERS"
+          fi
+          if [[ -n "$INPUT_VECTOR_LEVELS" ]]; then
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_vector_levels=$INPUT_VECTOR_LEVELS"
+          fi
+          if [[ "$INPUT_FLAMEGRAPH" == "true" ]]; then
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_flamegraph=1"
+          fi
+          if [[ "$INPUT_PERF_SUDO" == "true" ]]; then
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_perf_sudo=1"
+          fi
+          if [[ "$INPUT_PERF_FREQ" != "9" ]]; then
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_perf_freq=$INPUT_PERF_FREQ"
           fi
           ./ya make --build "$INPUT_BUILD_PRESET" -tA --test-disable-timeout \
             ydb/tests/stress/compare_index_performance/tests \
@@ -175,7 +217,7 @@ jobs:
             --test-param compare_current_table_service_config="$INPUT_CURRENT_TABLE_SERVICE_CONFIG" \
             --test-param compare_baseline_sha="$INPUT_BASELINE_SHA" \
             --test-param compare_current_sha="$INPUT_CURRENT_SHA" \
-            $EXTRA_PARAMS
+            $EXTRA_PARAMS 2>&1 | tee ya_make.log; exit "${PIPESTATUS[0]}"
 
       - name: Post results to job summary
         if: always()
@@ -191,6 +233,15 @@ jobs:
             done
           else
             echo "No report generated." >> "$GITHUB_STEP_SUMMARY"
+            if [[ -f ya_make.log ]]; then
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "<details><summary>Build/test log (last 50 lines)</summary>" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              tail -50 ya_make.log >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi
 
       - name: Post results to pull request
@@ -214,6 +265,15 @@ jobs:
               done
             else
               echo "No report generated."
+              if [[ -f ya_make.log ]]; then
+                echo ""
+                echo "<details><summary>Build/test log (last 50 lines)</summary>"
+                echo ""
+                echo '```'
+                tail -50 ya_make.log
+                echo '```'
+                echo "</details>"
+              fi
             fi
             echo "[Workflow run](${run_url})"
           } | .github/scripts/tests/comment-pr.py --rewrite --no-timestamp

@@ -15,7 +15,7 @@ QUERY_TABLE_NAME = "vector_query_table"
 
 
 class YdbVectorWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, duration, mode="standalone", data_dir=None, targets=1000, warmup=0, rows=10000, threads=10):
+    def __init__(self, endpoint, database, duration, mode="standalone", data_dir=None, targets=1000, warmup=0, rows=10000, threads=10, clusters=None, levels=None):
         super().__init__(None, '', 'vector_workload', None)
         self.endpoint = endpoint
         self.database = database
@@ -26,6 +26,8 @@ class YdbVectorWorkload(WorkloadBase):
         self.warmup = str(warmup)
         self.rows = str(rows)
         self.threads = str(threads)
+        self.clusters = str(clusters) if clusters is not None else None
+        self.levels = str(levels) if levels is not None else None
         self.tempdir = None
         self._unpack_resource('ydb_cli')
 
@@ -133,11 +135,13 @@ class YdbVectorWorkload(WorkloadBase):
             ])
         )
         # Build index explicitly and wait for completion
+        build_index_subcmds = ['build-index', '--distance', 'cosine']
+        if self.clusters is not None:
+            build_index_subcmds += ['--kmeans-tree-clusters', self.clusters]
+        if self.levels is not None:
+            build_index_subcmds += ['--kmeans-tree-levels', self.levels]
         self.cmd_run_with_retry(
-            self.get_command_prefix(subcmds=[
-                'build-index',
-                '--distance', 'cosine',
-            ])
+            self.get_command_prefix(subcmds=build_index_subcmds)
         )
         # Wait for table statistics to be calculated after index build
         print("Waiting for table statistics to be calculated...")

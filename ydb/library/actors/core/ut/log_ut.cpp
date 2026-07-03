@@ -153,8 +153,8 @@ namespace {
         void StartAccumulateMessages(TSettings::ELogFormat format) {
             Settings->Format = format;
             Settings->Append(1000, 1002,
-            [](EComponent comp) ->TString {
-                static std::vector<TString> names{"A","B","C"};
+            [](EComponent comp) ->const TString& {
+                static const std::vector<TString> names{"A","B","C"};
                 return names[comp - 1000];
             });
 

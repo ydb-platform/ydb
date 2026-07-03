@@ -107,6 +107,11 @@ ELSEIF (ARCH_X86_64 AND OS_DARWIN)
         contrib/restricted/libffi/configs/x86_64-apple-macosx
         GLOBAL contrib/restricted/libffi/configs/x86_64-apple-macosx/include
     )
+ELSEIF (ARCH_X86_64 AND OS_FREEBSD)
+    ADDINCL(
+        contrib/restricted/libffi/configs/x86_64-unknown-freebsd
+        GLOBAL contrib/restricted/libffi/configs/x86_64-unknown-freebsd/include
+    )
 ELSEIF (ARCH_X86_64 AND OS_IOS)
     ADDINCL(
         contrib/restricted/libffi/configs/x86_64-apple-iphonesimulator

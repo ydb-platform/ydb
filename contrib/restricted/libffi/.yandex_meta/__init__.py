@@ -1,5 +1,4 @@
 import os
-import shutil
 from glob import glob
 from os.path import basename, dirname
 
@@ -79,6 +78,12 @@ def post_install(self):
                         ADDINCL=[
                             configs_dir + "/x86_64-unknown-linux-gnu",
                             GLOBAL(configs_dir + "/x86_64-unknown-linux-gnu/include"),
+                        ],
+                    ),
+                    "ARCH_X86_64 AND OS_FREEBSD": Linkable(
+                        ADDINCL=[
+                            configs_dir + "/x86_64-unknown-freebsd",
+                            GLOBAL(configs_dir + "/x86_64-unknown-freebsd/include"),
                         ],
                     ),
                     "ARCH_X86_64 AND OS_ANDROID": Linkable(
@@ -315,6 +320,7 @@ libffi = GNUMakeNixProject(
         "configs/x86_64-apple-macosx",
         "configs/x86_64-microsoft-windows",
         "configs/x86_64-pc-linux-android21",
+        "configs/x86_64-unknown-freebsd",
     ],
     post_build=post_build,
     post_install=post_install,

@@ -49,6 +49,13 @@ enum class EHostState
     Offline,
 };
 
+// Determines where the data is located
+enum class EDataLocation
+{
+    PBuffer,
+    DDisk,
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct THostRoute

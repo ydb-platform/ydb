@@ -11,6 +11,7 @@ SRCS(
     host_state.cpp
     host.cpp
     oracle.cpp
+    time_predictor.cpp
     vchunk_config.cpp
 )
 

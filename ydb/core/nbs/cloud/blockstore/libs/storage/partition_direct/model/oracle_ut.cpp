@@ -44,6 +44,7 @@ struct THostStateControllerMock: public IHostStateController
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
+
 Y_UNIT_TEST_SUITE(TOracle)
 {
     Y_UNIT_TEST(SelectBestPBufferHostShouldPickHostWithLowestInflight)
@@ -404,6 +405,136 @@ Y_UNIT_TEST_SUITE(TOracle)
         UNIT_ASSERT_VALUES_EQUAL(
             EHostState::Online,
             hostStateController.States[0]);
+    }
+
+    Y_UNIT_TEST(GetReadHedgingDelayReturnsDefaultWhenNoHistory)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr);
+
+        // No read requests recorded → predictor returns zero → fallback to
+        // default. Default ReadHedgingDelay is 1ms when not set in config.
+        const auto defaultDelay = storageConfig->GetReadHedgingDelay();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            defaultDelay,
+            oracle.GetReadHedgingDelay(0, EDataLocation::DDisk));
+        UNIT_ASSERT_VALUES_EQUAL(
+            defaultDelay,
+            oracle.GetReadHedgingDelay(0, EDataLocation::PBuffer));
+    }
+
+    Y_UNIT_TEST(GetReadHedgingDelayDDiskAndPBufferAreIndependent)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr);
+        auto now = TInstant::Now();
+
+        // Feed DDisk reads with 100ms, 200ms on host 0.
+        for (auto duration: {100, 200}) {
+            oracle.OnRequestStarted(0, EOperation::ReadFromDDisk, now);
+            oracle.OnRequestSucceeded(
+                0,
+                EOperation::ReadFromDDisk,
+                now,
+                TDuration::MilliSeconds(duration));
+        }
+
+        // Feed PBuffer reads with 300ms, 400ms on host 0.
+        for (auto duration: {300, 400}) {
+            oracle.OnRequestStarted(0, EOperation::ReadFromPBuffer, now);
+            oracle.OnRequestSucceeded(
+                0,
+                EOperation::ReadFromPBuffer,
+                now,
+                TDuration::MilliSeconds(duration));
+        }
+
+        // Feed PBuffer reads with 400ms, 500ms on host 1.
+        for (auto duration: {400, 500}) {
+            oracle.OnRequestStarted(0, EOperation::ReadFromPBuffer, now);
+            oracle.OnRequestSucceeded(
+                1,
+                EOperation::ReadFromPBuffer,
+                now,
+                TDuration::MilliSeconds(duration));
+        }
+
+        // H0 DDisk predictor: [100, 200] → predict 100.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::MilliSeconds(100),
+            oracle.GetReadHedgingDelay(0, EDataLocation::DDisk));
+
+        // H0: PBuffer predictor: [300, 400] → predict 300.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::MilliSeconds(300),
+            oracle.GetReadHedgingDelay(0, EDataLocation::PBuffer));
+
+        // H1: PBuffer predictor: [500, 500] → predict 400.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::MilliSeconds(400),
+            oracle.GetReadHedgingDelay(1, EDataLocation::PBuffer));
+    }
+
+    Y_UNIT_TEST(GetWriteHedgingDelayReturnsDefaultWhenNoHistory)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr);
+
+        // No write requests recorded → predictor returns zero → fallback to
+        // default. Default WriteHedgingDelay is 1ms when not set in config.
+        const auto defaultDelay = storageConfig->GetWriteHedgingDelay();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            defaultDelay,
+            oracle.GetWriteHedgingDelay(THostMask::MakeOne(0), false));
+        UNIT_ASSERT_VALUES_EQUAL(
+            defaultDelay,
+            oracle.GetWriteHedgingDelay(THostMask::MakeOne(0), true));
+    }
+
+    Y_UNIT_TEST(GetWriteHedgingDelayDirectAndIndirectAreIndependent)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr);
+        auto now = TInstant::Now();
+
+        // WriteToPBuffer (direct): [100, 200] → predict 100ms.
+        for (auto duration: {100, 200}) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestSucceeded(
+                0,
+                EOperation::WriteToPBuffer,
+                now,
+                TDuration::MilliSeconds(duration));
+        }
+
+        // WriteToManyPBuffers (indirect): [300, 400] → predict 300ms.
+        for (auto duration: {300, 400}) {
+            oracle.OnRequestStarted(0, EOperation::WriteToManyPBuffers, now);
+            oracle.OnRequestSucceeded(
+                0,
+                EOperation::WriteToManyPBuffers,
+                now,
+                TDuration::MilliSeconds(duration));
+        }
+
+        // The direct mode reads only the WriteToPBuffer predictor.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::MilliSeconds(100),
+            oracle.GetWriteHedgingDelay(THostMask::MakeOne(0), false));
+        // The indirect mode reads only the WriteToManyPBuffers predictor.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::MilliSeconds(300),
+            oracle.GetWriteHedgingDelay(THostMask::MakeOne(0), true));
     }
 }
 

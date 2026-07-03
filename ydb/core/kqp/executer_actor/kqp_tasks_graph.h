@@ -23,6 +23,21 @@ namespace NKikimr::NKqp {
 class TMaxTasksGraph;
 struct TQueryExecutionStats;
 
+// Inputs for the KqpPlanner-parity placement heuristics (local-node fast paths + local-DC preference) run by
+// TMaxTasksGraph::DistributeTasksToNodes. Callers that only need task-count estimation (prepare) or unit tests leave it
+// at its default: with ExecuterNodeId == 0 there is no local-node context, so the heuristics are skipped and placement
+// is a plain resource-aware / round-robin spread. Fields mirror TKqpPlanner + TPlannerPlacingOptions.
+struct TPlacementParams {
+    ui64 ExecuterNodeId = 0;                     // 0 == no local-node context: skip the local-node/DC heuristics.
+    ui64 LocalMemory = 0;                        // executer node free memory (RM GetLocalResources) - for the "fits locally" test.
+    ui32 LocalExecutionUnits = 0;                // executer node available compute actors.
+    ui64 MaxNonParallelTasksExecutionLimit = 8;  // scan/default single-node threshold.
+    ui64 MaxNonParallelDataQueryTasksLimit = 1000; // data-query single-node threshold (when MayRunTasksLocally).
+    ui64 MaxNonParallelTopStageExecutionLimit = 1; // pin the top stage locally if it has no more tasks than this.
+    bool PreferLocalDatacenterExecution = true;
+    bool MayRunTasksLocally = false;
+};
+
 struct TColumnShardHashV1Params {
     ui64 SourceShardCount = 0;
     std::shared_ptr<TVector<NScheme::TTypeInfo>> SourceTableKeyColumnTypes = nullptr;
@@ -394,7 +409,7 @@ public:
 
     void ResolveShards(TGraphMeta::TShardToNodeMap&& shardsToNodes);
 
-    size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats);
+    size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats, const TPlacementParams& placementParams = {});
     void BuildLiteralTasks();
 
     NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings);

@@ -173,7 +173,8 @@ private:
             }
         }
 
-        TasksGraph.BuildAllTasks(LlvmSettings, ResourcesSnapshot, Stats.get());
+        // Scan queries never take the data-query "run locally" path, so mayRunTasksLocally is false.
+        TasksGraph.BuildAllTasks(LlvmSettings, ResourcesSnapshot, Stats.get(), BuildPlacementParams(false));
         OnEmptyResult();
 
         TIssue validateIssue;

@@ -3166,7 +3166,8 @@ void TKqpTasksGraph::ResolveShards(TGraphMeta::TShardToNodeMap&& shardsToNodes) 
 }
 
 size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
-    const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats)
+    const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats,
+    const TPlacementParams& placementParams)
 {
     // Counting tasks via MaxTasksGraph
 
@@ -3260,7 +3261,7 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
     }
 
     MaxTasksGraph->EstimateTasksResources();
-    MaxTasksGraph->DistributeTasksToNodes();
+    MaxTasksGraph->DistributeTasksToNodes(placementParams);
 
     if (ShrinkTasks) {
         MaxTasksGraph->Shrink();

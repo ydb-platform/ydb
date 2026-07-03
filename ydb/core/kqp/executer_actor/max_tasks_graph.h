@@ -55,10 +55,11 @@ public:
     // per-stage task count - so it is stored once per group (see TGroup::ColumnCost).
     void EstimateTasksResources();
 
-    // Places every still-unplaced (free) column onto a node. Currently round-robin per group; this is the seam where the
-    // greedy resource-aware strategy from KqpPlanner will plug in. Idempotent: already-placed (pinned) columns are kept.
-    // TODO: replace round-robin with the resource-aware placement, using EstimateTasksResources output.
-    void DistributeTasksToNodes();
+    // Places every still-unplaced (free) column onto a node. Reproduces TKqpPlanner's placement decisions (local-node
+    // fast paths, local-DC preference, greedy resource-aware spread), plus the copy-column improvement. Idempotent:
+    // already-placed (pinned) columns are kept. `params` carries the local-node context (executer node, its resources,
+    // the placing limits); at its default (ExecuterNodeId == 0) the local-node/DC heuristics are skipped.
+    void DistributeTasksToNodes(const TPlacementParams& params = {});
 
     void Shrink(); // TODO: forbid double call - it's not idempotent.
 
@@ -119,14 +120,29 @@ private:
     // Maps an external node id to its internal index, ensuring the node is known.
     TNodeIdx ResolveNodeIdx(TNodeId node) const;
 
+    // The executer's own node index, if it is known to the graph (params.ExecuterNodeId set and present); else nullopt.
+    std::optional<TNodeIdx> LocalNodeIdx(const TPlacementParams& params) const;
+
+    // KqpPlanner's single-node fast path (its Step 2): if the whole query fits on the executer node and is either small
+    // enough or reads from a single node, pin every free column there and return true. Leaves pinned columns as they are.
+    bool TryPlaceAllLocally(const TPlacementParams& params, TNodeIdx executer);
+
+    // KqpPlanner's top-stage pin (its Step 4): if the deepest (max stage-level) stages hold no more tasks than
+    // MaxNonParallelTopStageExecutionLimit (the merge/union-all collector), pin their free columns to the executer node.
+    void PinTopStageLocally(const TPlacementParams& params, TNodeIdx executer);
+
     // The basic placement action: pin a column of a group to a node.
     void PlaceColumnOnNode(TGroup& group, size_t columnIdx, TNodeIdx node);
 
-    // Greedy resource-aware placement of all free columns (ported from KqpPlanner's strategy). Pinned columns pre-charge
-    // their nodes' budget; free columns are placed largest-memory-first onto the least-loaded node that still fits, using
-    // the per-column cost from EstimateTasksResources. Returns false (placing nothing) if some column doesn't fit
-    // anywhere - the caller then falls back to round-robin.
-    bool DistributeByResources();
+    // Greedy resource-aware placement of all free columns (ported from KqpPlanner's strategy). Mirrors its local-DC
+    // preference: when params asks for it, first tries to fit every free column onto the executer's datacenter, and only
+    // if that fails spreads over all nodes. Returns false (placing nothing) if some column doesn't fit anywhere even
+    // across all nodes - the caller then falls back to round-robin.
+    bool DistributeByResources(const TPlacementParams& params, std::optional<TNodeIdx> executer);
+
+    // One greedy pass restricted to the `allowedNodes` mask for free-column candidates (pinned columns still pre-charge
+    // their own node regardless). Returns false without mutating anything if some free column doesn't fit.
+    bool DistributeByResourcesOnNodes(const std::vector<bool>& allowedNodes);
 
     // Fallback placement: every free column round-robin per group, ignoring resources.
     void DistributeRoundRobin();

@@ -627,7 +627,10 @@ private:
         size_t sourceScanPartitionsCount = 0;
 
         if (!graphRestored) {
-            sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get());
+            // MayRunTasksLocally mirrors ExecuteTasks() below; HasExternalSources / HasOlapTable / HasDatashardSourceScan
+            // are already set by the table-resolve handler that runs before Execute().
+            const bool mayRunTasksLocally = !HasExternalSources && !HasOlapTable && !HasDatashardSourceScan;
+            sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), BuildPlacementParams(mayRunTasksLocally));
         }
 
         TIssue validateIssue;

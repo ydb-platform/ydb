@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <numeric>
+#include <set>
 
 namespace NKikimr::NKqp {
 
@@ -173,21 +174,159 @@ void TMaxTasksGraph::EstimateTasksResources() {
     }
 }
 
-void TMaxTasksGraph::DistributeTasksToNodes() {
+std::optional<TMaxTasksGraph::TNodeIdx> TMaxTasksGraph::LocalNodeIdx(const TPlacementParams& params) const {
+    if (params.ExecuterNodeId == 0) {
+        return std::nullopt;
+    }
+    auto it = NodeIds.find(params.ExecuterNodeId);
+    if (it == NodeIds.end()) {
+        return std::nullopt;
+    }
+    return it->second;
+}
+
+void TMaxTasksGraph::DistributeTasksToNodes(const TPlacementParams& params) {
     if (NodesCount() == 0) {
         return;
     }
 
-    // Resource-aware placement first; round-robin only when it can't fit everything (e.g. nodes report no budget, as in
-    // unit tests, or the cluster is genuinely too small). Pinned columns are kept by both paths (idempotent).
-    if (!DistributeByResources()) {
+    // KqpPlanner-parity local-node fast paths, only when we know which node is the executer's own.
+    const std::optional<TNodeIdx> executer = LocalNodeIdx(params);
+    if (executer) {
+        // Step 2: the whole query fits locally -> run everything on the executer node.
+        if (TryPlaceAllLocally(params, *executer)) {
+            CheckInvariants();
+            return;
+        }
+        // Step 4: pin the small top (collector) stage to the executer node before spreading the rest.
+        PinTopStageLocally(params, *executer);
+    }
+
+    // Resource-aware placement first (Step 5, with local-DC preference); round-robin only when it can't fit everything
+    // (e.g. nodes report no budget, as in unit tests, or the cluster is genuinely too small). Pinned columns are kept
+    // by both paths (idempotent).
+    if (!DistributeByResources(params, executer)) {
         DistributeRoundRobin();
     }
 
     CheckInvariants();
 }
 
-bool TMaxTasksGraph::DistributeByResources() {
+bool TMaxTasksGraph::TryPlaceAllLocally(const TPlacementParams& params, TNodeIdx executer) {
+    // Sum the a-priori estimate over every task and count the pinned nodes (scans / local writes), mirroring
+    // TKqpPlanner::PrepareToProcess + the single-node check in AssignTasksToNodes.
+    ui64 totalMemory = 0;
+    ui64 totalTasks = 0;
+    size_t freeColumns = 0;
+    std::set<TNodeIdx> pinnedNodes;
+    for (const auto& group : Groups) {
+        totalMemory += group.ColumnCost.Memory * group.ColumnNodes.size();
+        totalTasks += static_cast<ui64>(group.ColumnCost.Tasks) * group.ColumnNodes.size();
+        for (const auto& node : group.ColumnNodes) {
+            if (node) {
+                pinnedNodes.insert(*node);
+            } else {
+                ++freeColumns;
+            }
+        }
+    }
+
+    if (freeColumns == 0) {
+        return false; // nothing left to place locally; keep the already-pinned columns.
+    }
+
+    // Task memory can grow during execution; KqpPlanner reserves twice the estimate for the local-run decision
+    // (MEMORY_ESTIMATION_OVERFLOW), which is deliberately more conservative than the greedy path's 1.2x.
+    constexpr ui64 memoryOverflow = 2;
+    const ui64 nonParallelLimit = params.MayRunTasksLocally
+        ? params.MaxNonParallelDataQueryTasksLimit
+        : params.MaxNonParallelTasksExecutionLimit;
+
+    const bool singleNodeMakesSense = (totalTasks <= nonParallelLimit) || (pinnedNodes.size() == 1);
+    const bool fitsLocally = totalMemory * memoryOverflow <= params.LocalMemory
+        && totalTasks <= params.LocalExecutionUnits;
+
+    if (!fitsLocally || !singleNodeMakesSense) {
+        return false;
+    }
+
+    for (auto& group : Groups) {
+        for (auto& node : group.ColumnNodes) {
+            if (!node) {
+                node = executer;
+            }
+        }
+    }
+    return true;
+}
+
+void TMaxTasksGraph::PinTopStageLocally(const TPlacementParams& params, TNodeIdx executer) {
+    const auto stageLevel = [](const TStage& stage) {
+        return stage.Info->Meta.GetStage(stage.Info->Id).GetProgram().GetSettings().GetStageLevel();
+    };
+
+    std::optional<ui64> maxLevel;
+    for (const auto& stage : Stages) {
+        if (stage.Tasks.empty()) {
+            continue;
+        }
+        const ui64 level = stageLevel(stage);
+        if (!maxLevel || level > *maxLevel) {
+            maxLevel = level;
+        }
+    }
+    if (!maxLevel) {
+        return;
+    }
+
+    ui64 topTasks = 0;
+    for (const auto& stage : Stages) {
+        if (!stage.Tasks.empty() && stageLevel(stage) == *maxLevel) {
+            topTasks += stage.Tasks.size();
+        }
+    }
+
+    // More than the limit -> the top stage is parallel (not a merge/union-all collector); leave it to the spread.
+    if (topTasks > params.MaxNonParallelTopStageExecutionLimit) {
+        return;
+    }
+
+    for (const auto& stage : Stages) {
+        if (stage.Tasks.empty() || stageLevel(stage) != *maxLevel) {
+            continue;
+        }
+        auto& group = Groups[stage.Group];
+        for (size_t columnIdx = 0; columnIdx < stage.Tasks.size(); ++columnIdx) {
+            if (!group.ColumnNodes[columnIdx]) {
+                group.ColumnNodes[columnIdx] = executer; // free column of the collector stage -> executer node.
+            }
+        }
+    }
+}
+
+bool TMaxTasksGraph::DistributeByResources(const TPlacementParams& params, std::optional<TNodeIdx> executer) {
+    // Local-datacenter preference (KqpPlanner Step 5): first try to fit every free column onto the executer's DC, and
+    // only if that fails spread over all nodes. Skipped when there is no local-node context, or when every node shares
+    // the same DC (common in unit tests, where DataCenterId is empty) - then the local pass would equal the full one.
+    if (params.PreferLocalDatacenterExecution && executer) {
+        const TString& localDc = NodeResources[*executer].DataCenterId;
+        std::vector<bool> localDcNodes(NodesCount(), false);
+        size_t localCount = 0;
+        for (TNodeIdx n = 0; n < NodesCount(); ++n) {
+            if (NodeResources[n].DataCenterId == localDc) {
+                localDcNodes[n] = true;
+                ++localCount;
+            }
+        }
+        if (localCount > 0 && localCount < NodesCount() && DistributeByResourcesOnNodes(localDcNodes)) {
+            return true;
+        }
+    }
+
+    return DistributeByResourcesOnNodes(std::vector<bool>(NodesCount(), true));
+}
+
+bool TMaxTasksGraph::DistributeByResourcesOnNodes(const std::vector<bool>& allowedNodes) {
     // Task memory can grow during execution; reserve a bit more than the estimate (mirrors KqpPlanner).
     constexpr double memoryOverflow = 1.2;
 
@@ -195,7 +334,8 @@ bool TMaxTasksGraph::DistributeByResources() {
         return static_cast<ui64>(group.ColumnCost.Memory * memoryOverflow);
     };
 
-    // Working per-node budget, started from the snapshot and pre-charged with the already-pinned columns.
+    // Working per-node budget, started from the snapshot and pre-charged with the already-pinned columns. Pinned columns
+    // charge their own node even if it is outside allowedNodes (their placement is fixed).
     std::vector<ui64> freeMemory(NodesCount());
     std::vector<ui32> freeTasks(NodesCount());
     std::vector<size_t> tasksOnNode(NodesCount(), 0); // load metric for the spread tie-break.
@@ -238,10 +378,10 @@ bool TMaxTasksGraph::DistributeByResources() {
             return false;
         }
 
-        // Least-loaded fitting node, tie-broken by most free memory, then most free task slots.
+        // Least-loaded fitting node among the allowed ones, tie-broken by most free memory, then most free task slots.
         std::optional<TNodeIdx> best;
         for (TNodeIdx n = 0; n < NodesCount(); ++n) {
-            if (freeMemory[n] < memNeed || freeTasks[n] < taskNeed) {
+            if (!allowedNodes[n] || freeMemory[n] < memNeed || freeTasks[n] < taskNeed) {
                 continue;
             }
             if (!best) {

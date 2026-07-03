@@ -190,7 +190,7 @@ public:
             (trace_id, TraceId()));
     }
 
-    TActorId SelfId() {
+    TActorId SelfId() const {
        return TActor<TDerived>::SelfId();
     }
 
@@ -1382,6 +1382,27 @@ protected:
                 (ForceFlag, force),
                 (trace_id, TraceId()));
         }
+    }
+
+    // Placement inputs for TKqpTasksGraph::BuildAllTasks so its node placement (TMaxTasksGraph) reproduces the
+    // KqpPlanner local-node fast paths and local-DC preference. mayRunTasksLocally is passed by the caller because it is
+    // derived differently per executer (and, in the data executer, only after table/shard resolution).
+    TPlacementParams BuildPlacementParams(bool mayRunTasksLocally) const {
+        if (!Request.ResourceManager_) {
+            return {}; // no RM (e.g. restored graph / tests): skip the local-node heuristics.
+        }
+        const auto local = Request.ResourceManager_->GetLocalResources();
+        const auto options = Request.ResourceManager_->GetPlacingOptions();
+        return TPlacementParams{
+            .ExecuterNodeId = SelfId().NodeId(),
+            .LocalMemory = local.Memory,
+            .LocalExecutionUnits = local.ExecutionUnits,
+            .MaxNonParallelTasksExecutionLimit = options.MaxNonParallelTasksExecutionLimit,
+            .MaxNonParallelDataQueryTasksLimit = options.MaxNonParallelDataQueryTasksLimit,
+            .MaxNonParallelTopStageExecutionLimit = options.MaxNonParallelTopStageExecutionLimit,
+            .PreferLocalDatacenterExecution = options.PreferLocalDatacenterExecution,
+            .MayRunTasksLocally = mayRunTasksLocally,
+        };
     }
 
     bool BuildPlannerAndSubmitTasks() {

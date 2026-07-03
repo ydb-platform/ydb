@@ -11,6 +11,13 @@
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h>
+#include <ydb/core/metering/stream_ru_calculator.h>
+#include <ydb/core/quoter/public/quoter.h>
+#include <ydb/services/sqs_topic/billing.h>
+
+#include <util/system/mutex.h>
+
+#include <memory>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json_value.h>
@@ -214,6 +221,141 @@ namespace {
         UNIT_ASSERT(writer->Write(messageBody));
         writer->Close();
     }
+
+    // Serverless rate-limiter path stored in the database user-attributes.
+    // When a topic is metered by Request Units, the sqs_topic actors read these
+    // attributes and build the rate-limiter context from them.
+    struct TRuTopicSetup {
+        TString CoordinationNodePath = "/Root/ru-coordination-node";
+        TString ResourcePath = "root-topic-resource-ru";
+    };
+
+    void SetupServerlessRuAttributes(std::derived_from<THttpProxyTestMock> auto& fixture, const TRuTopicSetup& setup) {
+        NYdb::TClient client(*(fixture.KikimrServer->ServerSettings));
+        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+            client.AlterUserAttributes("/", "Root",
+                {{"serverless_rt_coordination_node_path", setup.CoordinationNodePath},
+                 {"serverless_rt_topic_resource_ru", setup.ResourcePath}},
+                {}, {}, "root@builtin"));
+    }
+
+    bool CreateRequestUnitsTopic(NYdb::TDriver& driver, const TString& topicName, const TString& consumerName) {
+        // Force the RAW codec (no compression) so that the payload bytes written
+        // equal the payload bytes read back. This keeps the RU block accounting
+        // deterministic: the metering tests below rely on the exact transferred
+        // size, which compression would otherwise change.
+        return CreateTopic(driver, topicName, NYdb::NTopic::TCreateTopicSettings()
+            .MeteringMode(NYdb::NTopic::EMeteringMode::RequestUnits)
+            .SetSupportedCodecs({NYdb::NTopic::ECodec::RAW})
+            .BeginAddSharedConsumer(consumerName)
+                .KeepMessagesOrder(false)
+                .DefaultProcessingTimeout(TDuration::Seconds(20))
+            .EndAddConsumer());
+    }
+
+    // Replicates TStreamRequestUnitsCalculator::CalcConsumption for a freshly
+    // constructed calculator (Remainder == blockSize). Each RU-metered request
+    // uses its own actor and therefore its own fresh calculator, so a single
+    // charge maps its payload onto blocks with this formula. Used by the
+    // metering tests to predict the block-based part of a write/read charge.
+    ui64 RuPayloadBlocks(ui64 payloadSize, ui64 blockSize) {
+        if (payloadSize <= blockSize) {
+            return 0;
+        }
+        payloadSize -= blockSize;
+        return payloadSize / blockSize + ((payloadSize % blockSize) ? 1 : 0);
+    }
+
+    struct TRuCharge {
+        TString Quoter;
+        TString Resource;
+        ui64 Amount = 0;
+    };
+
+    // Mock quoter service actor. The fixture runs the embedded Kikimr actor
+    // system on real executor threads, where SetObserverFunc cannot intercept
+    // events (observers only see events on the single-threaded dispatcher).
+    // Instead we register this actor under MakeQuoterServiceID(), overriding the
+    // real quoter service, so it receives the TEvQuota::TEvRequest that
+    // TAcquireRateLimiterResourceRPC sends when a RU charge fires. It records the
+    // charged amount / quoter / resource (for requests matching the configured
+    // resource) into a shared, mutex-guarded vector, then grants a Success
+    // clearance so the HTTP request can complete without a real Kesus resource.
+    class TRuQuoterServiceMock : public TActor<TRuQuoterServiceMock> {
+    public:
+        TRuQuoterServiceMock(std::shared_ptr<TMutex> lock,
+                             std::shared_ptr<TVector<TRuCharge>> charges,
+                             TString resourceFilter)
+            : TActor(&TRuQuoterServiceMock::StateWork)
+            , Lock_(std::move(lock))
+            , Charges_(std::move(charges))
+            , ResourceFilter_(std::move(resourceFilter))
+        {}
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvQuota::TEvRequest, Handle);
+            }
+        }
+
+        void Handle(TEvQuota::TEvRequest::TPtr& ev) {
+            {
+                TGuard<TMutex> guard(*Lock_);
+                for (const auto& leaf : ev->Get()->Reqs) {
+                    if (leaf.Resource == ResourceFilter_) {
+                        Charges_->push_back(TRuCharge{leaf.Quoter, leaf.Resource, leaf.Amount});
+                    }
+                }
+            }
+            Send(ev->Sender,
+                 new TEvQuota::TEvClearance(TEvQuota::TEvClearance::EResult::Success),
+                 0, ev->Cookie);
+        }
+
+    private:
+        std::shared_ptr<TMutex> Lock_;
+        std::shared_ptr<TVector<TRuCharge>> Charges_;
+        TString ResourceFilter_;
+    };
+
+    // Registers a TRuQuoterServiceMock in place of the real quoter service and
+    // exposes the recorded charges. Because a RU-metered operation only replies
+    // (and thus the blocking HTTP call only returns) after the quota clearance is
+    // granted, any charge for a completed operation is guaranteed to have been
+    // recorded by the time the corresponding HTTP helper returns. Take() still
+    // polls briefly to be robust against cross-thread memory ordering.
+    class TRuRecorder {
+    public:
+        TRuRecorder(TTestActorRuntime* runtime, TString resourceFilter)
+            : Lock_(std::make_shared<TMutex>())
+            , Charges_(std::make_shared<TVector<TRuCharge>>())
+        {
+            const ui32 nodeIndex = 0;
+            const ui32 systemPoolId = runtime->GetAppData().SystemPoolId;
+            auto* actor = new TRuQuoterServiceMock(Lock_, Charges_, std::move(resourceFilter));
+            const TActorId actorId = runtime->Register(actor, nodeIndex, systemPoolId);
+            runtime->RegisterService(MakeQuoterServiceID(), actorId);
+        }
+
+        TVector<TRuCharge> Take(size_t expected = 1, TDuration timeout = TDuration::Seconds(10)) {
+            const TInstant deadline = TInstant::Now() + timeout;
+            for (;;) {
+                {
+                    TGuard<TMutex> guard(*Lock_);
+                    if (Charges_->size() >= expected || TInstant::Now() >= deadline) {
+                        TVector<TRuCharge> result = std::move(*Charges_);
+                        Charges_->clear();
+                        return result;
+                    }
+                }
+                Sleep(TDuration::MilliSeconds(10));
+            }
+        }
+
+    private:
+        std::shared_ptr<TMutex> Lock_;
+        std::shared_ptr<TVector<TRuCharge>> Charges_;
+    };
 } // namespace
 
 Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
@@ -1611,6 +1753,193 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         UNIT_ASSERT_VALUES_EQUAL(deleteJson["Failed"].GetArray().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(deleteJson["Failed"][0]["Id"], "delete-invalid");
+    }
+
+    // Number of messages and per-message size shared by the RU metering tests.
+    // The bodies sum to 24 KiB (> 8 KiB) so that a single request transfers more
+    // than one payload block. Each body is exactly READ_BLOCK_SIZE bytes, and the
+    // topic uses the RAW codec (see CreateRequestUnitsTopic), so the bytes read
+    // back equal the bytes written and the block accounting is deterministic.
+    static constexpr size_t RuMetering_MessageCount = 3;
+    static constexpr size_t RuMetering_MessageSize =
+        NKikimr::NSqsTopic::V1::NBilling::READ_BLOCK_SIZE;
+
+    static TVector<TString> MakeRuMeteringBodies() {
+        TVector<TString> bodies;
+        bodies.reserve(RuMetering_MessageCount);
+        for (size_t i = 0; i < RuMetering_MessageCount; ++i) {
+            // Distinct bodies (used as map keys on receive) of identical size.
+            bodies.push_back(TString(RuMetering_MessageSize, static_cast<char>('a' + i)));
+        }
+        return bodies;
+    }
+
+    static NJson::TJsonArray MakeRuMeteringSendEntries(const TVector<TString>& bodies) {
+        NJson::TJsonArray entries;
+        for (size_t i = 0; i < bodies.size(); ++i) {
+            entries.AppendValue(NJson::TJsonMap{
+                {"Id", std::format("Id-{}", i)},
+                {"MessageBody", bodies[i]},
+            });
+        }
+        return entries;
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageChargesRequestUnits, TFixture) {
+        namespace NBilling = NKikimr::NSqsTopic::V1::NBilling;
+
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateRequestUnitsTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+
+        // Send several messages (total payload > 8 KiB) in a single SendMessage
+        // (batch) call. The whole batch produces exactly one write RU charge.
+        const auto bodies = MakeRuMeteringBodies();
+        auto json = SendMessageBatch({
+            {"QueueUrl", path.QueueUrl},
+            {"Entries", MakeRuMeteringSendEntries(bodies)},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(json["Successful"].GetArray().size(), RuMetering_MessageCount);
+
+        auto charges = recorder.Take();
+        UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one write RU charge");
+        // Total payload = count * size (24 KiB) mapped onto WRITE_BLOCK_SIZE
+        // blocks by a fresh calculator. count messages written; non-FIFO topic
+        // => cost multiplier 1. Cost = base + blocks + count*perMessage.
+        const ui64 blocks = RuPayloadBlocks(
+            RuMetering_MessageCount * RuMetering_MessageSize, NBilling::WRITE_BLOCK_SIZE);
+        const ui64 expected = NBilling::CalcWriteRu(blocks, RuMetering_MessageCount, false, false);
+        UNIT_ASSERT_VALUES_EQUAL(blocks, 5);
+        UNIT_ASSERT_VALUES_EQUAL(expected, 9);
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Resource, ru.ResourcePath);
+    }
+
+    Y_UNIT_TEST_F(TestReceiveMessageChargesRequestUnits, TFixture) {
+        namespace NBilling = NKikimr::NSqsTopic::V1::NBilling;
+
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateRequestUnitsTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+
+        const auto bodies = MakeRuMeteringBodies();
+        SendMessageBatch({
+            {"QueueUrl", path.QueueUrl},
+            {"Entries", MakeRuMeteringSendEntries(bodies)},
+        });
+        // Drop the single write charge; we only assert on the read charges below.
+        recorder.Take();
+
+        // Receive all messages. Each ReceiveMessage call returns at least one
+        // message (they are all available) and produces exactly one read RU
+        // charge, which the blocking HTTP call has recorded by the time it
+        // returns. Messages may be split across several responses.
+        ui64 totalReadRu = 0;
+        size_t collected = 0;
+        while (collected < RuMetering_MessageCount) {
+            auto json = ReceiveMessage({
+                {"QueueUrl", path.QueueUrl},
+                {"WaitTimeSeconds", 20},
+                {"MaxNumberOfMessages", static_cast<int>(RuMetering_MessageCount)},
+            });
+            const size_t k = json["Messages"].GetArray().size();
+            UNIT_ASSERT_C(k >= 1, "receive returned no messages");
+
+            auto charges = recorder.Take(1);
+            UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one read RU charge");
+            // Payload of this response = k * size mapped onto READ_BLOCK_SIZE
+            // blocks by a fresh calculator; k messages returned; multiplier 1.
+            const ui64 blocks = RuPayloadBlocks(k * RuMetering_MessageSize, NBilling::READ_BLOCK_SIZE);
+            const ui64 expected = NBilling::CalcReadRu(blocks, k, false, false);
+            UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
+            UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
+            UNIT_ASSERT_VALUES_EQUAL(charges[0].Resource, ru.ResourcePath);
+
+            totalReadRu += charges[0].Amount;
+            collected += k;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(collected, RuMetering_MessageCount);
+        // Each 8 KiB message (== READ_BLOCK_SIZE) costs 2 RU (base+block share 1,
+        // per-message 1), so the total is independent of how the messages were
+        // split across receive responses.
+        UNIT_ASSERT_VALUES_EQUAL(totalReadRu, RuMetering_MessageCount * 2);
+    }
+
+    Y_UNIT_TEST_F(TestDeleteMessageChargesRequestUnits, TFixture) {
+        namespace NBilling = NKikimr::NSqsTopic::V1::NBilling;
+
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateRequestUnitsTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+
+        const auto bodies = MakeRuMeteringBodies();
+        SendMessageBatch({
+            {"QueueUrl", path.QueueUrl},
+            {"Entries", MakeRuMeteringSendEntries(bodies)},
+        });
+        // Drop the single write charge.
+        recorder.Take();
+
+        // Receive all messages, collecting their receipt handles and dropping the
+        // per-response read charges.
+        THashMap<TString, TString> receipts;
+        while (receipts.size() < RuMetering_MessageCount) {
+            auto json = ReceiveMessage({
+                {"QueueUrl", path.QueueUrl},
+                {"WaitTimeSeconds", 20},
+                {"MaxNumberOfMessages", static_cast<int>(RuMetering_MessageCount)},
+            });
+            const auto& messages = json["Messages"].GetArray();
+            UNIT_ASSERT_C(messages.size() >= 1, "receive returned no messages");
+            for (const auto& message : messages) {
+                receipts.try_emplace(message["Body"].GetString(), message["ReceiptHandle"].GetString());
+            }
+            // Each non-empty receive produces exactly one read charge; drop it.
+            recorder.Take(1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(receipts.size(), RuMetering_MessageCount);
+
+        // Delete all messages in a single DeleteMessage (batch) call. The whole
+        // batch produces exactly one delete RU charge.
+        NJson::TJsonArray entries;
+        size_t idx = 0;
+        for (const auto& [body, handle] : receipts) {
+            entries.AppendValue(NJson::TJsonMap{
+                {"Id", std::format("del-{}", idx++)},
+                {"ReceiptHandle", handle},
+            });
+        }
+        auto deleteJson = DeleteMessageBatch({
+            {"QueueUrl", path.QueueUrl},
+            {"Entries", entries},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(deleteJson["Successful"].GetArray().size(), RuMetering_MessageCount);
+
+        auto charges = recorder.Take();
+        UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one delete RU charge");
+        // count messages deleted; non-FIFO => multiplier 1.
+        // Cost = base(1) + count*perMessage(1).
+        const ui64 expected = NBilling::CalcDeleteRu(RuMetering_MessageCount, false, false);
+        UNIT_ASSERT_VALUES_EQUAL(expected, 4);
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Resource, ru.ResourcePath);
     }
 
     Y_UNIT_TEST_F(TestChangeMessageVisibilityInvalid, TFixture) {

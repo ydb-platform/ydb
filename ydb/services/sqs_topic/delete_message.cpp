@@ -34,6 +34,9 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
+#include <ydb/core/persqueue/public/pq_rl_helpers.h>
+
+#include <ydb/services/sqs_topic/billing.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
@@ -57,15 +60,17 @@ namespace NKikimr::NSqsTopic::V1 {
     }
 
     template <class TDerived, class TServiceRequest>
-    class TDeleteMessageActorBase: public TQueueUrlHolder, public TGrpcActorBase<TDeleteMessageActorBase<TDerived, TServiceRequest>, TServiceRequest> {
+    class TDeleteMessageActorBase: public TQueueUrlHolder, public TGrpcActorBase<TDeleteMessageActorBase<TDerived, TServiceRequest>, TServiceRequest>, private NPQ::TRlHelpers {
     protected:
         using TBase = TGrpcActorBase<TDeleteMessageActorBase, TServiceRequest>;
         using TProtoRequest = typename TBase::TProtoRequest;
+        using EWakeupTag = NPQ::TRlHelpers::EWakeupTag;
 
     public:
         TDeleteMessageActorBase(NKikimr::NGRpcService::IRequestOpCtx* request)
             : TQueueUrlHolder(ParseQueueUrlFromRequest<TProtoRequest>(request))
             , TBase(request, GetTopicPath().value_or(""))
+            , NPQ::TRlHelpers({}, request, NBilling::WRITE_BLOCK_SIZE, false)
         {
         }
 
@@ -73,6 +78,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void Bootstrap(const NActors::TActorContext& ctx) {
             TBase::Bootstrap(ctx);
+            NPQ::TRlHelpers::Bootstrap(this->SelfId(), ctx);
 
             if (this->Request().queue_url().empty()) {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::MISSING_PARAMETER, "No QueueUrl parameter."));
@@ -123,7 +129,7 @@ namespace NKikimr::NSqsTopic::V1 {
                         TDerived::Method)
                 });
 
-            NPQ::NMLP::TCommitterSettings committerSettings{
+            CommitterSettings_ = NPQ::NMLP::TCommitterSettings{
                 .DatabasePath = this->QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
                 .Consumer = ResolveConsumerNameFromQueueUrl(this->QueueUrl_->Consumer, ctx),
@@ -131,16 +137,28 @@ namespace NKikimr::NSqsTopic::V1 {
                 .UserToken = this->Request_->GetInternalToken(),
             };
 
-            std::unique_ptr<IActor> actorPtr{NKikimr::NPQ::NMLP::CreateCommitter(this->SelfId(), std::move(committerSettings))};
-            CommiterActorId_ = ctx.RegisterWithSameMailbox(actorPtr.release());
+            this->SendDescribeProposeRequest(ctx);
         }
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse); // override for testing
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
                 HFunc(NPQ::NMLP::TEvChangeResponse, Handle);
+                HFunc(TEvents::TEvWakeup, HandleWakeupTag);
                 default:
                     TBase::StateWork(ev);
+            }
+        }
+
+        void HandleWakeupTag(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+            switch (static_cast<EWakeupTag>(ev->Get()->Tag)) {
+                case EWakeupTag::RlAllowed:
+                    return static_cast<TDerived*>(this)->ReplyAndDie(ctx);
+                case EWakeupTag::RlNoResource:
+                    return this->ReplyWithError(MakeError(NSQS::NErrors::THROTTLING_EXCEPTION, "Request was throttled by the rate limiter"));
+                default:
+                    OnWakeup(static_cast<EWakeupTag>(ev->Get()->Tag));
+                    return;
             }
         }
 
@@ -200,6 +218,12 @@ namespace NKikimr::NSqsTopic::V1 {
                         "failed")
                 });
 
+            if (IsQuotaRequired() && successCount > 0) {
+                const ui64 ru = NBilling::CalcDeleteRu(static_cast<ui64>(successCount), Fifo_, Dedup_);
+                Y_ABORT_UNLESS(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx));
+                return;
+            }
+
             static_cast<TDerived*>(this)->ReplyAndDie(ctx);
         }
 
@@ -207,11 +231,54 @@ namespace NKikimr::NSqsTopic::V1 {
             if (CommiterActorId_) {
                 ctx.Send(CommiterActorId_, new TEvents::TEvPoison);
             }
+            NPQ::TRlHelpers::PassAway(this->SelfId());
             this->TBase::Die(ctx);
         }
 
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            Y_UNUSED(ev);
+            // Second navigate: resolve the rate-limiter path from the database
+            // serverless attributes, then start the committer.
+            if (TBase::IsRlPathNavigateResponse(ev)) {
+                if (auto rlContext = this->ExtractRlContext(ev)) {
+                    SetRlContext(*rlContext);
+                }
+                CreateCommitter();
+                return;
+            }
+
+            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
+            Y_ABORT_UNLESS(result->ResultSet.size() == 1);
+            const auto& response = result->ResultSet.front();
+            if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
+                    return this->ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, TStringBuilder() << "Queue name used by another scheme object"));
+                }
+                // ok
+            } else if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
+                return this->ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist")));
+            } else {
+                return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
+                                                TStringBuilder() << "Failed to describe topic: " << response.Status));
+            }
+
+            const auto& pqTabletConfig = response.PQGroupInfo->Description.GetPQTabletConfig();
+            SetMeteringMode(pqTabletConfig.GetMeteringMode());
+            Fifo_ = QueueUrl_->Fifo;
+            Dedup_ = Fifo_ && pqTabletConfig.GetContentBasedDeduplication();
+
+            // RU-metered topics need the rate-limiter path, which is not carried
+            // by DoLocalRpc requests. Resolve it from the database attributes
+            // before committing so the charge in Handle(TEvChangeResponse) can fire.
+            if (IsRequestUnitsMeteringMode()) {
+                this->SendRlPathNavigate();
+                return;
+            }
+            CreateCommitter();
+        }
+
+        void CreateCommitter() {
+            std::unique_ptr<IActor> actorPtr{NKikimr::NPQ::NMLP::CreateCommitter(this->SelfId(), std::move(*CommitterSettings_))};
+            CommiterActorId_ = this->ActorContext().RegisterWithSameMailbox(actorPtr.release());
         }
 
     protected:
@@ -224,6 +291,9 @@ namespace NKikimr::NSqsTopic::V1 {
         THashMap<TString, NSQS::TError> Failed_;
         THashSet<TString> Success_;
         TMap<NPQ::NMLP::TMessageId, TString, TMessageIdLess> PositionToIdMap_;
+        TMaybe<NPQ::NMLP::TCommitterSettings> CommitterSettings_;
+        bool Fifo_ = false;
+        bool Dedup_ = false;
     };
 
     class TDeleteMessageActor: public TDeleteMessageActorBase<TDeleteMessageActor, TEvSqsTopicDeleteMessageRequest> {

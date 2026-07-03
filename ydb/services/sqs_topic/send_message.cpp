@@ -37,6 +37,9 @@
 
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/core/persqueue/public/pq_rl_helpers.h>
+
+#include <ydb/services/sqs_topic/billing.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
@@ -73,15 +76,17 @@ namespace NKikimr::NSqsTopic::V1 {
     }
 
     template <class TDerived, class TServiceRequest>
-    class TSendMessageActorBase: public TQueueUrlHolder, public TGrpcActorBase<TSendMessageActorBase<TDerived, TServiceRequest>, TServiceRequest> {
+    class TSendMessageActorBase: public TQueueUrlHolder, public TGrpcActorBase<TSendMessageActorBase<TDerived, TServiceRequest>, TServiceRequest>, private NPQ::TRlHelpers {
     protected:
         using TBase = TGrpcActorBase<TSendMessageActorBase, TServiceRequest>;
         using TProtoRequest = typename TBase::TProtoRequest;
+        using EWakeupTag = NPQ::TRlHelpers::EWakeupTag;
 
     public:
         TSendMessageActorBase(NKikimr::NGRpcService::IRequestOpCtx* request)
             : TQueueUrlHolder(ParseQueueUrlFromRequest<TProtoRequest>(request))
             , TBase(request, GetTopicPath().value_or(""))
+            , NPQ::TRlHelpers({}, request, NBilling::WRITE_BLOCK_SIZE, false)
         {
         }
 
@@ -90,6 +95,7 @@ namespace NKikimr::NSqsTopic::V1 {
         void Bootstrap(const NActors::TActorContext& ctx) {
             TBase::CheckAccessWithWriteTopicPermission = true;
             TBase::Bootstrap(ctx);
+            NPQ::TRlHelpers::Bootstrap(this->SelfId(), ctx);
 
             if (this->Request().queue_url().empty()) {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::MISSING_PARAMETER, "No QueueUrl parameter."));
@@ -154,11 +160,22 @@ namespace NKikimr::NSqsTopic::V1 {
                         TDerived::Method)
                 });
 
+            // Accumulate the payload size (message bodies + user attributes) for
+            // RU-based charging. When quota is charged via the RateLimiter the
+            // MLP writer must not charge again through the reserved-capacity path.
+            PayloadSize_ = 0;
+            for (const auto& item : validItems) {
+                PayloadSize_ += item.MessageBody.size();
+                for (const auto& [key, value] : item.Attributes) {
+                    PayloadSize_ += key.size() + value.size();
+                }
+            }
+
             NPQ::NMLP::TWriterSettings writerSettings{
                 .DatabasePath = QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
                 .Messages = std::move(validItems),
-                .ShouldBeCharged = ShouldBeCharged_,
+                .ShouldBeCharged = ShouldBeCharged_ && !IsQuotaRequired(),
                 .UserToken = this->Request_->GetInternalToken(),
             };
             WriterActor_ = this->RegisterWithSameMailbox(NPQ::NMLP::CreateWriter(this->SelfId(), std::move(writerSettings)));
@@ -206,13 +223,34 @@ namespace NKikimr::NSqsTopic::V1 {
                         "failed")
                 });
 
-            static_cast<TDerived*>(this)->ReplyAndDie(TlsActivationContext->AsActorContext());
+            auto& ctx = TlsActivationContext->AsActorContext();
+            if (IsQuotaRequired()) {
+                const ui64 ru = NBilling::CalcWriteRu(
+                    CalcRuConsumption(PayloadSize_), static_cast<ui64>(successCount), Fifo_, Dedup_);
+                Y_ABORT_UNLESS(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx));
+                return;
+            }
+
+            static_cast<TDerived*>(this)->ReplyAndDie(ctx);
+        }
+
+        void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+            switch (static_cast<EWakeupTag>(ev->Get()->Tag)) {
+                case EWakeupTag::RlAllowed:
+                    return static_cast<TDerived*>(this)->ReplyAndDie(ctx);
+                case EWakeupTag::RlNoResource:
+                    return this->ReplyWithError(MakeError(NSQS::NErrors::THROTTLING_EXCEPTION, "Request was throttled by the rate limiter"));
+                default:
+                    OnWakeup(static_cast<EWakeupTag>(ev->Get()->Tag));
+                    return;
+            }
         }
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NPQ::NMLP::TEvWriteResponse, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
+                HFunc(TEvents::TEvWakeup, Handle);
                 default:
                     TBase::StateWork(ev);
             }
@@ -248,6 +286,16 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+            // Second navigate: resolve the rate-limiter path from the database
+            // serverless attributes, then proceed with the write.
+            if (TBase::IsRlPathNavigateResponse(ev)) {
+                if (auto rlContext = this->ExtractRlContext(ev)) {
+                    SetRlContext(*rlContext);
+                }
+                DoWrite();
+                return;
+            }
+
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
             Y_ABORT_UNLESS(result->ResultSet.size() == 1);
             const auto& response = result->ResultSet.front();
@@ -259,11 +307,23 @@ namespace NKikimr::NSqsTopic::V1 {
                     return this->ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, TStringBuilder() << "Queue name used by another scheme object"));
                 }
                 // ok
+                const auto& pqTabletConfig = response.PQGroupInfo->Description.GetPQTabletConfig();
+                SetMeteringMode(pqTabletConfig.GetMeteringMode());
+                Fifo_ = QueueUrl_->Fifo;
+                Dedup_ = Fifo_ && pqTabletConfig.GetContentBasedDeduplication();
             } else if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
                 return this->ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist")));
             } else {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
                                                 TStringBuilder() << "Failed to describe topic: " << response.Status));
+            }
+
+            // RU-metered topics need the rate-limiter path, which is not carried
+            // by DoLocalRpc requests. Resolve it from the database attributes
+            // before writing so the charge in Handle(TEvWriteResponse) can fire.
+            if (IsRequestUnitsMeteringMode()) {
+                this->SendRlPathNavigate();
+                return;
             }
             DoWrite();
         }
@@ -275,6 +335,7 @@ namespace NKikimr::NSqsTopic::V1 {
             if (WriterActor_) {
                 ctx.Send(WriterActor_, new TEvents::TEvPoison);
             }
+            NPQ::TRlHelpers::PassAway(this->SelfId());
             this->TBase::Die(ctx);
         }
 
@@ -308,6 +369,9 @@ namespace NKikimr::NSqsTopic::V1 {
         TActorId DescriptorActorId_;
         bool ShouldBeCharged_{};
         TActorId WriterActor_;
+        ui64 PayloadSize_{};
+        bool Fifo_{};
+        bool Dedup_{};
     };
 
     static TString GetBatchId(const Ydb::Ymq::V1::SendMessageBatchRequestEntry& batchEntry) {

@@ -61,6 +61,17 @@ protected:
     bool IsQuotaRequired() const;
     bool IsQuotaInflight() const;
 
+    // True when the topic is metered by Request Units. Unlike IsQuotaRequired()
+    // this does not require the rate-limiter context to be resolved yet, so it
+    // can be used to decide whether the RL path has to be looked up.
+    bool IsRequestUnitsMeteringMode() const;
+
+    // Rate-limiter context is normally taken from the request in the
+    // constructor. Requests dispatched via DoLocalRpc (e.g. the SQS-over-topic
+    // HTTP proxy) carry no RlPath, so the context has to be built from the
+    // database serverless attributes and injected afterwards.
+    void SetRlContext(const TRlContext& ctx);
+
     void RequestInitQuota(ui64 amount, const TActorContext& ctx, NWilson::TTraceId traceId = {});
     void RequestDataQuota(ui64 amount, const TActorContext& ctx, NWilson::TTraceId traceId = {});
 
@@ -78,7 +89,7 @@ protected:
 
 private:
     const std::optional<TString> TopicPath;
-    const TRlContext Ctx;
+    TRlContext Ctx;
     const bool Subscribe;
     const TDuration WaitDuration;
 

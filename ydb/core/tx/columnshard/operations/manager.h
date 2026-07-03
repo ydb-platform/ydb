@@ -211,7 +211,10 @@ public:
     TWriteOperation::TPtr GetOperationByInsertWriteIdVerified(const TInsertWriteId insertWriteId) const {
         auto it = InsertWriteIdToOpWriteId.find(insertWriteId);
         AFL_VERIFY(it != InsertWriteIdToOpWriteId.end())("write_id", insertWriteId);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "ask_by_insert_id")("write_id", insertWriteId)("operation_id", it->second);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "Dump event, writeId, operationId",
+            {"event", "ask_by_insert_id"},
+            {"writeId", insertWriteId},
+            {"operationId", it->second});
         return GetOperationVerified(it->second);
     }
 
@@ -220,8 +223,10 @@ public:
         AFL_VERIFY(op->GetInsertWriteIds() == insertions)("operation_data", JoinSeq(", ", op->GetInsertWriteIds()))(
             "expected", JoinSeq(", ", insertions));
         for (auto&& i : insertions) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "add_write_id_to_operation_id")("write_id", i)(
-                "operation_id", operationId);
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "Dump event, writeId, operationId",
+                {"event", "add_write_id_to_operation_id"},
+                {"writeId", i},
+                {"operationId", operationId});
             InsertWriteIdToOpWriteId.emplace(i, operationId);
         }
     }

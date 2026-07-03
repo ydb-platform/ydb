@@ -6,6 +6,8 @@
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_RESTORE
+
 namespace NKikimr::NOlap {
 
 std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBuildRequestInitiator() const {
@@ -14,8 +16,10 @@ std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBui
         writeMetaData.GetPathId(), Context.GetApplyToSnapshot(), Context.GetLockId(), ReadOnlyConflicts);
     request->TaskIdentifier = GetTaskId();
     request->SchemaVersion = Context.GetActualSchema()->GetVersion();
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "restore_start")(
-        "count", IncomingData.HasContainer() ? IncomingData->num_rows() : 0)("task_id", WriteData.GetWriteMeta().GetId());
+    YDB_LOG_DEBUG("Dump event, count, taskId",
+        {"event", "restore_start"},
+        {"count", IncomingData.HasContainer() ? IncomingData->num_rows() : 0},
+        {"taskId", WriteData.GetWriteMeta().GetId()});
     auto pkData = NArrow::TColumnOperator().VerifyIfAbsent().Extract(IncomingData.GetContainer(), Context.GetActualSchema()->GetPKColumnNames());
     request->RangesFilter = TPKRangesFilter::BuildFromRecordBatchLines(pkData);
     for (auto&& i : Context.GetActualSchema()->GetIndexInfo().GetColumnIds(false)) {
@@ -27,8 +31,11 @@ std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBui
 TConclusionStatus TModificationRestoreTask::DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) {
     auto result = Merger->AddExistsDataOrdered(data);
     if (result.IsFail()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "merge_data_problems")("write_id", WriteData.GetWriteMeta().GetWriteId())(
-            "tablet_id", GetTabletId())("message", result.GetErrorMessage());
+        YDB_LOG_WARN("",
+            {"event", "merge_data_problems"},
+            {"writeId", WriteData.GetWriteMeta().GetWriteId()},
+            {"tabletId", GetTabletId()},
+            {"message", result.GetErrorMessage()});
         SendErrorMessage(result.GetErrorMessage(), result.GetStatus() == Ydb::StatusIds::PRECONDITION_FAILED
                                                        ? NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::ConstraintViolation
                                                        : NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
@@ -38,8 +45,11 @@ TConclusionStatus TModificationRestoreTask::DoOnDataChunk(const std::shared_ptr<
 }
 
 void TModificationRestoreTask::DoOnError(const TString& errorMessage) {
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "restore_data_problems")("write_id", WriteData.GetWriteMeta().GetWriteId())(
-        "tablet_id", GetTabletId())("message", errorMessage);
+    YDB_LOG_ERROR("",
+        {"event", "restore_data_problems"},
+        {"writeId", WriteData.GetWriteMeta().GetWriteId()},
+        {"tabletId", GetTabletId()},
+        {"message", errorMessage});
     SendErrorMessage(errorMessage, NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
 }
 

@@ -13,6 +13,7 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NExport {
 
@@ -98,8 +99,9 @@ public:
     }
 
     STATEFN(StateError) {
-        const NActors::TLogContextGuard gLogging =
-            NActors::TLogContextBuilder::Build(NKikimrServices::TX_BACKGROUND)("SelfId", SelfId())("TabletId", TabletId);
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_BACKGROUND,
+            {"selfId", SelfId()},
+            {"tabletId", TabletId});
         switch (ev->GetTypeRewrite()) {
             hFunc(NBackground::TEvLocalTransactionCompleted, Handle);
             hFunc(NBackground::TEvSessionControl, Handle);

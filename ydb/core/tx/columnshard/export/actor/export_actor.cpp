@@ -3,6 +3,8 @@
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NExport {
 
 void TActor::SwitchStage(const EStage from, const EStage to) {
@@ -41,16 +43,25 @@ void TActor::HandleWakeup() {
                                      << "Export operation timed out after " << elapsed.Seconds() << "s"
                                      << " in stage " << StageToString(Stage) << ", tablet " << TabletId << ", scanActorId "
                                      << (ScanActorId ? ScanActorId->ToString() : "none") << ", exporter " << Exporter.ToString();
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "export_timeout")("stage", StageToString(Stage))("elapsed_sec", elapsed.Seconds())(
-            "tablet_id", TabletId)("scan_actor_id", ScanActorId ? ScanActorId->ToString() : "none")("exporter", Exporter.ToString());
+        YDB_LOG_ERROR("",
+            {"event", "export_timeout"},
+            {"stage", StageToString(Stage)},
+            {"elapsedSec", elapsed.Seconds()},
+            {"tabletId", TabletId},
+            {"scanActorId", ScanActorId ? ScanActorId->ToString() : "none"},
+            {"exporter", Exporter});
         Counters.OnError();
         AbortExport(errorMessage);
         return;
     }
     if (elapsed > WarningInterval) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "export_slow_operation")("stage", StageToString(Stage))(
-            "elapsed_sec", elapsed.Seconds())("tablet_id", TabletId)("scan_actor_id", ScanActorId ? ScanActorId->ToString() : "none")(
-            "exporter", Exporter.ToString());
+        YDB_LOG_WARN("",
+            {"event", "export_slow_operation"},
+            {"stage", StageToString(Stage)},
+            {"elapsedSec", elapsed.Seconds()},
+            {"tabletId", TabletId},
+            {"scanActorId", ScanActorId ? ScanActorId->ToString() : "none"},
+            {"exporter", Exporter});
     }
     ScheduleTimeoutCheck();
 }
@@ -58,7 +69,9 @@ void TActor::HandleWakeup() {
 void TActor::AbortExport(const TString& errorMessage) {
     ErrorMessage = errorMessage;
     if (ExportSession->GetCursor().IsFinished()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "abort_after_cursor_finished")("message", errorMessage);
+        YDB_LOG_WARN("",
+            {"event", "abort_after_cursor_finished"},
+            {"message", errorMessage});
         return;
     }
     ExportSession->MutableCursor().InitNext({}, true);
@@ -102,14 +115,17 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
 }
 
 void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev) {
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "scan_error")("message", ev->Get()->Record.ShortDebugString());
+    YDB_LOG_ERROR("",
+        {"event", "scan_error"},
+        {"message", ev->Get()->Record});
     Counters.OnError();
     if (ExportSession->GetCursor().IsFinished()) {
         if (Stage == EStage::WaitData) {
             Counters.OnAckResponse();
         }
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "scan_error_after_finish")(
-            "message", "ignoring scan error because cursor is already finished");
+        YDB_LOG_WARN("",
+            {"event", "scan_error_after_finish"},
+            {"message", "ignoring scan error because cursor is already finished"});
         return;
     }
     AbortExport("Scan error: " + ev->Get()->Record.ShortDebugString());
@@ -151,8 +167,9 @@ void TActor::HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchR
 void TActor::HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportError::TPtr& ev) {
     Counters.OnError();
     if (ExportSession->GetCursor().IsFinished()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "export_error_after_finish")(
-            "message", "ignoring export error because cursor is already finished");
+        YDB_LOG_WARN("",
+            {"event", "export_error_after_finish"},
+            {"message", "ignoring export error because cursor is already finished"});
         return;
     }
     AbortExport(ev->Get()->ErrorMessage);
@@ -165,8 +182,10 @@ void TActor::OnBootstrap(const TActorContext& /*ctx*/) {
 
     // Check if cursor is already finished (can happen after restart)
     if (ExportSession->GetCursor().IsFinished()) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_bootstrap_cursor_finished")("tablet_id", TabletId)(
-            "session_id", ExportSession->GetIdentifier().ToString());
+        YDB_LOG_INFO("",
+            {"event", "export_actor_bootstrap_cursor_finished"},
+            {"tabletId", TabletId},
+            {"sessionId", ExportSession->GetIdentifier()});
         ExportSession->Finish();
         SaveSessionState();
         SwitchStage(EStage::Initialization, EStage::Finished);

@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
             }
             if (Request.Contains("parquet")) {
-                runtime.GetAppData().FeatureFlags.SetEnableParquetForExport(true);
+                runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
             }
         }
 
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         TRuntimeSetup runtimeSetup;
         if (extraSettings.Contains("parquet")) {
             runtimeSetup = [](TTestActorRuntime& runtime) {
-                runtime.GetAppData().FeatureFlags.SetEnableParquetForExport(true);
+                runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
             };
         }
 

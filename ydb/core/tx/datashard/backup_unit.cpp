@@ -73,8 +73,8 @@ protected:
             }
 
             if (NBackupRestoreTraits::DataFormatFromTask(backup) == NBackupRestoreTraits::EDataFormat::Parquet) {
-                if (!appData->FeatureFlags.GetEnableParquetForExport()) {
-                    Abort(op, ctx, "Parquet export is disabled by feature flag EnableParquetForExport");
+                if (!appData->FeatureFlags.GetEnableExportInParquet()) {
+                    Abort(op, ctx, "Parquet export is disabled by feature flag EnableExportInParquet");
                     return false;
                 }
                 if (backup.HasEncryptionSettings()) {

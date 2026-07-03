@@ -137,8 +137,8 @@ TConclusion<std::unique_ptr<NTable::IScan>> CreateIScanExportUploader(const TAct
                 return TConclusionStatus::Fail(TStringBuilder() << "Unsupported compression codec: " << backupTask.GetCompression().GetCodec());
             }
             if (NDataShard::NBackupRestoreTraits::DataFormatFromTask(backupTask) == NDataShard::NBackupRestoreTraits::EDataFormat::Parquet) {
-                if (!AppData()->FeatureFlags.GetEnableParquetForExport()) {
-                    return TConclusionStatus::Fail("Parquet export to S3 is disabled by feature flag EnableParquetForExport");
+                if (!AppData()->FeatureFlags.GetEnableExportInParquet()) {
+                    return TConclusionStatus::Fail("Parquet export to S3 is disabled by feature flag EnableExportInParquet");
                 }
                 if (backupTask.HasEncryptionSettings()) {
                     return TConclusionStatus::Fail("Encryption is not supported for parquet files");

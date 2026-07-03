@@ -352,7 +352,7 @@ namespace {
                 Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
             }
             if (formatBlock.Contains("parquet")) {
-                Runtime().GetAppData().FeatureFlags.SetEnableParquetForExport(true);
+                Runtime().GetAppData().FeatureFlags.SetEnableExportInParquet(true);
             }
 
             THolder<IEventHandle> injectResult;
@@ -4918,7 +4918,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
     Y_UNIT_TEST(ShouldRejectParquetExportWithEncryption) {
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
-        Runtime().GetAppData().FeatureFlags.SetEnableParquetForExport(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableExportInParquet(true);
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(

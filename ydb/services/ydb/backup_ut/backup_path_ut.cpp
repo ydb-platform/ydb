@@ -508,7 +508,7 @@ void ExportWholeDatabaseByExplicitRootItemImpl(TBackupTestFixture& f, bool isOla
 
 template <typename TExportSettings, typename TBackupTestFixture>
 void ExportParquetWholeDatabaseImpl(TBackupTestFixture &f, bool isOlap) {
-    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableParquetForExport(true);
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
     {
         auto res = f.YdbQueryClient()
                     .ExecuteQuery(R"sql(
@@ -618,7 +618,7 @@ template <typename TExportSettings, typename TBackupTestFixture>
 void ExportParquetTableWithCompressionImpl(TBackupTestFixture &f, bool isOlap) {
     Y_UNUSED(isOlap);
 
-    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableParquetForExport(true);
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
 
     const int64_t numRows = 10000;
     TString data = TString("Data") * 256;

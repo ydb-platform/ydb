@@ -208,6 +208,13 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreaming
     constexpr inline static bool CreateDirsFromName = true;
 };
 
+template <>
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet>
+    : public TSchemeTxTraitsFallback
+{
+    constexpr inline static bool CreateDirsFromName = true;
+};
+
 namespace NOperation {
 
 template <class TTraits>

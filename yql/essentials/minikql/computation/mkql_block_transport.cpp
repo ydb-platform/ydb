@@ -1169,14 +1169,14 @@ struct TDeserializerTraits {
 std::unique_ptr<IBlockSerializer> MakeBlockSerializer(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper,
                                                       const NYql::NUdf::TType* type,
                                                       const TBlockSerializerParams& params) {
-    return NYql::NUdf::DispatchByArrowTraits<TSerializerTraits>(typeInfoHelper, type, nullptr, params);
+    return NYql::NUdf::DispatchByArrowTraits<TSerializerTraits>(typeInfoHelper, type, /*pgBuilder=*/nullptr, params);
 }
 
 std::unique_ptr<IBlockDeserializer> MakeBlockDeserializer(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper,
                                                           const NYql::NUdf::TType* type,
                                                           const TBlockSerializerParams& params) {
     std::unique_ptr<TBlockDeserializerBase> result = NYql::NUdf::DispatchByArrowTraits<TDeserializerTraits>(
-        typeInfoHelper, type, nullptr, params);
+        typeInfoHelper, type, /*pgBuilder=*/nullptr, params);
     result->SetArrowType(NYql::NUdf::GetArrowType(typeInfoHelper, type));
     return std::move(result);
 }

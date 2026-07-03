@@ -2467,7 +2467,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
     Y_UNIT_TEST_F(TestCreateQueueWithBadQueueName, TFixture) {
         auto json = CreateQueue({
-            {"QueueName", "B/d_queue_name"},
+            {"QueueName", "B?d_queue_name"},
             {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
         }, 400);
         TString resultType = GetByPath<TString>(json, "__type");

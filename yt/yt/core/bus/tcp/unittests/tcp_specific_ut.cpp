@@ -20,6 +20,7 @@
 namespace NYT::NBus::NTcp::NTests {
 namespace {
 
+
 using namespace NConcurrency;
 using namespace NYT::NBus::NTests;
 
@@ -117,6 +118,44 @@ TEST_F(TBusTest, BlackHole)
 
     auto result = WaitFor(bus->Send(message, options));
     EXPECT_FALSE(result.IsOK());
+
+    WaitFor(server->Stop())
+        .ThrowOnError();
+}
+
+TEST_F(TBusTest, DirectPlacementDelivery)
+{
+    auto serverConfig = TBusServerConfig::CreateTcp(Port_);
+    auto server = CreateBusServer(serverConfig);
+    auto handler = New<TDirectPlacementBusHandler>();
+    server->Start(handler);
+
+    auto client = CreateBusClient(TBusClientConfig::CreateTcp(Address_));
+    auto bus = client->CreateBus(New<TEmptyBusHandler>());
+
+    constexpr int PartCount = 4;
+    constexpr int DirectPlacementTransferPartCount = 2;
+    auto message = CreateMessage(PartCount, 64_KB);
+
+    auto options = TSendOptions{
+        .TrackingLevel = EDeliveryTrackingLevel::Full,
+        .DirectPlacementTransferPartCount = DirectPlacementTransferPartCount,
+    };
+    WaitFor(bus->Send(message, options))
+        .ThrowOnError();
+
+    auto receivedPartSizes = handler->WaitForReceivedPartSizes();
+
+    // TCP does not support direct placement transfer: the option is honored in
+    // compat mode, i.e. the whole message is delivered inline (no transfer) and
+    // must still be reassembled identically.
+    EXPECT_FALSE(handler->SawDirectPlacementTransfer());
+
+    std::vector<i64> expectedPartSizes;
+    for (const auto& part : message) {
+        expectedPartSizes.push_back(std::ssize(part));
+    }
+    EXPECT_EQ(expectedPartSizes, receivedPartSizes);
 
     WaitFor(server->Stop())
         .ThrowOnError();

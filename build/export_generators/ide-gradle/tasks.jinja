@@ -1,0 +1,90 @@
+{#- empty line #}
+tasks.withType<Jar>() {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+tasks.withType<Copy>() {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+tasks.withType<Sync>() {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+{%- if hasResources %}
+
+tasks.processResources.configure {
+    dependsOn(tasks.compileJava)
+}
+
+{%-     if named_tests -%}
+{%-         for extra_target in ordered_extra_targets -%}
+{%-             set testname = SourceSetName(extra_target) %}
+
+tasks.named("process{{ testname|title }}Resources").configure {
+    dependsOn(tasks.named<JavaCompile>("compile{{ testname|title }}Java"))
+}
+{%-         endfor -%}
+{%-     else -%}
+{%-         if extra_targets|length %}
+
+tasks.named("processTestResources").configure {
+    dependsOn(tasks.named<JavaCompile>("compileTestJava"))
+}
+{%-         endif -%}
+{%-     endif -%}
+{%- endif -%}
+
+{%- macro DependsCompiles(dependMode) -%}
+    {{ dependMode }}(
+        tasks.compileJava,
+{%-     if with_kotlin %}
+        tasks.compileKotlin,
+{%-     endif %}
+{%-     if named_tests %}
+{%-         for extra_target in ordered_extra_targets -%}
+{%-             set testname = SourceSetName(extra_target) %}
+        tasks.named("compile{{ testname|title }}Java"),
+{%-             if with_kotlin %}
+        tasks.named("compile{{ testname|title }}Kotlin"),
+{%-             endif -%}
+{%-         endfor %}
+{%-     else %}
+{%-         if extra_targets|length %}
+        tasks.named("compileTestJava"),
+{%-             if with_kotlin %}
+        tasks.named("compileTestKotlin"),
+{%-             endif -%}
+{%-         endif %}
+{%-     endif %}
+    )
+{%- endmacro %}
+
+tasks.named("sourcesJar").configure {
+{{ DependsCompiles("mustRunAfter") }}
+    mustRunAfter(tasks.named<Jar>("jar"))
+    mustRunAfter(tasks.named("javadocJar"))
+{%- if with_lombok_plugin %}
+    mustRunAfter(tasks.named("delombok"))
+{%- endif %}
+}
+
+{%- if with_lombok_plugin %}
+
+tasks.named("delombok").configure {
+{{ DependsCompiles("mustRunAfter") }}
+    mustRunAfter(tasks.named<Jar>("jar"))
+}
+{%- endif -%}
+
+{#- To disable redundant javadoc (it may fail the build) #}
+
+tasks.withType<Javadoc>().configureEach {
+    isEnabled = false
+}
+
+tasks.register("compileAll") {
+    group = "build"
+    description = "Compiles all source sets without running tests"
+{{ DependsCompiles("dependsOn") }}
+}

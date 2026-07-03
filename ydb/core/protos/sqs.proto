@@ -40,6 +40,8 @@ message TMessageAttribute {
     optional string DataType = 2;
     optional string StringValue = 3;
     optional bytes  BinaryValue = 4;
+    repeated string StringListValues = 5;
+    repeated bytes  BinaryListValues = 6;
 }
 
 message TMessageAttributes {

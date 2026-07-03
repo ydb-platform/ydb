@@ -447,6 +447,7 @@ bool FillSerializer(
 
         const auto level = *from->Level;
         if (!from->Algorithm) {
+            code = Ydb::StatusIds::BAD_REQUEST;
             error = TStringBuilder() << "Compression level " << level <<" for a column `" << name << "` specified without an algorithm";
             return false;
         }
@@ -454,6 +455,7 @@ bool FillSerializer(
         const auto codec = NArrow::CompressionFromProto(arrowCompression->GetCodec());
 
         if (!NArrow::SupportsCompressionLevel(codec.value())) {
+            code = Ydb::StatusIds::BAD_REQUEST;
             error = TStringBuilder()
                 << "Column `" << name << "`: algorithm `" << algoName
                 << "` does not support compression level";

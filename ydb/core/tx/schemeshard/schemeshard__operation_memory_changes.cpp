@@ -212,6 +212,14 @@ void TMemoryChanges::GrabSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx
     SharedShardEntries.emplace(shardIdx, pathId, pathIt->second);
 }
 
+void TMemoryChanges::GrabNewTestShardSet(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNew(pathId, ss->TestShardSets, TestShardSets);
+}
+
+void TMemoryChanges::GrabTestShardSet(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TTestShardSetInfo>(pathId, ss->TestShardSets, TestShardSets);
+}
+
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
@@ -467,6 +475,16 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             }
         }
         SharedShardEntries.pop();
+    }
+
+    while (TestShardSets) {
+        const auto& [id, elem] = TestShardSets.top();
+        if (elem) {
+            ss->TestShardSets[id] = elem;
+        } else {
+            ss->TestShardSets.erase(id);
+        }
+        TestShardSets.pop();
     }
 }
 

@@ -196,10 +196,6 @@ public:
         }
 
         auto ptr = static_cast<TFlowState*>(state.AsBoxed().Get());
-        if (ptr->InputStatus == NUdf::EFetchStatus::Yield) {
-            ptr->InputStatus = NUdf::EFetchStatus::Ok; // We should recheck input in new fetch iteration
-        }
-
         while (true) {
             if (ptr->ChildReadIndex == Handlers.size()) {
                 switch (ptr->InputStatus) {
@@ -409,22 +405,6 @@ public:
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
         const auto indexPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {fieldsStruct.This(), fieldsStruct.GetIndex()}, "index_ptr", block);
-
-        {
-            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {fieldsStruct.This(), fieldsStruct.GetStatus()}, "status_ptr", block);
-            const auto status = new LoadInst(statusType, statusPtr, "entry_status", block);
-            const auto isYield = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status,
-                                                 ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), "is_yield", block);
-            const auto resetOk = BasicBlock::Create(context, "reset_ok", ctx.Func);
-            const auto cont = BasicBlock::Create(context, "cont", ctx.Func);
-            BranchInst::Create(resetOk, cont, isYield, block);
-
-            block = resetOk;
-            new StoreInst(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), statusPtr, block);
-            BranchInst::Create(cont, block);
-
-            block = cont;
-        }
 
         BranchInst::Create(more, block);
 
@@ -700,10 +680,6 @@ private:
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            if (this->InputStatus == NUdf::EFetchStatus::Yield) {
-                this->InputStatus = NUdf::EFetchStatus::Ok; // We should recheck input in new fetch iteration
-            }
-
             for (;;) {
                 if (this->ChildReadIndex == this->Handlers.size()) {
                     switch (this->InputStatus) {
@@ -861,22 +837,6 @@ private:
 
         const auto itemPtr = new AllocaInst(valueType, 0U, "item_ptr", block);
         new StoreInst(ConstantInt::get(valueType, 0), itemPtr, block);
-
-        {
-            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {fieldsStruct.This(), fieldsStruct.GetStatus()}, "status_ptr", block);
-            const auto status = new LoadInst(statusType, statusPtr, "entry_status", block);
-            const auto isYield = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status,
-                                                 ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), "is_yield", block);
-            const auto resetOk = BasicBlock::Create(context, "reset_ok", ctx.Func);
-            const auto cont = BasicBlock::Create(context, "cont", ctx.Func);
-            BranchInst::Create(resetOk, cont, isYield, block);
-
-            block = resetOk;
-            new StoreInst(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), statusPtr, block);
-            BranchInst::Create(cont, block);
-
-            block = cont;
-        }
 
         BranchInst::Create(more, block);
 

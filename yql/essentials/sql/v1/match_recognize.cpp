@@ -95,7 +95,7 @@ public:
             ctx.Error(Pos_) << "Unexpected column reference state";
             return false;
         }
-        TColumnRefScope scope(ctx, EColumnRefState::MatchRecognizeDefineAggregate, false, ctx.GetMatchRecognizeDefineVar());
+        TColumnRefScope scope(ctx, EColumnRefState::MatchRecognizeDefineAggregate, /*isTopLevelExpr=*/false, ctx.GetMatchRecognizeDefineVar());
         if (Args_.size() != 1) {
             ctx.Error() << "Exactly one argument is required in MATCH_RECOGNIZE navigation function";
             return false;
@@ -224,7 +224,7 @@ private:
             return false;
         }
 
-        const auto sortTraits = SortSpecs_.empty() ? Y("Void") : src->BuildSortSpec(SortSpecs_, Label_, true, false);
+        const auto sortTraits = SortSpecs_.empty() ? Y("Void") : src->BuildSortSpec(SortSpecs_, Label_, /*traits=*/true, /*assume=*/false);
         if (!sortTraits || !sortTraits->Init(ctx, src)) {
             return false;
         }
@@ -244,7 +244,7 @@ private:
                 if (!aggr) {
                     return false;
                 }
-                auto [traits, result] = aggr->AggregationTraits(Y("TypeOf", Label_), false, false, false, ctx);
+                auto [traits, result] = aggr->AggregationTraits(Y("TypeOf", Label_), /*overState=*/false, /*many=*/false, /*allowAggApply=*/false, ctx);
                 if (!result) {
                     return false;
                 }
@@ -284,7 +284,7 @@ private:
         }
         auto defineNode = Y("MatchRecognizeDefines", inputRowType, Q(PatternVars_), Q(defineNames));
         for (auto& d : Definitions_) {
-            TColumnRefScope scope(ctx, EColumnRefState::MatchRecognizeDefine, true, d.Name);
+            TColumnRefScope scope(ctx, EColumnRefState::MatchRecognizeDefine, /*isTopLevelExpr=*/true, d.Name);
             if (!d.Callable || !d.Callable->Init(ctx, src)) {
                 return false;
             }

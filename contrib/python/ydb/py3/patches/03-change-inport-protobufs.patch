@@ -87,10 +87,11 @@
      from ..common.protos import ydb_topic_pb2
 --- contrib/python/ydb/py3/ydb/aio/connection.py	(index)
 +++ contrib/python/ydb/py3/ydb/aio/connection.py	(working tree)
-@@ -27,11 +27,10 @@ from ydb.driver import DriverConfig
+@@ -28,12 +28,11 @@ from ydb import issues
  from ydb.settings import BaseRequestSettings
  from ydb import issues
- 
+ from ydb.opentelemetry.tracing import get_trace_metadata
+
 -# Workaround for good IDE and universal for runtime
 -if TYPE_CHECKING:
 -    from ydb._grpc.v4 import ydb_topic_v1_pb2_grpc

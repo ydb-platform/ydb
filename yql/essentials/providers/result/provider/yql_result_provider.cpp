@@ -28,7 +28,7 @@ using namespace NNodes;
 class TYsonResultWriter: public IResultWriter {
 public:
     explicit TYsonResultWriter(NYson::EYsonFormat format)
-        : Writer_(new NYson::TYsonWriter(&PartialStream_, format, ::NYson::EYsonType::Node, true))
+        : Writer_(new NYson::TYsonWriter(&PartialStream_, format, ::NYson::EYsonType::Node, /*enableRaw=*/true))
     {
     }
 
@@ -169,7 +169,7 @@ IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TType
             if (!structType->FindItem(rightName)) {
                 if (hasAutoNames) {
                     columns = {};
-                    return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+                    return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
                 }
                 ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Unknown field in hint: " << child->Content()));
                 return IGraphTransformer::TStatus::Error;
@@ -178,7 +178,7 @@ IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TType
             if (!usedFields.insert(rightName).second) {
                 if (hasAutoNames) {
                     columns = {};
-                    return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+                    return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
                 }
                 ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Duplicate field in hint: " << rightName));
                 return IGraphTransformer::TStatus::Error;
@@ -187,7 +187,7 @@ IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TType
             TString columnName = "column" + ToString(i);
             if (!structType->FindItem(columnName) || !usedFields.insert(columnName).second) {
                 columns = {};
-                return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+                return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
             }
             orderedFields.push_back(ctx.NewAtom(child->Pos(), columnName));
         } else {
@@ -198,7 +198,7 @@ IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TType
                     if (!usedFields.insert(TString(x->GetName())).second) {
                         if (hasAutoNames) {
                             columns = {};
-                            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+                            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
                         }
                         ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Duplicate field in hint: " << x->GetName()));
                         return IGraphTransformer::TStatus::Error;
@@ -211,7 +211,7 @@ IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TType
     if (usedFields.size() != structType->GetSize()) {
         if (hasAutoNames) {
             columns = {};
-            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
         }
         ctx.AddError(TIssue(ctx.GetPosition(columns->Pos()), TStringBuilder() << "Mismatch of fields in hint and in the struct, columns fields: " << usedFields.size()
                                                                               << ", struct fields:" << structType->GetSize()));
@@ -220,7 +220,7 @@ IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TType
 
     if (hasPrefixes || hasAutoNames) {
         columns = ctx.NewList(columns->Pos(), std::move(orderedFields));
-        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
     }
 
     return IGraphTransformer::TStatus::Ok;
@@ -370,8 +370,8 @@ private:
                     auto zero = ctx.NewAtom(TPositionHandle(), "0", TNodeFlags::Default);
                     zero->SetTypeAnn(ctx.MakeType<TUnitExprType>());
                     zero->SetState(TExprNode::EState::ConstrComplete);
-                    zero->SetDependencyScope(nullptr, nullptr);                    // HOTFIX for CSEE
-                    input.Ptr()->ChildRef(TResFor::idx_Current) = std::move(zero); // FIXME: Don't use ChilfRef
+                    zero->SetDependencyScope(/*outerLambda=*/nullptr, /*innerLambda=*/nullptr); // HOTFIX for CSEE
+                    input.Ptr()->ChildRef(TResFor::idx_Current) = std::move(zero);              // FIXME: Don't use ChilfRef
                     input.Ptr()->SetResult(ctx.NewWorld(input.Pos()));
                     input.Ptr()->SetState(TExprNode::EState::ExecutionComplete);
                     return TStatus::Ok;
@@ -418,7 +418,7 @@ private:
                                  .Done()
                                  .Ptr();
 
-                    return IGraphTransformer::TStatus(TStatus::Repeat, true);
+                    return IGraphTransformer::TStatus(TStatus::Repeat, /*hasRestart=*/true);
                 } else {
                     auto status = RequireChild(input.Ref(), TResFor::idx_Active);
                     if (status.Level != IGraphTransformer::TStatus::Ok) {
@@ -444,7 +444,7 @@ private:
                                  .Done()
                                  .Ptr();
 
-                    return IGraphTransformer::TStatus(TStatus::Repeat, true);
+                    return IGraphTransformer::TStatus(TStatus::Repeat, /*hasRestart=*/true);
                 }
             } else if (input.Ref().HasResult()) {
                 // parse list
@@ -506,7 +506,7 @@ private:
                              .Done()
                              .Ptr();
 
-                return IGraphTransformer::TStatus(TStatus::Repeat, true);
+                return IGraphTransformer::TStatus(TStatus::Repeat, /*hasRestart=*/true);
             }
 
             needWriter = false;

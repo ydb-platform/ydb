@@ -1215,6 +1215,34 @@ void TPathDescriber::DescribeStreamingQuery(TPathId pathId, TPathElement::TPtr p
     *entry.MutableProperties() = streamingQueryInfo->Properties;
 }
 
+void TPathDescriber::DescribeTestShardSet(TPathId pathId, TPathElement::TPtr pathEl) {
+    const auto it = Self->TestShardSets.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "TestShardSet is not found");
+    const auto testShardSetInfo = *it;
+
+    auto& entry = *Result->Record.MutablePathDescription()->MutableTestShardSetDescription();
+    entry.SetName(pathEl->Name);
+    entry.SetPathId(pathId.LocalPathId);
+    entry.SetVersion(testShardSetInfo->AlterVersion);
+
+    TVector<std::pair<TShardIdx, TTabletId>> sortedShards(testShardSetInfo->TestShards.begin(), testShardSetInfo->TestShards.end());
+    std::sort(sortedShards.begin(), sortedShards.end(),
+              [](const auto& l, const auto& r) { return l.first < r.first; });
+
+    for (const auto& [shardIdx, tabletId] : sortedShards) {
+        entry.AddTabletIds(ui64(tabletId));
+    }
+
+    if (!sortedShards.empty()) {
+        const auto& shardIdx = sortedShards.front().first;
+        auto shardInfo = Self->ShardInfos.FindPtr(shardIdx);
+        Y_ABORT_UNLESS(shardInfo);
+        for (const auto& channel : shardInfo->BindedChannels) {
+            entry.AddBoundChannels()->CopyFrom(channel);
+        }
+    }
+}
+
 static bool ConsiderAsDropped(const TPath& path) {
     Y_ABORT_UNLESS(path.IsResolved());
 
@@ -1385,6 +1413,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             break;
         case NKikimrSchemeOp::EPathTypeStreamingQuery:
             DescribeStreamingQuery(base->PathId, base);
+            break;
+        case NKikimrSchemeOp::EPathTypeTestShardSet:
+            DescribeTestShardSet(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();

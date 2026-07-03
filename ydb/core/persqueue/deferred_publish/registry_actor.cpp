@@ -11,6 +11,8 @@ namespace NKikimr::NPQ::NDeferredPublish {
 
 namespace {
 
+constexpr ui32 MaxPendingBeginPublicationRequests = 100;
+
 struct TPendingBeginPublication {
     TString Database;
     TString ExtPublicationId;
@@ -28,6 +30,7 @@ class TDeferredPublishRegistryActor : public NActors::TActorBootstrapped<TDeferr
 
     struct TDatabaseState {
         ETablesStatus TablesStatus = ETablesStatus::NotReady;
+        ui32 InFlightTablesCreations = 0;
         TVector<TPendingBeginPublication> PendingRequests;
     };
 
@@ -37,6 +40,11 @@ public:
     }
 
     void Handle(TEvBeginPublicationRequest::TPtr& ev) {
+        if (ShuttingDown) {
+            ReplyAborted(ev->Sender);
+            return;
+        }
+
         const auto& request = *ev->Get();
         auto& state = Databases[request.Database];
 
@@ -46,23 +54,16 @@ public:
                     request.CreatedBy, ev->Sender);
                 return;
             case ETablesStatus::Pending:
-                state.PendingRequests.emplace_back(TPendingBeginPublication{
-                    .Database = request.Database,
-                    .ExtPublicationId = request.ExtPublicationId,
-                    .WriterIdentity = request.WriterIdentity,
-                    .CreatedBy = request.CreatedBy,
-                    .ReplyTo = ev->Sender,
-                });
+                if (!TryEnqueuePendingBeginPublication(state, request, ev->Sender)) {
+                    return;
+                }
                 return;
             case ETablesStatus::NotReady:
-                state.PendingRequests.emplace_back(TPendingBeginPublication{
-                    .Database = request.Database,
-                    .ExtPublicationId = request.ExtPublicationId,
-                    .WriterIdentity = request.WriterIdentity,
-                    .CreatedBy = request.CreatedBy,
-                    .ReplyTo = ev->Sender,
-                });
+                if (!TryEnqueuePendingBeginPublication(state, request, ev->Sender)) {
+                    return;
+                }
                 state.TablesStatus = ETablesStatus::Pending;
+                ++state.InFlightTablesCreations;
                 Register(CreateDeferredPublishTablesCreator(request.Database));
                 return;
         }
@@ -70,10 +71,26 @@ public:
 
     void Handle(TEvTablesCreationFinished::TPtr& ev) {
         auto& state = Databases[ev->Get()->Database];
-        Y_ABORT_UNLESS(state.TablesStatus == ETablesStatus::Pending);
+        if (state.InFlightTablesCreations > 0) {
+            --state.InFlightTablesCreations;
+        }
+
+        if (state.TablesStatus != ETablesStatus::Pending) {
+            TryPassAway();
+            return;
+        }
 
         TVector<TPendingBeginPublication> pending = std::move(state.PendingRequests);
         state.PendingRequests.clear();
+
+        if (ShuttingDown) {
+            state.TablesStatus = ETablesStatus::NotReady;
+            for (const auto& request : pending) {
+                ReplyAborted(request.ReplyTo);
+            }
+            TryPassAway();
+            return;
+        }
 
         if (ev->Get()->Success) {
             state.TablesStatus = ETablesStatus::Ready;
@@ -100,11 +117,35 @@ public:
     }
 
     void Handle(TEvInsertPublicationFinished::TPtr& ev) {
+        if (InFlightInserts == 0) {
+            return;
+        }
+        --InFlightInserts;
+
         auto* response = new TEvBeginPublicationResponse;
         response->Status = ev->Get()->Status;
         response->Issues = ev->Get()->Issues;
         response->IntPublicationId = ev->Get()->IntPublicationId;
         Send(ev->Get()->ReplyTo, response);
+
+        TryPassAway();
+    }
+
+    void HandlePoison() {
+        ShuttingDown = true;
+
+        for (auto& [database, state] : Databases) {
+            Y_UNUSED(database);
+            for (const auto& request : state.PendingRequests) {
+                ReplyAborted(request.ReplyTo);
+            }
+            state.PendingRequests.clear();
+            if (state.InFlightTablesCreations == 0) {
+                state.TablesStatus = ETablesStatus::NotReady;
+            }
+        }
+
+        TryPassAway();
     }
 
     STFUNC(StateFunc) {
@@ -112,12 +153,71 @@ public:
             hFunc(TEvBeginPublicationRequest, Handle);
             hFunc(TEvTablesCreationFinished, Handle);
             hFunc(TEvInsertPublicationFinished, Handle);
+            sFunc(TEvents::TEvPoison, HandlePoison);
             default:
                 break;
         }
     }
 
 private:
+    bool TryEnqueuePendingBeginPublication(
+        TDatabaseState& state,
+        const TEvBeginPublicationRequest& request,
+        const NActors::TActorId& replyTo)
+    {
+        if (state.PendingRequests.size() >= MaxPendingBeginPublicationRequests) {
+            ReplyOverloaded(replyTo);
+            return false;
+        }
+
+        state.PendingRequests.emplace_back(TPendingBeginPublication{
+            .Database = request.Database,
+            .ExtPublicationId = request.ExtPublicationId,
+            .WriterIdentity = request.WriterIdentity,
+            .CreatedBy = request.CreatedBy,
+            .ReplyTo = replyTo,
+        });
+        return true;
+    }
+
+    void ReplyOverloaded(const NActors::TActorId& replyTo) {
+        NYql::TIssues issues;
+        issues.AddIssue(TStringBuilder()
+            << "Deferred publish registry pending queue is full (limit "
+            << MaxPendingBeginPublicationRequests << ")");
+
+        auto* response = new TEvBeginPublicationResponse;
+        response->Status = Ydb::StatusIds::OVERLOADED;
+        response->Issues = issues;
+        Send(replyTo, response);
+    }
+
+    void ReplyAborted(const NActors::TActorId& replyTo) {
+        NYql::TIssues issues;
+        issues.AddIssue("Deferred publish registry is shutting down");
+
+        auto* response = new TEvBeginPublicationResponse;
+        response->Status = Ydb::StatusIds::ABORTED;
+        response->Issues = issues;
+        Send(replyTo, response);
+    }
+
+    void TryPassAway() {
+        if (ShuttingDown && InFlightInserts == 0 && !HasInFlightTablesCreations()) {
+            PassAway();
+        }
+    }
+
+    bool HasInFlightTablesCreations() const {
+        for (const auto& [database, state] : Databases) {
+            Y_UNUSED(database);
+            if (state.InFlightTablesCreations > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void StartInsert(
         const TString& database,
         const TString& extPublicationId,
@@ -125,9 +225,13 @@ private:
         const TString& createdBy,
         const NActors::TActorId& replyTo)
     {
+        Y_ABORT_UNLESS(!ShuttingDown);
+        ++InFlightInserts;
         Register(CreateInsertPublicationQueryActor(replyTo, database, extPublicationId, writerIdentity, createdBy));
     }
 
+    bool ShuttingDown = false;
+    ui32 InFlightInserts = 0;
     THashMap<TString, TDatabaseState> Databases;
 };
 

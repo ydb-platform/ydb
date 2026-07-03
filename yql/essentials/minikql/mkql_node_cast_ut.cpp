@@ -32,11 +32,11 @@ class TMiniKQLNodeCast: public TTestBase {
 
         TCallableType* ctype = TCallableType::Create(
             "callable", dataNode.GetStaticType(),
-            0, nullptr, nullptr, Env_);
+            0, /*arguments=*/nullptr, /*payload=*/nullptr, Env_);
 
         TCallable* callable = TCallable::Create(dataNode, ctype, Env_);
 
-        TRuntimeNode node(callable, false);
+        TRuntimeNode node(callable, /*isImmediate=*/false);
         node.Freeze();
 
         TDataLiteral* value = AS_VALUE(TDataLiteral, node);
@@ -57,7 +57,7 @@ class TMiniKQLNodeCast: public TTestBase {
 
 private:
     TRuntimeNode Uint32AsNode(ui32 value) {
-        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(value), NUdf::EDataSlot::Uint32, Env_), true);
+        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(value), NUdf::EDataSlot::Uint32, Env_), /*isImmediate=*/true);
     }
 
 private:

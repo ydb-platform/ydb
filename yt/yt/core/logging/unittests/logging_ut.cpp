@@ -621,6 +621,39 @@ TEST_F(TLoggingTest, StructuredLogging)
     }
 }
 
+TEST_F(TLoggingTest, StructuredLoggingBinaryYson)
+{
+    TTempFile logFile(GenerateLogFileName());
+    Configure(Format(R"({
+        rules = [
+            {
+                min_level = info;
+                writers = [ test ];
+            };
+        ];
+        writers = {
+            test = {
+                format = yson;
+                yson_format = binary;
+                file_name = "%v";
+                type = "file";
+            };
+        };
+    })", logFile.Name()));
+
+    YT_SLOG_EVENT(Logger(), ELogLevel::Info, "test_message", ("number", 1'000'000));
+
+    TLogManager::Get()->Synchronize();
+
+    // The payload is binary YSON, so it cannot be split into lines; read it as a whole.
+    auto content = TUnbufferedFileInput(logFile.Name()).ReadAll();
+    auto message = DeserializeStructuredEvent(content, ELogFormat::Yson);
+    EXPECT_EQ(message->GetChildOrThrow("message")->AsString()->GetValue(), "test_message");
+    EXPECT_EQ(message->GetChildOrThrow("number")->AsInt64()->GetValue(), 1'000'000);
+    EXPECT_EQ(message->GetChildOrThrow("level")->AsString()->GetValue(), "info");
+    EXPECT_EQ(message->GetChildOrThrow("category")->AsString()->GetValue(), Logger().GetCategory()->Name);
+}
+
 TEST_F(TLoggingTest, SlogMacroLogging)
 {
     for (auto format : {ELogFormat::Yson, ELogFormat::Json}) {

@@ -546,7 +546,7 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
 
     TAstParseResult astRes;
     if (sExpr) {
-        astRes = ParseAst(query, nullptr, fullName);
+        astRes = ParseAst(query, /*externalPool=*/nullptr, fullName);
     } else {
         NSQLTranslation::TTranslationSettings settings;
         settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
@@ -702,7 +702,7 @@ TString TModuleResolver::SubstParameters(const TString& str) {
         return str;
     }
 
-    return ::NYql::SubstParameters(str, Parameters_, nullptr);
+    return ::NYql::SubstParameters(str, Parameters_, /*usedNames=*/nullptr);
 }
 
 } // namespace NYql

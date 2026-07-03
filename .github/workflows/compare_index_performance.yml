@@ -3,10 +3,18 @@ name: compare_index_performance
 on:
   workflow_dispatch:
     inputs:
+      pull_number:
+        description: 'Pull request number to test the current side against, ex: 12345 (empty = current branch)'
+        required: false
+        default: ''
       duration:
         description: 'Duration of each workload run in seconds'
         required: false
         default: '100'
+      iterations:
+        description: 'Number of iterations per workload (median reported)'
+        required: false
+        default: '10'
       build_preset:
         description: 'Build preset (must match S3 prebuilt binary)'
         required: false
@@ -37,10 +45,6 @@ on:
         description: 'Number of query vectors for vector select'
         required: false
         default: '1000'
-      iterations:
-        description: 'Number of iterations per workload (median reported)'
-        required: false
-        default: '10'
       warmup:
         description: 'Warmup duration in seconds before each measured run'
         required: false
@@ -70,10 +74,6 @@ on:
         required: false
         type: boolean
         default: true
-      pull_number:
-        description: 'Pull request number to test the current side against, ex: 12345 (empty = current branch)'
-        required: false
-        default: ''
 
 jobs:
   compare:

@@ -40,6 +40,8 @@
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/random_provider/random_provider.h>
 
+#include <util/string/join.h>
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/compilation/events.h>
 #include <ydb/core/kqp/common/events/events.h>
@@ -69,6 +71,12 @@ struct TTaskDistribution {
     THashMap<TStageId, ui32> TasksPerStage;
     THashMap<TStageId, THashMap<ui64 /* nodeId */, ui32>> TasksPerStageNode;
     ui32 UnplacedTasks = 0;
+
+    // One entry per channel of a COPY-kind connection (Map/StreamLookup/Sequencer/VectorResolve) whose src and dst
+    // tasks ended up on different nodes (or without a node at all). Should always be empty - these connection types
+    // pair same-index tasks positionally, without checking node equality themselves (see BuildMapChannels /
+    // BuildTransformChannels), relying entirely on the placement stage keeping copy-group columns co-located.
+    TVector<TString> CrossNodeCopyChannels;
 
     ui32 Count(ui32 txIdx = 0, ui32 stageIdx = 0) const {
         auto it = TasksPerStage.find(TStageId(txIdx, stageIdx));
@@ -339,6 +347,7 @@ public:
                 }
             }
         }
+        CheckCrossNodeCopyChannels(reply->Result.CrossNodeCopyChannels);
         ctx.Send(Owner, reply.Release());
         Die(ctx);
     }
@@ -394,6 +403,52 @@ private:
         });
 
         planner.AssignTasksToNodes();
+    }
+
+    // Black-box channel-connectivity check, independent of TMaxTasksGraph's internal "copy group" concept: it
+    // re-derives which connections require same-node placement straight from the compiled physical plan (the same
+    // connection kinds TKqpTasksGraph::CountComputeTasks treats as COPY - Map/StreamLookup/Sequencer/VectorResolve),
+    // then verifies every such channel's src and dst task actually landed on the same node. Guards against
+    // regressions in either the placement logic or the channel-building logic (BuildMapChannels/BuildTransformChannels
+    // pair same-index tasks across these connections without checking node equality themselves - see
+    // kqp_tasks_graph.cpp), whichever one changes.
+    void CheckCrossNodeCopyChannels(TVector<TString>& errors) const {
+        const auto isCopyConnection = [](NKqpProto::TKqpPhyConnection::TypeCase type) {
+            switch (type) {
+                case NKqpProto::TKqpPhyConnection::kMap:
+                case NKqpProto::TKqpPhyConnection::kStreamLookup:
+                case NKqpProto::TKqpPhyConnection::kSequencer:
+                case NKqpProto::TKqpPhyConnection::kVectorResolve:
+                    return true;
+                default:
+                    return false;
+            }
+        };
+
+        for (const auto& channel : Graph->GetChannels()) {
+            if (channel.DstTask == 0) {
+                continue; // result channel (BuildResultChannels): no stage input to classify, not a copy connection.
+            }
+
+            const auto& dstStageInfo = Graph->GetStageInfo(channel.DstStageId);
+            const auto& dstStage = dstStageInfo.Meta.GetStage(dstStageInfo.Id);
+            if (channel.DstInputIndex >= (ui32)dstStage.InputsSize()) {
+                continue;
+            }
+            if (!isCopyConnection(dstStage.GetInputs(channel.DstInputIndex).GetTypeCase())) {
+                continue;
+            }
+
+            const auto& srcNode = Graph->GetTask(channel.SrcTask).Meta.ExpectedNodeId;
+            const auto& dstNode = Graph->GetTask(channel.DstTask).Meta.ExpectedNodeId;
+            if (!srcNode || !dstNode || *srcNode != *dstNode) {
+                errors.push_back(TStringBuilder()
+                    << "channel " << channel.Id << ": " << channel.SrcStageId << " task " << channel.SrcTask
+                    << " (node " << (srcNode ? ToString(*srcNode) : TString("<none>")) << ") -> "
+                    << channel.DstStageId << " task " << channel.DstTask
+                    << " (node " << (dstNode ? ToString(*dstNode) : TString("<none>")) << ")");
+            }
+        }
     }
 
     void ReplyError(const NActors::TActorContext& ctx, TString msg) {
@@ -646,6 +701,13 @@ inline void AssertNodeDistribution(const TTaskDistribution& dist, ui32 txId,
     }
 }
 
+// Blanket invariant, the same for every query: a copy-connection channel (Map/StreamLookup/Sequencer/VectorResolve)
+// must never cross nodes. Unlike AssertNodeDistribution there is no per-query expected table - this must hold
+// regardless of query shape, so every test can call it unconditionally.
+inline void AssertNoCrossNodeCopyChannels(const TTaskDistribution& dist) {
+    UNIT_ASSERT_C(dist.CrossNodeCopyChannels.empty(), JoinSeq("\n", dist.CrossNodeCopyChannels));
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -679,6 +741,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 0), 3840);
@@ -823,6 +886,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 12u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 0), 960);
@@ -919,6 +983,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 7u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 0), 256);
@@ -981,6 +1046,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 6u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 0), 1920);
@@ -1086,6 +1152,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 11u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
@@ -1136,6 +1203,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 3840);
@@ -1232,6 +1300,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 10u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
@@ -1374,6 +1443,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 14u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
@@ -1466,6 +1536,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 13u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 600);
@@ -1592,6 +1663,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 8u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
@@ -1676,6 +1748,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 11u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 1920);
@@ -1753,6 +1826,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 5u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 1920);
@@ -1808,6 +1882,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 6u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
@@ -1856,6 +1931,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 5u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
@@ -1932,6 +2008,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 8u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 1920);
@@ -2020,6 +2097,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 8u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 1200);
@@ -2090,6 +2168,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 8u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
@@ -2171,6 +2250,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 8u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
@@ -2240,6 +2320,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 5u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
@@ -2340,6 +2421,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 11u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 720);
@@ -2412,6 +2494,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 11u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
@@ -2512,6 +2595,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 8u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
@@ -2641,6 +2725,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         )";
 
         auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 25u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);

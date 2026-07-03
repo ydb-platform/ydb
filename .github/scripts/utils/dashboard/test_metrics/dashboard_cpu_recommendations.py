@@ -22,17 +22,18 @@ def _round_cpu_tier(cores: float) -> int:
     return 16
 
 
-def _next_cpu_tier(cpu: int) -> int:
-    """Move to the next runner tier: 1->2->4->8->16."""
-    if cpu <= 1:
-        return 2
-    if cpu <= 2:
-        return 4
-    if cpu <= 4:
-        return 8
-    if cpu <= 8:
-        return 16
-    return 16
+# RAM reservation tiers (GB) for REQUIREMENTS(ram:N). Round up observed per-chunk peak.
+RAM_TIERS_GB = (8, 16, 32, 64, 128, 256)
+# Do not suggest REQUIREMENTS(ram) when there is none and per-chunk peak is below this.
+RAM_SET_THRESHOLD_GB = 24
+
+
+def _round_ram_tier(gb: float) -> int:
+    """Round up to a RAM reservation tier (GB)."""
+    for tier in RAM_TIERS_GB:
+        if gb <= tier:
+            return tier
+    return RAM_TIERS_GB[-1]
 
 
 # When SPLIT_FACTOR is not set in ya.make, runner may pick 1..10. No need to suggest "set" if recommended is in that range.
@@ -328,16 +329,15 @@ def build_cpu_recommendations(
         size_u_cap = str(ya_size or "").upper()
         long_test_threshold_sec = _size_duration_threshold_sec(size_u_cap)
         max_test_duration_sec = float((max_test_duration_sec_by_suite or {}).get(suite, 0.0) or 0.0)
+        # Long test duration and timeouts drive SPLIT, not CPU. CPU is derived only
+        # from observed p95 cores per chunk. long_test_boost_applied is kept as a
+        # "long test present" flag for size-cap hints and the optional maximize
+        # policy, but it no longer changes the recommended CPU tier.
         long_test_boost_applied = max_test_duration_sec >= float(long_test_threshold_sec)
-        recommended = _next_cpu_tier(base_recommended) if long_test_boost_applied else base_recommended
-        # When suite has any timeout(s): recommend at least 2x actual consumption (tier), capped by size limit.
+        recommended = base_recommended
         timeout_tests_count = int(test_status.get("timeouts", 0) or 0)
+        # Timeouts no longer inflate CPU; kept False for output compatibility.
         timeout_2x_boost_applied = False
-        if timeout_tests_count > 0 and p95_c > 0:
-            recommended_2x_tier = _round_cpu_tier(2.0 * p95_c)
-            if recommended_2x_tier > recommended:
-                recommended = recommended_2x_tier
-                timeout_2x_boost_applied = True
         small_cap_applied = size_u_cap == "SMALL" and recommended > 1
         medium_cap_applied = size_u_cap == "MEDIUM" and recommended > 4
         if small_cap_applied:
@@ -363,11 +363,8 @@ def build_cpu_recommendations(
         ]
         if long_test_boost_applied:
             explain_parts.append(
-                f"max_test_duration_sec={max_test_duration_sec:.3f} >= threshold_sec={long_test_threshold_sec} -> next_tier={_next_cpu_tier(base_recommended)}"
-            )
-        if timeout_2x_boost_applied:
-            explain_parts.append(
-                f"timeouts={timeout_tests_count} -> 2x_p95_tier={_round_cpu_tier(2.0 * p95_c)}"
+                f"long_test_present: max_test_duration_sec={max_test_duration_sec:.3f} >= "
+                f"threshold_sec={long_test_threshold_sec} (drives split, not cpu)"
             )
         if timeout_max_policy_applied:
             explain_parts.append(f"maximize_reqs_for_timeout_tests(size={size_u or 'UNKNOWN'}) -> {timeout_max_value}")
@@ -377,23 +374,6 @@ def build_cpu_recommendations(
             explain_parts.append("MEDIUM cap -> 4")
         explain_parts.append(f"final={recommended_req}")
         recommended_cpu_explain = "; ".join(explain_parts)
-        if recommended_req == "all":
-            if ya_cpu is None:
-                cpu_action = "set"
-            else:
-                cpu_action = "raise"
-        else:
-            recommended_num = int(recommended_req)
-            if ya_cpu is None:
-                cpu_action = "ok" if recommended_num <= 1 else "set"
-            else:
-                ya_cpu_i = int(ya_cpu)
-                if recommended_num > ya_cpu_i:
-                    cpu_action = "raise"
-                elif recommended_num < ya_cpu_i:
-                    cpu_action = "lower"
-                else:
-                    cpu_action = "ok"
         chunks_real = by_suite_runs_non_sole[suite] if by_suite_runs_non_sole[suite] > 0 else by_suite_runs_all[suite]
         chunks_report = (report_chunks_by_suite or {}).get(suite)
         timeout_sec = _size_duration_threshold_sec(size_u_cap)
@@ -405,10 +385,15 @@ def build_cpu_recommendations(
         overloaded_chunks = 0
         overloaded_total_duration_sec = 0.0
         overloaded_chunk_examples: list[str] = []
-        if timeout_tests_count > 0 and timeout_budget_sec > 0:
+        max_chunk_load_sec = 0.0
+        # Detect overloaded chunks regardless of whether a timeout already happened,
+        # so we can recommend split proactively (before the first timeout).
+        if timeout_budget_sec > 0 and chunk_loads:
             overloaded_items: list[tuple[float, str]] = []
             for cl in chunk_loads:
                 load_sec = float(cl.get("sum_duration_sec", 0.0) or 0.0)
+                if load_sec > max_chunk_load_sec:
+                    max_chunk_load_sec = load_sec
                 if load_sec > timeout_budget_sec:
                     overloaded_chunks += 1
                     overloaded_total_duration_sec += load_sec
@@ -418,6 +403,12 @@ def build_cpu_recommendations(
                     overloaded_items.append((load_sec, f"{chunk_name}={load_sec:.1f}s"))
             overloaded_items.sort(key=lambda x: x[0], reverse=True)
             overloaded_chunk_examples = [x[1] for x in overloaded_items[:3]]
+        # Severity: "timeout" if a real timeout already occurred, "at_risk" if a chunk
+        # exceeds the serial-time budget but has not timed out yet, else "none".
+        if overloaded_chunks > 0:
+            split_severity = "timeout" if timeout_tests_count > 0 else "at_risk"
+        else:
+            split_severity = "none"
         target_chunk_load_sec = float(timeout_sec) * 0.5
         needed_chunks_for_overloaded = (
             int(math.ceil(overloaded_total_duration_sec / target_chunk_load_sec))
@@ -425,6 +416,16 @@ def build_cpu_recommendations(
             else 0
         )
         extra_chunks = max(0, needed_chunks_for_overloaded - overloaded_chunks)
+        # A single very heavy chunk must drive split even if the total-based estimate is
+        # conservative: split the heaviest overloaded chunk into ceil(load/target) pieces.
+        single_chunk_extra = 0
+        if (
+            overloaded_chunks > 0
+            and target_chunk_load_sec > 0
+            and max_chunk_load_sec > timeout_budget_sec
+        ):
+            single_chunk_extra = int(math.ceil(max_chunk_load_sec / target_chunk_load_sec)) - 1
+        extra_chunks = max(int(extra_chunks), int(single_chunk_extra))
         split_should_raise = extra_chunks > 0
         recommended_split = int(chunks_real) + int(extra_chunks) if split_should_raise else int(chunks_real)
         if ya_split_factor is None:
@@ -456,6 +457,30 @@ def build_cpu_recommendations(
                 recommended_split_action = "lower"
             else:
                 recommended_split_action = "ok"
+        # CPU action is decided after split so we can avoid recommending a lower cpu
+        # while the suite is under split/time pressure: REQUIREMENTS(cpu) is a per-chunk
+        # scheduler slot, so lowering it increases the number of parallel chunks on the
+        # runner, which worsens timeouts/OOM.
+        split_pressure = overloaded_chunks > 0 or recommended_split_action == "raise"
+        cpu_lower_suppressed = False
+        if recommended_req == "all":
+            cpu_action = "set" if ya_cpu is None else "raise"
+        else:
+            recommended_num = int(recommended_req)
+            if ya_cpu is None:
+                cpu_action = "ok" if recommended_num <= 1 else "set"
+            else:
+                ya_cpu_i = int(ya_cpu)
+                if recommended_num > ya_cpu_i:
+                    cpu_action = "raise"
+                elif recommended_num < ya_cpu_i:
+                    if split_pressure:
+                        cpu_action = "ok"
+                        cpu_lower_suppressed = True
+                    else:
+                        cpu_action = "lower"
+                else:
+                    cpu_action = "ok"
         heavy_test_threshold_sec = timeout_budget_sec * 0.97
         heavy_candidates = list(dur_stats.get("heavy_test_candidates", []) or [])
         heavy_tests_all = []
@@ -479,12 +504,15 @@ def build_cpu_recommendations(
             suffix = f" [chunk{chunk_idx}]" if chunk_idx is not None else ""
             heavy_examples.append(f"{str(t.get('name', '') or '')}{suffix}: {float(t.get('duration_sec', 0.0) or 0.0):.1f}s")
         recommended_split_explain = (
+            f"severity={split_severity}; "
             f"timeouts={timeout_tests_count}; "
             f"chunk_timeout_budget_sec={timeout_budget_sec:.1f}; "
+            f"max_chunk_load_sec={max_chunk_load_sec:.1f}; "
             f"overloaded_chunks(>budget)={overloaded_chunks}; "
             f"overloaded_total_duration_sec={overloaded_total_duration_sec:.1f}; "
             f"target_chunk_load_sec={target_chunk_load_sec:.1f}; "
             f"needed_chunks_for_overloaded={needed_chunks_for_overloaded}; "
+            f"single_chunk_extra={single_chunk_extra}; "
             f"extra_chunks={extra_chunks}; "
             f"split={chunks_real}->{recommended_split}; "
             f"examples={', '.join(overloaded_chunk_examples) if overloaded_chunk_examples else 'none'}"
@@ -514,10 +542,16 @@ def build_cpu_recommendations(
         budget_min = timeout_budget_sec / 60.0
         target_min = target_chunk_load_sec / 60.0
         if extra_chunks > 0:
+            severity_note = (
+                f"{timeout_tests_count} test timeout(s); "
+                if split_severity == "timeout"
+                else "At risk (no timeout yet, but chunk serial time over budget); "
+            )
             recommended_split_tooltip = (
                 f"Raise split {chunks_real} → {recommended_split} (+{extra_chunks} chunks). "
-                f"{timeout_tests_count} test timeout(s); "
-                f"{overloaded_chunks} chunk(s) exceed SIZE({size_u}) serial-time budget (~{budget_min:.0f} min per chunk). "
+                f"{severity_note}"
+                f"{overloaded_chunks} chunk(s) exceed SIZE({size_u}) serial-time budget (~{budget_min:.0f} min per chunk); "
+                f"heaviest chunk ~{max_chunk_load_sec / 60:.0f} min. "
                 f"Target ~{target_min:.0f} min serial test time per chunk."
             )
             if test_srcs_count and int(test_srcs_count) > 0:
@@ -542,8 +576,8 @@ def build_cpu_recommendations(
             )
         else:
             recommended_split_tooltip = (
-                f"Current {chunks_real} chunks OK: no overloaded chunks requiring more split "
-                f"(or no timeouts in this run)."
+                f"Current {chunks_real} chunks OK: no chunk exceeds the SIZE({size_u}) "
+                f"serial-time budget (~{budget_min:.0f} min per chunk)."
             )
         split_action_tooltips = {
             "raise": (
@@ -565,13 +599,8 @@ def build_cpu_recommendations(
         ]
         if long_test_boost_applied:
             cpu_tip_parts.append(
-                f"Raised one tier: longest test {max_test_duration_sec / 60:.1f} min "
-                f"≥ SIZE({size_u}) threshold {long_test_threshold_sec / 60:.0f} min."
-            )
-        if timeout_2x_boost_applied:
-            cpu_tip_parts.append(
-                f"Raised to ≥2× p95 (cpu:{_round_cpu_tier(2.0 * p95_c)}) "
-                f"because {timeout_tests_count} test timeout(s)."
+                f"Note: longest test {max_test_duration_sec / 60:.1f} min ≥ SIZE({size_u}) "
+                f"threshold {long_test_threshold_sec / 60:.0f} min — drives split, not CPU."
             )
         if timeout_max_policy_applied:
             cpu_tip_parts.append(f"Policy cap for long tests on SIZE({size_u}): cpu:{timeout_max_value}.")
@@ -587,22 +616,31 @@ def build_cpu_recommendations(
 
         cpu_action_tooltips = {
             "raise": (
-                f"Increase REQUIREMENTS(cpu) in ya.make from {ya_cpu} to {recommended_req}: "
-                f"tests need more CPU than configured."
+                f"Increase REQUIREMENTS(cpu) from {ya_cpu} to {recommended_req}. "
+                f"REQUIREMENTS(cpu) is a per-chunk scheduler slot (reserved cores that cap how many "
+                f"chunks run in parallel on a runner); observed p95 exceeds the current slot."
             ),
             "lower": (
-                f"Decrease REQUIREMENTS(cpu) in ya.make from {ya_cpu} to {recommended_req}: "
-                f"tests use less CPU; lowering frees runner capacity."
+                f"Decrease REQUIREMENTS(cpu) from {ya_cpu} to {recommended_req}. "
+                f"Observed p95 cores per chunk are below the reservation. REQUIREMENTS(cpu) is a "
+                f"scheduler slot, not raw core usage: a smaller slot lets more chunks run in parallel."
             ),
             "set": (
-                f"Add REQUIREMENTS(cpu:{recommended_req}) to ya.make "
-                f"(no cpu requirement set today)."
+                f"Add REQUIREMENTS(cpu:{recommended_req}) to ya.make (none today). "
+                f"Reserves a per-chunk scheduler slot sized to observed p95 cores."
             ),
             "ok": (
-                f"Current REQUIREMENTS(cpu:{ya_cpu}) matches recommendation "
-                f"(or recommendation is within limits)."
-                if ya_cpu is not None
-                else f"Recommended cpu:{recommended_req}; no change needed."
+                (
+                    f"Kept as-is: p95 suggests cpu:{recommended_req} < ya.make cpu:{ya_cpu}, but the suite "
+                    f"is under split/time pressure — lowering the cpu slot would increase parallel chunks "
+                    f"and worsen timeouts/OOM."
+                )
+                if cpu_lower_suppressed
+                else (
+                    f"Current REQUIREMENTS(cpu:{ya_cpu}) matches the recommendation."
+                    if ya_cpu is not None
+                    else f"Recommended cpu:{recommended_req}; no change needed."
+                )
             ),
         }
         cpu_action_tooltip = cpu_action_tooltips.get(cpu_action, "")
@@ -684,6 +722,70 @@ def build_cpu_recommendations(
         peak_ram_tooltip = (
             f"Peak sum of RAM for this suite at one moment: {peak_ram:.1f} GB."
         )
+
+        # RAM recommendation axis: REQUIREMENTS(ram:N) reserves memory per chunk so the
+        # scheduler limits how many chunks run in parallel. Base the recommendation on the
+        # observed per-chunk RAM (peak suite RAM divided by peak parallel chunks of this
+        # suite), rounded up to a reservation tier.
+        per_chunk_ram_gb = peak_ram / max_par if max_par > 0 else peak_ram
+        if per_chunk_ram_gb > 0:
+            recommended_ram_gb: Any = _round_ram_tier(per_chunk_ram_gb)
+        else:
+            recommended_ram_gb = None
+        if recommended_ram_gb is None:
+            ram_action = "ok"
+        elif ya_ram is None:
+            ram_action = "set" if per_chunk_ram_gb > RAM_SET_THRESHOLD_GB else "ok"
+        else:
+            try:
+                ya_ram_i = float(ya_ram)
+            except (TypeError, ValueError):
+                ya_ram_i = None
+            if ya_ram_i is None:
+                ram_action = "set"
+            elif recommended_ram_gb > ya_ram_i:
+                ram_action = "raise"
+            elif recommended_ram_gb * 2 <= ya_ram_i:
+                # Only suggest lowering when using well under half the reservation,
+                # to keep a safety margin against OOM.
+                ram_action = "lower"
+            else:
+                ram_action = "ok"
+        recommended_ram_explain = (
+            f"peak_suite_ram_gb={peak_ram:.1f}; max_parallel_self={max_par}; "
+            f"per_chunk_ram_gb={per_chunk_ram_gb:.1f}; "
+            f"recommended_ram_gb={recommended_ram_gb}; ya_ram={ya_ram}; action={ram_action}"
+        )
+        if recommended_ram_gb is None:
+            recommended_ram_tooltip = "No RAM metrics available to recommend REQUIREMENTS(ram)."
+        else:
+            recommended_ram_tooltip = (
+                f"Observed per-chunk peak RAM ≈{per_chunk_ram_gb:.1f} GB "
+                f"(suite peak {peak_ram:.1f} GB over {max_par} parallel chunk(s)). "
+                f"Recommend REQUIREMENTS(ram:{recommended_ram_gb}); "
+                + (f"ya.make has ram:{ya_ram}." if ya_ram is not None else "ya.make has no ram requirement.")
+            )
+        ram_action_tooltips = {
+            "raise": (
+                f"Increase REQUIREMENTS(ram) in ya.make from {ya_ram} to {recommended_ram_gb}: "
+                f"observed per-chunk memory exceeds the reservation, risking OOM / over-parallelism."
+            ),
+            "lower": (
+                f"Decrease REQUIREMENTS(ram) in ya.make from {ya_ram} to {recommended_ram_gb}: "
+                f"per-chunk memory uses well under half the reservation. "
+                f"Note: higher ram reservation limits parallel chunks on the runner."
+            ),
+            "set": (
+                f"Add REQUIREMENTS(ram:{recommended_ram_gb}) to ya.make: "
+                f"per-chunk peak ≈{per_chunk_ram_gb:.1f} GB (no ram requirement today)."
+            ),
+            "ok": (
+                f"Current REQUIREMENTS(ram:{ya_ram}) fits observed per-chunk memory."
+                if ya_ram is not None
+                else "No REQUIREMENTS(ram) needed for observed per-chunk memory."
+            ),
+        }
+        ram_action_tooltip = ram_action_tooltips.get(ram_action, "")
         test_status_tooltip = (
             f"Test results: {test_status.get('total', 0)} total, "
             f"{test_status.get('passed', 0)} passed, "
@@ -708,6 +810,9 @@ def build_cpu_recommendations(
             "recommended_split_action": recommended_split_action,
             "recommended_split_explain": recommended_split_explain,
             "recommended_split_tooltip": recommended_split_tooltip,
+            "split_severity": split_severity,
+            "max_chunk_load_sec": round(max_chunk_load_sec, 3),
+            "overloaded_chunks": overloaded_chunks,
             "chunks_count_tooltip": chunks_count_tooltip,
             "split_action_tooltip": split_action_tooltip,
             "ya_split_factor_raw": ya_split_factor_raw,
@@ -736,6 +841,13 @@ def build_cpu_recommendations(
             "recommended_cpu_explain": recommended_cpu_explain,
             "recommended_cpu_tooltip": recommended_cpu_tooltip,
             "cpu_action_tooltip": cpu_action_tooltip,
+            "cpu_lower_suppressed": cpu_lower_suppressed,
+            "recommended_ram_gb": recommended_ram_gb,
+            "ram_action": ram_action,
+            "recommended_ram_explain": recommended_ram_explain,
+            "recommended_ram_tooltip": recommended_ram_tooltip,
+            "ram_action_tooltip": ram_action_tooltip,
+            "per_chunk_ram_gb": round(per_chunk_ram_gb, 3),
             "ya_ram_gb_tooltip": ya_ram_gb_tooltip,
             "ya_cpu_cores_tooltip": ya_cpu_cores_tooltip,
             "ya_size_tooltip": ya_size_tooltip,

@@ -1,14 +1,19 @@
-#include "join_common.h"
+#pragma once
+
+#include <ydb/core/kqp/opt/rbo/kqp_operator.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 
 namespace NKikimr {
 namespace NKqp {
-namespace NJoinRules {
+namespace NMapRenames {
 
-void AddUsedIUs(TInfoUnitSet& usedIUs, const TVector<TInfoUnit>& ius) {
+using TRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>;
+
+inline void AddUsedIUs(TInfoUnitSet& usedIUs, const TVector<TInfoUnit>& ius) {
     usedIUs.insert(ius.begin(), ius.end());
 }
 
-TInfoUnit MakeUniqueInternalIU(int& varIdx, TInfoUnitSet& usedIUs) {
+inline TInfoUnit MakeUniqueInternalIU(int& varIdx, TInfoUnitSet& usedIUs) {
     for (;;) {
         auto iu = TInfoUnit("_rbo_arg_" + std::to_string(varIdx++));
         if (usedIUs.insert(iu).second) {
@@ -17,12 +22,7 @@ TInfoUnit MakeUniqueInternalIU(int& varIdx, TInfoUnitSet& usedIUs) {
     }
 }
 
-TRenameMap MakeRenameMap(const TVector<TInfoUnit>& ius, int& varIdx) {
-    TInfoUnitSet usedIUs;
-    return MakeRenameMap(ius, varIdx, usedIUs);
-}
-
-TRenameMap MakeRenameMap(const TVector<TInfoUnit>& ius, int& varIdx, TInfoUnitSet& usedIUs) {
+inline TRenameMap MakeRenameMap(const TVector<TInfoUnit>& ius, int& varIdx, TInfoUnitSet& usedIUs) {
     TRenameMap result;
     for (const auto& iu : ius) {
         result[iu] = MakeUniqueInternalIU(varIdx, usedIUs);
@@ -30,7 +30,12 @@ TRenameMap MakeRenameMap(const TVector<TInfoUnit>& ius, int& varIdx, TInfoUnitSe
     return result;
 }
 
-TVector<std::pair<TInfoUnit, TInfoUnit>> RemapRightJoinKeys(
+inline TRenameMap MakeRenameMap(const TVector<TInfoUnit>& ius, int& varIdx) {
+    TInfoUnitSet usedIUs;
+    return MakeRenameMap(ius, varIdx, usedIUs);
+}
+
+inline TVector<std::pair<TInfoUnit, TInfoUnit>> RemapRightJoinKeys(
     const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys,
     const TRenameMap& renameMap)
 {
@@ -48,17 +53,18 @@ TVector<std::pair<TInfoUnit, TInfoUnit>> RemapRightJoinKeys(
     return result;
 }
 
-TIntrusivePtr<TOpMap> MakeMapFromRenames(
+inline TIntrusivePtr<TOpMap> MakeMapFromRenames(
     const TIntrusivePtr<IOperator>& input,
     const TRenameMap& renameMap,
     TPositionHandle pos,
     TExprContext& ctx,
     TPlanProps& props)
 {
+    const auto outputIUs = input->GetOutputIUs();
     TVector<TMapElement> mapElements;
-    mapElements.reserve(input->GetOutputIUs().size());
+    mapElements.reserve(outputIUs.size());
 
-    for (const auto& iu : input->GetOutputIUs()) {
+    for (const auto& iu : outputIUs) {
         const auto it = renameMap.find(iu);
         const auto toIU = it == renameMap.end() ? iu : it->second;
         mapElements.emplace_back(toIU, iu, pos, &ctx, &props);
@@ -67,7 +73,7 @@ TIntrusivePtr<TOpMap> MakeMapFromRenames(
     return MakeIntrusive<TOpMap>(input, pos, mapElements);
 }
 
-TIntrusivePtr<TOpJoin> MakeJoinWithRightRenames(
+inline TIntrusivePtr<TOpJoin> MakeJoinWithRightRenames(
     const TIntrusivePtr<IOperator>& leftInput,
     const TIntrusivePtr<IOperator>& rightInput,
     TPositionHandle pos,
@@ -93,6 +99,6 @@ TIntrusivePtr<TOpJoin> MakeJoinWithRightRenames(
     return MakeIntrusive<TOpJoin>(leftInput, renamedRightInput, pos, joinKind, renamedJoinKeys, renamedJoinFilters);
 }
 
-} // namespace NJoinRules
+} // namespace NMapRenames
 } // namespace NKqp
 } // namespace NKikimr

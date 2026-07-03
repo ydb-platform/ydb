@@ -1,6 +1,6 @@
 #include "kqp_plan_conversion_utils.h"
 #include "kqp_rbo_utils.h"
-#include "rules/join_common.h"
+#include "map_renames.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 
@@ -43,7 +43,7 @@ bool OutputsBothJoinSides(const TString& joinKind) {
 
 TInfoUnit MakeRightConflictReplacement(const TInfoUnit& conflict, TInfoUnitSet& usedIUs, TPlanProps& props) {
     if (!IsGeneratedIgnoreIU(conflict)) {
-        return NJoinRules::MakeUniqueInternalIU(props.InternalVarIdx, usedIUs);
+        return NMapRenames::MakeUniqueInternalIU(props.InternalVarIdx, usedIUs);
     }
 
     for (;;) {
@@ -54,7 +54,7 @@ TInfoUnit MakeRightConflictReplacement(const TInfoUnit& conflict, TInfoUnitSet& 
     }
 }
 
-NJoinRules::TRenameMap BuildRightOutputConflictRenames(
+NMapRenames::TRenameMap BuildRightOutputConflictRenames(
     const TIntrusivePtr<IOperator>& leftInput,
     const TIntrusivePtr<IOperator>& rightInput,
     TPlanProps& props)
@@ -64,7 +64,7 @@ NJoinRules::TRenameMap BuildRightOutputConflictRenames(
     TInfoUnitSet usedIUs = leftOutput;
     AddInfoUnits(usedIUs, rightOutput);
 
-    NJoinRules::TRenameMap rightRenames;
+    NMapRenames::TRenameMap rightRenames;
 
     for (const auto& rightIU : rightOutput) {
         if (!leftOutput.contains(rightIU)) {
@@ -467,7 +467,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node) 
     if (OutputsBothJoinSides(joinKind)) {
         const auto rightRenames = BuildRightOutputConflictRenames(leftInput, rightInput, PlanProps);
         if (!rightRenames.empty()) {
-            return NJoinRules::MakeJoinWithRightRenames(
+            return NMapRenames::MakeJoinWithRightRenames(
                 leftInput, rightInput, node->Pos(), joinKind, joinKeys, joinFilters, rightRenames, Ctx, PlanProps);
         }
     }

@@ -1,10 +1,11 @@
 #include "kqp_rules_include.h"
-#include "join_common.h"
+
+#include <ydb/core/kqp/opt/rbo/map_renames.h>
 
 namespace {
 
 using namespace NKikimr::NKqp;
-using namespace NKikimr::NKqp::NJoinRules;
+using namespace NKikimr::NKqp::NMapRenames;
 
 bool CheckNonNullKeys(const TIntrusivePtr<IOperator> &input, const TVector<TInfoUnit>& columns) {
     auto itemType = input->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();

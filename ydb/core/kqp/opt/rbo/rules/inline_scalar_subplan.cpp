@@ -1,5 +1,6 @@
 #include "kqp_rules_include.h"
-#include "join_common.h"
+
+#include <ydb/core/kqp/opt/rbo/map_renames.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -43,17 +44,17 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
         TVector<TExpression> joinFilters;
-        NJoinRules::TRenameMap subplanOutputRenames;
+        NMapRenames::TRenameMap subplanOutputRenames;
 
         auto leftIUs = child->GetOutputIUs();
         auto rightIUs = uncorrSubplan->GetOutputIUs();
         THashSet<TInfoUnit, TInfoUnit::THashFunction> usedIUs;
-        NJoinRules::AddUsedIUs(usedIUs, leftIUs);
-        NJoinRules::AddUsedIUs(usedIUs, rightIUs);
+        NMapRenames::AddUsedIUs(usedIUs, leftIUs);
+        NMapRenames::AddUsedIUs(usedIUs, rightIUs);
 
         for (const auto& iu : rightIUs) {
             if (ContainsInfoUnit(leftIUs, iu) && !subplanOutputRenames.contains(iu)) {
-                subplanOutputRenames.emplace(iu, NJoinRules::MakeUniqueInternalIU(props.InternalVarIdx, usedIUs));
+                subplanOutputRenames.emplace(iu, NMapRenames::MakeUniqueInternalIU(props.InternalVarIdx, usedIUs));
             }
         }
 
@@ -80,7 +81,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
                 if (renameIt != subplanOutputRenames.end()) {
                     rightKey = renameIt->second;
                 } else {
-                    auto newKey = NJoinRules::MakeUniqueInternalIU(props.InternalVarIdx, usedIUs);
+                    auto newKey = NMapRenames::MakeUniqueInternalIU(props.InternalVarIdx, usedIUs);
                     subplanOutputRenames.emplace(rightKey, newKey);
                     rightKey = newKey;
                 }
@@ -94,7 +95,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
             joinedSubplanResIU = renameIt->second;
         }
 
-        auto leftJoin = NJoinRules::MakeJoinWithRightRenames(
+        auto leftJoin = NMapRenames::MakeJoinWithRightRenames(
             child, uncorrSubplan, subplan->Pos, "Left", joinKeys, joinFilters, subplanOutputRenames, ctx.ExprCtx, props);
 
         if (input->Kind == EOperator::Filter) {

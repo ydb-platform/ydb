@@ -2,6 +2,8 @@
 
 #include <yt/yt/core/misc/error.h>
 
+#include <library/cpp/yt/string/string.h>
+
 #include <util/string/hex.h>
 
 #include <openssl/hmac.h>
@@ -71,8 +73,7 @@ std::string TMD5Hasher::GetHexDigestUpperCase() const
 
 std::string TMD5Hasher::GetHexDigestLowerCase() const
 {
-    // TODO(babenko): migrate to std::string
-    return to_lower(TString(GetHexDigestUpperCase()));
+    return AsciiStringToLower(GetHexDigestUpperCase());
 }
 
 void TMD5Hasher::Persist(const TStreamPersistenceContext& context)
@@ -151,8 +152,7 @@ std::string TSha1Hasher::GetHexDigestUpperCase() const
 
 std::string TSha1Hasher::GetHexDigestLowerCase() const
 {
-    // TODO(babenko): migrate to std::string
-    return to_lower(TString(GetHexDigestUpperCase()));
+    return AsciiStringToLower(GetHexDigestUpperCase());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -193,8 +193,7 @@ std::string TSha256Hasher::GetHexDigestUpperCase() const
 
 std::string TSha256Hasher::GetHexDigestLowerCase() const
 {
-    // TODO(babenko): migrate to std::string
-    return to_lower(TString(GetHexDigestUpperCase()));
+    return AsciiStringToLower(GetHexDigestUpperCase());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -236,7 +235,7 @@ TSha256Hmac CreateSha256HmacImpl(TStringBuf key, TStringBuf message)
 std::string CreateSha256Hmac(TStringBuf key, TStringBuf message)
 {
     auto hmac = CreateSha256HmacImpl(key, message);
-    return to_lower(HexEncode(hmac.data(), hmac.size()));
+    return AsciiStringToLower(HexEncode(hmac.data(), hmac.size()));
 }
 
 std::string CreateSha256HmacRaw(TStringBuf key, TStringBuf message)

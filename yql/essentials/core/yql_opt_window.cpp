@@ -2152,7 +2152,7 @@ TVector<TChain1MapTraits::TPtr> BuildFoldMapTraitsForNonNumericRange(const TExpr
         TStringBuf name = item.first;
         const TRawTrait& trait = item.second;
         if (!trait.InitLambda) {
-            result.push_back(ProcessPartitionBaseTraits(trait, name, partitionRowsColumn, nullptr, expandContext));
+            result.push_back(ProcessPartitionBaseTraits(trait, name, partitionRowsColumn, /*incrementalBounds=*/nullptr, expandContext));
             continue;
         }
         YQL_ENSURE(trait.FrameSettings.GetFrameType() == EFrameType::FrameByRange);
@@ -3324,7 +3324,7 @@ TExprNode::TPtr AddPartitionRowsColumn(TPositionHandle pos, const TExprNode::TPt
     const auto ex = exports.find("count_traits_factory");
     YQL_ENSURE(exports.cend() != ex);
     TNodeOnNodeOwnedMap deepClones;
-    auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
+    auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, /*internStrings=*/true, /*copyTypes=*/false);
     auto listTypeNode = ctx.NewCallable(pos, "TypeOf", {input});
     auto extractor = ctx.Builder(pos)
         .Lambda()
@@ -3523,8 +3523,8 @@ TExprNode::TPtr ProcessRangeNonNumericFrames(TPositionHandle pos,
         .Callable("OrderedMap")
             .Callable(0, "Chain1Map")
                 .Add(0, std::move(processed))
-                .Add(1, BuildChain1MapInitLambda(pos, traits, nullptr, 0, nullptr, expandContext.Ctx, expandContext.Types))
-                .Add(2, BuildChain1MapUpdateLambda(pos, traits, nullptr, false, expandContext.Ctx, expandContext.Types))
+                .Add(1, BuildChain1MapInitLambda(pos, traits, nullptr, 0, /*lagQueueItemType=*/nullptr, expandContext.Ctx, expandContext.Types))
+                .Add(2, BuildChain1MapUpdateLambda(pos, traits, nullptr, /*haveLagQueue=*/false, expandContext.Ctx, expandContext.Types))
             .Seal()
             .Lambda(1)
                 .Param("pair")

@@ -136,6 +136,7 @@
 #include <ydb/services/deprecated/persqueue_v0/persqueue.h>
 #include <ydb/services/persqueue_v1/persqueue.h>
 #include <ydb/services/persqueue_v1/topic.h>
+#include <ydb/services/persqueue_v1/topic_deferred_publish.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
 #include <ydb/services/replication/grpc_service.h>
 #include <ydb/services/test_shard/grpc_service.h>
@@ -767,16 +768,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         GRpcServersWrapper = std::make_shared<TGRpcServersWrapper>();
     }
 
-    const auto& kqpConfig = runConfig.AppConfig.GetKQPConfig();
-    const bool kqpEnabled = runConfig.ServicesMask.EnableKqp
-        && (!kqpConfig.HasEnable() || kqpConfig.GetEnable());
-
-    if (kqpEnabled && runConfig.AppConfig.GetTableServiceConfig().GetEnableCompileCacheWarmup()) {
-        auto warmupConfig = NKqp::ImportWarmupConfigFromProto(
-            runConfig.AppConfig.GetTableServiceConfig().GetCompileCacheWarmupConfig());
-        GRpcWarmupTimeout = warmupConfig.HardDeadline;
-    }
-
+    // Open the gRPC port immediately: a node must be reachable while its cache warms (slow on a v2 cold bootstrap); cold queries are instead held at the query layer (KqpProxy) until warmup completes.
     GRpcServersWrapper->GrpcServersFactory = [runConfig, this] { return CreateGRpcServers(runConfig); };
 }
 
@@ -1086,6 +1078,11 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         if (hasPQv1 || hasTopic) {
             server.AddService(new NGRpcService::V1::TGRpcTopicService(ActorSystem.Get(), Counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
                 grpcRequestProxies[0], hasTopic.IsRlAllowed() || hasPQv1.IsRlAllowed()));
+        }
+
+        if (hasTopic) {
+            server.AddService(new NGRpcService::V1::TGRpcTopicDeferredPublishService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasTopic.IsRlAllowed()));
         }
 
         if (hasPQCD) {
@@ -1561,6 +1558,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasColumnShardConfig()) {
         AppData->ColumnShardConfig = runConfig.AppConfig.GetColumnShardConfig();
+    }
+
+    if (runConfig.AppConfig.HasSmallBlobsQuotaConfig()) {
+        AppData->SmallBlobsQuotaConfig = runConfig.AppConfig.GetSmallBlobsQuotaConfig();
     }
 
     if (runConfig.AppConfig.HasSchemeShardConfig()) {
@@ -2056,6 +2057,8 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TPersQueueClusterTrackerInitializer(runConfig));
     }
 
+    sil->AddServiceInitializer(new TTopicDeferredPublishRegistryInitializer(runConfig));
+
     if (serviceMask.EnablePersQueueDirectReadCache) {
         sil->AddServiceInitializer(new TPersQueueDirectReadCacheInitializer(runConfig));
     }
@@ -2285,7 +2288,7 @@ void TKikimrRunner::KikimrStart() {
     if (GRpcServersWrapper) {
         GRpcServersWrapper->Servers = GRpcServersWrapper->GrpcServersFactory();
         GRpcServersManager = ActorSystem->Register(new TGRpcServersManager(
-            GRpcServersWrapper, ProcessMemoryInfoProvider, GRpcWarmupTimeout));
+            GRpcServersWrapper, ProcessMemoryInfoProvider, TDuration::Zero()));
         ActorSystem->RegisterLocalService(NKikimr::MakeGRpcServersManagerId(ActorSystem->NodeId), GRpcServersManager);
     }
 

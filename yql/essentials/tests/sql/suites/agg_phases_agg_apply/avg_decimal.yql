@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 pragma EmitAggApply;
 
 $t = SELECT * FROM AS_TABLE([<|key: 1, value: decimal("2.1", 7, 2)|>,<|key: 1, value: decimal("3.5", 7, 2)|>]);

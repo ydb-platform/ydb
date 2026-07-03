@@ -1745,8 +1745,8 @@ TNodePtr BuildAlterAsyncReplication(TPosition pos, const TString& id,
                                     std::map<TString, TNodePtr>&& settings,
                                     const TObjectOperatorContext& context);
 TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);
-TNodePtr BuildCreateTransfer(TPosition pos, const TString& id, const TString&& source, const TString&& target,
-                             const TString&& transformLambda,
+TNodePtr BuildCreateTransfer(TPosition pos, const TString& id, const TString& source, const TString& target,
+                             const TString& transformLambda,
                              std::map<TString, TNodePtr>&& settings,
                              const TObjectOperatorContext& context);
 TNodePtr BuildAlterTransfer(TPosition pos, const TString& id, std::optional<TString>&& transformLambda,
@@ -1834,4 +1834,9 @@ void EnumerateBuiltins(const std::function<void(std::string_view name, std::stri
 bool Parseui32(TNodePtr from, ui32& to);
 TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr);
 const TString* DeriveCommonSourceName(const TVector<TNodePtr>& nodes);
+
+// Strips system columns (the built-in "_yql_" prefix via RemoveSystemMembers) and, additionally,
+// any columns matching the provided extra system column prefixes (e.g. provider-specific
+// "__ydb_"-prefixed topic metadata). Keeps explicitly referenced columns intact.
+TNodePtr RemoveSystemColumns(TNodePtr input, const TVector<TString>& extraSystemColumnPrefixes);
 } // namespace NSQLTranslationV1

@@ -74,17 +74,6 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         const TVersionedIndex* vIndex = Self->GetIndexOptional() ? &Self->GetIndexOptional()->GetVersionedIndex() : nullptr;
         AFL_VERIFY(vIndex);
         {
-            auto readSchema = read.TableMetadataAccessor->GetSnapshotSchemaVerified(
-                Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedSchemas(), read.GetSnapshot());
-            // Write without MvccSnapshot uses ApplyToSnapshot=Max, while SchemaVersion comes from ActualSchema
-            // captured at write start. If ALTER commits before internal scan is processed, snapshot resolves
-            // to a newer schema than the one used to build column ids.
-            if (request.SchemaVersion && readSchema->GetVersion() != *request.SchemaVersion) {
-                return SendError("schema version mismatch",
-                    TStringBuilder() << "request_schema_version=" << *request.SchemaVersion
-                                     << "; snapshot_schema_version=" << readSchema->GetVersion() << "; snapshot=" << read.GetSnapshot(), ctx);
-            }
-
             TProgramContainer pContainer;
             pContainer.OverrideProcessingColumns(read.ColumnIds);
             read.SetProgram(std::move(pContainer));

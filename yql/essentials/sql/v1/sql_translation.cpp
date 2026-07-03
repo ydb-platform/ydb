@@ -101,8 +101,8 @@ TNodePtr BuildViewSelect(const TRule_select_stmt& selectStatement, TContext& con
     return BuildSelectResult(
         position,
         source,
-        false, /* write result */
-        false, /* in subquery */
+        /*writeResult=*/false, /* write result */
+        false,                 /* in subquery */
         context.Scoped);
 }
 
@@ -1359,7 +1359,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
     bool isBinding = false;
     if (node.HasBlock1()) {
         const auto& clusterExpr = node.GetBlock1().GetRule_cluster_expr1();
-        bool result = !hasAt ? ClusterExprOrBinding(clusterExpr, service, cluster, isBinding) : ClusterExpr(clusterExpr, false, service, cluster);
+        bool result = !hasAt ? ClusterExprOrBinding(clusterExpr, service, cluster, isBinding) : ClusterExpr(clusterExpr, /*allowWildcard=*/false, service, cluster);
         if (!result) {
             return false;
         }
@@ -1563,7 +1563,7 @@ TMaybe<TSourcePtr> TSqlTranslation::AsTableImpl(const TRule_table_ref& node) {
                 return TMaybe<TSourcePtr>(nullptr);
             }
 
-            return BuildNodeSource(Ctx_.Pos(), arg->Expr, true, Ctx_.EmitTableSource);
+            return BuildNodeSource(Ctx_.Pos(), arg->Expr, /*wrapToList=*/true, Ctx_.EmitTableSource);
         }
     }
 
@@ -1588,14 +1588,14 @@ bool ColumnCompression(const TRule_compression_setting_entry& node, TTranslation
             }
             const auto literal = MakeIntrusive<TLiteralNumberNode<ui64>>(ctx.Context().Pos(), "Uint64", ToString(*result));
 
-            compression.Entries[std::move(id)] = std::move(literal);
+            compression.Entries[id] = literal;
             break;
         }
         case TRule_compression_setting_value::AltCase::kAltCompressionSettingValue2: {
             const auto result = Id(value.GetAlt_compression_setting_value2().GetRule_id1(), ctx);
             const TNodePtr literal = BuildLiteralRawString(ctx.Context().Pos(), result);
 
-            compression.Entries[std::move(id)] = std::move(literal);
+            compression.Entries[id] = literal;
             break;
         }
         case TRule_compression_setting_value::AltCase::ALT_NOT_SET:
@@ -1648,7 +1648,7 @@ bool EncodingSettingEntry(const TRule_encoding_setting_entry& node, TTranslation
         }
         case TRule_encoding_setting_value::kAltEncodingSettingValue2: {
             auto result = Id(value.GetAlt_encoding_setting_value2().GetRule_id1(), ctx);
-            encoding.Entries[id] = BuildLiteralRawString(ctx.Context().Pos(), std::move(result));
+            encoding.Entries[id] = BuildLiteralRawString(ctx.Context().Pos(), result);
             break;
         }
         case TRule_encoding_setting_value::ALT_NOT_SET:
@@ -1890,15 +1890,15 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
     }
 
     return TColumnSchema{
-        .Pos = std::move(pos),
-        .Name = std::move(name),
+        .Pos = pos,
+        .Name = name,
         .Type = std::move(type),
-        .Families = std::move(families),
-        .DefaultExpr = std::move(defaultExpr),
-        .Compression = std::move(compression),
-        .Nullable = std::move(nullable),
+        .Families = families,
+        .DefaultExpr = defaultExpr,
+        .Compression = compression,
+        .Nullable = nullable,
         .Serial = serial,
-        .ColumnEncoding = std::move(columnEncoding),
+        .ColumnEncoding = columnEncoding,
     };
 }
 
@@ -2153,7 +2153,7 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
             const TString name(Id(node.GetAlt_create_table_entry6().GetRule_an_id_schema1(), *this));
             const TPosition pos(Context().Pos());
 
-            params.Columns.push_back({.Pos = std::move(pos), .Name = std::move(name), .Nullable = true});
+            params.Columns.push_back({.Pos = pos, .Name = name, .Nullable = true});
             break;
         }
         case NSQLv1Generated::TRule_create_table_entry::ALT_NOT_SET:
@@ -2702,11 +2702,11 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
 
 bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value& value,
                                               TTableSettings& settings, ETableType tableType, bool alter) {
-    return StoreTableSettingsEntry(id, &value, settings, tableType, alter, false);
+    return StoreTableSettingsEntry(id, &value, settings, tableType, alter, /*reset=*/false);
 }
 
 bool TSqlTranslation::ResetTableSettingsEntry(const TIdentifier& id, TTableSettings& settings, ETableType tableType) {
-    return StoreTableSettingsEntry(id, nullptr, settings, tableType, true, true);
+    return StoreTableSettingsEntry(id, /*value=*/nullptr, settings, tableType, /*alter=*/true, /*reset=*/true);
 }
 
 bool TSqlTranslation::CreateTableSettings(const TRule_with_table_settings& settingsNode, TCreateTableParameters& params) {
@@ -2725,6 +2725,25 @@ bool TSqlTranslation::CreateTableSettings(const TRule_with_table_settings& setti
 }
 
 namespace {
+
+bool StoreConsumerIntervalSetting(
+    TNodePtr& setting, TSqlExpression& ctx, TStringBuf statement, const TIdentifier& id,
+    const TNodePtr& valueExprNode, bool reset) {
+    if (setting) {
+        ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+        return false;
+    }
+    if (reset) {
+        ctx.Error() << to_upper(id.Name) << " reset is not supported";
+        return false;
+    }
+    if (valueExprNode->GetOpName() != "Interval") {
+        ctx.Error() << "Literal of Interval type is expected for " << to_upper(id.Name) << " setting";
+        return false;
+    }
+    setting = valueExprNode;
+    return true;
+}
 
 bool StoreConsumerSettingsEntry(
     const TIdentifier& id, const TRule_topic_consumer_setting_value* value, TSqlExpression& ctx,
@@ -2835,19 +2854,9 @@ bool StoreConsumerSettingsEntry(
         }
         settings.KeepMessagesOrder = valueExprNode;
     } else if (name == "default_processing_timeout") {
-        if (settings.DefaultProcessingTimeout) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+        if (!StoreConsumerIntervalSetting(settings.DefaultProcessingTimeout, ctx, statement, id, valueExprNode, reset)) {
             return false;
         }
-        if (reset) {
-            ctx.Error() << to_upper(id.Name) << " reset is not supported";
-            return false;
-        }
-        if (valueExprNode->GetOpName() != "Interval") {
-            ctx.Error() << "Literal of Interval type is expected for " << to_upper(id.Name) << " setting";
-            return false;
-        }
-        settings.DefaultProcessingTimeout = valueExprNode;
     } else if (name == "max_processing_attempts") {
         if (settings.MaxProcessingAttempts) {
             ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
@@ -2896,33 +2905,13 @@ bool StoreConsumerSettingsEntry(
         }
         settings.DeadLetterQueue = valueExprNode;
     } else if (name == "receive_message_wait_time") {
-        if (settings.ReceiveMessageWaitTime) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+        if (!StoreConsumerIntervalSetting(settings.ReceiveMessageWaitTime, ctx, statement, id, valueExprNode, reset)) {
             return false;
         }
-        if (reset) {
-            ctx.Error() << to_upper(id.Name) << " reset is not supported";
-            return false;
-        }
-        if (valueExprNode->GetOpName() != "Interval") {
-            ctx.Error() << "Literal of Interval type is expected for " << to_upper(id.Name) << " setting";
-            return false;
-        }
-        settings.ReceiveMessageWaitTime = valueExprNode;
     } else if (name == "receive_message_delay") {
-        if (settings.ReceiveMessageDelay) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+        if (!StoreConsumerIntervalSetting(settings.ReceiveMessageDelay, ctx, statement, id, valueExprNode, reset)) {
             return false;
         }
-        if (reset) {
-            ctx.Error() << to_upper(id.Name) << " reset is not supported";
-            return false;
-        }
-        if (valueExprNode->GetOpName() != "Interval") {
-            ctx.Error() << "Literal of Interval type is expected for " << to_upper(id.Name) << " setting";
-            return false;
-        }
-        settings.ReceiveMessageDelay = valueExprNode;
     } else {
         ctx.Error() << to_upper(id.Name) << ": unknown option for consumer";
         return false;
@@ -2943,7 +2932,7 @@ bool TSqlTranslation::CreateConsumerSettings(
     if (!StoreConsumerSettingsEntry(
             IdEx(firstEntry.GetRule_an_id1(), *this),
             &firstEntry.GetRule_topic_consumer_setting_value3(),
-            expr, settings, false,
+            expr, settings, /*reset=*/false,
             /* alter = */ false)) {
         return false;
     }
@@ -2952,7 +2941,7 @@ bool TSqlTranslation::CreateConsumerSettings(
         if (!StoreConsumerSettingsEntry(
                 IdEx(entry.GetRule_an_id1(), *this),
                 &entry.GetRule_topic_consumer_setting_value3(),
-                expr, settings, false,
+                expr, settings, /*reset=*/false,
                 /* alter = */ false)) {
             return false;
         }
@@ -2988,8 +2977,8 @@ bool TSqlTranslation::AlterTopicConsumerEntry(
             TSqlExpression expr(*this);
             if (!StoreConsumerSettingsEntry(
                     IdEx(resetNode.GetRule_an_id3(), *this),
-                    nullptr,
-                    expr, alterConsumer.Settings, true,
+                    /*value=*/nullptr,
+                    expr, alterConsumer.Settings, /*reset=*/true,
                     /* alter = */ true)) {
                 return false;
             }
@@ -2997,8 +2986,8 @@ bool TSqlTranslation::AlterTopicConsumerEntry(
             for (auto& resetItem : resetNode.GetBlock4()) {
                 if (!StoreConsumerSettingsEntry(
                         IdEx(resetItem.GetRule_an_id2(), *this),
-                        nullptr,
-                        expr, alterConsumer.Settings, true,
+                        /*value=*/nullptr,
+                        expr, alterConsumer.Settings, /*reset=*/true,
                         /* alter = */ true)) {
                     return false;
                 }
@@ -3216,16 +3205,16 @@ bool TSqlTranslation::AlterTopicAction(const TRule_alter_topic_action& node, TAl
             TSqlExpression expr(*this);
             if (!StoreTopicSettingsEntry(
                     IdEx(resetNode.GetRule_an_id3(), *this),
-                    nullptr, expr,
-                    params.TopicSettings, true)) {
+                    /*value=*/nullptr, expr,
+                    params.TopicSettings, /*reset=*/true)) {
                 return false;
             }
 
             for (auto& resetItem : resetNode.GetBlock4()) {
                 if (!StoreTopicSettingsEntry(
                         IdEx(resetItem.GetRule_an_id_pure2(), *this),
-                        nullptr, expr,
-                        params.TopicSettings, true)) {
+                        /*value=*/nullptr, expr,
+                        params.TopicSettings, /*reset=*/true)) {
                     return false;
                 }
             }
@@ -3245,7 +3234,7 @@ bool TSqlTranslation::CreateTopicSettings(const TRule_topic_settings& node, TTop
     if (!StoreTopicSettingsEntry(
             IdEx(firstEntry.GetRule_an_id1(), *this),
             &firstEntry.GetRule_topic_setting_value3(),
-            expr, params, false)) {
+            expr, params, /*reset=*/false)) {
         return false;
     }
     for (auto& block : node.GetBlock2()) {
@@ -3253,7 +3242,7 @@ bool TSqlTranslation::CreateTopicSettings(const TRule_topic_settings& node, TTop
         if (!StoreTopicSettingsEntry(
                 IdEx(entry.GetRule_an_id1(), *this),
                 &entry.GetRule_topic_setting_value3(),
-                expr, params, false)) {
+                expr, params, /*reset=*/false)) {
             return false;
         }
     }
@@ -3454,7 +3443,7 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name& node) {
         }
         case TRule_type_name::TAlt2::TBlock1::kAlt2: {
             auto& simpleType = block.GetAlt2().GetRule_type_name_simple1();
-            result = TypeSimple(simpleType, false);
+            result = TypeSimple(simpleType, /*onlyDataAllowed=*/false);
             break;
         }
         case TRule_type_name::TAlt2::TBlock1::kAlt3: {
@@ -3822,7 +3811,7 @@ TNodePtr TSqlTranslation::DictLiteral(const TRule_dict_literal& node) {
                 return nullptr;
             }
 
-            values.push_back(new TTupleNode(Ctx_.Pos(), std::move(tupleItems)));
+            values.push_back(new TTupleNode(Ctx_.Pos(), tupleItems));
         }
 
         for (auto& b : list.GetBlock3()) {
@@ -3847,7 +3836,7 @@ TNodePtr TSqlTranslation::DictLiteral(const TRule_dict_literal& node) {
                     return nullptr;
                 }
 
-                values.push_back(new TTupleNode(Ctx_.Pos(), std::move(tupleItems)));
+                values.push_back(new TTupleNode(Ctx_.Pos(), tupleItems));
             }
         }
     } else {
@@ -4115,7 +4104,7 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
     switch (node.Alt_case()) {
         case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore1: {
             if (node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().HasBlock1()) {
-                if (!ClusterExpr(node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetBlock1().GetRule_cluster_expr1(), false, service, cluster)) {
+                if (!ClusterExpr(node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetBlock1().GetRule_cluster_expr1(), /*allowWildcard=*/false, service, cluster)) {
                     return false;
                 }
             }
@@ -4134,7 +4123,7 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
         }
         case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore2: {
             if (node.GetAlt_simple_table_ref_core2().HasBlock1()) {
-                if (!ClusterExpr(node.GetAlt_simple_table_ref_core2().GetBlock1().GetRule_cluster_expr1(), false, service, cluster)) {
+                if (!ClusterExpr(node.GetAlt_simple_table_ref_core2().GetBlock1().GetRule_cluster_expr1(), /*allowWildcard=*/false, service, cluster)) {
                     return false;
                 }
             }
@@ -4176,7 +4165,7 @@ bool TSqlTranslation::TopicRefImpl(const TRule_topic_ref& node, TTopicRef& resul
             return false;
         }
 
-        if (!ClusterExpr(node.GetBlock1().GetRule_cluster_expr1(), false, service, cluster)) {
+        if (!ClusterExpr(node.GetBlock1().GetRule_cluster_expr1(), /*allowWildcard=*/false, service, cluster)) {
             return false;
         }
     }
@@ -4241,7 +4230,7 @@ TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<
                         return std::unexpected(node.error());
                     }
 
-                    return TNonNull(ToTableExpression(GetYqlSource(std::move(*node))));
+                    return TNonNull(ToTableExpression(GetYqlSource(*node)));
                 },
                 [&]() -> TNodePtr {
                     TSqlSelect select(*this);
@@ -4273,7 +4262,7 @@ bool TSqlTranslation::ImportStatement(const TRule_import_stmt& stmt, TVector<TSt
         return false;
     }
     YQL_ENSURE(names.size() == aliases.size());
-    const TString moduleAlias = Ctx_.AddImport(std::move(modulePath));
+    const TString moduleAlias = Ctx_.AddImport(modulePath);
     if (!moduleAlias) {
         return false;
     }
@@ -4403,7 +4392,7 @@ bool TSqlTranslation::PasswordParameter(const TRule_password_option& passwordOpt
             return false;
         }
 
-        result.Password = TDeferredAtom(Ctx_.Pos(), std::move(password->Content));
+        result.Password = TDeferredAtom(Ctx_.Pos(), password->Content);
     }
 
     result.IsPasswordEncrypted = passwordOption.HasBlock1();
@@ -4424,7 +4413,7 @@ bool TSqlTranslation::HashParameter(const TRule_hash_option& hashOption, TUserPa
         return false;
     }
 
-    result.Hash = TDeferredAtom(Ctx_.Pos(), std::move(hash->Content));
+    result.Hash = TDeferredAtom(Ctx_.Pos(), hash->Content);
 
     return true;
 }
@@ -5221,11 +5210,11 @@ TNodePtr TSqlTranslation::DoStatement(const TRule_do_stmt& stmt, bool makeLambda
             *Ctx_.Scoped = *saveScoped;
             Ctx_.Scoped->Local = TScopedState::TLocal{};
             Ctx_.ScopeLevel++;
-            TSqlQuery query(Ctx_, Ctx_.Settings.Mode, false);
+            TSqlQuery query(Ctx_, Ctx_.Settings.Mode, /*topLevel=*/false);
             TBlocks innerBlocks;
 
             const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, body);
-            auto ret = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, Ctx_.SeqMode) : nullptr;
+            auto ret = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, /*topLevel=*/false, Ctx_.Scoped, Ctx_.SeqMode) : nullptr;
             if (!WarnUnusedNodes()) {
                 return nullptr;
             }
@@ -5319,7 +5308,7 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
         Ctx_.Settings.Mode = NSQLTranslation::ESqlMode::SUBQUERY;
     }
 
-    TSqlQuery query(Ctx_, Ctx_.Settings.Mode, false);
+    TSqlQuery query(Ctx_, Ctx_.Settings.Mode, /*topLevel=*/false);
     TBlocks innerBlocks;
     const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, stmt.GetRule_define_action_or_subquery_body8());
 
@@ -5327,7 +5316,7 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
         return false;
     }
 
-    auto ret = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, !isSubquery && Ctx_.SeqMode) : nullptr;
+    auto ret = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, /*topLevel=*/false, Ctx_.Scoped, !isSubquery && Ctx_.SeqMode) : nullptr;
     if (!WarnUnusedNodes()) {
         return false;
     }
@@ -5418,7 +5407,7 @@ TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
         ++Ctx_.ParallelModeCount;
     }
 
-    auto bodyNode = DoStatement(stmt.GetRule_do_stmt7(), true, {itemArgName});
+    auto bodyNode = DoStatement(stmt.GetRule_do_stmt7(), /*makeLambda=*/true, {itemArgName});
     if (isParallel) {
         --Ctx_.ParallelModeCount;
     }
@@ -5433,7 +5422,7 @@ TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
 
     TNodePtr elseNode;
     if (stmt.HasBlock8()) {
-        elseNode = DoStatement(stmt.GetBlock8().GetRule_do_stmt2(), true);
+        elseNode = DoStatement(stmt.GetBlock8().GetRule_do_stmt2(), /*makeLambda=*/true);
         if (!elseNode) {
             return {};
         }
@@ -5825,7 +5814,7 @@ bool TSqlTranslation::ParseViewQuery(
         return false;
     }
 
-    auto queryNode = BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, Ctx_.SeqMode);
+    auto queryNode = BuildQuery(Ctx_.Pos(), innerBlocks, /*topLevel=*/false, Ctx_.Scoped, Ctx_.SeqMode);
     if (!queryNode) {
         return false;
     }
@@ -6158,7 +6147,7 @@ TMaybe<TDeferredAtom> TSqlTranslation::DoParseObjectPath(const TRule_object_ref&
     // object_ref: (cluster_expr .)? id_or_at
 
     if (node.HasBlock1()) {
-        if (!ClusterExpr(node.GetBlock1().GetRule_cluster_expr1(), false, context.ServiceId, context.Cluster)) {
+        if (!ClusterExpr(node.GetBlock1().GetRule_cluster_expr1(), /*allowWildcard=*/false, context.ServiceId, context.Cluster)) {
             return Nothing();
         }
     }
@@ -6181,7 +6170,7 @@ TMaybe<TDeferredAtom> TSqlTranslation::ParseObjectPath(const TRule_simple_table_
         clusterExpr = &node.GetAlt_simple_table_ref_core2().GetBlock1().GetRule_cluster_expr1();
     }
 
-    if (clusterExpr && !ClusterExpr(*clusterExpr, false, context.ServiceId, context.Cluster)) {
+    if (clusterExpr && !ClusterExpr(*clusterExpr, /*allowWildcard=*/false, context.ServiceId, context.Cluster)) {
         return {};
     }
 
@@ -6335,7 +6324,7 @@ bool TSqlTranslation::ParseStreamingQueryDefinition(const TRule_streaming_query_
     innerBlocks.push_back(clearWorldNode);
 
     const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, inlineAction.GetRule_define_action_or_subquery_body2());
-    auto queryNode = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, Ctx_.SeqMode) : nullptr;
+    auto queryNode = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, /*topLevel=*/false, Ctx_.Scoped, Ctx_.SeqMode) : nullptr;
     if (!WarnUnusedNodes()) {
         return false;
     }

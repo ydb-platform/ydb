@@ -1,7 +1,17 @@
+import ipaddress
+import uuid
 from collections.abc import Sequence
 from enum import Enum as PyEnum
 
 from sqlalchemy.exc import ArgumentError
+from sqlalchemy.types import (
+    ARRAY,
+    Float,
+    Integer,
+    Interval,
+    Numeric,
+    UserDefinedType,
+)
 from sqlalchemy.types import (
     Boolean as SqlaBoolean,
 )
@@ -12,17 +22,10 @@ from sqlalchemy.types import (
     DateTime as SqlaDateTime,
 )
 from sqlalchemy.types import (
-    Float,
-    Integer,
-    Interval,
-    Numeric,
-    UserDefinedType,
-)
-from sqlalchemy.types import (
     String as SqlaString,
 )
 
-from clickhouse_connect.cc_sqlalchemy.datatypes.base import ChSqlaType, schema_types
+from clickhouse_connect.cc_sqlalchemy.datatypes.base import ChSqlaType, schema_types, sqla_type_from_name
 from clickhouse_connect.datatypes.base import EMPTY_TYPE_DEF, LC_TYPE_DEF, NULLABLE_TYPE_DEF, TypeDef
 from clickhouse_connect.datatypes.numeric import Enum8 as ChEnum8
 from clickhouse_connect.datatypes.numeric import Enum16 as ChEnum16
@@ -209,43 +212,43 @@ class FixedString(ChSqlaType, SqlaString):
 
 
 class IPv4(ChSqlaType, UserDefinedType):
-    python_type = None
+    python_type = ipaddress.IPv4Address
 
 
 class IPv6(ChSqlaType, UserDefinedType):
-    python_type = None
+    python_type = ipaddress.IPv6Address
 
 
 class UUID(ChSqlaType, UserDefinedType):
-    python_type = None
+    python_type = uuid.UUID
 
 
 class Nothing(ChSqlaType, UserDefinedType):
-    python_type = None
+    python_type = type(None)
 
 
 class Point(ChSqlaType, UserDefinedType):
-    python_type = None
+    python_type = tuple
 
 
 class Ring(ChSqlaType, UserDefinedType):
-    python_type = None
+    python_type = list
 
 
 class Polygon(ChSqlaType, UserDefinedType):
-    python_type = None
+    python_type = list
 
 
 class MultiPolygon(ChSqlaType, UserDefinedType):
-    python_type = None
+    python_type = list
 
 
 class LineString(ChSqlaType, UserDefinedType):
-    python_type = None
+    python_type = list
 
 
 class MultiLineString(ChSqlaType, UserDefinedType):
-    python_type = None
+    python_type = list
 
 
 class Date(ChSqlaType, SqlaDate):
@@ -412,8 +415,9 @@ class LowCardinality:
         return element.__class__(type_def=TypeDef(wrappers, orig.keys, orig.values))
 
 
-class Array(ChSqlaType, UserDefinedType):
+class Array(ChSqlaType, ARRAY):
     python_type = list
+    dimensions = 1
 
     def __init__(self, element: ChSqlaType | type[ChSqlaType] = None, type_def: TypeDef = None):
         """
@@ -425,7 +429,12 @@ class Array(ChSqlaType, UserDefinedType):
             if callable(element):
                 element = element()
             type_def = TypeDef(values=(element.name,))
-        super().__init__(type_def)
+        ChSqlaType.__init__(self, type_def)
+        # Set item_type directly; calling ARRAY.__init__ would reject nested Array(Array(T)),
+        # which CH supports natively (CH expresses dimensions via nesting, not a dim count).
+        # as_tuple has no class-level default, so set it here to satisfy ARRAY result processing.
+        self.item_type = sqla_type_from_name(type_def.values[0])
+        self.as_tuple = False
 
 
 class Map(ChSqlaType, UserDefinedType):
@@ -489,7 +498,7 @@ class JSON(ChSqlaType, UserDefinedType):
     Note this isn't currently supported for insert/select, only table definitions
     """
 
-    python_type = None
+    python_type = dict
 
 
 class Nested(ChSqlaType, UserDefinedType):
@@ -497,11 +506,11 @@ class Nested(ChSqlaType, UserDefinedType):
     Note this isn't currently supported for insert/select, only table definitions
     """
 
-    python_type = None
+    python_type = list
 
 
 class SimpleAggregateFunction(ChSqlaType, UserDefinedType):
-    python_type = None
+    python_type = str
 
     def __init__(
         self,
@@ -532,7 +541,7 @@ class AggregateFunction(ChSqlaType, UserDefinedType):
     Note this isn't currently supported for insert/select, only table definitions
     """
 
-    python_type = None
+    python_type = str
 
     def __init__(self, *params, type_def: TypeDef = None):
         """

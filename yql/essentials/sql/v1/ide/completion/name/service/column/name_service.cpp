@@ -53,7 +53,7 @@ public:
 
             TDescribeTableResponse table =
                 Schema_
-                    ->Describe(std::move(describeRequest))
+                    ->Describe(describeRequest)
                     .ExtractValue();
 
             Y_ENSURE(table.IsExisting);

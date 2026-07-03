@@ -156,6 +156,7 @@ namespace NKikimr::NYmq::V1 {
             request->MutableAuth()->SetUserName(CloudId);
             request->MutableAuth()->SetFolderId(FolderId);
             request->MutableAuth()->SetUserSID(UserSid);
+            request->MutableAuth()->SetSourceAddress(SourceAddress);
 
             if (SecurityToken) {
                 request->MutableCredentials()->SetOAuthToken(SecurityToken);

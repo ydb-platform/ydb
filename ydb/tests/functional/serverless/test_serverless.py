@@ -615,9 +615,12 @@ def test_discovery_with_inner_path(ydb_hostel_db, ydb_serverless_db, ydb_endpoin
     driver.scheme_client.make_directory(serverless_inner_path)
 
     logger.debug("List endpoints of '%s' by path '%s'", ydb_serverless_db, serverless_inner_path)
+
+    # discovery must reject inner (non-database) paths: only a domain or a subdomain
     resolver = ydb.DiscoveryEndpointsResolver(ydb.DriverConfig(ydb_endpoint, serverless_inner_path))
     result = resolver.resolve()
-    assert_that(result.endpoints, not_none())
+    assert result is None
+    assert "Requested database does not exist" in resolver.debug_details()
 
 
 def ydbcli_db_schema_exec(cluster, operation_proto):

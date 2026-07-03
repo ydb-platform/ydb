@@ -29,12 +29,14 @@
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/protos/counters_schemeshard.pb.h>
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/sys_view_types.pb.h>
+#include <ydb/core/protos/test_shard_control.pb.h>
 #include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -411,6 +413,9 @@ struct TPartitionStats {
     ui64 DataSize = 0;
     ui64 IndexSize = 0;
     ui64 ByKeyFilterSize = 0;
+
+    ui64 SmallBlobsVolumeBytes = 0;
+    ui64 SmallBlobsCount = 0;
 
     struct TStoragePoolStats {
         ui64 DataSize = 0;
@@ -1653,6 +1658,10 @@ struct TShardInfo {
     static TShardInfo BlobDepotInfo(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::BlobDepot);
     }
+
+    static TShardInfo TestShardSetInfo(TTxId txId, TPathId pathId) {
+        return TShardInfo(txId, pathId, ETabletType::TestShard);
+    }
 };
 
 /**
@@ -1745,14 +1754,6 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     bool FillKeySchema(const TString& tabletConfig);
 
     bool HasBalancer() const { return bool(BalancerTabletID); }
-
-    ui32 GetTotalPartitionCountWithAlter() const {
-        ui32 res = 0;
-        for (const auto& shard : Shards) {
-            res += shard.second->PartsCount();
-        }
-        return res;
-    }
 
     ui32 ExpectedShardCount() const {
 
@@ -1916,16 +1917,28 @@ struct IQuotaCounters {
     virtual void ChangeDiskSpaceTablesTotalBytes(i64 delta) = 0;
     virtual void AddDiskSpaceTables(EUserFacingStorageType storageType, ui64 data, ui64 index) = 0;
     virtual void ChangeDiskSpaceTopicsTotalBytes(ui64 value) = 0;
-    virtual void ChangeDiskSpaceQuotaExceeded(i64 delta) = 0;
     virtual void ChangeDiskSpaceHardQuotaBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceSoftQuotaBytes(i64 delta) = 0;
     virtual void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) = 0;
+    virtual void ChangeSmallBlobsVolumeBytes(i64 delta) = 0;
+    virtual void ChangeSmallBlobsCount(i64 delta) = 0;
+    virtual void ChangeSmallBlobsVolumeHardQuotaBytes(i64 delta) = 0;
+    virtual void ChangeSmallBlobsVolumeSoftQuotaBytes(i64 delta) = 0;
+    virtual void ChangeSmallBlobsCountHardQuota(i64 delta) = 0;
+    virtual void ChangeSmallBlobsCountSoftQuota(i64 delta) = 0;
+    virtual void ChangeSimpleCounter(ESimpleCounters counter, i64 delta) = 0;
     virtual void ChangePathCount(i64 delta) = 0;
     virtual void SetPathCount(ui64 value) = 0;
     virtual void SetPathsQuota(ui64 value) = 0;
     virtual void ChangeShardCount(i64 delta) = 0;
     virtual void SetShardCount(ui64 value) = 0;
     virtual void SetShardsQuota(ui64 value) = 0;
+};
+
+enum class EQuotaUsageStatus {
+    AboveHardQuota,
+    InBetween,
+    BelowSoftQuota,
 };
 
 enum class EPathCategory : ui8 {
@@ -1973,6 +1986,18 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
                 }
             );
         }
+    };
+
+    struct TSmallBlobsQuotas {
+        ui64 VolumeHardQuota = 0;
+        ui64 VolumeSoftQuota = 0;
+        ui64 CountHardQuota = 0;
+        ui64 CountSoftQuota = 0;
+    };
+
+    struct TSmallBlobsUsage {
+        ui64 VolumeBytes = 0;
+        ui64 Count = 0;
     };
 
     TSubDomainInfo() = default;
@@ -2291,16 +2316,20 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
         if (!AlterData->DatabaseQuotas && DatabaseQuotas && !isExternal) {
             AlterData->DatabaseQuotas = DatabaseQuotas;
+            AlterData->SmallBlobsStorageUnits = SmallBlobsStorageUnits;
         }
 
         AlterData->DomainStateVersion = DomainStateVersion;
         AlterData->DiskQuotaExceeded = DiskQuotaExceeded;
+        AlterData->SmallBlobsQuotaExceeded = SmallBlobsQuotaExceeded;
 
-        // Update DiskSpaceUsage and recheck quotas (which may have changed by an alter)
+        // Update usage and recheck quotas (which may have changed by an alter)
         AlterData->DiskSpaceUsage = DiskSpaceUsage;
-        AlterData->CheckDiskSpaceQuotas(counters);
+        AlterData->SmallBlobsUsage = SmallBlobsUsage;
+        AlterData->CheckQuotas(counters);
 
         CountDiskSpaceQuotas(counters, GetDiskSpaceQuotas(), AlterData->GetDiskSpaceQuotas());
+        CountSmallBlobsQuotas(counters, GetSmallBlobsQuotas(), AlterData->GetSmallBlobsQuotas());
         CountStreamShardsQuota(counters, GetStreamShardsQuota(), AlterData->GetStreamShardsQuota());
         CountStreamReservedStorageQuota(counters, GetStreamReservedStorageQuota(), AlterData->GetStreamReservedStorageQuota());
     }
@@ -2331,6 +2360,8 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
     static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& prev, const TDiskSpaceQuotas& next);
 
+    static void CountSmallBlobsQuotas(IQuotaCounters* counters, const TSmallBlobsQuotas& prev, const TSmallBlobsQuotas& next);
+
     static void CountStreamShardsQuota(IQuotaCounters* counters, const i64 delta) {
         counters->ChangeStreamShardsQuota(delta);
     }
@@ -2349,11 +2380,25 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
     TDiskSpaceQuotas GetDiskSpaceQuotas() const;
 
+    TSmallBlobsQuotas GetSmallBlobsQuotas() const;
+
     /*
     Checks current disk usage against disk quotas.
     Returns true when DiskQuotaExceeded value has changed and needs to be persisted and pushed to scheme board.
     */
     bool CheckDiskSpaceQuotas(IQuotaCounters* counters);
+
+    /*
+    Checks current small-blobs usage against small-blobs quotas.
+    Returns true when the SmallBlobsQuotaExceeded flag has changed and needs to be persisted and pushed to scheme board.
+    */
+    bool CheckSmallBlobsQuotas(IQuotaCounters* counters);
+
+    /*
+    Rechecks disk space and small blobs quotas in one go. 
+    Returns true when any flag changed and needs to be persisted and pushed to scheme board.
+    */
+    bool CheckQuotas(IQuotaCounters* counters);
 
     ui64 TotalDiskSpaceUsage() {
         return DiskSpaceUsage.Tables.TotalSize + (AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota() ? GetPQAccountStorage() : 0);
@@ -2526,11 +2571,16 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
     void AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TPartitionStats& oldAggr = {});
     void AggrDiskSpaceUsage(IQuotaCounters* counters, const TDiskSpaceUsageDelta& delta);
+    void AggrSmallBlobsUsage(IQuotaCounters* counters, i64 bytesDelta, i64 countDelta);
 
     void AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr = {});
 
     const TDiskSpaceUsage& GetDiskSpaceUsage() const {
         return DiskSpaceUsage;
+    }
+
+    const TSmallBlobsUsage& GetSmallBlobsUsage() const {
+        return SmallBlobsUsage;
     }
 
     const TMaybe<NKikimrSubDomains::TSchemeQuotas>& GetDeclaredSchemeQuotas() const {
@@ -2547,17 +2597,21 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
     void SetDatabaseQuotas(const Ydb::Cms::DatabaseQuotas& databaseQuotas) {
         DatabaseQuotas.ConstructInPlace(databaseQuotas);
+        RecomputeSmallBlobsStorageUnits();
     }
 
     void SetDatabaseQuotas(const Ydb::Cms::DatabaseQuotas& databaseQuotas, IQuotaCounters* counters) {
         auto prev = GetDiskSpaceQuotas();
+        auto prevSmallBlobs = GetSmallBlobsQuotas();
         auto prevs = GetStreamShardsQuota();
         auto prevrs = GetStreamReservedStorageQuota();
-        DatabaseQuotas.ConstructInPlace(databaseQuotas);
+        SetDatabaseQuotas(databaseQuotas);
         auto next = GetDiskSpaceQuotas();
+        auto nextSmallBlobs = GetSmallBlobsQuotas();
         auto nexts = GetStreamShardsQuota();
         auto nextrs = GetStreamReservedStorageQuota();
         CountDiskSpaceQuotas(counters, prev, next);
+        CountSmallBlobsQuotas(counters, prevSmallBlobs, nextSmallBlobs);
         CountStreamShardsQuota(counters, prevs, nexts);
         CountStreamReservedStorageQuota(counters, prevrs, nextrs);
     }
@@ -2640,6 +2694,14 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         DiskQuotaExceeded = value;
     }
 
+    bool GetSmallBlobsQuotaExceeded() const {
+        return SmallBlobsQuotaExceeded;
+    }
+
+    void SetSmallBlobsQuotaExceeded(bool value) {
+        SmallBlobsQuotaExceeded = value;
+    }
+
     const NLoginProto::TSecurityState& GetSecurityState() const {
         return SecurityState;
     }
@@ -2689,6 +2751,9 @@ private:
     TMaybe<Ydb::Cms::DatabaseQuotas> DatabaseQuotas;
     ui64 DomainStateVersion = 0;
     bool DiskQuotaExceeded = false;
+    bool SmallBlobsQuotaExceeded = false;
+    // Cached (data_size_hard_quota / 10 TiB) factor used to derive the small-blobs quotas
+    double SmallBlobsStorageUnits = 0;
 
     TVector<TShardIdx> PrivateShards;
     TStoragePools StoragePools;
@@ -2701,6 +2766,11 @@ private:
     ui64 BackupPathsCount = 0;
     ui64 SystemPathsCount = 0;
     TDiskSpaceUsage DiskSpaceUsage;
+    TSmallBlobsUsage SmallBlobsUsage;
+
+    void RecomputeSmallBlobsStorageUnits();
+    // Returns whether the quota exceeded status was flipped
+    bool ApplyQuotaExceededStatus(EQuotaUsageStatus status, bool& exceeded, ESimpleCounters counter, IQuotaCounters* counters);
 
     THashSet<TShardIdx> InternalShards;
     THashSet<TShardIdx> BackupShards;
@@ -4417,6 +4487,18 @@ struct TStreamingQueryInfo : TSimpleRefCount<TStreamingQueryInfo> {
 
     ui64 AlterVersion = 0;
     NKikimrSchemeOp::TStreamingQueryProperties Properties;
+};
+
+struct TTestShardSetInfo : public TSimpleRefCount<TTestShardSetInfo> {
+    using TPtr = TIntrusivePtr<TTestShardSetInfo>;
+
+    NKikimrClient::TTestShardControlRequest::TCmdInitialize CmdInitialize;
+    THashMap<TShardIdx, TTabletId> TestShards; // ShardIdx -> TabletId
+    ui64 AlterVersion = 0;
+
+    explicit TTestShardSetInfo(ui64 alterVersion)
+        : AlterVersion(alterVersion)
+    {}
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,

@@ -41,27 +41,61 @@ jobs:
 
       - name: Resolve build types matrix
         id: resolve
+        # Untrusted event inputs via env to avoid shell injection.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_BASE_BRANCH: ${{ github.event.inputs.base_branch }}
+          DISPATCH_BUILD_TYPE: ${{ github.event.inputs.build_type }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref || github.base_ref }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            BASE_BRANCH="${{ github.event.inputs.base_branch }}"
-          else
-            BASE_BRANCH="${{ github.event.pull_request.base.ref || github.base_ref }}"
-            if [ -z "$BASE_BRANCH" ]; then
-              echo "BASE_BRANCH is empty for pull_request event" >&2
-              exit 1
-            fi
-          fi
-          echo "base_branch=$BASE_BRANCH" >> "$GITHUB_OUTPUT"
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.build_type }}" ]; then
-            MATRIX_BUILD_TYPES='["${{ github.event.inputs.build_type }}"]'
-          else
-            MATRIX_BUILD_TYPES="$(python3 .github/scripts/tests/mute/mute_helper.py issue-build-types \
+          issue_build_types() {
+            python3 .github/scripts/tests/mute/mute_helper.py issue-build-types \
               --profiles-config ".github/config/mute_issue_and_digest_config.json" \
-              --branch "$BASE_BRANCH")"
+              --branch "$1"
+          }
+          json_array() { python3 -c "import json,sys; print(json.dumps(sys.argv[1:]))" "$@"; }
+          emit() {  # newline-safe GITHUB_OUTPUT writer: emit <name> <value>
+            local d="d_${RANDOM}${RANDOM}"
+            { printf '%s<<%s\n' "$1" "$d"; printf '%s\n' "$2"; printf '%s\n' "$d"; } >> "$GITHUB_OUTPUT"
+          }
+          # build_type is interpolated raw into later run: steps, so require a safe, non-empty value.
+          validate_build_type() {
+            case "$1" in
+              ""|*[!a-zA-Z0-9._-]*) echo "invalid build_type: '$1'" >&2; exit 1 ;;
+            esac
+          }
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            BASE_BRANCH="$DISPATCH_BASE_BRANCH"
+          else
+            BASE_BRANCH="$PR_BASE_REF"
           fi
-          echo "matrix_build_types=$MATRIX_BUILD_TYPES" >> "$GITHUB_OUTPUT"
+          if [ -z "$BASE_BRANCH" ]; then
+            echo "BASE_BRANCH is empty (event=$EVENT_NAME)" >&2
+            exit 1
+          fi
+          emit base_branch "$BASE_BRANCH"
+
+          # Run only for the triggering PR's own build type (create_new_muted_ya.py skips
+          # build types not configured for issues), so build-type PRs don't duplicate issues.
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$DISPATCH_BUILD_TYPE" ]; then
+            validate_build_type "$DISPATCH_BUILD_TYPE"
+            MATRIX_BUILD_TYPES="$(json_array "$DISPATCH_BUILD_TYPE")"
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
+            case "$PR_HEAD_REF" in
+              update-muted-ya_*)
+                BUILD_TYPE="${PR_HEAD_REF##*_}"
+                validate_build_type "$BUILD_TYPE"
+                MATRIX_BUILD_TYPES="$(json_array "$BUILD_TYPE")" ;;
+              *) MATRIX_BUILD_TYPES="$(issue_build_types "$BASE_BRANCH")" ;;
+            esac
+          else
+            MATRIX_BUILD_TYPES="$(issue_build_types "$BASE_BRANCH")"
+          fi
+          emit matrix_build_types "$MATRIX_BUILD_TYPES"
 
   create-issues-for-muted-tests:
     needs: resolve-build-types
@@ -113,12 +147,15 @@ jobs:
         run: .github/scripts/tests/mute/create_new_muted_ya.py create_issues --file_path="${{ env.MUTED_YA_FILE_PATH }}" --branch=${{ env.BASE_BRANCH }} --build-type=${{ matrix.build_type }}
 
       - name: Add issues to PR
+        # created_issues_file is set only when issues were produced (configured build types).
+        if: steps.create_issues.outputs.created_issues_file != ''
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
         run: python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number || github.event.inputs.pr_number  }} --body=${{ steps.create_issues.outputs.created_issues_file }}
 
       - name: Comment PR
+        if: steps.create_issues.outputs.created_issues_file != ''
         uses: actions/github-script@v8
         with:
           github-token: ${{ env.GH_TOKEN }}

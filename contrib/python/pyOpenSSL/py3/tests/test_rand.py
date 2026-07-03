@@ -10,7 +10,7 @@ import pytest
 from OpenSSL import rand
 
 
-class TestRand(object):
+class TestRand:
     @pytest.mark.parametrize("args", [(b"foo", None), (None, 3)])
     def test_add_wrong_args(self, args):
         """

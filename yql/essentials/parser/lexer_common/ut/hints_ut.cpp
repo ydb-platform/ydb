@@ -13,7 +13,7 @@ TSQLHints CollectHints(const TString& query) {
     NSQLTranslationV1::TLexers lexers;
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     bool ansi = false;
-    auto lexer = MakeLexer(lexers, ansi, true);
+    auto lexer = MakeLexer(lexers, ansi, /*antlr4=*/true);
     UNIT_ASSERT(lexer);
     TSQLHints result;
     NYql::TIssues issues;

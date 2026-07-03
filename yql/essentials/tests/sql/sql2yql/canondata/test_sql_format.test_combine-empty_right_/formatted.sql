@@ -1,0 +1,23 @@
+$f = ($key, $leftList, $rightList) -> {
+    RETURN <|k: $key, v: ListZipAll($leftList, $rightList)|>;
+};
+
+$a = [
+    <|key: 1, subkey: 11, value: '111'|>,
+    <|key: 1, subkey: 12, value: '112'|>,
+    <|key: 2, subkey: 21, value: '221'|>,
+    <|key: 2, subkey: 22, value: '222'|>,
+    <|key: 3, subkey: 33, value: '333'|>,
+];
+
+$b = ListCreate(Struct<key: Int32, subkey: Int32, value: String>);
+
+COMBINE AS_TABLE($a) AS A
+    PRESORT
+        A.key
+WITH AS_TABLE($b) AS B
+    PRESORT
+        B.key
+ON
+    A.key == B.key
+USING $f(TableRow(), TableRow());

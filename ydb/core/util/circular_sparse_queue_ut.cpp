@@ -46,10 +46,9 @@ Y_UNIT_TEST_SUITE(TCircularSparseQueueTest) {
 
         auto i1 = queue.Emplace(3, 4);
         UNIT_ASSERT(i1.has_value());
-        auto* v1 = queue.Find(i1.value());
-        UNIT_ASSERT(v1 != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(v1->first, 3);
-        UNIT_ASSERT_VALUES_EQUAL(v1->second, 4);
+        UNIT_ASSERT(i1->second != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(i1->second->first, 3);
+        UNIT_ASSERT_VALUES_EQUAL(i1->second->second, 4);
     }
 
     Y_UNIT_TEST(FullThenEraseAllowsPush) {

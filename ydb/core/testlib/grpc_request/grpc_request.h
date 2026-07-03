@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
@@ -34,12 +36,14 @@ public:
             const TReq& request,
             TString topicPath,
             TString databaseName,
-            std::shared_ptr<TResultHolder<TRes>> resultHolder
+            std::shared_ptr<TResultHolder<TRes>> resultHolder,
+            NActors::TActorId notifyActor = {}
         )
         : Request(request)
         , TopicPath(topicPath)
         , DatabaseName(databaseName)
         , ResultHolder(resultHolder)
+        , NotifyActor(notifyActor)
     {
     };
 
@@ -186,6 +190,7 @@ public:
     void Reply(NProtoBuf::Message* resp, ui32 status = 0) override {
         ResultHolder->ResultStatus = Ydb::StatusIds::StatusCode(status);
         ResultHolder->Response.reset(resp);
+        NotifyCompletion();
     };
 
     void SendOperation(const Ydb::Operations::Operation& operation) override {
@@ -231,6 +236,7 @@ private:
     const TString DatabaseName;
 
     std::shared_ptr<TResultHolder<TRes>> ResultHolder;
+    const NActors::TActorId NotifyActor;
 
     void ProcessYdbStatusCode(Ydb::StatusIds::StatusCode& status, const google::protobuf::Message& result) {
         ResultHolder->ResultStatus = status;
@@ -238,6 +244,15 @@ private:
         auto* c = result.New();
         c->CopyFrom(result);
         ResultHolder->Response.reset(c);
+        NotifyCompletion();
+    }
+
+    // Wakes up the waiting test thread via the actor system, establishing a
+    // happens-before edge so the result written above is safely visible there.
+    void NotifyCompletion() {
+        if (NotifyActor) {
+            NActors::TActivationContext::Send(NotifyActor, std::make_unique<NActors::TEvents::TEvWakeup>());
+        }
     }
 };
     

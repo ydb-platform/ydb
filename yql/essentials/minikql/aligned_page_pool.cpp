@@ -330,9 +330,9 @@ TAlignedPagePoolCounters::TAlignedPagePoolCounters(::NMonitoring::TDynamicCounte
     }
     ::NMonitoring::TDynamicCounterPtr subGroup = countersRoot->GetSubgroup("counters", "utils")->GetSubgroup("subsystem", "mkqlalloc");
     TotalBytesAllocatedCntr = subGroup->GetCounter(name + "/TotalBytesAllocated");
-    AllocationsCntr = subGroup->GetCounter(name + "/Allocations", true);
-    PoolsCntr = subGroup->GetCounter(name + "/Pools", true);
-    LostPagesBytesFreeCntr = subGroup->GetCounter(name + "/LostPagesBytesFreed", true);
+    AllocationsCntr = subGroup->GetCounter(name + "/Allocations", /*derivative=*/true);
+    PoolsCntr = subGroup->GetCounter(name + "/Pools", /*derivative=*/true);
+    LostPagesBytesFreeCntr = subGroup->GetCounter(name + "/LostPagesBytesFreed", /*derivative=*/true);
 }
 
 template <typename T>

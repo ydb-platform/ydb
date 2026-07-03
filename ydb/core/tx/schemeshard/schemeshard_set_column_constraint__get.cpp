@@ -89,7 +89,7 @@ private:
 
         // Map internal state to proto state
         using EState = TSetColumnConstraintOperationInfo::EOperationState;
-        using ProtoState = Ydb::Table::SetColumnConstraintState;
+        using ProtoState = Ydb::Table::SetNotNullState;
         switch (operationInfo.OperationState) {
         case EState::Locking:
         case EState::LockingNullWrites:

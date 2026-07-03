@@ -1080,15 +1080,15 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         ui64 setConstraintTxId = ++txId;
 
-        using TConstraintState = Ydb::Table::SetColumnConstraintState_State;
+        using TConstraintState = Ydb::Table::SetNotNullState_State;
         std::vector<TConstraintState> answers;
         std::vector<TConstraintState> expectedAnswers = {
-            Ydb::Table::SetColumnConstraintState::STATE_PREPARING,
-            Ydb::Table::SetColumnConstraintState::STATE_PREPARING,
-            Ydb::Table::SetColumnConstraintState::STATE_VALIDATING,
-            Ydb::Table::SetColumnConstraintState::STATE_APPLYING,
-            Ydb::Table::SetColumnConstraintState::STATE_APPLYING,
-            (isShouldBeFailed ? Ydb::Table::SetColumnConstraintState::STATE_CANCELLED : Ydb::Table::SetColumnConstraintState::STATE_DONE)
+            Ydb::Table::SetNotNullState::STATE_PREPARING,
+            Ydb::Table::SetNotNullState::STATE_PREPARING,
+            Ydb::Table::SetNotNullState::STATE_VALIDATING,
+            Ydb::Table::SetNotNullState::STATE_APPLYING,
+            Ydb::Table::SetNotNullState::STATE_APPLYING,
+            (isShouldBeFailed ? Ydb::Table::SetNotNullState::STATE_CANCELLED : Ydb::Table::SetNotNullState::STATE_DONE)
         };
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -1137,9 +1137,9 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
                 static_cast<int>(expectedAnswers[i]),
                 TStringBuilder() << "State mismatch at index " << i
                     << ": got " << static_cast<int>(answers[i])
-                    << " (" << Ydb::Table::SetColumnConstraintState_State_Name(answers[i]) << ")"
+                    << " (" << Ydb::Table::SetNotNullState_State_Name(answers[i]) << ")"
                     << ", expected " << static_cast<int>(expectedAnswers[i])
-                    << " (" << Ydb::Table::SetColumnConstraintState_State_Name(expectedAnswers[i]) << ")"
+                    << " (" << Ydb::Table::SetNotNullState_State_Name(expectedAnswers[i]) << ")"
             );
         }
     }

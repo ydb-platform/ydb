@@ -1609,7 +1609,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                     }
                 }
                 const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
-                    << "with access " << accessDescription
+                    << (requestIt->RequireAnyOfAccess.empty() ? "with access " : "with any of access rights ")
+                    << accessDescription
                 );
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);

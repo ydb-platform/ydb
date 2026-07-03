@@ -47,7 +47,6 @@ std::shared_ptr<TResultHolder<TResponse>> DoRequest(
         path,
         database,
         result,
-        nullptr,
         edgeActor
     );
     runtime.Register(createActor(ctx));

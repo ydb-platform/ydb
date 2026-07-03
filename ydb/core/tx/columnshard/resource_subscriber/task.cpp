@@ -10,7 +10,7 @@
 namespace NKikimr::NOlap::NResourceBroker::NSubscribe {
 
 void ITask::OnAllocationSuccess(const ui64 taskId, const NActors::TActorId& senderId) {
-    YDB_LOG_DEBUG("Dump event, externalTaskId, mem, cpu",
+    YDB_LOG_DEBUG("",
         {"event", "resource_allocated"},
         {"externalTaskId", ExternalTaskId},
         {"mem", MemoryAllocation},
@@ -26,7 +26,7 @@ TResourcesGuard::~TResourcesGuard() {
     if (!NActors::TlsActivationContext) {
         return;
     }
-    YDB_LOG_DEBUG("Dump event, taskId, externalTaskId, mem, cpu",
+    YDB_LOG_DEBUG("",
         {"event", "free_resources"},
         {"taskId", TaskId},
         {"externalTaskId", ExternalTaskId},
@@ -52,7 +52,7 @@ TResourcesGuard::TResourcesGuard(
 {
     AFL_VERIFY(taskId || (!Memory && !Cpu));
     Context.GetCounters()->GetBytesAllocated()->Add(Memory);
-    YDB_LOG_DEBUG("Dump event, externalTaskId, taskId, mem, cpu",
+    YDB_LOG_DEBUG("",
         {"event", "allocate_resources"},
         {"externalTaskId", ExternalTaskId},
         {"taskId", TaskId},
@@ -67,7 +67,7 @@ void TResourcesGuard::Update(const ui64 memNew) {
     AFL_VERIFY(Memory);
     Context.GetCounters()->GetBytesAllocated()->Remove(Memory);
     AFL_VERIFY(NActors::TlsActivationContext);
-    YDB_LOG_DEBUG("Dump event, taskId, externalTaskId, mem, cpu, memOld",
+    YDB_LOG_DEBUG("",
         {"event", "update_resources"},
         {"taskId", TaskId},
         {"externalTaskId", ExternalTaskId},

@@ -291,12 +291,12 @@ public:
             YDB_LOG_CREATE_CONTEXT(
                 {"txId", GetTxId()});
             if (!IsInProgress()) {
-                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "Dump event",
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
                     {"event", "not_in_progress"});
                 return nullptr;
             }
             if (PreparationsStarted.Val()) {
-                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "Dump event",
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
                     {"event", "prepared_already"});
                 return nullptr;
             }

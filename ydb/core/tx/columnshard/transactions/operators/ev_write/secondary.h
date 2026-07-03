@@ -222,7 +222,7 @@ private:
     }
 
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* owner) const override {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "Dump event, lockId",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
             {"event", "prepare_for_progress_started"},
             {"lockId", LockId});
         return std::make_unique<TTxStartPreparation>(owner, GetTxId());

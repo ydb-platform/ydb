@@ -22,7 +22,7 @@ void TActor::DoReplyAllocated(const ui64 internalTaskId, const ui64 rbTaskId) {
     Tasks.erase(it);
     task->GetContext().GetCounters()->OnReply(task->GetMemoryAllocation());
     if (Aborted) {
-        YDB_LOG_DEBUG("Dump event, taskId, task",
+        YDB_LOG_DEBUG("",
             {"event", "result_resources_on_abort"},
             {"taskId", rbTaskId},
             {"task", task->DebugString()});
@@ -31,7 +31,7 @@ void TActor::DoReplyAllocated(const ui64 internalTaskId, const ui64 rbTaskId) {
             PassAway();
         }
     } else {
-        YDB_LOG_DEBUG("Dump event, taskId, task",
+        YDB_LOG_DEBUG("",
             {"event", "result_resources"},
             {"taskId", rbTaskId},
             {"task", task->DebugString()});
@@ -43,7 +43,7 @@ void TActor::Handle(TEvStartTask::TPtr& ev) {
     Y_ABORT_UNLESS(!Aborted);
     auto task = ev->Get()->GetTask();
     Y_ABORT_UNLESS(task);
-    YDB_LOG_DEBUG("Dump event, task",
+    YDB_LOG_DEBUG("",
         {"event", "ask_resources"},
         {"task", task->DebugString()});
     Tasks.emplace(++Counter, task);

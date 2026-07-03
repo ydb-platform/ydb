@@ -145,7 +145,7 @@ private:
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, true);
             if (!op) {
-                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "Dump event, receive, reason",
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
                     {"event", "ack_tablet_duplication"},
                     {"receive", TabletId},
                     {"reason", "operation absent"});
@@ -155,7 +155,7 @@ private:
                     {"wait", JoinSeq(",", op->WaitShardsResultAck)},
                     {"receive", TabletId});
             } else {
-                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "Dump event, wait, receive",
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
                     {"event", "ack_tablet"},
                     {"wait", JoinSeq(",", op->WaitShardsResultAck)},
                     {"receive", TabletId});
@@ -194,7 +194,7 @@ private:
 
     void CheckFinished(TColumnShard& owner) {
         if (!IsInProgress()) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "Dump event",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
                 {"event", "finished"});
             owner.EnqueueProgressTx(NActors::TActivationContext::AsActorContext(), GetTxId());
         }
@@ -235,7 +235,7 @@ private:
                 op->TxBroken = op->TxBroken.value_or(false) || lock.IsBroken();
                 AFL_VERIFY(op->WaitShardsBrokenFlags.erase(Self->TabletID()));
                 AFL_VERIFY(op->WaitShardsResultAck.erase(Self->TabletID()));
-                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "Dump event, waitBrokenFlags, waitResultAck, receive",
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
                     {"event", "remove_tablet_id"},
                     {"waitBrokenFlags", JoinSeq(",", op->WaitShardsBrokenFlags)},
                     {"waitResultAck", JoinSeq(",", op->WaitShardsResultAck)},
@@ -266,7 +266,7 @@ private:
     }
 
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* owner) const override {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "Dump event, lockId",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
             {"event", "prepare_for_progress_started"},
             {"lockId", LockId});
         return std::make_unique<TTxStartPreparation>(owner, GetTxId());

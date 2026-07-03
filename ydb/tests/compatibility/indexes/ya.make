@@ -4,7 +4,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 FORK_TEST_FILES()
 FORK_TESTS()
 FORK_SUBTESTS()
-SPLIT_FACTOR(14)
+SPLIT_FACTOR(20)
 
 TEST_SRCS(
     test_fulltext_index.py
@@ -15,11 +15,7 @@ TEST_SRCS(
 )
 
 SIZE(LARGE)
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:16)
-ELSE()
-    REQUIREMENTS(cpu:4)
-ENDIF()
+REQUIREMENTS(cpu:4)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 DEPENDS(

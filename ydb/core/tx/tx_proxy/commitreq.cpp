@@ -414,11 +414,11 @@ private:
 
                     TxProxyMon->TxResultAborted->Inc();
 
-                    YDB_LOG_ERROR_CTX(ctx, "HANDLE Prepare TEvProposeTransactionResult TCommitWritesReq coordinator selected at resolve coordinator selected at propose",
+                    YDB_LOG_ERROR_CTX(ctx, "HANDLE Prepare: coordinator mismatch",
                         {"explanation", explanation},
                         {"actorId", ctx.SelfID},
-                        {"keysState", SelectedCoordinator},
-                        {"resultState", privateCoordinator});
+                        {"selectedCoordinator", SelectedCoordinator},
+                        {"privateCoordinator", privateCoordinator});
 
                     return Die(ctx);
                 }

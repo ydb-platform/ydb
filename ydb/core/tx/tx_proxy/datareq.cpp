@@ -1949,11 +1949,11 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
             }
             ReportStatus(errorCode, NKikimrIssues::TStatusIds::INTERNAL_ERROR, true, ctx);
             TxProxyMon->TxResultAborted->Inc();
-            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "coordinator selected at resolve coordinator selected at propose",
+            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Coordinator mismatch between resolve and propose states",
                 {"actorId", ctx.SelfID},
                 {"txid", TxId},
-                {"keysState", SelectedCoordinator},
-                {"resultState", privateCoordinator});
+                {"selectedCoordinator", SelectedCoordinator},
+                {"privateCoordinator", privateCoordinator});
 
             return Die(ctx);
         }
@@ -2520,7 +2520,7 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, cons
     ReadTableRequest->KeySpace.AddRange(rec.GetKeyRange(), shard);
 
     if (ReadTableRequest->KeySpace.IsFull()) {
-        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Collected all clerance requests",
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Collected all clearance requests",
             {"txid", TxId});
     }
 

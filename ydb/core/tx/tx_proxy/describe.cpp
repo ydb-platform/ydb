@@ -363,10 +363,10 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
         switch (entry.Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied: {
             const ui32 access = NACLib::EAccessRights::DescribeSchema;
-            YDB_LOG_ERROR_CTX(ctx, "Access denied for with access to path because base path",
-                {"userToken", (UserToken ? UserToken->GetUserSID() : "empty")},
+            YDB_LOG_ERROR_CTX(ctx, "Access denied (base path)",
+                {"user", (UserToken ? UserToken->GetUserSID() : "empty")},
                 {"access", NACLib::AccessRightsToString(access)},
-                {"entryPath", JoinPath(entry.Path)});
+                {"path", JoinPath(entry.Path)});
             ReportError(NKikimrScheme::StatusAccessDenied, "Access denied", ctx);
             break;
         }
@@ -393,10 +393,10 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
     if (UserToken != nullptr) {
         ui32 access = NACLib::EAccessRights::DescribeSchema;
         if (entry.SecurityObject != nullptr && !entry.SecurityObject->CheckAccess(access, *UserToken)) {
-            YDB_LOG_ERROR_CTX(ctx, "Access denied for with access to path",
-                {"userSID", UserToken->GetUserSID()},
+            YDB_LOG_ERROR_CTX(ctx, "Access denied",
+                {"user", UserToken->GetUserSID()},
                 {"access", NACLib::AccessRightsToString(access)},
-                {"entryPath", JoinPath(entry.Path)});
+                {"path", JoinPath(entry.Path)});
             ReportError(NKikimrScheme::StatusAccessDenied, "Access denied", ctx);
             return Die(ctx);
         }

@@ -213,6 +213,7 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
                         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer->Data(), FormatSectorSize);
                         BlockDevice->PwriteSync(buffer->Data(), FormatSectorSize, targetOffset,
                                 TReqId(TReqId::RestoreFormatOnRead, 0), nullptr);
+                        buffer->ReturnToPool();
                     }
                 }
                 //BlockDevice->FlushAsync(nullptr);

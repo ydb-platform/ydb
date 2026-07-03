@@ -322,7 +322,7 @@ bool TKikimrConfiguration::IsAutoIndexSelectionDisabled() const {
 
 bool TKikimrConfiguration::IsAutoIndexSelectionForIndexLookupJoinEnabled() const {
     return EnableAutoIndexSelectionForIndexLookupJoin.Get()
-        .GetOrElse(TTableServiceConfig::GetDefaultEnableAutoIndexSelectionForIndexLookupJoin());
+        .GetOrElse(TTableServiceConfig::GetEnableAutoIndexSelectionForIndexLookupJoin());
 }
 
 NSQLTranslation::EBindingsMode TKikimrConfiguration::GetYqlBindingsMode() const {

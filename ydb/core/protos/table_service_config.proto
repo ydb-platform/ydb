@@ -551,5 +551,5 @@ message TTableServiceConfig {
 
     // Cluster default for automatic secondary-index selection in index lookup joins.
     // Overridable per session via PRAGMA ydb.EnableAutoIndexSelectionForIndexLookupJoin.
-    optional bool DefaultEnableAutoIndexSelectionForIndexLookupJoin = 139 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableAutoIndexSelectionForIndexLookupJoin = 139 [default = false, (InvalidateCompileCache) = true];
 };

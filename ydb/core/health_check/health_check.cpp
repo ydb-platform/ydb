@@ -763,6 +763,7 @@ public:
     TTabletRequestsState TabletRequests;
 
     TDuration Timeout = TDuration::MilliSeconds(HealthCheckConfig.GetTimeout());
+    bool ReturnHints = false;
     static constexpr TStringBuf STATIC_STORAGE_POOL_NAME = "static";
 
     bool IsSpecificDatabaseFilter() const {
@@ -774,6 +775,7 @@ public:
         if (Request->Request.operation_params().has_operation_timeout()) {
             Timeout = GetDuration(Request->Request.operation_params().operation_timeout());
         }
+        ReturnHints = Request->Request.return_hints() && IsSpecificDatabaseFilter();
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto *domain = domains->GetDomain();
         DomainPath = "/" + domain->Name;
@@ -1092,10 +1094,58 @@ public:
     }
 
     template<typename TEvent>
-    [[nodiscard]] TRequestResponse<typename WhiteboardResponse<TEvent>::Type> RequestNodeWhiteboard(TNodeId nodeId, std::initializer_list<int> fields = {}) {
+    std::vector<int> GetRequiredFields();
+
+    template<>
+    std::vector<int> GetRequiredFields<TEvWhiteboard::TEvSystemStateRequest>() {
+        return {
+                NKikimrWhiteboard::TSystemStateInfo::kPoolStatsFieldNumber,
+                NKikimrWhiteboard::TSystemStateInfo::kLoadAverageFieldNumber,
+                NKikimrWhiteboard::TSystemStateInfo::kNumberOfCpusFieldNumber,
+                NKikimrWhiteboard::TSystemStateInfo::kMaxClockSkewPeerIdFieldNumber,
+                NKikimrWhiteboard::TSystemStateInfo::kLocationFieldNumber,
+                NKikimrWhiteboard::TSystemStateInfo::kMaxClockSkewWithPeerUsFieldNumber,
+            };
+    }
+
+    template<>
+    std::vector<int> GetRequiredFields<TEvWhiteboard::TEvVDiskStateRequest>() {
+        return {
+                NKikimrWhiteboard::TVDiskStateInfo::kVDiskIdFieldNumber,
+                NKikimrWhiteboard::TVDiskStateInfo::kPDiskIdFieldNumber,
+                NKikimrWhiteboard::TVDiskStateInfo::kVDiskStateFieldNumber,
+                NKikimrWhiteboard::TVDiskStateInfo::kReplicatedFieldNumber,
+                NKikimrWhiteboard::TVDiskStateInfo::kDiskSpaceFieldNumber,
+        };
+    }
+
+    template<>
+    std::vector<int> GetRequiredFields<TEvWhiteboard::TEvPDiskStateRequest>() {
+        return {
+                NKikimrWhiteboard::TPDiskStateInfo::kPDiskIdFieldNumber,
+                NKikimrWhiteboard::TPDiskStateInfo::kPathFieldNumber,
+                NKikimrWhiteboard::TPDiskStateInfo::kAvailableSizeFieldNumber,
+                NKikimrWhiteboard::TPDiskStateInfo::kTotalSizeFieldNumber,
+                NKikimrWhiteboard::TPDiskStateInfo::kStateFieldNumber,
+        };
+    }
+
+    template<>
+    std::vector<int> GetRequiredFields<TEvWhiteboard::TEvBSGroupStateRequest>() {
+        return {
+                NKikimrWhiteboard::TBSGroupStateInfo::kGroupGenerationFieldNumber,
+                NKikimrWhiteboard::TBSGroupStateInfo::kGroupIDFieldNumber,
+                NKikimrWhiteboard::TBSGroupStateInfo::kStoragePoolNameFieldNumber,
+                NKikimrWhiteboard::TBSGroupStateInfo::kErasureSpeciesFieldNumber,
+                NKikimrWhiteboard::TBSGroupStateInfo::kVDiskIdsFieldNumber,
+        };
+    }
+
+    template<typename TEvent>
+    [[nodiscard]] TRequestResponse<typename WhiteboardResponse<TEvent>::Type> RequestNodeWhiteboard(TNodeId nodeId) {
         TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         auto request = MakeHolder<TEvent>();
-        for (int field : fields) {
+        for (int field : GetRequiredFields<TEvent>()) {
             request->Record.AddFieldsRequired(field);
         }
         TRequestResponse<typename WhiteboardResponse<TEvent>::Type> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, TypeName(*request.Get())));
@@ -1109,7 +1159,7 @@ public:
 
     void RequestGenericNode(TNodeId nodeId) {
         if (NodeSystemState.count(nodeId) == 0) {
-            NodeSystemState.emplace(nodeId, RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId, {-1}));
+            NodeSystemState.emplace(nodeId, RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId));
             ++Requests;
         }
     }
@@ -1169,7 +1219,7 @@ public:
             case TEvWhiteboard::EvSystemStateRequest: {
                 auto& request = NodeSystemState[nodeId];
                 if (!request.IsOk()) {
-                    request = RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId, {-1});
+                    request = RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId);
                 }
                 break;
             }

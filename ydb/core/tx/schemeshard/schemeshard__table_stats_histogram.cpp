@@ -415,11 +415,14 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 
     TSerializedCellVec splitKey = getSplitBoundary(rec.GetTableStats(), GetKeyColumnTypes(*tableInfo));
 
-    if ((tableInfo->TableDescription.GetTableType() == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact ||
-        tableInfo->TableDescription.GetTableType() == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance) &&
-        splitKey.GetCells().size() > tableInfo->KeyColumnIds.size()-2) {
-        // For now, only allow to split compact fulltext index table by prefix + __ydb_token
-        splitKey = TSerializedCellVec(splitKey.GetCells().Slice(0, tableInfo->KeyColumnIds.size()-2));
+    const auto specialType = tableInfo->TableDescription.GetPartitionConfig().GetSpecialTableType();
+    if (specialType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact ||
+        specialType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance) {
+        const auto prefixSize = tableInfo->KeyColumnIds.size() - NTableIndex::NFulltext::CompactTableKeySize;
+        if (splitKey.GetCells().size() > prefixSize + 1) {
+            // For now, only allow to split compact fulltext index table by prefix + __ydb_token
+            splitKey = TSerializedCellVec(splitKey.GetCells().Slice(0, prefixSize + 1));
+        }
     }
 
     if (splitKey.GetBuffer().empty()) {

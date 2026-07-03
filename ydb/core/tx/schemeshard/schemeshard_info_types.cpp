@@ -917,10 +917,6 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         return nullptr;
     }
 
-    if (op.HasTableType()) {
-        alterData->TableDescriptionFull->SetTableType(op.GetTableType());
-    }
-
     if (source) {
         // key columns reorder or deletion is not supported
         const TVector<ui32>& oldColIds = source->KeyColumnIds;
@@ -1314,6 +1310,10 @@ bool TPartitionConfigMerger::ApplyChanges(
 
     if (changes.HasUniqueIndexKeySize()) {
         result.SetUniqueIndexKeySize(changes.GetUniqueIndexKeySize());
+    }
+
+    if (changes.HasSpecialTableType()) {
+        result.SetSpecialTableType(changes.GetSpecialTableType());
     }
 
     return true;

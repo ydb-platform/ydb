@@ -15,6 +15,18 @@ bool IsIdentityAppend(const TMapElement& mapElement) {
         mapElement.GetColumnAccess() == mapElement.GetElementName();
 }
 
+bool IsIdentityElement(const TMapElement& mapElement) {
+    return IsIdentityRename(mapElement) || IsIdentityAppend(mapElement);
+}
+
+TInfoUnitSet GetInputIUs(const TIntrusivePtr<TOpMap>& map) {
+    TInfoUnitSet result;
+    for (const auto& iu : map->GetInput()->GetOutputIUs()) {
+        result.insert(iu);
+    }
+    return result;
+}
+
 } // anonymous namespace
 
 // Remove extra maps that arrise during translation.
@@ -33,32 +45,27 @@ TIntrusivePtr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const TIntru
         return map->GetInput();
     }
 
-    TInfoUnitSet identityAppendSources;
+    const auto inputIUs = GetInputIUs(map);
+    TInfoUnitSet identitySources;
     for (const auto& mapElement : map->MapElements) {
-        if (IsIdentityAppend(mapElement)) {
-            identityAppendSources.insert(mapElement.GetElementName());
+        if (IsIdentityElement(mapElement) && inputIUs.contains(mapElement.GetElementName())) {
+            identitySources.insert(mapElement.GetElementName());
         }
     }
 
     TVector<TMapElement> newElements;
     newElements.reserve(map->MapElements.size());
     TInfoUnitSet remainingRenameSources;
-    TInfoUnitSet convertedRenameSources;
     bool changed = false;
     for (auto mapElement : map->MapElements) {
-        if (IsIdentityRename(mapElement)) {
-            changed = true;
-            continue;
-        }
-
         if (mapElement.IsRename() &&
-            identityAppendSources.contains(mapElement.GetRename())) {
-            convertedRenameSources.insert(mapElement.GetRename());
+            !IsIdentityRename(mapElement) &&
+            identitySources.contains(mapElement.GetRename())) {
             mapElement.SetIsRename(false);
             changed = true;
         }
 
-        if (mapElement.IsRename()) {
+        if (mapElement.IsRename() && !IsIdentityRename(mapElement)) {
             remainingRenameSources.insert(mapElement.GetRename());
         }
 
@@ -68,8 +75,8 @@ TIntrusivePtr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const TIntru
     TVector<TMapElement> finalElements;
     finalElements.reserve(newElements.size());
     for (const auto& mapElement : newElements) {
-        if (IsIdentityAppend(mapElement) &&
-            convertedRenameSources.contains(mapElement.GetElementName()) &&
+        if (IsIdentityElement(mapElement) &&
+            inputIUs.contains(mapElement.GetElementName()) &&
             !remainingRenameSources.contains(mapElement.GetElementName())) {
             changed = true;
             continue;

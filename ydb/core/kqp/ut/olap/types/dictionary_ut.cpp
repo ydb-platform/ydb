@@ -16,6 +16,39 @@ namespace NKikimr::NKqp {
 
 namespace {
 
+// The JsonDocument column table every dictionary test operates on.
+constexpr const char* CreateColumnTableDdl = R"(CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            Col2 JsonDocument,
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);)";
+
+// Common script preamble: stop background compaction, create the table, pin the SIMPLE scan reader
+// (and, when the test will run compaction, the tiling++ planner). Callers append their own ALTER
+// COLUMN (sub-columns/dictionary) settings, data, and assertions.
+TString DictionaryTableSetup(const bool withCompactionPlanner = false) {
+    TStringBuilder script;
+    script << R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        )" << CreateColumnTableDdl << R"(
+        ------)";
+    if (withCompactionPlanner) {
+        script << R"(
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)
+        ------)";
+    }
+    script << R"(
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------)";
+    return script;
+}
+
 // primary_index_stats assertion that every Col2 chunk's separated sub-column was serialized with
 // `expectedType` (compared against the IChunkedArray::EType enum value, not a magic number).
 // `minChunks` lets a caller additionally require more than N chunks (e.g. multi-chunk coverage).
@@ -39,24 +72,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
     // Two low-cardinality portions are merged by compaction; the merged sub-column must be
     // re-encoded as a dictionary and still read back correctly.
     Y_UNIT_TEST(Compaction) {
-        const TString script = TStringBuilder() << R"(
-        STOP_COMPACTION
-        ------
-        SCHEMA:
-        CREATE TABLE `/Root/ColumnTable` (
-            Col1 Uint64 NOT NULL,
-            Col2 JsonDocument,
-            PRIMARY KEY (Col1)
-        )
-        PARTITION BY HASH(Col1)
-        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
+        const TString script = TStringBuilder() << DictionaryTableSetup(/*withCompactionPlanner=*/true) << R"(
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
                     `DICTIONARY_DETECTOR_KFF`=`2`)
@@ -81,21 +97,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
     // A freshly written low-cardinality separated column must actually be dictionary-encoded
     // (not just readable). Asserts the encoding engaged via primary_index_stats.
     Y_UNIT_TEST(FreshWrite) {
-        const TString script = TStringBuilder() << R"(
-        STOP_COMPACTION
-        ------
-        SCHEMA:
-        CREATE TABLE `/Root/ColumnTable` (
-            Col1 Uint64 NOT NULL,
-            Col2 JsonDocument,
-            PRIMARY KEY (Col1)
-        )
-        PARTITION BY HASH(Col1)
-        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
+        const TString script = TStringBuilder() << DictionaryTableSetup() << R"(
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
                     `OTHERS_ALLOWED_FRACTION`=`0`, `DICTIONARY_DETECTOR_KFF`=`1`)
@@ -125,35 +127,21 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
         const TString arrowString = Base64Encode(NArrow::NSerialization::TNativeSerializer().SerializeFull(updates.BuildArrow()));
 
         const auto runScript = [&](const TString& kff, const NArrow::NAccessor::IChunkedArray::EType expectedType) {
-            const TString script = TString(std::format(R"(
-                STOP_COMPACTION
-                ------
-                SCHEMA:
-                CREATE TABLE `/Root/ColumnTable` (
-                    Col1 Uint64 NOT NULL,
-                    Col2 JsonDocument,
-                    PRIMARY KEY (Col1)
-                )
-                PARTITION BY HASH(Col1)
-                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
-                ------
-                SCHEMA:
-                ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-                ------
-                SCHEMA:
-                ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
-                            `OTHERS_ALLOWED_FRACTION`=`0`, `DICTIONARY_DETECTOR_KFF`=`{}`)
-                ------
-                BULK_UPSERT:
-                    /Root/ColumnTable
-                    {}
-                    EXPECT_STATUS:SUCCESS
-                ------
-                READ: SELECT COUNT(*) FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = ("v" || CAST(Col1 AS String));
-                EXPECTED: [[{}u]]
-                ------
-                {})",
-                kff.c_str(), arrowString.c_str(), rowsCount, SubColumnsColumnAccessorCheck(expectedType).c_str()));
+            const TString script = DictionaryTableSetup() + TString(std::format(R"(
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
+                    `OTHERS_ALLOWED_FRACTION`=`0`, `DICTIONARY_DETECTOR_KFF`=`{}`)
+        ------
+        BULK_UPSERT:
+            /Root/ColumnTable
+            {}
+            EXPECT_STATUS:SUCCESS
+        ------
+        READ: SELECT COUNT(*) FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = ("v" || CAST(Col1 AS String));
+        EXPECTED: [[{}u]]
+        ------
+        )",
+                kff.c_str(), arrowString.c_str(), rowsCount)) + SubColumnsColumnAccessorCheck(expectedType);
             Variator::ToExecutor(Variator::SingleScript(script)).Execute();
         };
 
@@ -178,24 +166,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
         const TString batch1 = buildBatch(0, 100);
         const TString batch2 = buildBatch(100, 200);
 
-        const TString script = TString(std::format(R"(
-        STOP_COMPACTION
-        ------
-        SCHEMA:
-        CREATE TABLE `/Root/ColumnTable` (
-            Col1 Uint64 NOT NULL,
-            Col2 JsonDocument,
-            PRIMARY KEY (Col1)
-        )
-        PARTITION BY HASH(Col1)
-        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
+        const TString script = DictionaryTableSetup(/*withCompactionPlanner=*/true) + TString(std::format(R"(
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
                     `OTHERS_ALLOWED_FRACTION`=`0`, `MEM_LIMIT_CHUNK`=`100`, `DICTIONARY_DETECTOR_KFF`=`1`)
@@ -215,9 +186,9 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
         READ: SELECT COUNT(*) FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") IN ("xxxxxxxxxx", "yyyyyyyyyy");
         EXPECTED: [[200u]]
         ------
-        {})",
-            batch1.c_str(), batch2.c_str(),
-            SubColumnsColumnAccessorCheck(NArrow::NAccessor::IChunkedArray::EType::Dictionary, /*minChunks=*/1).c_str()));
+        )",
+            batch1.c_str(), batch2.c_str()))
+            + SubColumnsColumnAccessorCheck(NArrow::NAccessor::IChunkedArray::EType::Dictionary, /*minChunks=*/1);
         Variator::ToExecutor(Variator::SingleScript(script)).Execute();
     }
 
@@ -226,21 +197,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
     // leaf values are the raw serialized sub-values, so dictionary encode/decode (KFF=1) must round-trip
     // all of them losslessly.
     Y_UNIT_TEST(AllValueTypes) {
-        const TString script = TStringBuilder() << R"(
-        STOP_COMPACTION
-        ------
-        SCHEMA:
-        CREATE TABLE `/Root/ColumnTable` (
-            Col1 Uint64 NOT NULL,
-            Col2 JsonDocument,
-            PRIMARY KEY (Col1)
-        )
-        PARTITION BY HASH(Col1)
-        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
+        const TString script = TStringBuilder() << DictionaryTableSetup() << R"(
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`true`,
                     `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0`, `DICTIONARY_DETECTOR_KFF`=`1`)
@@ -267,15 +224,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
         {
-            auto result = session.ExecuteSchemeQuery(R"(
-                CREATE TABLE `/Root/ColumnTable` (
-                    Col1 Uint64 NOT NULL,
-                    Col2 JsonDocument,
-                    PRIMARY KEY (Col1)
-                )
-                PARTITION BY HASH(Col1)
-                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
-            )").GetValueSync();
+            auto result = session.ExecuteSchemeQuery(CreateColumnTableDdl).GetValueSync();
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
 

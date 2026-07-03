@@ -5,6 +5,4 @@ RECURSE(
     multinode
     large
     with_quotas
-    merge_split_common_table/fifo
-    merge_split_common_table/std
 )

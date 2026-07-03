@@ -164,7 +164,7 @@ NImport::EIndexPopulationMode TProtoAccessor::FromProto(Ydb::Import::ImportFromS
     }
 }
 
-NExport::TYdbDumpFormat TProtoAccessor::FromProto(Ydb::Export::YdbDumpFormat) {
+NExport::TYdbDumpFormat TProtoAccessor::FromProto(const Ydb::Export::YdbDumpFormat&) {
     return NExport::TYdbDumpFormat();
 }
 

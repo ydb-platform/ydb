@@ -66,4 +66,4 @@
     - [Перекос времени](metrics.md#timeskew)
     - [Потребление CPU](metrics.md#cpu)
     - [Потребление памяти](metrics.md#memory)
-  - [Подсказки оптимизатора](hints.md)
+- [Подсказки оптимизатора](hints.md)

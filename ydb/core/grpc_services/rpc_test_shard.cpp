@@ -372,7 +372,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(req->path());
+            pathPair = SplitPath(Request_->GetDatabaseName(), req->path());
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);

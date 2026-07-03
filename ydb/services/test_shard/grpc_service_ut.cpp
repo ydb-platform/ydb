@@ -92,7 +92,7 @@ private:
 };
 
 
-Y_UNIT_TEST_SUITE(TestShardGRPCService) {
+Y_UNIT_TEST_SUITE(TestShardSetGRPCService) {
 
     template <typename TCtx>
     void AdjustCtxForDB(TCtx &ctx) {
@@ -420,6 +420,6 @@ tracing:
         }
     }
 
-} // Y_UNIT_TEST_SUITE(TestShardGRPCService)
+} // Y_UNIT_TEST_SUITE(TestShardSetGRPCService)
 
 } // NKikimr::NGRpcService

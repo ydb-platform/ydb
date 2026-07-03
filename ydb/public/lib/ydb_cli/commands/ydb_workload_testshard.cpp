@@ -31,7 +31,7 @@ void TCommandTestShardInit::Config(TConfig& config) {
     config.Opts->AddLongOption('f', "config-file", "Path to YAML configuration file")
         .RequiredArgument("PATH").StoreResult(&ConfigFile);
     config.SetFreeArgsNum(1);
-    SetFreeArgTitle(0, "<path>", "Path to TestShard object");
+    SetFreeArgTitle(0, "<path>", "Path to TestShardSet object");
 }
 
 void TCommandTestShardInit::Parse(TConfig& config) {
@@ -71,14 +71,14 @@ int TCommandTestShardInit::Run(TConfig& config) {
 }
 
 TCommandTestShardClean::TCommandTestShardClean()
-    : TYdbCommand("clean", {}, "Delete TestShard object")
+    : TYdbCommand("clean", {}, "Delete TestShardSet object")
 {
 }
 
 void TCommandTestShardClean::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.SetFreeArgsNum(1);
-    SetFreeArgTitle(0, "<path>", "Path to TestShard object");
+    SetFreeArgTitle(0, "<path>", "Path to TestShardSet object");
 }
 
 void TCommandTestShardClean::Parse(TConfig& config) {
@@ -93,7 +93,7 @@ int TCommandTestShardClean::Run(TConfig& config) {
     auto result = client.DeleteTestShardSet(Path).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
-    Cout << "TestShard object deleted successfully." << Endl;
+    Cout << "TestShardSet object deleted successfully." << Endl;
 
     return EXIT_SUCCESS;
 }

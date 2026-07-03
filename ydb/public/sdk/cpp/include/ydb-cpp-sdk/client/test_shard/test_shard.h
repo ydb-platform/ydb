@@ -40,8 +40,8 @@ public:
     TAsyncCreateTestShardSetResult CreateTestShardSet(
         const std::string& path,
         const std::vector<std::string>& channels,
-        uint32_t count = 1,
-        const std::string& config = {},
+        uint32_t count,
+        const std::string& config,
         const TCreateTestShardSetSettings& settings = {});
 
     TAsyncStatus DeleteTestShardSet(

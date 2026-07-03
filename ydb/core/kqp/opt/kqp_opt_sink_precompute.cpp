@@ -35,6 +35,10 @@ public:
     TStatus DoTransform(TExprNode::TPtr inputExpr, TExprNode::TPtr& outputExpr, TExprContext& ctx) final {
         outputExpr = inputExpr;
 
+        if (KqpCtx->Config->GetEnableStreamWrite()) {
+            return TStatus::Ok;
+        }
+
         TNodeOnNodeOwnedMap marked;
 
         {
@@ -51,42 +55,36 @@ public:
                 }
             }
 
-            {
-                auto markCommonUndeterminedStages = [&](const TNodeOnNodeOwnedMap& left, const TNodeOnNodeOwnedMap& right) {
-                    for (const auto& [_, exprNode] : FindStagesUsedForBothStagesSets(left, right)) {
-                        AFL_ENSURE(exprNode);
-                        TExprBase node(exprNode);
-                        const auto stage = node.Cast<TDqStage>();
-                        if (HasNonDeterministicFunction(stage) || !IsKqpPureInputs(stage.Inputs())) {
-                            marked.emplace(node.Raw(), node.Ptr());
-                        }
+            auto markCommonStages = [&](const TNodeOnNodeOwnedMap& left, const TNodeOnNodeOwnedMap& right, bool markUndetermined) {
+                for (const auto& [_, exprNode] : FindStagesUsedForBothStagesSets(left, right)) {
+                    AFL_ENSURE(exprNode);
+                    TExprBase node(exprNode);
+                    const auto stage = node.Cast<TDqStage>();
+                    if ((markUndetermined && HasNonDeterministicFunction(stage)) || !IsKqpPureInputs(stage.Inputs())) {
+                        marked.emplace(node.Raw(), node.Ptr());
                     }
-                };
+                }
+            };
 
-                markCommonUndeterminedStages(precomputeStages, sinkStages);
-                markCommonUndeterminedStages(returningStages, precomputeStages);
-                markCommonUndeterminedStages(sinkStages, returningStages);
+            {
+                markCommonStages(precomputeStages, sinkStages, true);
+                markCommonStages(returningStages, precomputeStages, true);
+                markCommonStages(sinkStages, returningStages, true);
             }
 
             {
-                const auto resultStages = GatherResultStages(outputExpr, ctx);
+                auto resultStages = GatherResultStages(outputExpr, ctx);
                 if (!resultStages) {
                     return TStatus::Error;
                 }
 
-                auto markCommonStages = [&](const TNodeOnNodeOwnedMap& left, const TNodeOnNodeOwnedMap& right) {
-                    for (const auto& [_, exprNode] : FindStagesUsedForBothStagesSets(left, right)) {
-                        AFL_ENSURE(exprNode);
-                        TExprBase node(exprNode);
-                        const auto stage = node.Cast<TDqStage>();
-                        if (!IsKqpPureInputs(stage.Inputs())) {
-                            marked.emplace(node.Raw(), node.Ptr());
-                        }
-                    }
-                };
-                
-                markCommonStages(*resultStages, sinkStages);
-                markCommonStages(*resultStages, returningStages);
+                // Make resultStages to contain only SELECT results without RETURNING.
+                for (const auto& [exprNodeRaw, _] : returningStages) {
+                    resultStages->erase(exprNodeRaw);
+                }
+
+                markCommonStages(*resultStages, sinkStages, false);
+                markCommonStages(*resultStages, returningStages, false);
             }
         }
 
@@ -279,6 +277,7 @@ private:
             for (const auto& input : stage.Inputs()) {
                 if (auto maybePrecompute = input.Maybe<TDqPhyPrecompute>()) {
                     const auto precomputeStage = maybePrecompute.Cast().Connection().Output().Stage();
+                    AFL_ENSURE(precomputeStage.Raw() != stage.Raw());
                     precomputeStages.emplace(precomputeStage.Raw(), precomputeStage.Ptr());
                 } else if (auto maybeSource = input.Maybe<TDqSource>()) {
                     VisitExpr(maybeSource.Cast().Ptr(),
@@ -286,6 +285,7 @@ private:
                             TExprBase node(ptr);
                             if (auto maybePrecompute = node.Maybe<TDqPhyPrecompute>()) {
                                 const auto precomputeStage = maybePrecompute.Cast().Connection().Output().Stage();
+                                AFL_ENSURE(precomputeStage.Raw() != stage.Raw());
                                 precomputeStages.emplace(precomputeStage.Raw(), precomputeStage.Ptr());
                                 return false;
                             }
@@ -312,12 +312,12 @@ private:
                         }
                     } else if (auto maybeTransform = output.Maybe<TDqTransform>()) {
                         const auto transform = maybeTransform.Cast();
-                        if (const auto sinkSettings = transform.Settings().Maybe<TKqpTableSinkSettings>()) {
-                            sinkOrTransformOutputsCount++;
-                            AFL_ENSURE(sinkSettings.Cast().Mode() != "fill_table");
-                            AFL_ENSURE(kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Datashard);
-                            returningStages.emplace(stage.Raw(), stage.Ptr());
-                        }
+                        const auto sinkSettings = transform.Settings().Maybe<TKqpTableSinkSettings>();
+                        AFL_ENSURE(sinkSettings);
+                        sinkOrTransformOutputsCount++;
+                        AFL_ENSURE(sinkSettings.Cast().Mode() != "fill_table");
+                        AFL_ENSURE(kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Datashard);
+                        returningStages.emplace(stage.Raw(), stage.Ptr());
                     }
                 }
 

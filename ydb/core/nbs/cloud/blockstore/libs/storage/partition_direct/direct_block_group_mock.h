@@ -36,6 +36,7 @@ struct TOracleMock: public IOracle
 
     void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) override;
     void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
+    TDuration GetDDiskReconnectDelay(THostIndex hostIndex) override;
 
     void OnRequestCancelled(
         THostIndex hostIndex,

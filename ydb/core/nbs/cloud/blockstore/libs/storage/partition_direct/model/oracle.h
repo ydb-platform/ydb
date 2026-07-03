@@ -44,6 +44,7 @@ public:
         TInstant now) = 0;
     virtual void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) = 0;
     virtual void OnDDiskConnected(THostIndex hostIndex, TInstant now) = 0;
+    virtual TDuration GetDDiskReconnectDelay(THostIndex hostIndex) = 0;
     virtual void OnRequestCancelled(
         THostIndex hostIndex,
         EOperation operation,
@@ -93,6 +94,7 @@ public:
         TInstant now) override;
     void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) override;
     void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
+    TDuration GetDDiskReconnectDelay(THostIndex hostIndex) override;
     void OnRequestCancelled(
         THostIndex hostIndex,
         EOperation operation,
@@ -131,6 +133,7 @@ private:
     TVector<THostStat> HostStatistics;
     TVector<THostState> HostStates;
     TVector<EHostHealth> HostsHealths;
+    TVector<TDuration> HostsReconnectDelays;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

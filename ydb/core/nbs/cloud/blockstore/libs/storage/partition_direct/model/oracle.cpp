@@ -108,6 +108,9 @@ TOracle::TOracle(
     , DefaultWriteMode(GetWriteModeFromProto(StorageConfig->GetWriteMode()))
     , HostStatistics(DirectBlockGroupHostCount)
     , HostStates(DirectBlockGroupHostCount)
+    , HostsReconnectDelays(
+          DirectBlockGroupHostCount,
+          TDuration::MilliSeconds(20))
 {
     HostsHealths.resize(HostStates.size());
     for (auto& healths: HostsHealths) {
@@ -203,6 +206,12 @@ void TOracle::OnDDiskDisconnected(THostIndex hostIndex, TInstant now)
 void TOracle::OnDDiskConnected(THostIndex hostIndex, TInstant now)
 {
     Y_UNUSED(hostIndex, now);
+}
+
+TDuration TOracle::GetDDiskReconnectDelay(THostIndex hostIndex)
+{
+    HostsReconnectDelays[hostIndex] *= 2;
+    return HostsReconnectDelays[hostIndex];
 }
 
 void TOracle::OnRequestCancelled(

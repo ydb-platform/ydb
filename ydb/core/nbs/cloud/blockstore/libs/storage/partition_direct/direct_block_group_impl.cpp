@@ -1241,14 +1241,12 @@ void TDirectBlockGroup::OnConnectionEstablished(
             }
             connection.SessionState = EDDiskSessionState::Locked;
             connection.ConfirmedSessionSeqNo = seqNo;
+            Oracle.OnDDiskConnected(index, TInstant::Now());
         }
         // INVARIANT: PBuffer does NOT require a session/lock
     } else {
         // TODO (future phase): handle the error code/BLOCKED, transition to
         // Broken/suicide.
-        Y_ABORT(
-            "TDirectBlockGroup::OnConnectionEstablished: connection failed - "
-            "unhandled error");
     }
 
     // ConnectPromise resolves both "connection ready" and "session ready" in
@@ -1269,17 +1267,20 @@ void TDirectBlockGroup::OnConnectionEstablished(
 
 void TDirectBlockGroup::ReEstablishDDiskConnection(
     size_t index,
-    EConnectionType connectionType)
+    TDuration reconnectDelay)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     Y_ABORT_UNLESS(index < DDiskConnections.size());
 
-    TDDiskConnection& connection = connectionType == EConnectionType::DDisk
-                                       ? DDiskConnections[index]
-                                       : PBufferConnections[index];
-
-    connection.ResetSession();
-    DoEstablishConnection(index, connectionType);
+    DDiskConnections[index].ResetSession();
+    Schedule(
+        reconnectDelay,
+        [index, weakSelf = weak_from_this()]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->DoEstablishConnection(index, EConnectionType::DDisk);
+            }
+        });
 }
 
 void TDirectBlockGroup::OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId)
@@ -1296,7 +1297,8 @@ void TDirectBlockGroup::OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId)
 
     Oracle.OnDDiskDisconnected(hostIndex, TInstant::Now());
     // OnNodeDisconnected may be called only for DDisk
-    ReEstablishDDiskConnection(hostIndex, EConnectionType::DDisk);
+    TDuration reconnectDelay = Oracle.GetDDiskReconnectDelay(hostIndex);
+    ReEstablishDDiskConnection(hostIndex, reconnectDelay);
 }
 
 bool TDirectBlockGroup::HasPBufferQuorum() const

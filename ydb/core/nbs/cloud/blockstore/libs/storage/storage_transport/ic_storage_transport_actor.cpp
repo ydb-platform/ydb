@@ -51,6 +51,7 @@ void RejectAllPending(TMap& map)
             event.Record);
         request.second->Promise.SetValue(std::move(event.Record));
     }
+    map.clear();
 }
 
 template <typename T>

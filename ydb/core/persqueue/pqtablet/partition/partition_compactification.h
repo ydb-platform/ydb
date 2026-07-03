@@ -129,7 +129,7 @@ public:
         bool ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
         bool ProcessResponse(NBatching::TEvProcessBatchKeysResult::TPtr& ev);
         bool ProcessReadResult(NKikimrClient::TCmdReadResult& readResult);
-        bool MaybeRequestBatchKeys(const NKikimrClient::TCmdReadResult& readResult);
+        bool MaybeRequestBatchKeys(NKikimrClient::TCmdReadResult& readResult);
 
         EStep ContinueIfPossible(ui64 nextCookie);
         void RunKvRequest();

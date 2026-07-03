@@ -60,12 +60,12 @@ struct TEvProcessBatchKeys : public NActors::TEventLocal<TEvProcessBatchKeys, TE
 };
 
 struct TEvProcessBatchKeysResult : public NActors::TEventLocal<TEvProcessBatchKeysResult, TEvPQ::EvProcessBatchKeysResult> {
-    explicit TEvProcessBatchKeysResult(THashMap<ui64, TString>&& offsetToKeys)
-        : OffsetToKeys(std::move(offsetToKeys))
+    explicit TEvProcessBatchKeysResult(THashMap<ui64, TString>&& offsetToKey)
+        : OffsetToKey(std::move(offsetToKey))
     {
     }
 
-    THashMap<ui64, TString> OffsetToKeys;
+    THashMap<ui64, TString> OffsetToKey;
 };
 
 class TBatchProcessor : public TBaseTabletActor<TBatchProcessor>, private TConstantLogPrefix {

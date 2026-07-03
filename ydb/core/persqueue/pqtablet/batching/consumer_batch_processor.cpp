@@ -124,7 +124,7 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatchKeys::TPtr& ev, const NActor
     CurrentCPUUsagePartitionId = context.PartitionId;
     HasCurrentCPUUsagePartitionId = true;
 
-    THashMap<ui64, TString> offsetToKeys;
+    THashMap<ui64, TString> offsetToKey;
 
     for (const auto& result : context.Results) {
         if (result.GetData().empty()) {
@@ -138,7 +138,7 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatchKeys::TPtr& ev, const NActor
 
         if (!result.GetIsBatch()) {
             auto key = GetCompactionKey(dataChunk);
-            offsetToKeys[result.GetOffset()] = std::move(key);
+            offsetToKey[result.GetOffset()] = std::move(key);
             continue;
         }
 
@@ -147,12 +147,12 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatchKeys::TPtr& ev, const NActor
             TBatchCutterData data(result, std::move(dataChunk));
             auto batchKeys = it->second->GetKeys(data, result.GetOffset());
             for (auto& [key, offset] : batchKeys) {
-                offsetToKeys[offset] = std::move(key);
+                offsetToKey[offset] = std::move(key);
             }
         }
     }
 
-    ctx.Send(context.ResponseActor, new TEvProcessBatchKeysResult(std::move(offsetToKeys)));
+    ctx.Send(context.ResponseActor, new TEvProcessBatchKeysResult(std::move(offsetToKey)));
 }
 
 void TConsumerBatchProcessor::FlushCPUUsageMetrics(const NActors::TActorContext& ctx, bool scheduleNext) {

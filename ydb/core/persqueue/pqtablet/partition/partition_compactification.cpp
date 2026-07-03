@@ -210,7 +210,7 @@ void TPartitionCompaction::TReadState::ProcessResponse(NBatching::TEvProcessBatc
     AFL_ENSURE(BatchKeysRequestsInflight > 0);
     --BatchKeysRequestsInflight;
 
-    for (auto& [offset, key] : ev->Get()->OffsetToKeys) {
+    for (auto& [offset, key] : ev->Get()->OffsetToKey) {
         TopicData[key] = offset;
     }
 }
@@ -483,25 +483,24 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
     return ProcessReadResult(readResult);
 }
 
-bool TPartitionCompaction::TCompactState::MaybeRequestBatchKeys(const NKikimrClient::TCmdReadResult& readResult) {
+bool TPartitionCompaction::TCompactState::MaybeRequestBatchKeys(NKikimrClient::TCmdReadResult& readResult) {
     if (BatchKeysRequestInflight || PendingReadResult) {
         return true;
     }
 
-    bool hasBatch = false;
     TVector<NKikimrClient::TCmdReadResult::TResult> results;
-    results.reserve(readResult.ResultSize());
     for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
         const auto& result = readResult.GetResult(i);
-        hasBatch = hasBatch || result.GetIsBatch();
-        results.push_back(result);
+        if (result.GetIsBatch()) {
+            results.push_back(result);
+        }
     }
 
-    if (!hasBatch) {
+    if (results.empty()) {
         return false;
     }
 
-    PendingReadResult.ConstructInPlace(readResult);
+    PendingReadResult.ConstructInPlace(std::move(readResult));
     BatchKeysRequestInflight = true;
     PartitionActor->Send(PartitionActor->BatchProcessorActor, new NBatching::TEvProcessBatchKeys(NBatching::TBatchKeysProcessingContext{
         .PartitionId = PartitionActor->Partition.InternalPartitionId,
@@ -516,7 +515,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(NBatching::TEvProcessB
     AFL_ENSURE(PendingReadResult);
 
     BatchKeysRequestInflight = false;
-    PendingBatchOffsetKeys = std::move(ev->Get()->OffsetToKeys);
+    PendingBatchOffsetKeys = std::move(ev->Get()->OffsetToKey);
 
     auto readResult = std::move(PendingReadResult.GetRef());
     PendingReadResult = Nothing();

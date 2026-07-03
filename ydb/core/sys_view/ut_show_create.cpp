@@ -51,20 +51,6 @@ public:
         return ShowCreate(session, "EXTERNAL DATA SOURCE", dataSourceName);
     }
 
-    void CheckShowCreateExternalDataSource(const std::string& dataSourceName, const std::string& expectedQuery = "") {
-        auto showCreateQuery = ShowCreateExternalDataSource(Session, dataSourceName);
-
-        if (!expectedQuery.empty()) {
-            TString normalizedExpected = NormalizeWhitespaceInQuery(UnescapeC(expectedQuery));
-            TString normalizedActual = NormalizeWhitespaceInQuery(UnescapeC(showCreateQuery));
-            UNIT_ASSERT_STRINGS_EQUAL(normalizedExpected, normalizedActual);
-        }
-
-        // The output must contain the canonical SQL header.
-        UNIT_ASSERT_C(showCreateQuery.find("CREATE EXTERNAL DATA SOURCE") != std::string::npos,
-            "SHOW CREATE EXTERNAL DATA SOURCE output must contain the CREATE statement: " << showCreateQuery);
-    }
-
     void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false, bool initialScan = false) {
         auto session = QueryClient.GetSession().GetValueSync().GetSession();
 

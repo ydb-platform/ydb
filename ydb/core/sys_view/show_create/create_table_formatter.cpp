@@ -94,61 +94,61 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         }
         case NYdb::EPrimitiveType::Int8: {
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int8, NUdf::TUnboxedValuePod(parser.GetInt8()));
-            Y_ENSURE(str.HasValue());
+            Y_ENSURE(str.HasValue(), "Failed to convert Int8 value to string");
             Stream << TString(str.AsStringRef());
             break;
         }
         case NYdb::EPrimitiveType::Uint8: {
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint8, NUdf::TUnboxedValuePod(parser.GetUint8()));
-            Y_ENSURE(str.HasValue());
+            Y_ENSURE(str.HasValue(), "Failed to convert Uint8 value to string");
             Stream << TString(str.AsStringRef());
             break;
         }
         case NYdb::EPrimitiveType::Int16: {
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int16, NUdf::TUnboxedValuePod(parser.GetInt16()));
-            Y_ENSURE(str.HasValue());
+            Y_ENSURE(str.HasValue(), "Failed to convert Int16 value to string");
             Stream << TString(str.AsStringRef());
             break;
         }
         case NYdb::EPrimitiveType::Uint16: {
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint16, NUdf::TUnboxedValuePod(parser.GetUint16()));
-            Y_ENSURE(str.HasValue());
+            Y_ENSURE(str.HasValue(), "Failed to convert Uint16 value to string");
             Stream << TString(str.AsStringRef());
             break;
         }
         case NYdb::EPrimitiveType::Int32: {
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int32, NUdf::TUnboxedValuePod(parser.GetInt32()));
-            Y_ENSURE(str.HasValue());
+            Y_ENSURE(str.HasValue(), "Failed to convert Int32 value to string");
             Stream << TString(str.AsStringRef());
             break;
         }
         case NYdb::EPrimitiveType::Uint32: {
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint32, NUdf::TUnboxedValuePod(parser.GetUint32()));
-            Y_ENSURE(str.HasValue());
+            Y_ENSURE(str.HasValue(), "Failed to convert Uint32 value to string");
             Stream << TString(str.AsStringRef());
             break;
         }
         case NYdb::EPrimitiveType::Int64: {
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetInt64())));
-            Y_ENSURE(str.HasValue());
+            Y_ENSURE(str.HasValue(), "Failed to convert Int64 value to string");
             Stream << TString(str.AsStringRef());
             break;
         }
         case NYdb::EPrimitiveType::Uint64: {
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint64, NUdf::TUnboxedValuePod(static_cast<ui64>(parser.GetUint64())));
-            Y_ENSURE(str.HasValue());
+            Y_ENSURE(str.HasValue(), "Failed to convert Uint64 value to string");
             Stream << TString(str.AsStringRef());
             break;
         }
         case NYdb::EPrimitiveType::Float: {
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Float, NUdf::TUnboxedValuePod(parser.GetFloat()));
-            Y_ENSURE(str.HasValue());
+            Y_ENSURE(str.HasValue(), "Failed to convert Float value to string");
             Stream << TString(str.AsStringRef());
             break;
         }
         case NYdb::EPrimitiveType::Double: {
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Double, NUdf::TUnboxedValuePod(parser.GetDouble()));
-            Y_ENSURE(str.HasValue());
+            Y_ENSURE(str.HasValue(), "Failed to convert Double value to string");
             Stream << TString(str.AsStringRef());
             break;
         }
@@ -177,7 +177,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         case NYdb::EPrimitiveType::Interval: {
             Stream << "INTERVAL(";
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetInterval())));
-            Y_ENSURE(str.HasValue());
+            Y_ENSURE(str.HasValue(), "Failed to convert Interval value to string");
             EscapeString(TString(str.AsStringRef()), Stream);
             Stream << ")";
             break;
@@ -185,7 +185,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         case NYdb::EPrimitiveType::Date32: {
             Stream << "DATE32(";
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Date32, NUdf::TUnboxedValuePod(parser.GetDate32().time_since_epoch().count()));
-            Y_ENSURE(str.HasValue());
+            Y_ENSURE(str.HasValue(), "Failed to convert Date32 value to string");
             EscapeString(TString(str.AsStringRef()), Stream);
             Stream << ")";
             break;
@@ -193,7 +193,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         case NYdb::EPrimitiveType::Datetime64: {
             Stream << "DATETIME64(";
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Datetime64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetDatetime64().time_since_epoch().count())));
-            Y_ENSURE(str.HasValue());
+            Y_ENSURE(str.HasValue(), "Failed to convert Datetime64 value to string");
             EscapeString(TString(str.AsStringRef()), Stream);
             Stream << ")";
             break;
@@ -201,7 +201,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         case NYdb::EPrimitiveType::Timestamp64: {
             Stream << "TIMESTAMP64(";
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Timestamp64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetTimestamp64().time_since_epoch().count())));
-            Y_ENSURE(str.HasValue());
+            Y_ENSURE(str.HasValue(), "Failed to convert Timestamp64 value to string");
             EscapeString(TString(str.AsStringRef()), Stream);
             Stream << ")";
             break;
@@ -209,7 +209,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         case NYdb::EPrimitiveType::Interval64: {
             Stream << "INTERVAL64(";
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetInterval64().count())));
-            Y_ENSURE(str.HasValue());
+            Y_ENSURE(str.HasValue(), "Failed to convert Interval64 value to string");
             EscapeString(TString(str.AsStringRef()), Stream);
             Stream << ")";
             break;
@@ -282,8 +282,8 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
         return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
     }
 
-    Y_ENSURE(!tableDesc.GetColumns().empty());
-    Y_ENSURE(tableDesc.GetColumns().size() == createRequest.columns().size());
+    Y_ENSURE(!tableDesc.GetColumns().empty(), "Table description has no columns (table may be in an intermediate schema state)");
+    Y_ENSURE(tableDesc.GetColumns().size() == createRequest.columns().size(), "Column count mismatch between table description and create request");
 
     std::map<ui32, const TColumnDescription*> columns;
 
@@ -349,7 +349,7 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
         }
     }
 
-    Y_ENSURE(!tableDesc.GetKeyColumnIds().empty());
+    Y_ENSURE(!tableDesc.GetKeyColumnIds().empty(), "Table description has no key columns (table may be in an intermediate schema state)");
     if (isFamilyPrinted) {
         Stream << ",\n";
     }
@@ -423,7 +423,8 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
     Stream << ";";
 
     if (!tableDesc.GetCdcStreams().empty()) {
-        Y_ENSURE((ui32)tableDesc.GetCdcStreams().size() == persQueues.size());
+        Y_ENSURE((ui32)tableDesc.GetCdcStreams().size() == persQueues.size(),
+            "Number of CDC streams does not match the number of resolved changefeed topic descriptions");
         auto firstColumnTypeId = columns[tableDesc.GetKeyColumnIds(0)]->GetTypeId();
         try {
             for (int i = 0; i < tableDesc.GetCdcStreams().size(); i++) {
@@ -564,7 +565,7 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::TableIndex::TYPE_NOT_SET");
     }
 
-    Y_ENSURE(!index.index_columns().empty());
+    Y_ENSURE(!index.index_columns().empty(), "Index has no columns");
     Stream << "(";
     EscapeName(index.index_columns(0), Stream);
     for (int i = 1; i < index.index_columns().size(); i++) {
@@ -664,9 +665,9 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
     if (fulltextIndexSettings) {
         Stream << " WITH (";
 
-        Y_ENSURE(fulltextIndexSettings->columns().size() == 1);
+        Y_ENSURE(fulltextIndexSettings->columns().size() == 1, "Fulltext index settings must have exactly one column");
         auto analyzers = fulltextIndexSettings->columns().at(0).analyzers();
-        Y_ENSURE(analyzers.has_tokenizer());
+        Y_ENSURE(analyzers.has_tokenizer(), "Fulltext index analyzer settings have no tokenizer");
         Stream << "tokenizer=";
         switch (analyzers.tokenizer()) {
             case Ydb::Table::FulltextIndexSettings_Tokenizer_WHITESPACE:
@@ -807,7 +808,7 @@ bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
         }
     }
 
-    Y_ENSURE(familyName);
+    Y_ENSURE(familyName, "Family name must not be empty");
 
     Stream << "\tFAMILY ";
     EscapeName(familyName, Stream);
@@ -933,7 +934,7 @@ void TCreateTableFormatter::Format(ui64 expireAfterSeconds, std::optional<TStrin
     TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
     Stream << "INTERVAL(";
     const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(expireAfterSeconds * 1000000));
-    Y_ENSURE(str.HasValue());
+    Y_ENSURE(str.HasValue(), "Failed to convert TTL expiration interval to string");
     EscapeString(TString(str.AsStringRef()), Stream);
     Stream << ") ";
     if (storage) {
@@ -1161,7 +1162,7 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
         Stream << "INTERVAL(";
         ui64 retentionPeriod = partitionConfig.GetLifetimeSeconds();
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(retentionPeriod * 1000000));
-        Y_ENSURE(str.HasValue());
+        Y_ENSURE(str.HasValue(), "Failed to convert retention period to string");
         EscapeString(TString(str.AsStringRef()), Stream);
         Stream << ")";
         del = ", ";
@@ -1343,8 +1344,42 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
         }
     }
 
+<<<<<<< HEAD
     Y_ENSURE(!schema.GetKeyColumnNames().empty());
     if (isFamilyPrinted) {
+=======
+    bool hasInlineIndex = false;
+    std::set<TString> inlineFormattedIndexes;
+    if (enableLocalIndexAsSchemeObject && !schema.GetIndexes().empty()) {
+        try {
+            for (const auto& index : schema.GetIndexes()) {
+                // Check if this is a bloom filter or bloom ngram filter that should be formatted inline
+                if (index.HasBloomFilter() || index.HasBloomNGrammFilter() || index.HasMinMaxIndex()) {
+                    if (isFamilyPrinted || hasInlineIndex) {
+                        Stream << ",\n";
+                        isFamilyPrinted = false;
+                    }
+                    hasInlineIndex = true;
+                    inlineFormattedIndexes.insert(index.GetName());
+                    if (index.HasBloomFilter()) {
+                        FormatLocalBloomFilterIndexInline(index, columns);
+                    } else if (index.HasBloomNGrammFilter()){
+                        FormatLocalBloomNgramFilterIndexInline(index, columns);
+                    } else {
+                        FormatLocalMinMaxIndexInline(index, columns);
+                    }
+                }
+            }
+        } catch (const TFormatFail& ex) {
+            return TFormatResult(ex.Status, ex.Error);
+        } catch (const yexception& e) {
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+        }
+    }
+
+    Y_ENSURE(!schema.GetKeyColumnNames().empty(), "Table description has no key columns");
+    if (isFamilyPrinted || hasInlineIndex) {
+>>>>>>> 9321dfeefee (Handle yexceptions in show create (#45352))
         Stream << ",\n";
     }
     Stream << "\tPRIMARY KEY (";
@@ -1473,43 +1508,43 @@ TString TCreateTableFormatter::ValueToString(const NKikimrColumnShardColumnDefau
         }
     } else if (scalar.HasUint8()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint8, NUdf::TUnboxedValuePod(scalar.GetUint8()));
-        Y_ENSURE(str.HasValue());
+        Y_ENSURE(str.HasValue(), "Failed to convert Uint8 value to string");
         stream << TString(str.AsStringRef());
     } else if (scalar.HasUint16()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint16, NUdf::TUnboxedValuePod(scalar.GetUint16()));
-        Y_ENSURE(str.HasValue());
+        Y_ENSURE(str.HasValue(), "Failed to convert Uint16 value to string");
         stream << TString(str.AsStringRef());
     } else if (scalar.HasUint32()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint32, NUdf::TUnboxedValuePod(scalar.GetUint32()));
-        Y_ENSURE(str.HasValue());
+        Y_ENSURE(str.HasValue(), "Failed to convert Uint32 value to string");
         stream << TString(str.AsStringRef());
     } else if (scalar.HasUint64()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint64, NUdf::TUnboxedValuePod(static_cast<ui64>(scalar.GetUint64())));
-        Y_ENSURE(str.HasValue());
+        Y_ENSURE(str.HasValue(), "Failed to convert Uint64 value to string");
         stream << TString(str.AsStringRef());
     } else if (scalar.HasInt8()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int8, NUdf::TUnboxedValuePod(scalar.GetInt8()));
-        Y_ENSURE(str.HasValue());
+        Y_ENSURE(str.HasValue(), "Failed to convert Int8 value to string");
         stream << TString(str.AsStringRef());
     } else if (scalar.HasInt16()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int16, NUdf::TUnboxedValuePod(scalar.GetInt16()));
-        Y_ENSURE(str.HasValue());
+        Y_ENSURE(str.HasValue(), "Failed to convert Int16 value to string");
         stream << TString(str.AsStringRef());
     } else if (scalar.HasInt32()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int32, NUdf::TUnboxedValuePod(scalar.GetInt32()));
-        Y_ENSURE(str.HasValue());
+        Y_ENSURE(str.HasValue(), "Failed to convert Int32 value to string");
         stream << TString(str.AsStringRef());
     } else if (scalar.HasInt64()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int64, NUdf::TUnboxedValuePod(static_cast<i64>(scalar.GetInt64())));
-        Y_ENSURE(str.HasValue());
+        Y_ENSURE(str.HasValue(), "Failed to convert Int64 value to string");
         stream << TString(str.AsStringRef());
     } else if (scalar.HasDouble()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Double, NUdf::TUnboxedValuePod(scalar.GetDouble()));
-        Y_ENSURE(str.HasValue());
+        Y_ENSURE(str.HasValue(), "Failed to convert Double value to string");
         stream << TString(str.AsStringRef());
     } else if (scalar.HasFloat()) {
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Float, NUdf::TUnboxedValuePod(scalar.GetFloat()));
-        Y_ENSURE(str.HasValue());
+        Y_ENSURE(str.HasValue(), "Failed to convert Float value to string");
         stream << TString(str.AsStringRef());
     } else if (scalar.HasTimestamp()) {
         ui64 value = scalar.GetTimestamp().GetValue();
@@ -1529,7 +1564,7 @@ TString TCreateTableFormatter::ValueToString(const NKikimrColumnShardColumnDefau
         }
         stream << "TIMESTAMP(";
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Timestamp, NUdf::TUnboxedValuePod(value));
-        Y_ENSURE(str.HasValue());
+        Y_ENSURE(str.HasValue(), "Failed to convert Timestamp value to string");
         EscapeString(TString(str.AsStringRef()), stream);
         stream << ")";
     } else if (scalar.HasString()) {
@@ -1545,7 +1580,7 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnTableSharding& 
     switch (sharding.GetMethodCase()) {
         case NKikimrSchemeOp::TColumnTableSharding::kHashSharding: {
             const auto& hashSharding = sharding.GetHashSharding();
-            Y_ENSURE(!hashSharding.GetColumns().empty());
+            Y_ENSURE(!hashSharding.GetColumns().empty(), "Hash sharding has no columns");
             Stream << "PARTITION BY HASH(";
             EscapeName(hashSharding.GetColumns(0), Stream);
             for (int i = 1; i < hashSharding.GetColumns().size(); i++) {
@@ -1578,7 +1613,7 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDataLifeCycle& 
     bool first = true;
 
     if (!enabled.TiersSize()) {
-        Y_ENSURE(enabled.HasExpireAfterSeconds());
+        Y_ENSURE(enabled.HasExpireAfterSeconds(), "TTL settings must specify ExpireAfterSeconds when no tiers are defined");
         Format(enabled.GetExpireAfterSeconds());
     } else {
         for (const auto& tier : enabled.GetTiers()) {

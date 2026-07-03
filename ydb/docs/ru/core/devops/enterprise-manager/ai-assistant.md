@@ -13,6 +13,8 @@
 1. Способ добавить именованную запись с учётными данными модели в token-файл Gateway. Tokenator в Gateway читает этот файл и использует значение поля `Token` записи, у которой поле `Name` равно `ydb_em_ai_model_token_name`, например `model-token`, как upstream-заголовок `Authorization`.
 1. Если вы обновляете существующую установку, доступ к развёрнутому хосту Gateway.
 
+Для уже работающей установки сначала убедитесь, что хост Gateway управляется тем же Ansible inventory. Перед запуском playbook проверьте активный service manager unit, владельца процесса, путь к конфигурации, token-файл и порт, который слушает Gateway. Если на хосте используется custom или ручной layout Gateway, применяйте те же настройки через операционную процедуру этой установки, а не запускайте playbook вслепую.
+
 {% note warning %}
 
 Не помещайте API-ключи модели, OAuth-токены и другие секреты в `ydb_em_ai_assistant_client_runtime_config`. Gateway возвращает это значение в браузер через `GET /meta/ai_assistant_client_config`.
@@ -91,7 +93,7 @@ ydb_em_docs_search_enabled: true
 ydb_em_docs_search_embeddings_upstream_base_url: "https://llm.example.com/v1"
 ydb_em_docs_search_embeddings_token_name: "model-token"
 ydb_em_docs_search_embeddings_model: "<embeddings-model-name>"
-ydb_em_docs_search_vector_size: 1536
+ydb_em_docs_search_vector_size: 0
 ydb_em_docs_search_limit: 6
 ydb_em_docs_search_score: 0.6
 ```
@@ -102,7 +104,7 @@ ydb_em_docs_search_score: 0.6
 `ydb_em_docs_search_embeddings_upstream_base_url` | Базовый URL OpenAI-совместимого endpoint для embeddings.
 `ydb_em_docs_search_embeddings_token_name` | Имя записи tokenator для embeddings-запросов.
 `ydb_em_docs_search_embeddings_model` | Имя embeddings-модели.
-`ydb_em_docs_search_vector_size` | Ожидаемая размерность вектора эмбеддинга. Используйте `0`, чтобы отключить проверку размера.
+`ydb_em_docs_search_vector_size` | Необязательное переопределение размерности вектора эмбеддинга. Не задавайте переменную, чтобы использовать Ansible default `0`. При `0` Gateway не отправляет OpenAI-compatible поле `dimensions` и отключает проверку размера ответа. Положительное значение задавайте только если embeddings provider и модель поддерживают explicit dimensions и ожидаемый размер известен.
 `ydb_em_docs_search_limit` | Максимальное количество возвращаемых документов.
 `ydb_em_docs_search_score` | Минимальная оценка релевантности от `0` до `1`. Документы с меньшей оценкой не возвращаются.
 
@@ -166,6 +168,8 @@ curl -k https://<gateway-host>:8789/proxy/model/v1/chat/completions \
 
 Если в вашем развёртывании Gateway требует аутентификацию пользователя, добавьте те же authentication headers, которые используются для UI YDB EM.
 
+Если включён поиск по документации, также проверьте, что `/meta/mcp` публикует `search_docs`, и выполните безопасный поисковый запрос через ваш MCP-клиент или tooling ассистента. Это проверяет и регистрацию MCP-инструмента, и путь embeddings/metabase.
+
 ## Устранение неполадок {#troubleshooting}
 
 ### Кнопка ассистента не отображается {#button-not-shown}
@@ -191,3 +195,11 @@ curl -k https://<gateway-host>:8789/proxy/model/v1/chat/completions \
 ### Поиск по документации недоступен {#docs-search-unavailable}
 
 Проверьте настройки `ydb_em_docs_search_*`, путь embeddings endpoint и запись tokenator для embeddings-запросов. Также убедитесь, что documentation vectors доступны в metabase YDB EM. Если поиск по документации не настроен, инструмент `search_docs` не публикуется.
+
+### Embeddings endpoint отклоняет размер вектора {#embeddings-vector-size}
+
+Если `search_docs` падает с `variable embedding size not supported`, установите `ydb_em_docs_search_vector_size: 0` и проверьте embeddings endpoint и модель.
+
+### Поиск по документации возвращает 504 {#docs-search-504}
+
+Если `search_docs` возвращает `504 Gateway Timeout`, а в логах Gateway для `/meta/docs` есть `Member not found: doc_id`, проверьте таблицу metabase `ydb/Docs.db`. Текущий запрос Gateway docs search использует колонки `doc_id`, `embedding` и `payload`. Для полезных результатов в таблице также должны быть строки, а сама таблица должна быть построена для embeddings model, совместимой с `ydb_em_docs_search_embeddings_model`.

@@ -13,6 +13,8 @@ Make sure that you have:
 1. A way to add a named model credential entry to the Gateway token file. The tokenator in Gateway reads this file and uses the `Token` value of the entry whose `Name` equals `ydb_em_ai_model_token_name`, for example `model-token`, as the upstream `Authorization` header.
 1. If you are updating an existing installation, access to the deployed Gateway host.
 
+For an existing installation, first confirm that the Gateway host is managed by the same Ansible inventory. Check the active service manager unit, process owner, config path, token file, and listening port before applying the playbook. If the host uses a custom or manual Gateway layout, apply the same settings through that installation's operational procedure instead of running the playbook blindly.
+
 {% note warning %}
 
 Do not put model API keys, OAuth tokens, or other secrets into `ydb_em_ai_assistant_client_runtime_config`. Gateway returns this value to the browser from `GET /meta/ai_assistant_client_config`.
@@ -91,7 +93,7 @@ ydb_em_docs_search_enabled: true
 ydb_em_docs_search_embeddings_upstream_base_url: "https://llm.example.com/v1"
 ydb_em_docs_search_embeddings_token_name: "model-token"
 ydb_em_docs_search_embeddings_model: "<embeddings-model-name>"
-ydb_em_docs_search_vector_size: 1536
+ydb_em_docs_search_vector_size: 0
 ydb_em_docs_search_limit: 6
 ydb_em_docs_search_score: 0.6
 ```
@@ -102,7 +104,7 @@ Parameter | Description
 `ydb_em_docs_search_embeddings_upstream_base_url` | OpenAI-compatible embeddings endpoint base URL.
 `ydb_em_docs_search_embeddings_token_name` | Tokenator entry name for embeddings requests.
 `ydb_em_docs_search_embeddings_model` | Embeddings model name.
-`ydb_em_docs_search_vector_size` | Expected embedding vector dimension. Use `0` to skip the size check.
+`ydb_em_docs_search_vector_size` | Optional embedding vector dimension override. Leave it unset to use the Ansible default `0`. With `0`, Gateway omits the OpenAI-compatible `dimensions` field and skips the response size check. Set a positive value only when the embeddings provider and model support explicit dimensions and the expected size is known.
 `ydb_em_docs_search_limit` | Maximum number of documents returned.
 `ydb_em_docs_search_score` | Minimum similarity score from `0` to `1`. Documents with a lower score are filtered out.
 
@@ -166,6 +168,8 @@ curl -k https://<gateway-host>:8789/proxy/model/v1/chat/completions \
 
 If your deployment requires user authentication, add the same authentication headers that are used for the YDB EM UI.
 
+If documentation search is enabled, also check that `/meta/mcp` exposes `search_docs` and run a harmless documentation-search request through your MCP client or assistant tooling. This verifies both the MCP registration and the embeddings and metabase path.
+
 ## Troubleshooting {#troubleshooting}
 
 ### Assistant button is not shown {#button-not-shown}
@@ -191,3 +195,11 @@ Check that the runtime config contains `url: "/meta/mcp"` and that user requests
 ### Documentation search is unavailable {#docs-search-unavailable}
 
 Check the `ydb_em_docs_search_*` settings, the embeddings endpoint path, and the tokenator entry used for embeddings requests. Also make sure documentation vectors are available in the YDB EM metabase. If docs search is not configured, the `search_docs` tool is not exposed.
+
+### Embeddings endpoint rejects vector size {#embeddings-vector-size}
+
+If `search_docs` fails with `variable embedding size not supported`, set `ydb_em_docs_search_vector_size: 0` and verify the embeddings endpoint and model.
+
+### Documentation search returns 504 {#docs-search-504}
+
+If `search_docs` returns `504 Gateway Timeout` and Gateway logs for `/meta/docs` contain `Member not found: doc_id`, check the YDB EM metabase table `ydb/Docs.db`. The current Gateway docs search query uses the `doc_id`, `embedding`, and `payload` columns. For useful results, the table should also contain rows and be built for an embeddings model compatible with `ydb_em_docs_search_embeddings_model`.

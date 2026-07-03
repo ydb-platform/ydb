@@ -285,7 +285,9 @@ namespace NLWTrace {
                         if (shuttle->IsDead()) {
                             *ref = shuttle->Drop();
                         } else {
-                            result = result && shuttle->Fork(cHead);
+                            if (Y_UNLIKELY(!shuttle->Fork(cHead))) {
+                                result = false;
+                            }
                             ref = &shuttle->GetNext();
                         }
                     }

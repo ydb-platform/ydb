@@ -30,7 +30,7 @@ std::optional<std::vector<NArrow::TSerializedBatch>> TBuildSlicesTask::BuildSlic
     auto result = splitResult.DetachResult();
     if (result.size() > 1) {
         for (auto&& i : result) {
-            YDB_LOG_DEBUG("Dump event, blob, originalSize",
+            YDB_LOG_DEBUG("",
                 {"event", "strange_blobs_splitting"},
                 {"blob", i.DebugString()},
                 {"originalSize", WriteData.GetSize()});

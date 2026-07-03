@@ -211,7 +211,7 @@ public:
     TWriteOperation::TPtr GetOperationByInsertWriteIdVerified(const TInsertWriteId insertWriteId) const {
         auto it = InsertWriteIdToOpWriteId.find(insertWriteId);
         AFL_VERIFY(it != InsertWriteIdToOpWriteId.end())("write_id", insertWriteId);
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "Dump event, writeId, operationId",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
             {"event", "ask_by_insert_id"},
             {"writeId", insertWriteId},
             {"operationId", it->second});
@@ -223,7 +223,7 @@ public:
         AFL_VERIFY(op->GetInsertWriteIds() == insertions)("operation_data", JoinSeq(", ", op->GetInsertWriteIds()))(
             "expected", JoinSeq(", ", insertions));
         for (auto&& i : insertions) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "Dump event, writeId, operationId",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
                 {"event", "add_write_id_to_operation_id"},
                 {"writeId", i},
                 {"operationId", operationId});

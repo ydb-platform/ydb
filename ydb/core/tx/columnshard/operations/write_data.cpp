@@ -9,7 +9,7 @@ namespace NKikimr::NColumnShard {
 
 bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite::TOperation& proto, const NEvWrite::IPayloadReader& payload) {
     if (proto.GetPayloadFormat() != NKikimrDataEvents::FORMAT_ARROW) {
-        YDB_LOG_DEBUG("Dump event, payloadFormat",
+        YDB_LOG_DEBUG("",
             {"event", "invalid_payload_format"},
             {"payloadFormat", (ui64)proto.GetPayloadFormat()});
         return false;
@@ -18,7 +18,7 @@ bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite::TOperation& proto, con
     if (proto.HasType()) {
         auto type = TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(proto.GetType());
         if (!type) {
-            YDB_LOG_DEBUG("Dump event, proto",
+            YDB_LOG_DEBUG("",
                 {"event", "invalid_modification_type"},
                 {"proto", proto.DebugString()});
             return false;
@@ -84,25 +84,25 @@ bool TProtoArrowData::ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto
     if (proto.HasMeta()) {
         const auto& incomingDataScheme = proto.GetMeta().GetSchema();
         if (incomingDataScheme.empty() || proto.GetMeta().GetFormat() != NKikimrTxColumnShard::FORMAT_ARROW) {
-            YDB_LOG_DEBUG("Dump event",
+            YDB_LOG_DEBUG("",
                 {"event", "invalid_data_format"});
             return false;
         }
         ArrowSchema = NArrow::DeserializeSchema(incomingDataScheme);
         if (!ArrowSchema) {
-            YDB_LOG_DEBUG("Dump event",
+            YDB_LOG_DEBUG("",
                 {"event", "cannot_deserialize_data"});
             return false;
         }
     }
     OriginalDataSize = IncomingData.size();
     if (IncomingData.empty()) {
-        YDB_LOG_DEBUG("Dump event",
+        YDB_LOG_DEBUG("",
             {"event", "empty_data"});
         return false;
     }
     if (NColumnShard::TLimits::GetMaxBlobSize() < IncomingData.size() && !AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert()) {
-        YDB_LOG_DEBUG("Dump event",
+        YDB_LOG_DEBUG("",
             {"event", "too_big_blob"});
         return false;
     }

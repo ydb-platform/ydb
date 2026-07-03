@@ -16,7 +16,7 @@ std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBui
         writeMetaData.GetPathId(), Context.GetApplyToSnapshot(), Context.GetLockId(), ReadOnlyConflicts);
     request->TaskIdentifier = GetTaskId();
     request->SchemaVersion = Context.GetActualSchema()->GetVersion();
-    YDB_LOG_DEBUG("Dump event, count, taskId",
+    YDB_LOG_DEBUG("",
         {"event", "restore_start"},
         {"count", IncomingData.HasContainer() ? IncomingData->num_rows() : 0},
         {"taskId", WriteData.GetWriteMeta().GetId()});

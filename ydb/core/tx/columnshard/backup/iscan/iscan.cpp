@@ -285,7 +285,7 @@ public:
 
     void HandleGetS3Upload(TEvDataShard::TEvGetS3Upload::TPtr& ev) {
         const auto& msg = *ev->Get();
-        YDB_LOG_DEBUG("Dump component, event, txId",
+        YDB_LOG_DEBUG("",
             {"component", "TUploaderActor"},
             {"event", "GetS3Upload"},
             {"txId", msg.TxId});
@@ -299,7 +299,7 @@ public:
 
     void HandleStoreS3UploadId(TEvDataShard::TEvStoreS3UploadId::TPtr& ev) {
         const auto& msg = *ev->Get();
-        YDB_LOG_DEBUG("Dump component, event, txId, uploadId",
+        YDB_LOG_DEBUG("",
             {"component", "TUploaderActor"},
             {"event", "StoreS3UploadId"},
             {"txId", msg.TxId},
@@ -316,7 +316,7 @@ public:
 
     void HandleChangeS3UploadStatus(TEvDataShard::TEvChangeS3UploadStatus::TPtr& ev) {
         auto& msg = *ev->Get();
-        YDB_LOG_DEBUG("Dump component, event, txId, status",
+        YDB_LOG_DEBUG("",
             {"component", "TUploaderActor"},
             {"event", "ChangeS3UploadStatus"},
             {"txId", msg.TxId},

@@ -105,7 +105,7 @@ public:
             rowSchemaOrder.emplace_back(std::move(name), typeInfo);
         }
 
-        YDB_LOG_DEBUG("Dump event, keyColumns, valueColumns, totalColumns, rows",
+        YDB_LOG_DEBUG("",
             {"event", "s3_upload_rows_schema"},
             {"keyColumns", rowScheme.KeyColumnIdsSize()},
             {"valueColumns", rowScheme.ValueColumnIdsSize()},

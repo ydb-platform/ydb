@@ -89,7 +89,7 @@ ECompressionCodec NextCompressionCodec(ECompressionCodec cur) {
 TParquetExportSettings ParquetExportSettingsFromTask(const NKikimrSchemeOp::TBackupTask& task) {
     NKikimrSchemeOp::TParquetFormat taskParquetSettings;
     switch(task.GetSettingsCase()) {
-    case NKikimrSchemeOp::TBackupTask::kS3Settings: {        
+    case NKikimrSchemeOp::TBackupTask::kS3Settings: {
         auto& taskParquetSettings = task.GetS3Settings().GetExportDataSettings().GetParquet();
         return TParquetExportSettings().WithRowGroupSize(taskParquetSettings.GetRowGroupSize());
     }

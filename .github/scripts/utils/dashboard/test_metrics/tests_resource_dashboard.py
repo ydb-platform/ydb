@@ -75,6 +75,43 @@ EVLOG_AUX_OUTPUT_RE = re.compile(
 )
 
 
+def _suites_with_indexed_chunks(
+    chunks: dict[tuple[str, Optional[str], int], dict[str, Any]],
+) -> set[str]:
+    """Suites that have real [i/N] chunk rows in report (not only sole-chunk deps)."""
+    kinds: dict[str, dict[str, int]] = defaultdict(lambda: {"indexed": 0, "sole": 0})
+    for (suite_raw, _group, _idx), meta in chunks.items():
+        if meta.get("_fallback_alias"):
+            continue
+        suite = normalize_suite_path(suite_raw)
+        sub = str(meta.get("subtest_name", "") or "")
+        if CHUNK_SOLE_RE.search(sub):
+            kinds[suite]["sole"] += 1
+        else:
+            kinds[suite]["indexed"] += 1
+    return {suite for suite, k in kinds.items() if k["indexed"] > 0}
+
+
+def _is_dependency_sole_chunk_run(
+    run: dict[str, Any],
+    suites_with_indexed: set[str],
+) -> bool:
+    """Report 'sole chunk' row for recipe/deps when suite also has indexed test chunks."""
+    suite = normalize_suite_path(str(run.get("suite_path", "")))
+    if suite not in suites_with_indexed:
+        return False
+    if run.get("chunk_group"):
+        return False
+    raw = str(run.get("raw_name", "") or "").strip().lower()
+    if raw == "sole chunk" or CHUNK_SOLE_RE.search(raw):
+        return True
+    # Report run keyed as (suite, None, 0) without chunk_group.
+    try:
+        return int(run.get("chunk", -1)) == 0
+    except (TypeError, ValueError):
+        return False
+
+
 def load_json_or_jsonl(path: Path) -> list[dict[str, Any]]:
     text = path.read_text(encoding="utf-8", errors="replace").strip()
     if not text:
@@ -1395,7 +1432,13 @@ def main() -> None:
         suite_norm = normalize_suite_path(suite_raw)
         label = f"{suite_norm}::{group}/chunk{idx}" if group else f"{suite_norm}::chunk{idx}"
         tests_per_chunk_by_label[label] = count
+    suites_with_indexed = _suites_with_indexed_chunks(chunks)
     report_runs = parse_report_runs_from_chunks(chunks, args.suite_path)
+    report_runs = [
+        rr
+        for rr in report_runs
+        if not _is_dependency_sole_chunk_run(rr, suites_with_indexed)
+    ]
     evlog_runs = parse_evlog_runs(args.evlog, args.suite_path)
     evlog_by_key: dict[tuple[str, Optional[str], int], dict[str, Any]] = {}
     for er in evlog_runs:

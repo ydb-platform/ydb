@@ -210,13 +210,24 @@ def build_cpu_recommendations(
             dedup_runs_by_chunk[key] = r
     runs_for_recommendations = list(dedup_runs_by_chunk.values()) + dedup_runs_fallback
     parallel_stats = _compute_parallel_stats(runs_for_recommendations)
-    # Markers (suite_start_sec / suite_end_sec) must match the chart, which uses ALL runs.
-    # Dedup keeps one run per chunk (longer duration), so retries can make marker later than chart.
+    # Marker bounds: use all runs, but skip dependency "sole chunk" rows when suite has
+    # indexed [i/N] chunks (recipe/deps at ya-make start must not shift suite start marker).
+    suites_with_indexed = {
+        str(r.get("suite_path", ""))
+        for r in runs
+        if r.get("chunk_group")
+    }
     suite_start_us_all: dict[str, float] = {}
     suite_end_us_all: dict[str, float] = {}
     for r in runs:
         suite = str(r.get("suite_path", ""))
         if not suite:
+            continue
+        if (
+            suite in suites_with_indexed
+            and not r.get("chunk_group")
+            and int(r.get("chunk", -1) or -1) == 0
+        ):
             continue
         start = float(r.get("start_us", 0) or 0)
         end = float(r.get("end_us", 0) or 0)

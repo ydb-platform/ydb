@@ -111,7 +111,7 @@ message TFeatureFlags {
     optional bool EnableDataShardVolatileTransactions = 85 [default = true];
     optional bool EnableTopicServiceTx = 86 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableLLVMCache = 87 [default = false];
-    optional bool EnableExternalDataSources = 88 [default = true];
+    optional bool EnableExternalDataSources = 88 [default = false];
     optional bool EnableTopicDiskSubDomainQuota = 89 [default = true, (RequireRestart) = true];
     optional bool EnableSeparationComputeActorsFromRead = 90 [default = true];
     reserved 91; // EnablePQConfigTransactionsAtSchemeShard
@@ -139,7 +139,7 @@ message TFeatureFlags {
     optional bool EnableServerlessExclusiveDynamicNodes = 113 [default = false];
     optional bool EnableAccessServiceBulkAuthorization = 114 [default = true];
     optional bool EnableAddColumsWithDefaults = 115 [default = true];
-    optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = true];
+    optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = false];
     optional bool EnableCMSRequestPriorities = 117 [default = true];
     optional bool EnableKeyvalueLogBatching = 118 [default = false];
     optional bool EnableLocalDBFlatIndex = 119 [default = true];
@@ -149,7 +149,7 @@ message TFeatureFlags {
     optional bool EnableBackupService = 123 [default = false];
     optional bool EnableVolatileTransactionArbiters = 124 [default = true];
     optional bool EnableGraphShard = 125 [default = false];
-    optional bool EnableExternalSourceSchemaInference = 126 [default = true];
+    optional bool EnableExternalSourceSchemaInference = 126 [default = false];
     optional bool EnableDbMetadataCache = 127 [default = false];
     optional bool EnableTableDatetime64 = 128 [default = true];
     optional bool EnableResourcePools = 129 [default = true];
@@ -295,12 +295,12 @@ message TFeatureFlags {
     optional bool EnableNodeShutdownHints = 257 [default = false];
     optional bool EnableTopicPartitionSplitBasedOnMessages = 258 [default = false];
     optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
-    optional bool EnableStreamingQueryDisposition = 260 [default = true];
+    optional bool EnableStreamingQueryDisposition = 260 [default = false];
     // Skip persisting partition rows that are not affected by a split/merge operation.
     optional bool EnableSplitMergePartialPersistence = 261 [default = true];
     optional bool EnableLocalMinMaxIndex = 262 [default = true];
     optional bool DisableOnlineRO = 263 [default = false];
-    optional bool EnableUserAttributesInTopicQuery = 264 [default = true];
+    optional bool EnableUserAttributesInTopicQuery = 264 [default = false];
     optional bool EnableDqSourceStreamLookupJoinFullscan = 265 [default = false];
     optional bool EnableTopicsPredicatePushdown = 266 [default = false];
     optional bool EnableJsonIndexAutoSelect = 267 [default = false];
@@ -316,7 +316,7 @@ message TFeatureFlags {
     optional bool EnableTopicMessagesBatching = 274 [default = false];
     optional bool EnableTopicWriteOffsetDeltaInKeys = 275 [default = false];
     optional bool EnableTablePartitionsConsistencyCheck = 276 [default = true];
-    optional bool EnableKqpConstraintsTransformer = 277 [default = true];
+    optional bool EnableKqpConstraintsTransformer = 277 [default = false];
     optional bool EnableLocalIndexAsSchemeObject = 278 [default = true];
     optional bool EnableDataShardDetailedMetrics = 279 [default = false];
     optional bool EnableCompactFulltextIndex = 280 [default = false];

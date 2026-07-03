@@ -400,6 +400,31 @@ void TMaxTasksGraph::PlaceTasks(TKqpTasksGraph& graph) {
             }
         }
     }
+
+    // Check that tasks from one column are placed on the same node.
+    for (const auto& group : Groups) {
+        const auto& rootTasks = Stages[group.Root].Info->Tasks;
+        for (TStageIdx memberIdx : group.Stages) {
+            if (memberIdx == group.Root) {
+                continue;
+            }
+
+            const auto& memberTasks = Stages[memberIdx].Info->Tasks;
+            Y_ENSURE(memberTasks.size() == rootTasks.size(),
+                "Copy-group placement mismatch: root stage[" << group.Root << "] has " << rootTasks.size()
+                    << " tasks, but member stage[" << memberIdx << "] has " << memberTasks.size());
+
+            for (size_t i = 0; i < memberTasks.size(); ++i) {
+                const auto& rootNode = graph.GetTask(rootTasks[i]).Meta.ExpectedNodeId;
+                const auto& memberNode = graph.GetTask(memberTasks[i]).Meta.ExpectedNodeId;
+                Y_ENSURE(rootNode && memberNode && *rootNode == *memberNode,
+                    "Copy-group placement mismatch: root stage[" << group.Root << "] task[" << i << "] is on node "
+                        << (rootNode ? ToString(*rootNode) : TString("<none>")) << ", but member stage[" << memberIdx
+                        << "] task[" << i << "] (same column) is on node "
+                        << (memberNode ? ToString(*memberNode) : TString("<none>")));
+            }
+        }
+    }
 }
 
 size_t TMaxTasksGraph::GetStageTasksCount(const TStageId& stage, TNodeId node) const {

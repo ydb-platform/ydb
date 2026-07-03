@@ -1245,6 +1245,35 @@ void ValidateNoTransactionOnPaths(TOperationId operationId, const THashSet<TPath
     }
 }
 
+void AbortRelatedOperations(TOperationId operationId, const THashSet<TTxId>& relatedTx, TOperationContext& context, TStringBuf logPrefix) {
+    const TTabletId ssId = context.SS->SelfTabletId();
+
+    for (auto otherTxId: relatedTx) {
+        if (otherTxId == operationId.GetTxId()) {
+            continue;
+        }
+
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     logPrefix
+                         << ", dependent transaction: " << operationId.GetTxId()
+                         << ", parent transaction: " << otherTxId
+                         << ", at schemeshard: " << ssId);
+
+        context.OnComplete.Dependence(otherTxId, operationId.GetTxId());
+
+        Y_ABORT_UNLESS(context.SS->Operations.contains(otherTxId));
+        auto otherOperation = context.SS->Operations.at(otherTxId);
+        // AbortUnsafe marks parts as done; clear active barriers first to avoid
+        // IsDoneBarrier() VERIFY when a blocked part is force-aborted.
+        otherOperation->ForceClearBarriers();
+        for (ui32 partId = 0; partId < otherOperation->Parts.size(); ++partId) {
+            if (auto part = otherOperation->Parts.at(partId)) {
+                part->AbortUnsafe(operationId.GetTxId(), context);
+            }
+        }
+    }
+}
+
 }  // namespace NForceDrop
 
 void RegisterParentPathDependencies(const TOperationId& operationId, const TOperationContext& context, const TPath& parentPath) {

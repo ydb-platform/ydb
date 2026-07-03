@@ -100,8 +100,10 @@ namespace NKikimr::NBlobDepot {
             params->SetAllocatedSize(Data->GetTotalStoredDataSize());
 
             // TODO(alexvru): use a better approach
-            const double approximateFreeSpaceShare = (double)params->GetAvailableSize() / (params->GetAvailableSize() +
-                params->GetAllocatedSize());
+            const double available = static_cast<double>(params->GetAvailableSize());
+            const double allocated = static_cast<double>(params->GetAllocatedSize());
+            const double denom = available + allocated;
+            const float approximateFreeSpaceShare = denom ? static_cast<float>(available / denom) : 0.0f;
 
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), response.release());
             SpaceMonitor->SetSpaceColor(dataColor, approximateFreeSpaceShare); // the best data channel space color works for the whole depot

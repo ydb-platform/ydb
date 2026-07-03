@@ -191,8 +191,8 @@ Y_UNIT_TEST_SUITE(Donor) {
         UNIT_ASSERT_VALUES_EQUAL(acceptor->DonorsSize(), 1);
         donor = acceptor->GetDonors(0);
 
-        const auto& acceptorId = acceptor->GetVSlotId();
-        const auto& donorId = donor.GetVSlotId();
+        const auto acceptorId = acceptor->GetVSlotId();
+        const auto donorId = donor.GetVSlotId();
         UNIT_ASSERT_C(acceptorId.GetNodeId() != donorId.GetNodeId(),
             "test requires cross-node donor relocation path");
 

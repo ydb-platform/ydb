@@ -41,6 +41,19 @@ bool OutputsBothJoinSides(const TString& joinKind) {
     return joinKind != "LeftOnly" && joinKind != "LeftSemi" && joinKind != "RightOnly" && joinKind != "RightSemi";
 }
 
+TInfoUnit MakeRightConflictReplacement(const TInfoUnit& conflict, TInfoUnitSet& usedIUs, TPlanProps& props) {
+    if (!IsGeneratedIgnoreIU(conflict)) {
+        return NMapRenames::MakeUniqueInternalIU(props.InternalVarIdx, usedIUs);
+    }
+
+    for (;;) {
+        const auto replacement = MakeGeneratedIgnoreIU(props);
+        if (AddInfoUnit(usedIUs, replacement)) {
+            return replacement;
+        }
+    }
+}
+
 NMapRenames::TRenameMap BuildRightOutputConflictRenames(
     const TIntrusivePtr<IOperator>& leftInput,
     const TIntrusivePtr<IOperator>& rightInput,
@@ -58,59 +71,11 @@ NMapRenames::TRenameMap BuildRightOutputConflictRenames(
             continue;
         }
 
-        const auto replacement = NMapRenames::MakeUniqueInternalIU(props.InternalVarIdx, usedIUs);
+        const auto replacement = MakeRightConflictReplacement(rightIU, usedIUs, props);
         rightRenames.emplace(rightIU, replacement);
     }
 
     return rightRenames;
-}
-
-void AddVisibleDependencies(const TIntrusivePtr<IOperator>& op, TInfoUnitSet& dependencies) {
-    if (!op) {
-        return;
-    }
-
-    const auto visibleIUs = MakeInfoUnitSet(op->GetOutputIUs());
-
-    auto it = TOpIterator(op, nullptr);
-    for (; it != TOpIterator(nullptr); it++) {
-        auto currOp = (*it).Current;
-        if (currOp->Kind != EOperator::AddDependencies) {
-            continue;
-        }
-
-        auto deps = CastOperator<TOpAddDependencies>(currOp);
-        for (const auto& dep : deps->Dependencies) {
-            if (visibleIUs.contains(dep)) {
-                AddInfoUnit(dependencies, dep);
-            }
-        }
-    }
-}
-
-void RenameRightGeneratedIgnoreConflicts(
-    const TIntrusivePtr<IOperator>& leftInput,
-    TIntrusivePtr<IOperator>& rightInput,
-    TPositionHandle pos,
-    TExprContext& ctx,
-    TPlanProps& props)
-{
-    const auto leftOutput = MakeInfoUnitSet(leftInput->GetOutputIUs());
-    TVector<TMapElement> mapElements;
-
-    for (const auto& rightIU : rightInput->GetOutputIUs()) {
-        if (!IsGeneratedIgnoreIU(rightIU) || !leftOutput.contains(rightIU)) {
-            continue;
-        }
-
-        mapElements.emplace_back(MakeGeneratedIgnoreIU(props), rightIU, pos, &ctx, &props);
-    }
-
-    if (mapElements.empty()) {
-        return;
-    }
-
-    rightInput = MakeIntrusive<TOpMap>(rightInput, pos, mapElements);
 }
 
 void AddVisibleDependencies(const TIntrusivePtr<IOperator>& op, TInfoUnitSet& dependencies) {
@@ -500,8 +465,6 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node) 
     }
 
     if (OutputsBothJoinSides(joinKind)) {
-        RenameRightGeneratedIgnoreConflicts(leftInput, rightInput, node->Pos(), Ctx, PlanProps);
-
         const auto rightRenames = BuildRightOutputConflictRenames(leftInput, rightInput, PlanProps);
         if (!rightRenames.empty()) {
             return NMapRenames::MakeJoinWithRightRenames(

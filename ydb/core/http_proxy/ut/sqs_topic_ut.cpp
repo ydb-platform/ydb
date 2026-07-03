@@ -1573,6 +1573,33 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(json2["Messages"].GetArray().size(), 0);
         }
 
+        Y_UNIT_TEST_F(TestReceiveMessageInvalidReceiveRequestAttemptId, TFixture) {
+            auto json = CreateQueue({
+                {"QueueName", "ReceiveAttemptValidation.fifo"},
+                {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+            });
+            TString queueUrl = GetPathFromQueueUrlMap(json);
+
+            SendMessage({
+                {"QueueUrl", queueUrl},
+                {"MessageBody", "message-body-0"},
+                {"MessageGroupId", "message-group-0"},
+                {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+            });
+
+            const auto checkInvalid = [&](const TString& attemptId) {
+                auto jsonReceived = ReceiveMessage({
+                    {"QueueUrl", queueUrl},
+                    {"ReceiveRequestAttemptId", attemptId},
+                }, 400);
+                UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(jsonReceived, "__type"), "InvalidParameterValue");
+            };
+
+            checkInvalid("§");
+            checkInvalid(
+                "very_big_0000000000111111111122222222223333333333444444444455555555556666666666777777777788888888889999999999000000000011111111112222222222");
+        }
+
         Y_UNIT_TEST_F(TestReceiveMessageGroup, TFixture) {
             auto driver = MakeDriver(*this);
             const TSqsTopicPaths path;

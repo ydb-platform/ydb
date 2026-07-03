@@ -228,12 +228,12 @@ def build_html_dashboard(
       <ol>
         <li><b>cores_est</b> for a chunk is calculated as <code>cpu_sec_report / duration_sec</code>.</li>
         <li>Per suite, recommendations use the distribution of chunk <b>cores_est</b> values.</li>
-        <li><b>recommended_cpu</b> is p95 rounded to runner tiers: <code>1/2/4/8/16</code>.</li>
-        <li><b>recommended_cpu</b> is increased by one tier when a suite has a test with duration at/above size threshold: <b>SMALL=60s, MEDIUM=600s, LARGE=1800s</b> (then size cap is applied).</li>
-        <li>When a suite has <b>any timeout(s)</b>, recommended CPU is at least <b>2× actual consumption</b> (p95 cores rounded to tier), still capped by size limit (SMALL=1, MEDIUM=4, LARGE=4).</li>
-        <li>When CLI flag <code>--maximize-reqs-for-timeout-tests</code> is enabled, suites crossing the duration threshold (SMALL=60s, MEDIUM=600s, LARGE=1800s) use size max: <b>SMALL=1, MEDIUM=4, LARGE=4</b>.</li>
-        <li><b>recommended_split</b> uses per-<b>chunk</b> load: sum test durations inside each chunk. For overloaded chunks (<code>sum &gt; size_timeout*0.98</code>) we sum their durations and estimate required chunk count as <code>ceil(overloaded_total / (size_timeout*0.5))</code>, then add missing chunks.</li>
-        <li><b>cpu_action</b> compares recommended cpu to <code>ya_cpu</code> from <code>ya.make</code>.</li>
+        <li><b>recommended_cpu</b> is p95 rounded to runner tiers: <code>1/2/4/8/16</code>. It reflects <b>only observed per-chunk core usage</b>. <code>REQUIREMENTS(cpu)</code> is a per-chunk scheduler slot (reserved cores that cap how many chunks run in parallel), not a request for more raw CPU.</li>
+        <li>Long test duration and timeouts drive <b>recommended_split</b>, <b>not</b> CPU. A single long test at/above the size threshold (<b>SMALL=60s, MEDIUM=600s, LARGE=1800s</b>) is flagged as a split hint only; it no longer bumps the CPU tier.</li>
+        <li>SIZE still caps recommended CPU (SMALL=1, MEDIUM=4). When CLI flag <code>--maximize-reqs-for-timeout-tests</code> is enabled, suites crossing the duration threshold additionally use size max: <b>SMALL=1, MEDIUM=4, LARGE=4</b>.</li>
+        <li><b>recommended_split</b> uses per-<b>chunk</b> load: sum test durations inside each chunk. Overloaded chunks (<code>sum &gt; size_timeout*0.98</code>) are detected <b>even without a timeout</b> (<code>split_severity=at_risk</code>); with a timeout it is <code>timeout</code>. Required chunk count is <code>ceil(overloaded_total / (size_timeout*0.5))</code>, and a single very heavy chunk is split into <code>ceil(max_chunk_load / (size_timeout*0.5))</code> pieces.</li>
+        <li><b>cpu_action</b> compares recommended cpu to <code>ya_cpu</code>. A <b>lower</b> suggestion is suppressed (kept <b>ok</b>) while the suite is under split/time pressure, because a smaller cpu slot increases parallel chunks and can worsen timeouts/OOM.</li>
+        <li><b>recommended_ram</b> / <b>ram_action</b> come from observed per-chunk peak RAM (suite peak ÷ peak parallel chunks) rounded to a reservation tier. Like cpu, <code>REQUIREMENTS(ram)</code> reserves memory per chunk and limits parallelism.</li>
       </ol>
       <ul>
         <li><b>status chunks</b>: counters from report rows where <code>chunk=true</code>. <b>total</b> = all chunk rows, <b>passed</b> = status OK/PASS.</li>
@@ -328,9 +328,12 @@ def build_html_dashboard(
           Then:
           <code>overloaded_total = Σ sum_duration_sec(overloaded chunks)</code>,
           <code>needed = ceil(overloaded_total / L)</code>,
-          <code>extra = max(0, needed - overloaded_chunks_count)</code>,
-          <code>recommended_split = chunks_real + extra</code>.
-          If there are no overloaded chunks (or no timeouts), <code>extra = 0</code> and split is not raised.
+          <code>extra = max(0, needed - overloaded_chunks_count)</code>.
+          A single heavy chunk also forces <code>single_chunk_extra = ceil(max_chunk_load / L) - 1</code>,
+          and <code>recommended_split = chunks_real + max(extra, single_chunk_extra)</code>.
+          Overloaded chunks are detected regardless of timeouts: <code>split_severity</code> is
+          <code>at_risk</code> when a chunk is over budget without a timeout, <code>timeout</code> once a
+          timeout occurs. If no chunk exceeds the budget, split is not raised.
         </li>
       </ul>
       <details style="margin-top:8px;">
@@ -1298,7 +1301,8 @@ def build_html_dashboard(
         'max_parallel_self', 'max_parallel_self_at_sec',
         'peak_others_during_suite', 'peak_others_during_suite_at_sec',
         'peak_self_cpu_cores_during_suite', 'peak_self_cpu_at_sec',
-        'peak_self_ram_gb_during_suite', 'peak_self_ram_at_sec'
+        'peak_self_ram_gb_during_suite', 'peak_self_ram_at_sec',
+        'recommended_ram_gb', 'ram_action'
       ];
 
       function titleAttr(text) {{
@@ -1413,6 +1417,10 @@ def build_html_dashboard(
             tipCell(formatAbsSecLabel(s.peak_self_cpu_at_sec), 'Wall-clock time of peak CPU for this suite.', ''),
             tipCell(s.peak_self_ram_gb_during_suite != null ? Number(s.peak_self_ram_gb_during_suite).toFixed(2) : '', s.peak_self_ram_tooltip, ''),
             tipCell(formatAbsSecLabel(s.peak_self_ram_at_sec), 'Wall-clock time of peak RAM for this suite.', ''),
+            (s.recommended_ram_gb != null
+              ? tipCell('ram:' + String(s.recommended_ram_gb), s.recommended_ram_tooltip || s.recommended_ram_explain || '', 'font-weight:700;')
+              : tipCell('—', s.recommended_ram_tooltip || 'No RAM data', '')),
+            actionCell(s.ram_action || 'ok', s.ram_action_tooltip),
           ];
         }});
 
@@ -1441,6 +1449,7 @@ def build_html_dashboard(
           '<th colspan="2">others during suite</th>' +
           '<th colspan="2">cpu_self_peak during suite</th>' +
           '<th colspan="2">cpu_ram_peak during suite</th>' +
+          '<th colspan="2">ram decision</th>' +
           '</tr>';
         const subHeader =
           '<tr>' +
@@ -1483,9 +1492,11 @@ def build_html_dashboard(
           '<th data-col="38" class="group-end" style="cursor:pointer;user-select:none;" title="When CPU peaked">at' + marker(38) + '</th>' +
           '<th data-col="39" style="cursor:pointer;user-select:none;" title="Peak RAM (GB, sum) for this suite">GB' + marker(39) + '</th>' +
           '<th data-col="40" class="group-end" style="cursor:pointer;user-select:none;" title="When RAM peaked">at' + marker(40) + '</th>' +
+          '<th data-col="41" style="cursor:pointer;user-select:none;" title="Suggested REQUIREMENTS(ram:N) from observed per-chunk peak RAM">recommended_ram' + marker(41) + '</th>' +
+          '<th data-col="42" class="group-end" style="cursor:pointer;user-select:none;" title="raise/lower/ok vs current ya.make ram">ram_action' + marker(42) + '</th>' +
           '</tr>';
 
-        const groupEnds = new Set([5, 8, 11, 12, 15, 17, 25, 32, 34, 36, 38, 40]);
+        const groupEnds = new Set([5, 8, 11, 12, 15, 17, 25, 32, 34, 36, 38, 40, 42]);
         const bodyHtml = rowsData.map(cols => (
           '<tr>' + cols.map((c, i) => '<td' + (groupEnds.has(i) ? ' class="group-end"' : '') + '>' + c + '</td>').join('') + '</tr>'
         )).join('');

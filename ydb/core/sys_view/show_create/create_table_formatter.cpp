@@ -1347,42 +1347,8 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
         }
     }
 
-<<<<<<< HEAD
     Y_ENSURE(!schema.GetKeyColumnNames().empty());
     if (isFamilyPrinted) {
-=======
-    bool hasInlineIndex = false;
-    std::set<TString> inlineFormattedIndexes;
-    if (enableLocalIndexAsSchemeObject && !schema.GetIndexes().empty()) {
-        try {
-            for (const auto& index : schema.GetIndexes()) {
-                // Check if this is a bloom filter or bloom ngram filter that should be formatted inline
-                if (index.HasBloomFilter() || index.HasBloomNGrammFilter() || index.HasMinMaxIndex()) {
-                    if (isFamilyPrinted || hasInlineIndex) {
-                        Stream << ",\n";
-                        isFamilyPrinted = false;
-                    }
-                    hasInlineIndex = true;
-                    inlineFormattedIndexes.insert(index.GetName());
-                    if (index.HasBloomFilter()) {
-                        FormatLocalBloomFilterIndexInline(index, columns);
-                    } else if (index.HasBloomNGrammFilter()){
-                        FormatLocalBloomNgramFilterIndexInline(index, columns);
-                    } else {
-                        FormatLocalMinMaxIndexInline(index, columns);
-                    }
-                }
-            }
-        } catch (const TFormatFail& ex) {
-            return TFormatResult(ex.Status, ex.Error);
-        } catch (const yexception& e) {
-            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
-        }
-    }
-
-    Y_ENSURE(!schema.GetKeyColumnNames().empty(), "Table description has no key columns");
-    if (isFamilyPrinted || hasInlineIndex) {
->>>>>>> 9321dfeefee (Handle yexceptions in show create (#45352))
         Stream << ",\n";
     }
     Stream << "\tPRIMARY KEY (";

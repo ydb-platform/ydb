@@ -480,6 +480,214 @@ def build_cpu_recommendations(
         )
         # Mismatch: real runtime chunks vs ya.make SPLIT_FACTOR(N) when set
         chunks_mismatch = ya_split_factor is not None and chunks_real != ya_split_factor
+        test_srcs_count = req.get("test_srcs_count")
+        tests_in_report = int(test_status.get("total", 0) or 0)
+        avg_tests_per_chunk = (
+            round(tests_in_report / chunks_real, 1) if tests_in_report > 0 and chunks_real > 0 else None
+        )
+        if ya_split_factor is not None and not ya_split_factor_tooltip:
+            ya_split_factor_tooltip = f"Effective split from ya.make: {ya_split_factor}."
+        chunks_count_tooltip_parts = [
+            f"Runtime: {chunks_real} chunk process(es) actually started.",
+        ]
+        if ya_split_factor is not None:
+            chunks_count_tooltip_parts.append(f"Expected from ya.make: {ya_split_factor}.")
+            if chunks_mismatch:
+                chunks_count_tooltip_parts.append("Mismatch with ya.make — check FORK_TEST_FILES / SPLIT_FACTOR.")
+            else:
+                chunks_count_tooltip_parts.append("Matches ya.make effective split.")
+        if tests_in_report > 0:
+            per_chunk_note = f" ~{avg_tests_per_chunk} tests/chunk on average." if avg_tests_per_chunk else ""
+            chunks_count_tooltip_parts.append(f"{tests_in_report} tests in report.{per_chunk_note}")
+        chunks_count_tooltip = " ".join(chunks_count_tooltip_parts)
+        budget_min = timeout_budget_sec / 60.0
+        target_min = target_chunk_load_sec / 60.0
+        if extra_chunks > 0:
+            recommended_split_tooltip = (
+                f"Raise split {chunks_real} → {recommended_split} (+{extra_chunks} chunks). "
+                f"{timeout_tests_count} test timeout(s); "
+                f"{overloaded_chunks} chunk(s) exceed SIZE({size_u}) serial-time budget (~{budget_min:.0f} min per chunk). "
+                f"Target ~{target_min:.0f} min serial test time per chunk."
+            )
+            if test_srcs_count and int(test_srcs_count) > 0:
+                needed_sf = int(math.ceil(int(recommended_split) / int(test_srcs_count)))
+                recommended_split_tooltip += (
+                    f" With FORK_TEST_FILES ({test_srcs_count} files): set SPLIT_FACTOR({needed_sf}) "
+                    f"→ {needed_sf * int(test_srcs_count)} effective chunks."
+                )
+            else:
+                recommended_split_tooltip += f" Set SPLIT_FACTOR({recommended_split}) in ya.make."
+            if overloaded_chunk_examples:
+                recommended_split_tooltip += f" Examples: {', '.join(overloaded_chunk_examples[:2])}."
+        elif recommended_split_action == "lower":
+            recommended_split_tooltip = (
+                f"Can lower split from {ya_split_factor} to {recommended_split}: "
+                f"runtime uses fewer chunks than ya.make specifies."
+            )
+        elif recommended_split_action == "set":
+            recommended_split_tooltip = (
+                f"Set effective split to {recommended_split} in ya.make "
+                f"(currently {ya_split_factor or 'unset'})."
+            )
+        else:
+            recommended_split_tooltip = (
+                f"Current {chunks_real} chunks OK: no overloaded chunks requiring more split "
+                f"(or no timeouts in this run)."
+            )
+        split_action_tooltips = {
+            "raise": (
+                f"recommended_split ({recommended_split}) > ya_split_factor ({ya_split_factor}): "
+                f"increase SPLIT_FACTOR in ya.make."
+            ),
+            "lower": (
+                f"recommended_split ({recommended_split}) < ya_split_factor ({ya_split_factor}): "
+                f"ya.make over-splits; can reduce SPLIT_FACTOR."
+            ),
+            "set": f"ya.make has no SPLIT_FACTOR; suggest setting effective split to {recommended_split}.",
+            "ok": "recommended_split matches current setup; no SPLIT_FACTOR change needed.",
+        }
+        split_action_tooltip = split_action_tooltips.get(recommended_split_action, "")
+
+        cpu_tip_parts = [
+            f"Observed CPU load: median {median_c:.1f} cores, p95 {p95_c:.1f} cores.",
+            f"Base tier from p95: cpu:{base_recommended}.",
+        ]
+        if long_test_boost_applied:
+            cpu_tip_parts.append(
+                f"Raised one tier: longest test {max_test_duration_sec / 60:.1f} min "
+                f"≥ SIZE({size_u}) threshold {long_test_threshold_sec / 60:.0f} min."
+            )
+        if timeout_2x_boost_applied:
+            cpu_tip_parts.append(
+                f"Raised to ≥2× p95 (cpu:{_round_cpu_tier(2.0 * p95_c)}) "
+                f"because {timeout_tests_count} test timeout(s)."
+            )
+        if timeout_max_policy_applied:
+            cpu_tip_parts.append(f"Policy cap for long tests on SIZE({size_u}): cpu:{timeout_max_value}.")
+        if small_cap_applied:
+            cpu_tip_parts.append("Capped at cpu:1 by SIZE(SMALL) limit.")
+        elif medium_cap_applied:
+            cpu_tip_parts.append("Capped at cpu:4 by SIZE(MEDIUM) limit.")
+        if ya_cpu is not None:
+            cpu_tip_parts.append(f"Recommend REQUIREMENTS(cpu:{recommended_req}); ya.make has cpu:{ya_cpu}.")
+        else:
+            cpu_tip_parts.append(f"Recommend REQUIREMENTS(cpu:{recommended_req}); ya.make has no cpu requirement.")
+        recommended_cpu_tooltip = " ".join(cpu_tip_parts)
+
+        cpu_action_tooltips = {
+            "raise": (
+                f"Increase REQUIREMENTS(cpu) in ya.make from {ya_cpu} to {recommended_req}: "
+                f"tests need more CPU than configured."
+            ),
+            "lower": (
+                f"Decrease REQUIREMENTS(cpu) in ya.make from {ya_cpu} to {recommended_req}: "
+                f"tests use less CPU; lowering frees runner capacity."
+            ),
+            "set": (
+                f"Add REQUIREMENTS(cpu:{recommended_req}) to ya.make "
+                f"(no cpu requirement set today)."
+            ),
+            "ok": (
+                f"Current REQUIREMENTS(cpu:{ya_cpu}) matches recommendation "
+                f"(or recommendation is within limits)."
+                if ya_cpu is not None
+                else f"Recommended cpu:{recommended_req}; no change needed."
+            ),
+        }
+        cpu_action_tooltip = cpu_action_tooltips.get(cpu_action, "")
+
+        ya_ram_gb_tooltip = (
+            f"REQUIREMENTS(ram:{ya_ram}) from ya.make."
+            if ya_ram is not None
+            else "No REQUIREMENTS(ram) in ya.make."
+        )
+        ya_cpu_cores_tooltip = (
+            f"REQUIREMENTS(cpu:{ya_cpu}) from ya.make."
+            if ya_cpu is not None
+            else "No REQUIREMENTS(cpu) in ya.make."
+        )
+        size_timeout_min = timeout_sec / 60.0
+        ya_size_tooltip = (
+            f"SIZE({ya_size}) in ya.make: per-test timeout ≈{size_timeout_min:.0f} min, "
+            f"chunk serial-time budget ≈{timeout_budget_sec / 60:.0f} min."
+            if ya_size
+            else "No SIZE in ya.make (defaults used)."
+        )
+        if small_cap_applied or medium_cap_applied:
+            ya_size_tooltip += " Long tests hit SIZE CPU cap — consider larger SIZE."
+
+        median_cores_tooltip = (
+            f"Median estimated cores per chunk run: {median_c:.2f}. "
+            f"Computed as cpu_sec_report / duration per run."
+        )
+        p95_cores_tooltip = (
+            f"95th percentile of estimated cores per chunk run: {p95_c:.2f}. "
+            f"Used as base for recommended_cpu."
+        )
+        total_cpu_sec_tooltip = (
+            f"Sum of CPU-seconds across deduplicated chunk runs: {by_suite_cpu[suite]:.0f} s."
+        )
+        total_ram_gb_tooltip = (
+            f"Sum of peak RAM (GB) across deduplicated chunk runs: "
+            f"{by_suite_ram_kb[suite] / (1024 ** 2):.1f} GB."
+        )
+        total_dur_sec_tooltip = (
+            f"Sum of max(report, evlog) wall time per chunk: {by_suite_dur[suite]:.0f} s "
+            f"({by_suite_dur[suite] / 3600:.2f} h)."
+        )
+        total_dur_report_sec_tooltip = (
+            f"Sum of report wall time per chunk: {by_suite_dur_report[suite]:.0f} s."
+        )
+        total_dur_evlog_sec_tooltip = (
+            f"Sum of evlog wall time per chunk: {by_suite_dur_evlog[suite]:.0f} s."
+        )
+
+        ps = parallel_stats.get(suite, {})
+        max_par = int(ps.get("max_parallel_self", 0) or 0)
+        peak_others = int(ps.get("peak_others_during_suite", 0) or 0)
+        peak_cpu = float(ps.get("peak_self_cpu_cores_during_suite", 0) or 0)
+        peak_ram = float(ps.get("peak_self_ram_gb_during_suite", 0) or 0)
+        suite_start_sec = ps.get("suite_start_sec")
+        suite_end_sec = ps.get("suite_end_sec")
+        suite_wall_h = (
+            (float(suite_end_sec) - float(suite_start_sec)) / 3600.0
+            if suite_start_sec is not None and suite_end_sec is not None
+            else None
+        )
+        suite_path_tooltip = (
+            f"Test suite path. Wall time ≈{suite_wall_h:.2f} h."
+            if suite_wall_h is not None
+            else "Test suite path."
+        )
+        max_parallel_self_tooltip = (
+            f"Peak parallel chunk processes of this suite: {max_par} "
+            f"(of {chunks_real} total chunks). Low value vs chunks → runner contention or sequential phases."
+        )
+        peak_others_tooltip = (
+            f"Peak parallel chunks of OTHER suites while this suite was active: {peak_others}. "
+            f"High value → this suite competes for runner threads."
+        )
+        peak_cpu_tooltip = (
+            f"Peak sum of estimated CPU cores for this suite at one moment: {peak_cpu:.1f} cores."
+        )
+        peak_ram_tooltip = (
+            f"Peak sum of RAM for this suite at one moment: {peak_ram:.1f} GB."
+        )
+        test_status_tooltip = (
+            f"Test results: {test_status.get('total', 0)} total, "
+            f"{test_status.get('passed', 0)} passed, "
+            f"{test_status.get('timeouts', 0)} timeouts, "
+            f"{test_status.get('errors', 0)} errors, "
+            f"{test_status.get('muted', 0)} muted, "
+            f"{test_status.get('skipped', 0)} skipped."
+        )
+        chunk_status_tooltip = (
+            f"Chunk results: {chunk_status.get('total', 0)} total, "
+            f"{chunk_status.get('timeouts', 0)} timeouts, "
+            f"{chunk_status.get('errors', 0)} errors, "
+            f"{chunk_status.get('muted', 0)} muted."
+        )
+
         out.append({
             "suite_path": suite,
             "chunks_count": chunks_real,
@@ -488,6 +696,10 @@ def build_cpu_recommendations(
             "recommended_split": recommended_split,
             "recommended_split_action": recommended_split_action,
             "recommended_split_explain": recommended_split_explain,
+            "recommended_split_tooltip": recommended_split_tooltip,
+            "chunks_count_tooltip": chunks_count_tooltip,
+            "split_action_tooltip": split_action_tooltip,
+            "ya_split_factor_raw": ya_split_factor_raw,
             "heavy_tests_count": heavy_tests_count,
             "heavy_test_threshold_sec": round(heavy_test_threshold_sec, 3),
             "heavy_tests_examples": heavy_examples[:3],
@@ -511,6 +723,25 @@ def build_cpu_recommendations(
             "test_p96_duration_sec": round(p96_test_duration_sec, 3),
             "test_total_duration_sec": round(total_test_duration_sec, 3),
             "recommended_cpu_explain": recommended_cpu_explain,
+            "recommended_cpu_tooltip": recommended_cpu_tooltip,
+            "cpu_action_tooltip": cpu_action_tooltip,
+            "ya_ram_gb_tooltip": ya_ram_gb_tooltip,
+            "ya_cpu_cores_tooltip": ya_cpu_cores_tooltip,
+            "ya_size_tooltip": ya_size_tooltip,
+            "median_cores_tooltip": median_cores_tooltip,
+            "p95_cores_tooltip": p95_cores_tooltip,
+            "total_cpu_sec_tooltip": total_cpu_sec_tooltip,
+            "total_ram_gb_tooltip": total_ram_gb_tooltip,
+            "total_dur_sec_tooltip": total_dur_sec_tooltip,
+            "total_dur_report_sec_tooltip": total_dur_report_sec_tooltip,
+            "total_dur_evlog_sec_tooltip": total_dur_evlog_sec_tooltip,
+            "suite_path_tooltip": suite_path_tooltip,
+            "max_parallel_self_tooltip": max_parallel_self_tooltip,
+            "peak_others_tooltip": peak_others_tooltip,
+            "peak_self_cpu_tooltip": peak_cpu_tooltip,
+            "peak_self_ram_tooltip": peak_ram_tooltip,
+            "test_status_tooltip": test_status_tooltip,
+            "chunk_status_tooltip": chunk_status_tooltip,
             "total_cpu_sec": round(by_suite_cpu[suite], 2),
             "total_ram_gb": round(by_suite_ram_kb[suite] / (1024.0 * 1024.0), 3),
             "total_dur_sec": round(by_suite_dur[suite], 2),

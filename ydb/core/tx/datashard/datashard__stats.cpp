@@ -363,17 +363,18 @@ public:
             if (tableInfo.SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact ||
                 tableInfo.SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance) {
                 // For now, only allow to split compact fulltext index table by prefix + __ydb_token
+                const auto prefixSize = tableInfo.KeyColumnIds.size() - NTableIndex::NFulltext::CompactTableKeySize;
                 auto pb = Result->Record.MutableTableStats();
                 if (pb->GetSplitBySizeSuggestedKey().size()) {
                     TSerializedCellVec key(pb->GetSplitBySizeSuggestedKey());
-                    if (key.GetCells().size() > tableInfo.KeyColumnIds.size()-2) {
-                        pb->SetSplitBySizeSuggestedKey(TSerializedCellVec::Serialize(key.GetCells().Slice(0, tableInfo.KeyColumnIds.size()-2)));
+                    if (key.GetCells().size() > prefixSize + 1) {
+                        pb->SetSplitBySizeSuggestedKey(TSerializedCellVec::Serialize(key.GetCells().Slice(0, prefixSize + 1)));
                     }
                 }
                 if (pb->GetSplitByLoadSuggestedKey().size()) {
                     TSerializedCellVec key(pb->GetSplitByLoadSuggestedKey());
-                    if (key.GetCells().size() > 1) {
-                        pb->SetSplitByLoadSuggestedKey(TSerializedCellVec::Serialize(key.GetCells().Slice(0, tableInfo.KeyColumnIds.size()-2)));
+                    if (key.GetCells().size() > prefixSize + 1) {
+                        pb->SetSplitByLoadSuggestedKey(TSerializedCellVec::Serialize(key.GetCells().Slice(0, prefixSize + 1)));
                     }
                 }
             }

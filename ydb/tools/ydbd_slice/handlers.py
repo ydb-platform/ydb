@@ -5,6 +5,7 @@ import subprocess
 from collections import deque, defaultdict
 from uuid import uuid4
 from ydb.tools.ydbd_slice import config_client
+from ydb.tools.ydbd_slice import blobstorage_init
 
 logger = logging.getLogger(__name__)
 
@@ -190,12 +191,12 @@ class Slice:
                 )
 
     def __init_blobstorage_kikimr(self):
-        self.nodes.execute_async(
-            f"{self.slice_kikimr_path} admin blobstorage config init --yaml-file {self.slice_cfg_path}/config.yaml",
-            nodes=self.nodes.nodes_list[:1],
-            check_retcode=True,
-            retry_attempts=5,
+        host = self.nodes.nodes_list[0]
+        cmd = (
+            f"{self.slice_kikimr_path} admin blobstorage config init "
+            f"--yaml-file {self.slice_cfg_path}/config.yaml"
         )
+        blobstorage_init.run_blobstorage_config_init_with_retry(self.nodes, host, cmd)
 
     def __cluster_bootstrap(self):
         try:

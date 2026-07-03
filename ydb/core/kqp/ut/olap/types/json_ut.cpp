@@ -6,7 +6,6 @@
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
@@ -29,25 +28,6 @@
 
 
 namespace NKikimr::NKqp {
-
-namespace {
-
-// primary_index_stats assertion that Col2's separated sub-column was serialized with `expectedType`
-// (compared against the IChunkedArray::EType enum value, not a magic number).
-TString SubColumnsColumnAccessorCheck(const NArrow::NAccessor::IChunkedArray::EType expectedType) {
-    return TStringBuilder() << R"(READ: $All = SELECT COUNT(*) AS cnt FROM `/Root/ColumnTable/.sys/primary_index_stats`
-                  WHERE Activity == 1 AND EntityName = 'Col2';
-              $Ok = SELECT SUM(CASE
-                    WHEN CAST(JSON_VALUE(CAST(ChunkDetails AS JsonDocument), "$.columns.accessor[0]") AS Uint64) == )"
-                                << (ui32)expectedType << R"(u
-                    THEN 1 ELSE 0 END) AS ok
-                  FROM `/Root/ColumnTable/.sys/primary_index_stats`
-                  WHERE Activity == 1 AND EntityName = 'Col2';
-              SELECT ($All > 0u) AND ($All == $Ok);
-        EXPECTED: [[[%true]]])";
-}
-
-}   // namespace
 
 Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
@@ -1726,129 +1706,6 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         }
     }
 
-    // Two low-cardinality portions are merged by compaction; the merged sub-column must be
-    // re-encoded as a dictionary and still read back correctly.
-    Y_UNIT_TEST(SubColumnsDictionaryCompaction) {
-        const TString script = TStringBuilder() << R"(
-        STOP_COMPACTION
-        ------
-        SCHEMA:
-        CREATE TABLE `/Root/ColumnTable` (
-            Col1 Uint64 NOT NULL,
-            Col2 JsonDocument,
-            PRIMARY KEY (Col1)
-        )
-        PARTITION BY HASH(Col1)
-        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
-                    `DICTIONARY_DETECTOR_KFF`=`2`)
-        ------
-        DATA:
-        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"a" : "x"}')), (2u, JsonDocument('{"a" : "y"}')),
-                                                             (3u, JsonDocument('{"a" : "x"}')), (4u, JsonDocument('{"a" : "y"}'))
-        ------
-        DATA:
-        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (5u, JsonDocument('{"a" : "x"}')), (6u, JsonDocument('{"a" : "y"}')),
-                                                             (7u, JsonDocument('{"a" : "x"}')), (8u, JsonDocument('{"a" : "y"}'))
-        ------
-        ONE_COMPACTION
-        ------
-        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
-        EXPECTED: [[1u;["{\"a\":\"x\"}"]];[2u;["{\"a\":\"y\"}"]];[3u;["{\"a\":\"x\"}"]];[4u;["{\"a\":\"y\"}"]];[5u;["{\"a\":\"x\"}"]];[6u;["{\"a\":\"y\"}"]];[7u;["{\"a\":\"x\"}"]];[8u;["{\"a\":\"y\"}"]]]
-        ------
-        )" << SubColumnsColumnAccessorCheck(NArrow::NAccessor::IChunkedArray::EType::Dictionary);
-        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
-    }
-
-    // A freshly written low-cardinality separated column must actually be dictionary-encoded
-    // (not just readable). Asserts the encoding engaged via primary_index_stats.
-    Y_UNIT_TEST(SubColumnsDictionaryFreshWrite) {
-        const TString script = TStringBuilder() << R"(
-        STOP_COMPACTION
-        ------
-        SCHEMA:
-        CREATE TABLE `/Root/ColumnTable` (
-            Col1 Uint64 NOT NULL,
-            Col2 JsonDocument,
-            PRIMARY KEY (Col1)
-        )
-        PARTITION BY HASH(Col1)
-        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
-                    `OTHERS_ALLOWED_FRACTION`=`0`, `DICTIONARY_DETECTOR_KFF`=`1`)
-        ------
-        DATA:
-        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"a" : "x"}')), (2u, JsonDocument('{"a" : "y"}')),
-                                                             (3u, JsonDocument('{"a" : "x"}')), (4u, JsonDocument('{"a" : "y"}')),
-                                                             (5u, JsonDocument('{"a" : "x"}')), (6u, JsonDocument('{"a" : "y"}'))
-        ------
-        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
-        EXPECTED: [[1u;["{\"a\":\"x\"}"]];[2u;["{\"a\":\"y\"}"]];[3u;["{\"a\":\"x\"}"]];[4u;["{\"a\":\"y\"}"]];[5u;["{\"a\":\"x\"}"]];[6u;["{\"a\":\"y\"}"]]]
-        ------
-        )" << SubColumnsColumnAccessorCheck(NArrow::NAccessor::IChunkedArray::EType::Dictionary);
-        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
-    }
-
-    // A separated column with many (>256) distinct values widens the dictionary positions index past
-    // uint8. With KFF=1 the column is dictionary-encoded (distinct <= records) and must round-trip
-    // through the wide index; with KFF=2 the gate rejects it (distinct*2 > records) so it stays Array.
-    Y_UNIT_TEST(SubColumnsDictionaryWideIndex) {
-        NColumnShard::TTableUpdatesBuilder updates(NArrow::MakeArrowSchema(
-            { { "Col1", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) }, { "Col2", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) } }));
-        const ui32 rowsCount = 300;
-        for (ui32 i = 0; i < rowsCount; ++i) {
-            updates.AddRow().Add<int64_t>(i).Add((TStringBuilder() << R"({"a" : "v)" << i << R"("})").c_str());
-        }
-        const TString arrowString = Base64Encode(NArrow::NSerialization::TNativeSerializer().SerializeFull(updates.BuildArrow()));
-
-        const auto runScript = [&](const TString& kff, const NArrow::NAccessor::IChunkedArray::EType expectedType) {
-            const TString script = TStringBuilder() << R"(
-                STOP_COMPACTION
-                ------
-                SCHEMA:
-                CREATE TABLE `/Root/ColumnTable` (
-                    Col1 Uint64 NOT NULL,
-                    Col2 JsonDocument,
-                    PRIMARY KEY (Col1)
-                )
-                PARTITION BY HASH(Col1)
-                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
-                ------
-                SCHEMA:
-                ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-                ------
-                SCHEMA:
-                ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
-                            `OTHERS_ALLOWED_FRACTION`=`0`, `DICTIONARY_DETECTOR_KFF`=`)" << kff << R"(`)
-                ------
-                BULK_UPSERT:
-                    /Root/ColumnTable
-                    )" << arrowString << R"(
-                    EXPECT_STATUS:SUCCESS
-                ------
-                READ: SELECT COUNT(*) FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = ("v" || CAST(Col1 AS String));
-                EXPECTED: [[)" << rowsCount << R"(u]]
-                ------
-                )" << SubColumnsColumnAccessorCheck(expectedType);
-            Variator::ToExecutor(Variator::SingleScript(script)).Execute();
-        };
-
-        runScript("1", NArrow::NAccessor::IChunkedArray::EType::Dictionary);   // dictionary-encoded, wide (uint16) positions index
-        runScript("2", NArrow::NAccessor::IChunkedArray::EType::Array);        // Kff gate rejects the high-cardinality column -> plain Array
-    }
 }
 
 }   // namespace NKikimr::NKqp

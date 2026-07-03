@@ -467,9 +467,26 @@ public:
         auto& record = ev->Record;
         auto *p = record.AddPDisksMetrics();
         p->SetPDiskId(Impl.PDiskId);
-        p->SetAvailableSize((Impl.TotalChunks - usedChunks) * Impl.ChunkSize);
-        p->SetTotalSize(Impl.TotalChunks * Impl.ChunkSize);
+        p->SetAvailableSize((ui64)(Impl.TotalChunks - usedChunks) * Impl.ChunkSize);
+        p->SetTotalSize((ui64)Impl.TotalChunks * Impl.ChunkSize);
         p->SetState(NKikimrBlobStorage::TPDiskState::Normal);
+        // report a full performance metrics set (like a real PDisk does) so that BSC considers the PDisk complete
+        p->SetMaxIOPS(1000);
+        p->SetMaxReadThroughput(1'000'000'000);
+        p->SetMaxWriteThroughput(1'000'000'000);
+
+        // report per-VDisk metrics with normalized occupancy; deliberately do not touch status flags
+        for (const auto& [ownerId, owner] : Impl.Owners) {
+            auto *m = record.AddVDisksMetrics();
+            VDiskIDFromVDiskID(owner.VDiskId, m->MutableVDiskId());
+            auto *vslotId = m->MutableVSlotId();
+            vslotId->SetNodeId(Impl.NodeId);
+            vslotId->SetPDiskId(Impl.PDiskId);
+            vslotId->SetVSlotId(owner.SlotId);
+            m->SetNormalizedOccupancy(GetOccupancy());
+            m->SetAllocatedSize((ui64)owner.CommittedChunks.size() * Impl.ChunkSize);
+            m->SetAvailableSize(p->GetAvailableSize());
+        }
         Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
 
         Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup);

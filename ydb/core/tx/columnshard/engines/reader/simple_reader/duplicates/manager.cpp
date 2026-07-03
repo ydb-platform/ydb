@@ -43,9 +43,6 @@ public:
 };
 }   // namespace
 
-#define LOCAL_LOG_TRACE \
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)
-
 TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions)
     : TActor(&TDuplicateManager::StateMain)
     , LastSchema(context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetLastSchema())
@@ -101,7 +98,7 @@ TIntervalsIterator TDuplicateManager::StartIntervalProcessing(
         materializedBorders.emplace(portionId, GetBorders(portionId));
     }
     TColumnDataSplitter splitter(materializedBorders);
-    LOCAL_LOG_TRACE("event", "split_portion")
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)("event", "split_portion")
     ("source", constructor->GetRequest()->Get()->GetPortionId())("splitter", splitter.DebugString())(
         "intersection_portions", intersectingPortions.size());
     THashMap<ui32, NArrow::TColumnFilter> readyFilters;
@@ -156,7 +153,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
     Counters->OnFilterRequest(intersectingPortions.size());
     ExpectedIntersectionCount = intersectingPortions.size();
 
-    LOCAL_LOG_TRACE("event", "request_filter")
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)("event", "request_filter")
     ("source", constructor->GetRequest()->Get()->GetPortionId())("intersecting_portions", intersectingPortions.size());
     AFL_VERIFY(intersectingPortions.size());
 
@@ -189,11 +186,11 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
 
 void TDuplicateManager::Handle(const NPrivate::TEvFilterConstructionResult::TPtr& ev) {
     if (ev->Get()->GetConclusion().IsFail()) {
-        LOCAL_LOG_TRACE("event", "filter_construction_error")("error", ev->Get()->GetConclusion().GetErrorMessage());
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)("event", "filter_construction_error")("error", ev->Get()->GetConclusion().GetErrorMessage());
         AbortAndPassAway(ev->Get()->GetConclusion().GetErrorMessage());
         return;
     }
-    LOCAL_LOG_TRACE("event", "filters_constructed")("filters", ev->Get()->GetConclusion().GetResult().size());
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)("event", "filters_constructed")("filters", ev->Get()->GetConclusion().GetResult().size());
     AFL_VERIFY(ev->Get()->GetConclusion().GetResult().size());
     for (auto&& [mapInfo, filter] : ev->Get()->ExtractResult()) {
         if (auto findInterval = IntervalsInFlight.find(mapInfo.GetInterval()); findInterval != IntervalsInFlight.end()) {
@@ -203,7 +200,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterConstructionResult::TPtr
             }
         }
         FiltersCache.Insert(mapInfo, filter);
-        LOCAL_LOG_TRACE("event", "extract_constructed_filter")("range", mapInfo.DebugString());
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)("event", "extract_constructed_filter")("range", mapInfo.DebugString());
     }
 
     ValidateInFlightProgress();

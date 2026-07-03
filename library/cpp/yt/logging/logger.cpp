@@ -220,23 +220,23 @@ void TLogger::Write(TLogEvent&& event) const
     LogManager_->Enqueue(std::move(event));
 }
 
-void TLogger::AddRawTag(const std::string& tag)
+void TLogger::AddRawTag(TStringBuf tag)
 {
     auto* state = GetMutableCoWState();
     if (!state->Tag.empty()) {
         state->Tag += ", ";
     }
-    state->Tag += tag;
+    state->Tag.append(tag.data(), tag.size());
 }
 
-TLogger TLogger::WithRawTag(const std::string& tag) const &
+TLogger TLogger::WithRawTag(TStringBuf tag) const &
 {
     auto result = *this;
     result.AddRawTag(tag);
     return result;
 }
 
-TLogger TLogger::WithRawTag(const std::string& tag) &&
+TLogger TLogger::WithRawTag(TStringBuf tag) &&
 {
     AddRawTag(tag);
     return std::move(*this);

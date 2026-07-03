@@ -3571,6 +3571,25 @@ namespace NSchemeShardUT_Private {
         ForwardToTablet(runtime, schemeShard, sender, request.Release());
     }
 
+    TEvSetColumnConstraint::TEvListRequest* ListSetColumnConstraintRequest(const TString& dbName) {
+        return new TEvSetColumnConstraint::TEvListRequest(dbName, 100, "");
+    }
+
+    NKikimrSetColumnConstraint::TEvListResponse TestListSetColumnConstraint(TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName) {
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = ListSetColumnConstraintRequest(dbName);
+
+        ForwardToTablet(runtime, schemeShard, sender, request);
+
+        TAutoPtr<IEventHandle> handle;
+        TEvSetColumnConstraint::TEvListResponse* event = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvListResponse>(handle);
+        UNIT_ASSERT(event);
+
+        Cerr << "SET COLUMN CONSTRAINT RESPONSE LIST: " << event->ToString() << Endl;
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), 400000, event->Record.GetIssues());
+        return event->Record;
+    }
+
     void TestCheckColumnsNotNull(
         TTestActorRuntime& runtime,
         const TString& tablePath,

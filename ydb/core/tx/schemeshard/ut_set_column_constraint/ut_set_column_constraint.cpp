@@ -1293,4 +1293,129 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         UNIT_ASSERT(getResponse.GetStartTime().seconds() > 0);
         UNIT_ASSERT(getResponse.GetEndTime().seconds() > getResponse.GetStartTime().seconds());
     }
+
+    Y_UNIT_TEST(ListOperations) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        TString root = "/MyRoot";
+        TString tablePath1 = root + "/Table1";
+        TString tablePath2 = root + "/Table2";
+
+        // Create test tables
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table1"
+              Columns { Name: "key"    Type: "Uint32" }
+              Columns { Name: "value"  Type: "Utf8"   }
+              Columns { Name: "value2" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            TString notnullVal = "hello";
+            TVector<TCell> cells = {
+                TCell::Make((ui32)1),
+                TCell(notnullVal.data(), notnullVal.size()),
+                TCell() // NULL
+            };
+
+            WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, tablePath1,
+                0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                {1, 2, 3}, TSerializedCellMatrix(cells, 1, 3), true);
+        }
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table2"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Start first set column constraint operation
+        ui64 setConstraintTxId1 = ++txId;
+        auto response1 = TestSetColumnConstraint(
+            runtime, setConstraintTxId1,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath1,
+            {"value"});
+
+        UNIT_ASSERT_VALUES_EQUAL(response1.GetStatus(), Ydb::StatusIds::SUCCESS);
+        env.TestWaitNotification(runtime, setConstraintTxId1, TTestTxConfig::SchemeShard);
+
+        // Start first set column constraint operation
+        ui64 setConstraintTxId2 = ++txId;
+        auto response2 = TestSetColumnConstraint(
+            runtime, setConstraintTxId2,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath1,
+            {"value2"});
+
+        UNIT_ASSERT_VALUES_EQUAL(response2.GetStatus(), Ydb::StatusIds::SUCCESS);
+        env.TestWaitNotification(runtime, setConstraintTxId2, TTestTxConfig::SchemeShard);
+
+        // Start second set column constraint operation
+        ui64 setConstraintTxId3 = ++txId;
+        auto response3 = TestSetColumnConstraint(
+            runtime, setConstraintTxId3,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath2,
+            {"value"});
+
+        UNIT_ASSERT_VALUES_EQUAL(response3.GetStatus(), Ydb::StatusIds::SUCCESS);
+        env.TestWaitNotification(runtime, setConstraintTxId3, TTestTxConfig::SchemeShard);
+
+        // Test list operations
+        auto listResponse = TestListSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, root);
+
+        UNIT_ASSERT_VALUES_EQUAL(listResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_GE(listResponse.GetEntries().size(), 3);
+
+        // Check that both operations are in the list
+        bool foundOp1 = false, foundOp2 = false, foundOp3 = false;
+        for (const auto& entry : listResponse.GetEntries()) {
+            const auto& columns = entry.GetSettings().GetNotNullColumns();
+            if (entry.GetId() == setConstraintTxId1) {
+                foundOp1 = true;
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(entry.GetState()), static_cast<int>(Ydb::Table::SetColumnConstraintState::STATE_DONE));
+                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(columns.Get(0), "value");
+            }
+            if (entry.GetId() == setConstraintTxId2) {
+                foundOp2 = true;
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(entry.GetState()), static_cast<int>(Ydb::Table::SetColumnConstraintState::STATE_DONE));
+                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(columns.Get(0), "value2");
+            }
+            if (entry.GetId() == setConstraintTxId3) {
+                foundOp3 = true;
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(entry.GetState()), static_cast<int>(Ydb::Table::SetColumnConstraintState::STATE_CANCELLED));
+                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(columns.Get(0), "value2");
+            }
+        }
+
+        UNIT_ASSERT(foundOp1);
+        UNIT_ASSERT(foundOp2);
+        UNIT_ASSERT(foundOp3);
+    }
+
+    Y_UNIT_TEST(ListEmptyOperations) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        TString root = "/MyRoot";
+
+        // Test list operations when no operations exist
+        auto listResponse = TestListSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, root);
+
+        UNIT_ASSERT_VALUES_EQUAL(listResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(listResponse.GetEntries().size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(listResponse.GetNextPageToken(), "0");
+    }
 } // Y_UNIT_TEST_SUITE(SetNotNullTest)

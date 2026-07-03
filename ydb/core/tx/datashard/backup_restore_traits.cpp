@@ -86,8 +86,7 @@ ECompressionCodec NextCompressionCodec(ECompressionCodec cur) {
     }
 }
 
-TParquetExportSettings ParquetExportSettingsFromTask(const NKikimrSchemeOp::TBackupTask& task) {
-    NKikimrSchemeOp::TParquetFormat taskParquetSettings;
+std::optional<TParquetExportSettings> ParquetExportSettingsFromTask(const NKikimrSchemeOp::TBackupTask& task) {
     switch(task.GetSettingsCase()) {
     case NKikimrSchemeOp::TBackupTask::kS3Settings: {
         auto& taskParquetSettings = task.GetS3Settings().GetExportDataSettings().GetParquet();
@@ -99,9 +98,9 @@ TParquetExportSettings ParquetExportSettingsFromTask(const NKikimrSchemeOp::TBac
     }
     case NKikimrSchemeOp::TBackupTask::SETTINGS_NOT_SET:
     case NKikimrSchemeOp::TBackupTask::kYTSettings:
-        return TParquetExportSettings();
+        return std::nullopt;
     }
-    return TParquetExportSettings();
+    return std::nullopt;
 }
 
 TString DataFileExtension(EDataFormat format, ECompressionCodec codec) {

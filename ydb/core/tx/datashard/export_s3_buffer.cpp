@@ -439,7 +439,8 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
         {
             bufferSettings.WithoutCompression();
             
-            auto settings = ParquetExportSettingsFromTask(Task);
+            auto maybeSettings = ParquetExportSettingsFromTask(Task);
+            auto settings = maybeSettings.value_or(TParquetExportSettings{});
             settings
                 .WithColumns(Columns);
             

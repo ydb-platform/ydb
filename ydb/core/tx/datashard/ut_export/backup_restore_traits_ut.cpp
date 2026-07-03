@@ -50,29 +50,34 @@ Y_UNIT_TEST_SUITE(BackupRestoreTraitsTest) {
     Y_UNIT_TEST(ParquetExportSettingsFromTaskS3) {
         NKikimrSchemeOp::TBackupTask task;
         task.MutableS3Settings()->MutableExportDataSettings()->MutableParquet()->SetRowGroupSize(123);
-        UNIT_ASSERT_VALUES_EQUAL(ParquetExportSettingsFromTask(task).RowGroupSize, 123);
+        auto settings = ParquetExportSettingsFromTask(task);
+        UNIT_ASSERT(settings.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(settings->RowGroupSize, 123);
     }
 
     // ParquetExportSettingsFromTask must read the Parquet sub-message from FS settings.
     Y_UNIT_TEST(ParquetExportSettingsFromTaskFS) {
         NKikimrSchemeOp::TBackupTask task;
         task.MutableFSSettings()->MutableExportDataSettings()->MutableParquet()->SetRowGroupSize(456);
-        UNIT_ASSERT_VALUES_EQUAL(ParquetExportSettingsFromTask(task).RowGroupSize, 456);
+        auto settings = ParquetExportSettingsFromTask(task);
+        UNIT_ASSERT(settings.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(settings->RowGroupSize, 456);
     }
 
     // FS Parquet without an explicit RowGroupSize falls back to the proto default.
     Y_UNIT_TEST(ParquetExportSettingsFromTaskFSDefaultRowGroupSize) {
         NKikimrSchemeOp::TBackupTask task;
         task.MutableFSSettings()->MutableExportDataSettings()->MutableParquet();
-        UNIT_ASSERT_VALUES_EQUAL(ParquetExportSettingsFromTask(task).RowGroupSize,
+        auto settings = ParquetExportSettingsFromTask(task);
+        UNIT_ASSERT(settings.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(settings->RowGroupSize,
             NKikimrSchemeOp::TParquetFormat().GetRowGroupSize());
     }
 
-    // For tasks without S3/FS settings a default (empty) Parquet message is returned.
+    // For tasks without S3/FS settings nullopt is returned.
     Y_UNIT_TEST(ParquetExportSettingsFromTaskNoSettings) {
         NKikimrSchemeOp::TBackupTask task;
-        UNIT_ASSERT_VALUES_EQUAL(ParquetExportSettingsFromTask(task).RowGroupSize,
-            NKikimrSchemeOp::TParquetFormat().GetRowGroupSize());
+        UNIT_ASSERT(!ParquetExportSettingsFromTask(task).has_value());
     }
 
     // The format iteration order used when probing for backup files.

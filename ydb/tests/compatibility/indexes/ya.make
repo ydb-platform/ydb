@@ -4,7 +4,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 FORK_TEST_FILES()
 FORK_TESTS()
 FORK_SUBTESTS()
-SPLIT_FACTOR(10)
+SPLIT_FACTOR(12)
 
 TEST_SRCS(
     test_fulltext_index.py

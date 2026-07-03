@@ -5,7 +5,7 @@ ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 FORK_TEST_FILES()
 FORK_TESTS()
 FORK_SUBTESTS()
-SPLIT_FACTOR(10)
+SPLIT_FACTOR(32)
 
 TEST_SRCS(
     test_stress.py

@@ -277,12 +277,17 @@ Y_UNIT_TEST(FailureWithEmptyQueryTextLogsIssuesAtWarn) {
         const auto edge = runtime.AllocateEdgeActor();
         SendKqpQueryAsUser(runtime, edge, "user@domain", "");
     }
-    const auto entries = CollectReqJson(logStream.Str());
-    DumpEntries("FailureWithEmptyQueryTextLogsIssuesAtWarn", entries, logStream.Str());
+    const auto fullLog = logStream.Str();
+    const auto entries = CollectReqJson(fullLog);
+    DumpEntries("FailureWithEmptyQueryTextLogsIssuesAtWarn", entries, fullLog);
 
     bool found = false;
     for (const auto& e : entries) {
         if (e.Event != "completed" || e.Part != 1) {
+            continue;
+        }
+        // Whole-log scan now sees startup/background requests too — scope to ours.
+        if (e.Json["user"].GetStringSafe("") != "user@domain") {
             continue;
         }
         const auto& req = e.Json["request"];
@@ -406,7 +411,7 @@ Y_UNIT_TEST(IssuesOnlyInFirstPartOnFailure) {
         UNIT_ASSERT_C(!bad.IsSuccess(), "syntax-broken query must fail");
     }
     const auto fullLog = logStream.Str();
-    const auto entries = CollectReqJson(logStream.Str());
+    const auto entries = CollectReqJson(fullLog);
     DumpEntries("IssuesOnlyInFirstPartOnFailure", entries, fullLog);
 
     TString targetReqId;
@@ -468,13 +473,16 @@ Y_UNIT_TEST(LongIssuesChunkedAcrossPartsOnFailure) {
             sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(!fail.IsSuccess(), "missing-table query must fail");
     }
-    const auto entries = CollectReqJson(logStream.Str());
-    DumpEntries("LongIssuesChunkedAcrossPartsOnFailure", entries, logStream.Str());
+    const auto fullLog = logStream.Str();
+    const auto entries = CollectReqJson(fullLog);
+    DumpEntries("LongIssuesChunkedAcrossPartsOnFailure", entries, fullLog);
 
     TString targetReqId;
     for (const auto& e : entries) {
         const auto status = e.Json["request"]["status"].GetStringSafe("");
-        if (e.Part == 1 && !status.empty() && status != "SUCCESS") {
+        // Only our long broken SQL fans out into a multi-part failure — that
+        // Total>1 keeps startup/background single-part failures out of scope.
+        if (e.Total > 1 && e.Part == 1 && !status.empty() && status != "SUCCESS") {
             targetReqId = e.Json["req_id"].GetStringSafe("");
             break;
         }
@@ -515,8 +523,9 @@ Y_UNIT_TEST(LongIssuesTruncatedAtWarn) {
             sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(!fail.IsSuccess(), "missing-table query must fail");
     }
-    const auto entries = CollectReqJson(logStream.Str());
-    DumpEntries("LongIssuesTruncatedAtWarn", entries, logStream.Str());
+    const auto fullLog = logStream.Str();
+    const auto entries = CollectReqJson(fullLog);
+    DumpEntries("LongIssuesTruncatedAtWarn", entries, fullLog);
 
     bool found = false;
     for (const auto& e : entries) {
@@ -525,6 +534,11 @@ Y_UNIT_TEST(LongIssuesTruncatedAtWarn) {
         }
         const auto& req = e.Json["request"];
         if (req["status"].GetStringSafe("") == "SUCCESS") {
+            continue;
+        }
+        // Whole-log scan sees startup/background WARN failures too — ours is the
+        // only one whose SQL carries the giant missing-table marker.
+        if (!req["data"].GetStringSafe("").Contains("zzzz")) {
             continue;
         }
         UNIT_ASSERT_VALUES_EQUAL_C(e.Total, 1, e.RawLine);

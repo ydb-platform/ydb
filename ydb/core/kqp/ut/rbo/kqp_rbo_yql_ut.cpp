@@ -46,6 +46,7 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 using namespace NYdb;
 using namespace NYdb::NTable;
+using namespace NYql::NNodes;
 using namespace NStat;
 
 TString FormatBenchmarkTraceTitle(TStringBuf suiteName, TStringBuf benchmarkName, ui32 queryId) {
@@ -1056,6 +1057,67 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         for (const auto& iu : convertedOutput) {
             UNIT_ASSERT(!IsGeneratedIgnoreIU(iu));
         }
+    }
+
+    Y_UNIT_TEST(KqpOpJoinRenamesNonGeneratedRightOutputConflicts) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftNode = testContext.ExprCtx.NewCallable(pos, "LeftInput", {});
+        auto rightNode = testContext.ExprCtx.NewCallable(pos, "RightInput", {});
+        auto joinNode = Build<TKqpOpJoin>(testContext.ExprCtx, pos)
+            .LeftInput(leftNode)
+            .RightInput(rightNode)
+            .JoinKind()
+                .Value("Inner")
+            .Build()
+            .JoinKeys<TDqJoinKeyTupleList>()
+                .Add<TDqJoinKeyTuple>()
+                    .LeftLabel()
+                        .Value("")
+                    .Build()
+                    .LeftColumn()
+                        .Value("a")
+                    .Build()
+                    .RightLabel()
+                        .Value("")
+                    .Build()
+                    .RightColumn()
+                        .Value("a")
+                    .Build()
+                .Build()
+            .Build()
+            .JoinFilters()
+            .Build()
+        .Done().Ptr();
+
+        PlanConverter converter(testContext.TypeCtx, testContext.ExprCtx);
+        converter.Converted[leftNode.Get()] = MakeTestRead({TInfoUnit("a"), TInfoUnit("left_payload")}, pos);
+        converter.Converted[rightNode.Get()] = MakeTestRead({TInfoUnit("a"), TInfoUnit("right_payload")}, pos);
+
+        auto converted = CastOperator<TOpJoin>(converter.ConvertTKqpOpJoin(joinNode));
+
+        UNIT_ASSERT_C(converted->GetRightInput()->Kind == EOperator::Map, converted->ToString(testContext.ExprCtx));
+        auto rightMap = CastOperator<TOpMap>(converted->GetRightInput());
+        const auto conflictRename = std::find_if(
+            rightMap->MapElements.begin(),
+            rightMap->MapElements.end(),
+            [](const TMapElement& element) {
+                return element.IsRename() && element.GetRename() == TInfoUnit("a");
+            });
+        UNIT_ASSERT(conflictRename != rightMap->MapElements.end());
+
+        const auto replacement = conflictRename->GetElementName();
+        UNIT_ASSERT(replacement != TInfoUnit("a"));
+        UNIT_ASSERT(!IsGeneratedIgnoreIU(replacement));
+        UNIT_ASSERT_VALUES_EQUAL(converted->JoinKeys.size(), 1);
+        UNIT_ASSERT(converted->JoinKeys.front().first == TInfoUnit("a"));
+        UNIT_ASSERT(converted->JoinKeys.front().second == replacement);
+
+        const auto output = converted->GetOutputIUs();
+        UNIT_ASSERT_VALUES_EQUAL(MakeInfoUnitSet(output).size(), output.size());
+        UNIT_ASSERT_VALUES_EQUAL(std::count(output.begin(), output.end(), TInfoUnit("a")), 1);
+        UNIT_ASSERT(std::find(output.begin(), output.end(), replacement) != output.end());
     }
 
     Y_UNIT_TEST(ReplaceAliasSubqueryDoesNotDuplicateVisibleColumns) {

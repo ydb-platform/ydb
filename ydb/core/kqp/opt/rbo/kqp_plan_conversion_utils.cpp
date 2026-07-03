@@ -1,5 +1,6 @@
 #include "kqp_plan_conversion_utils.h"
 #include "kqp_rbo_utils.h"
+#include "rules/join_common.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 
@@ -40,29 +41,41 @@ bool OutputsBothJoinSides(const TString& joinKind) {
     return joinKind != "LeftOnly" && joinKind != "LeftSemi" && joinKind != "RightOnly" && joinKind != "RightSemi";
 }
 
-void RenameRightGeneratedIgnoreConflicts(
+TInfoUnit MakeRightConflictReplacement(const TInfoUnit& conflict, TInfoUnitSet& usedIUs, TPlanProps& props) {
+    if (!IsGeneratedIgnoreIU(conflict)) {
+        return NJoinRules::MakeUniqueInternalIU(props.InternalVarIdx, usedIUs);
+    }
+
+    for (;;) {
+        const auto replacement = MakeGeneratedIgnoreIU(props);
+        if (AddInfoUnit(usedIUs, replacement)) {
+            return replacement;
+        }
+    }
+}
+
+NJoinRules::TRenameMap BuildRightOutputConflictRenames(
     const TIntrusivePtr<IOperator>& leftInput,
-    TIntrusivePtr<IOperator>& rightInput,
-    TPositionHandle pos,
-    TExprContext& ctx,
+    const TIntrusivePtr<IOperator>& rightInput,
     TPlanProps& props)
 {
     const auto leftOutput = MakeInfoUnitSet(leftInput->GetOutputIUs());
-    TVector<TMapElement> mapElements;
+    const auto rightOutput = rightInput->GetOutputIUs();
+    TInfoUnitSet usedIUs = leftOutput;
+    AddInfoUnits(usedIUs, rightOutput);
 
-    for (const auto& rightIU : rightInput->GetOutputIUs()) {
-        if (!IsGeneratedIgnoreIU(rightIU) || !leftOutput.contains(rightIU)) {
+    NJoinRules::TRenameMap rightRenames;
+
+    for (const auto& rightIU : rightOutput) {
+        if (!leftOutput.contains(rightIU)) {
             continue;
         }
 
-        mapElements.emplace_back(MakeGeneratedIgnoreIU(props), rightIU, pos, &ctx, &props);
+        const auto replacement = MakeRightConflictReplacement(rightIU, usedIUs, props);
+        rightRenames.emplace(rightIU, replacement);
     }
 
-    if (mapElements.empty()) {
-        return;
-    }
-
-    rightInput = MakeIntrusive<TOpMap>(rightInput, pos, mapElements);
+    return rightRenames;
 }
 
 void AddVisibleDependencies(const TIntrusivePtr<IOperator>& op, TInfoUnitSet& dependencies) {
@@ -452,7 +465,11 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node) 
     }
 
     if (OutputsBothJoinSides(joinKind)) {
-        RenameRightGeneratedIgnoreConflicts(leftInput, rightInput, node->Pos(), Ctx, PlanProps);
+        const auto rightRenames = BuildRightOutputConflictRenames(leftInput, rightInput, PlanProps);
+        if (!rightRenames.empty()) {
+            return NJoinRules::MakeJoinWithRightRenames(
+                leftInput, rightInput, node->Pos(), joinKind, joinKeys, joinFilters, rightRenames, Ctx, PlanProps);
+        }
     }
 
     return MakeIntrusive<TOpJoin>(leftInput, rightInput, node->Pos(), joinKind, joinKeys, joinFilters);

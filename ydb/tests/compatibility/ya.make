@@ -1,5 +1,6 @@
 RECURSE(
     core
+    workloads
     indexes
     topics
     stress

@@ -69,6 +69,18 @@ def _shell_escape(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
 
+def _default_repo_root() -> Optional[Path]:
+    """Infer YDB repo root from script location (same logic as fetch_and_build_dashboard)."""
+    p = Path(__file__).resolve().parent
+    for _ in range(10):
+        if (p / "ydb").is_dir() and (p / ".github").is_dir():
+            return p
+        if p.parent == p:
+            break
+        p = p.parent
+    return None
+
+
 # Match path ending with aux file; (?:$|\s) = at end of string or followed by space (evlog name can list multiple paths)
 EVLOG_AUX_OUTPUT_RE = re.compile(
     r"(?:^|/)(?:meta\.json|ytest\.report\.trace|run_test\.log|testing_out_stuff\.tar(?:\.zstd)?)(?=\s|$)"
@@ -1460,12 +1472,13 @@ def main() -> None:
         runs.append(out)
 
     requirements_cache = None
-    repo_root = args.repo_root
+    repo_root = args.repo_root.resolve() if args.repo_root else _default_repo_root()
     if not repo_root or not repo_root.is_dir():
         if len(chunks) == 0 and runs:
             repo_root = Path.cwd()
         else:
             repo_root = None
+    suites_missing_ya_make: list[str] = []
     if repo_root and repo_root.is_dir():
         suite_paths = sorted(
             {normalize_suite_path(str(r["suite_path"])) for r in runs}
@@ -1474,11 +1487,24 @@ def main() -> None:
         requirements_cache = ya_make_requirements.build_requirements_cache(
             repo_root, suite_paths, sanitizer=effective_sanitizer
         )
+        suites_missing_ya_make = [
+            sp for sp in suite_paths if sp not in (requirements_cache or {})
+        ]
 
     trace, stats, enriched_runs = build_trace(runs, chunks, args.suite_path, requirements_cache)
     stats["runs_from_report"] = len(report_runs)
     stats["runs_from_evlog"] = len(evlog_runs)
     stats["runs_enriched_by_evlog"] = enriched_by_evlog
+    stats["repo_root"] = str(repo_root) if repo_root else None
+    stats["suites_missing_ya_make"] = suites_missing_ya_make
+    if suites_missing_ya_make:
+        print(
+            "WARNING: ya.make not found for "
+            f"{len(suites_missing_ya_make)} suite(s) under repo_root={repo_root}. "
+            "ya_cpu / ya_split_factor / SIZE will use defaults (SIZE=SMALL -> recommended_cpu may cap at 1). "
+            "Use --repo-root pointing at the CI branch checkout (e.g. compat split).",
+            file=sys.stderr,
+        )
 
     # Per-suite chunk count from report (declared chunks; may differ from evlog run count).
     # If suite has indexed chunk rows, ignore "sole chunk" rows for counting.

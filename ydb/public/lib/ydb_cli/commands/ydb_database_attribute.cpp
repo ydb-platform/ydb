@@ -3,6 +3,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/cms/cms.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
+#include <util/string/strip.h>
+
 #include <memory>
 
 namespace NYdb {
@@ -49,7 +51,7 @@ TCommandDatabaseAttributeSet::TCommandDatabaseAttributeSet()
 void TCommandDatabaseAttributeSet::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.SetFreeArgsMin(1);
-    SetFreeArgTitle(0, "<ATTRIBUTE>", "NAME=VALUE");
+    SetFreeArgTitle(0, "<ATTRIBUTE>", "NAME=VALUE (non-empty value)");
 }
 
 void TCommandDatabaseAttributeSet::Parse(TConfig& config) {
@@ -64,7 +66,14 @@ void TCommandDatabaseAttributeSet::Parse(TConfig& config) {
                 << "Bad format in attribute '" + attr + "'. NAME=VALUE expected";
         }
 
-        Attributes[items.at(0)] = items.at(1);
+        const auto value = StripString(items.at(1));
+
+        if (value.empty()) {
+            throw TMisuseException()
+                << "Bad attribure '" + attr + "'. Attribute value cannot be empty";
+        }
+
+        Attributes[items.at(0)] = value;
     }
 }
 

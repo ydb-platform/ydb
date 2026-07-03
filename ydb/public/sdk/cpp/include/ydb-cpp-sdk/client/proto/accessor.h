@@ -73,8 +73,8 @@ public:
     static Ydb::Export::ExportToS3Settings::StorageClass GetProto(NExport::TExportToS3Settings::EStorageClass value);
     static NExport::TExportToS3Settings::EStorageClass FromProto(Ydb::Export::ExportToS3Settings::StorageClass value);
     static NExport::EExportProgress FromProto(Ydb::Export::ExportProgress::Progress value);
-    static NExport::TYdbDumpFormat FromProto(Ydb::Export::YdbDumpFormat value);
-    static NExport::TParquetFormat FromProto(Ydb::Export::ParquetFormat value);
+    static NExport::TYdbDumpFormat FromProto(const Ydb::Export::YdbDumpFormat& value);
+    static NExport::TParquetFormat FromProto(const Ydb::Export::ParquetFormat& value);
     static NImport::EImportProgress FromProto(Ydb::Import::ImportProgress::Progress value);
     static Ydb::Import::ImportFromS3Settings::IndexPopulationMode GetProto(NImport::EIndexPopulationMode value);
     static NImport::EIndexPopulationMode FromProto(Ydb::Import::ImportFromS3Settings::IndexPopulationMode value);

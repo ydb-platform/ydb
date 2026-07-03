@@ -9,7 +9,7 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/bootstrap.pb.h>
 
 namespace NKikimr::NSharedCache {
 using namespace NActors;

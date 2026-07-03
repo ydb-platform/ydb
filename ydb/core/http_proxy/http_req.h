@@ -60,6 +60,7 @@ struct THttpResponseData {
     ui32 YmqHttpCode = 500;
     bool YmqIsFifo = false;
     THashMap<TString, TString> QueueTags;
+    bool SkipMetering = false;
 
     TString DumpBody(MimeTypes contentType);
 };

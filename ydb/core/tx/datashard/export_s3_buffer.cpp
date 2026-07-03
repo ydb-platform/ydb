@@ -59,6 +59,10 @@ public:
         return Buffer.Size();
     }
 
+    size_t GetUncompressedBytes() const {
+        return BytesAdded;
+    }
+
 private:
     enum ECompressionResult {
         CONTINUE,
@@ -81,7 +85,6 @@ class TS3Buffer: public NExportScan::IBuffer {
     using TChecksumCreator = std::function<NBackup::IChecksum*()>;
     using TEncryptionCreator = std::function<TMaybe<NBackup::TEncryptedFileSerializer>()>;
     using TTagToColumn = IExport::TTableColumns;
-    using TTagToIndex = THashMap<ui32, ui32>; // index in IScan::TRow
 
 public:
     explicit TS3Buffer(TS3ExportBufferSettings&& settings, std::unique_ptr<IExportDataFormat> dataFormat);
@@ -108,8 +111,6 @@ private:
     const ui64 MinBytes;
     const ui64 MaxBytes;
     std::unique_ptr<IExportDataFormat> DataFormat;
-
-    TTagToIndex Indices;
 
 protected:
     ui64 Rows = 0;
@@ -262,6 +263,10 @@ void TS3Buffer::Clear() {
 bool TS3Buffer::IsFilled() const {
     size_t outputSize = Buffer.Size();
     if (Compression) {
+        size_t uncompressedSize = Compression->GetUncompressedBytes();
+        if (uncompressedSize >= MaxBytes) {
+            return true;
+        }
         outputSize = Compression->GetReadyOutputBytes();
     }
     // Some formats (e.g. Parquet) keep encoded output inside the format itself

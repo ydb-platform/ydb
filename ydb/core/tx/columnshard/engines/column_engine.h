@@ -170,7 +170,9 @@ public:
     virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) = 0;
 
     void RegisterTable(const TInternalPathId pathId) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "RegisterTable")("path_id", pathId);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "RegisterTable"},
+            {"pathId", pathId});
         return DoRegisterTable(pathId);
     }
 

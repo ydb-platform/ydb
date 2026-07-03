@@ -208,7 +208,6 @@ public:
 
     ~TDynamicNameserver() {
         for (auto& config : DynamicConfigs) {
-            config->PendingCacheMisses.Clear();
             config->CacheMissHolders.clear();
         }
     }

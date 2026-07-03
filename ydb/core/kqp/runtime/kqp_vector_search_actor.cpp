@@ -331,19 +331,29 @@ private:
         return TargetVector.empty() ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Ok;
     }
 
+    // Insert `item` into a bounded max-heap kept at <= `cap` (cmp orders it worst
+    // at the front for cheap eviction). The caller guarantees the item belongs:
+    // either the heap is below cap, or the item is nearer than the current worst.
+    template <typename T, typename TCmp>
+    static void PushBoundedMaxHeap(TVector<T>& heap, size_t cap, T item, TCmp cmp) {
+        if (heap.size() < cap) {
+            heap.push_back(std::move(item));
+            std::push_heap(heap.begin(), heap.end(), cmp);
+        } else {
+            std::pop_heap(heap.begin(), heap.end(), cmp);
+            heap.back() = std::move(item);
+            std::push_heap(heap.begin(), heap.end(), cmp);
+        }
+    }
+
     // Insert a child into the round's bounded max-heap of the LevelTop nearest
-    // (keyed by distance, worst at the top for cheap eviction). Once full, a child
-    // no nearer than the current worst is dropped, so the ranking structure never
-    // grows past LevelTop regardless of how many shards contribute.
+    // (keyed by distance). Once full, a child no nearer than the current worst is
+    // dropped, so the ranking structure never grows past LevelTop regardless of how
+    // many shards contribute.
     void PushLevelCandidate(TClusterId id, double distance) {
         auto cmp = [](const auto& a, const auto& b) { return a.second < b.second; };
-        if (LevelCandidates.size() < LevelTop) {
-            LevelCandidates.emplace_back(id, distance);
-            std::push_heap(LevelCandidates.begin(), LevelCandidates.end(), cmp);
-        } else if (distance < LevelCandidates.front().second) {
-            std::pop_heap(LevelCandidates.begin(), LevelCandidates.end(), cmp);
-            LevelCandidates.back() = {id, distance};
-            std::push_heap(LevelCandidates.begin(), LevelCandidates.end(), cmp);
+        if (LevelCandidates.size() < LevelTop || distance < LevelCandidates.front().second) {
+            PushBoundedMaxHeap(LevelCandidates, LevelTop, std::make_pair(id, distance), cmp);
         }
     }
 
@@ -546,6 +556,14 @@ private:
         }
     }
 
+    // Append the main-table PK column types (shared by the posting and main reads,
+    // whose keys both carry the main PK columns).
+    void AddMainKeyColumnTypes(NKikimrTxDataShard::TKqpReadRangesSourceSettings* src) {
+        for (const auto& pk : Settings.GetMainTableKeyColumns()) {
+            AddColumnMetaKeyColumnType(src, pk);
+        }
+    }
+
     static void AddColumn(NKikimrTxDataShard::TKqpReadRangesSourceSettings* src,
         ui32 id, const TString& name, ui32 typeId, const NKikimrProto::TTypeInfo* typeInfo, bool notNull)
     {
@@ -616,9 +634,7 @@ private:
 
         // Posting key is (__ydb_parent, <main PK columns>).
         AddUint64KeyColumnType(src);
-        for (const auto& pk : Settings.GetMainTableKeyColumns()) {
-            AddColumnMetaKeyColumnType(src, pk);
-        }
+        AddMainKeyColumnTypes(src);
 
         YQL_ENSURE(Settings.PostingTableKeyColumnIdsSize() == Settings.MainTableKeyColumnsSize() + 1);
         if (PostingCovers) {
@@ -696,9 +712,7 @@ private:
             ranges->AddKeyPoints(key.GetBuffer());
         }
 
-        for (const auto& pk : Settings.GetMainTableKeyColumns()) {
-            AddColumnMetaKeyColumnType(src, pk);
-        }
+        AddMainKeyColumnTypes(src);
         for (const auto& col : Settings.GetOutputColumns()) {
             const NKikimrProto::TTypeInfo* ti = col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr;
             AddColumn(src, col.GetId(), col.GetName(), col.GetType(), ti, col.GetNotNull());
@@ -727,9 +741,9 @@ private:
         RegisterWithSameMailbox(readActor);
         // Kick off the freshly launched read: the first GetAsyncInputData poll starts
         // the inner read actor. Always called after (never during) the ActiveReads
-        // iteration loop, so re-entering HandleRead here is safe -- the new read has
-        // no data yet, so the nested call finds nothing finished and returns early.
-        HandleRead(nullptr);
+        // iteration loop, so re-polling here is safe -- the new read has no data yet,
+        // so the nested poll finds nothing finished and returns early.
+        PollActiveReads();
     }
 
     // The inner read actors are not async inputs of the compute actor, so the
@@ -773,20 +787,25 @@ private:
         return n;
     }
 
-    // Drain every active inner read, collecting their rows by table kind. Inner reads
-    // notify via TEvNewAsyncInputDataArrived (all with the same input index), so each
-    // wake-up polls all of them. Level rounds are barriered (the next round needs all
-    // children ranked). Posting and main reads of a non-covered search overlap: as the
-    // posting read streams rows in, once enough candidate PKs have buffered they are
-    // dispatched to a main read (LaunchMainReadFor) while the posting read keeps
-    // running, so cross-node latency is hidden instead of serialized behind a
-    // posting->main barrier. The search finishes once no posting and no main reads
-    // remain.
+    // Inner reads notify via TEvNewAsyncInputDataArrived (all with the same input
+    // index); every wake-up re-polls the whole active set.
     void HandleRead(TEvNewAsyncInputDataArrived::TPtr) {
+        PollActiveReads();
+    }
+
+    // Drain every active inner read, collecting their rows by table kind. Level rounds
+    // are barriered (the next round needs all children ranked). Posting and main reads
+    // of a non-covered search overlap: as the posting read streams rows in, once enough
+    // candidate PKs have buffered they are dispatched to a main read (LaunchMainReadFor)
+    // while the posting read keeps running, so cross-node latency is hidden instead of
+    // serialized behind a posting->main barrier. The search finishes once no posting and
+    // no main reads remain. Also called to kick a freshly launched read (see LaunchRead).
+    void PollActiveReads() {
         if (ActiveReads.empty()) {
             return;
         }
         TVector<TActiveRead> finishedReads;
+        bool postingFinished = false;
         {
             auto guard = BindAllocator();
             for (auto& ar : ActiveReads) {
@@ -801,6 +820,7 @@ private:
                 rows.clear();
                 if (finished) {
                     CollectLocks(ar.Read);
+                    postingFinished |= (ar.Kind == EReadKind::Posting);
                     finishedReads.push_back(ar);
                 }
                 if (Failed) {
@@ -808,21 +828,21 @@ private:
                 }
             }
         }
-        // Drop finished reads from the active set; any left unpolled after a Failed
-        // break stay active and are torn down later in PassAway.
-        THashSet<NYql::NDq::IDqComputeActorAsyncInput*> finishedSet;
-        for (const auto& ar : finishedReads) {
-            finishedSet.insert(ar.Read);
-        }
-        ActiveReads.erase(
-            std::remove_if(ActiveReads.begin(), ActiveReads.end(), [&](const TActiveRead& ar) {
-                return finishedSet.contains(ar.Read);
-            }),
-            ActiveReads.end());
-        // Tear down finished reads outside our allocator guard (their PassAway binds
-        // the allocator itself).
-        for (const auto& ar : finishedReads) {
-            StopRead(ar.Read);
+        // Drop finished reads from the active set and tear them down outside our
+        // allocator guard (their PassAway binds the allocator itself). Most wake-ups
+        // deliver partial data with nothing finished, so skip this entirely then --
+        // both the membership scan of ActiveReads and the reads' teardown. Any reads
+        // left unpolled after a Failed break stay active and are torn down in PassAway.
+        if (!finishedReads.empty()) {
+            ActiveReads.erase(
+                std::remove_if(ActiveReads.begin(), ActiveReads.end(), [&](const TActiveRead& ar) {
+                    return std::any_of(finishedReads.begin(), finishedReads.end(),
+                        [&](const TActiveRead& f) { return f.Read == ar.Read; });
+                }),
+                ActiveReads.end());
+            for (const auto& ar : finishedReads) {
+                StopRead(ar.Read);
+            }
         }
         if (Failed) {
             return;
@@ -834,10 +854,6 @@ private:
         // (its below-threshold tail must not be left stranded), carrying the final PKs.
         // Covered searches build candidates straight from the posting rows and never
         // read the main table.
-        bool postingFinished = false;
-        for (const auto& ar : finishedReads) {
-            postingFinished |= (ar.Kind == EReadKind::Posting);
-        }
         if (!PostingCovers && !PendingMainKeys.empty()
             && (postingFinished || PendingMainKeys.size() >= MainReadFlushThreshold))
         {
@@ -953,15 +969,9 @@ private:
         for (ui32 i = 0; i < Settings.OutputColumnsSize(); ++i) {
             items[i] = value.GetElement(i);
         }
-        if (Candidates.size() < TopK) {
-            Candidates.push_back(TCandidate{distance, std::move(row)});
-            std::push_heap(Candidates.begin(), Candidates.end(), cmp);
-        } else {
-            // Heap full and this row is nearer than the worst: evict the worst.
-            std::pop_heap(Candidates.begin(), Candidates.end(), cmp);
-            Candidates.back() = TCandidate{distance, std::move(row)};
-            std::push_heap(Candidates.begin(), Candidates.end(), cmp);
-        }
+        // The early-out above guarantees this row belongs (heap below TopK, or nearer
+        // than the current worst), so hand it to the bounded-heap insert.
+        PushBoundedMaxHeap(Candidates, TopK, TCandidate{distance, std::move(row)}, cmp);
     }
 
     void CollectLocks(NYql::NDq::IDqComputeActorAsyncInput* read) {

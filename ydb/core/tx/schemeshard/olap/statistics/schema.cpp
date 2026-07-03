@@ -1,0 +1,119 @@
+#include "schema.h"
+
+#include <ydb/core/tx/schemeshard/olap/schema/schema.h>
+
+namespace NKikimr::NSchemeShard {
+
+void TOlapMultiColumnStatisticsSchema::SerializeToProto(NKikimrSchemeOp::TMultiColumnStatisticsDescription& proto) const {
+    proto.SetName(Name);
+    for (const auto& columnName : ColumnNames) {
+        proto.AddColumnNames(columnName);
+    }
+    for (const auto columnId : ColumnIds) {
+        proto.AddColumnIds(columnId);
+    }
+    for (const auto type : Types) {
+        proto.AddTypes(type);
+    }
+}
+
+void TOlapMultiColumnStatisticsSchema::DeserializeFromProto(const NKikimrSchemeOp::TMultiColumnStatisticsDescription& proto) {
+    Name = proto.GetName();
+    for (const auto& columnName : proto.GetColumnNames()) {
+        ColumnNames.emplace_back(columnName);
+    }
+    for (const auto columnId : proto.GetColumnIds()) {
+        ColumnIds.emplace_back(columnId);
+    }
+    for (const auto type : proto.GetTypes()) {
+        Types.emplace_back(static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type));
+    }
+}
+
+bool TOlapMultiColumnStatisticsSchema::ApplyUpsert(const TOlapSchema& currentSchema, const TOlapMultiColumnStatisticsUpsert& upsert, IErrorCollector& errors) {
+    Name = upsert.GetName();
+    ColumnNames.clear();
+    ColumnIds.clear();
+    Types.clear();
+
+    if (upsert.GetColumnNames().empty()) {
+        errors.AddError(NKikimrScheme::StatusInvalidParameter,
+            TStringBuilder() << "MultiColumnStatistics '" << Name << "' must have at least one column");
+        return false;
+    }
+
+    for (const auto& columnName : upsert.GetColumnNames()) {
+        const auto* column = currentSchema.GetColumns().GetByName(columnName);
+        if (!column) {
+            errors.AddError(NKikimrScheme::StatusSchemeError,
+                TStringBuilder() << "Undefined column: " << columnName);
+            return false;
+        }
+        ColumnNames.emplace_back(columnName);
+        ColumnIds.emplace_back(column->GetId());
+    }
+
+    for (const auto rawType : upsert.GetTypes()) {
+        const auto type = static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(rawType);
+        switch (type) {
+            case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
+                break;
+        }
+        Types.emplace_back(type);
+    }
+
+    return true;
+}
+
+bool TOlapMultiColumnStatisticsDescription::ApplyUpdate(const TOlapSchema& currentSchema, const TOlapMultiColumnStatisticsUpdate& schemaUpdate, IErrorCollector& errors) {
+    for (const auto& name : schemaUpdate.GetDropMultiColumnStatistics()) {
+        if (!MultiColumnStatisticsByName.contains(name)) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Unknown statistics for drop: " << name);
+            return false;
+        }
+        MultiColumnStatisticsByName.erase(name);
+    }
+
+    for (const auto& upsert : schemaUpdate.GetUpsertMultiColumnStatistics()) {
+        if (MultiColumnStatisticsByName.contains(upsert.GetName())) {
+            errors.AddError(NKikimrScheme::StatusAlreadyExists, TStringBuilder() << "MultiColumnStatistics already exists: " << upsert.GetName());
+            return false;
+        }
+        TOlapMultiColumnStatisticsSchema statistics;
+        if (!statistics.ApplyUpsert(currentSchema, upsert, errors)) {
+            return false;
+        }
+        MultiColumnStatisticsByName.emplace(upsert.GetName(), std::move(statistics));
+    }
+
+    return true;
+}
+
+void TOlapMultiColumnStatisticsDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
+    for (const auto& proto : tableSchema.GetMultiColumnStatistics()) {
+        TOlapMultiColumnStatisticsSchema statistics;
+        statistics.DeserializeFromProto(proto);
+        MultiColumnStatisticsByName.emplace(proto.GetName(), std::move(statistics));
+    }
+}
+
+void TOlapMultiColumnStatisticsDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const {
+    for (const auto& [_, statistics] : MultiColumnStatisticsByName) {
+        statistics.SerializeToProto(*tableSchema.AddMultiColumnStatistics());
+    }
+}
+
+bool TOlapMultiColumnStatisticsDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+    for (const auto& proto : opSchema.GetMultiColumnStatistics()) {
+        if (proto.GetName().empty()) {
+            errors.AddError("MultiColumnStatistics cannot have an empty name");
+            return false;
+        }
+        if (!GetByName(proto.GetName())) {
+            errors.AddError("MultiColumnStatistics '" + proto.GetName() + "' does not match schema preset");
+            return false;
+        }
+    }
+    return true;
+}
+}

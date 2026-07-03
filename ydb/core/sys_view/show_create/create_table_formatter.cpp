@@ -308,6 +308,7 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
     try {
         FillTableBoundary(createRequest, tableDesc, mkqlKeyType);
         FillIndexDescription(createRequest, tableDesc);
+        FillMultiColumnStatisticsDescription(createRequest, tableDesc);
     } catch (const yexception& e) {
         return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());;
     }
@@ -319,6 +320,19 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
             for (int i = 1; i < createRequest.indexes().size(); i++) {
                 Stream << ",\n";
                 Format(createRequest.indexes(i));
+            }
+        } catch (const TFormatFail& ex) {
+            return TFormatResult(ex.Status, ex.Error);
+        } catch (const yexception& e) {
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+        }
+    }
+
+    if (!createRequest.statistics().empty()) {
+        try {
+            for (const auto& statistics : createRequest.statistics()) {
+                Stream << ",\n";
+                Format(statistics);
             }
         } catch (const TFormatFail& ex) {
             return TFormatResult(ex.Status, ex.Error);
@@ -759,6 +773,69 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         if (!with.empty()) {
             Stream << " WITH (" << with << ")";
         }
+    }
+}
+
+void TCreateTableFormatter::Format(const Ydb::Table::TableMultiColumnStatistics& statistics) {
+    Stream << "\tSTATISTICS ";
+    EscapeName(statistics.name(), Stream);
+
+    Y_ENSURE(!statistics.columns().empty(), "MultiColumnStatistics has no columns");
+    Stream << " ON (";
+    EscapeName(statistics.columns(0), Stream);
+    for (int i = 1; i < statistics.columns().size(); i++) {
+        Stream << ", ";
+        EscapeName(statistics.columns(i), Stream);
+    }
+    Stream << ")";
+
+    if (!statistics.types().empty()) {
+        Stream << " WITH (";
+        for (int i = 0; i < statistics.types().size(); i++) {
+            if (i > 0) {
+                Stream << ", ";
+            }
+            switch (statistics.types(i)) {
+                case Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH:
+                    Stream << "COUNT_MIN_SKETCH";
+                    break;
+                default:
+                    ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::TableMultiColumnStatistics statistic type");
+            }
+        }
+        Stream << ")";
+    }
+}
+
+void TCreateTableFormatter::Format(const NKikimrSchemeOp::TMultiColumnStatisticsDescription& statistics) {
+    Stream << "\tSTATISTICS ";
+    EscapeName(statistics.GetName(), Stream);
+
+    Y_ENSURE(!statistics.GetColumnNames().empty(), "MultiColumnStatistics has no columns");
+    Stream << " ON (";
+    for (int i = 0; i < statistics.GetColumnNames().size(); i++) {
+        if (i > 0) {
+            Stream << ", ";
+        }
+        EscapeName(statistics.GetColumnNames(i), Stream);
+    }
+    Stream << ")";
+
+    if (!statistics.GetTypes().empty()) {
+        Stream << " WITH (";
+        for (int i = 0; i < statistics.GetTypes().size(); i++) {
+            if (i > 0) {
+                Stream << ", ";
+            }
+            switch (statistics.GetTypes(i)) {
+                case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
+                    Stream << "COUNT_MIN_SKETCH";
+                    break;
+                default:
+                    ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected NKikimrSchemeOp::TMultiColumnStatisticsDescription statistic type");
+            }
+        }
+        Stream << ")";
     }
 }
 
@@ -1392,8 +1469,25 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
         }
     }
 
+    bool statisticsPrinted = false;
+    if (!schema.GetMultiColumnStatistics().empty()) {
+        try {
+            for (const auto& statistics : schema.GetMultiColumnStatistics()) {
+                if (isFamilyPrinted || hasInlineIndex || statisticsPrinted) {
+                    Stream << ",\n";
+                }
+                Format(statistics);
+                statisticsPrinted = true;
+            }
+        } catch (const TFormatFail& ex) {
+            return TFormatResult(ex.Status, ex.Error);
+        } catch (const yexception& e) {
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+        }
+    }
+
     Y_ENSURE(!schema.GetKeyColumnNames().empty(), "Table description has no key columns");
-    if (isFamilyPrinted || hasInlineIndex) {
+    if (isFamilyPrinted || hasInlineIndex || statisticsPrinted) {
         Stream << ",\n";
     }
     Stream << "\tPRIMARY KEY (";
@@ -1960,7 +2054,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& tablePath, const TS
             if (!minMaxIndex.HasColumnId()) {
                 ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << columnIdFieldName <<" must be filled in " << minMaxIndex.GetTypeName() << " proto");
             }
-            auto columnNameIt = columns.find(minMaxIndex.GetColumnId()); 
+            auto columnNameIt = columns.find(minMaxIndex.GetColumnId());
             if (columnNameIt == columns.end()) {
                 ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "column id(" << minMaxIndex.GetDescriptor()->FindFieldByNumber(TMinMaxIndex::kColumnIdFieldNumber)->full_name() << ") is not present in table description ");
             }

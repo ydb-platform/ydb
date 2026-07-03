@@ -725,6 +725,88 @@ Y_UNIT_TEST(TableDefaultLiteral) {
     );
 }
 
+Y_UNIT_TEST(TableWithMultiColumnStatistics) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+    TShowCreateChecker checker(env);
+
+    // Exact-output check for a row table.
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b) WITH (COUNT_MIN_SKETCH)
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64,
+                `a` Uint64,
+                `b` Utf8,
+                STATISTICS `s` ON (`a`, `b`) WITH (COUNT_MIN_SKETCH),
+                PRIMARY KEY (`Key`)
+            );
+        )"
+    );
+
+    // Round-trip check (create -> SHOW CREATE -> recreate -> compare) for a column table.
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b) WITH (COUNT_MIN_SKETCH)
+            )
+            WITH (STORE = COLUMN);
+        )", "test_show_create"
+    );
+}
+
+Y_UNIT_TEST(TableWithMultiColumnStatisticsWithoutWith) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b)
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64,
+                `a` Uint64,
+                `b` Utf8,
+                STATISTICS `s` ON (`a`, `b`),
+                PRIMARY KEY (`Key`)
+            );
+        )"
+    );
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b)
+            )
+            WITH (STORE = COLUMN);
+        )", "test_show_create"
+    );
+}
+
 Y_UNIT_TEST(TablePartitionAtKeys) {
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
 

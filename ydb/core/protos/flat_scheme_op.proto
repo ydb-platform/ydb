@@ -474,6 +474,10 @@ message TTableDescription {
     optional TTableDetailedMetricsSettings DetailedMetricsSettings = 51;
 
     reserved 52;
+
+    // Multi-column statistics.
+    repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 53;
+    repeated string DropMultiColumnStatistics = 54;
 }
 
 message TCompressionOptions {
@@ -658,6 +662,18 @@ message TOlapIndexDescription {
     }
 }
 
+enum EMultiColumnStatisticsType {
+    COUNT_MIN_SKETCH = 1;
+}
+
+// Multi-column table statistics
+message TMultiColumnStatisticsDescription {
+    optional string Name = 1;
+    repeated string ColumnNames = 2;
+    repeated uint32 ColumnIds = 3;
+    repeated EMultiColumnStatisticsType Types = 4;
+}
+
 enum EColumnTableEngine {
     COLUMN_ENGINE_NONE = 0;
     COLUMN_ENGINE_REPLACING_TIMESERIES = 1;
@@ -806,6 +822,8 @@ message TColumnTableSchema {
     repeated TFamilyDescription ColumnFamilies = 13;
     // Internal fields
     optional uint32 NextColumnFamilyId = 14;
+
+    repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 15;
 }
 
 message TColumnTableSchemaDiff {
@@ -820,6 +838,9 @@ message TColumnTableSchemaDiff {
     repeated uint32 DropIndexes = 6;
 
     optional TColumnTableSchemeOptions Options = 7;
+
+    repeated TMultiColumnStatisticsDescription UpsertMultiColumnStatistics = 8;
+    repeated string DropMultiColumnStatistics = 9;
 }
 
 message TColumnTableRequestedOptions {
@@ -840,6 +861,8 @@ message TAlterColumnTableSchema {
     repeated TFamilyDescription AddColumnFamily = 13;
     repeated TFamilyDescription AlterColumnFamily = 14;
     repeated TOlapMoveIndex MoveIndex = 15;
+    repeated TMultiColumnStatisticsDescription UpsertMultiColumnStatistics = 16;
+    repeated string DropMultiColumnStatistics = 17;
 }
 
 // Schema presets are used to manage multiple tables with the same schema

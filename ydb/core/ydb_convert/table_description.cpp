@@ -65,7 +65,8 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTabl
         req->alter_column_families_size() || req->set_compaction_policy() ||
         req->has_alter_partitioning_settings() ||
         req->set_key_bloom_filter() != Ydb::FeatureFlag::STATUS_UNSPECIFIED ||
-        req->has_set_read_replicas_settings())
+        req->has_set_read_replicas_settings() ||
+        req->add_statistics_size() || req->drop_statistics_size())
     {
         ops.emplace(EAlterOperationKind::Common);
     }
@@ -743,6 +744,29 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
                                         AppData())) {
             return false;
         }
+
+        for (const auto& statistics : req->add_statistics()) {
+            auto* statisticsDesc = desc->AddMultiColumnStatistics();
+            statisticsDesc->SetName(statistics.name());
+            for (const auto& column : statistics.columns()) {
+                statisticsDesc->AddColumnNames(column);
+            }
+            for (const auto type : statistics.types()) {
+                switch (type) {
+                    case Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH:
+                        statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+                        break;
+                    default:
+                        code = Ydb::StatusIds::BAD_REQUEST;
+                        error = "Unknown statistic type";
+                        return false;
+                }
+            }
+        }
+
+        for (const auto& drop : req->drop_statistics()) {
+            desc->AddDropMultiColumnStatistics(drop);
+        }
     }
 
     if (OpType == EAlterOperationKind::Attribute) {
@@ -987,6 +1011,23 @@ void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTab
             TString error;
             if (!FillTtlSettings(*out.mutable_ttl_settings(), in.GetTtlSettings().GetEnabled(), status, error)) {
                 ythrow yexception() << "invalid TTL settings: " << error;
+            }
+        }
+    }
+
+    for (const auto& statistics : schema.GetMultiColumnStatistics()) {
+        auto* outMultiColumnStatistics = out.add_statistics();
+        outMultiColumnStatistics->set_name(statistics.GetName());
+        for (const auto& column : statistics.GetColumnNames()) {
+            outMultiColumnStatistics->add_columns(column);
+        }
+        for (const auto type : statistics.GetTypes()) {
+            switch (type) {
+                case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
+                    outMultiColumnStatistics->add_types(Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH);
+                    break;
+                default:
+                    break;
             }
         }
     }
@@ -1551,6 +1592,29 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
         } else if (req->has_drop_ttl_settings()) {
             alterColumnTable->MutableAlterTtlSettings()->MutableDisabled();
         }
+
+        for (const auto& statistics : req->add_statistics()) {
+            auto* statisticsDesc = alterColumnTable->MutableAlterSchema()->AddUpsertMultiColumnStatistics();
+            statisticsDesc->SetName(statistics.name());
+            for (const auto& column : statistics.columns()) {
+                statisticsDesc->AddColumnNames(column);
+            }
+            for (const auto type : statistics.types()) {
+                switch (type) {
+                    case Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH:
+                        statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+                        break;
+                    default:
+                        status = Ydb::StatusIds::BAD_REQUEST;
+                        error = "Unknown statistic type";
+                        return false;
+                }
+            }
+        }
+
+        for (const auto& drop : req->drop_statistics()) {
+            alterColumnTable->MutableAlterSchema()->AddDropMultiColumnStatistics(drop);
+        }
     } else if (OpType == EAlterOperationKind::AddIndex) {
         if (req->add_indexes_size() != 1) {
             status = Ydb::StatusIds::UNSUPPORTED;
@@ -2057,6 +2121,53 @@ void FillIndexDescription(Ydb::Table::DescribeTableResult& out,
 void FillIndexDescription(Ydb::Table::CreateTableRequest& out,
         const NKikimrSchemeOp::TTableDescription& in) {
     FillIndexDescriptionImpl(out, in);
+}
+
+template <typename TYdbProto>
+void FillMultiColumnStatisticsDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescription& in) {
+    for (const auto& statistics : in.GetMultiColumnStatistics()) {
+        auto* outMultiColumnStatistics = out.add_statistics();
+        outMultiColumnStatistics->set_name(statistics.GetName());
+        for (const auto& column : statistics.GetColumnNames()) {
+            outMultiColumnStatistics->add_columns(column);
+        }
+        for (const auto type : statistics.GetTypes()) {
+            switch (type) {
+                case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
+                    outMultiColumnStatistics->add_types(Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+}
+
+void FillMultiColumnStatisticsDescription(Ydb::Table::DescribeTableResult& out,
+        const NKikimrSchemeOp::TTableDescription& in) {
+    FillMultiColumnStatisticsDescriptionImpl(out, in);
+}
+
+void FillMultiColumnStatisticsDescription(Ydb::Table::CreateTableRequest& out,
+        const NKikimrSchemeOp::TTableDescription& in) {
+    FillMultiColumnStatisticsDescriptionImpl(out, in);
+}
+
+void FillMultiColumnStatistics(NKikimrSchemeOp::TMultiColumnStatisticsDescription& out,
+        const Ydb::Table::TableMultiColumnStatistics& in) {
+    out.SetName(in.name());
+    for (const auto& column : in.columns()) {
+        out.AddColumnNames(column);
+    }
+    for (const auto type : in.types()) {
+        switch (type) {
+            case Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH:
+                out.AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+                break;
+            default:
+                break;
+        }
+    }
 }
 
 bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
@@ -2701,6 +2812,10 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
         return false;
     }
 
+    for (const auto& stat : in.statistics()) {
+        FillMultiColumnStatistics(*tableDesc->AddMultiColumnStatistics(), stat);
+    }
+
     return true;
 }
 
@@ -2730,6 +2845,10 @@ bool FillColumnTableDescription(NKikimrSchemeOp::TModifyScheme& out,
 
     if (!FillColumnTableIndexesFromCreateRequest(tableDesc, in, status, error)) {
         return false;
+    }
+
+    for (const auto& stat : in.statistics()) {
+        FillMultiColumnStatistics(*tableDesc.MutableSchema()->AddMultiColumnStatistics(), stat);
     }
 
     return true;

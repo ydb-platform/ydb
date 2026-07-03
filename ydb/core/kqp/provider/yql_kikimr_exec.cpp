@@ -2878,6 +2878,51 @@ public:
                 } else if (name == "dropIndex") {
                     auto nameNode = action.Value().Cast<TCoAtom>();
                     alterTableRequest.add_drop_indexes(TString(nameNode.Value()));
+                } else if (name == "addStatistics") {
+                    if (!SessionCtx->Config().FeatureFlags.GetEnableColumnStatistics()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                            "Multi-column statistics support is disabled"));
+                        return SyncError();
+                    }
+                    auto listNode = action.Value().Cast<TExprList>();
+                    auto add_statistics = alterTableRequest.add_add_statistics();
+                    for (size_t i = 0; i < listNode.Size(); ++i) {
+                        auto columnTuple = listNode.Item(i).Cast<TExprList>();
+                        auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
+                        auto itemName = TString(nameNode.Value());
+                        if (itemName == "statisticsName") {
+                            add_statistics->set_name(TString(columnTuple.Item(1).Cast<TCoAtom>().Value()));
+                        } else if (itemName == "statisticsColumns") {
+                            auto columnList = columnTuple.Item(1).Cast<TCoAtomList>();
+                            for (auto column : columnList) {
+                                add_statistics->add_columns(TString(column.Value()));
+                            }
+                        } else if (itemName == "statisticsTypes") {
+                            auto typeList = columnTuple.Item(1).Cast<TCoAtomList>();
+                            for (auto type : typeList) {
+                                const auto typeName = to_upper(TString(type.Value()));
+                                if (typeName == "COUNT_MIN_SKETCH") {
+                                    add_statistics->add_types(Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH);
+                                } else {
+                                    ctx.AddError(TIssue(ctx.GetPosition(type.Pos()),
+                                        TStringBuilder() << "Unknown statistic type: " << TString(type.Value())));
+                                    return SyncError();
+                                }
+                            }
+                        } else {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                TStringBuilder() << "Unknown add statistics item: " << itemName));
+                            return SyncError();
+                        }
+                    }
+                } else if (name == "dropStatistics") {
+                    if (!SessionCtx->Config().FeatureFlags.GetEnableColumnStatistics()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                            "Multi-column statistics support is disabled"));
+                        return SyncError();
+                    }
+                    auto nameNode = action.Value().Cast<TCoAtom>();
+                    alterTableRequest.add_drop_statistics(TString(nameNode.Value()));
                 } else if (name == "addChangefeed") {
                     auto listNode = action.Value().Cast<TExprList>();
                     auto add_changefeed = alterTableRequest.add_add_changefeeds();

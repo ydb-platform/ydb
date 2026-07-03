@@ -125,6 +125,16 @@ void IndexProtoToMetadata(const TIndexProto& indexes, NYql::TKikimrTableMetadata
     }
 }
 
+// Convert multi-column statistics (stored inline in the row TTableDescription and in the
+// column table schema, both as NKikimrSchemeOp::TMultiColumnStatisticsDescription) into
+// NYql::TMultiColumnStatisticsDescription entries of the table metadata.
+template<typename TMultiColumnStatisticsProto>
+void MultiColumnStatisticsProtoToMetadata(const TMultiColumnStatisticsProto& statistics, NYql::TKikimrTableMetadataPtr tableMeta) {
+    for (const NKikimrSchemeOp::TMultiColumnStatisticsDescription& stat : statistics) {
+        tableMeta->MultiColumnStatistics.emplace_back(NYql::TMultiColumnStatisticsDescription(stat));
+    }
+}
+
 // Convert OLAP (column table) local indexes, stored in the column table schema as
 // NKikimrSchemeOp::TOlapIndexDescription, into NYql::TIndexDescription entries of the
 // table metadata. This is what makes local CS indexes (bloom / bloom-ngram / min-max)
@@ -347,10 +357,12 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         const auto& description = entry.ColumnTableInfo->Description;
         if (description.HasSchema()) {
             OlapIndexProtoToMetadata(description.GetSchema().GetIndexes(), columnOrder, tableMeta);
+            MultiColumnStatisticsProtoToMetadata(description.GetSchema().GetMultiColumnStatistics(), tableMeta);
         }
     }
 
     IndexProtoToMetadata(entry.Indexes, tableMeta);
+    MultiColumnStatisticsProtoToMetadata(entry.MultiColumnStatistics, tableMeta);
 
     // Check if we have unique indexes that are not built
     if (!enableOnlineAddUniqueIndex) {

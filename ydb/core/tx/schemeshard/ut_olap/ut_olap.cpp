@@ -117,7 +117,7 @@ NLs::TCheckFunc LsCheckDiskQuotaExceeded(
     };
 }
 
-// A single flag covers both the volume and the count small-blobs quota 
+// A single flag covers both the volume and the count small-blobs quota
 bool GetSmallBlobsQuotaExceeded(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     const auto& state = record.GetPathDescription().GetDomainDescription().GetDomainState();
     return state.GetSmallBlobsQuotaExceeded();
@@ -615,6 +615,132 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TestLs(runtime, "/MyRoot/MyDir/MyTable", false, NLs::PathNotExist);
         TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual(""));
+    }
+
+    Y_UNIT_TEST(MultiColumnStatistics) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto checkMultiColumnStatistics = [&](const TSet<TString>& expectedNames) {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/ColumnTable");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            TSet<TString> names;
+            for (const auto& stat : schema.GetMultiColumnStatistics()) {
+                names.insert(stat.GetName());
+                // column names must be resolved to ids on persist
+                UNIT_ASSERT_VALUES_EQUAL(stat.ColumnNamesSize(), stat.ColumnIdsSize());
+                UNIT_ASSERT(stat.ColumnNamesSize() > 0);
+                UNIT_ASSERT(stat.TypesSize() > 0);
+                for (const auto type : stat.GetTypes()) {
+                    UNIT_ASSERT_EQUAL(
+                        static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type),
+                        NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(names, expectedNames);
+        };
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key1" Type: "Uint32" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: [ "timestamp" ]
+                MultiColumnStatistics { Name: "s1" ColumnNames: "key1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        checkMultiColumnStatistics({"s1"});
+
+        // MultiColumnStatistics must survive a SchemeShard restart (persist -> load round-trip).
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        checkMultiColumnStatistics({"s1"});
+
+        // ADD STATISTICS
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                UpsertMultiColumnStatistics { Name: "s2" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        checkMultiColumnStatistics({"s1", "s2"});
+
+        // DROP STATISTICS
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                DropMultiColumnStatistics: "s2"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        checkMultiColumnStatistics({"s1"});
+
+        // Validation: referencing an unknown column must fail.
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                UpsertMultiColumnStatistics { Name: "bad" ColumnNames: "missing" Types: COUNT_MIN_SKETCH }
+            }
+        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        // Validation: duplicate statistics name must fail.
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                UpsertMultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
+            }
+        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusAlreadyExists});
+    }
+
+    Y_UNIT_TEST(MultiColumnStatisticsWithoutTypesMeansAllTypes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto checkMultiColumnStatistics = [&](const TString& expectedName) {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/ColumnTableNoTypes");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            UNIT_ASSERT_VALUES_EQUAL(schema.MultiColumnStatisticsSize(), 1);
+            const auto& stat = schema.GetMultiColumnStatistics(0);
+            UNIT_ASSERT_VALUES_EQUAL(stat.GetName(), expectedName);
+            UNIT_ASSERT_VALUES_EQUAL(stat.TypesSize(), 0);
+        };
+
+        // CREATE with a MultiColumnStatistics entry that has no Types.
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTableNoTypes"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: [ "timestamp" ]
+                MultiColumnStatistics { Name: "s1" ColumnNames: "data" }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        checkMultiColumnStatistics("s1");
+
+        // ALTER ADD STATISTICS: also with no Types.
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTableNoTypes"
+            AlterSchema {
+                DropMultiColumnStatistics: "s1"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTableNoTypes"
+            AlterSchema {
+                UpsertMultiColumnStatistics { Name: "s2" ColumnNames: "data" }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        checkMultiColumnStatistics("s2");
     }
 
     Y_UNIT_TEST(CreateTable) {

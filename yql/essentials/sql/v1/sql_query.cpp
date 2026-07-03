@@ -2692,6 +2692,20 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
             break;
         }
+        case TRule_alter_table_action::kAltAlterTableAction24: {
+            // ADD STATISTICS
+            const auto& addStatistics = node.GetAlt_alter_table_action24().GetRule_alter_table_add_statistics1();
+            if (!AlterTableAddStatistics(addStatistics, params)) {
+                return false;
+            }
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction25: {
+            // DROP STATISTICS
+            const auto& dropStatistics = node.GetAlt_alter_table_action25().GetRule_alter_table_drop_statistics1();
+            AlterTableDropStatistics(dropStatistics, params);
+            break;
+        }
         case TRule_alter_table_action::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
     }
@@ -3027,6 +3041,14 @@ bool TSqlQuery::AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlt
 
 void TSqlQuery::AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params) {
     params.DropIndexes.emplace_back(IdEx(node.GetRule_an_id3(), *this));
+}
+
+bool TSqlQuery::AlterTableAddStatistics(const TRule_alter_table_add_statistics& node, TAlterTableParameters& params) {
+    return CreateTableStatistics(node.GetRule_table_statistics2(), params.AddStatistics);
+}
+
+void TSqlQuery::AlterTableDropStatistics(const TRule_alter_table_drop_statistics& node, TAlterTableParameters& params) {
+    params.DropStatistics.emplace_back(IdEx(node.GetRule_an_id3(), *this));
 }
 
 void TSqlQuery::AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params) {

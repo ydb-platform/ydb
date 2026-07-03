@@ -377,6 +377,23 @@ INode::TPtr CreateAlterIndex(const TIndexDescription& index, const INode& node) 
     return alterIndexNode;
 }
 
+INode::TPtr CreateStatisticsDesc(const TStatisticsDescription& statistics, const INode& node) {
+    auto statisticsColumns = node.Y();
+    for (const auto& col : statistics.Columns) {
+        statisticsColumns = node.L(statisticsColumns, BuildQuotedAtom(col.Pos, col.Name));
+    }
+    auto statisticsTypes = node.Y();
+    for (const auto& type : statistics.Types) {
+        statisticsTypes = node.L(statisticsTypes, BuildQuotedAtom(type.Pos, type.Name));
+    }
+    const auto& statisticsName = node.Y(node.Q("statisticsName"), BuildQuotedAtom(statistics.Name.Pos, statistics.Name.Name));
+    auto statisticsNode = node.Y(
+        node.Q(statisticsName),
+        node.Q(node.Y(node.Q("statisticsColumns"), node.Q(statisticsColumns))),
+        node.Q(node.Y(node.Q("statisticsTypes"), node.Q(statisticsTypes))));
+    return statisticsNode;
+}
+
 INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode& node) {
     auto settings = node.Y();
     if (desc.Settings.Mode) {
@@ -1165,7 +1182,7 @@ public:
             return false;
         }
 
-        if (!Params_.PkColumns.empty() || !Params_.PartitionByColumns.empty() || !Params_.OrderByColumns.empty() || !Params_.Indexes.empty() || !Params_.Changefeeds.empty())
+        if (!Params_.PkColumns.empty() || !Params_.PartitionByColumns.empty() || !Params_.OrderByColumns.empty() || !Params_.Indexes.empty() || !Params_.Statistics.empty() || !Params_.Changefeeds.empty())
         {
             THashSet<TString> columnsSet;
             for (auto& col : Params_.Columns) {
@@ -1226,6 +1243,28 @@ public:
                     ctx.Error(cf.Name.Pos) << "Changefeed " << cf.Name.Name << " must be defined once";
                     return false;
                 }
+            }
+
+            THashSet<TString> statisticsNames;
+            for (const auto& statistics : Params_.Statistics) {
+                if (!statisticsNames.insert(statistics.Name.Name).second) {
+                    ctx.Error(statistics.Name.Pos) << "Statistics " << statistics.Name.Name << " must be defined once";
+                    return false;
+                }
+
+                if (statistics.Columns.empty()) {
+                    ctx.Error(statistics.Name.Pos) << "Statistics " << statistics.Name.Name << " must have at least one column";
+                    return false;
+                }
+
+                for (const auto& statisticsColumn : statistics.Columns) {
+                    if (!allowUndefinedColumns && !columnsSet.contains(statisticsColumn.Name)) {
+                        ctx.Error(statisticsColumn.Pos) << "Undefined column: " << statisticsColumn.Name;
+                        return false;
+                    }
+                }
+
+                // statistics.Types may be empty: WITH is optional and its omission means "all supported statistic types"
             }
         }
 
@@ -1397,6 +1436,11 @@ public:
         for (const auto& index : Params_.Indexes) {
             const auto& desc = CreateIndexDesc(index, ETableSettingsParsingMode::Create, *this);
             opts = L(opts, Q(Y(Q("index"), Q(desc))));
+        }
+
+        for (const auto& statistics : Params_.Statistics) {
+            const auto& desc = CreateStatisticsDesc(statistics, *this);
+            opts = L(opts, Q(Y(Q("statistics"), Q(desc))));
         }
 
         for (const auto& cf : Params_.Changefeeds) {
@@ -1854,6 +1898,31 @@ public:
         for (const auto& id : Params_.DropIndexes) {
             auto indexName = BuildQuotedAtom(id.Pos, id.Name);
             actions = L(actions, Q(Y(Q("dropIndex"), indexName)));
+        }
+
+        {
+            THashSet<TString> statisticsNames;
+            for (const auto& statistics : Params_.AddStatistics) {
+                if (!statisticsNames.insert(statistics.Name.Name).second) {
+                    ctx.Error(statistics.Name.Pos) << "Statistics " << statistics.Name.Name << " must be defined once";
+                    return false;
+                }
+
+                if (statistics.Columns.empty()) {
+                    ctx.Error(statistics.Name.Pos) << "Statistics " << statistics.Name.Name << " must have at least one column";
+                    return false;
+                }
+
+                // statistics.Types may be empty: WITH is optional and its omission means "all supported statistic types"
+
+                const auto& desc = CreateStatisticsDesc(statistics, *this);
+                actions = L(actions, Q(Y(Q("addStatistics"), Q(desc))));
+            }
+        }
+
+        for (const auto& id : Params_.DropStatistics) {
+            auto statisticsName = BuildQuotedAtom(id.Pos, id.Name);
+            actions = L(actions, Q(Y(Q("dropStatistics"), statisticsName)));
         }
 
         if (Params_.RenameIndexTo) {

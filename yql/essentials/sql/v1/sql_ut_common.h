@@ -4294,6 +4294,139 @@ Y_UNIT_TEST(AlterTableDropIndexIsCorrect) {
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
 }
 
+Y_UNIT_TEST(CreateTableWithStatisticsIsSupported) {
+    auto res = SqlToYql(R"(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            b Utf8,
+            PRIMARY KEY (k),
+            STATISTICS s ON (a, b) WITH (COUNT_MIN_SKETCH)
+        );
+    )");
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "statisticsName");
+            UNIT_ASSERT_STRING_CONTAINS(line, "statisticsColumns");
+            UNIT_ASSERT_STRING_CONTAINS(line, "statisticsTypes");
+            UNIT_ASSERT_STRING_CONTAINS(line, "COUNT_MIN_SKETCH");
+        }
+    };
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateTableWithStatisticsOnUnknownColumnFails) {
+    auto res = SqlToYql(R"(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            PRIMARY KEY (k),
+            STATISTICS s ON (missing) WITH (COUNT_MIN_SKETCH)
+        );
+    )");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "Undefined column: missing");
+}
+
+Y_UNIT_TEST(CreateTableWithStatisticsWithoutWithIsSupported) {
+    auto res = SqlToYql(R"(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            b Utf8,
+            PRIMARY KEY (k),
+            STATISTICS s ON (a, b)
+        );
+    )");
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+}
+
+Y_UNIT_TEST(CreateTableWithStatisticsEmptyWithFails) {
+    auto res = SqlToYql(R"(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            PRIMARY KEY (k),
+            STATISTICS s ON (a) WITH ()
+        );
+    )");
+    UNIT_ASSERT(!res.IsOk());
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsIsSupported) {
+    auto res = SqlToYql(R"(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a, b) WITH (COUNT_MIN_SKETCH),
+            ADD STATISTICS s2 ON (a) WITH (COUNT_MIN_SKETCH);
+    )");
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "addStatistics");
+        }
+    };
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsDuplicateFails) {
+    auto res = SqlToYql(R"(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a) WITH (COUNT_MIN_SKETCH),
+            ADD STATISTICS s1 ON (b) WITH (COUNT_MIN_SKETCH);
+    )");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "Statistics s1 must be defined once");
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsWithoutWithIsSupported) {
+    auto res = SqlToYql(R"(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a, b);
+    )");
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsEmptyWithFails) {
+    auto res = SqlToYql(R"(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a) WITH ();
+    )");
+    UNIT_ASSERT(!res.IsOk());
+}
+
+Y_UNIT_TEST(AlterTableDropStatisticsIsSupported) {
+    auto res = SqlToYql("USE ydb; ALTER TABLE table DROP STATISTICS s");
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "dropStatistics");
+        }
+    };
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+}
+
+Y_UNIT_TEST(StatisticsKeywordIsNotReserved) {
+    // STATISTICS is a non-reserved keyword and must remain usable as an identifier.
+    UNIT_ASSERT(SqlToYql("SELECT 1 AS statistics;").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; SELECT statistics FROM plato.Input;").IsOk());
+}
+
 Y_UNIT_TEST(CreateTableWithLocalBloomFilterAndDropIndexIsCorrect) {
     const auto result = SqlToYql(R"sql(
         USE ydb;
@@ -9865,7 +9998,6 @@ Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
                     AWS_REGION="ru-central-1"
                 );
             )sql", "<main>:8:32: Error: A value must be provided for either AWS_SECRET_ACCESS_KEY_SECRET_NAME or AWS_SECRET_ACCESS_KEY_SECRET_PATH\n");
-
     ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
@@ -11865,7 +11997,6 @@ Y_UNIT_TEST(DeduplicationSameSource) {
         )sql");
 
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-
     TWordCountHive count = {{TString("percentile_traits_factory"), 0}};
     VerifyProgram(res, count);
 
@@ -14865,7 +14996,6 @@ Y_UNIT_TEST(QuotedAtoms) {
         SELECT * FROM x AS `e f`;
     )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-
     TWordCountHive stat = {"YqlSelect"};
     TString program = VerifyProgram(res, stat);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);

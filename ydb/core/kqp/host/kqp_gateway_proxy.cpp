@@ -408,6 +408,20 @@ bool FillCreateTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSchemeOp
     if (!NGRpcService::FillCreateTableSettingsDesc(tableDesc, createTableProto, profiles, code, error, warnings)) {
         return false;
     }
+
+    for (const auto& statistics : metadata->MultiColumnStatistics) {
+        auto* statisticsDesc = tableDesc.AddMultiColumnStatistics();
+        statisticsDesc->SetName(statistics.Name);
+        for (const auto& column : statistics.Columns) {
+            statisticsDesc->AddColumnNames(column);
+        }
+        for (const auto& type : statistics.Types) {
+            if (type == "COUNT_MIN_SKETCH") {
+                statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+            }
+        }
+    }
+
     return true;
 }
 
@@ -739,6 +753,19 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
 
     if (!FillCreateLocalIndexDesc(tableDesc, metadata->Indexes, code, error)) {
         return false;
+    }
+
+    for (const auto& statistics : metadata->MultiColumnStatistics) {
+        auto* statisticsDesc = tableDesc.MutableSchema()->AddMultiColumnStatistics();
+        statisticsDesc->SetName(statistics.Name);
+        for (const auto& column : statistics.Columns) {
+            statisticsDesc->AddColumnNames(column);
+        }
+        for (const auto& type : statistics.Types) {
+            if (type == "COUNT_MIN_SKETCH") {
+                statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+            }
+        }
     }
 
     tableDesc.SetTemporary(metadata->Temporary);

@@ -270,6 +270,7 @@ jobs:
         run_tests: ${{ contains(fromJSON('["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]'), matrix.build_preset) }}
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
         ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+        test_size: small,medium
         secs: ${{ env.CI_SECS }}
         vars: ${{ env.CI_VARS }}
   postcommit_build_and_test:

@@ -168,7 +168,7 @@ NExport::TYdbDumpFormat TProtoAccessor::FromProto(const Ydb::Export::YdbDumpForm
     return NExport::TYdbDumpFormat();
 }
 
-NExport::TParquetFormat TProtoAccessor::FromProto(Ydb::Export::ParquetFormat value) {
+NExport::TParquetFormat TProtoAccessor::FromProto(const Ydb::Export::ParquetFormat& value) {
     NExport::TParquetFormat result;
     if (value.row_group_size()) {
         result.RowGroupSize(value.row_group_size());

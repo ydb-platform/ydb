@@ -558,7 +558,6 @@ class TKqpBuildTxsTransformer : public TSyncTransformerBase {
     class TEffectsInfo {
     public:
         enum class EType {
-            KQP_EFFECT,
             KQP_SINK,
             KQP_BATCH_SINK,
         };

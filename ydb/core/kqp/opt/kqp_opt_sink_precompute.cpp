@@ -55,12 +55,12 @@ public:
                 }
             }
 
-            auto markCommonStages = [&](const TNodeOnNodeOwnedMap& left, const TNodeOnNodeOwnedMap& right, bool markUndetermined) {
+            auto markCommonStages = [&](const TNodeOnNodeOwnedMap& left, const TNodeOnNodeOwnedMap& right, bool markNonDeterministic) {
                 for (const auto& [_, exprNode] : FindStagesUsedForBothStagesSets(left, right)) {
                     AFL_ENSURE(exprNode);
                     TExprBase node(exprNode);
                     const auto stage = node.Cast<TDqStage>();
-                    if ((markUndetermined && HasNonDeterministicFunction(stage)) || !IsKqpPureInputs(stage.Inputs())) {
+                    if ((markNonDeterministic && HasNonDeterministicFunction(stage)) || !IsKqpPureInputs(stage.Inputs())) {
                         marked.emplace(node.Raw(), node.Ptr());
                     }
                 }

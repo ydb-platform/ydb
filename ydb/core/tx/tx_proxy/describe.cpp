@@ -271,7 +271,7 @@ void TDescribeReq::Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TAct
     const auto &record = msg->Ev->Get()->Record;
     YDB_LOG_DEBUG_CTX(ctx, "HANDLE EvNavigateScheme",
         {"actor", ctx.SelfID},
-        {"#_record.GetDescribePath().GetPath", record.GetDescribePath().GetPath()});
+        {"path", record.GetDescribePath().GetPath()});
 
     WallClockStarted = ctx.Now();
 
@@ -316,7 +316,7 @@ void TDescribeReq::Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TAct
         YDB_LOG_DEBUG_CTX(ctx, "SEND shardToRequest",
             {"actor", ctx.SelfID},
             {"to", shardToRequest},
-            {"#_req->ToString", req->ToString()});
+            {"req", req->ToString()});
 
         Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), shardToRequest, true), 0, SourceCookie);
 
@@ -364,9 +364,9 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
         case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied: {
             const ui32 access = NACLib::EAccessRights::DescribeSchema;
             YDB_LOG_ERROR_CTX(ctx, "Access denied for with access to path because base path",
-                {"#_num_0", (UserToken ? UserToken->GetUserSID() : "empty")},
-                {"#_NACLib::AccessRightsToString(access)", NACLib::AccessRightsToString(access)},
-                {"#_JoinPath(entry.Path)", JoinPath(entry.Path)});
+                {"userToken", (UserToken ? UserToken->GetUserSID() : "empty")},
+                {"access", NACLib::AccessRightsToString(access)},
+                {"entryPath", JoinPath(entry.Path)});
             ReportError(NKikimrScheme::StatusAccessDenied, "Access denied", ctx);
             break;
         }
@@ -394,9 +394,9 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
         ui32 access = NACLib::EAccessRights::DescribeSchema;
         if (entry.SecurityObject != nullptr && !entry.SecurityObject->CheckAccess(access, *UserToken)) {
             YDB_LOG_ERROR_CTX(ctx, "Access denied for with access to path",
-                {"#_UserToken->GetUserSID", UserToken->GetUserSID()},
-                {"#_NACLib::AccessRightsToString(access)", NACLib::AccessRightsToString(access)},
-                {"#_JoinPath(entry.Path)", JoinPath(entry.Path)});
+                {"userSID", UserToken->GetUserSID()},
+                {"access", NACLib::AccessRightsToString(access)},
+                {"entryPath", JoinPath(entry.Path)});
             ReportError(NKikimrScheme::StatusAccessDenied, "Access denied", ctx);
             return Die(ctx);
         }
@@ -436,7 +436,7 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
     YDB_LOG_DEBUG_CTX(ctx, "SEND shardToRequest",
         {"actor", ctx.SelfID},
         {"to", shardToRequest},
-        {"#_req->ToString", req->ToString()});
+        {"req", req->ToString()});
 
     Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), shardToRequest, true), 0, SourceCookie);
     Become(&TThis::StateWaitExec);

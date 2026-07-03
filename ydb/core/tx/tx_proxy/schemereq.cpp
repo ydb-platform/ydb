@@ -119,7 +119,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             {"actor", ctx.SelfID},
             {"txid", TxId},
             {"to", shardToRequest},
-            {"#_req->ToString", req->ToString()});
+            {"req", req->ToString()});
         NTabletPipe::SendData(ctx, PipeClient, req.Release());
     }
 
@@ -663,7 +663,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             {"actor", ctx.SelfID},
             {"txid", TxId},
             {"to", Source},
-            {"#_result->ToString", result->ToString()});
+            {"result", result->ToString()});
         ctx.Send(Source, result);
     }
 
@@ -1338,7 +1338,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         }
 
         YDB_LOG_ERROR_CTX(ctx, "Unexpected response from scheme cache",
-            {"#_navigate->ToString(*AppData()->TypeRegistry)", navigate->ToString(*AppData()->TypeRegistry)});
+            {"navigate", navigate->ToString(*AppData()->TypeRegistry)});
         Y_DEBUG_ABORT("Unreachable");
 
         TxProxyMon->ResolveKeySetFail->Inc();
@@ -1617,8 +1617,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         YDB_LOG_DEBUG_CTX(ctx, "Status HANDLE",
             {"actor", ctx.SelfID},
             {"txid", TxId},
-            {"#_record.GetStatus", record.GetStatus()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"status", record.GetStatus()},
+            {"ev", ev->Get()->ToString()});
 
         TxProxyMon->SchemeRequestLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
 
@@ -1728,7 +1728,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             {"txid", TxId},
             {"shardToRequest", SchemeshardIdToRequest},
             {"domainKey", navigate->ResultSet.begin()->DomainInfo->DomainKey},
-            {"#_DomainInfo.Params", navigate->ResultSet.begin()->DomainInfo->Params},
+            {"domainInfoParams", navigate->ResultSet.begin()->DomainInfo->Params},
             {"redirectRequired", (navigate->ResultSet.begin()->RedirectRequired ? "true" : "false")});
 
         // TSchemeTransactionalReq can't contain AlterLogin operations since it's used only for RenameTables requests

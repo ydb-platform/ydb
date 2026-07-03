@@ -480,7 +480,7 @@ private:
 
         YDB_LOG_DEBUG("Sending TEvNagivateKeySet for table",
             {"logPrefix", LogPrefix},
-            {"#_Settings.TablePath", Settings.TablePath});
+            {"tablePath", Settings.TablePath});
         ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
 
         Become(&TThis::StateWaitNavigate);
@@ -562,12 +562,12 @@ private:
 
         YDB_LOG_DEBUG("Received TEvNavigateKeySetResult for table",
             {"logPrefix", LogPrefix},
-            {"#_Settings.TablePath", Settings.TablePath});
+            {"tablePath", Settings.TablePath});
 
         if (resp->ErrorCount > 0) {
             YDB_LOG_ERROR("Navigate request failed for table",
                 {"logPrefix", LogPrefix},
-                {"#_Settings.TablePath", Settings.TablePath});
+                {"tablePath", Settings.TablePath});
             TxProxyMon->ResolveKeySetWrongRequest->Inc();
             TString error = TStringBuilder() << "Failed to resolve table " << Settings.TablePath;
             IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, error));
@@ -708,7 +708,7 @@ private:
 
         YDB_LOG_DEBUG("Sending TEvResolveKeySet for table",
             {"logPrefix", LogPrefix},
-            {"#_Settings.TablePath", Settings.TablePath});
+            {"tablePath", Settings.TablePath});
         ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvResolveKeySet(request));
         ResolveInProgress = true;
 
@@ -725,7 +725,7 @@ private:
 
         YDB_LOG_DEBUG("Received TEvResolveKeySetResult for table",
             {"logPrefix", LogPrefix},
-            {"#_Settings.TablePath", Settings.TablePath});
+            {"tablePath", Settings.TablePath});
 
         TxProxyMon->CacheRequestLatency->Collect((WallClockResolved - WallClockAllocated).MilliSeconds());
 
@@ -733,7 +733,7 @@ private:
         if (request->ErrorCount > 0) {
             YDB_LOG_ERROR("Resolve request failed for table",
                 {"logPrefix", LogPrefix},
-                {"#_Settings.TablePath", Settings.TablePath},
+                {"tablePath", Settings.TablePath},
                 {"errorCount", request->ErrorCount});
 
             bool gotHardResolveError = false;
@@ -913,7 +913,7 @@ private:
 
         YDB_LOG_DEBUG("Sending CreateVolatileSnapshot tx to shard",
             {"logPrefix", LogPrefix},
-            {"#_state.ShardId", state.ShardId});
+            {"shardId", state.ShardId});
         ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
                 new TEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_SNAPSHOT,
@@ -960,7 +960,7 @@ private:
         const auto shardStatus = msg->GetStatus();
         YDB_LOG_DEBUG("Received for CreateVolatileSnapshot from shard",
             {"logPrefix", LogPrefix},
-            {"#_NKikimrTxDataShard::TEvProposeTransactionResult::EStatus_Name(shardStatus)", NKikimrTxDataShard::TEvProposeTransactionResult::EStatus_Name(shardStatus)},
+            {"shardStatus", NKikimrTxDataShard::TEvProposeTransactionResult::EStatus_Name(shardStatus)},
             {"shardId", shardId});
 
         switch (shardStatus) {
@@ -1411,9 +1411,9 @@ private:
         Y_DEBUG_ABORT_UNLESS(state.State == EShardState::SnapshotPlanned);
 
         if (msg->GetTxId() != TxId) {
-            YDB_LOG_ERROR("Unexpected TEvProposeTransactionResult (snapshot expected",
+            YDB_LOG_ERROR("Unexpected TEvProposeTransactionResult (snapshot expected)",
                 {"logPrefix", LogPrefix},
-                {"#_tx)_TxId", msg->GetTxId()},
+                {"msgTxId", msg->GetTxId()},
                 {"txId", TxId});
             return;
         }
@@ -1699,7 +1699,7 @@ private:
 
         YDB_LOG_DEBUG("Sending TEvStreamClearanceResponse",
             {"logPrefix", LogPrefix},
-            {"#_state.ClearanceActor", state.ClearanceActor},
+            {"clearanceActor", state.ClearanceActor},
             {"shardId", shardId});
         ctx.Send(state.ClearanceActor, response.Release(), 0, state.ClearanceCookie);
 
@@ -1784,7 +1784,7 @@ private:
         // Always notify scan about received data (otherwise it may become stuck)
         YDB_LOG_TRACE("Sending TEvStreamDataAck",
             {"logPrefix", LogPrefix},
-            {"#_ev->Sender", ev->Sender},
+            {"sender", ev->Sender},
             {"shardId", shardId});
         ctx.Send(ev->Sender, new TEvTxProcessing::TEvStreamDataAck);
 
@@ -2195,10 +2195,10 @@ private:
 
         YDB_LOG_DEBUG("Updated quotas, allocated message size message rows available",
             {"logPrefix", LogPrefix},
-            {"#_Quota.Allocated", Quota.Allocated},
-            {"#_Quota.MessageSize", Quota.MessageSize},
-            {"#_Quota.MessageRows", Quota.MessageRows},
-            {"#_(Quota.Allocated - Quota.Reserved)", (Quota.Allocated - Quota.Reserved)});
+            {"allocated", Quota.Allocated},
+            {"messageSize", Quota.MessageSize},
+            {"messageRows", Quota.MessageRows},
+            {"available", (Quota.Allocated - Quota.Reserved)});
 
         ProcessQuotaRequests(ctx);
     }
@@ -2649,7 +2649,7 @@ private:
 
         YDB_LOG_DEBUG("Sending TEvResolveKeySet update for table",
             {"logPrefix", LogPrefix},
-            {"#_Settings.TablePath", Settings.TablePath});
+            {"tablePath", Settings.TablePath});
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
         // Avoid setting DomainOwnerId to reduce possible races with schemeshard migration
         request->DatabaseName = Settings.DatabaseName;
@@ -2665,13 +2665,13 @@ private:
 
         YDB_LOG_DEBUG("Received TEvResolveKeySetResult update for table",
             {"logPrefix", LogPrefix},
-            {"#_Settings.TablePath", Settings.TablePath});
+            {"tablePath", Settings.TablePath});
 
         auto* request = ev->Get()->Request.Get();
         if (request->ErrorCount > 0) {
             YDB_LOG_ERROR("Resolve request failed for table",
                 {"logPrefix", LogPrefix},
-                {"#_Settings.TablePath", Settings.TablePath},
+                {"tablePath", Settings.TablePath},
                 {"errorCount", request->ErrorCount});
 
             bool gotHardResolveError = false;

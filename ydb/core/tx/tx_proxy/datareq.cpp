@@ -1700,8 +1700,8 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
                 << " with access " << NACLib::AccessRightsToString(access)
                 << " to tableId# " << entry.KeyDescription->TableId;
 
-            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "",
-                {"#_explanation.Str", explanation.Str()});
+            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Error",
+                {"explanation", explanation.Str()});
             IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, explanation.Str()));
             ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, NKikimrIssues::TStatusIds::ACCESS_DENIED, true, ctx);
             return Die(ctx);
@@ -1719,8 +1719,8 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
             }
 
             if (error) {
-                YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "",
-                    {"#_*error", *error});
+                YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Error",
+                    {"error", *error});
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, *error));
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError, NKikimrIssues::TStatusIds::NOTSUPPORTED, true, ctx);
                 return Die(ctx);
@@ -2380,8 +2380,8 @@ void TDataReq::HandlePlan(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TAct
                 YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Shard has unexpected state on delivery problem in planning state",
                     {"actor", ctx.SelfID},
                     {"txid", TxId},
-                    {"#_msg->TabletId", msg->TabletId},
-                    {"#_perTablet->TabletStatus", perTablet->TabletStatus});
+                    {"tabletId", msg->TabletId},
+                    {"tabletStatus", perTablet->TabletStatus});
                 wasRestarting = false;
                 break;
             case TPerTablet::ETabletStatus::StatusPrepared:
@@ -2615,7 +2615,7 @@ void TDataReq::MergeResult(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, 
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Got stats",
             {"txid", TxId},
             {"datashard", tabletId},
-            {"#_*perTablet->Stats", *perTablet->Stats});
+            {"stats", *perTablet->Stats});
     }
 
     if (StreamResponse) {

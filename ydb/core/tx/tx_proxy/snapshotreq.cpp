@@ -328,8 +328,8 @@ public:
                     << " with access " << NACLib::AccessRightsToString(access)
                     << " to tableId# " << entry.KeyDescription->TableId;
 
-                YDB_LOG_ERROR_CTX(ctx, "",
-                    {"#_explanation.Str", explanation.Str()});
+                YDB_LOG_ERROR_CTX(ctx, "Error",
+                    {"explanation", explanation.Str()});
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, explanation.Str()));
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, NKikimrIssues::TStatusIds::ACCESS_DENIED, true, ctx);
                 return Die(ctx);
@@ -1369,8 +1369,8 @@ public:
                     << " with access " << NACLib::AccessRightsToString(access)
                     << " to tableId# " << entry.KeyDescription->TableId;
 
-                YDB_LOG_ERROR_CTX(ctx, "",
-                    {"#_explanation.Str", explanation.Str()});
+                YDB_LOG_ERROR_CTX(ctx, "Error",
+                    {"explanation", explanation.Str()});
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, explanation.Str()));
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, NKikimrIssues::TStatusIds::ACCESS_DENIED, true, ctx);
                 return Die(ctx);

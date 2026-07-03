@@ -96,7 +96,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
         YDB_LOG_ERROR_CTX(ctx, "",
             {"actor", SelfId()},
             {"cookie", (ui64)ev->Cookie},
-            {"#_tx.GetUserRequestId", tx.GetUserRequestId()},
+            {"userRequestId", tx.GetUserRequestId()},
             {"userReqId", "RESPONSE"},
             {"status", "NotImplemented"},
             {"type", "Unknown"});
@@ -209,7 +209,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
         YDB_LOG_DEBUG_CTX(ctx, "HANDLE TEvClientConnected",
             {"actor", SelfId()},
-            {"#_num_0", (PipeClientCache->OnConnect(ev) ? "success connect" : "fail connect")},
+            {"connect", (PipeClientCache->OnConnect(ev) ? "success connect" : "fail connect")},
             {"tablet", msg->TabletId});
 
         if(!PipeClientCache->OnConnect(ev)) {
@@ -267,7 +267,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
             YDB_LOG_DEBUG_CTX(ctx, "DataReq",
                 {"actor", SelfId()},
                 {"cookie", (ui64)ev->Cookie},
-                {"#_tx.GetUserRequestId", tx.GetUserRequestId()},
+                {"requestId", tx.GetUserRequestId()},
                 {"txid", txid},
                 {"to", reqId},
                 {"userReqId", "SEND"},
@@ -325,7 +325,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
                 YDB_LOG_DEBUG_CTX(ctx, "Scheme",
                     {"actor", SelfId()},
                     {"cookie", (ui64)ev->Cookie},
-                    {"#_tx.GetUserRequestId", tx.GetUserRequestId()},
+                    {"requestId", tx.GetUserRequestId()},
                     {"userReqId", "Type#"});
                 return DelayRequest(ev, ctx);
             }
@@ -444,7 +444,7 @@ public:
         Become(&TThis::StateWork);
         YDB_LOG_DEBUG_CTX(ctx, "Become StateWork (SchemeCache",
             {"actor", SelfId()},
-            {"#_Services.SchemeCache", Services.SchemeCache});
+            {"schemeCache", Services.SchemeCache});
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

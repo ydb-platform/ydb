@@ -1274,8 +1274,8 @@ private:
         Span && Span.Event("WaitResults", {{"shardRequests", long(shardRequests.size())}});
 
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Uploading rows / shards",
-            {"#_ctx.SelfID", ctx.SelfID},
-            {"#_Rows->size", Rows->size()},
+            {"selfId", ctx.SelfID},
+            {"rows", Rows->size()},
             {"shardRequestCount", shardRequestCount});
 
         // Sanity check: don't break when we don't have any shards for some reason
@@ -1291,8 +1291,8 @@ private:
         ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
 
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Failed to connect to shard",
-            {"#_ctx.SelfID", ctx.SelfID},
-            {"#_ev->Get()->TabletId", ev->Get()->TabletId});
+            {"selfId", ctx.SelfID},
+            {"tabletId", ev->Get()->TabletId});
 
         if (!Backoff.HasMore()) {
             return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM,
@@ -1326,8 +1326,8 @@ private:
         Span && Span.Event("TEvUploadRowsResponse", {{"shardId", long(shardId)}});
 
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: got from shard",
-            {"#_NKikimrTxDataShard::TError::EKind_Name((NKikimrTxDataShard::TError::EKind)shardResponse.GetStatus())", NKikimrTxDataShard::TError::EKind_Name((NKikimrTxDataShard::TError::EKind)shardResponse.GetStatus())},
-            {"#_shardResponse.GetTabletID", shardResponse.GetTabletID()},
+            {"status", NKikimrTxDataShard::TError::EKind_Name((NKikimrTxDataShard::TError::EKind)shardResponse.GetStatus())},
+            {"tabletId", shardResponse.GetTabletID()},
             {"description", shardResponse.GetErrorDescription()});
 
         if (shardResponse.GetStatus() == NKikimrTxDataShard::TError::OK) {
@@ -1402,10 +1402,10 @@ private:
         }
 
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Retry iteration for rows / shards",
-            {"#_ctx.SelfID", ctx.SelfID},
-            {"#_Backoff.GetIteration", Backoff.GetIteration()},
+            {"selfId", ctx.SelfID},
+            {"iteration", Backoff.GetIteration()},
             {"count", count},
-            {"#_ShardUploadRetryStates.size", ShardUploadRetryStates.size()});
+            {"shardUploadRetryStates", ShardUploadRetryStates.size()});
 
         auto rows = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>();
         rows->reserve(count);
@@ -1433,7 +1433,7 @@ private:
     void ReplyIfDone(const NActors::TActorContext& ctx) {
         if (!ShardRepliesLeft.empty()) {
             YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: waiting for shards replies",
-                {"#_ShardRepliesLeft.size", ShardRepliesLeft.size()});
+                {"shardRepliesLeftSize", ShardRepliesLeft.size()});
             return;
         }
 
@@ -1456,7 +1456,7 @@ private:
         AFL_VERIFY(status.GetCode() != Ydb::StatusIds::SUCCESS);
         YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "",
             {"logPrefix", LogPrefix()},
-            {"#_status.GetErrorMessage", status.GetErrorMessage()});
+            {"status", status.GetErrorMessage()});
         RaiseIssue(NYql::TIssue(LogPrefix() << status.GetErrorMessage()));
         ReplyWithResult(status, ctx);
     }
@@ -1466,7 +1466,7 @@ private:
         SendResult(ctx, status.GetCode());
 
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Completed with status",
-            {"#_status.GetCode", status.GetCode()});
+            {"status", status.GetCode()});
 
         if (LongTxId != NLongTxService::TLongTxId()) {
             // LongTxId is reset after successful commit

@@ -20,7 +20,7 @@ class TestSqsTopicListQueues(KikimrSqsTopicTestBase):
         assert_that(queue_urls, has_item(self._queue_url))
 
     def test_list_queues_fifo_queue(self):
-        queue_name = self._create_fifo_queue('list_queues_fifo_queue')
+        self._create_fifo_queue('list_queues_fifo_queue')
 
         assert_that(self._queue_url, not_none())
 

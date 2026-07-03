@@ -68,13 +68,31 @@ class KikimrSqsTopicTestBase(object):
 
         self._boto_client = self._make_boto_client()
         self._queue_url = None
+        self._created_queue_urls = []
+
+        # Track every created queue so that teardown can clean up all of them,
+        # even the ones a test creates in addition to self._queue_url.
+        original_create_queue = self._boto_client.create_queue
+
+        def tracking_create_queue(*args, **kwargs):
+            response = original_create_queue(*args, **kwargs)
+            queue_url = response.get('QueueUrl')
+            if queue_url is not None:
+                self._created_queue_urls.append(queue_url)
+            return response
+
+        self._boto_client.create_queue = tracking_create_queue
 
     def teardown_method(self, method=None):
-        if self._queue_url is not None:
+        queue_urls = list(self._created_queue_urls)
+        if self._queue_url is not None and self._queue_url not in queue_urls:
+            queue_urls.append(self._queue_url)
+
+        for queue_url in queue_urls:
             try:
-                self._boto_client.delete_queue(QueueUrl=self._queue_url)
+                self._boto_client.delete_queue(QueueUrl=queue_url)
             except Exception as exc:
-                logger.warning('Failed to delete queue %s: %s', self._queue_url, exc)
+                logger.warning('Failed to delete queue %s: %s', queue_url, exc)
 
         logger.debug('Test finished: %s', method.__name__)
 

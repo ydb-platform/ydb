@@ -16,6 +16,8 @@ namespace NKikimr::NSQS {
 
 static const std::uint8_t STRING_TRANSPORT_TYPE_CODE = 1;
 static const std::uint8_t BINARY_TRANSPORT_TYPE_CODE = 2;
+static const std::uint8_t STRING_LIST_TRANSPORT_TYPE_CODE = 3;
+static const std::uint8_t BINARY_LIST_TRANSPORT_TYPE_CODE = 4;
 
 static std::uint32_t ToBigEndian(std::uint32_t x) {
     return htonl(x);
@@ -37,12 +39,12 @@ static void Update(MD5& md5, const TMessageAttribute& attr) {
         md5.Update(&STRING_TRANSPORT_TYPE_CODE, sizeof(std::uint8_t));
         UpdateValue(md5, attr.GetStringValue());
     } else if (attr.stringlistvalues_size()) {
-        md5.Update(&STRING_TRANSPORT_TYPE_CODE, sizeof(std::uint8_t));
+        md5.Update(&STRING_LIST_TRANSPORT_TYPE_CODE, sizeof(std::uint8_t));
         for (const auto& value : attr.stringlistvalues()) {
             UpdateValue(md5, value);
         }
     } else if (attr.binarylistvalues_size()) {
-        md5.Update(&BINARY_TRANSPORT_TYPE_CODE, sizeof(std::uint8_t));
+        md5.Update(&BINARY_LIST_TRANSPORT_TYPE_CODE, sizeof(std::uint8_t));
         for (const auto& value : attr.binarylistvalues()) {
             UpdateValue(md5, value);
         }

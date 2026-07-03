@@ -29,7 +29,7 @@ class TestSqsTopicReceiveMessage(KikimrSqsTopicTestBase):
         assert_that(messages[0]['Body'], equal_to(message_body))
 
     def test_receive_message_fifo_queue(self):
-        queue_name = self._create_fifo_queue('receive_message_fifo_queue')
+        self._create_fifo_queue('receive_message_fifo_queue')
 
         message_body = 'hello from fifo sqs'
         self._boto_client.send_message(

@@ -22,9 +22,6 @@ class TestSqsTopicSendMessage(KikimrSqsTopicTestBase):
         message = self._read_message_from_topic_without_consumer(queue_name)
         assert_that(message.data.decode('utf-8'), equal_to(message_body))
 
-        message = self._read_message_from_topic_without_consumer(queue_name)
-        assert_that(message.data.decode('utf-8'), equal_to(message_body))
-
     def test_send_message_fifo_queue(self):
         queue_name = self._create_fifo_queue('send_message_fifo_queue')
 

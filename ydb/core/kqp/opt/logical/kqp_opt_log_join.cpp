@@ -500,7 +500,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     TMaybeNode<TExprBase> rightPrefixExpr;
 
     auto rightRead = rightReadMatch->Read;
-    if (!kqpCtx.Config->IsAutoIndexSelectionDisabled()) {
+    if (kqpCtx.Config->IsAutoIndexSelectionForIndexLookupJoinEnabled()) {
         if (auto maybeRanges = rightRead.Maybe<TKqlReadTableRanges>()) {
             const auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, maybeRanges.Cast().Table().Path());
             if (mainTableDesc.Metadata->Kind != NYql::EKikimrTableKind::Olap) {

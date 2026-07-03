@@ -81,6 +81,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
 
     REGISTER_SETTING(*this, OptDisableTopSort);
     REGISTER_SETTING(*this, OptDisableAutoIndexSelection);
+    REGISTER_SETTING(*this, EnableAutoIndexSelectionForIndexLookupJoin);
     REGISTER_SETTING(*this, OptDisableSqlInToJoin);
     REGISTER_SETTING(*this, OptEnableInplaceUpdate);
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
@@ -317,6 +318,11 @@ bool TKikimrConfiguration::GetUseDqHashCombine() const {
 
 bool TKikimrConfiguration::IsAutoIndexSelectionDisabled() const {
     return OptDisableAutoIndexSelection.Get().GetOrElse(false);
+}
+
+bool TKikimrConfiguration::IsAutoIndexSelectionForIndexLookupJoinEnabled() const {
+    return EnableAutoIndexSelectionForIndexLookupJoin.Get()
+        .GetOrElse(TTableServiceConfig::GetDefaultEnableAutoIndexSelectionForIndexLookupJoin());
 }
 
 NSQLTranslation::EBindingsMode TKikimrConfiguration::GetYqlBindingsMode() const {

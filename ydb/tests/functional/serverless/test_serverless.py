@@ -782,3 +782,56 @@ def test_seamless_migration_to_exclusive_nodes(ydb_serverless_db_with_exclusive_
         f"UPSERT INTO `{path}` (id) VALUES (10), (11), (12);",
         commit_tx=True
     )
+
+
+def get_effective_permission_names(scheme_client, path, subject):
+    desc = scheme_client.describe_path(path)
+    names = set()
+    for p in desc.effective_permissions:
+        if p.subject == subject:
+            names.update(p.permission_names)
+    return names
+
+
+def test_connect_permission_not_inherited_in_serverless(ydb_hostel_db, ydb_serverless_db, ydb_endpoint, ydb_root):
+    connect_permission = 'ydb.database.connect'
+    inheritable_permission = 'ydb.generic.read'
+
+    root_domain_driver = ydb.Driver(ydb.DriverConfig(ydb_endpoint, database=ydb_root))
+    root_domain_driver.wait(120)
+    root_domain_sc = root_domain_driver.scheme_client
+
+    serverless_subdomain_driver = ydb.Driver(ydb.DriverConfig(ydb_endpoint, database=ydb_serverless_db))
+    serverless_subdomain_driver.wait(120)
+    serverless_subdomain_sc = serverless_subdomain_driver.scheme_client
+
+    root_domain_sc.modify_permissions(
+        ydb_root,
+        ydb.ModifyPermissionsSettings().grant_permissions('user1', (connect_permission,))
+    )
+
+    root_domain_sc.modify_permissions(
+        ydb_root,
+        ydb.ModifyPermissionsSettings().grant_permissions('user1', (inheritable_permission,))
+    )
+
+    inner_path = os.path.join(ydb_serverless_db, "dirA0")
+    serverless_subdomain_sc.make_directory(inner_path)
+
+    # at the serverless database root user1 must have both connect (inherited from /Root)
+    # and the ordinary inheritable permission
+    serverless_root_perms = get_effective_permission_names(root_domain_sc, ydb_serverless_db, 'user1')
+    logger.info("effective permissions of user1 at serverless root %s: %s", ydb_serverless_db, serverless_root_perms)
+    assert connect_permission in serverless_root_perms, \
+        "connect permission granted on /Root must be inherited down to the serverless database root"
+    assert inheritable_permission in serverless_root_perms, \
+        "ordinary inheritable permission granted on /Root must be inherited down to the serverless database root"
+
+    # inside the serverless database the connect permission must NOT leak,
+    # while the ordinary inheritable permission must still be inherited
+    inner_perms = get_effective_permission_names(serverless_subdomain_sc, inner_path, 'user1')
+    logger.info("effective permissions of user1 at inner %s: %s", inner_path, inner_perms)
+    assert connect_permission not in inner_perms, \
+        "connect permission must NOT be inherited into objects inside a serverless database"
+    assert inheritable_permission in inner_perms, \
+        "ordinary inheritable permission must still be inherited inside a serverless database"

@@ -27,12 +27,6 @@
                 "effective_permissions": [
                     {
                         "permission_names": [
-                            "ydb.database.connect"
-                        ],
-                        "subject": "USERS"
-                    },
-                    {
-                        "permission_names": [
                             "ydb.generic.list"
                         ],
                         "subject": "METADATA-READERS"
@@ -1681,12 +1675,6 @@
                     "tx_id": "not-zero-number-text"
                 },
                 "effective_permissions": [
-                    {
-                        "permission_names": [
-                            "ydb.database.connect"
-                        ],
-                        "subject": "USERS"
-                    },
                     {
                         "permission_names": [
                             "ydb.generic.list"

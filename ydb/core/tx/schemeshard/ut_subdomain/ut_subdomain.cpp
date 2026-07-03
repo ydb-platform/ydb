@@ -4165,6 +4165,52 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
                            {LsCheckDiskQuotaExceeded(false, "Topic1 was deleted")});
     }
+
+    Y_UNIT_TEST(ConnectRightNotInheritedIntoSubDomain) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // Grant connect on the root database.
+        {
+            NACLib::TDiffACL diffACL;
+            diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::ConnectDatabase, "connector@builtin",
+                NACLib::DefaultInheritanceType);
+            TestModifyACL(runtime, ++txId, "/", "MyRoot", diffACL.SerializeAsString(), "");
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot",
+            "PlanResolution: 50 "
+            "Coordinators: 1 "
+            "Mediators: 1 "
+            "TimeCastBucketsPerMediator: 2 "
+            "Name: \"USER_0\"");
+        env.TestWaitNotification(runtime, txId);
+
+
+        TestMkDir(runtime, ++txId, "/MyRoot/USER_0", "InsideDir");
+        env.TestWaitNotification(runtime, txId);
+
+        const TString connectRight = "+(ConnDB):connector@builtin";
+        const TString readRight = "+R:reader@builtin";
+
+        TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot"), {
+            NLs::PathExist,
+            NLs::HasEffectiveRight(connectRight),
+        });
+
+        TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::HasEffectiveRight(connectRight),
+        });
+
+        // Connect must NOT leak into objects inside the subdomain.
+        TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/USER_0/InsideDir"), {
+            NLs::PathExist,
+            NLs::HasNoEffectiveRight(connectRight),
+        });
+    }
 }
 
 Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {

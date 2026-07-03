@@ -20,6 +20,7 @@ static NKikimrConfig::TAppConfig GetAppConfig(bool scanSourceRead = false, bool 
     app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(scanSourceRead);
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(streamLookupJoin);
     app.MutableTableServiceConfig()->SetEnableOlapSink(true);
+    app.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
     return app;
 }
 

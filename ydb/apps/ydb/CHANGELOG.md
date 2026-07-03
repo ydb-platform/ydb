@@ -1,4 +1,21 @@
 
+## 2.33.0 ##
+
+* The `ydb` interactive AI mode can now search the YDB documentation.
+
+## 2.32.0 ##
+
+* Added `--no-consumer` option to `ydb topic read` command.
+* Added an AI mode to the `ydb` interactive mode. Press Ctrl+T to switch to it.
+* Added `--codec kafka-batch`, `--batch-inner-codec`, `--batch-flush-interval`, `--batch-flush-size`, and `--batch-flush-message-count` options to `ydb workload topic run write|full` commands.
+* `ydb scheme describe` now prints a human-readable description for external data sources (source type, location, auth method, database, properties and creation time) instead of empty output.
+* Added `--partition-max-inflight-bytes` option to `ydb topic workload`
+* Added `--partition-write-speed-mps` and `--partition-write-burst-messages` options to `ydb topic create` and `ydb topic alter` commands.
+* Added CPU Time statistics to benchmarks run commands.
+* `ydb sql`: add `--resource-pool` option
+* `ydb` interactive mode add `SET resource_pool` command
+* Added `ydb workload fulltext` command to make load testing and measure quality of fulltext indexes.
+
 ## 2.31.0 ##
 
 * Added `--stats` option to `ydb workload * run` benchmarks to enable extended execution stats collection (e.g. `--stats profile`).

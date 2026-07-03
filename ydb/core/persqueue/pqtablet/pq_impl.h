@@ -72,6 +72,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     //partitions will send some times it's counters
     void Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorContext&);
+    void Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const TActorContext&);
 
     void Handle(TEvPQ::TEvMetering::TPtr& ev, const TActorContext&);
 
@@ -147,6 +148,10 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     TMaybe<TEvPQ::TEvDeregisterMessageGroup::TBody> MakeDeregisterMessageGroup(
         const NKikimrClient::TPersQueuePartitionRequest::TCmdDeregisterMessageGroup& cmd,
         NPersQueue::NErrorCode::EErrorCode& code, TString& error) const;
+
+    void FillBatchInfo(
+        const NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd,
+        TEvPQ::TEvWrite::TMsg& msg) const;
 
     void TrySendUpdateConfigResponses(const TActorContext& ctx);
     static void CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
@@ -229,6 +234,7 @@ private:
     bool InitCompleted = false;
     THashMap<TPartitionId, TPartitionInfo> Partitions;
     THashMap<TString, TIntrusivePtr<TEvTabletCounters::TInFlightCookie>> CounterEventsInflight;
+    ui64 ReservedBytes = 0;
 
     struct TTxWriteInfo {
         THashMap<ui32, TPartitionId> Partitions;
@@ -244,6 +250,7 @@ private:
     ui32 NextSupportivePartitionId = 100'000;
 
     TActorId CacheActor;
+    TActorId BatchProcessorActor;
     TActorId ReadBalancerActorId;
 
     TSet<TChangeNotification> ChangeConfigNotification;

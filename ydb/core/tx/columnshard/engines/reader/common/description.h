@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/metadata_accessor.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/operations/manager.h>
 #include <ydb/core/tx/program/program.h>
 
@@ -33,10 +34,10 @@ private:
     std::optional<std::shared_ptr<IScanCursor>> ScanCursor;
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
     YDB_ACCESSOR(ERequestSorting, Sorting, ERequestSorting::NONE);
+    YDB_ACCESSOR_DEF(bool, FakeSort);
     YDB_READONLY(ui64, TabletId, 0);
 
 public:
-    // Table
     ui64 TxId = 0;
     ui64 ScanId = 0;
     std::optional<ui64> LockId;
@@ -46,6 +47,7 @@ public:
     std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::ALLOW_DUPLICATES;
+    EScanGroupedMemoryLimiterOperator GroupedMemoryLimiterOperator = EScanGroupedMemoryLimiterOperator::Scan;
     std::shared_ptr<NLWTrace::TOrbit> Orbit;
     bool readNonconflictingPortions;
     bool readConflictingPortions;

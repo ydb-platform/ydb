@@ -3,6 +3,7 @@
 
 #include <util/system/sanitizers.h>
 #include <util/system/type_name.h>
+#include <util/system/filemap.h>
 #include <util/system/info.h>
 #include <util/system/protect.h>
 
@@ -17,21 +18,65 @@ namespace NActors {
 #endif
         return size;
     }
+
+    class TLegacyStackMem : public IStackMem {
+    public:
+        explicit TLegacyStackMem(size_t sz)
+            : Alloc(sz)
+        {
+#ifndef NDEBUG
+            ProtectMemory(STACK_GROW_DOWN ? Begin() : End() - PageSize, PageSize, EProtectMemoryMode::PM_NONE);
+#endif
+        }
+
+        char* Begin() noexcept override {
+            return Alloc.Begin();
+        }
+
+        char* End() noexcept override {
+            return Alloc.End();
+        }
+
+    private:
+        TMappedAllocation Alloc;
+    };
+
+    static TArrayRef<char> GetStackRange(const std::unique_ptr<IStackMem>& stack) {
+        Y_ABORT_UNLESS(stack);
+        return TArrayRef(stack->Begin(), stack->End());
+    }
 #endif
 
     TActorCoroImpl::TActorCoroImpl(size_t stackSize, bool allowUnhandledDtor)
-        : AllowUnhandledDtor(allowUnhandledDtor)
 #if !CORO_THROUGH_THREADS
-        , Stack(AlignStackSize(stackSize))
-        , FiberClosure{this, TArrayRef(Stack.Begin(), Stack.End())}
-        , FiberContext(FiberClosure)
+        : TActorCoroImpl(std::make_unique<TLegacyStackMem>(AlignStackSize(stackSize)), allowUnhandledDtor)
+#else
+        : AllowUnhandledDtor(allowUnhandledDtor)
 #endif
     {
         Y_UNUSED(stackSize);
-#if !CORO_THROUGH_THREADS && !defined(NDEBUG)
-        ProtectMemory(STACK_GROW_DOWN ? Stack.Begin() : Stack.End() - PageSize, PageSize, EProtectMemoryMode::PM_NONE);
-#endif
     }
+
+    TActorCoroImpl::TActorCoroImpl(TUsePooledStack stack, bool allowUnhandledDtor)
+#if !CORO_THROUGH_THREADS
+        : TActorCoroImpl(
+            TStackMemPool::GetMemPool(TStackMemPool::TPageBucket::Bytes(stack.StackSize))->Allocate(),
+            allowUnhandledDtor)
+#else
+        : TActorCoroImpl(stack.StackSize, allowUnhandledDtor)
+#endif
+    {
+    }
+
+#if !CORO_THROUGH_THREADS
+    TActorCoroImpl::TActorCoroImpl(std::unique_ptr<IStackMem> stack, bool allowUnhandledDtor)
+        : AllowUnhandledDtor(allowUnhandledDtor)
+        , Stack(std::move(stack))
+        , FiberClosure{this, GetStackRange(Stack)}
+        , FiberContext(FiberClosure)
+    {
+    }
+#endif
 
     void TActorCoroImpl::Destroy() {
         if (!Finished) { // only resume when we have bootstrapped and Run() was entered and not yet finished; in other case simply terminate

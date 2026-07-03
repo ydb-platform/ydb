@@ -1,6 +1,5 @@
-#include "schema_operation.h"
-
 #include "common.h"
+#include "schema_operation.h"
 
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
@@ -10,7 +9,6 @@
 #include <ydb/core/util/backoff.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
 #include <ydb/library/services/services.pb.h>
-
 
 namespace NKikimr::NPQ::NSchema {
 

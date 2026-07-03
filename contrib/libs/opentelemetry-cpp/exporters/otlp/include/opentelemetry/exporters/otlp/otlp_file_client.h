@@ -82,7 +82,7 @@ public:
 
 private:
   // Stores if this file client had its Shutdown() method called
-  bool is_shutdown_;
+  bool is_shutdown_{false};
 
   // The configuration options associated with this file client.
   OtlpFileClientOptions options_;

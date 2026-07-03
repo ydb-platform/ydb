@@ -192,6 +192,17 @@ def call(cmd, cwd, env=None):
     return subprocess.check_output(cmd, stdin=None, stderr=subprocess.STDOUT, cwd=cwd, env=env, text=True)
 
 
+# Mirror cmd/internal/objabi.EncodeArg from the Go stdlib: the response file
+# read by `go link @file` parses `\` as the start of an escape, so only `\\`
+# and `\n` are legal. Windows paths in build_root (e.g. `C:\...\main.a`)
+# otherwise trip cmd/link with `panic: badly formatted input`.
+_GO_LINK_ARG_ESCAPES = str.maketrans({'\\': r'\\', '\n': r'\n'})
+
+
+def _encode_go_link_arg(arg):
+    return arg.translate(_GO_LINK_ARG_ESCAPES)
+
+
 def classify_srcs(srcs, args):
     args.go_srcs = [x for x in srcs if x.endswith('.go')]
     args.asm_srcs = [x for x in srcs if x.endswith('.s')]
@@ -569,62 +580,14 @@ def do_link_exe(args):
                 extldflags = json.loads(res)[1:]
         cmd.append('-extldflags={}'.format(' '.join(extldflags)))
     cmd.append(compile_args.output)
-    with tempfile.NamedTemporaryFile(mode='w', delete_on_close=False) as response_file:
+    # newline='\n' keeps text mode from emitting CRLF on Windows hosts.
+    with tempfile.NamedTemporaryFile(mode='w', newline='\n', delete_on_close=False) as response_file:
         for arg in cmd[1:]:
-            print(arg, file=response_file)
+            response_file.write(_encode_go_link_arg(arg))
+            response_file.write('\n')
         response_file.close()
         cmd = [cmd[0], '@' + response_file.name]
         call(cmd, args.build_root)
-
-
-def gen_cover_info(args, test_module: str):
-    lines = []
-    lines.extend(
-        [
-            """
-var (
-    coverCounters = make(map[string][]uint32)
-    coverBlocks = make(map[string][]testing.CoverBlock)
-)
-        """,
-            'func init() {',
-        ]
-    )
-    for var, file in (x.split(':') for x in args.cover_info):
-        lines.append(
-            '    coverRegisterFile("{file}", {test_module}.{var}.Count[:], {test_module}.{var}.Pos[:], {test_module}.{var}.NumStmt[:])'.format(
-                file=file, test_module=test_module, var=var
-            )
-        )
-    lines.extend(
-        [
-            '}',
-            """
-func coverRegisterFile(fileName string, counter []uint32, pos []uint32, numStmts []uint16) {
-    if 3*len(counter) != len(pos) || len(counter) != len(numStmts) {
-        panic("coverage: mismatched sizes")
-    }
-    if coverCounters[fileName] != nil {
-        // Already registered.
-        return
-    }
-    coverCounters[fileName] = counter
-    block := make([]testing.CoverBlock, len(counter))
-    for i := range counter {
-        block[i] = testing.CoverBlock{
-            Line0: pos[3*i+0],
-            Col0: uint16(pos[3*i+2]),
-            Line1: pos[3*i+1],
-            Col1: uint16(pos[3*i+2]>>16),
-            Stmts: numStmts[i],
-        }
-    }
-    coverBlocks[fileName] = block
-}
-        """,
-        ]
-    )
-    return lines
 
 
 def filter_out_skip_tests(tests, skip_tests):
@@ -664,7 +627,6 @@ def gen_test_main(args, test_lib_args, xtest_lib_args):
     assert args and (test_lib_args or xtest_lib_args)
     test_miner = args.test_miner
     cover_mode = args.cover_mode  # Go coverage per Go-package
-    is_cover = args.cover_info and len(args.cover_info) > 0  # deprecated
 
     # Prepare GOPATH
     # $BINDIR
@@ -746,8 +708,6 @@ def gen_test_main(args, test_lib_args, xtest_lib_args):
         + (['    "os"'] if not test_main_package else [])  # else unused import os happened
         # Skip "reflect", because os.Exit called inside TestMain and reflect functions not used
         + (['    "internal/coverage/cfile"'] if cover_mode else [])
-        + (['    _cover_test "{}"'.format(test_import_path)] if is_cover and test_import_path else [])  # deprecated
-        + (['    _cover_xtest "{}"'.format(xtest_import_path)] if is_cover and xtest_import_path else [])  # deprecated
         + [
             '    "testing"',
             '    "testing/internal/testdeps"',
@@ -775,17 +735,6 @@ def gen_test_main(args, test_lib_args, xtest_lib_args):
         lines.extend([f'var  {var_name} = []testing.Internal{kind}{{'] + test_lines + xtest_lines + ['}', ''])
 
     lines.append('func init() {')
-    if is_cover:  # deprecated
-        lines.extend(
-            [
-                '    testing.RegisterCover(testing.Cover{',
-                '        Mode: "set",',
-                '        Counters: coverCounters,',
-                '        Blocks: coverBlocks,',
-                '        CoveredPackages: "",',
-                '    })',
-            ]
-        )
     if cover_mode:
         lines.extend(
             [
@@ -798,10 +747,6 @@ def gen_test_main(args, test_lib_args, xtest_lib_args):
             ]
         )
     lines.extend(['}', ''])
-
-    if is_cover:  # deprecated
-        # old coverage supported or only _cover_test, or only _cover_xtest, never both
-        lines.extend(gen_cover_info(args, '_cover_test' if test_import_path else '_cover_xtest'))
 
     lines.extend(
         [
@@ -933,9 +878,13 @@ if __name__ == '__main__':
     parser.add_argument('++cgo-srcs', nargs='*')
     parser.add_argument('++test_srcs', nargs='*')
     parser.add_argument('++xtest_srcs', nargs='*')
-    parser.add_argument('++cover_info', nargs='*')
     parser.add_argument('++cover-mode', choices=['set', 'count', 'atomic'])
-    parser.add_argument('++cover-cfg')
+    parser.add_argument('++cover-cfg', help='coverage output config, if zero-size, really no coverage')
+    parser.add_argument(
+        '++cover-covervars',
+        default='covervars.go',
+        help='basename of coverage vars go-file, if zero-size ++cover-cfg, must be excluded',
+    )
     parser.add_argument('++ld_plugins', nargs='*')
     parser.add_argument('++output', nargs='?', default=None)
     parser.add_argument('++source-root', default=None)
@@ -974,6 +923,14 @@ if __name__ == '__main__':
     parser.add_argument('++embed', action='append', nargs='*')
     parser.add_argument('++embed_xtest', action='append', nargs='*')
     args = parser.parse_args(args)
+
+    if args.cover_cfg:
+        coveragecfg = os.path.join(args.output_root, args.cover_cfg)
+        # when not found source files for covering config is empty
+        if not os.path.getsize(coveragecfg):
+            args.cover_cfg = None  # really no coverage
+            # if no coverage, we must exclude covervars.go from compile
+            args.srcs = [src for src in args.srcs if not src.endswith(os.path.join('', args.cover_covervars))]
 
     arc_project_prefix = args.arc_project_prefix
     std_lib_prefix = args.std_lib_prefix

@@ -13,11 +13,13 @@ namespace {
 class TScriptExecutionLeaseCheckActor : public TActorBootstrapped<TScriptExecutionLeaseCheckActor> {
     static constexpr TDuration CHECK_PERIOD = TDuration::Seconds(1);
     static constexpr TDuration REFRESH_NODES_PERIOD = TDuration::Minutes(1);
+    static constexpr TDuration CREATE_TABLES_PERIOD = TDuration::Seconds(10);
 
     enum class EWakeup {
         RefreshNodesInfo,
         ScheduleRefreshScriptExecutions,
         RefreshScriptExecutions,
+        CreateTables
     };
 
 public:
@@ -50,10 +52,16 @@ public:
             case EWakeup::ScheduleRefreshScriptExecutions:
                 ScheduleRefreshScriptExecutions();
                 break;
-            case EWakeup::RefreshScriptExecutions:
+            case EWakeup::RefreshScriptExecutions: {
                 const auto& checkerId = Register(CreateRefreshScriptExecutionLeasesActor(SelfId(), QueryServiceConfig, Counters));
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Start lease checker: " << checkerId);
                 break;
+            }
+            case EWakeup::CreateTables: {
+                const auto& creatorId = Register(CreateScriptExecutionsTablesCreator(AppData()->FeatureFlags.GetEnableSecureScriptExecutions()));
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Start script executions tables creator: " << creatorId);
+                break;
+            }
         }
     }
 
@@ -74,17 +82,21 @@ public:
 
     void Handle(TEvRefreshScriptExecutionLeasesResponse::TPtr& ev) {
         WaitRefreshScriptExecutions = false;
+
+        const auto expiredLeasesCount = ev->Get()->ExpiredLeasesCount;
+
         if (!ev->Get()->Success) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Refresh failed with issues: " << ev->Get()->Issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Refresh " << ev->Sender << " failed, found expired leases: " << expiredLeasesCount << ", issues: " << ev->Get()->Issues.ToOneLineString());
         } else {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Refresh successfully completed");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Refresh " << ev->Sender << " successfully completed, found expired leases: " << expiredLeasesCount);
         }
     }
 
     void Handle(TEvScriptExecutionsTablesCreationFinished::TPtr& ev) {
         if (!ev->Get()->Success) {
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Script executions tables creation failed with issues: " << ev->Get()->Issues.ToOneLineString());
-            return PassAway();
+            Schedule(CREATE_TABLES_PERIOD, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CreateTables)));
+            return;
         }
 
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Script executions tables creation finished, start lease checks");
@@ -124,7 +136,7 @@ private:
     }
 
     TString LogPrefix() const {
-        return TStringBuilder() << "[ScriptExecutions] [TScriptExecutionLeaseCheckActor] ";
+        return "[ScriptExecutions] [TScriptExecutionLeaseCheckActor] ";
     }
 
 private:

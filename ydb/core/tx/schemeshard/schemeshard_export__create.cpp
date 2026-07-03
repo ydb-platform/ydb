@@ -339,6 +339,10 @@ private:
                         continue;
                     }
                     for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
+                        auto implTablePath = childPath.Child(implTableName);
+                        if (implTablePath.IsDeleted()) {
+                            continue;
+                        }
                         const auto implTableRelPath = JoinPath(ChildPath(childParts, implTableName));
                         indexItems.emplace_back(implTableRelPath, implTablePathId, childPath->PathType, itemIdx);
                     }
@@ -773,7 +777,7 @@ private:
         for (size_t i : xrange(exportInfo.Items.size())) {
             const auto& item = exportInfo.Items[i];
 
-            if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable) {
+            if (!IsPathTypeTable(item)) {
                 // only tables can be targets of the copy tables operation
                 continue;
             }
@@ -858,16 +862,17 @@ private:
     TMaybe<TString> GetIssues(const TExportInfo& exportInfo, TTxId backupTxId, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
         const auto& item = exportInfo.Items[itemIdx];
-        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
-            if (!Self->ColumnTables.contains(item.SourcePathId)) {
-                return TStringBuilder() << "Cannot find table: " << item.SourcePathId;
-            }
-
-            TColumnTableInfo::TPtr table = Self->ColumnTables.at(item.SourcePathId).GetPtr();
-            return GetIssues(table, item.SourcePathId, backupTxId);
-        }
 
         auto itemPathId = ItemPathId(Self, exportInfo, itemIdx);
+        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
+            if (!Self->ColumnTables.contains(itemPathId)) {
+                return TStringBuilder() << "Cannot find table: " << itemPathId;
+            }
+
+            TColumnTableInfo::TPtr table = Self->ColumnTables.at(itemPathId).GetPtr();
+            return GetIssues(table, itemPathId, backupTxId);
+        }
+
         if (!Self->Tables.contains(itemPathId)) {
             return TStringBuilder() << "Cannot find table: " << itemPathId;
         }
@@ -1201,9 +1206,11 @@ private:
                     }
 
                     if (exportInfo->State == EState::CopyTables && isMultipleMods) {
+                        bool sourcePathMissing = false;
                         for (const auto& item : exportInfo->Items) {
                             if (!Self->PathsById.contains(item.SourcePathId)) {
                                 exportInfo->DependencyTxIds.clear();
+                                sourcePathMissing = true;
                                 break;
                             }
 
@@ -1219,6 +1226,10 @@ private:
 
                         if (!exportInfo->DependencyTxIds.empty()) {
                             return;
+                        }
+
+                        if (!sourcePathMissing) {
+                            return AllocateTxId(*exportInfo);
                         }
                     }
 

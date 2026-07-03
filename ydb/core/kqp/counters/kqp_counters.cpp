@@ -222,6 +222,8 @@ void TKqpCountersBase::Init() {
     TxAborted = KqpGroup->GetCounter("Transactions/Aborted", true);
     TxCommited = KqpGroup->GetCounter("Transactions/Commited", true);
     TxEvicted = KqpGroup->GetCounter("Transactions/Evicted", true);
+    OnlineRORequests = KqpGroup->GetCounter("Isolation/OnlineRO/Requests", true);
+    OnlineROWithInconsistentReadsRequests = KqpGroup->GetCounter("Isolation/OnlineROWithInconsistentReads/Requests", true);
 
     TxActivePerSession = KqpGroup->GetHistogram(
         "Transactions/TxActivePerSession", NMonitoring::ExponentialHistogram(16, 2, 1));
@@ -542,6 +544,14 @@ void TKqpCountersBase::ReportTxAborted(ui32 abortedCount) {
     TxAborted->Add(abortedCount);
 }
 
+void TKqpCountersBase::ReportOnlineRO() {
+    OnlineRORequests->Inc();
+}
+
+void TKqpCountersBase::ReportOnlineROWithInconsistentReads() {
+    OnlineROWithInconsistentReadsRequests->Inc();
+}
+
 void TKqpCountersBase::ReportQueryCacheHit(bool hit) {
     if (hit) {
         CompileQueryCacheHits->Inc();
@@ -798,6 +808,13 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     WarmupQueriesTruncated = KqpGroup->GetCounter("Warmup/QueriesTruncated", false);
     WarmupQueriesEmptyQueryType = KqpGroup->GetCounter("Warmup/QueriesEmptyQueryType", false);
 
+    /* Compile cache view (federated .sys/compile_cache_queries) */
+    CompileCacheViewPeerScanWarnings = KqpGroup->GetCounter("CompileCacheView/PeerScanWarnings", true);
+
+    WarmupHitsInWindow = KqpGroup->GetCounter("Warmup/HitsInWindow", true);
+    WarmupMissesInWindow = KqpGroup->GetCounter("Warmup/MissesInWindow", true);
+    WarmupSavedCompileMs = KqpGroup->GetCounter("Warmup/SavedCompileMs", true);
+
     /* Resource Manager */
     RmComputeActors = KqpGroup->GetCounter("RM/ComputeActors", false);
     RmMemory = KqpGroup->GetCounter("RM/Memory", false);
@@ -844,6 +861,12 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     IteratorDeliveryProblems = KqpGroup->GetCounter("IteratorReads/DeliveryProblems", true);
     StreamLookupIteratorTotalQuotaBytesInFlight = KqpGroup->GetCounter("IteratorReads/StreamLookupIteratorTotalQuotaBytesInFlight", false);
     StreamLookupIteratorTotalQuotaBytesExceeded = KqpGroup->GetCounter("IteratorReads/StreamLookupIteratorTotalQuotaBytesExceeded", true);
+    
+    SentLocks = KqpGroup->GetCounter("PessimisticLocks/SentLocks", true);
+    LockLatencyHistogram = KqpGroup->GetHistogram("PessimisticLocks/LockLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    ModifiedRowsCount = KqpGroup->GetCounter("PessimisticLocks/ModifiedRowsCount", true);
+    LockedRowsCount = KqpGroup->GetCounter("PessimisticLocks/LockedRowsCount", true);
+    MaxInFlightLockTimeOnExit = KqpGroup->GetHistogram("PessimisticLocks/MaxInFlightLockTimeOnExitMs", NMonitoring::ExponentialHistogram(20, 2, 1));
 
     /* sink writes */
     WriteActorsShardResolve = KqpGroup->GetCounter("SinkWrites/WriteActorShardResolve", true);
@@ -1260,6 +1283,20 @@ void TKqpCounters::ReportTxAborted(TKqpDbCountersPtr dbCounters, ui32 abortedCou
     TKqpCountersBase::ReportTxAborted(abortedCount);
     if (dbCounters) {
         dbCounters->ReportTxAborted(abortedCount);
+    }
+}
+
+void TKqpCounters::ReportOnlineRO(TKqpDbCountersPtr dbCounters) {
+    TKqpCountersBase::ReportOnlineRO();
+    if (dbCounters) {
+        dbCounters->ReportOnlineRO();
+    }
+}
+
+void TKqpCounters::ReportOnlineROWithInconsistentReads(TKqpDbCountersPtr dbCounters) {
+    TKqpCountersBase::ReportOnlineROWithInconsistentReads();
+    if (dbCounters) {
+        dbCounters->ReportOnlineROWithInconsistentReads();
     }
 }
 

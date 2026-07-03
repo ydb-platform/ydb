@@ -15,7 +15,7 @@
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/core/blobstorage/common/immediate_control_defaults.h>
-#include <ydb/core/retro_tracing_impl/lazy_retro_span.h>
+#include <ydb/core/retro_tracing_impl/spans/lazy_retro_span.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/core/base/appdata_fwd.h>
@@ -230,23 +230,27 @@ public:
         , ForceGroupGeneration(params.Common.ForceGroupGeneration)
         , DoSendDeathNote(params.Common.DoSendDeathNote)
     {
-        if (ParentSpan) {
+        if (NWilson::TSpan* parentWilsonSpan = ParentSpan.GetWilsonSpanPtr()) {
             const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
             Span = NWilson::TSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(parentTraceId.GetVerbosity(),
-                parentTraceId.GetTimeToLive()), ParentSpan.GetName());
-            ParentSpan.Link(Span.GetTraceId());
-            Span.Attribute("GroupId", Info->GroupID.GetRawId());
-            Span.Attribute("RestartCounter", RestartCounter);
-            Span.Attribute("database", AppData()->TenantName);
-            Span.Attribute("storagePool", Info->GetStoragePoolName());
-            params.Common.Event->ToSpan(*Span.GetWilsonSpanPtr());
+                    parentTraceId.GetTimeToLive()), params.TypeSpecific.Name);
+            parentWilsonSpan->Link(Span.GetTraceId());
+
+            // if for extra safety
+            if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                wilsonSpan->Attribute("GroupId", Info->GroupID.GetRawId());
+                wilsonSpan->Attribute("RestartCounter", RestartCounter);
+                wilsonSpan->Attribute("database", AppData()->TenantName);
+                wilsonSpan->Attribute("storagePool", Info->GetStoragePoolName());
+                params.Common.Event->ToSpan(*wilsonSpan);
+            }
         } else if (ParentSpan.GetRetroSpanPtr()) {
             const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
             Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage,
-                    parentTraceId.GetTimeToLive(), true), "DSProxy.RTX");
+                    parentTraceId.GetTimeToLive(), true), "DSProxy.Retro");
         } else {
             // Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage, Max<ui32>(), true),
-            //         "DSProxy.RTX");
+            //         "DSProxy.Retro");
         }
 
         Y_ABORT_UNLESS(CostModel);
@@ -303,7 +307,8 @@ public:
     static double GetTotalTimeMs(const NKikimrBlobStorage::TTimestamps& timestamps);
     static double GetVDiskTimeMs(const NKikimrBlobStorage::TTimestamps& timestamps);
 
-    bool CheckForExternalCancellation();
+    bool CancelIfIrrelevant();
+    bool CheckForExternalCancellation() const;
 
 private:
     void CheckPostponedQueue();

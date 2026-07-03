@@ -1,6 +1,7 @@
 #include "yql_yt_file.h"
 #include "yql_yt_file_mkql_compiler.h"
 #include "yql_yt_file_comp_nodes.h"
+#include "yql_yt_file_row_count.h"
 
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -898,12 +899,19 @@ public:
             ThrowNonConsumedLinear(*compGraph);
             YQL_ENSURE(1 == outTableContent.size());
 
+            ui64 publishedRowCount = 0;
             {
                 TMemoryInput in(outTableContent.front());
                 TOFStream of(destFilePath);
                 TDoubleHighPrecisionYsonWriter writer(&of, ::NYson::EYsonType::ListFragment);
-                NYson::TYsonParser parser(&writer, &in, ::NYson::EYsonType::ListFragment);
-                parser.Parse();
+                if (Services_->GetWriteOutputRowCount()) {
+                    auto counting = NFile::MakeRowCountingYsonConsumer(&writer, publishedRowCount);
+                    NYson::TYsonParser parser(counting.get(), &in, ::NYson::EYsonType::ListFragment);
+                    parser.Parse();
+                } else {
+                    NYson::TYsonParser parser(&writer, &in, ::NYson::EYsonType::ListFragment);
+                    parser.Parse();
+                }
             }
 
             {
@@ -921,7 +929,7 @@ public:
 
                 const auto nativeYtTypeCompatibility = options.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
                 const bool rowSpecCompactForm = options.Config()->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
-                dstRowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], rowSpecCompactForm);
+                dstRowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], nativeYtTypeCompatibility, rowSpecCompactForm);
                 NYT::TNode columnGroupsSpec;
                 if (options.Config()->OptimizeFor.Get(cluster).GetOrElse(NYT::OF_LOOKUP_ATTR) != NYT::OF_LOOKUP_ATTR) {
                     if (auto setting = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::ColumnGroups)) {
@@ -1001,6 +1009,9 @@ public:
                     }
                 }
 
+                if (Services_->GetWriteOutputRowCount()) {
+                    attrs["row_count"] = static_cast<i64>(publishedRowCount);
+                }
                 TOFStream ofAttr(destFilePath + ".attr");
                 ofAttr.Write(NYT::NodeToYsonString(attrs, NYson::EYsonFormat::Pretty));
             }
@@ -1120,7 +1131,7 @@ public:
             }
             const auto nativeYtTypeCompatibility = options.Config()->NativeYtTypeCompatibility.Get(TString{cluster}).GetOrElse(NTCF_LEGACY);
             const bool rowSpecCompactForm = options.Config()->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
-            options.OutTable().RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], rowSpecCompactForm);
+            options.OutTable().RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], nativeYtTypeCompatibility, rowSpecCompactForm);
             NYT::TNode rowSpecYson;
             options.OutTable().RowSpec->FillCodecNode(rowSpecYson);
             attrs["schema"] = RowSpecToYTSchema(rowSpecYson, nativeYtTypeCompatibility).ToNode();
@@ -1280,13 +1291,19 @@ private:
     }
 
     static void LoadTableStatInfo(const TString& path, TYtTableStatInfo& info) {
-        NYT::TNode inputList = LoadTableContent(path);
-        info.RecordsCount = inputList.AsList().size();
+        NYT::TNode attrs = LoadTableAttrs(path);
+        if (attrs.HasKey("row_count")) {
+            info.RecordsCount = attrs["row_count"].AsInt64();
+        } else {
+            NYT::TNode inputList = LoadTableContent(path);
+            info.RecordsCount = inputList.AsList().size();
+        }
         if (!info.IsEmpty()) {
             info.DataSize = TFileStat(path).Size;
             info.ChunkCount = 1;
         }
     }
+
 
     static NYT::TNode LoadTableContent(const TString& path) {
         NYT::TNode inputList = NYT::TNode::CreateList();
@@ -1413,7 +1430,6 @@ private:
             TYtTableStatInfo::TPtr statInfo = MakeIntrusive<TYtTableStatInfo>();
             statInfo->Id = outTableInfos[i].Name;
             LoadTableStatInfo(outTablePaths.at(i), *statInfo);
-
             outStat.emplace_back(statInfo->Id, statInfo);
         }
         return outStat;
@@ -1431,8 +1447,8 @@ private:
 
             TYtTableStatInfo::TPtr statInfo = MakeIntrusive<TYtTableStatInfo>();
             statInfo->Id = name;
-            LoadTableStatInfo(Services_->GetTmpTablePath(name), *statInfo);
-
+            const TString touchPath = Services_->GetTmpTablePath(name);
+            LoadTableStatInfo(touchPath, *statInfo);
             outStat.emplace_back(statInfo->Id, statInfo);
         }
 
@@ -1498,14 +1514,21 @@ private:
     {
         auto outPath = Services_->GetTmpTablePath(outTableInfo.Name);
         session.DeleteAtFinalize(config, cluster, outPath);
+
+        ui64 rowCount = 0;
         if (binaryYson) {
             TMemoryInput in(binaryYson);
             TOFStream of(outPath);
             TDoubleHighPrecisionYsonWriter writer(&of, ::NYson::EYsonType::ListFragment);
-            NYson::TYsonParser parser(&writer, &in, ::NYson::EYsonType::ListFragment);
-            parser.Parse();
-        }
-        else {
+            if (Services_->GetWriteOutputRowCount()) {
+                auto counting = NFile::MakeRowCountingYsonConsumer(&writer, rowCount);
+                NYson::TYsonParser parser(counting.get(), &in, ::NYson::EYsonType::ListFragment);
+                parser.Parse();
+            } else {
+                NYson::TYsonParser parser(&writer, &in, ::NYson::EYsonType::ListFragment);
+                parser.Parse();
+            }
+        } else {
             YQL_ENSURE(TFile(outPath, CreateAlways | WrOnly).IsOpen(), "Failed to create " << outPath.Quote() << " file");
         }
 
@@ -1517,11 +1540,14 @@ private:
             const auto nativeYtTypeCompatibility = config->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
             const bool rowSpecCompactForm = config->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
             const bool optimizeForScan = config->OptimizeFor.Get(cluster).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) != NYT::EOptimizeForAttr::OF_LOOKUP_ATTR;
-            outTableInfo.RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], rowSpecCompactForm);
+            outTableInfo.RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], nativeYtTypeCompatibility, rowSpecCompactForm);
             NYT::TNode rowSpecYson;
             outTableInfo.RowSpec->FillCodecNode(rowSpecYson);
 
             attrs["schema"] = RowSpecToYTSchema(rowSpecYson, nativeYtTypeCompatibility, optimizeForScan ? outTableInfo.GetColumnGroups() : NYT::TNode{}).ToNode();
+            if (Services_->GetWriteOutputRowCount()) {
+                attrs["row_count"] = static_cast<i64>(rowCount);
+            }
             TOFStream ofAttr(outPath + ".attr");
             NYson::TYsonWriter writer(&ofAttr, NYson::EYsonFormat::Pretty, ::NYson::EYsonType::Node);
             NYT::TNodeVisitor visitor(&writer);
@@ -1667,6 +1693,13 @@ private:
 
     NThreading::TFuture<IYtGateway::TDownloadTableResult> DownloadTable(TDownloadTableOptions&&) override {
         return MakeFuture<IYtGateway::TDownloadTableResult>();
+    }
+
+    NThreading::TFuture<TUploadFilesToCacheResult> UploadFilesToCache(TUploadFilesToCacheOptions&& options) override {
+        TUploadFilesToCacheResult res;
+        res.SetSuccess();
+        res.Files = options.Files();
+        return MakeFuture(std::move(res));
     }
 
     IYtTokenResolver::TPtr GetYtTokenResolver() const override {

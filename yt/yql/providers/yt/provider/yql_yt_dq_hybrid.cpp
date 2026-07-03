@@ -64,6 +64,10 @@ private:
     }
 
     bool CanReplaceOnHybrid(const TYtOutputOpBase& operation) const {
+        if (operation.DataSink().Cluster().Value() == YtUnspecifiedCluster) {
+            // wait until runtime cluster is assigned
+            return false;
+        }
         const TStringBuf nodeName = operation.Raw()->Content();
         if (!State_->IsHybridEnabledForCluster(operation.DataSink().Cluster().Value())) {
             PushSkipStat("DisabledCluster", nodeName);
@@ -537,7 +541,7 @@ private:
                 sortKeys = ctx.Builder(reduce.Pos())
                     .Lambda()
                         .Param("row")
-                        .Do(std::bind(keysBuilder, std::ref(sort), std::placeholders::_1))
+                        .Do(std::bind_front(keysBuilder, std::ref(sort)))
                     .Seal().Build();
             }
         }
@@ -545,7 +549,7 @@ private:
         const auto extract = TCoLambda(ctx.Builder(reduce.Pos())
             .Lambda()
                 .Param("row")
-                .Do(std::bind(keysBuilder, std::ref(keys), std::placeholders::_1))
+                .Do(std::bind_front(keysBuilder, std::ref(keys)))
             .Seal().Build());
 
         const bool hasGetSysKeySwitch = bool(FindNode(reduce.Reducer().Body().Ptr(),

@@ -21,7 +21,7 @@
 
 #include <atomic>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -30,7 +30,7 @@ bool IsLocalBusTransportEnabled();
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTcpDispatcher::TImpl
+class TDispatcher::TImpl
     : public NProfiling::ISensorProducer
 {
 public:
@@ -50,22 +50,22 @@ public:
     NConcurrency::IPollerPtr GetAcceptorPoller();
     NConcurrency::IPollerPtr GetXferPoller();
 
-    void Configure(const TTcpDispatcherConfigPtr& config);
+    void Configure(const TDispatcherConfigPtr& config);
 
-    void RegisterConnection(TTcpConnectionPtr connection);
+    void RegisterConnection(TConnectionPtr connection);
 
     void CollectSensors(NProfiling::ISensorWriter* writer) override;
 
     NYTree::IYPathServicePtr GetOrchidService();
 
-    std::optional<TString> GetBusCertsDirectoryPath() const;
+    std::optional<std::string> GetBusCertsDirectoryPath() const;
 
     void RegisterLocalMessageHandler(int port, const ILocalMessageHandlerPtr& handler);
     void UnregisterLocalMessageHandler(int port);
     ILocalMessageHandlerPtr FindLocalBypassMessageHandler(const NNet::TNetworkAddress& address);
 
 private:
-    friend class TTcpDispatcher;
+    friend class TDispatcher;
 
     DECLARE_NEW_FRIEND()
 
@@ -77,17 +77,17 @@ private:
         bool isXfer,
         TStringBuf threadNamePrefix);
 
-    std::vector<TTcpConnectionPtr> GetConnections();
+    std::vector<TConnectionPtr> GetConnections();
     void BuildOrchid(NYson::IYsonConsumer* consumer);
 
-    TAtomicIntrusivePtr<TTcpDispatcherConfig> Config_{New<TTcpDispatcherConfig>()};
+    TAtomicIntrusivePtr<TDispatcherConfig> Config_{New<TDispatcherConfig>()};
 
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, PollersLock_);
     NConcurrency::IThreadPoolPollerPtr AcceptorPoller_;
     NConcurrency::IThreadPoolPollerPtr XferPoller_;
 
-    TMpscStack<TWeakPtr<TTcpConnection>> ConnectionsToRegister_;
-    NThreading::TAtomicObject<std::vector<TWeakPtr<TTcpConnection>>> ConnectionList_;
+    TMpscStack<TWeakPtr<TConnection>> ConnectionsToRegister_;
+    NThreading::TAtomicObject<std::vector<TWeakPtr<TConnection>>> ConnectionList_;
     int CurrentConnectionListIndex_ = 0;
 
     struct TNetworkStatistics
@@ -121,4 +121,4 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp

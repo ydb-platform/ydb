@@ -5,7 +5,9 @@ SRCS(
 )
 
 PEERDIR(
+    yql/essentials/core
     yql/essentials/providers/common/codec
+    yql/essentials/providers/common/mkql_simple_file
     yql/essentials/providers/common/provider
     yql/essentials/providers/result/expr_nodes
     yql/essentials/utils/log
@@ -17,11 +19,13 @@ PEERDIR(
     yt/yql/providers/yt/fmr/coordinator/interface
     yt/yql/providers/yt/fmr/file/metadata/interface
     yt/yql/providers/yt/fmr/file/upload/interface
+    yt/yql/providers/yt/fmr/job_launcher
     yt/yql/providers/yt/fmr/job_preparer/interface
     yt/yql/providers/yt/fmr/vanilla/coordinator_client
     yt/yql/providers/yt/fmr/vanilla/peer_tracker
     yt/yql/providers/yt/lib/config_clusters
     yt/yql/providers/yt/lib/url_mapper
+    yt/yql/providers/yt/lib/res_pull
     yt/yql/providers/yt/lib/schema
     yt/yql/providers/yt/provider
 )

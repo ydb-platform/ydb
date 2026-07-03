@@ -3,6 +3,8 @@
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
+$zero = cast(0 as decimal(7,2));
+
 SELECT
     w_warehouse_name,
     w_warehouse_sq_ft,
@@ -61,145 +63,145 @@ FROM (
         Sum(
             CASE
                 WHEN d_moy == 1 THEN ws_sales_price * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS jan_sales,
         Sum(
             CASE
                 WHEN d_moy == 2 THEN ws_sales_price * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS feb_sales,
         Sum(
             CASE
                 WHEN d_moy == 3 THEN ws_sales_price * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS mar_sales,
         Sum(
             CASE
                 WHEN d_moy == 4 THEN ws_sales_price * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS apr_sales,
         Sum(
             CASE
                 WHEN d_moy == 5 THEN ws_sales_price * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS may_sales,
         Sum(
             CASE
                 WHEN d_moy == 6 THEN ws_sales_price * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS jun_sales,
         Sum(
             CASE
                 WHEN d_moy == 7 THEN ws_sales_price * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS jul_sales,
         Sum(
             CASE
                 WHEN d_moy == 8 THEN ws_sales_price * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS aug_sales,
         Sum(
             CASE
                 WHEN d_moy == 9 THEN ws_sales_price * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS sep_sales,
         Sum(
             CASE
                 WHEN d_moy == 10 THEN ws_sales_price * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS oct_sales,
         Sum(
             CASE
                 WHEN d_moy == 11 THEN ws_sales_price * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS nov_sales,
         Sum(
             CASE
                 WHEN d_moy == 12 THEN ws_sales_price * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS dec_sales,
         Sum(
             CASE
                 WHEN d_moy == 1 THEN ws_net_paid_inc_tax * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS jan_net,
         Sum(
             CASE
                 WHEN d_moy == 2 THEN ws_net_paid_inc_tax * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS feb_net,
         Sum(
             CASE
                 WHEN d_moy == 3 THEN ws_net_paid_inc_tax * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS mar_net,
         Sum(
             CASE
                 WHEN d_moy == 4 THEN ws_net_paid_inc_tax * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS apr_net,
         Sum(
             CASE
                 WHEN d_moy == 5 THEN ws_net_paid_inc_tax * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS may_net,
         Sum(
             CASE
                 WHEN d_moy == 6 THEN ws_net_paid_inc_tax * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS jun_net,
         Sum(
             CASE
                 WHEN d_moy == 7 THEN ws_net_paid_inc_tax * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS jul_net,
         Sum(
             CASE
                 WHEN d_moy == 8 THEN ws_net_paid_inc_tax * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS aug_net,
         Sum(
             CASE
                 WHEN d_moy == 9 THEN ws_net_paid_inc_tax * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS sep_net,
         Sum(
             CASE
                 WHEN d_moy == 10 THEN ws_net_paid_inc_tax * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS oct_net,
         Sum(
             CASE
                 WHEN d_moy == 11 THEN ws_net_paid_inc_tax * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS nov_net,
         Sum(
             CASE
                 WHEN d_moy == 12 THEN ws_net_paid_inc_tax * ws_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS dec_net
     FROM
@@ -241,145 +243,145 @@ FROM (
         Sum(
             CASE
                 WHEN d_moy == 1 THEN cs_ext_sales_price * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS jan_sales,
         Sum(
             CASE
                 WHEN d_moy == 2 THEN cs_ext_sales_price * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS feb_sales,
         Sum(
             CASE
                 WHEN d_moy == 3 THEN cs_ext_sales_price * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS mar_sales,
         Sum(
             CASE
                 WHEN d_moy == 4 THEN cs_ext_sales_price * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS apr_sales,
         Sum(
             CASE
                 WHEN d_moy == 5 THEN cs_ext_sales_price * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS may_sales,
         Sum(
             CASE
                 WHEN d_moy == 6 THEN cs_ext_sales_price * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS jun_sales,
         Sum(
             CASE
                 WHEN d_moy == 7 THEN cs_ext_sales_price * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS jul_sales,
         Sum(
             CASE
                 WHEN d_moy == 8 THEN cs_ext_sales_price * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS aug_sales,
         Sum(
             CASE
                 WHEN d_moy == 9 THEN cs_ext_sales_price * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS sep_sales,
         Sum(
             CASE
                 WHEN d_moy == 10 THEN cs_ext_sales_price * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS oct_sales,
         Sum(
             CASE
                 WHEN d_moy == 11 THEN cs_ext_sales_price * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS nov_sales,
         Sum(
             CASE
                 WHEN d_moy == 12 THEN cs_ext_sales_price * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS dec_sales,
         Sum(
             CASE
                 WHEN d_moy == 1 THEN cs_net_paid_inc_ship_tax * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS jan_net,
         Sum(
             CASE
                 WHEN d_moy == 2 THEN cs_net_paid_inc_ship_tax * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS feb_net,
         Sum(
             CASE
                 WHEN d_moy == 3 THEN cs_net_paid_inc_ship_tax * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS mar_net,
         Sum(
             CASE
                 WHEN d_moy == 4 THEN cs_net_paid_inc_ship_tax * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS apr_net,
         Sum(
             CASE
                 WHEN d_moy == 5 THEN cs_net_paid_inc_ship_tax * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS may_net,
         Sum(
             CASE
                 WHEN d_moy == 6 THEN cs_net_paid_inc_ship_tax * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS jun_net,
         Sum(
             CASE
                 WHEN d_moy == 7 THEN cs_net_paid_inc_ship_tax * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS jul_net,
         Sum(
             CASE
                 WHEN d_moy == 8 THEN cs_net_paid_inc_ship_tax * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS aug_net,
         Sum(
             CASE
                 WHEN d_moy == 9 THEN cs_net_paid_inc_ship_tax * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS sep_net,
         Sum(
             CASE
                 WHEN d_moy == 10 THEN cs_net_paid_inc_ship_tax * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS oct_net,
         Sum(
             CASE
                 WHEN d_moy == 11 THEN cs_net_paid_inc_ship_tax * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS nov_net,
         Sum(
             CASE
                 WHEN d_moy == 12 THEN cs_net_paid_inc_ship_tax * cs_quantity
-                ELSE 0
+                ELSE $zero
             END
         ) AS dec_net
     FROM

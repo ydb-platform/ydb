@@ -1,5 +1,9 @@
 #include "yql_yt_sorted_partitioner_base_ut.h"
 
+#include <library/cpp/random_provider/random_provider.h>
+#include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/sorted_merge/yql_yt_sorted_merge_stage_operation_manager.h>
+#include <yt/yql/providers/yt/fmr/test_tools/fmr_coordinator_service_helper/yql_yt_mock_coordinator_service.h>
+
 namespace NYql::NFmr::NPartitionerTest {
 
 Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
@@ -249,6 +253,111 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
         };
 
         CheckPartitionCorrectness(cases);
+    }
+}
+
+Y_UNIT_TEST_SUITE(SortedMergeOperationManagerTests) {
+    Y_UNIT_TEST(PartitionsSingleYtTableIntoOrderedTasks) {
+        TYtTableRef ytTable(TString("test_cluster"), TString("test_path"));
+
+        TSortedMergeOperationParams operationParams{
+            .Input = {ytTable},
+            .Output = TFmrTableRef{
+                .FmrTableId = TFmrTableId("out_cluster", "out_path"),
+                .SortOrder = {ESortOrder::Ascending},
+                .SortColumns = {"key"}
+            }
+        };
+
+        NYT::TNode fmrOperationSpec;
+        fmrOperationSpec["partition"]["yt_table"]["max_data_weight_per_part"] = 1000000LL;
+        fmrOperationSpec["partition"]["yt_table"]["max_parts"] = 64LL;
+        fmrOperationSpec["partition"]["fmr_table"]["max_data_weight_per_part"] = 1000000LL;
+        fmrOperationSpec["partition"]["fmr_table"]["max_parts"] = 64LL;
+        fmrOperationSpec["partition"]["fmr_table"]["adjust_data_weight_per_partition"] = false;
+
+        TFmrTableId ytTableId(ytTable.GetCluster(), ytTable.GetPath());
+        TYtTableTaskRef partition0{.RichPaths = {ytTable.RichPath}};
+        TYtTableTaskRef partition1{.RichPaths = {ytTable.RichPath}};
+
+        auto ytService = MakeIntrusive<TMockYtCoordinatorService>();
+        ytService->SetPartitionsForTable(ytTableId, {partition0, partition1});
+
+        std::unordered_map<TFmrTableId, TClusterConnection> clusterConnections{
+            {ytTableId, TClusterConnection{.TransactionId = "txn", .YtServerName = "test_cluster"}}
+        };
+
+        TOperationParams params{operationParams};
+        std::unordered_map<TFmrTableId, std::vector<TString>> partIdsForTables;
+        std::unordered_map<TString, std::vector<TChunkStats>> partIdStats;
+
+        TPrepareOperationStageContext context{
+            .OperationParams = params,
+            .FmrOperationSpec = fmrOperationSpec,
+            .ClusterConnections = clusterConnections,
+            .PartIdsForTables = partIdsForTables,
+            .PartIdStats = partIdStats,
+            .YtCoordinatorService = ytService
+        };
+
+        auto manager = MakeSortedMergeStageOperationManager(CreateDeterministicRandomProvider(1));
+        auto result = manager->PrepareOperationStage(context);
+
+        UNIT_ASSERT_C(!result.Error, result.Error->ErrorMessage);
+        UNIT_ASSERT_VALUES_EQUAL(result.PartitionResult.TaskInputs.size(), 2);
+
+        for (const auto& taskInput : result.PartitionResult.TaskInputs) {
+            UNIT_ASSERT_VALUES_EQUAL(taskInput.Inputs.size(), 1);
+            UNIT_ASSERT(std::holds_alternative<TYtTableTaskRef>(taskInput.Inputs[0]));
+        }
+    }
+
+    Y_UNIT_TEST(FallsBackWhenYtPartitioningFails) {
+        TYtTableRef ytTable(TString("test_cluster"), TString("test_path"));
+
+        TSortedMergeOperationParams operationParams{
+            .Input = {ytTable},
+            .Output = TFmrTableRef{
+                .FmrTableId = TFmrTableId("out_cluster", "out_path"),
+                .SortOrder = {ESortOrder::Ascending},
+                .SortColumns = {"key"}
+            }
+        };
+
+        NYT::TNode fmrOperationSpec;
+        fmrOperationSpec["partition"]["yt_table"]["max_data_weight_per_part"] = 1000000LL;
+        fmrOperationSpec["partition"]["yt_table"]["max_parts"] = 64LL;
+        fmrOperationSpec["partition"]["fmr_table"]["max_data_weight_per_part"] = 1000000LL;
+        fmrOperationSpec["partition"]["fmr_table"]["max_parts"] = 64LL;
+        fmrOperationSpec["partition"]["fmr_table"]["adjust_data_weight_per_partition"] = false;
+
+        TFmrTableId ytTableId(ytTable.GetCluster(), ytTable.GetPath());
+
+        auto ytService = MakeIntrusive<TMockYtCoordinatorService>();
+        ytService->SetPartitionsForTable(ytTableId, {}, /*status=*/false);
+
+        std::unordered_map<TFmrTableId, TClusterConnection> clusterConnections{
+            {ytTableId, TClusterConnection{.TransactionId = "txn", .YtServerName = "test_cluster"}}
+        };
+
+        TOperationParams params{operationParams};
+        std::unordered_map<TFmrTableId, std::vector<TString>> partIdsForTables;
+        std::unordered_map<TString, std::vector<TChunkStats>> partIdStats;
+
+        TPrepareOperationStageContext context{
+            .OperationParams = params,
+            .FmrOperationSpec = fmrOperationSpec,
+            .ClusterConnections = clusterConnections,
+            .PartIdsForTables = partIdsForTables,
+            .PartIdStats = partIdStats,
+            .YtCoordinatorService = ytService
+        };
+
+        auto manager = MakeSortedMergeStageOperationManager(CreateDeterministicRandomProvider(1));
+        auto result = manager->PrepareOperationStage(context);
+
+        UNIT_ASSERT(result.Error.Defined());
+        UNIT_ASSERT_EQUAL(result.Error->Reason, EFmrErrorReason::FallbackOperation);
     }
 }
 

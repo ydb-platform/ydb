@@ -4,6 +4,7 @@
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -27,38 +28,67 @@ TRegion::TRegion(
     IPartitionDirectService* partitionDirectService,
     ui32 regionIndex,
     const TVector<IDirectBlockGroupPtr>& directBlockGroups,
+    const TVChunkConfigByIndex& vChunkConfigs,
     ui32 syncRequestsBatchSize,
     ui64 vChunkSize,
-    TDuration writeHedgingDelay,
-    TDuration writeRequestTimeout,
-    TDuration traceSamplePeriod,
     NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
 {
     Y_ABORT_UNLESS(vChunkSize > 0 && vChunkSize <= RegionSize);
-    const ui32 vChunksPerRegionCount = RegionSize / vChunkSize;
+    const ui64 vChunksPerRegionCount = RegionSize / vChunkSize;
     for (size_t i = 0; i < vChunksPerRegionCount; i++) {
-        const size_t vChunkIndex =
-            (regionIndex * vChunksPerRegionCount) + static_cast<ui32>(i);
-        const size_t dbgIndex = i % directBlockGroups.size();
+        const size_t vChunkIndex = (regionIndex * vChunksPerRegionCount) + i;
+        const size_t dbgIndex = vChunkIndex % directBlockGroups.size();
 
         NMonitoring::TDynamicCounterPtr vChunkCounters =
             counters->GetSubgroup("vchunk", ToString(vChunkIndex));
 
+        const auto* persisted = vChunkConfigs.FindPtr(vChunkIndex);
+        const auto vChunkConfig = persisted ? *persisted
+                                            : TVChunkConfig::MakeDefault(
+                                                  vChunkIndex,
+                                                  DirectBlockGroupHostCount,
+                                                  DefaultPrimaryCount);
+        Y_ABORT_UNLESS(vChunkConfig.IsValid());
+        Y_ABORT_UNLESS(vChunkConfig.GetVChunkIndex() == vChunkIndex);
+
         auto vChunk = std::make_shared<TVChunk>(
             ActorSystem,
             partitionDirectService,
-            TVChunkConfig::Make(vChunkIndex),
+            vChunkConfig,
             directBlockGroups[dbgIndex],
             syncRequestsBatchSize,
             vChunkSize,
-            writeHedgingDelay,
-            writeRequestTimeout,
-            traceSamplePeriod,
             vChunkCounters);
-        vChunk->Start();
         VChunks.push_back(std::move(vChunk));
     }
+}
+
+void TRegion::Run()
+{
+    for (const auto& vChunk: VChunks) {
+        vChunk->Start();
+    }
+}
+
+NThreading::TFuture<void> TRegion::Stop()
+{
+    TVector<NThreading::TFuture<void>> stopFutures;
+    for (const auto& vChunk: VChunks) {
+        stopFutures.push_back(vChunk->Stop());
+    }
+    auto result = WaitAll(stopFutures);
+    result.Subscribe(
+        [weakSelf = weak_from_this()]   //
+        (const NThreading::TFuture<void>& f)
+        {
+            Y_UNUSED(f);
+
+            if (auto self = weakSelf.lock()) {
+                self->OnVChunksStopped();
+            }
+        });
+    return result;
 }
 
 NThreading::TFuture<TReadBlocksLocalResponse> TRegion::ReadBlocksLocal(
@@ -77,9 +107,6 @@ NThreading::TFuture<TReadBlocksLocalResponse> TRegion::ReadBlocksLocal(
 NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
-    EWriteMode writeMode,
-    TDuration pbufferReplyTimeout,
-    ui64 lsn,
     const NWilson::TTraceId& traceId)
 {
     const size_t vChunkIndex = VChunkIndexFromHeaders(request->Headers);
@@ -87,10 +114,12 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
     return VChunks[vChunkIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
-        writeMode,
-        pbufferReplyTimeout,
-        lsn,
         traceId);
+}
+
+void TRegion::OnVChunksStopped()
+{
+    VChunks.clear();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -59,19 +59,6 @@ Y_UNIT_TEST(TestDeallocated) {
     UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), 1);
 }
 
-Y_UNIT_TEST(FreeInWrongAllocator) {
-    {
-        return;
-    }
-    TScopedAlloc alloc1(__LOCATION__);
-    void* p1 = TWithDefaultMiniKQLAlloc::AllocWithSize(10);
-    void* p2 = TWithDefaultMiniKQLAlloc::AllocWithSize(10);
-    {
-        TScopedAlloc alloc2(__LOCATION__);
-        TWithDefaultMiniKQLAlloc::FreeWithSize(p1, 10);
-    }
-    TWithDefaultMiniKQLAlloc::FreeWithSize(p2, 10);
-}
 Y_UNIT_TEST(InitiallyAcquired) {
     {
         TScopedAlloc alloc(__LOCATION__);

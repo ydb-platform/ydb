@@ -52,6 +52,10 @@ TKqpStreamLockWorker::~TKqpStreamLockWorker() {
     Clear();
 }
 
+bool TKqpStreamLockWorker::AllRowsProcessed() {
+    return InputRows.empty() && BatchesByRequestId.empty();
+}
+
 void TKqpStreamLockWorker::Clear() {
     InputRows.clear();
     BatchesByRequestId.clear();

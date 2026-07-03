@@ -13,7 +13,7 @@ class TCreateTopicInternalActor: public NPQ::TBaseActor<TCreateTopicInternalActo
 
 public:
     TCreateTopicInternalActor(
-        NThreading::TPromise<TCreateTopicResponse>&& promise,
+        NThreading::TPromise<TSchemaResponse>&& promise,
         TCreateTopicSettings&& settings
     )
         : NPQ::TBaseActor<TCreateTopicInternalActor>(NKikimrServices::PQ_SCHEMA)
@@ -32,9 +32,7 @@ public:
     void OnException(const std::exception& exc) override {
         LOG_E("OnException: " << exc.what());
 
-        TEvCreateTopicResponse response;
-        response.Status = Ydb::StatusIds::INTERNAL_ERROR;
-        response.ErrorMessage = exc.what();
+        TEvSchemaResponse response(Path, Ydb::StatusIds::INTERNAL_ERROR, exc.what());
 
         Promise.SetValue(std::move(response));
     }
@@ -44,10 +42,11 @@ public:
     }
 
 private:
-    void Handle(NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev) {
-        LOG_D("Handle TEvCreateTopicResponse. Status: " << ev->Get()->Status << ", ErrorMessage: " << ev->Get()->ErrorMessage);
+    void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
+        LOG_D("Handle TEvSchemaResponse. Status: " << ev->Get()->Status << ", ErrorMessage: " << ev->Get()->ErrorMessage);
 
         Promise.SetValue({
+            .Path = Path,
             .Status = ev->Get()->Status,
             .ErrorMessage = std::move(ev->Get()->ErrorMessage),
             .ModifyScheme = std::move(ev->Get()->ModifyScheme)
@@ -58,12 +57,12 @@ private:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NPQ::NSchema::TEvCreateTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
         }
     }
 
 private:
-    NThreading::TPromise<TCreateTopicResponse> Promise;
+    NThreading::TPromise<TSchemaResponse> Promise;
     TCreateTopicSettings Settings;
     const TString Path;
 };
@@ -71,7 +70,7 @@ private:
 } // namespace
 
 NActors::IActor* CreateCreateTopicActor(
-    NThreading::TPromise<TCreateTopicResponse>&& promise,
+    NThreading::TPromise<TSchemaResponse>&& promise,
     TCreateTopicSettings&& settings
 ) {
     return new TCreateTopicInternalActor(std::move(promise), std::move(settings));

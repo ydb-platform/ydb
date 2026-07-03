@@ -22,9 +22,12 @@ constexpr ui32 DefaultLogLevel = 5;
 
 TNbsServicePtr NbsService;
 
-NVhost::TServerConfig CreateDefaultVhostServerConfig()
+NVhost::TServerConfig CreateVhostServerConfig(
+    const TStorageConfig& storageConfig)
 {
     NVhost::TServerConfig result;
+    const auto threadsCount = storageConfig.GetVhostThreadsCount();
+    result.ThreadsCount = threadsCount > 0 ? threadsCount : 1;
     return result;
 }
 
@@ -51,12 +54,15 @@ TNbsService::TNbsService(const NKikimrConfig::TNbsConfig& config)
     VhostQueueFactory = NVhost::CreateVhostQueueFactory();
     VHostStats = std::make_shared<TVHostStatsSimple>();
 
+    auto vhostServerConfig = CreateVhostServerConfig(*StorageConfig);
+    STORAGE_INFO("Vhost threads count: " << vhostServerConfig.ThreadsCount);
+
     VhostServer = NVhost::CreateServer(
         Logging,
         VHostStats,
         NVhost::CreateVhostQueueFactory(),
         CreateDefaultDeviceHandlerFactory(),
-        CreateDefaultVhostServerConfig(),
+        std::move(vhostServerConfig),
         VhostCallbacks);
 }
 
@@ -83,6 +89,9 @@ const NKikimrConfig::TNbsConfig& TNbsService::GetConfig() const
 
 void CreateNbsService(const NKikimrConfig::TNbsConfig& config)
 {
+    // Ensure existing NbsService (if any) is destroyed BEFORE a new one
+    // is constructed to prevent global vhost queue contention.
+    NbsService = nullptr;
     NbsService = std::make_shared<TNbsService>(config);
 }
 

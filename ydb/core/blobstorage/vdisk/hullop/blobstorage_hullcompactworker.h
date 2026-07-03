@@ -66,7 +66,8 @@ namespace NKikimr {
                     void *cookie = nullptr;
                     auto write = std::make_unique<NPDisk::TEvChunkWrite>(Worker->PDiskCtx->Dsk->Owner,
                         Worker->PDiskCtx->Dsk->OwnerRound, preallocatedLocation.ChunkIdx, preallocatedLocation.Offset,
-                        partsPtr, cookie, true, NPriWrite::HullComp, false);
+                        partsPtr, cookie, true, NPriWrite::HullComp, TWriteSource::HullCompactWorkerWrite,
+                        false);
                     Worker->PendingWrites.push_back(std::move(write));
                 }
             }
@@ -232,19 +233,15 @@ namespace NKikimr {
             // time stat
             TInstant CreationTime;
             TInstant StartTime;
-            TInstant FinishTime;
 
             TStatistics(THullCtxPtr hullCtx)
                 : HullCtx(hullCtx)
                 , CreationTime(TAppData::TimeProvider->Now())
-                , StartTime()
-                , FinishTime()
             {}
 
             TString ToString() const {
                 TStringStream str;
                 str << "{WaitTime# " << (StartTime - CreationTime).ToString()
-                    << " GetNextItemTime# " << (FinishTime - StartTime).ToString()
                     << " BytesRead# " << BytesRead << " ReadIOPS# " << ReadIOPS
                     << " BytesWritten# " << BytesWritten << " WriteIOPS# " << WriteIOPS
                     << " ItemsWritten# " << ItemsWritten

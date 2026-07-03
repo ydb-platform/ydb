@@ -74,6 +74,7 @@ PEERDIR(
     ydb/core/keyvalue
     ydb/core/kqp
     ydb/core/kqp/federated_query/actors
+    ydb/services/scheme_secret
     ydb/core/kqp/finalize_script_service
     ydb/core/kqp/rm_service
     ydb/core/load_test
@@ -92,7 +93,8 @@ PEERDIR(
     ydb/core/protos
     ydb/core/public_http
     ydb/core/quoter
-    ydb/core/retro_tracing_impl
+    ydb/core/retro_tracing_impl/distributed_collector
+    ydb/core/retro_tracing_impl/spans
     ydb/core/scheme
     ydb/core/scheme_types
     ydb/core/security
@@ -140,6 +142,7 @@ PEERDIR(
     ydb/library/actors/protos
     ydb/library/actors/retro_tracing
     ydb/library/actors/util
+    ydb/library/aws_init
     ydb/library/folder_service
     ydb/library/folder_service/proto
     ydb/library/global_plugins
@@ -187,7 +190,12 @@ PEERDIR(
     yt/yql/providers/yt/comp_nodes/llvm16
 )
 
-IF (OS_LINUX)
+DEFAULT(YDB_EMBEDDED_NBS_ENABLED yes)
+
+IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
+    CFLAGS(
+        -DYDB_EMBEDDED_NBS_ENABLED
+    )
     PEERDIR(
         ydb/core/nbs/cloud/blockstore/bootstrap
         ydb/core/nbs/cloud/blockstore/config/protos

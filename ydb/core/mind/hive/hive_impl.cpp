@@ -65,6 +65,10 @@ void THive::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         RestartRootHivePipe();
         return;
     }
+    if (msg->ClientId == ConsolePipeClient && msg->Status != NKikimrProto::OK) {
+        ConsolePipeClient = TActorId();
+        return;
+    }
     if (msg->Status != NKikimrProto::OK) {
         for (auto& [_, domain] : Domains) {
             if (domain.HivePipeClient == msg->ClientId) {
@@ -89,6 +93,10 @@ void THive::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
     }
     if (msg->ClientId == RootHivePipeClient) {
         RestartRootHivePipe();
+        return;
+    }
+    if (msg->ClientId == ConsolePipeClient) {
+        ConsolePipeClient = TActorId();
         return;
     }
     for (auto& [_, domain] : Domains) {
@@ -682,6 +690,31 @@ void THive::BuildCurrentConfig() {
     for (const NKikimrConfig::THiveTabletPreference& tabletPreference : CurrentConfig.GetDefaultTabletPreference()) {
         DefaultDataCentersPreference[tabletPreference.GetType()] = tabletPreference.GetDataCentersPreference();
     }
+    TabletTypeAllowedMetricsDefaults.clear();
+    auto setComputeMetric = [](TVector<i64>& metrics, i64 metricId, auto value) {
+        if (value == NKikimrConfig::THiveConfig::THiveTabletAllowedMetrics::Default) {
+            return;
+        }
+        auto it = Find(metrics, metricId);
+        if (value == NKikimrConfig::THiveConfig::THiveTabletAllowedMetrics::Enabled && it == metrics.end()) {
+            metrics.emplace_back(metricId);
+        } else if (value == NKikimrConfig::THiveConfig::THiveTabletAllowedMetrics::Disabled && it != metrics.end()) {
+            metrics.erase(it);
+        }
+    };
+    for (const auto& allowedMetrics : CurrentConfig.GetDefaultTabletAllowedMetrics()) {
+        for (auto t : allowedMetrics.GetTabletType()) {
+            const TTabletTypes::EType tabletType = TTabletTypes::EType(t);
+            if (!IsValidTabletType(tabletType)) {
+                continue;
+            }
+            TVector<i64> metricIds = GetDefaultAllowedMetricIdsForType(tabletType);
+            setComputeMetric(metricIds, NKikimrTabletBase::TMetrics::kCPUFieldNumber, allowedMetrics.GetCPU());
+            setComputeMetric(metricIds, NKikimrTabletBase::TMetrics::kMemoryFieldNumber, allowedMetrics.GetMemory());
+            setComputeMetric(metricIds, NKikimrTabletBase::TMetrics::kNetworkFieldNumber, allowedMetrics.GetNetwork());
+            TabletTypeAllowedMetricsDefaults.insert_or_assign(tabletType, std::move(metricIds));
+        }
+    }
     BalancerIgnoreTabletTypes.clear();
     for (auto i : CurrentConfig.GetBalancerIgnoreTabletTypes()) {
         const auto type = TTabletTypes::EType(i);
@@ -1130,6 +1163,15 @@ void THive::SendToRootHivePipe(IEventBase* payload) {
         RootHivePipeClient = Register(NTabletPipe::CreateClient(SelfId(), RootHiveId, pipeConfig));
     }
     NTabletPipe::SendData(SelfId(), RootHivePipeClient, payload);
+}
+
+void THive::SendToConsolePipe(IEventBase* payload) {
+    if (!ConsolePipeClient) {
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        ConsolePipeClient = Register(NTabletPipe::CreateClient(SelfId(), MakeConsoleID(), pipeConfig));
+    }
+    NTabletPipe::SendData(SelfId(), ConsolePipeClient, payload);
 }
 
 void THive::RestartBSControllerPipe() {
@@ -2436,7 +2478,7 @@ void THive::RemoveNodeFromSegments(TNodeInfo* node) {
         NodeSegments.erase(it);
     }
 }
- 
+
 void THive::RemoveNodeFromSegments(TNodeId nodeId) {
     if (auto* node = FindNode(nodeId)) {
         RemoveNodeFromSegments(node);
@@ -2829,12 +2871,15 @@ const TVector<i64>& THive::GetDefaultAllowedMetricIdsForType(TTabletTypes::EType
 }
 
 const TVector<i64>& THive::GetTabletTypeAllowedMetricIds(TTabletTypes::EType type) const {
-    const TVector<i64>& defaultAllowedMetricIds = GetDefaultAllowedMetricIdsForType(type);
     auto it = TabletTypeAllowedMetrics.find(type);
     if (it != TabletTypeAllowedMetrics.end()) {
         return it->second;
     }
-    return defaultAllowedMetricIds;
+    it = TabletTypeAllowedMetricsDefaults.find(type);
+    if (it != TabletTypeAllowedMetricsDefaults.end()) {
+        return it->second;
+    }
+    return GetDefaultAllowedMetricIdsForType(type);
 }
 
 THolder<TGroupFilter> THive::BuildGroupParametersForChannel(const TLeaderTabletInfo& tablet, ui32 channelId) {
@@ -2937,7 +2982,8 @@ void THive::CreateTabletFollowers(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db
                 }
                 for (ui32 i = 0; i < group.GetFollowerCountForDataCenter(dataCenterId); ++i) {
                     TFollowerTabletInfo& follower = tablet.AddFollower(group);
-                    follower.NodeFilter.AllowedDataCenters = {dataCenterId};
+                    follower.NodeFilter.AllowedDataCenters.Clear();
+                    follower.NodeFilter.AllowedDataCenters.AddDataCenter(dataCenterId);
                     follower.Statistics.SetLastAliveTimestamp(TlsActivationContext->Now().MilliSeconds());
                     db.Table<Schema::TabletFollowerTablet>().Key(tablet.Id, follower.Id).Update(
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(follower.FollowerGroup.Id),
@@ -3293,6 +3339,9 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvPrivate::TEvProcessTabletMetrics, Handle);
         hFunc(TEvHive::TEvShrinkStoragePool, Handle);
         hFunc(TEvHive::TEvShrinkStoragePoolReply, Handle);
+        hFunc(TEvHive::TEvShrinkStoragePoolDone, Handle);
+        hFunc(TEvPrivate::TEvReassignInactiveGroupsComplete, Handle);
+        hFunc(TEvPrivate::TEvCompactComplete, Handle);
     }
 }
 
@@ -3410,6 +3459,9 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvProcessTabletMetrics::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvShrinkStoragePool::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvShrinkStoragePoolReply::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvShrinkStoragePoolDone::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvReassignInactiveGroupsComplete::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvCompactComplete::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3797,7 +3849,7 @@ void THive::Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
     BLOG_D("Handle TEvShrinkStoragePool");
     const auto& record = ev->Get()->Record;
     auto& pool = GetStoragePool(record.GetStoragePool());
-    if (pool.ConsoleVersion < record.GetVersion()) {
+    if (pool.ConsoleVersion <= record.GetVersion()) {
         pool.ConsoleVersion = record.GetVersion();
     } else {
         BLOG_W("Got outdated TEvShrinkStoragePool request");
@@ -3807,15 +3859,40 @@ void THive::Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
         ShrinkPoolInitiator = ev->Sender;
         auto* domain = FindDomain(TSubDomainKey(record.GetSubDomain()));
         if (auto tenantHive = GetPipeToTenantHive(domain)) {
+            pool.NeedShrinkFromTenant = true;
             return NTabletPipe::SendData(SelfId(), *tenantHive, ev->Release().Release());
         }
     }
 
-    Execute(CreateShrinkPool(ev));
+    Execute(CreateShrinkPool(std::move(ev)));
 }
 
 void THive::Handle(TEvHive::TEvShrinkStoragePoolReply::TPtr& ev) {
     Execute(CreateShrinkPoolReply(std::move(ev)));
+}
+
+void THive::Handle(TEvPrivate::TEvReassignInactiveGroupsComplete::TPtr& ev) {
+    auto& pool = GetStoragePool(ev->Get()->PoolName);
+    if (!CompactInactiveGroups(pool)) {
+        CheckRemainingHistory(pool);
+    }
+}
+
+void THive::Handle(TEvPrivate::TEvCompactComplete::TPtr& ev) {
+    auto& pool = GetStoragePool(ev->Get()->PoolName);
+    if (ev->Get()->Success) {
+        CheckRemainingHistory(pool);
+    } else {
+        if (!CompactInactiveGroups(pool)) {
+            CheckRemainingHistory(pool);
+        }
+    }
+}
+
+void THive::Handle(TEvHive::TEvShrinkStoragePoolDone::TPtr& ev) {
+    auto& pool = GetStoragePool(ev->Get()->Record.GetStoragePool());
+    pool.NeedShrinkFromTenant = false;
+    CheckRemainingHistory(pool);
 }
 
 void THive::MakeScaleRecommendation() {
@@ -3943,6 +4020,102 @@ void THive::Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev) {
     response->Record.SetStatus(NKikimrProto::OK);
     response->Record.SetRecommendedNodes(domainInfo.LastScaleRecommendation->Nodes);
     Send(ev->Sender, response.release());
+}
+
+void THive::StartShrinkPool(TStoragePoolInfo& pool) {
+    if (ReassignInactiveGroups(pool)) {
+        return;
+    }
+    if (CompactInactiveGroups(pool)) {
+        return;
+    }
+    CheckRemainingHistory(pool);
+}
+
+bool THive::ReassignInactiveGroups(TStoragePoolInfo& pool) {
+    struct TShrinkPoolReassignCallback : IReassignCallback {
+        TString PoolName;
+
+        virtual IEventBase* MakeEvent(ui64) override {
+            return new TEvPrivate::TEvReassignInactiveGroupsComplete(PoolName);
+        }
+
+        TShrinkPoolReassignCallback(const TString& poolName)
+            : PoolName(poolName)
+        {}
+    };
+
+    std::vector<TReassignOperation> operations;
+    std::unordered_set<TStorageGroupId> inactiveGroups(pool.InactiveGroups.begin(), pool.InactiveGroups.end());
+    for (const auto& [tabletId, tablet] : Tablets) {
+        TVector<ui32> channels;
+        for (const auto& channel : tablet.TabletStorageInfo->Channels) {
+            if (inactiveGroups.contains(channel.LatestEntry()->GroupID)) {
+                channels.push_back(channel.Channel);
+            }
+        }
+        if (!channels.empty()) {
+            operations.emplace_back(tabletId, channels);
+        }
+    }
+    if (operations.empty()) {
+        return false;
+    } else {
+        BLOG_I("ShrinkPool - starting reassign for " << operations.size() << " tablets");
+        StartReassignActor(std::move(operations), SelfId(), 1, TStringBuilder() << "shrink pool " << pool.Name, std::make_unique<TShrinkPoolReassignCallback>(pool.Name));
+        return true;
+    }
+}
+
+bool THive::CompactInactiveGroups(TStoragePoolInfo& pool) {
+    std::unordered_set<TStorageGroupId> inactiveGroups(pool.InactiveGroups.begin(), pool.InactiveGroups.end());
+    std::vector<TTabletId> tabletsToCompact;
+    if (pool.RemainingHistory.empty()) {
+        for (const auto& [tabletId, tablet] : Tablets) {
+            bool foundHistory = false;
+            for (const auto& channel : tablet.TabletStorageInfo->Channels) {
+                if (channel.StoragePool != pool.Name) {
+                    continue;
+                }
+                for (const auto& entry : channel.History) {
+                    if (inactiveGroups.contains(entry.GroupID)) {
+                        pool.RemainingHistory.emplace(tabletId, channel.Channel, entry.FromGeneration);
+                        foundHistory = true;
+                    }
+                }
+            }
+            if (foundHistory) {
+                tabletsToCompact.push_back(tabletId);
+            }
+        }
+    } else {
+        auto tabletsWithHistory = pool.RemainingHistory | std::views::transform(&TStoragePoolInfo::THistoryEntry::Tablet);
+        std::unordered_set<TTabletId> uniqueTablets(tabletsWithHistory.begin(), tabletsWithHistory.end());
+        tabletsToCompact.assign(uniqueTablets.begin(), uniqueTablets.end());
+    }
+    if (tabletsToCompact.empty()) {
+        return false;
+    } else {
+        BLOG_I("ShrinkPool - starting compact for " << tabletsToCompact.size() << " tablets");
+        StartCompactActor(std::move(tabletsToCompact), pool.Name);
+        return true;
+    }
+}
+
+void THive::CheckRemainingHistory(TStoragePoolInfo& pool) {
+    if (!pool.RemainingHistory.empty() || pool.NeedShrinkFromTenant) {
+        BLOG_D("ShrinkPool - " << pool.RemainingHistory.size() << " history entries remaining");
+        return;
+    }
+    BLOG_D("ShrinkPool - done");
+    auto ev = std::make_unique<TEvHive::TEvShrinkStoragePoolDone>();
+    ev->Record.SetStoragePool(pool.Name);
+    ev->Record.MutableGroupsToRemove()->Assign(pool.InactiveGroups.begin(), pool.InactiveGroups.end());
+    if (AreWeRootHive()) {
+        SendToConsolePipe(ev.release());
+    } else {
+        SendToRootHivePipe(ev.release());
+    }
 }
 
 void THive::Handle(TEvPrivate::TEvGenerateTestData::TPtr&) {

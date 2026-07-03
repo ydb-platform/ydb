@@ -1,3 +1,4 @@
+import os
 import sys
 import argparse
 import base64
@@ -25,6 +26,8 @@ class _Go:
     def cmd(cmd: list[str], cwd: str = None, env: dict[str, str] = None) -> int:
         try:
             r = subprocess.run(cmd, capture_output=True, cwd=cwd, env=env, check=True, timeout=1800, text=True)
+            if r.returncode != 0:
+                sys.stderr.write(f'\nFail command with returncode={r.returncode}:\n{' '.join(cmd)}\n')
             if r.stderr:
                 sys.stderr.write(f'{r.stderr}\n')
             return r.returncode
@@ -100,7 +103,7 @@ class _GoTool:
                 if line.startswith('package '):
                     return line.split()[1].strip()
                 line = f.readline()
-        return ''
+        return 'package_not_found'
 
 
 class _GoToolCover(_GoTool):
@@ -143,26 +146,52 @@ class _GoToolCover(_GoTool):
 
     def __init__(self, args):
         super().__init__(args)
-        self.cover_module = self.args.cover_module if self.args.cover_module else self.args.moddir
+        # For GO_TEST_FOR module in cover_module, else moddir is module for coverage, strip first and last slashes
+        self.cover_module = (self.args.cover_module if self.args.cover_module else self.args.moddir).strip('/')
         self.cover_package = self.args.cover_package
+        self.source_root_for_clear = str(self.source_root) + os.sep
 
     def execute(self) -> int:
-        # For GO_TEST_FOR module in cover_module, else moddir is module for coverage
-        go_files = []
+        if not self.args.cover_srcs:
+            sys.stderr.write("Not found source files for covering\n")
+            # But covervars.go and cover_outcfg declared as output, we must create empty they
+            cover_outcfg_path = self.bindir / self.args.cover_outcfg
+            os.makedirs(cover_outcfg_path.parent, exist_ok=True)
+            with open(cover_outcfg_path, 'w'):
+                pass
+            cover_covervars_path = self.bindir / self.args.cover_covervars
+            os.makedirs(cover_covervars_path.parent, exist_ok=True)
+            with open(cover_covervars_path, 'wt', encoding="utf-8") as f:
+                f.write(f'package {self.cover_package}\n')
+            return 0
+        # Extract go packages from all go files
+        go_package2files = {}
         for go_file in self.args.cover_srcs:
             go_package = self.go_package(self.source_root / go_file)
-            if go_package == 'main':
-                self._make_empty_cover_go(go_file)  # {go_file}.cover.go declared as output, we must create it
-                continue  # can't generate coverage for package main
-            if go_package != self.cover_package:
-                sys.stderr.write(
-                    f"In file '{go_file}' package '{go_package}' != configured package '{self.cover_package}', file skipped by coverage\n"
-                )
-                self._make_empty_cover_go(go_file)  # {go_file}.cover.go declared as output, we must create it
-                continue
-            go_files.append(go_file)
-        if not go_files:
-            raise Exception(f"Not found files for coverage with package '{self.cover_package}'")
+            if go_package not in go_package2files:
+                go_package2files[go_package] = []
+            go_package2files[go_package].append(go_file)
+        go_packages = list(go_package2files.keys())
+        if len(go_packages) > 1:
+            for go_pkg, go_pkg_files in go_package2files.items():
+                # {go_file}.cover.go declared as output, we must create empty coverage files for build
+                for go_file in go_pkg_files:
+                    self._make_empty_cover_go(go_file, go_pkg)
+            message = (
+                "Few packages found in sources, can't make coverage, please, use only one pakage in all sources "
+                + f"(recommended 'package {self.cover_package}' or 'package main').\n"
+                + "Packages and files:"
+            )
+            for go_pkg, go_pkg_files in go_package2files.items():
+                if message[-1] == ')':
+                    message += ','
+                message += f' {go_pkg} ({', '.join(Path(go_file).name for go_file in go_pkg_files)})'
+            message += '.'
+            raise Exception(message)
+        go_package = go_packages[0]
+        go_files = go_package2files[go_package]
+        if go_package != self.cover_package and go_package != 'main':
+            sys.stderr.write(f"Package in files '{go_package}' != configured package '{self.cover_package}'\n")
         return self._do_package_coverage(
             go_package,
             self.args.cover_covervars,
@@ -171,9 +200,10 @@ class _GoToolCover(_GoTool):
             go_files,
         )
 
-    def _make_empty_cover_go(self, go_file: str) -> None:
+    def _make_empty_cover_go(self, go_file: str, go_pkg: str) -> None:
         with open(self.bindir / Path(go_file).name.replace('.go', self.args.cover_ext), 'wt', encoding="utf-8") as f:
-            f.write(f'package {self.cover_package}')
+            f.write(f'// line {go_file.replace(self.source_root_for_clear, '')}:1:1\n')
+            f.write(f'package {go_pkg}\n')
 
     def _do_package_coverage(
         self, go_package: str, covervars_file: str, outfileslist_file: str, pkgcfg_file: str, go_files: list[str]
@@ -187,7 +217,7 @@ class _GoToolCover(_GoTool):
                     "PkgName": go_package,  # package name for generated covervars.go
                     "Granularity": "perblock",  # now always perblock, reserved as future extension point
                     "OutConfig": f'{self.args.cover_outcfg}',  # file with generated coverage config, which must be applied in -coveragecfg <HERE> in compile go-files
-                    "Local": True,  # in coverage report use only basename of files
+                    "Local": False,  # in coverage report use PkgPath / basename for files
                     "ModulePath": f'a.yandex-team.ru/{Path(self.cover_module).parent}',
                 },
                 f,
@@ -217,7 +247,21 @@ class _GoToolCover(_GoTool):
             str(outfileslist_file),
             *[str(Path(self.args.source_root) / go_file) for go_file in go_files],
         ]
-        return _Go.cmd(cmd, self.bindir)
+        r = _Go.cmd(cmd, self.bindir)
+        if r != 0:
+            return r
+        for cover_out in cover_outs:
+            try:
+                with open(cover_out, 'rt', encoding="utf-8") as f:
+                    content = f.read()
+                patched_content = content.replace(self.source_root_for_clear, '').replace('//line', '// line')
+                if patched_content != content:
+                    with open(cover_out, 'wt', encoding="utf-8") as fw:
+                        fw.write(patched_content)
+            except Exception as e:
+                sys.stderr.write(f"Failed patch coverage file '{cover_out}': {str(e)}\n")
+                r = 1
+        return r
 
 
 class _GoToolCovdata(_GoTool):
@@ -238,10 +282,12 @@ class _GoToolCovdata(_GoTool):
         )
         covdata_merge.add_argument(
             '+i',
+            required=True,
             help='comma separated list of input directory with binary coverage data',
         )
         covdata_merge.add_argument(
             '+o',
+            required=True,
             help='output directory for binary coverage data',
         )
         covdata_merge.add_argument(
@@ -255,10 +301,12 @@ class _GoToolCovdata(_GoTool):
         )
         covdata_textfmt.add_argument(
             '+i',
+            required=True,
             help='input directory with binary coverage data',
         )
         covdata_textfmt.add_argument(
             '+o',
+            required=True,
             help='output coverage profile',
         )
 
@@ -274,7 +322,10 @@ class _GoToolCovdata(_GoTool):
                 return self._merge()
 
     def _merge(self) -> int:
-        cmd = [self.tool('covdata'), 'merge', '-i', self.args.i, '-o', self.args.o, '-modpaths', self.args.modpaths]
+        cmd = [self.tool('covdata'), 'merge', '-i', self.args.i, '-o', self.args.o]
+        if self.args.modpaths:
+            cmd.append('-modpaths')
+            cmd.append(self.args.modpaths)
         return _Go.cmd(cmd, self.bindir)
 
     def _textfmt(self) -> int:

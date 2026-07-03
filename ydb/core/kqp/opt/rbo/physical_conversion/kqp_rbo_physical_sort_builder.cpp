@@ -124,7 +124,7 @@ TExprNode::TPtr TPhysicalSortBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     }
 
     // Fuse wide input.
-    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, inputs, Ctx);
+    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, inputs, NPhysicalConvertionUtils::BuildNameSet(Sort->GetOutputIUs()), Ctx);
 
     // clang-format off
     input = Build<TCoFromFlow>(Ctx, Pos)

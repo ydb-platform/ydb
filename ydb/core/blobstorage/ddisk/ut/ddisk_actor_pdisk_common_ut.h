@@ -1017,9 +1017,9 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::SESSION_MISMATCH);
 }
 
-// Write data to DDisk0, sync to DDisk1 via TEvSyncWithDDisk, then read and verify on DDisk1.
+// Write data to DDisk0, sync to DDisk1 via TEvSync, then read and verify on DDisk1.
 // segmentsPerSync controls how many non-overlapping segments each sync request carries.
-[[maybe_unused]] void TestSyncWithDDisk(ui32 numTablets, ui32 numVChunks, ui32 blocksPerVChunk,
+[[maybe_unused]] void TestSync(ui32 numTablets, ui32 numVChunks, ui32 blocksPerVChunk,
         ui32 segmentsPerSync, NLog::EPriority ddiskLogPriority = NLog::PRI_ERROR) {
     TTestContext ctx({}, ddiskLogPriority, 2);
     const ui32 baseTabletId = 401;
@@ -1062,8 +1062,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
             const ui32 totalBlocks = blocksPerVChunk;
             const ui32 blocksPerSegment = (totalBlocks + segmentsPerSync - 1) / segmentsPerSync;
 
-            auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
-                tablets[t].Dst, srcDDiskId, std::optional<ui64>(srcGuid));
+            auto syncEv = std::make_unique<NDDisk::TEvSync>(tablets[t].Dst);
 
             for (ui32 s = 0; s < segmentsPerSync; ++s) {
                 ui32 startBlock = s * blocksPerSegment;
@@ -1071,7 +1070,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
                 if (startBlock >= endBlock) {
                     break;
                 }
-                syncEv->AddSegment(NDDisk::TBlockSelector(v,
+                syncEv->AddSegmentFromDDisk(srcDDiskId, srcGuid, NDDisk::TBlockSelector(v,
                     startBlock * MinBlockSize, (endBlock - startBlock) * MinBlockSize));
             }
             ctx.SendTo(1, syncEv.release());
@@ -1079,8 +1078,8 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         }
     }
     for (ui32 i = 0; i < totalSyncs; ++i) {
-        auto syncResult = ctx.Grab<NDDisk::TEvSyncWithDDiskResult>();
-        AssertStatus<NDDisk::TEvSyncWithDDiskResult>(syncResult, TReplyStatus::OK);
+        auto syncResult = ctx.Grab<NDDisk::TEvSyncResult>();
+        AssertStatus<NDDisk::TEvSyncResult>(syncResult, TReplyStatus::OK);
     }
 
     // Phase 3: read from DDisk1 and verify
@@ -1239,6 +1238,71 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     // Tablet 3's writes on the new DDisk slot are still readable -- proves the
     // restarted PDisk is functional and the zombie DDisk slot didn't corrupt it.
     readAndVerify(disk2Idx, creds3, baseTabletId + 2, 0, 0);
+}
+
+// Write from 2 tablets to multiple VChunks, free all chunks of one tablet, verify the other
+// tablet still reads its data while the freed tablet gets zeroes, then restart and re-verify.
+[[maybe_unused]] void TestDeleteTabletChunks(NDDisk::TDDiskConfig ddiskConfig) {
+    TTestContext ctx(std::move(ddiskConfig));
+    const ui32 diskIdx = ctx.AddDisk();
+
+    const ui64 tablet1Id = 1001;
+    const ui64 tablet2Id = 1002;
+    const TString data1 = MakeData('A', MinBlockSize);
+    const TString data2 = MakeData('B', MinBlockSize);
+    const TString zeroes(MinBlockSize, '\0');
+
+    NDDisk::TQueryCredentials creds1 = ConnectTo(ctx, diskIdx, tablet1Id, 1);
+    NDDisk::TQueryCredentials creds2 = ConnectTo(ctx, diskIdx, tablet2Id, 1);
+
+    // Write tablet1 data to VChunks 0 and 1
+    for (ui64 vchunk : {0u, 1u}) {
+        auto w = std::make_unique<NDDisk::TEvWrite>(creds1,
+            NDDisk::TBlockSelector(vchunk, 0, MinBlockSize), NDDisk::TWriteInstruction(0));
+        w->AddPayload(MakeAlignedRope(data1));
+        auto wr = ctx.SendToAndGrab<NDDisk::TEvWriteResult>(diskIdx, w.release());
+        AssertStatus<NDDisk::TEvWriteResult>(wr, TReplyStatus::OK);
+    }
+
+    // Write tablet2 data to VChunks 0 and 1
+    for (ui64 vchunk : {0u, 1u}) {
+        auto w = std::make_unique<NDDisk::TEvWrite>(creds2,
+            NDDisk::TBlockSelector(vchunk, 0, MinBlockSize), NDDisk::TWriteInstruction(0));
+        w->AddPayload(MakeAlignedRope(data2));
+        auto wr = ctx.SendToAndGrab<NDDisk::TEvWriteResult>(diskIdx, w.release());
+        AssertStatus<NDDisk::TEvWriteResult>(wr, TReplyStatus::OK);
+    }
+
+    // Free all chunks belonging to tablet2
+    auto freeResult = ctx.SendToAndGrab<NDDisk::TEvDeleteTabletChunksResult>(diskIdx,
+        new NDDisk::TEvDeleteTabletChunks(creds2));
+    AssertStatus<NDDisk::TEvDeleteTabletChunksResult>(freeResult, TReplyStatus::OK);
+
+    auto verifyAfterFree = [&](NDDisk::TQueryCredentials& c1, NDDisk::TQueryCredentials& c2) {
+        // Tablet1 should still read its original data from both VChunks
+        for (ui64 vchunk : {0u, 1u}) {
+            auto rr = ctx.SendToAndGrab<NDDisk::TEvReadResult>(diskIdx,
+                new NDDisk::TEvRead(c1, {vchunk, 0, MinBlockSize}, {true}));
+            AssertStatus<NDDisk::TEvReadResult>(rr, TReplyStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(rr->Get()->GetPayload(0).ConvertToString(), data1);
+        }
+        // Tablet2 should read zeroes from both VChunks (chunks were freed)
+        for (ui64 vchunk : {0u, 1u}) {
+            auto rr = ctx.SendToAndGrab<NDDisk::TEvReadResult>(diskIdx,
+                new NDDisk::TEvRead(c2, {vchunk, 0, MinBlockSize}, {true}));
+            AssertStatus<NDDisk::TEvReadResult>(rr, TReplyStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(rr->Get()->GetPayload(0).ConvertToString(), zeroes);
+        }
+    };
+
+    verifyAfterFree(creds1, creds2);
+
+    // Restart DDisk and verify that both tablets read expected data post-recovery
+    ctx.RestartDDisk(diskIdx);
+    creds1 = ConnectTo(ctx, diskIdx, tablet1Id, 2);
+    creds2 = ConnectTo(ctx, diskIdx, tablet2Id, 2);
+
+    verifyAfterFree(creds1, creds2);
 }
 
 } // anonymous namespace

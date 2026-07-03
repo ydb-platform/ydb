@@ -84,12 +84,15 @@ TEST(THedgingClientCountersTest, CountersAfterSuccessFromFirstClient)
     EXPECT_EQ(1, TTesting::ReadCounter(firstClientCounter->SuccessRequestCount));
     EXPECT_EQ(0, TTesting::ReadCounter(firstClientCounter->ErrorRequestCount));
     EXPECT_EQ(0, TTesting::ReadCounter(firstClientCounter->CancelRequestCount));
+    EXPECT_EQ(1, TTesting::ReadCounter(firstClientCounter->TotalRequestCount));
     EXPECT_DURATION_NEAR(TDuration::Zero(), TTesting::ReadTimeGauge(firstClientCounter->EffectivePenalty));
 
-    // Cancel result from second client with effective initial penalty increment to ban duration
+    // Cancel result from second client with effective initial penalty increment to ban duration.
+    // Delayed request is cancelled before callback invocation.
     EXPECT_EQ(0, TTesting::ReadCounter(secondClientCounter->SuccessRequestCount));
     EXPECT_EQ(0, TTesting::ReadCounter(secondClientCounter->ErrorRequestCount));
     EXPECT_EQ(1, TTesting::ReadCounter(secondClientCounter->CancelRequestCount));
+    EXPECT_EQ(0, TTesting::ReadCounter(secondClientCounter->TotalRequestCount));
     EXPECT_DURATION_NEAR(SleepQuantum, TTesting::ReadTimeGauge(secondClientCounter->EffectivePenalty));
 }
 
@@ -126,12 +129,15 @@ TEST(THedgingClientCountersTest, CountersAfterFirstClientHasFailed)
     EXPECT_EQ(0, TTesting::ReadCounter(firstClientCounter->SuccessRequestCount));
     EXPECT_EQ(1, TTesting::ReadCounter(firstClientCounter->ErrorRequestCount));
     EXPECT_EQ(0, TTesting::ReadCounter(firstClientCounter->CancelRequestCount));
+    EXPECT_EQ(1, TTesting::ReadCounter(firstClientCounter->TotalRequestCount));
     EXPECT_DURATION_NEAR(TDuration::Zero(), TTesting::ReadTimeGauge(firstClientCounter->EffectivePenalty));
 
-    // Success result from second client with effective initial penalty equals to 8 ms
+    // Success result from second client with effective initial penalty equals to 8 ms.
+    // Delayed request actually starts after the delay.
     EXPECT_EQ(1, TTesting::ReadCounter(secondClientCounter->SuccessRequestCount));
     EXPECT_EQ(0, TTesting::ReadCounter(secondClientCounter->ErrorRequestCount));
     EXPECT_EQ(0, TTesting::ReadCounter(secondClientCounter->CancelRequestCount));
+    EXPECT_EQ(1, TTesting::ReadCounter(secondClientCounter->TotalRequestCount));
     EXPECT_DURATION_NEAR(SleepQuantum, TTesting::ReadTimeGauge(secondClientCounter->EffectivePenalty));
 }
 
@@ -174,12 +180,14 @@ TEST(THedgingClientCountersTest, CountersWhenFirstClientIsBanned)
     EXPECT_EQ(0, TTesting::ReadCounter(firstClientCounter->SuccessRequestCount));
     EXPECT_EQ(1, TTesting::ReadCounter(firstClientCounter->ErrorRequestCount));
     EXPECT_EQ(1, TTesting::ReadCounter(firstClientCounter->CancelRequestCount));
+    EXPECT_EQ(1, TTesting::ReadCounter(firstClientCounter->TotalRequestCount));
     EXPECT_DURATION_NEAR(SleepQuantum, TTesting::ReadTimeGauge(firstClientCounter->EffectivePenalty));
 
     // Success result from second client with effective initial penalty equals to 0 ms
     EXPECT_EQ(2, TTesting::ReadCounter(secondClientCounter->SuccessRequestCount));
     EXPECT_EQ(0, TTesting::ReadCounter(secondClientCounter->ErrorRequestCount));
     EXPECT_EQ(0, TTesting::ReadCounter(secondClientCounter->CancelRequestCount));
+    EXPECT_EQ(2, TTesting::ReadCounter(secondClientCounter->TotalRequestCount));
     EXPECT_DURATION_NEAR(TDuration::Zero(), TTesting::ReadTimeGauge(secondClientCounter->EffectivePenalty));
 }
 
@@ -226,12 +234,14 @@ TEST(THedgingClientCountersTest, CountersAfterFirstClientBanHasElapsed)
     EXPECT_EQ(1, TTesting::ReadCounter(firstClientCounter->SuccessRequestCount));
     EXPECT_EQ(1, TTesting::ReadCounter(firstClientCounter->ErrorRequestCount));
     EXPECT_EQ(0, TTesting::ReadCounter(firstClientCounter->CancelRequestCount));
+    EXPECT_EQ(2, TTesting::ReadCounter(firstClientCounter->TotalRequestCount));
     EXPECT_DURATION_NEAR(TDuration::Zero(), TTesting::ReadTimeGauge(firstClientCounter->EffectivePenalty));
 
     // Cancel result from second client with effective initial penalty equals to 8 ms
     EXPECT_EQ(1, TTesting::ReadCounter(secondClientCounter->SuccessRequestCount));
     EXPECT_EQ(0, TTesting::ReadCounter(secondClientCounter->ErrorRequestCount));
     EXPECT_EQ(1, TTesting::ReadCounter(secondClientCounter->CancelRequestCount));
+    EXPECT_EQ(1, TTesting::ReadCounter(secondClientCounter->TotalRequestCount));
     EXPECT_DURATION_NEAR(SleepQuantum, TTesting::ReadTimeGauge(secondClientCounter->EffectivePenalty));
 }
 

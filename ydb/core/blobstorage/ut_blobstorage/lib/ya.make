@@ -27,9 +27,11 @@ PEERDIR(
     ydb/core/blobstorage/pdisk
     ydb/core/blobstorage/pdisk/mock
     ydb/core/blobstorage/vdisk/common
+    ydb/core/load_test
     ydb/core/mind
     ydb/core/mind/bscontroller
     ydb/core/mind/hive
+    ydb/core/retro_tracing_impl/distributed_collector
     ydb/core/sys_view/service
     ydb/core/tx/scheme_board
     ydb/core/tx/tx_allocator

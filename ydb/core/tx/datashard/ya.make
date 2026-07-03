@@ -39,7 +39,6 @@ SRCS(
     conflicts_cache.cpp
     create_cdc_stream_unit.cpp
     create_persistent_snapshot_unit.cpp
-    create_incremental_restore_src_unit.cpp
     create_table_unit.cpp
     create_volatile_snapshot_unit.cpp
     block_fail_point_unit.cpp
@@ -159,6 +158,7 @@ SRCS(
     follower_edge.cpp
     incr_restore_helpers.cpp
     incr_restore_scan.cpp
+    incremental_restore_src_actor.cpp
     initiate_build_index_unit.cpp
     key_conflicts.cpp
     key_conflicts.h
@@ -262,6 +262,7 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/backup/common
     ydb/core/base
+    ydb/library/json_index
     ydb/core/change_exchange
     ydb/core/engine
     ydb/core/engine/minikql
@@ -275,6 +276,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/locks
+    ydb/core/tx/sequenceproxy/public
     ydb/core/util
     ydb/core/wrappers
     ydb/core/ydb_convert
@@ -315,6 +317,7 @@ END()
 
 RECURSE_FOR_TESTS(
     build_index/ut
+    ut_bloom_filter
     ut_borrowed_compaction
     ut_change_collector
     ut_change_exchange
@@ -339,6 +342,7 @@ RECURSE_FOR_TESTS(
     ut_object_storage_listing
     ut_order
     ut_range_ops
+    ut_read_committed
     ut_read_iterator
     ut_read_table
     ut_reassign

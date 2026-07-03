@@ -43,11 +43,13 @@ public:
     void RecordAnnotation(y_absl::string_view /*annotation*/) override
     { }
 
+    // TODO(babenko): migrate to std::string
     TString TraceId() override
     {
         return {};
     }
 
+    // TODO(babenko): migrate to std::string
     TString SpanId() override
     {
         return {};
@@ -93,6 +95,7 @@ public:
         if (!grpc_error_get_int(error, grpc_core::StatusIntProperty::kRpcStatus, &statusCode)) {
             statusCode = GRPC_STATUS_UNKNOWN;
         }
+        // TODO(babenko): migrate to std::string
         TString statusDetail;
         if (!grpc_error_get_str(error, grpc_core::StatusStrProperty::kDescription, &statusDetail)) {
             statusDetail = "Unknown error";

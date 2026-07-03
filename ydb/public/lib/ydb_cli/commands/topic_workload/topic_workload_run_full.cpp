@@ -73,10 +73,14 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
     config.Opts->AddLongOption("byte-rate", "Total message rate for all producer threads (bytes per second). Exclusive with --message-rate.")
         .DefaultValue(0)
         .StoreMappedResult(&Scenario.BytesPerSec, &TCommandWorkloadTopicParams::StrToBytes);
-    config.Opts->AddLongOption("codec", PrepareAllowedCodecsDescription("Client-side compression algorithm. When read, data will be uncompressed transparently with a codec used on write", InitAllowedCodecs()))
+    config.Opts->AddLongOption("codec", PrepareAllowedCodecsDescription("Client-side compression algorithm. When read, data will be uncompressed transparently with a codec used on write", TCommandWorkloadTopicParams::GetWriteAllowedCodecs()))
         .Optional()
         .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))
         .StoreMappedResult(&Scenario.Codec, &TCommandWorkloadTopicParams::StrToCodec);
+    config.Opts->AddLongOption("batch-inner-codec", PrepareAllowedCodecsDescription("Inner compression for Kafka record batch payload. Can be set only when --codec is kafka-batch", TCommandWorkloadTopicParams::GetBatchInnerAllowedCodecs()))
+        .Optional()
+        .Hidden()
+        .StoreResult(&Scenario.BatchInnerCodecStr);
     config.Opts->AddLongOption("direct", "Direct write to a partition node.")
         .Hidden()
         .StoreTrue(&Scenario.Direct);
@@ -122,9 +126,24 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
     config.Opts->AddLongOption("max-memory-usage-per-consumer", "Max memory usage per consumer in bytes. Should be more than '1MiB'.")
         .DefaultValue(HumanReadableSize(15_MB, SF_BYTES))
         .StoreMappedResult(&Scenario.ConsumerMaxMemoryUsageBytes, NYdb::SizeFromString);
+    config.Opts->AddLongOption("partition-max-inflight-bytes", "Max inflight bytes per partition.")
+        .DefaultValue(0)
+        .StoreResult(&Scenario.PartitionMaxInflightBytes);
     config.Opts->AddLongOption("max-memory-usage-per-producer", "Max memory usage per producer in bytes.")
         .DefaultValue(HumanReadableSize(15_MB, SF_BYTES))
         .StoreMappedResult(&Scenario.ProducerMaxMemoryUsageBytes, NYdb::SizeFromString);
+    config.Opts->AddLongOption("batch-flush-interval", "Max time to accumulate messages before flushing one write batch. Zero disables this limit (ex. '0s', '10ms', '1s').")
+        .DefaultValue("1s")
+        .Hidden()
+        .StoreMappedResult(&Scenario.BatchFlushInterval, TDuration::Parse);
+    config.Opts->AddLongOption("batch-flush-size", "Max accumulated payload size in bytes before flushing one write batch. Not set means no size limit.")
+        .Optional()
+        .Hidden()
+        .StoreMappedResult(&Scenario.BatchFlushSizeBytes, &TCommandWorkloadTopicParams::StrToBytes);
+    config.Opts->AddLongOption("batch-flush-message-count", "Max number of logical messages packed into a single write block.")
+        .DefaultValue(1)
+        .Hidden()
+        .StoreResult(&Scenario.BatchFlushMessageCount);
 
     Scenario.ConfigMetadataMonitoringOptions(config);
 
@@ -138,6 +157,7 @@ void TCommandWorkloadTopicRunFull::Parse(TConfig& config)
     Scenario.EnsurePercentileIsValid();
     Scenario.EnsureWarmupSecIsValid();
     Scenario.EnsureRatesIsValid();
+    Scenario.EnsureCodecOptionsAreValid();
 }
 
 int TCommandWorkloadTopicRunFull::Run(TConfig& config)

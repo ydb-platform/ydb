@@ -108,7 +108,7 @@ DECLARE_REFCOUNTED_STRUCT(TSerializableReplicationCard)
 struct TSerializableReplicationCard
     : public NYTree::TYsonStruct
 {
-    THashMap<TString, TReplicaInfo> Replicas;
+    THashMap<std::string, TReplicaInfo> Replicas;
     std::vector<NObjectClient::TCellId> CoordinatorCellIds;
     TReplicationEra Era;
     TTableId TableId;
@@ -167,6 +167,7 @@ void DeserializeImpl(TReplicaInfo& replicaInfo, TSerializableReplicaInfoPtr seri
     replicaInfo.Mode = serializable->Mode;
     replicaInfo.State = serializable->State;
     replicaInfo.ReplicationProgress = std::move(serializable->ReplicationProgress);
+    replicaInfo.EnableReplicatedTableTracker = serializable->EnableReplicatedTableTracker;
 }
 
 void DeserializeImpl(TReplicationCard& replicationCard, TSerializableReplicationCardPtr serializable)

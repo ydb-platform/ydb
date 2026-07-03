@@ -1,7 +1,5 @@
 #include "metrics.h"
 
-#include "operation_name.h"
-
 #include <ydb/public/sdk/cpp/src/client/impl/internal/common/log_lazy.h>
 
 #include <exception>
@@ -34,7 +32,7 @@ TRequestMetrics::TRequestMetrics(NSdkStats::TStatCollector::TClientOperationStat
     , const std::string& requestName
     , const TLog& log
 ) : Collector_(operationCollector)
-    , RequestName_(NormalizeOperationName(requestName))
+    , RequestName_(requestName)
     , Log_(log)
 {
     if (!Collector_) {

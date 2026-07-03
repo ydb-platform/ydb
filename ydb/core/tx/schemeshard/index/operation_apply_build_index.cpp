@@ -136,6 +136,10 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         alterIndex->SetName(index.LeafName());
         alterIndex->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
 
+        if (config.HasVectorIndexKmeansTreeDescription()) {
+            *alterIndex->MutableVectorIndexKmeansTreeDescription() = config.GetVectorIndexKmeansTreeDescription();
+        }
+
         result.push_back(CreateAlterTableIndex(NextPartId(nextId, result), tableIndexAltering));
     }
 

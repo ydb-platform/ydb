@@ -8,6 +8,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -368,7 +369,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
         TTypedLocalHelper helper("Utf8", kikimr);
         helper.CreateTestOlapTable();
-        helper.SetForcedCompaction();
+        helper.SetTilingPlanner();
 
         auto writeSession = helper.StartWriting("/Root/olapStore/olapTable");
         writeSession.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "aaa", 1), 0, 800000);
@@ -428,7 +429,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
         TTypedLocalHelper helper("Utf8", "Utf8", kikimr);
         helper.CreateTestOlapTable();
-        helper.SetForcedCompaction();
+        helper.SetTilingPlanner();
         auto writeGuard = helper.StartWriting("/Root/olapStore/olapTable");
         writeGuard.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "aaa", 1), 0, 800000);
         Sleep(TDuration::Seconds(1));
@@ -488,6 +489,12 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         settings.AppConfig.MutableColumnShardConfig()->SetMaxReadStaleness_ms(300000);
 
         TKikimrRunner kikimr(settings);
+        // Shorten LongTx delays so MinSnapshotForNewReads advances quickly enough for GC
+        // to run within the test's wait window. Total delay = 1+1+1+10 = 13s.
+        auto& longTxConfig = kikimr.GetTestServer().GetRuntime()->GetAppData().LongTxServiceConfig;
+        longTxConfig.SetLocalSnapshotPromotionTimeSeconds(1);
+        longTxConfig.SetSnapshotsExchangeIntervalSeconds(1);
+        longTxConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
         auto helper = TLocalHelper(kikimr);
         helper.CreateTestOlapTable();
         helper.SetForcedCompaction();
@@ -539,7 +546,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         {
             const TInstant start = TInstant::Now();
             while (
-                Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() && TInstant::Now() - start < TDuration::Seconds(10)) {
+                Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() && TInstant::Now() - start < TDuration::Seconds(30)) {
                 Cerr << "Wait empty... " << Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() << Endl;
                 Sleep(TDuration::Seconds(2));
             }

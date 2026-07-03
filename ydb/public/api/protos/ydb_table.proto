@@ -102,6 +102,8 @@ message KMeansTreeSettings {
     optional uint32 overlap_clusters = 4;
 
     optional double overlap_ratio = 5;
+
+    optional bool adaptive_clusters = 6;
 }
 
 message GlobalIndex {
@@ -238,6 +240,7 @@ message FulltextIndexSettings {
     repeated ColumnAnalyzers columns = 2;
 }
 
+// Without EnableCompactFulltextIndex feature flag (old version):
 // Simplest possible layout without support for relevance.
 // Uses a single flat inverted index table (indexImplTable).
 // Supports a single column only.
@@ -261,6 +264,23 @@ message FulltextIndexSettings {
 //     │ "quick"      │ 1  │
 //     │ "quick"      │ 2  │
 //     └──────────────┴────┘
+//
+// With EnableCompactFulltextIndex feature flag (new version):
+// Compact fulltext index format with segmented storage.
+// Index table stores varint+delta-compressed binary segments (document ID lists)
+// instead of individual document IDs.
+// Example inverted index table (indexImplTable):
+//     ┌──────────────┬──────────────┬──────────────────┬─────────────┬───────────────┐
+//     │ __ydb_token  │ __ydb_max_id │ __ydb_generation | __ydb_added | __ydb_segment │
+//     ├──────────────┼──────────────┼──────────────────┼─────────────┼───────────────┤
+//     │ "The"        │ 2^64-1       │ 2^64-1           │ true        │ 1 2           │
+//     │ "blue"       │ 2^64-1       │ 2^64-1           │ true        │ 2             │
+//     │ "brown"      │ 2^64-1       │ 2^64-1           │ true        │ 1             │
+//     │ "fox"        │ 2^64-1       │ 2^64-1           │ true        │ 1             │
+//     │ "hare"       │ 2^64-1       │ 2^64-1           │ true        │ 2             │
+//     │ "quick"      │ 2^64-1       │ 2^64-1           │ true        │ 1 2           │
+//     └──────────────┴──────────────┴──────────────────┴─────────────┴───────────────┘
+
 message GlobalFulltextPlainIndex {
     GlobalIndexSettings settings = 1;
     FulltextIndexSettings fulltext_settings = 2;
@@ -275,6 +295,7 @@ message GlobalFulltextPlainIndex {
 //     │ 1  │ "A quick fox catches quick hare"      │
 //     │ 2  │ "The quick blue hare"                 │
 //     └────┴───────────────────────────────────────┘
+// Without EnableCompactFulltextIndex feature flag (old version):
 // Example inverted index table with term frequencies (indexImplTable):
 //     ┌──────────────┬────┬────────────┐
 //     │ __ydb_token  │ id │ __ydb_freq │
@@ -289,6 +310,20 @@ message GlobalFulltextPlainIndex {
 //     │ "quick"      │ 1  │ 2          │
 //     │ "quick"      │ 2  │ 1          │
 //     └──────────────┴────┴────────────┘
+// With EnableCompactFulltextIndex feature flag (new version):
+//     ┌──────────────┬──────────────┬──────────────────┬─────────────┬───────────────┐
+//     │ __ydb_token  │ __ydb_max_id │ __ydb_generation | __ydb_added | __ydb_segment │
+//     ├──────────────┼──────────────┼──────────────────┼─────────────┼───────────────┤
+//     │ "A"          │ 2^64-1       │ 2^64-1           │ true        │ 1:1           │
+//     │ "The"        │ 2^64-1       │ 2^64-1           │ true        │ 2:1           │
+//     │ "blue"       │ 2^64-1       │ 2^64-1           │ true        │ 2:1           │
+//     │ "catches"    │ 2^64-1       │ 2^64-1           │ true        │ 1:1           │
+//     │ "fox"        │ 2^64-1       │ 2^64-1           │ true        │ 1:1           │
+//     │ "hare"       │ 2^64-1       │ 2^64-1           │ true        │ 1:1 2:1       │
+//     │ "quick"      │ 2^64-1       │ 2^64-1           │ true        │ 1:2 2:1       │
+//     └──────────────┴──────────────┴──────────────────┴─────────────┴───────────────┘
+//
+// Other tables are the same for both compressed and uncompressed formats:
 // Term dictionary table (indexImplDictTable):
 //     ┌──────────────┬────────────┐
 //     │ __ydb_token  │ __ydb_freq │
@@ -335,6 +370,8 @@ message LocalBloomNgramFilterIndex {
     optional double false_positive_probability = 6;
 }
 
+message LocalMinMaxIndex {}
+
 message GlobalJsonIndex {
     GlobalIndexSettings settings = 1;
 }
@@ -356,6 +393,7 @@ message TableIndex {
        LocalBloomFilterIndex local_bloom_filter_index = 10;
        LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 11;
        GlobalJsonIndex global_json_index = 12;
+       LocalMinMaxIndex local_min_max_index = 14;
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
@@ -387,6 +425,7 @@ message TableIndexDescription {
        LocalBloomFilterIndex local_bloom_filter_index = 12;
        LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 13;
        GlobalJsonIndex global_json_index = 14;
+       LocalMinMaxIndex local_min_max_index = 15;
     }
     Status status = 4;
     // list of columns content to be copied in to index table
@@ -408,6 +447,22 @@ message IndexBuildState {
         STATE_REJECTION = 7;
         STATE_REJECTED = 8;
     }
+}
+
+// State of set column constraint operation
+message SetColumnConstraintState {
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        STATE_PREPARING = 1;
+        STATE_VALIDATING = 2;
+        STATE_APPLYING = 3;
+        STATE_DONE = 4;
+        STATE_CANCELLED = 5;
+    }
+}
+
+message SetNotNullItem {
+    optional string column_name = 1;
 }
 
 // Description of index building operation
@@ -1059,6 +1114,27 @@ message CompactMetadata {
     optional uint32 shards_done = 7;
 }
 
+// State of an analyze operation
+message AnalyzeState {
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        STATE_ENQUEUED = 1;
+        STATE_IN_PROGRESS = 2;
+        STATE_DONE = 3;
+        STATE_CANCELLED = 4;
+        STATE_FAILED = 5;
+    }
+}
+
+message AnalyzeMetadata {
+
+    repeated string paths = 1;             // All table paths covered by this analyze operation.
+    repeated string in_progress_paths = 2; // Tables currently being traversed
+    repeated string done_paths = 3;        // Tables for which analysis is complete
+    optional AnalyzeState.State state = 4;
+    optional float progress = 5;
+}
+
 // Alter table with given path
 message AlterTableRequest {
     // Session identifier
@@ -1115,6 +1191,9 @@ message AlterTableRequest {
         MetricsSettings set_metrics_settings = 25;
         google.protobuf.Empty drop_metrics_settings = 26;
     }
+
+    // Start set not null for table
+    repeated SetNotNullItem set_not_null = 27;
 }
 
 message AlterTableResponse {
@@ -1278,6 +1357,9 @@ message SnapshotRWModeSettings {
 message ReadCommittedRWModeSettings {
 }
 
+message StrictSerializableRWModeSettings {
+}
+
 message TransactionSettings {
     oneof tx_mode {
         SerializableModeSettings serializable_read_write = 1;
@@ -1286,6 +1368,7 @@ message TransactionSettings {
         SnapshotModeSettings snapshot_read_only = 4;
         SnapshotRWModeSettings snapshot_read_write = 5;
         ReadCommittedRWModeSettings read_committed_read_write = 6;
+        StrictSerializableRWModeSettings strict_serializable_read_write = 7;
     }
 }
 

@@ -206,6 +206,12 @@ struct TSideEffects : TCompleteNotifications, TCompleteActions {
     }
 };
 
+struct IReassignCallback {
+    virtual IEventBase* MakeEvent(ui64 tabletsDone) = 0;
+
+    virtual ~IReassignCallback() = default;
+};
+
 TResourceNormalizedValues NormalizeRawValues(const TResourceRawValues& values, const TResourceRawValues& maximum);
 NMetrics::EResource GetDominantResourceType(const TResourceRawValues& values, const TResourceRawValues& maximum);
 NMetrics::EResource GetDominantResourceType(const TResourceNormalizedValues& normValues);
@@ -332,7 +338,7 @@ struct TBalancerStats {
 struct TNodeFilter {
     TVector<TSubDomainKey> AllowedDomains;
     TVector<TNodeId> AllowedNodes;
-    TVector<TDataCenterId> AllowedDataCenters;
+    NKikimrHive::TDataCentersGroup AllowedDataCenters;
     TSubDomainKey ObjectDomain;
     TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
     bool MustBePrimaryPile = true;

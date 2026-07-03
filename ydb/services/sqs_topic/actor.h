@@ -1,8 +1,10 @@
 #pragma once
 
-#include <ydb/services/lib/actors/pq_schema_actor.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/protos/sqs.pb.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/http_proxy/error/error.h>
+#include <ydb/services/lib/actors/pq_schema_actor.h>
 
 namespace NKikimr::NSqsTopic::V1 {
 
@@ -28,6 +30,25 @@ namespace NKikimr::NSqsTopic::V1 {
             this->Request_->ReplyWithYdbStatus(Ydb::StatusIds_StatusCode_STATUS_CODE_UNSPECIFIED);
             this->Die(this->ActorContext());
             TBase::IsDead = true;
+        }
+
+        void DescribeTopic(NACLib::EAccessRights accessRights) {
+            this->RegisterWithSameMailbox(NPQ::NDescriber::CreateDescriberActor(
+                this->SelfId(),
+                this->Database,
+                { this->GetTopicPath() },
+                {
+                    .UserToken = this->GetUserToken(),
+                    .AccessRights = accessRights,
+                }
+            ));
+        }
+
+        TIntrusiveConstPtr<NACLib::TUserToken> GetUserToken() const {
+            if (auto const& token = this->Request_->GetSerializedToken()) {
+                return MakeIntrusive<NACLib::TUserToken>(token);
+            }
+            return nullptr;
         }
     };
 }

@@ -50,11 +50,12 @@ public:
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
         const std::optional<TLlvmSettings>& llvmSettings,
         std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-        const IKqpTransactionManagerPtr& txManager)
+        const IKqpTransactionManagerPtr& txManager,
+        bool shrinkTasksGraph)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, {}, database,
             userToken, std::move(formatsSettings), counters, executerConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter",
-            {}, txManager, Nothing(), channelService)
+            {}, txManager, Nothing(), channelService, shrinkTasksGraph)
         , LlvmSettings(llvmSettings)
     {
         YQL_ENSURE(Request.Transactions.size() == 1);
@@ -74,6 +75,7 @@ public:
                 hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
                 hFunc(NShardResolver::TEvShardsResolveStatus, HandleResolve);
                 hFunc(TEvPrivate::TEvResourcesSnapshot, HandleResolve);
+                hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandlePartitionStats);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 default:
                     UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
@@ -129,13 +131,24 @@ private:
 private:
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (TBase::HandleResolve(ev) == CONTINUE) {
-            GetResourcesSnapshot();
+            if (!TBase::GetPartitionStats()) {
+                GetResourcesSnapshot();
+            }
         }
     }
 
     void HandleResolve(NShardResolver::TEvShardsResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
-        GetResourcesSnapshot();
+        if (!TBase::GetPartitionStats()) {
+            GetResourcesSnapshot();
+        }
+    }
+
+    void HandlePartitionStats(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        TBase::ApplyPartitionStatsResult(ev);
+        if (TBase::PendingPartitionStatsRequests == 0) {
+            GetResourcesSnapshot();
+        }
     }
 
     void HandleResolve(TEvPrivate::TEvResourcesSnapshot::TPtr& ev) {
@@ -285,11 +298,11 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const std::optional<TLlvmSettings>& llvmSettings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-    const IKqpTransactionManagerPtr& txManager)
+    const IKqpTransactionManagerPtr& txManager, bool shrinkTasksGraph)
 {
     return new TKqpScanExecuter(std::move(request), database, userToken, std::move(formatsSettings),
         counters, executerConfig, std::move(asyncIoFactory), userRequestContext, statementResultIndex,
-        federatedQuerySetup, GUCSettings, llvmSettings, channelService, txManager);
+        federatedQuerySetup, GUCSettings, llvmSettings, channelService, txManager, shrinkTasksGraph);
 }
 
 } // namespace NKqp

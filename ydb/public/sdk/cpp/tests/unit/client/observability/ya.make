@@ -10,6 +10,7 @@ ENDIF()
 FORK_SUBTESTS()
 
 SRCS(
+    metric_buffer_ut.cpp
     metrics_ut.cpp
     spans_ut.cpp
 )

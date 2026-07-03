@@ -22,6 +22,56 @@ namespace {
     THashSet<TString> PgConstantFoldingWhiteList = {
         "PgResolvedOp", "PgResolvedCall", "PgCast", "PgConst", "PgArray", "PgType"};
 
+    bool HasFlag(const TMaybeNode<TCoAtomList>& flags, TStringBuf flag) {
+        if (!flags) {
+            return false;
+        }
+
+        for (const auto& item : flags.Cast()) {
+            if (item.StringValue() == flag) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool HasSettingValue(const TCoNameValueTupleList& settings, TStringBuf name, TStringBuf value) {
+        for (const auto& setting : settings) {
+            if (setting.Name().Value() != name) {
+                continue;
+            }
+
+            if (const auto settingValue = setting.Value().Maybe<TCoAtom>()) {
+                return settingValue.Cast().Value() == value;
+            }
+        }
+        return false;
+    }
+
+    TMaybe<EJoinAlgoType> GetDqJoinBaseStatsAlgo(const TExprNode::TPtr& input) {
+        if (auto dqJoin = TMaybeNode<TDqJoin>(input)) {
+            return FromString<EJoinAlgoType>(dqJoin.Cast().JoinAlgo().StringValue());
+        }
+
+        if (TMaybeNode<TDqPhyMapJoin>(input)) {
+            return EJoinAlgoType::MapJoin;
+        }
+
+        if (auto graceJoin = TMaybeNode<TDqPhyGraceJoin>(input)) {
+            return HasFlag(graceJoin.Cast().Flags().Maybe<TCoAtomList>(), "Broadcast")
+                ? EJoinAlgoType::MapJoin
+                : EJoinAlgoType::GraceJoin;
+        }
+
+        if (auto blockHashJoin = TMaybeNode<TDqPhyBlockHashJoin>(input)) {
+            return HasSettingValue(blockHashJoin.Cast().Settings(), "BuildSide", "Left")
+                ? EJoinAlgoType::ReverseBlockJoin
+                : EJoinAlgoType::GraceJoin;
+        }
+
+        return Nothing();
+    }
+
     TVector<TString> UdfBlackList = {
         "RandomNumber",
         "Random",
@@ -142,6 +192,37 @@ namespace {
         res.insert(res.begin(), leftLabels.begin(), leftLabels.end());
         res.insert(res.end(), rightLabels.begin(), rightLabels.end());
         return res;
+    }
+
+    double AggregateSelectivity(std::shared_ptr<TOptimizerStatistics> aggStats, TVector<TString> strKeys) {
+        if (aggStats->KeyColumns) {
+            bool isPrefix = true;
+            bool isKey = false;
+
+            size_t i=0;
+            for (; i<aggStats->KeyColumns->Data.size(); i++) {
+                if (i == strKeys.size()) {
+                    break;
+                }
+                if (aggStats->KeyColumns->Data[i] != strKeys[i]){
+                    isPrefix = false;
+                    break;
+                }
+            }
+
+            if (i == aggStats->KeyColumns->Data.size()) {
+                isKey = true;
+            }
+
+            if (isKey) {
+                return 1.0;
+            }
+            if (isPrefix) {
+                return 0.1;
+            }
+        }
+
+        return 0.7;
     }
 
 }
@@ -469,13 +550,11 @@ void InferStatisticsForDqJoinBase(const TExprNode::TPtr& input, TKqpStatsStore* 
         return;
     }
 
-    EJoinAlgoType joinAlgo = EJoinAlgoType::Undefined;
-    if (auto dqJoin = TMaybeNode<TDqJoin>(input)) {
-        joinAlgo = FromString<EJoinAlgoType>(dqJoin.Cast().JoinAlgo().StringValue());
-        if (joinAlgo == EJoinAlgoType::Undefined && join.JoinType().StringValue() != "Cross" /* we don't set any join algo to cross join */) {
-            return;
-        }
+    const auto maybeJoinAlgo = GetDqJoinBaseStatsAlgo(input);
+    if (!maybeJoinAlgo || (*maybeJoinAlgo == EJoinAlgoType::Undefined && join.JoinType().StringValue() != "Cross" /* we don't set any join algo to cross join */)) {
+        return;
     }
+    const auto joinAlgo = *maybeJoinAlgo;
 
     auto leftLabels = InferLabels(leftStats, join.LeftJoinKeyNames());
     auto rightLabels = InferLabels(rightStats, join.RightJoinKeyNames());
@@ -720,6 +799,19 @@ void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TKqpStatsStor
     for (const auto& key: agg.Keys()) {
         strKeys.push_back(key.StringValue());
     }
+
+    double selectivity = AggregateSelectivity(aggStats, strKeys);
+    if (strKeys.empty()) {
+        double rowBytes = aggStats->Nrows > 0.0 ? aggStats->ByteSize / aggStats->Nrows : aggStats->ByteSize;
+        aggStats->Nrows = 1.0;
+        aggStats->ByteSize = rowBytes;
+        aggStats->Selectivity = 1.0;
+        aggStats->Type = EStatisticsType::Constant;
+    } else {
+        aggStats->Nrows = aggStats->Nrows * selectivity;
+        aggStats->ByteSize = aggStats->ByteSize * selectivity;
+    }
+
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for AggregateBase with keys: " << JoinSeq(", ", strKeys) << ", with stats: " << aggStats->ToString();
     kqpStats->SetStats(input.Get(), std::move(aggStats));
 }
@@ -739,7 +831,45 @@ void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, TKqp
         return;
     }
 
-    kqpStats->SetStats( input.Get(), inputStats );
+      auto aggStats = std::make_shared<TOptimizerStatistics>(*inputStats);
+
+    TVector<TString> strKeys;
+    strKeys.reserve(agg.Keys().Size());
+    for (const auto& key: agg.Keys()) {
+        strKeys.push_back(key.StringValue());
+    }
+
+    double selectivity = AggregateSelectivity(aggStats, strKeys);
+    if (strKeys.empty()) {
+        double rowBytes = aggStats->Nrows > 0.0 ? aggStats->ByteSize / aggStats->Nrows : aggStats->ByteSize;
+        aggStats->Nrows = 1.0;
+        aggStats->ByteSize = rowBytes;
+        aggStats->Type = EStatisticsType::Constant;
+    } else {
+        aggStats->Nrows = aggStats->Nrows * selectivity;
+        aggStats->ByteSize = aggStats->ByteSize * selectivity;
+    }
+
+    kqpStats->SetStats( input.Get(), aggStats );
+}
+
+void InferStatisticsForCombiner(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats) {
+    auto inputNode = TExprBase(input);
+    auto agg = inputNode.Cast<TCoWideCombiner>();
+    auto aggInput = agg.Input();
+
+    auto inputStats = kqpStats->GetStats(aggInput.Raw() );
+    if (!inputStats) {
+        return;
+    }
+
+    auto aggStats = std::make_shared<TOptimizerStatistics>(*inputStats);
+    aggStats->Nrows = aggStats->Nrows / 7.0;
+    aggStats->ByteSize = aggStats->ByteSize / 7.0;
+
+    YQL_CLOG(TRACE, CoreDq) << "Stats for aggregatem, Nrows: " << aggStats->Nrows;
+
+    kqpStats->SetStats( input.Get(), aggStats );
 }
 
 void InferStatisticsForAsList(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats) {
@@ -808,6 +938,13 @@ void PropagateStatisticsToLambdaArgument(const TExprNode::TPtr& input, TKqpStats
         // So we need to propagate corresponding arguments
 
         if (callableInput->IsList()){
+            // Only propagate when the lambda takes exactly one argument per list element (the shape this
+            // mapping assumes). Some callables pair a list child0 with a lambda of a different arity -- e.g.
+            // HybridRank, whose child0 is the positional scoring tuple but whose Fuse lambda takes a single
+            // rank-vector argument -- and indexing Arg(j) past the lambda's args would be out of range.
+            if (lambda.Args().Size() != callableInput->ChildrenSize()) {
+                continue;
+            }
             for(size_t j=0; j<callableInput->ChildrenSize(); j++){
                 auto inputStats = kqpStats->GetStats(callableInput->Child(j) );
                 if (inputStats){
@@ -1218,6 +1355,9 @@ bool IsLiteralDataExpr(TExprBase node) {
  *   - If one of the child is a type expression, it also passes the check
  */
 bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs) {
+    if (!input->GetTypeAnn()) {
+        return false;
+    }
     if (input->GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg) {
         return IsConstantExprPg(input);
     }
@@ -1243,6 +1383,9 @@ bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs) {
 bool IsConstantExprWithParams(const TExprNode::TPtr& input) {
     if (input->IsCallable("Parameter")) {
         return true;
+    }
+    if (!input->GetTypeAnn()) {
+        return false;
     }
     if (input->GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg) {
         return IsConstantExprPg(input);

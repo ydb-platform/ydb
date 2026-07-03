@@ -1,23 +1,24 @@
 #pragma once
 
-#include <library/cpp/threading/future/core/future.h>
 #include <ydb/core/persqueue/events/events.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
+#include <library/cpp/threading/future/core/future.h>
+
 namespace NACLib {
+
 class TUserToken;
-}
+
+} // namespace NACLib
 
 namespace NKikimr::NPQ::NSchema {
 
 enum EEv : ui32 {
     EvReadResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::SCHEMA),
     EvSchemaOperationResponse,
-    EvAlterTopicResponse,
-    EvCreateTopicResponse,
-    EvDropTopicResponse,
+    EvSchemaResponse,
     EvEnd
 };
 
@@ -35,27 +36,29 @@ struct TEvSchemaOperationResponse: public NActors::TEventLocal<TEvSchemaOperatio
     TString ErrorMessage;
 };
 
-//
-// Alter Topic
-//
-struct TAlterTopicResponse {
+struct TSchemaResponse {
+    TString Path;
     Ydb::StatusIds::StatusCode Status;
     TString ErrorMessage;
     NKikimrSchemeOp::TModifyScheme ModifyScheme;
 };
 
-struct TEvAlterTopicResponse: public NActors::TEventLocal<TEvAlterTopicResponse, EEv::EvAlterTopicResponse>
-                            , public TAlterTopicResponse {
-    TEvAlterTopicResponse(
+struct TEvSchemaResponse: public NActors::TEventLocal<TEvSchemaResponse, EEv::EvSchemaResponse>
+                        , public TSchemaResponse {
+    TEvSchemaResponse(
+        const TString& path,
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
         TString&& errorMessage = {},
         NKikimrSchemeOp::TModifyScheme&& modifyScheme = {}
     )
-        : TAlterTopicResponse(status, std::move(errorMessage), std::move(modifyScheme))
+        : TSchemaResponse(path, status, std::move(errorMessage), std::move(modifyScheme))
     {
     }
 };
 
+//
+// Alter Topic
+//
 struct TAlterTopicSettings {
     TString Database;
     TString PeerName;
@@ -67,7 +70,7 @@ struct TAlterTopicSettings {
 };
 
 NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlterTopicSettings&& settings);
-NActors::IActor* CreateAlterTopicActor(NThreading::TPromise<TAlterTopicResponse>&& promise, TAlterTopicSettings&& settings);
+NActors::IActor* CreateAlterTopicActor(NThreading::TPromise<TSchemaResponse>&& promise, TAlterTopicSettings&& settings);
 
 //
 // Add Consumer
@@ -100,24 +103,6 @@ NActors::IActor* CreateRemoveConsumerActor(const NActors::TActorId& parentId, TR
 //
 // Create Topic
 //
-struct TCreateTopicResponse {
-    Ydb::StatusIds::StatusCode Status;
-    TString ErrorMessage;
-    NKikimrSchemeOp::TModifyScheme ModifyScheme;
-};
-
-struct TEvCreateTopicResponse: public NActors::TEventLocal<TEvCreateTopicResponse, EEv::EvCreateTopicResponse>
-                             , public TCreateTopicResponse {
-    TEvCreateTopicResponse(
-        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
-        TString&& errorMessage = {},
-        NKikimrSchemeOp::TModifyScheme&& modifyScheme = {}
-    )
-        : TCreateTopicResponse(status, std::move(errorMessage), std::move(modifyScheme))
-    {
-    }
-};
-
 struct TCreateTopicSettings {
     TString Database;
     TString PeerName;
@@ -129,29 +114,11 @@ struct TCreateTopicSettings {
 };
 
 NActors::IActor* CreateCreateTopicActor(const NActors::TActorId& parentId, TCreateTopicSettings&& settings);
-NActors::IActor* CreateCreateTopicActor(NThreading::TPromise<TCreateTopicResponse>&& promise, TCreateTopicSettings&& settings);
+NActors::IActor* CreateCreateTopicActor(NThreading::TPromise<TSchemaResponse>&& promise, TCreateTopicSettings&& settings);
 
 //
 // Drop Topic
 //
-struct TDropTopicResponse {
-    Ydb::StatusIds::StatusCode Status;
-    TString ErrorMessage;
-    NKikimrSchemeOp::TModifyScheme ModifyScheme;
-};
-
-struct TEvDropTopicResponse : public NActors::TEventLocal<TEvDropTopicResponse, EEv::EvDropTopicResponse>
-                             , public TDropTopicResponse {
-    TEvDropTopicResponse(
-        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
-        TString&& errorMessage = {},
-        NKikimrSchemeOp::TModifyScheme&& modifyScheme = {}
-    )
-        : TDropTopicResponse(status, std::move(errorMessage), std::move(modifyScheme))
-    {
-    }
-};
-
 struct TDropTopicSettings {
     TString Database;
     TString PeerName;

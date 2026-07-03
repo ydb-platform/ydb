@@ -49,13 +49,31 @@ struct TIndexBuildShardStatus {
     }
 };
 
-// TODO(mbkkt) separate it to 3 classes: TBuildColumnsInfo TBuildSecondaryInfo TBuildVectorInfo with single base TBuildInfo
+struct TValidateColumnConstraintShardStatus : TIndexBuildShardStatus {
+    using TIndexBuildShardStatus::TIndexBuildShardStatus;
+    NKikimrSetColumnConstraint::EValidateStatus ValidateStatus = NKikimrSetColumnConstraint::EValidateStatus::INVALID;
+};
+
+// TODO(???) [thank you, mbkkt]
+// Separate it to 4 classes:
+// > TBuildColumnsInfo
+// > TBuildSecondaryInfo
+// > TBuildVectorInfo
+// > TSetColumnConstraintOperationInfo
+// with single base TBuildInfo
 struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     using TPtr = TIntrusivePtr<TIndexBuildInfo>;
+
+    virtual ~TIndexBuildInfo() = default;
 
     enum class EState: ui32 {
         Invalid = 0,
         AlterMainTable = 5,
+        CreateBuildSequence = 6,
+        // Fulltext rowid auto-provisioning: parent fulltext build spawns + awaits child builds for the
+        // __ydb_row_id column and the unique index on it, under the parent's shared lock.
+        ProvisioningRowIdColumn = 7,
+        ProvisioningRowIdUniqueIndex = 8,
         Locking = 10,
         GatheringStatistics = 20,
         Initiating = 30,
@@ -93,6 +111,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         FulltextIndexStats = 200,
         FulltextIndexDictionary = 201,
         FulltextIndexBorders = 202,
+        // Compact rowid-mode prepass: build the transient "row-id source" table (main re-keyed by the
+        // dense seq) that the posting scan then reads so doc ids arrive ascending and densely packed.
+        FulltextRowIdSrc = 203,
     };
 
     struct TColumnBuildInfo {
@@ -100,6 +121,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Ydb::TypedValue DefaultFromLiteral;
         bool NotNull = false;
         TString FamilyName;
+        TString DefaultFromSequence;
+        bool BitReverseSequenceValue = false;
 
         TColumnBuildInfo(const TString& name, const TString& serializedLiteral, bool notNull, const TString& familyName)
             : ColumnName(name)
@@ -117,9 +140,33 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         {
         }
 
-        void SerializeToProto(NKikimrIndexBuilder::TColumnBuildSetting* setting) const {
+        struct FromSequenceTag {};
+        TColumnBuildInfo(FromSequenceTag, const TString& name, const Ydb::Type& columnType,
+                         const TString& sequencePath, bool bitReverse, bool notNull, const TString& familyName)
+            : ColumnName(name)
+            , NotNull(notNull)
+            , FamilyName(familyName)
+            , DefaultFromSequence(sequencePath)
+            , BitReverseSequenceValue(bitReverse)
+        {
+            *DefaultFromLiteral.mutable_type() = columnType;
+        }
+
+        bool IsFromSequence() const {
+            return !DefaultFromSequence.empty();
+        }
+
+        void SerializeToProto(NKikimrIndexBuilder::TColumnBuildSetting* setting, const TString& tablePath) const {
             setting->SetColumnName(ColumnName);
-            setting->mutable_default_from_literal()->CopyFrom(DefaultFromLiteral);
+            if (IsFromSequence()) {
+                setting->set_default_from_sequence(JoinPath({tablePath, DefaultFromSequence}));
+                setting->set_bit_reverse_sequence_value(BitReverseSequenceValue);
+                if (DefaultFromLiteral.has_type()) {
+                    *setting->mutable_default_from_literal()->mutable_type() = DefaultFromLiteral.type();
+                }
+            } else {
+                setting->mutable_default_from_literal()->CopyFrom(DefaultFromLiteral);
+            }
             setting->SetNotNull(NotNull);
             setting->SetFamily(FamilyName);
         }
@@ -173,6 +220,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         ui32 OverlapClusters = 0;
         double OverlapRatio = 0;
         bool IsPrefixed = false;
+        bool Adaptive = false;
 
         // progress
         enum EState : ui32 {
@@ -186,6 +234,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         ui32 Level = 1;
         ui32 Round = 0;
         bool IsEmpty = false;
+        bool NeedVectorAutodetect = false;
 
         EState State = Sample;
 
@@ -255,6 +304,7 @@ public:
     bool ApplyTxDone = false;
     bool UnlockTxDone = false;
     bool DropColumnsTxDone = false;
+    bool CreateBuildSequenceTxDone = false;
 
     bool BillingEventIsScheduled = false;
 
@@ -264,6 +314,7 @@ public:
     TTxId ApplyTxId = TTxId();
     TTxId UnlockTxId = TTxId();
     TTxId DropColumnsTxId = TTxId();
+    TTxId CreateBuildSequenceTxId = TTxId();
 
     NKikimrScheme::EStatus AlterMainTableTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus LockTxStatus = NKikimrScheme::StatusSuccess;
@@ -271,6 +322,24 @@ public:
     NKikimrScheme::EStatus ApplyTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus UnlockTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus DropColumnsTxStatus = NKikimrScheme::StatusSuccess;
+    NKikimrScheme::EStatus CreateBuildSequenceTxStatus = NKikimrScheme::StatusSuccess;
+
+    // Fulltext rowid auto-provisioning (parent fulltext build): when a fulltext index is built on a
+    // custom-PK table without the rowid infrastructure, the parent build first spawns child builds -
+    // a BuildColumns child for the __ydb_row_id column (NeedColumn) and/or a BuildSecondaryUniqueIndex child
+    // for the unique index on __ydb_row_id (NeedUniqueIndex) - that run under the parent's shared lock,
+    // before the fulltext index itself is built. The child build ids are remembered for await + resume.
+    bool FulltextNeedsRowIdColumn = false;
+    bool FulltextNeedsUniqueIndex = false;
+    // Name of the auto-provisioned unique index (NFulltext::RowIdUniqueIndexName); persisted for
+    // restart determinism and so rollback targets the right child.
+    TString AutoUniqueIndexName;
+    TIndexBuildId RowIdColumnBuildId = TIndexBuildId();   // child BuildColumns id (0 if none/not yet spawned)
+    TIndexBuildId RowIdUniqueBuildId = TIndexBuildId();   // child BuildSecondaryUniqueIndex id
+
+    // Set on a spawned child build: links it back to the parent fulltext build so the child wakes the
+    // parent (Progress) when it reaches a terminal state. The child is otherwise a fully normal build.
+    TIndexBuildId ParentBuildId = TIndexBuildId();
 
     TStepId SnapshotStep;
     TTxId SnapshotTxId;
@@ -381,7 +450,7 @@ public:
             result << KMeans.DebugString() << ", "
                 << "{ Rows = " << Sample.Rows.size()
                 << ", Sample = " << Sample.State
-                << ", Clusters = " << Clusters->GetClusters().size() << " }, ";
+                << ", Clusters = " << (Clusters ? Clusters->GetClusters().size() : 0) << " }, ";
         }
 
         result
@@ -410,7 +479,11 @@ public:
         TString defaultFromLiteral = row.template GetValue<Schema::BuildColumnOperationSettings::DefaultFromLiteral>();
         bool notNull = row.template GetValue<Schema::BuildColumnOperationSettings::NotNull>();
         TString familyName = row.template GetValue<Schema::BuildColumnOperationSettings::FamilyName>();
-        BuildColumns.push_back(TColumnBuildInfo(columnName, defaultFromLiteral, notNull, familyName));
+        TString defaultFromSequence = row.template GetValueOrDefault<Schema::BuildColumnOperationSettings::DefaultFromSequence>(TString{});
+        bool bitReverseSequenceValue = row.template GetValueOrDefault<Schema::BuildColumnOperationSettings::BitReverseSequenceValue>(false);
+        auto& back = BuildColumns.emplace_back(columnName, defaultFromLiteral, notNull, familyName);
+        back.DefaultFromSequence = defaultFromSequence;
+        back.BitReverseSequenceValue = bitReverseSequenceValue;
     }
 
     template<class TRowSetType>
@@ -571,6 +644,35 @@ public:
             row.template GetValueOrDefault<Schema::IndexBuild::DropColumnsTxDone>(
                 indexInfo->DropColumnsTxDone);
 
+        indexInfo->CreateBuildSequenceTxId =
+            row.template GetValueOrDefault<Schema::IndexBuild::CreateBuildSequenceTxId>(
+                indexInfo->CreateBuildSequenceTxId);
+        indexInfo->CreateBuildSequenceTxStatus =
+            row.template GetValueOrDefault<Schema::IndexBuild::CreateBuildSequenceTxStatus>(
+                indexInfo->CreateBuildSequenceTxStatus);
+        indexInfo->CreateBuildSequenceTxDone =
+            row.template GetValueOrDefault<Schema::IndexBuild::CreateBuildSequenceTxDone>(
+                indexInfo->CreateBuildSequenceTxDone);
+
+        indexInfo->FulltextNeedsRowIdColumn =
+            row.template GetValueOrDefault<Schema::IndexBuild::FulltextNeedsRowIdColumn>(
+                indexInfo->FulltextNeedsRowIdColumn);
+        indexInfo->FulltextNeedsUniqueIndex =
+            row.template GetValueOrDefault<Schema::IndexBuild::FulltextNeedsUniqueIndex>(
+                indexInfo->FulltextNeedsUniqueIndex);
+        indexInfo->AutoUniqueIndexName =
+            row.template GetValueOrDefault<Schema::IndexBuild::AutoUniqueIndexName>(
+                indexInfo->AutoUniqueIndexName);
+        indexInfo->RowIdColumnBuildId =
+            row.template GetValueOrDefault<Schema::IndexBuild::RowIdColumnBuildId>(
+                indexInfo->RowIdColumnBuildId);
+        indexInfo->RowIdUniqueBuildId =
+            row.template GetValueOrDefault<Schema::IndexBuild::RowIdUniqueBuildId>(
+                indexInfo->RowIdUniqueBuildId);
+        indexInfo->ParentBuildId =
+            row.template GetValueOrDefault<Schema::IndexBuild::ParentBuildId>(
+                indexInfo->ParentBuildId);
+
         indexInfo->Billed.SetUploadRows(row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsBilled>(0));
         indexInfo->Billed.SetUploadBytes(row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesBilled>(0));
         indexInfo->Billed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsBilled>(0));
@@ -598,10 +700,11 @@ public:
                 case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription: {
                     auto& desc = *creationConfig.MutableVectorIndexKmeansTreeDescription();
                     TString createError;
-                    Y_ENSURE(NKikimr::NKMeans::ValidateSettings(desc.settings(), createError), createError);
+                    Y_ENSURE(NKikimr::NKMeans::ValidateSettingsPartial(desc.settings(), createError), createError);
                     indexInfo->KMeans.K = desc.settings().clusters();
                     indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + desc.settings().levels();
                     indexInfo->KMeans.IsPrefixed = indexInfo->IsBuildPrefixedVectorIndex();
+                    indexInfo->KMeans.Adaptive = desc.settings().adaptive_clusters() && indexInfo->IsBuildPrefixedVectorIndex();
                     indexInfo->KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
                     indexInfo->KMeans.OverlapClusters = desc.settings().overlap_clusters()
                         ? desc.settings().overlap_clusters()
@@ -610,7 +713,6 @@ public:
                         ? desc.settings().overlap_ratio()
                         : NTableIndex::NKMeans::DefaultOverlapRatio;
                     indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
-                    Y_ENSURE(indexInfo->Clusters, createError);
                     indexInfo->SpecializedIndexDescription = std::move(desc);
                     break;
                 }
@@ -619,6 +721,8 @@ public:
                     indexInfo->SpecializedIndexDescription = std::move(desc);
                     break;
                 }
+                case NKikimrSchemeOp::TIndexCreationConfig::kBloomFilterDescription:
+                case NKikimrSchemeOp::TIndexCreationConfig::kBloomNGrammFilterDescription:
                 case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
                     /* do nothing */
                     break;
@@ -708,6 +812,29 @@ public:
         return BuildKind == EBuildKind::BuildFulltext;
     }
 
+    bool IsBuildFulltextRelevance() const {
+        return BuildKind == EBuildKind::BuildFulltext && (
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance ||
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance);
+    }
+
+    bool IsBuildFulltextCompact() const {
+        return BuildKind == EBuildKind::BuildFulltext && (
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact ||
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance ||
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact);
+    }
+
+    // A compact fulltext build that uses __ydb_row_id as the doc id: it runs a prepass building the
+    // transient row-id source table, then the posting scan reads that (__ydb_row_id-ordered) table.
+    bool IsBuildFulltextCompactRowId() const {
+        if (!IsBuildFulltextCompact()) {
+            return false;
+        }
+        const auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&SpecializedIndexDescription);
+        return desc && desc->GetUseRowIdAsDocId();
+    }
+
     bool IsBuildIndex() const {
         return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildVectorIndex() || IsBuildFulltextIndex();
     }
@@ -716,8 +843,31 @@ public:
         return BuildKind == EBuildKind::BuildColumns;
     }
 
+    bool HasFromSequenceBuildColumn() const {
+        for (const auto& col : BuildColumns) {
+            if (col.IsFromSequence()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // True when this fulltext build still has rowid infrastructure to auto-provision (via sequential
+    // child builds) before it can build the fulltext index itself.
+    bool IsFulltextProvisioning() const {
+        return IsBuildFulltextIndex() && (FulltextNeedsRowIdColumn || FulltextNeedsUniqueIndex);
+    }
+
+    virtual bool IsSetColumnConstraint() const {
+        return false;
+    }
+
+
     bool IsPreparing() const {
         return State == EState::AlterMainTable ||
+               State == EState::CreateBuildSequence ||
+               State == EState::ProvisioningRowIdColumn ||
+               State == EState::ProvisioningRowIdUniqueIndex ||
                State == EState::Locking ||
                State == EState::GatheringStatistics ||
                State == EState::Initiating;
@@ -736,7 +886,7 @@ public:
                State == EState::Unlocking;
     }
 
-    bool IsDone() const {
+    virtual bool IsDone() const {
         return State == EState::Done;
     }
 
@@ -833,6 +983,47 @@ public:
 
 };
 
+struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
+    enum class EOperationState: ui32 {
+        Invalid = 0,
+        Locking = 10,
+        LockingNullWrites = 20,
+        Validating = 30,
+        Finishing = 40,
+        Unlocking = 60,
+        Done = 200
+    };
+
+    EOperationState OperationState = EOperationState::Invalid;
+    std::vector<TString> SetNotNullColumns;
+
+    TTxId LockNullWritesTxId = TTxId();
+    NKikimrScheme::EStatus LockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
+    bool LockNullWritesTxDone = false;
+
+    TTxId UnlockNullWritesTxId = TTxId();
+    NKikimrScheme::EStatus UnlockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
+    bool UnlockNullWritesTxDone = false;
+
+    bool NeedToCalculateValidationShards = true;
+    THashMap<TShardIdx, TValidateColumnConstraintShardStatus> ValidationShards;
+
+    TDeque<TShardIdx> ToValidateShards;
+    THashSet<TShardIdx> InProgressValidationShards;
+    THashSet<TShardIdx> DoneValidationShards;
+
+    constexpr static ui32 MaxInProgressValidationShards = 10;
+
+    bool ValidationFailed = false;  // true if any shard found NULL values
+
+    bool IsDone() const override {
+        return OperationState == EOperationState::Done;
+    }
+
+    bool IsSetColumnConstraint() const override {
+        return true;
+    }
+};
 
 }
 

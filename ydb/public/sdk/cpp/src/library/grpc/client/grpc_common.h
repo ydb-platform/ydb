@@ -9,6 +9,8 @@
 #include <util/datetime/base.h>
 #include <unordered_map>
 #include <string>
+#include <memory>
+#include <new>
 
 namespace NYdbGrpc {
 inline namespace Dev {
@@ -51,6 +53,8 @@ struct TGRpcClientConfig {
         , UseXds((Locator.starts_with("xds:///")))
     {}
 };
+
+bool ValidateTlsCredentials(const grpc::SslCredentialsOptions& sslCredentials, std::string& errorMessage);
 
 inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRpcClientConfig& config, grpc_socket_mutator* mutator = nullptr){
     grpc::ChannelArguments args;

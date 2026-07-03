@@ -5,6 +5,7 @@
 #include <ydb/core/ymq/actor/error.h>
 #include <ydb/core/ymq/actor/proxy_actor.h>
 #include <ydb/core/ymq/actor/serviceid.h>
+#include <ydb/public/sdk/cpp/src/client/types/core_facility/simple_core_facility.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/folder_service/events.h>
@@ -113,7 +114,7 @@ bool TBaseCloudAuthRequestProxy::InitAndValidate() {
         }
     }
 
-    if (IamToken_ && FolderId_) {
+    if (IamToken_) {
         // UI
         return true;
     }
@@ -126,6 +127,7 @@ bool TBaseCloudAuthRequestProxy::InitAndValidate() {
 STATEFN(TBaseCloudAuthRequestProxy::ProcessAuthentication) {
     switch (ev->GetTypeRewrite()) {
         hFunc(NCloud::TEvAccessService::TEvAuthenticateResponse, HandleAuthenticationResult);
+        hFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV2, HandleAuthenticationResult);
         hFunc(TEvWakeup, HandleWakeup);
     }
 }
@@ -193,11 +195,12 @@ void TBaseCloudAuthRequestProxy::ScheduleFolderServiceRequestRetry() {
     ScheduleRetry(FolderServiceRequestRetryPeriod_, FOLDER_SERVICE_REQUEST_WAKEUP_TAG);
 }
 
-void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
+template <typename TEvResponse>
+void TBaseCloudAuthRequestProxy::HandleAuthenticationResponse(typename TEvResponse::TPtr& ev) {
     ChangeCounters([this, &ev](){
         Counters_.IncCounter(
             NCloudAuth::EActionType::Authenticate,
-            NCloudAuth::ECredentialType::Signature,
+            (AccessKeySignature_ ? NCloudAuth::ECredentialType::Signature : NCloudAuth::ECredentialType::IamToken),
             ev->Get()->Status.GRpcStatusCode
         );
         auto now = TActivationContext::Now();
@@ -217,15 +220,31 @@ void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessSer
             SendReplyAndDie();
         }
         return;
-    } else if (!ev->Get()->Response.Getsubject().Hasservice_account()) {
-        SetError(NErrors::ACCESS_DENIED, "(this error should be unreachable).");
+    }
+
+    if (!ev->Get()->Response.subject().has_service_account()) {
+        SetError(AuthenticateIamToken_ ? NErrors::INVALID_CLIENT_TOKEN_ID : NErrors::ACCESS_DENIED,
+            AuthenticateIamToken_ ? "Failed to resolve folder id for IAM token." : "(this error should be unreachable).");
         SendReplyAndDie();
         return;
     }
 
-    FolderId_ = ev->Get()->Response.Getsubject().Getservice_account().Getfolder_id();
+    FolderId_ = ev->Get()->Response.subject().service_account().folder_id();
+    if (AuthenticateIamToken_ && !FolderId_) {
+        SetError(NErrors::ACCESS_DENIED, "Failed to resolve folder id for IAM token.");
+        SendReplyAndDie();
+        return;
+    }
 
     GetCloudIdAndAuthorize();
+}
+
+void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
+    HandleAuthenticationResponse<NCloud::TEvAccessService::TEvAuthenticateResponse>(ev);
+}
+
+void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev) {
+    HandleAuthenticationResponse<NCloud::TEvAccessService::TEvAuthenticateResponseV2>(ev);
 }
 
 STATEFN(TBaseCloudAuthRequestProxy::ProcessAuthorization) {
@@ -380,12 +399,26 @@ void TBaseCloudAuthRequestProxy::FillSignatureProto(TSignatureProto& signature) 
 }
 
 void TBaseCloudAuthRequestProxy::Authenticate() {
-    THolder<NCloud::TEvAccessService::TEvAuthenticateRequest> request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
-    request->RequestId = RequestId_;
-    FillSignatureProto(*request->Request.mutable_signature());
-
     AuthenticateRequestStartTimestamp_ = TActivationContext::Now();
-    Send(MakeSqsAccessServiceID(), std::move(request));
+    if (EnableAccessServiceV2Interface_) {
+        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV2>();
+        request->RequestId = RequestId_;
+        if (AccessKeySignature_) {
+            FillSignatureProto(*request->Request.mutable_signature());
+        } else {
+            request->Request.set_iam_token(IamToken_);
+        }
+        Send(MakeSqsAccessServiceID(), std::move(request));
+    } else {
+        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
+        request->RequestId = RequestId_;
+        if (AccessKeySignature_) {
+            FillSignatureProto(*request->Request.mutable_signature());
+        } else {
+            request->Request.set_iam_token(IamToken_);
+        }
+        Send(MakeSqsAccessServiceID(), std::move(request));
+    }
 }
 
 
@@ -483,8 +516,12 @@ void TBaseCloudAuthRequestProxy::Bootstrap() {
                 return;
             }
         }
-    } else {
+    } else if (FolderId_) {
         GetCloudIdAndAuthorize();
+    } else {
+        AuthenticateIamToken_ = true;
+        Become(&TThis::ProcessAuthentication);
+        Authenticate();
     }
 };
 
@@ -499,6 +536,9 @@ void TCloudAuthRequestProxy::DoReply() {
 void TCloudAuthRequestProxy::SetError(const TErrorClass& errorClass, const TString& message) {
     auto* error = MakeMutableError();
     ::NKikimr::NSQS::MakeError(error, errorClass, Sprintf("%s Request id to report: %s.", message.c_str(), RequestId_.c_str()));
+    if (Callback_) {
+        Callback_->OnIamAuthError();
+    }
 }
 
 void TCloudAuthRequestProxy::OnSuccessfulAuth() {
@@ -518,7 +558,7 @@ void TCloudAuthRequestProxy::ChangeCounters(std::function<void()> func) {
 
 void THttpProxyAuthRequestProxy::DoReply() {
     auto response = Error_.Empty()
-        ? MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(CloudId_, FolderId_, UserSID_, AuthType_)
+        ? MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(CloudId_, FolderId_, UserSID_)
         : MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(Error_.GetRef());
 
     Send(Requester_, response.Release());
@@ -553,7 +593,8 @@ void TMultiAuthFactory::Initialize(
     }
 
     IsYandexCloudMode_ = true;
-    CredentialsProvider_ = CreateCredentialsProviderFactory(config)->CreateProvider();
+    CoreFacility_ = NYdb::CreateSimpleCoreFacility();
+    CredentialsProvider_ = CreateCredentialsProviderFactory(config)->CreateProvider(CoreFacility_);
 
     const auto& rootCAPath = appData.AuthConfig.GetPathToRootCA();
 
@@ -561,9 +602,12 @@ void TMultiAuthFactory::Initialize(
         return TActorSetupCmd(actor, TMailboxType::HTSwap, executorPoolID);
     };
 
+    EnableAccessServiceV2Interface_ = appData.FeatureFlags.GetEnableAccessServiceV2Interface();
+
     IActor* const accessService = CreateSqsAccessService(
         config.GetYandexCloudAccessServiceAddress(),
-        rootCAPath);
+        rootCAPath,
+        EnableAccessServiceV2Interface_);
 
     services.emplace_back(MakeSqsAccessServiceID(), setupActor(accessService));
 
@@ -613,12 +657,12 @@ void TMultiAuthFactory::RegisterAuthActor(NActors::TActorSystem& system, TAuthAc
     if (data.RequestFormat == NSQS::TAuthActorData::Json) {
         auto requester = data.Requester;
         system.Register(
-            new THttpProxyAuthRequestProxy(std::move(data), token, requester),
+            new THttpProxyAuthRequestProxy(std::move(data), token, EnableAccessServiceV2Interface_, requester),
             NActors::TMailboxType::HTSwap,
             poolID);
     } else {
         system.Register(
-            new TCloudAuthRequestProxy(std::move(data), token),
+            new TCloudAuthRequestProxy(std::move(data), token, EnableAccessServiceV2Interface_),
             NActors::TMailboxType::HTSwap,
             poolID);
     }

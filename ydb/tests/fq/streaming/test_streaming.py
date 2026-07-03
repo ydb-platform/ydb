@@ -1,49 +1,24 @@
+import json
 import logging
 import pytest
 import random
 import string
 import time
+from typing import Callable
 
 import ydb
 
-from ydb.tests.fq.streaming.common import StreamingTestBase
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
 
 logger = logging.getLogger(__name__)
 
 
 class TestStreamingInYdb(StreamingTestBase):
-    def get_input_name(self, kikimr, name, local_topics, entity_name, partitions_count=1, shared=False):
-        if local_topics and shared:
-            pytest.skip("Shared reading is not supported for local topics: YQ-5036")
-
-        endpoint = self.get_endpoint(kikimr, local_topics)
-        source_name = entity_name(name)
-        self.init_topics(source_name, create_output=False, partitions_count=partitions_count, endpoint=endpoint)
-        self.create_source(kikimr, source_name, shared=shared)
-
-        if local_topics:
-            return f"`{self.input_topic}`", endpoint
-        else:
-            return f"`{source_name}`.`{self.input_topic}`", endpoint
-
-    def get_io_names(self, kikimr, name, local_topics, entity_name, partitions_count=1, shared=False):
-        if local_topics and shared:
-            pytest.skip("Shared reading is not supported for local topics: YQ-5036")
-
-        endpoint = self.get_endpoint(kikimr, local_topics)
-        source_name = entity_name(name)
-        self.init_topics(source_name, create_output=True, partitions_count=partitions_count, endpoint=endpoint)
-        self.create_source(kikimr, source_name, shared=shared)
-
-        if local_topics:
-            return f"`{self.input_topic}`", f"`{self.output_topic}`", endpoint
-        else:
-            return f"`{source_name}`.`{self.input_topic}`", f"`{source_name}`.`{self.output_topic}`", endpoint
 
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic(self, kikimr, entity_name, local_topics, use_partition_balancing):
+    def test_read_topic(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, use_partition_balancing) -> None:
         input_name, endpoint = self.get_input_name(kikimr, f"test_read_topic{local_topics!s:.1}{use_partition_balancing!s:.1}", local_topics, entity_name)
 
         sql = f"""SELECT time FROM {input_name}
@@ -64,7 +39,7 @@ class TestStreamingInYdb(StreamingTestBase):
         assert result_sets[0].rows[0]['time'] == b'lunch time'
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_csv(self, kikimr, entity_name, local_topics):
+    def test_read_topic_csv(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         """FORMAT csv: one topic message = one CSV row (ClickHouseClient.ParseFormat, no row dispatcher).
 
         S3 batch analogs: `test_formats.TestS3Formats.test_csv_format_no_header`, etc.
@@ -87,7 +62,7 @@ class TestStreamingInYdb(StreamingTestBase):
         assert result_sets[0].rows[0]["time"] == b"lunch time"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_csv_with_names(self, kikimr, entity_name, local_topics):
+    def test_read_topic_csv_with_names(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         """FORMAT csv_with_names: header + data line per message (same CH parser as S3; no row dispatcher).
 
         S3 analog: `test_formats.TestS3Formats.test_format` / `test_custom_csv_delimiter_csv_with_names` (csv_with_names).
@@ -112,7 +87,7 @@ class TestStreamingInYdb(StreamingTestBase):
         assert result_sets[0].rows[0]["time"] == b"lunch time"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_projection_column_order(self, kikimr, entity_name, local_topics):
+    def test_csv_projection_column_order(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         """Headerless CSV: file fields follow SCHEMA order; SELECT only reorders output columns.
 
         S3 analog: `test_formats.TestS3Formats.test_csv_projection_column_order`.
@@ -140,7 +115,7 @@ class TestStreamingInYdb(StreamingTestBase):
         assert row["a"] == b"aa"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_with_names_projection_column_order(self, kikimr, entity_name, local_topics):
+    def test_csv_with_names_projection_column_order(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         """csv_with_names: header names map fields; SCHEMA order vs header row; SELECT only reorders output.
 
         S3 analog: `test_formats.TestS3Formats.test_csv_with_names_projection_column_order`.
@@ -168,7 +143,7 @@ class TestStreamingInYdb(StreamingTestBase):
         assert row["a"] == b"aa"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_custom_csv_delimiter_csv_with_names(self, kikimr, entity_name, local_topics):
+    def test_custom_csv_delimiter_csv_with_names(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         """Analog of `TestS3Formats.test_custom_csv_delimiter_csv_with_names` (semicolon + header per message)."""
         input_name, endpoint = self.get_input_name(
             kikimr, "test_custom_csv_delimiter_csv_with_names", local_topics, entity_name
@@ -203,7 +178,7 @@ class TestStreamingInYdb(StreamingTestBase):
         assert rows[2]["Fruit"] == b"Pear" and rows[2]["Price"] == 15 and rows[2]["Weight"] == 33
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_custom_csv_delimiter_csv(self, kikimr, entity_name, local_topics):
+    def test_custom_csv_delimiter_csv(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         """Analog of `TestS3Formats.test_custom_csv_delimiter_csv` / `test_csv_format_custom_delimiter`."""
         input_name, endpoint = self.get_input_name(
             kikimr, "test_custom_csv_delimiter_csv", local_topics, entity_name
@@ -234,7 +209,7 @@ class TestStreamingInYdb(StreamingTestBase):
         assert rows[2]["Fruit"] == b"Pear" and rows[2]["Price"] == 15 and rows[2]["Weight"] == 33
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_delimiter_invalid_format_rejected(self, kikimr, entity_name, local_topics):
+    def test_csv_delimiter_invalid_format_rejected(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         input_name, _ = self.get_input_name(
             kikimr, "test_csv_delimiter_invalid_format_rejected", local_topics, entity_name
         )
@@ -253,7 +228,7 @@ class TestStreamingInYdb(StreamingTestBase):
         assert "csv_delimiter can only be used with csv or csv_with_names format" in str(exc_info.value)
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_delimiter_must_be_single_character_rejected(self, kikimr, entity_name, local_topics):
+    def test_csv_delimiter_must_be_single_character_rejected(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         input_name, _ = self.get_input_name(
             kikimr, "test_csv_delimiter_must_be_single_character_rejected", local_topics, entity_name
         )
@@ -272,7 +247,7 @@ class TestStreamingInYdb(StreamingTestBase):
         assert "csv_delimiter must be single character" in str(exc_info.value)
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_empty_schema_rejected(self, kikimr, entity_name, local_topics):
+    def test_csv_empty_schema_rejected(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         """Analog of `TestS3Formats.test_csv_empty_schema_rejected`."""
         input_name, endpoint = self.get_input_name(
             kikimr, "test_csv_empty_schema_rejected", local_topics, entity_name
@@ -294,7 +269,7 @@ class TestStreamingInYdb(StreamingTestBase):
         )
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_projection_single_column(self, kikimr, entity_name, local_topics):
+    def test_csv_projection_single_column(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         """Analog of `TestS3Formats.test_csv_projection_single_column`."""
         input_name, endpoint = self.get_input_name(
             kikimr, "test_csv_projection_single_column", local_topics, entity_name
@@ -316,7 +291,12 @@ class TestStreamingInYdb(StreamingTestBase):
         assert result_sets[0].rows[0]["b"] == b"bb"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_projection_column_order_non_alphabetical_schema(self, kikimr, entity_name, local_topics):
+    def test_csv_projection_column_order_non_alphabetical_schema(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool
+    ) -> None:
         """Analog of `TestS3Formats.test_csv_projection_column_order_non_alphabetical_schema`."""
         input_name, endpoint = self.get_input_name(
             kikimr, "test_csv_projection_nonalpha_schema", local_topics, entity_name
@@ -339,7 +319,7 @@ class TestStreamingInYdb(StreamingTestBase):
         assert row["b"] == b"bb"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_no_header_three_rows(self, kikimr, entity_name, local_topics):
+    def test_csv_no_header_three_rows(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         """Analog of `TestS3Formats.test_csv_format_no_header` (same data as test_format_data/test_no_header.csv)."""
         input_name, endpoint = self.get_input_name(
             kikimr, "test_csv_no_header_three_rows", local_topics, entity_name
@@ -369,7 +349,7 @@ class TestStreamingInYdb(StreamingTestBase):
         assert rows[2]["Fruit"] == b"Pear" and rows[2]["Price"] == 15 and rows[2]["Weight"] == 33
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_no_header_select_price(self, kikimr, entity_name, local_topics):
+    def test_csv_no_header_select_price(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         """Analog of `TestS3Formats.test_csv_format_no_header_project_non_first_alphabetic_column`."""
         input_name, endpoint = self.get_input_name(
             kikimr, "test_csv_no_header_select_price", local_topics, entity_name
@@ -399,7 +379,7 @@ class TestStreamingInYdb(StreamingTestBase):
         assert rows[2]["Price"] == 15
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_physical_column_order(self, kikimr, entity_name, local_topics):
+    def test_csv_physical_column_order(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         """Analog of `TestS3Formats.test_csv_format_schema_order_differs_from_alphabet`."""
         input_name, endpoint = self.get_input_name(
             kikimr, "test_csv_physical_column_order", local_topics, entity_name
@@ -427,7 +407,7 @@ class TestStreamingInYdb(StreamingTestBase):
         assert row["Fruit"] == b"Banana"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_shared_reading_limit(self, kikimr, entity_name, local_topics):
+    def test_read_topic_shared_reading_limit(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         input_name, endpoint = self.get_input_name(kikimr, "test_read_topic_shared_reading_limit", local_topics, entity_name, partitions_count=10, shared=True)
 
         sql = f"""SELECT time FROM {input_name}
@@ -449,9 +429,572 @@ class TestStreamingInYdb(StreamingTestBase):
         assert result_sets1[0].rows[0]['time'] == b'lunch time'
         assert result_sets2[0].rows[0]['time'] == b'lunch time'
 
+    @pytest.mark.parametrize(
+        "kikimr",
+        [
+            {"enable_user_attributes_in_topic_query": True},
+            {"enable_user_attributes_in_topic_query": False},
+        ],
+        ids=["ua_on", "ua_off"],
+        indirect=["kikimr"],
+    )
+    def test_read_user_attributes(self, kikimr, entity_name, request):
+        cfg = request.node.callspec.params["kikimr"]
+        enable_message_meta_flag = cfg["enable_user_attributes_in_topic_query"]
+
+        inp, endpoint = self.get_input_name(
+            kikimr,
+            "ua",
+            True,
+            entity_name,
+            partitions_count=1,
+        )
+
+        sql = f"""
+            SELECT
+                field1,
+                field2,
+                Unwrap(DictLookup(SystemMetadata("user_attributes"), "trace_id")) AS trace_id
+            FROM {inp}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "json_each_row",
+                SCHEMA = (field1 String NOT NULL, field2 Int32 NOT NULL)
+            )
+            LIMIT 1
+        """
+
+        if not enable_message_meta_flag:
+            with pytest.raises(ydb.issues.GenericError) as excinfo:
+                kikimr.ydb_client.query(sql)
+            err = str(excinfo.value)
+            assert "Metadata key user_attributes" in err and "found" in err
+            return
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        rows = [('{"field1": "value1", "field2": 105}', {"trace_id": "tid-a"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"value1"
+        assert row["field2"] == 105
+        assert row["trace_id"] == b"tid-a"
+
+    @pytest.mark.parametrize(
+        "kikimr",
+        [
+            {"enable_user_attributes_in_topic_query": True},
+            {"enable_user_attributes_in_topic_query": False},
+        ],
+        ids=["ua_on", "ua_off"],
+        indirect=["kikimr"],
+    )
+    def test_read_user_attributes_in_streaming_query(self, kikimr, entity_name, request):
+        cfg = request.node.callspec.params["kikimr"]
+        enable_message_meta_flag = cfg["enable_user_attributes_in_topic_query"]
+
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            "ua_sq",
+            True,
+            entity_name,
+            partitions_count=1,
+        )
+        query_name = "ua_sq"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow())))
+                FROM (
+                    SELECT
+                        field1,
+                        field2,
+                        Unwrap(DictLookup(SystemMetadata("user_attributes"), "trace_id")) AS trace_id
+                    FROM {inp}
+                    WITH (
+                        FORMAT="json_each_row",
+                        SCHEMA=(field1 String NOT NULL, field2 Int32 NOT NULL)
+                    )
+                );
+            END DO;'''
+
+        if not enable_message_meta_flag:
+            with pytest.raises(ydb.issues.GenericError) as excinfo:
+                kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+            err = str(excinfo.value)
+            assert "Metadata key user_attributes" in err and "found" in err
+            return
+
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
+
+        rows = [('{"field1": "value1", "field2": 105}', {"trace_id": "tid-sq"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
+        assert json.loads(result) == {
+            "field1": "value1",
+            "field2": 105,
+            "trace_id": "tid-sq",
+        }
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+    # --- Issue #40506: Missing key in non-empty dictionary ---
+    def test_ua_missing_key_in_nonempty_dict(self, kikimr, entity_name):
+        """DictLookup for a key that is NOT in the metadata must return NULL (Optional<String>)."""
+        inp, endpoint = self.get_input_name(
+            kikimr, "ua_miss_key", True, entity_name, partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    field1,
+    DictLookup(SystemMetadata("user_attributes"), "missing_key") AS missing_val,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "present_key")) AS present_val
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (field1 String NOT NULL)
+)
+LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        rows = [('{"field1": "v1"}', {"present_key": "hello"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"v1"
+        assert row["missing_val"] is None
+        assert row["present_val"] == b"hello"
+
+    # --- Issue #40507: When no user attribute provided returns empty dict ---
+    def test_ua_no_attributes_returns_empty_dict(self, kikimr, entity_name):
+        """When a message has no metadata_items, SystemMetadata("user_attributes") must be an empty Dict."""
+        inp, endpoint = self.get_input_name(
+            kikimr, "ua_empty", True, entity_name, partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    field1,
+    DictLength(SystemMetadata("user_attributes")) AS dict_len
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (field1 String NOT NULL)
+)
+LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        data = ['{"field1": "v1"}']
+        self.write_stream(data, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"v1"
+        assert row["dict_len"] == 0
+
+    # --- Issue #40508: Empty dictionary metadata_items equivalent to empty dict ---
+    def test_ua_empty_metadata_items_is_empty_dict(self, kikimr, entity_name):
+        """Explicitly empty metadata_items should produce the same empty dict as no metadata at all."""
+        inp, endpoint = self.get_input_name(
+            kikimr, "ua_empty_meta", True, entity_name, partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    field1,
+    DictLength(SystemMetadata("user_attributes")) AS dict_len,
+    DictLookup(SystemMetadata("user_attributes"), "any_key") AS any_val
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (field1 String NOT NULL)
+)
+LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        # Write with explicitly empty metadata
+        rows = [('{"field1": "v1"}', {})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"v1"
+        assert row["dict_len"] == 0
+        assert row["any_val"] is None
+
+    # --- Issue #40509: Multiple keys in metadata ---
+    def test_ua_multiple_keys(self, kikimr, entity_name):
+        """All pairs from metadata_items are in the dictionary; multiple keys can be extracted independently."""
+        inp, endpoint = self.get_input_name(
+            kikimr, "ua_multi_keys", True, entity_name, partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    field1,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "key1")) AS val1,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "key2")) AS val2,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "key3")) AS val3,
+    DictLength(SystemMetadata("user_attributes")) AS dict_len
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (field1 String NOT NULL)
+)
+LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        rows = [('{"field1": "v1"}', {"key1": "aaa", "key2": "bbb", "key3": "ccc"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"v1"
+        assert row["val1"] == b"aaa"
+        assert row["val2"] == b"bbb"
+        assert row["val3"] == b"ccc"
+        assert row["dict_len"] == 3
+
+    # --- Issue #40510: All user attributes must be accessible as dictionary ---
+    def test_ua_all_attributes_accessible(self, kikimr, entity_name):
+        """The full dictionary returned by SystemMetadata("user_attributes") must contain all written pairs."""
+        inp, endpoint = self.get_input_name(
+            kikimr, "ua_all_access", True, entity_name, partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    field1,
+    DictKeys(SystemMetadata("user_attributes")) AS keys,
+    DictLength(SystemMetadata("user_attributes")) AS dict_len
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (field1 String NOT NULL)
+)
+LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        meta = {"alpha": "1", "beta": "2", "gamma": "3"}
+        rows = [('{"field1": "v1"}', meta)]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"v1"
+        assert row["dict_len"] == 3
+        returned_keys = set(k.decode("utf-8") if isinstance(k, bytes) else k for k in row["keys"])
+        assert returned_keys == {"alpha", "beta", "gamma"}
+
+    # --- Issue #40511: Special characters and UTF-8 ---
+    def test_ua_special_characters_and_utf8(self, kikimr, entity_name):
+        """Keys and values with special characters and UTF-8 must be preserved."""
+        inp, endpoint = self.get_input_name(
+            kikimr, "ua_utf8", True, entity_name, partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    field1,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "ключ")) AS val_ru,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "key with spaces")) AS val_spaces,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "emoji🔑")) AS val_emoji
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (field1 String NOT NULL)
+)
+LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        meta = {
+            "ключ": "значение",
+            "key with spaces": "value with spaces",
+            "emoji🔑": "emoji🎉value",
+        }
+        rows = [('{"field1": "v1"}', meta)]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"v1"
+        assert row["val_ru"] == "значение".encode("utf-8")
+        assert row["val_spaces"] == b"value with spaces"
+        assert row["val_emoji"] == "emoji🎉value".encode("utf-8")
+
+    # --- Issue #40512: Multiple messages in a row ---
+    def test_ua_multiple_messages(self, kikimr, entity_name):
+        """Each message carries its own metadata; streaming query does not mix attributes across messages."""
+        inp, out, endpoint = self.get_io_names(
+            kikimr, "ua_multi_msg", True, entity_name, partitions_count=1,
+        )
+        query_name = "ua_multi_msg"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow())))
+                FROM (
+                    SELECT
+                        field1,
+                        Unwrap(DictLookup(SystemMetadata("user_attributes"), "msg_id")) AS msg_id
+                    FROM {inp}
+                    WITH (
+                        FORMAT="json_each_row",
+                        SCHEMA=(field1 String NOT NULL)
+                    )
+                );
+            END DO;'''
+
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
+
+        rows = [
+            ('{"field1": "msg1"}', {"msg_id": "id-1"}),
+            ('{"field1": "msg2"}', {"msg_id": "id-2"}),
+            ('{"field1": "msg3"}', {"msg_id": "id-3"}),
+        ]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        raw_results = self.read_stream(3, topic_path=self.output_topic, endpoint=endpoint)
+        results = [json.loads(raw) for raw in raw_results]
+
+        # Each message must have its own msg_id, not mixed
+        msg_ids = {r["msg_id"] for r in results}
+        assert msg_ids == {"id-1", "id-2", "id-3"}
+        for r in results:
+            expected_field1 = "msg" + r["msg_id"][-1]
+            assert r["field1"] == expected_field1
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+    # --- Issue #40513: Restart after checkpoint ---
+    def test_ua_restart_after_checkpoint(self, kikimr, entity_name):
+        """After streaming query restart, metadata processing still works."""
+        inp, out, endpoint = self.get_io_names(
+            kikimr, "ua_restart", True, entity_name, partitions_count=1,
+        )
+        query_name = "ua_restart"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow())))
+                FROM (
+                    SELECT
+                        field1,
+                        Unwrap(DictLookup(SystemMetadata("user_attributes"), "trace_id")) AS trace_id
+                    FROM {inp}
+                    WITH (
+                        FORMAT="json_each_row",
+                        SCHEMA=(field1 String NOT NULL)
+                    )
+                );
+            END DO;'''
+
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
+
+        # Write and read before restart
+        rows = [('{"field1": "before"}', {"trace_id": "tid-before"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
+        assert json.loads(result) == {"field1": "before", "trace_id": "tid-before"}
+
+        self.wait_completed_checkpoints(kikimr, path)
+
+        # Stop and restart the streaming query
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);")
+        time.sleep(0.5)
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);")
+        self.wait_completed_checkpoints(kikimr, path)
+
+        # Write and read after restart
+        rows = [('{"field1": "after"}', {"trace_id": "tid-after"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
+        assert json.loads(result) == {"field1": "after", "trace_id": "tid-after"}
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+    # --- Issue #40514: WHERE predicate works on metadata ---
+    def test_ua_where_predicate(self, kikimr, entity_name):
+        """WHERE clause can filter on user_attributes values."""
+        inp, out, endpoint = self.get_io_names(
+            kikimr, "ua_where", True, entity_name, partitions_count=1,
+        )
+        query_name = "ua_where"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow())))
+                FROM (
+                    SELECT
+                        field1,
+                        Unwrap(DictLookup(SystemMetadata("user_attributes"), "priority")) AS priority
+                    FROM {inp}
+                    WITH (
+                        FORMAT="json_each_row",
+                        SCHEMA=(field1 String NOT NULL)
+                    )
+                    WHERE Unwrap(DictLookup(SystemMetadata("user_attributes"), "priority")) = "high"
+                );
+            END DO;'''
+
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
+
+        rows = [
+            ('{"field1": "low_msg"}', {"priority": "low"}),
+            ('{"field1": "high_msg"}', {"priority": "high"}),
+            ('{"field1": "medium_msg"}', {"priority": "medium"}),
+        ]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
+        parsed = json.loads(result)
+        assert parsed["field1"] == "high_msg"
+        assert parsed["priority"] == "high"
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+    # --- Issue #40515: Reading user_attributes and system attributes in one query ---
+    def test_ua_with_system_attributes(self, kikimr, entity_name):
+        """user_attributes and other system metadata (e.g. _message_group_id) can be read in one query."""
+        inp, endpoint = self.get_input_name(
+            kikimr, "ua_sys_attr", True, entity_name, partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    field1,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "trace_id")) AS trace_id,
+    SystemMetadata("message_group_id") AS producer_id
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (field1 String NOT NULL)
+)
+LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        rows = [('{"field1": "v1"}', {"trace_id": "tid-sys"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"v1"
+        assert row["trace_id"] == b"tid-sys"
+        # producer_id should be non-empty (set by the writer)
+        assert row["producer_id"] is not None and len(row["producer_id"]) > 0
+
+    # --- Issue #40516: json_each_row + SCHEMA + user_attributes ---
+    def test_ua_json_each_row_with_schema(self, kikimr, entity_name):
+        """user_attributes works with json_each_row format and explicit SCHEMA for payload."""
+        inp, endpoint = self.get_input_name(
+            kikimr, "ua_json_schema", True, entity_name, partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    name,
+    age,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "source")) AS source
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (name String NOT NULL, age Int32 NOT NULL)
+)
+LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        rows = [('{"name": "Alice", "age": 30}', {"source": "test-system"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["name"] == b"Alice"
+        assert row["age"] == 30
+        assert row["source"] == b"test-system"
+
+    # --- Issue #40517: user_attributes in remote topics ---
+    def test_ua_remote_topics(self, kikimr, entity_name):
+        """user_attributes works when reading from a topic via an external data source (remote topic)."""
+        inp, endpoint = self.get_input_name(
+            kikimr, "ua_remote", False, entity_name, partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    field1,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "trace_id")) AS trace_id
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (field1 String NOT NULL)
+)
+LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        rows = [('{"field1": "remote_v1"}', {"trace_id": "tid-remote"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"remote_v1"
+        assert row["trace_id"] == b"tid-remote"
+
+    # --- Issue #40518: NEG Reading SystemMetadata("user_attributes") FROM some_table fails ---
+    def test_ua_neg_from_table_fails(self, kikimr, entity_name):
+        """SystemMetadata("user_attributes") must fail when used on a regular table (not a topic)."""
+        table_name = entity_name("ua_neg_table")
+        kikimr.ydb_client.query(f"""
+            CREATE TABLE `{table_name}` (
+                id Int32 NOT NULL,
+                value String,
+                PRIMARY KEY (id)
+            );
+        """)
+
+        sql = f"""SELECT
+    id,
+    SystemMetadata("user_attributes") AS ua
+FROM `{table_name}`"""
+
+        with pytest.raises(ydb.issues.GenericError):
+            kikimr.ydb_client.query(sql)
+
+        kikimr.ydb_client.query(f"DROP TABLE `{table_name}`;")
+
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_restart_query(self, kikimr, entity_name, local_topics, use_partition_balancing):
+    def test_restart_query(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, use_partition_balancing) -> None:
         inp, out, endpoint = self.get_io_names(kikimr, "test_restart_query", local_topics, entity_name, partitions_count=10)
 
         name = f"test_restart_query_{local_topics!s:.1}{use_partition_balancing!s:.1}"
@@ -491,8 +1034,15 @@ class TestStreamingInYdb(StreamingTestBase):
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_shared_reading_insert_to_topic(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, f"shared_reading_insert_to_topic{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
+    def test_read_topic_shared_reading_insert_to_topic(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"shared_reading_insert_to_topic{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=10,
+            shared=True,
+        )
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -543,7 +1093,7 @@ class TestStreamingInYdb(StreamingTestBase):
         kikimr.ydb_client.query(sql.format(query_name=query_name2))
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_shared_reading_restart_nodes(self, kikimr, entity_name, local_topics):
+    def test_read_topic_shared_reading_restart_nodes(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         inp, out, endpoint = self.get_io_names(kikimr, f"reading_restart_nodes_{local_topics!s:.1}", local_topics, entity_name, partitions_count=1, shared=True)
 
         sql = R'''
@@ -594,8 +1144,15 @@ class TestStreamingInYdb(StreamingTestBase):
         self.wait_completed_checkpoints(kikimr, path)
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_restore_state(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, f"test_read_topic_restore_state_{local_topics!s:.1}", local_topics, entity_name, partitions_count=1, shared=True)
+    def test_read_topic_restore_state(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"test_read_topic_restore_state_{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=1,
+            shared=True,
+        )
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -657,7 +1214,7 @@ class TestStreamingInYdb(StreamingTestBase):
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_json_errors(self, kikimr, entity_name, local_topics):
+    def test_json_errors(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         inp, out, endpoint = self.get_io_names(kikimr, f"test_json_errors_{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
 
         name = f"test_json_errors_{local_topics!s:.1}"
@@ -687,8 +1244,15 @@ class TestStreamingInYdb(StreamingTestBase):
         assert self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint) == expected
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_restart_query_by_rescaling(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, f"test_restart_query_by_rescaling{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
+    def test_restart_query_by_rescaling(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"test_restart_query_by_rescaling{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=10,
+            shared=True,
+        )
 
         name = f"test_restart_query_by_rescaling_{local_topics!s:.1}"
         sql = R'''
@@ -745,8 +1309,14 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_pragma(self, kikimr, entity_name, local_topics, use_partition_balancing):
-        inp, out, endpoint = self.get_io_names(kikimr, f"test_pragma_{local_topics!s:.1}{use_partition_balancing!s:.1}", local_topics, entity_name, partitions_count=10)
+    def test_pragma(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, use_partition_balancing) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"test_pragma_{local_topics!s:.1}{use_partition_balancing!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=10,
+        )
 
         create_read_rule(self.input_topic, self.consumer_name, default_endpoint=endpoint)
 
@@ -773,7 +1343,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_types(self, kikimr, entity_name, local_topics, use_partition_balancing):
+    def test_types(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, use_partition_balancing) -> None:
         inp, out, endpoint = self.get_io_names(kikimr, "test_types", local_topics, entity_name, partitions_count=1)
 
         query_name = f"test_types1_{local_topics!s:.1}{use_partition_balancing!s:.1}"
@@ -810,7 +1380,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_raw_format(self, kikimr, entity_name, local_topics, use_partition_balancing):
+    def test_raw_format(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, use_partition_balancing) -> None:
         inp, out, endpoint = self.get_io_names(kikimr, "test_raw_format", local_topics, entity_name, partitions_count=10)
 
         pragma = 'PRAGMA pq.MaxPartitionReadSkew = "10s";\n' if use_partition_balancing else ""
@@ -879,9 +1449,9 @@ class TestStreamingInYdb(StreamingTestBase):
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
-    @pytest.mark.parametrize("kikimr", [{"checkpointing_period_ms": "20000"}], indirect=["kikimr"])
-    @pytest.mark.parametrize("local_topics", [False, True])
-    def test_deduplication(self, kikimr, entity_name, local_topics):
+    @pytest.mark.parametrize("kikimr", [{"checkpointing_period_ms": "30000"}], indirect=["kikimr"])
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_deduplication(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -946,7 +1516,7 @@ class TestStreamingInYdb(StreamingTestBase):
         ],
         indirect=["kikimr"],
     )
-    def test_check_shared_reading_disabled(self, kikimr, entity_name, request):
+    def test_check_shared_reading_disabled(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], request) -> None:
         cfg = request.node.callspec.params["kikimr"]
         enable_shared_reading_in_streaming_queries = cfg["enable_shared_reading_in_streaming_queries"]
         source_name = entity_name("MyEDS")
@@ -963,7 +1533,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize("kikimr", [{"enable_streaming_queries": False}], indirect=["kikimr"])
-    def test_table_mode(self, kikimr, entity_name, local_topics):
+    def test_table_mode(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         input_name, endpoint = self.get_input_name(kikimr, f"test_table_mode{local_topics!s:.1}", local_topics, entity_name)
 
         message = b'{"time": "lunch time"}'

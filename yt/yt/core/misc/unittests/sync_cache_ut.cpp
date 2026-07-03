@@ -12,7 +12,7 @@ namespace {
 DECLARE_REFCOUNTED_STRUCT(TTestValue)
 
 struct TTestValue
-    : TSyncCacheValueBase<TString, TTestValue>
+    : TSyncCacheValueBase<std::string, TTestValue>
 {
 public:
     using TSyncCacheValueBase::TSyncCacheValueBase;
@@ -23,7 +23,7 @@ public:
 DEFINE_REFCOUNTED_TYPE(TTestValue)
 
 class TTestCache
-    : public TSyncSlruCacheBase<TString, TTestValue>
+    : public TSyncSlruCacheBase<std::string, TTestValue>
 {
 public:
     using TSyncSlruCacheBase::TSyncSlruCacheBase;
@@ -36,7 +36,7 @@ public:
 
 TSharedRef CreateRandomReference(TFastRng64& rnd, i64 size)
 {
-    TString s;
+    std::string s;
     s.resize(size, '*');
 
     for (i64 index = 0; index < size; ++index) {
@@ -79,7 +79,7 @@ TEST(TSyncSlruCacheTest, EntryWeightUpdate)
 
     auto cache = New<TTestCache>(config);
     for (; cache->GetSize() < 990;) {
-        cache->TryInsert(New<TTestValue>(TString(CreateRandomReference(rng,  256).ToStringBuf())));
+        cache->TryInsert(New<TTestValue>(std::string(CreateRandomReference(rng,  256).ToStringBuf())));
     }
 
     EXPECT_GE(990, cache->GetSize());
@@ -97,6 +97,21 @@ TEST(TSyncSlruCacheTest, EntryWeightUpdate)
     }
 
     EXPECT_GE(250, cache->GetSize());
+}
+
+TEST(TSyncSlruCacheTest, HeterogeneousLookup)
+{
+    auto config = New<TSlruCacheConfig>();
+    config->Capacity = 100;
+
+    auto cache = New<TTestCache>(config);
+    cache->TryInsert(New<TTestValue>(std::string("alpha")));
+    cache->TryInsert(New<TTestValue>(std::string("beta")));
+
+    // Lookup via TStringBuf must not materialize a std::string key.
+    EXPECT_TRUE(cache->Find(TStringBuf("alpha")));
+    EXPECT_TRUE(cache->Find(TStringBuf("beta")));
+    EXPECT_FALSE(cache->Find(TStringBuf("gamma")));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

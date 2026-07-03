@@ -183,7 +183,7 @@ private:
     TSessionPtr GetOrCreateSession(const TSendOptions& options)
     {
         auto& bucket = Buckets_[options.MultiplexingBand];
-        auto parallelism = TTcpDispatcher::Get()->GetMultiplexingParallelism(
+        auto parallelism = NBus::NTcp::TDispatcher::Get()->GetMultiplexingParallelism(
             options.MultiplexingBand,
             options.MultiplexingParallelism);
         auto index = parallelism <= 1 ? 0 : bucket.CurrentSessionIndex++ % parallelism;
@@ -302,7 +302,7 @@ private:
         TSession(
             EMultiplexingBand band,
             IMemoryUsageTrackerPtr memoryUsageTracker)
-            : TosLevel_(TTcpDispatcher::Get()->GetTosLevelForBand(band))
+            : TosLevel_(NBus::NTcp::TDispatcher::Get()->GetTosLevelForBand(band))
             , MemoryUsageTracker_(std::move(memoryUsageTracker))
         {
             YT_VERIFY(MemoryUsageTracker_);
@@ -372,18 +372,18 @@ private:
                 // NB: Requests without timeout are rare but may occur.
                 // For these requests we still need to register a timeout cookie with TDelayedExecutor
                 // since this also provides proper cleanup and cancellation when global shutdown happens.
-                if (TDispatcher::Get()->ShouldAlertOnUnsetRequestTimeout() && !options.Timeout.has_value()) {
+                if (NRpc::TDispatcher::Get()->ShouldAlertOnUnsetRequestTimeout() && !options.Timeout.has_value()) {
                     YT_LOG_ALERT("Request without timeout (RequestId: %v, Method: %v.%v, Endpoint: %v)",
                         requestControl->GetRequestId(),
                         requestControl->GetService(),
                         requestControl->GetMethod(),
                         Bus_->GetEndpointDescription());
                 }
-                auto effectiveTimeout = options.Timeout.value_or(TDispatcher::Get()->GetDefaultRequestTimeout());
+                auto effectiveTimeout = options.Timeout.value_or(NRpc::TDispatcher::Get()->GetDefaultRequestTimeout());
                 auto timeoutCookie = TDelayedExecutor::Submit(
                     BIND(&TSession::HandleTimeout, MakeWeak(this), requestControl),
                     effectiveTimeout,
-                    TDispatcher::Get()->GetHeavyInvoker());
+                    NRpc::TDispatcher::Get()->GetHeavyInvoker());
                 requestControl->SetTimeoutCookie(std::move(timeoutCookie));
             }
 
@@ -410,7 +410,7 @@ private:
                             requestControl,
                             options);
                     })
-                    .Via(TDispatcher::Get()->GetHeavyInvoker()));
+                    .Via(NRpc::TDispatcher::Get()->GetHeavyInvoker()));
             } else {
                 DoSendRequest(
                     std::move(request),
@@ -462,7 +462,7 @@ private:
                     TError(NYT::EErrorCode::Canceled, "Request canceled"));
                 --Depth;
             } else {
-                TDispatcher::Get()->GetHeavyInvoker()->Invoke(BIND(
+                NRpc::TDispatcher::Get()->GetHeavyInvoker()->Invoke(BIND(
                     &TSession::NotifyError,
                     MakeStrong(this),
                     requestControl,
@@ -728,7 +728,7 @@ private:
 
             if (options.RequestHeavy || (request->IsAttachmentCompressionEnabled() && request->HasAttachments())) {
                 BIND(&IClientRequest::Serialize, request)
-                    .AsyncVia(TDispatcher::Get()->GetHeavyInvoker())
+                    .AsyncVia(NRpc::TDispatcher::Get()->GetHeavyInvoker())
                     .Run()
                     .Subscribe(BIND(
                         &TSession::OnRequestSerialized,
@@ -843,7 +843,7 @@ private:
                     auto timeoutCookie = TDelayedExecutor::Submit(
                         BIND(&TSession::HandleAcknowledgementTimeout, MakeWeak(this), requestControl),
                         *options.AcknowledgementTimeout,
-                        TDispatcher::Get()->GetHeavyInvoker());
+                        NRpc::TDispatcher::Get()->GetHeavyInvoker());
                     requestControl->SetAcknowledgementTimeoutCookie(std::move(timeoutCookie));
                 }
             }
@@ -1328,7 +1328,7 @@ class TTcpBusChannelFactory
 {
 public:
     TTcpBusChannelFactory(
-        TBusConfigPtr config,
+        NTcp::TBusConfigPtr config,
         IMemoryUsageTrackerPtr memoryUsageTracker)
         : Config_(ConvertToNode(std::move(config)))
         , MemoryUsageTracker_(std::move(memoryUsageTracker))
@@ -1338,11 +1338,11 @@ public:
 
     IChannelPtr CreateChannel(const std::string& address) override
     {
-        auto config = TBusClientConfig::CreateTcp(address);
+        auto config = NTcp::TBusClientConfig::CreateTcp(address);
         config->Load(Config_, /*postprocess*/ true, /*setDefaults*/ false);
-        auto client = CreateBusClient(
+        auto client = NTcp::CreateBusClient(
             std::move(config),
-            GetYTPacketTranscoderFactory(),
+            NTcp::GetYTPacketTranscoderFactory(),
             MemoryUsageTracker_);
         return CreateBusChannel(
             std::move(client),
@@ -1355,7 +1355,7 @@ private:
 };
 
 IChannelFactoryPtr CreateTcpBusChannelFactory(
-    TBusConfigPtr config,
+    NTcp::TBusConfigPtr config,
     IMemoryUsageTrackerPtr memoryUsageTracker)
 {
     return New<TTcpBusChannelFactory>(
@@ -1370,7 +1370,7 @@ class TUdsBusChannelFactory
 {
 public:
     TUdsBusChannelFactory(
-        TBusConfigPtr config,
+        NTcp::TBusConfigPtr config,
         IMemoryUsageTrackerPtr memoryUsageTracker)
         : Config_(ConvertToNode(std::move(config)))
         , MemoryUsageTracker_(std::move(memoryUsageTracker))
@@ -1380,11 +1380,11 @@ public:
 
     IChannelPtr CreateChannel(const std::string& address) override
     {
-        auto config = TBusClientConfig::CreateUds(address);
+        auto config = NTcp::TBusClientConfig::CreateUds(address);
         config->Load(Config_, /*postprocess*/ true, /*setDefaults*/ false);
-        auto client = CreateBusClient(
+        auto client = NTcp::CreateBusClient(
             std::move(config),
-            GetYTPacketTranscoderFactory(),
+            NTcp::GetYTPacketTranscoderFactory(),
             MemoryUsageTracker_);
         return CreateBusChannel(
             std::move(client),
@@ -1397,7 +1397,7 @@ private:
 };
 
 IChannelFactoryPtr CreateUdsBusChannelFactory(
-    TBusConfigPtr config,
+    NTcp::TBusConfigPtr config,
     IMemoryUsageTrackerPtr memoryUsageTracker)
 {
     return New<TUdsBusChannelFactory>(

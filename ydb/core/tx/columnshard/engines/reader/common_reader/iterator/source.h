@@ -115,6 +115,7 @@ private:
     virtual ui64 DoGetEntityRecordsCount() const override;
 
     std::optional<bool> IsSourceInMemoryFlag;
+    bool InFlightReleasedFlag = false;
     TAtomic SourceFinishedSafeFlag = 0;
     TAtomic StageResultBuiltFlag = 0;
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) = 0;
@@ -185,28 +186,34 @@ public:
                                 : GetStageResult().GetBatch()->num_rows();
     }
 
+    NO_SANITIZE_THREAD
     void AddExecutionDuration(const TDuration d) {
         TotalExecutionDuration += d;
     }
 
+    NO_SANITIZE_THREAD
     void AddBytesRead(const ui64 bytes) {
         TotalBytesRead += bytes;
     }
 
     void OnStartProcessing();
 
+    NO_SANITIZE_THREAD
     TDuration GetTotalDuration() const {
         return SourceCreatedTimestamp ? (TMonotonic::Now() - SourceCreatedTimestamp) : TDuration::Zero();
     }
 
+    NO_SANITIZE_THREAD
     TDuration GetTotalExecutionDuration() const {
         return TotalExecutionDuration;
     }
 
+    NO_SANITIZE_THREAD
     ui64 GetTotalBytesRead() const {
         return TotalBytesRead;
     }
 
+    NO_SANITIZE_THREAD
     ui64 ExtractTotalBytesRead() {
         const ui64 result = TotalBytesRead;
         TotalBytesRead = 0;
@@ -351,6 +358,15 @@ public:
 
     bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
         return DoStartFetchingColumns(sourcePtr, step, columns);
+    }
+
+    bool IsInFlightReleased() const {
+        return InFlightReleasedFlag;
+    }
+
+    void SetInFlightReleased() {
+        AFL_VERIFY(!InFlightReleasedFlag);
+        InFlightReleasedFlag = true;
     }
 
     void ResetSourceFinishedFlag();

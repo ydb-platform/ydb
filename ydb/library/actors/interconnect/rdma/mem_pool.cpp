@@ -670,26 +670,26 @@ namespace NInterconnect::NRdma {
                 SlotsInBatch = GetSlotsInBatch(slotSize);
             }
             TMemRegionPtr TryGetSlot() noexcept {
-                if (Slots.empty()) {
-                    return nullptr;
-                }
-                auto it = Slots.begin();
-                TIntrusivePtr<TMemRegion> slot = *it;
-                const TChunk* const curChunkPtr = slot->Chunk.Get();
-                const ui64 curGeneration = slot->Generation;
-                if (Y_LIKELY(slot->Chunk->TryAcquire(curGeneration))) {
-                    Slots.erase(it);
-                    return slot;
-                } else {
-                    // Search for slots with same chunk and same (important!) generation to remove it from local cache
-                    // The generation check is mandatory here because the cache can contain slots with same parent chunk but with different generation
-                    // we need to delete only slots with generation we check in TryAcquire
-                    while ((it != Slots.end()) && ((*it)->Chunk.Get() == curChunkPtr) && ((*it)->Generation == curGeneration)) {
-                        (*it)->Chunk.Reset();
-                        Slots.erase(it++);
+                while (!Slots.empty()) {
+                    auto it = Slots.begin();
+                    TIntrusivePtr<TMemRegion> slot = *it;
+                    const TChunk* const curChunkPtr = slot->Chunk.Get();
+                    const ui64 curGeneration = slot->Generation;
+                    if (Y_LIKELY(slot->Chunk->TryAcquire(curGeneration))) {
+                        Slots.erase(it);
+                        return slot;
+                    } else {
+                        // Search for slots with same chunk and same (important!) generation to remove it from local cache
+                        // The generation check is mandatory here because the cache can contain slots with same parent chunk but with different generation
+                        // we need to delete only slots with generation we check in TryAcquire
+                        while ((it != Slots.end()) && ((*it)->Chunk.Get() == curChunkPtr) && ((*it)->Generation == curGeneration)) {
+                            TIntrusivePtr<TMemRegion> stale = *it;
+                            it = Slots.erase(it);
+                            stale->Chunk.Reset();
+                        }
                     }
-                    return TryGetSlot();
                 }
+                return nullptr;
             }
             void PutSlot(TIntrusivePtr<TMemRegion> slot) noexcept {
                 Slots.insert(slot);
@@ -865,7 +865,8 @@ namespace NInterconnect::NRdma {
             }
 
             void Free(TMemRegion&& mr, TSlotMemPool& pool) noexcept {
-                ui32 chainIndex = GetChainIndex(mr.GetSize());
+                ui32 chainIndex = GetChainIndex(mr.OrigSize);
+                Y_ABORT_UNLESS(chainIndex < ChainsNum, "Invalid chain index: %u", chainIndex);
                 if (Y_UNLIKELY(Stopped)) {
                     // current thread is stopped, return mr to global pool
                     pool.Chains[chainIndex].PutSlotUnderLock(MakeIntrusive<TMemRegion>(std::move(mr)));
@@ -875,7 +876,6 @@ namespace NInterconnect::NRdma {
                 mr.Chunk->DoRelease();
 
                 auto& chain = Chains[chainIndex];
-                Y_ABORT_UNLESS(chainIndex < ChainsNum, "Invalid chain index: %u", chainIndex);
                 chain.PutSlot(MakeIntrusive<TMemRegion>(std::move(mr)));
 
                 if (chain.Slots.size() >= 2 * chain.SlotsInBatch) { // TODO: replace constant 2

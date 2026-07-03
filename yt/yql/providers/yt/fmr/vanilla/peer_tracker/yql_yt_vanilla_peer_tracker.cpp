@@ -292,6 +292,7 @@ namespace NYql::NFmr {
     TString TVanillaExternalPeerTracker::GetPeerAddress(ui64 index) const {
         TGuard guard(PeersMutex_);
         WaitForJobCount();
+        WaitForPeers();
         Y_ENSURE(index < PeerIps_.size(), "Peer index " << index << " is out of range [0, " << PeerIps_.size() << ")");
         return PeerIps_[index];
     }
@@ -299,7 +300,19 @@ namespace NYql::NFmr {
     TVector<TString> TVanillaExternalPeerTracker::GetPeerAddresses() const {
         TGuard guard(PeersMutex_);
         WaitForJobCount();
+        WaitForPeers();
         return PeerIps_;
+    }
+
+    void TVanillaExternalPeerTracker::WaitForPeers() const {
+        if (!Settings_.WaitForPeers) {
+            return;
+        }
+
+        Y_ENSURE(Running_, "TVanillaExternalPeerTracker is not running");
+        JobListReady_.WaitI(PeersMutex_, [this] { return LastError_ || PeersLoaded_ || !Running_; });
+        Y_ENSURE(!LastError_, "TVanillaExternalPeerTracker fatal error: " + *LastError_);
+        Y_ENSURE(Running_, "TVanillaExternalPeerTracker stopped before job list was obtained");
     }
 
     ui64 TVanillaExternalPeerTracker::FetchJobCount(const NYT::IClientPtr& client) const {
@@ -343,9 +356,14 @@ namespace NYql::NFmr {
             Running_ = false;
         }
         JobCountReady_.BroadCast();
+        JobListReady_.BroadCast();
         if (RefreshThread_) {
             RefreshThread_->Join();
             RefreshThread_.Reset();
+        }
+        {
+            TGuard guard(PeersMutex_);
+            PeersLoaded_ = false;
         }
     }
 
@@ -382,6 +400,7 @@ namespace NYql::NFmr {
                     if (Fails_ > Settings_.MaxFails) {
                         LastError_ = CurrentExceptionMessage();
                         JobCountReady_.BroadCast();
+                        JobListReady_.BroadCast();
                         return;
                     }
                 }
@@ -434,8 +453,10 @@ namespace NYql::NFmr {
 
             TGuard guard(PeersMutex_);
             PeerIps_ = std::move(newPeerIps);
+            PeersLoaded_ = true;
             Fails_ = 0; // reset counter
             LastError_.Clear();
+            JobListReady_.BroadCast();
             return;
         } catch (...) {
             YQL_CLOG(ERROR, FastMapReduce) << "external peer tracker failed to refresh: "
@@ -445,6 +466,7 @@ namespace NYql::NFmr {
             ++Fails_;
             if (Fails_ > Settings_.MaxFails) {
                 LastError_ = CurrentExceptionMessage();
+                JobListReady_.BroadCast();
                 return;
             }
         }

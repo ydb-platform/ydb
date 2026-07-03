@@ -1,0 +1,168 @@
+#include "schemeshard_impl.h"
+#include "schemeshard_set_column_constraint.h"
+#include <util/string/split.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
+
+namespace NKikimr {
+namespace NSchemeShard {
+
+TString SerializeSetColumnConstraintColumnNames(const std::vector<TString>& columns) {
+    NKikimrSetColumnConstraint::TSetColumnConstraintSettings data;
+    for (const auto& column : columns) {
+        data.AddNotNullColumns(column);
+    }
+
+    return data.SerializeAsString();
+}
+
+std::vector<TString> DeserializeSetColumnConstraintColumnNames(const TString& serialized) {
+    std::vector<TString> result;
+
+    NKikimrSetColumnConstraint::TSetColumnConstraintSettings data;
+    if (data.ParseFromString(serialized)) {
+        for (const auto& column : data.GetNotNullColumns()) {
+            result.push_back(column);
+        }
+    }
+
+    return result;
+}
+
+void TSchemeShard::PersistCreateSetColumnConstraint(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    TString serializedColumnNames = SerializeSetColumnConstraintColumnNames(operationInfo.SetNotNullColumns);
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::TableOwnerId>(operationInfo.TablePathId.OwnerId),
+        NIceDb::TUpdate<Schema::SetColumnConstraint::TableLocalId>(operationInfo.TablePathId.LocalPathId),
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SerializedColumnNames>(serializedColumnNames),
+        NIceDb::TUpdate<Schema::SetColumnConstraint::ValidationFailed>(operationInfo.ValidationFailed),
+        NIceDb::TUpdate<Schema::SetColumnConstraint::OperationState>(ui32(operationInfo.OperationState))
+    );
+}
+
+void TSchemeShard::PersistSetColumnConstraintState(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::OperationState>(ui32(operationInfo.OperationState))
+    );
+}
+
+void TSchemeShard::PersistSetColumnConstraintResetSubState(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TNull<Schema::SetColumnConstraint::SubStateTxId>(),
+        NIceDb::TNull<Schema::SetColumnConstraint::SubStateTxStatus>(),
+        NIceDb::TNull<Schema::SetColumnConstraint::SubStateTxDone>()
+    );
+}
+
+void TSchemeShard::PersistSetColumnConstraintLockTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxId>(operationInfo.LockTxId),
+        NIceDb::TUpdate<Schema::SetColumnConstraint::LockTxId>(operationInfo.LockTxId)
+    );
+}
+
+void TSchemeShard::PersistSetColumnConstraintLockTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxStatus>(operationInfo.LockTxStatus)
+    );
+}
+
+void TSchemeShard::PersistSetColumnConstraintLockTxDone(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxDone>(operationInfo.LockTxDone)
+    );
+}
+
+void TSchemeShard::PersistSetColumnConstraintLockNullWritesTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxId>(operationInfo.LockNullWritesTxId)
+    );
+}
+
+void TSchemeShard::PersistSetColumnConstraintLockNullWritesTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxStatus>(operationInfo.LockNullWritesTxStatus)
+    );
+}
+
+void TSchemeShard::PersistSetColumnConstraintLockNullWritesTxDone(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxDone>(operationInfo.LockNullWritesTxDone)
+    );
+}
+
+void TSchemeShard::PersistSetColumnConstraintUnlockNullWritesTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxId>(operationInfo.UnlockNullWritesTxId)
+    );
+}
+
+void TSchemeShard::PersistSetColumnConstraintUnlockNullWritesTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxStatus>(operationInfo.UnlockNullWritesTxStatus)
+    );
+}
+
+void TSchemeShard::PersistSetColumnConstraintUnlockNullWritesTxDone(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxDone>(operationInfo.UnlockNullWritesTxDone)
+    );
+}
+
+void TSchemeShard::PersistSetColumnConstraintUnlockTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxId>(operationInfo.UnlockTxId)
+    );
+}
+
+void TSchemeShard::PersistSetColumnConstraintUnlockTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxStatus>(operationInfo.UnlockTxStatus)
+    );
+}
+
+void TSchemeShard::PersistSetColumnConstraintUnlockTxDone(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxDone>(operationInfo.UnlockTxDone)
+    );
+}
+
+void TSchemeShard::PersistSetColumnConstraintValidationFailedValue(
+    NIceDb::TNiceDb& db,
+    const TSetColumnConstraintOperationInfo& operationInfo)
+{
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::ValidationFailed>(operationInfo.ValidationFailed)
+    );
+}
+
+void TSchemeShard::PersistSetColumnConstraintShardDone(
+    NIceDb::TNiceDb& db,
+    TIndexBuildId operationId,
+    TShardIdx shardIdx,
+    const TSetColumnConstraintOperationInfo& operationInfo)
+{
+    auto status = operationInfo.ValidationShards.at(shardIdx);
+    db.Table<Schema::SetColumnConstraintShardStatus>()
+        .Key(operationId, shardIdx.GetOwnerId(), shardIdx.GetLocalId())
+        .Update(
+            NIceDb::TUpdate<Schema::SetColumnConstraintShardStatus::Status>(status.ValidateStatus),
+            NIceDb::TUpdate<Schema::SetColumnConstraintShardStatus::Issue>(status.DebugMessage)
+        );
+}
+
+void TSchemeShard::Handle(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxCreateSetColumnConstraint(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvSetColumnConstraint::TEvGetRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxGetSetColumnConstraint(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    TIndexBuildId operationId = TIndexBuildId(record.GetId());
+    Execute(CreateTxReplyValidateRowCondition(operationId, ev), ctx);
+}
+
+} // NSchemeShard
+} // NKikimr

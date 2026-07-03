@@ -42,7 +42,7 @@ TRequestQueue* TPerKeyRequestQueueProvider<T>::DoGetQueue(const T& key)
         YT_VERIFY(key == std::any_cast<T>(queue->GetTag()));
 
         // It doesn't matter if configs are outdated since we will reconfigure them
-        // again in the automaton thread.
+        // again in ConfigureQueue.
         auto configs = DefaultConfigs_.Load();
 
         auto [weightThrottlingEnabled, bytesThrottlingEnabled] =

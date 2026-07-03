@@ -42,26 +42,6 @@ namespace NKikimr::NGRpcProxy::V1 {
     using namespace NKikimr::NPQ;
     using namespace NKikimr::NPQ::NSchema;
 
-    TYdbPqCodes FillProposeRequestImpl(
-        const TString& name,
-        const Ydb::Topic::CreateTopicRequest& request,
-        NKikimrSchemeOp::TModifyScheme& modifyScheme,
-        TAppData* appData,
-        TString& error,
-        const TString& path,
-        const TString& database = TString(),
-        const TString& localDc = TString()
-    );
-
-    Ydb::StatusIds::StatusCode FillProposeRequestImpl(
-        const Ydb::Topic::AlterTopicRequest& request,
-        NKikimrSchemeOp::TPersQueueGroupDescription& pqDescr,
-        TAppData* appData,
-        TString& error,
-        bool isCdcStream
-    );
-
-
     TClientServiceTypes GetSupportedClientServiceTypes(const NKikimrPQ::TPQConfig& pqConfig);
 
     // Returns true if have duplicated read rules
@@ -132,6 +112,11 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return RespondWithCode(Ydb::StatusIds::UNAUTHORIZED);
             }
 
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "SendDescribeProposeRequest "
+                << " database: " << Database
+                << " path: " << GetTopicPath()
+                << " showPrivate: " << showPrivate);
+
             navigateRequest->DatabaseName = Database;
             navigateRequest->ResultSet.emplace_back(NSchemeCache::TSchemeCacheNavigate::TEntry{
                 .Path = NKikimr::SplitPath(GetTopicPath()),
@@ -189,11 +174,12 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return static_cast<TDerived*>(this)->HandleCacheNavigateResponse(ev);
             }
             break;
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown: {
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied: {
                 AddIssue(
                     FillIssue(
-                        TStringBuilder() << "path '" << path << "' does not exist or you " <<
-                        "do not have access rights",
+                        TStringBuilder() << "path '" << path <<
+                        "' does not exist or you do not have access rights",
                         Ydb::PersQueue::ErrorCode::ACCESS_DENIED
                     )
                 );
@@ -219,6 +205,16 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return RespondWithCode(Ydb::StatusIds::SCHEME_ERROR);
             }
             break;
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath: {
+                AddIssue(
+                    FillIssue(
+                        TStringBuilder() << "path '" << path << "' is not a path",
+                        Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
+                    )
+                );
+                return RespondWithCode(Ydb::StatusIds::SCHEME_ERROR);
+            }
+            break;
             case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown: {
                 AddIssue(
                     FillIssue(
@@ -229,6 +225,16 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return RespondWithCode(Ydb::StatusIds::SCHEME_ERROR);
             }
             break;
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError: {
+                AddIssue(
+                    FillIssue(
+                        TStringBuilder() << "could not resolve path '" << path << "'",
+                        Ydb::PersQueue::ErrorCode::ERROR
+                    )
+                );
+                return RespondWithCode(Ydb::StatusIds::UNAVAILABLE);
+            }
 
             default:
                 return RespondWithCode(Ydb::StatusIds::GENERIC_ERROR);

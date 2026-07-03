@@ -35,7 +35,7 @@ jobs:
       matrix_build_types: ${{ steps.resolve.outputs.matrix_build_types }}
     steps:
       - name: Checkout config
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
 
@@ -81,7 +81,7 @@ jobs:
           echo "BASE_BRANCH=${{ needs.resolve-build-types.outputs.base_branch }}" >> "$GITHUB_ENV"
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
             ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
 
@@ -103,6 +103,7 @@ jobs:
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
             ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+            ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
 
       - name: Create issues for muted tests
         id: create_issues
@@ -118,7 +119,7 @@ jobs:
         run: python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number || github.event.inputs.pr_number  }} --body=${{ steps.create_issues.outputs.created_issues_file }}
 
       - name: Comment PR
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ env.GH_TOKEN }}
           script: |
@@ -161,7 +162,7 @@ jobs:
           echo "BASE_BRANCH=${{ needs.resolve-build-types.outputs.base_branch }}" >> "$GITHUB_ENV"
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
 
@@ -174,6 +175,7 @@ jobs:
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
 
       - name: Export GitHub issues to YDB
         env:

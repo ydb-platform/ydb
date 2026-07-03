@@ -86,6 +86,7 @@ public:
     TSharedRef ConvertTo(const TSharedRef& message, const NYson::TProtobufMessageType* messageType, const TYsonString& /*formatOptionsYson*/) override
     {
         google::protobuf::io::ArrayInputStream stream(message.Begin(), message.Size());
+        // TODO(babenko): migrate to std::string
         TString ysonBuffer;
         {
             TStringOutput output(ysonBuffer);
@@ -125,6 +126,7 @@ public:
     TSharedRef ConvertTo(const TSharedRef& message, const NYson::TProtobufMessageType* messageType, const TYsonString& formatOptionsYson) override
     {
         google::protobuf::io::ArrayInputStream stream(message.Begin(), message.Size());
+        // TODO(babenko): migrate to std::string
         TString ysonBuffer;
         {
             TStringOutput output(ysonBuffer);

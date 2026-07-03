@@ -2,7 +2,7 @@
 
 #include "dq_columns_resolve.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_watermarks.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
@@ -703,11 +703,11 @@ private:
 
         YQL_ENSURE(width == chunk.size() + 1);
         for (ui32 i = 0; i < chunk.size(); ++i) {
-            result[i] = Factory_.CreateArrowBlock(std::move(chunk[i]));
+            result[i] = Factory_.CreateArrowBlock(std::move(chunk[i]), NYql::DefaultDatumValidationMode);
         }
 
         YQL_ENSURE(blockLen > 0);
-        result[chunk.size()] = Factory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
+        result[chunk.size()] = Factory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)), NYql::DefaultDatumValidationMode);
         if (Stats_) {
             Stats_.Add(result, width);
         }

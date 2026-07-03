@@ -258,6 +258,13 @@ public:
         return NProfiling::GetCpuInstant() < WarmupDeadline_;
     }
 
+    bool IsPersistent() const override
+    {
+        YT_ASSERT_THREAD_AFFINITY_ANY();
+
+        return false;
+    }
+
 private:
     const TResponseKeeperConfigPtr Config_;
     const IInvokerPtr Invoker_;

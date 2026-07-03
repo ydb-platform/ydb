@@ -25,18 +25,11 @@ from .common import (
     STRING_MARKER, INT64_MARKER, DOUBLE_MARKER,
     FALSE_MARKER, TRUE_MARKER, UINT64_MARKER)
 
-try:
-    from yt.packages.six.moves import xrange
-    from yt.packages.six import int2byte, iterbytes
-except ImportError:
-    from six.moves import xrange
-    from six import int2byte, iterbytes
-
 import struct
 
-_SEEMS_INT64 = int2byte(0)
-_SEEMS_UINT64 = int2byte(1)
-_SEEMS_DOUBLE = int2byte(2)
+_SEEMS_INT64 = b'\x00'
+_SEEMS_UINT64 = b'\x01'
+_SEEMS_DOUBLE = b'\x02'
 
 PERCENT_LITERALS = [b"true", b"false", b"nan", b"inf", b"-inf", b"+inf"]
 PERCENT_LITERAL_LENGTH = dict((s[0:1], len(s)) for s in PERCENT_LITERALS)
@@ -44,8 +37,8 @@ assert len(PERCENT_LITERALS) == len(PERCENT_LITERAL_LENGTH)
 
 
 def _get_numeric_type(string):
-    for code in iterbytes(string):
-        ch = int2byte(code)
+    for code in string:
+        ch = bytes([code])
         if ch == b"E" or ch == b"e" or ch == b".":
             return _SEEMS_DOUBLE
         elif ch == b"u":
@@ -176,7 +169,7 @@ class YsonLexer(object):
             return string
 
         result = []
-        for i in xrange(char_count):
+        for i in range(char_count):
             ch = self._read_char(True)
             if not ch:
                 raise_yson_error(

@@ -9,10 +9,14 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const auto DefaultTraceSamplePeriod = TDuration::MicroSeconds(1000);
-const auto DefaultPBufferReplyTimeout = TDuration::MicroSeconds(50000);
-const auto DefaultHedgingDelay = TDuration::MicroSeconds(1000);
-const auto DefaultWriteRequestTimeout = TDuration::MilliSeconds(10000);
+const auto DefaultTraceSamplePeriod = TDuration::MilliSeconds(1);
+const auto DefaultReadHedgingDelay = TDuration::MilliSeconds(1);
+const auto DefaultReadRequestTimeout = TDuration::Seconds(10);
+const auto DefaultWriteHedgingDelay = TDuration::MilliSeconds(1);
+const auto DefaultWriteRequestTimeout = TDuration::Seconds(10);
+const auto DefaultIndirectWriteReplyTimeout = TDuration::MilliSeconds(50);
+const auto DefaultFlushRequestTimeout = TDuration::Seconds(10);
+const auto DefaultEraseRequestTimeout = TDuration::Seconds(10);
 
 }   // namespace
 
@@ -33,11 +37,14 @@ TStorageConfig::TStorageConfig(
     xxx(PersistentBufferDDiskPoolName,      TString,  "ddp1"                  )\
     xxx(WriteMode,                                                             \
         NProto::EWriteMode,                                                    \
-        NProto::DirectPBuffersFilling)                                         \
+        NProto::DirectWrite)                                                   \
     xxx(VChunkSize,                         ui64,     128_MB                  )\
     xxx(ThreadPoolSize,                     ui32,     2                       )\
     xxx(OracleConfig,                       NProto::TOracleConfig, {}         )\
     xxx(DirtyMapDebugPrintInterval,         TDuration, TDuration::Seconds(0)  )\
+    xxx(VhostThreadsCount,                  ui32,     4                       )\
+    xxx(VhostQueuesCount,                   ui32,     4                       )\
+    xxx(PBufferCleanupLsnStep,              ui64,     3000                    )\
 
 // BLOCKSTORE_STORAGE_CONFIG_RO
 // clang-format on
@@ -120,10 +127,10 @@ BLOCKSTORE_STORAGE_CONFIG_RO(BLOCKSTORE_CONFIG_GETTER)
 EWriteMode GetWriteModeFromProto(NProto::EWriteMode writeMode)
 {
     switch (writeMode) {
-        case NProto::EWriteMode::PBufferReplication:
-            return EWriteMode::PBufferReplication;
-        case NProto::EWriteMode::DirectPBuffersFilling:
-            return EWriteMode::DirectPBuffersFilling;
+        case NProto::EWriteMode::IndirectWrite:
+            return EWriteMode::IndirectWrite;
+        case NProto::EWriteMode::DirectWrite:
+            return EWriteMode::DirectWrite;
         default:
             break;
     }
@@ -133,10 +140,10 @@ EWriteMode GetWriteModeFromProto(NProto::EWriteMode writeMode)
 NProto::EWriteMode GetProtoWriteMode(EWriteMode writeMode)
 {
     switch (writeMode) {
-        case EWriteMode::PBufferReplication:
-            return NProto::EWriteMode::PBufferReplication;
-        case EWriteMode::DirectPBuffersFilling:
-            return NProto::EWriteMode::DirectPBuffersFilling;
+        case EWriteMode::IndirectWrite:
+            return NProto::EWriteMode::IndirectWrite;
+        case EWriteMode::DirectWrite:
+            return NProto::EWriteMode::DirectWrite;
     }
 }
 
@@ -150,12 +157,28 @@ TDuration TStorageConfig::GetTraceSamplePeriod() const
                : DefaultTraceSamplePeriod;
 }
 
+TDuration TStorageConfig::GetReadHedgingDelay() const
+{
+    return StorageServiceConfig.HasReadHedgingDelay()
+               ? TDuration::MicroSeconds(
+                     StorageServiceConfig.GetReadHedgingDelay())
+               : DefaultReadHedgingDelay;
+}
+
+TDuration TStorageConfig::GetReadRequestTimeout() const
+{
+    return StorageServiceConfig.HasReadRequestTimeout()
+               ? TDuration::MilliSeconds(
+                     StorageServiceConfig.GetReadRequestTimeout())
+               : DefaultReadRequestTimeout;
+}
+
 TDuration TStorageConfig::GetWriteHedgingDelay() const
 {
     return StorageServiceConfig.HasWriteHedgingDelay()
                ? TDuration::MicroSeconds(
                      StorageServiceConfig.GetWriteHedgingDelay())
-               : DefaultHedgingDelay;
+               : DefaultWriteHedgingDelay;
 }
 
 TDuration TStorageConfig::GetWriteRequestTimeout() const
@@ -166,12 +189,28 @@ TDuration TStorageConfig::GetWriteRequestTimeout() const
                : DefaultWriteRequestTimeout;
 }
 
-TDuration TStorageConfig::GetPBufferReplyTimeout() const
+TDuration TStorageConfig::GetIndirectWriteReplyTimeout() const
 {
     return StorageServiceConfig.HasPBufferReplyTimeoutMicroseconds()
                ? TDuration::MicroSeconds(
                      StorageServiceConfig.GetPBufferReplyTimeoutMicroseconds())
-               : DefaultPBufferReplyTimeout;
+               : DefaultIndirectWriteReplyTimeout;
+}
+
+TDuration TStorageConfig::GetFlushRequestTimeout() const
+{
+    return StorageServiceConfig.HasFlushRequestTimeout()
+               ? TDuration::MilliSeconds(
+                     StorageServiceConfig.GetFlushRequestTimeout())
+               : DefaultFlushRequestTimeout;
+}
+
+TDuration TStorageConfig::GetEraseRequestTimeout() const
+{
+    return StorageServiceConfig.HasEraseRequestTimeout()
+               ? TDuration::MilliSeconds(
+                     StorageServiceConfig.GetEraseRequestTimeout())
+               : DefaultEraseRequestTimeout;
 }
 
 }   // namespace NYdb::NBS::NBlockStore

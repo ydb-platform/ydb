@@ -161,6 +161,7 @@ namespace NYql::NFmr {
         TMaybe<TString> Token;
         TDuration ListJobsInterval = TDuration::Seconds(1);
         ui64 MaxFails = 3;
+        bool WaitForPeers = false;
     };
 
     // Tracks peers of a vanilla operation from the outside (not from inside a job).
@@ -188,6 +189,7 @@ namespace NYql::NFmr {
  private:
         // Must be called with PeersMutex_ held.
         void WaitForJobCount() const;
+        void WaitForPeers() const;
         ui64 FetchJobCount(const NYT::IClientPtr& client) const;
         void RefreshLoop();
         void Refresh(const NYT::IClientPtr& client);
@@ -197,7 +199,9 @@ namespace NYql::NFmr {
         bool Running_ = false;    // protected by PeersMutex_
         ui64 JobCount_ = 0;       // protected by PeersMutex_, written once by RefreshLoop
         mutable TCondVar JobCountReady_;  // signalled when JobCount_ is set or Running_ becomes false
+        mutable TCondVar JobListReady_;  // signalled when at least one ListJobs done or Running_ becomes false
         TVector<TString> PeerIps_; // protected by PeersMutex_
+        bool PeersLoaded_ = false; // protected by PeersMutex_
         ui64 Fails_ = 0; // protected by PeersMutex_
         TMaybe<TString> LastError_; // protected by PeersMutex_
         std::atomic<bool> Shutdown_{false};

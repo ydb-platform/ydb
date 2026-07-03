@@ -29,6 +29,7 @@
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet/tablet_metrics.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/core/util/queue_oneone_inplace.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
@@ -504,6 +505,7 @@ class TExecutor
     ui64 TransactionPagesMemory = 0;
 
     bool BackupSnapshotInProgress = false;
+    std::optional<TBackoff> BackupRetry;
 
     TActorContext SelfCtx() const;
     TActorContext OwnerCtx() const;
@@ -511,6 +513,8 @@ class TExecutor
     TControlWrapper LogFlushDelayOverrideUsec;
     TControlWrapper MaxCommitRedoMB;
     TControlWrapper MaxTxInFly;
+
+    THashSet<TActorId> MoveDataSubscribers;
 
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;
@@ -560,7 +564,7 @@ class TExecutor
     void DropPageCollection(const TLogoBlobID& pageCollectionId);
     void StartNewBackup();
     void FailBackup(const TString& error);
-    void ScheduleRetryBackup() const;
+    void ScheduleRetryBackup();
     TStringBuilder BackupLogPrefix() const;
 
     void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
@@ -705,8 +709,10 @@ public:
     ui64 CompactMemTable(ui32 tableId) override;
     ui64 CompactTable(ui32 tableId) override;
     bool CompactTables() override;
+    void MoveData(TEvTablet::TEvMoveData::TPtr &ev) override;
 
-    void StartVacuum(ui64 vacuumGeneration) override;
+    void StartVacuum(TVacuumTag tag) override;
+    void VacuumComplete(TVacuumGeneration generation, const TActorContext& ctx) override;
 
     void Handle(NMemory::TEvMemTableRegistered::TPtr &ev);
     void Handle(NMemory::TEvMemTableCompact::TPtr &ev);

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Sequence
 from subprocess import PIPE, Popen
-from typing import Any, Sequence
+from typing import Any
 
 
 def get_output_error_code(cmd: str | Sequence[str]) -> tuple[str, str, Any]:

@@ -38,14 +38,6 @@ struct TDescribeTopicActorSettings {
     bool RequireStats = false;
     bool RequireLocation = false;
 
-    TDescribeTopicActorSettings()
-        : Mode(EMode::DescribeTopic)
-    {}
-
-    TDescribeTopicActorSettings(const TString& consumer)
-        : Mode(EMode::DescribeConsumer)
-        , Consumer(consumer)
-    {}
     TDescribeTopicActorSettings(EMode mode, bool requireStats, bool requireLocation)
         : Mode(mode)
         , RequireStats(requireStats)
@@ -177,72 +169,6 @@ public:
 
 private:
     Ydb::Topic::DescribeTopicResult Result;
-};
-
-class TDescribeConsumerActor : public TPQGrpcSchemaBase<TDescribeConsumerActor, NKikimr::NGRpcService::TEvDescribeConsumerRequest>
-                          , public TCdcStreamCompatible
-                          , public TDescribeTopicActorImpl
-{
-using TBase = TPQGrpcSchemaBase<TDescribeConsumerActor, NKikimr::NGRpcService::TEvDescribeConsumerRequest>;
-using TTabletInfo = TDescribeTopicActorImpl::TTabletInfo;
-
-public:
-     TDescribeConsumerActor(NKikimr::NGRpcService::TEvDescribeConsumerRequest* request);
-     TDescribeConsumerActor(NKikimr::NGRpcService::IRequestOpCtx * ctx);
-
-    ~TDescribeConsumerActor() = default;
-
-    void Bootstrap(const NActors::TActorContext& ctx);
-
-    void StateWork(TAutoPtr<IEventHandle>& ev);
-
-    void RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext& ctx) override;
-    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) override;
-    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) override;
-    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) override;
-    bool ApplyResponse(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) override;
-    virtual void Reply(const TActorContext& ctx) override;
-
-    void PassAway() override;
-
-private:
-    Ydb::Topic::DescribeConsumerResult Result;
-};
-
-class TDescribePartitionActor : public TPQGrpcSchemaBase<TDescribePartitionActor, NKikimr::NGRpcService::TEvDescribePartitionRequest>
-                              , public TDescribeTopicActorImpl
-{
-using TBase = TPQGrpcSchemaBase<TDescribePartitionActor, NKikimr::NGRpcService::TEvDescribePartitionRequest>;
-using TTabletInfo = TDescribeTopicActorImpl::TTabletInfo;
-
-public:
-     TDescribePartitionActor(NKikimr::NGRpcService::TEvDescribePartitionRequest* request);
-     TDescribePartitionActor(NKikimr::NGRpcService::IRequestOpCtx * ctx);
-
-    ~TDescribePartitionActor() = default;
-
-    void Bootstrap(const NActors::TActorContext& ctx);
-
-    void StateWork(TAutoPtr<IEventHandle>& ev);
-
-    void RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode,
-                    const Ydb::StatusIds::StatusCode status, const TActorContext& ctx) override;
-    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) override;
-    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) override;
-    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) override;
-    bool ApplyResponse(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) override;
-
-    virtual void Reply(const TActorContext& ctx) override;
-
-    void PassAway() override;
-
-private:
-
-    bool NeedToRequestWithDescribeSchema(TAutoPtr<IEventHandle>& ev);
-
-private:
-    TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
-    Ydb::Topic::DescribePartitionResult Result;
 };
 
 class TPartitionsLocationActor : public TPQInternalSchemaActor<TPartitionsLocationActor,

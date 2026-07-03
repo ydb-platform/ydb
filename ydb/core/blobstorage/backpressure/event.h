@@ -92,8 +92,11 @@ public:
         Discard();
     }
 
-    bool Relevant() const {
-        return !Tracker || Tracker->IsRelevant();
+    TMessageRelevance::EStatus GetRelevanceStatus() const {
+        if (!Tracker) {
+            return TMessageRelevance::EStatus::Relevant;
+        }
+        return Tracker->GetStatus();
     }
 
     ui32 GetByteSize() const {

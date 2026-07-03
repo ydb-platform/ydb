@@ -95,11 +95,36 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
     auto seqNo = SeqNoFromProto(SchemaTxBody.GetSeqNo());
     auto lastSeqNo = owner.LastSchemaSeqNo;
 
-    // Check if proposal is outdated
-    if (seqNo < lastSeqNo) {
-        auto errorMessage = TStringBuilder() << "Ignoring outdated schema tx proposal at tablet " << owner.TabletID() << " txId " << GetTxId()
-                                             << " ssId " << owner.CurrentSchemeShardId << " seqNo " << seqNo << " lastSeqNo " << lastSeqNo;
-        return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_CHANGED, errorMessage);
+    // Independent seq no for CopyTable and DropTable
+    std::optional<ui64> targetPathId;
+    switch (SchemaTxBody.TxBody_case()) {
+        case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
+            targetPathId = SchemaTxBody.GetDropTable().GetPathId();
+            break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable:
+            targetPathId = SchemaTxBody.GetCopyTable().GetDstPathId();
+            break;
+        default:
+            break;
+    }
+
+    if (targetPathId) {
+        // For path-specific operations, check SeqNo against the per-path SeqNo
+        auto pathSeqNoIt = owner.LastSchemaSeqNoByPath.find(*targetPathId);
+        if (pathSeqNoIt != owner.LastSchemaSeqNoByPath.end() && seqNo < pathSeqNoIt->second) {
+            auto errorMessage = TStringBuilder() << "Ignoring outdated schema tx proposal at tablet " << owner.TabletID() << " txId "
+                                                 << GetTxId() << " ssId " << owner.CurrentSchemeShardId << " seqNo " << seqNo << " lastSeqNo "
+                                                 << pathSeqNoIt->second << " pathId " << *targetPathId;
+            return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_CHANGED, errorMessage);
+        }
+    } else {
+        // For shard-wide operations, use the global SeqNo check
+        if (seqNo < lastSeqNo) {
+            auto errorMessage = TStringBuilder() << "Ignoring outdated schema tx proposal at tablet " << owner.TabletID() << " txId "
+                                                 << GetTxId() << " ssId " << owner.CurrentSchemeShardId << " seqNo " << seqNo << " lastSeqNo "
+                                                 << lastSeqNo;
+            return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_CHANGED, errorMessage);
+        }
     }
 
     switch (SchemaTxBody.TxBody_case()) {
@@ -164,11 +189,11 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             if (owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false)) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Copy to existing table");
             }
-            auto txIdsToWait = owner.GetProgressTxController().GetTxs();
-            if (!txIdsToWait.empty()) {
-                AFL_VERIFY(!txIdsToWait.contains(GetTxId()))("tx_id", GetTxId())("tx_ids", JoinSeq(",", txIdsToWait));
-                WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
-            }
+            // CopyTable is a read-only metadata operation that creates a new path pointing to the
+            // same data. Unlike MoveTable, it does not modify the source path mapping, so it does
+            // not conflict with existing transactions and should not wait for them. Waiting for all
+            // txs via GetTxs() caused hangs when other long-running transactions existed on the shard
+            // (e.g., during export when backup txs are pending on the same shards).
             owner.TablesManager.CopyTablePropose(srcSchemeShardLocalPathId);
             break;
         }
@@ -180,6 +205,10 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
     }
 
     owner.UpdateSchemaSeqNo(seqNo, txc);
+    // Update per-path SeqNo for path-specific operations
+    if (targetPathId) {
+        owner.LastSchemaSeqNoByPath[*targetPathId] = seqNo;
+    }
     return TProposeResult();
 }
 
@@ -286,14 +315,14 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
         case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable: {
             const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetSrcPathId());
             const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetDstPathId());
-            AFL_VERIFY(owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false));
-            AFL_VERIFY(!owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false));
-            owner.TablesManager.CopyTablePropose(srcSchemeShardLocalPathId);
-            auto txIdsToWait = owner.GetProgressTxController().GetTxs();
-            AFL_VERIFY(txIdsToWait.erase(GetTxId()));
-            if (!txIdsToWait.empty()) {
-                WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
+            const auto srcInternalPathId = owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false);
+            AFL_VERIFY(srcInternalPathId);
+            // CopyTablePlanStep persists dst in TableInfoV1 before progress completes. After tablet restart
+            // dst is already in SchemeShardLocalToInternal, so replay must be idempotent (same as CopyTableProgress).
+            if (const auto dstInternalPathId = owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false)) {
+                AFL_VERIFY(*dstInternalPathId == *srcInternalPathId)("src", *srcInternalPathId)("dst", *dstInternalPathId);
             }
+            owner.TablesManager.CopyTablePropose(srcSchemeShardLocalPathId);
         } break;
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;

@@ -1,50 +1,120 @@
 #pragma once
 
+#include "public.h"
+
+#include "host.h"
+#include "host_mask.h"
 #include "host_stat.h"
 #include "host_state.h"
 
+#include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
 
 #include <util/generic/vector.h>
-
-#include <span>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-enum class EHostStatus
+enum class EHostHealth
 {
     Online,
     Sufferer,
+    TemporaryOffline,
     Offline,
 };
 
-class TOracle
+class IOracle
+{
+public:
+    virtual ~IOracle() = default;
+
+    virtual void OnRequestStarted(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now) = 0;
+    virtual void OnRequestSucceeded(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now,
+        TDuration executionTime) = 0;
+    virtual void OnRequestFailed(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now) = 0;
+
+    // Picks the best host (by lowest inflight count) out of the provided set
+    // of hosts. Ties are broken uniformly at random.
+    [[nodiscard]] virtual THostIndex SelectBestPBufferHost(
+        THostMask hosts,
+        EOperation operation) const = 0;
+
+    [[nodiscard]] virtual TDuration GetReadHedgingDelay() const = 0;
+    [[nodiscard]] virtual TDuration GetReadRequestTimeout() const = 0;
+    [[nodiscard]] virtual TDuration GetWriteHedgingDelay() const = 0;
+    [[nodiscard]] virtual TDuration GetWriteRequestTimeout() const = 0;
+    [[nodiscard]] virtual TDuration GetIndirectWriteReplyTimeout() const = 0;
+    [[nodiscard]] virtual TDuration GetFlushRequestTimeout() const = 0;
+    [[nodiscard]] virtual TDuration GetEraseRequestTimeout() const = 0;
+    [[nodiscard]] virtual EWriteMode GetWriteMode() const = 0;
+
+    [[nodiscard]] virtual TString Dump() const = 0;
+};
+
+class TOracle: public IOracle
 {
 public:
     TOracle(
         TStorageConfigPtr storageConfig,
-        IHostStateController* hostStateController,
-        const TVector<THostStat>& stats,
-        const TVector<THostState>& states);
+        IHostStateController* hostStateController);
 
     void Think(TInstant now);
 
-    // Picks the best host (by lowest inflight count) out of the provided set
-    // of hosts. Ties are broken uniformly at random.
-    [[nodiscard]] ui8 SelectBestPBufferHost(
-        std::span<const ui8> hostIndexes,
-        EOperation operation) const;
+    void OnRequestStarted(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now) override;
+    void OnRequestSucceeded(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now,
+        TDuration executionTime) override;
+    void OnRequestFailed(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now) override;
+
+    [[nodiscard]] THostIndex SelectBestPBufferHost(
+        THostMask hosts,
+        EOperation operation) const override;
+
+    [[nodiscard]] TDuration GetReadHedgingDelay() const override;
+    [[nodiscard]] TDuration GetReadRequestTimeout() const override;
+    [[nodiscard]] TDuration GetWriteHedgingDelay() const override;
+    [[nodiscard]] TDuration GetWriteRequestTimeout() const override;
+    [[nodiscard]] TDuration GetIndirectWriteReplyTimeout() const override;
+    [[nodiscard]] TDuration GetFlushRequestTimeout() const override;
+    [[nodiscard]] TDuration GetEraseRequestTimeout() const override;
+    [[nodiscard]] EWriteMode GetWriteMode() const override;
+
+    [[nodiscard]] TString Dump() const override;
 
 private:
     const TStorageConfigPtr StorageConfig;
 
     IHostStateController* const HostStateController;
-    const TVector<THostStat>& Stats;
-    const TVector<THostState>& States;
+    const TDuration DefaultReadHedgingDelay;
+    const TDuration DefaultReadRequestTimeout;
+    const TDuration DefaultWriteHedgingDelay;
+    const TDuration DefaultWriteRequestTimeout;
+    const TDuration DefaultIndirectWriteReplyTimeout;
+    const TDuration DefaultFlushRequestTimeout;
+    const TDuration DefaultEraseRequestTimeout;
+    const EWriteMode DefaultWriteMode;
 
-    TVector<EHostStatus> Statuses;
+    TVector<THostStat> HostStatistics;
+    TVector<THostState> HostStates;
+    TVector<EHostHealth> HostsHealths;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

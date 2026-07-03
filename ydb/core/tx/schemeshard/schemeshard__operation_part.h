@@ -517,6 +517,20 @@ ISubOperation::TPtr CreateDropColumnTable(TOperationId id, TTxState::ETxState st
 ISubOperation::TPtr CreateReadOnlyCopyColumnTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateReadOnlyCopyColumnTable(TOperationId id, TTxState::ETxState state);
 
+ISubOperation::TPtr CreateNewColumnTableLocalIndex(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewColumnTableLocalIndex(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateDropColumnTableLocalIndex(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropColumnTableLocalIndex(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateAlterColumnTableLocalIndex(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterColumnTableLocalIndex(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateMoveColumnTableLocalIndex(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateMoveColumnTableLocalIndex(TOperationId id, TTxState::ETxState state);
+
+TVector<ISubOperation::TPtr> CreateColumnTableWithLocalIndexes(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr> DropColumnTableWithLocalIndexes(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr> CreateConsistentMoveLocalIndex(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
+
 ISubOperation::TPtr CreateNewBSV(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewBSV(TOperationId id, TTxState::ETxState state);
 
@@ -726,6 +740,14 @@ TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxT
 ISubOperation::TPtr CreateChangePathState(TOperationId opId, const TTxTransaction& tx);
 ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state);
 
+// Incremental restore path-state lock/unlock ops. Propose-only; fan out to TChangePathState sub-ops.
+TVector<ISubOperation::TPtr> CreateIncrementalRestoreLockTargets(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+ISubOperation::TPtr CreateIncrementalRestoreLockTargets(TOperationId opId, const TTxTransaction& tx);
+ISubOperation::TPtr CreateIncrementalRestoreLockTargets(TOperationId opId, TTxState::ETxState state);
+TVector<ISubOperation::TPtr> CreateIncrementalRestoreUnlockTargets(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+ISubOperation::TPtr CreateIncrementalRestoreUnlockTargets(TOperationId opId, const TTxTransaction& tx);
+ISubOperation::TPtr CreateIncrementalRestoreUnlockTargets(TOperationId opId, TTxState::ETxState state);
+
 // Incremental Restore Finalization
 ISubOperation::TPtr CreateIncrementalRestoreFinalize(TOperationId opId, const TTxTransaction& tx);
 ISubOperation::TPtr CreateIncrementalRestoreFinalize(TOperationId opId, TTxState::ETxState state);
@@ -734,6 +756,11 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
 TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateLongIncrementalBackupOp(TOperationId opId, const TTxTransaction& tx);
 ISubOperation::TPtr CreateLongIncrementalBackupOp(TOperationId opId, TTxState::ETxState state);
+
+ISubOperation::TPtr CreateNewFullBackupOp(TOperationId opId, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewFullBackupOp(TOperationId opId, TTxState::ETxState state);
+bool AppendFullBackupOpToBackupBackupCollection(TOperationId opId, const TPath& bcPath,
+    TVector<ISubOperation::TPtr>& result, ui32 expectedItemCount);
 
 // SysView
 // Create

@@ -1,6 +1,14 @@
 /*
- * mixed_intersection.h
+ * mixed_union.h
  *
+ * This header declares union operations between different Roaring container
+ * types, such as array, bitset, and run containers. These mixed-operation
+ * helpers are used when the two input containers do not share the same
+ * representation and the result may need to stay in, or be converted to, a
+ * representation chosen according to the data.
+ *
+ * The file includes regular, lazy, and inplace variants so callers can select
+ * between fully maintained results and faster deferred-maintenance paths.
  */
 
 #ifndef INCLUDE_CONTAINERS_MIXED_UNION_H_

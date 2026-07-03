@@ -9,6 +9,8 @@ items:
   href: scrubbing.md
 - name: Working with SelfHeal
   href: selfheal.md
+- name: Self Heal State Storage
+  href: selfheal_statestorage.md
 - name: Decommissioning a cluster part
   href: ../../devops/deployment-options/manual/decommissioning.md
 - name: Decommissioning groups using virtual groups

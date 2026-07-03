@@ -67,9 +67,12 @@ public:
                                                       originalContext.CountersProvider,
                                                       originalContext.LogProvider,
                                                       originalContext.LangVer,
-                                                      originalContext.RuntimeSettings),
+                                                      originalContext.GetRuntimeSettingsSharedPtr()),
 
-                  originalContext.Mutables, *NYql::NUdf::GetYqlMemoryPool(), originalContext.NotConsumedLinear, originalContext.RuntimeSettings)
+                  originalContext.Mutables,
+                  *NYql::NUdf::GetYqlMemoryPool(),
+                  originalContext.NotConsumedLinear,
+                  originalContext.GetRuntimeSettingsSharedPtr())
         {
             Alloc.Ref().EnableArrowTracking = false;
             Alloc.Release();
@@ -169,7 +172,7 @@ public:
         }
 
         auto& state = GetState(ctx);
-        return ctx.HolderFactory.CreateArrowBlock(CalculateImpl(providers, state.Accessors, ctx.ArrowMemoryPool, ctx));
+        return ctx.HolderFactory.CreateArrowBlock(CalculateImpl(providers, state.Accessors, ctx.ArrowMemoryPool, ctx), ctx.RuntimeSettings.DatumValidation.Get());
     }
 
     arrow::Datum CalculateImpl(const TVector<TDatumProvider>& providers, TAccessors& accessors, arrow::MemoryPool& memoryPool,

@@ -7,7 +7,6 @@ IF (PYTHON2)
 ELSE()
     PEERDIR(
         contrib/python/simplejson
-        contrib/python/six
         yt/python/yt/type_info 
     )
 

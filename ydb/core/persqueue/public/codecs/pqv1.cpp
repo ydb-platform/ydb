@@ -36,4 +36,4 @@ i32 FromTopicCodec(const NYdb::NTopic::ECodec codec) {
     return (ui32)(codec) - 1;
 }
 
-} // NKikimr::NPQ
+} // namespace NKikimr::NPQ

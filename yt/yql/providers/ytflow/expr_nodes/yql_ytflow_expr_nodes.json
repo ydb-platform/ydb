@@ -69,7 +69,8 @@
             "Match": {"Type": "CallableBase"},
             "Builder": {"Generate": "None"},
             "Children": [
-                {"Index": 0, "Name": "Name", "Type": "TCoAtom"}
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "OutputIndex", "Type": "TCoAtom"}
             ]
         },
         {
@@ -77,7 +78,7 @@
             "Base": "TYtflowSinkBase",
             "Match": {"Type": "Callable", "Name": "YtflowIntermediateSink"},
             "Children": [
-                {"Index": 1, "Name": "RowType", "Type": "TExprBase"}
+                {"Index": 2, "Name": "RowType", "Type": "TExprBase"}
             ]
         },
         {
@@ -85,7 +86,7 @@
             "Base": "TYtflowSinkBase",
             "Match": {"Type": "Callable", "Name": "YtflowPersistentSink"},
             "Children": [
-                {"Index": 1, "Name": "Input", "Type": "TExprBase"}
+                {"Index": 2, "Name": "Input", "Type": "TExprBase"}
             ]
         },
         {
@@ -124,6 +125,23 @@
             "Match": {"Type": "Callable", "Name": "YtflowTransformMap!"},
             "Children": [
                 {"Index": 5, "Name": "GroupByColumns", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TYtflowHoppingAggregate",
+            "Base": "TYtflowOpBase",
+            "Match": {"Type": "Callable", "Name": "YtflowHoppingAggregate!"},
+            "Children": [
+                {"Index": 4, "Name": "Keys", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "UpdateStateLambda", "Type": "TCoLambda"},
+                {"Index": 6, "Name": "PostprocessLambda", "Type": "TCoLambda"},
+                {"Index": 7, "Name": "Column", "Type": "TCoAtom"},
+                {"Index": 8, "Name": "Hop", "Type": "TCoAtom"},
+                {"Index": 9, "Name": "Interval", "Type": "TCoAtom"},
+                {"Index": 10, "Name": "Delay", "Type": "TCoAtom"},
+                {"Index": 11, "Name": "ItemType", "Type": "TExprBase"},
+                {"Index": 12, "Name": "InitLambda", "Type": "TCoLambda"},
+                {"Index": 13, "Name": "SaveLambda", "Type": "TCoLambda"}
             ]
         },
         {

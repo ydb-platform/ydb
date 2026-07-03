@@ -24,9 +24,9 @@ TStringBuf TUnversionedValue::AsStringBuf() const
     return TStringBuf(Data.String, Length);
 }
 
-TString TUnversionedValue::AsString() const
+std::string TUnversionedValue::AsString() const
 {
-    return TString(Data.String, Length);
+    return std::string(Data.String, Length);
 }
 
 TFingerprint GetFarmFingerprint(const TUnversionedValue& value)
@@ -168,7 +168,7 @@ void FormatValue(TStringBuilderBase* builder, const TUnversionedValue& value, TS
     }
 }
 
-TString ToString(const TUnversionedValue& value, bool valueOnly)
+std::string ToString(const TUnversionedValue& value, bool valueOnly)
 {
     return ToStringViaBuilder(value, valueOnly ? "k" : "");
 }

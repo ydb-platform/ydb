@@ -187,6 +187,38 @@ TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntime
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TDqProgramBuilder::DqWatermarkGenerator(
+    TRuntimeNode input,
+    const TUnaryLambda& watermarkExtractor,
+    const TUnaryLambda& partitionKeyExtractor,
+    TConstArrayRef<std::pair<std::string, std::string>> watermarkSettings,
+    TRuntimeNode partitionKeys
+) {
+    auto returnType = AS_TYPE(TStreamType, input);
+    auto itemType = returnType->GetItemType();
+
+    const auto itemArg = Arg(itemType);
+    const auto watermark = watermarkExtractor(itemArg);
+    const auto partitionKey = partitionKeyExtractor(itemArg);
+
+    TRuntimeNode::TList watermarkSettingItems;
+    for (const auto& [name, value] : watermarkSettings) {
+        watermarkSettingItems.push_back(NewDataLiteral<NUdf::EDataSlot::String>(name));
+        watermarkSettingItems.push_back(NewDataLiteral<NUdf::EDataSlot::String>(value));
+    }
+    const auto watermarkSettingsNode = NewList(NewDataType(NUdf::EDataSlot::String), watermarkSettingItems);
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(input);
+    callableBuilder.Add(itemArg);
+    callableBuilder.Add(watermark);
+    callableBuilder.Add(partitionKey);
+    callableBuilder.Add(watermarkSettingsNode);
+    callableBuilder.Add(partitionKeys);
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TType* TDqProgramBuilder::LastScalarIndexBlock() {
     return NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar);
 }

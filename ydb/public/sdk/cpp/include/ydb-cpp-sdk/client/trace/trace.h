@@ -1,11 +1,16 @@
 #pragma once
 
 #include <cstdint>
-#include <map>
+#include <initializer_list>
 #include <memory>
 #include <string>
+#include <string_view>
+#include <utility>
 
 namespace NYdb::inline Dev::NTrace {
+
+using TAttribute = std::pair<std::string_view, std::string_view>;
+using TAttributes = std::initializer_list<TAttribute>;
 
 enum class ESpanKind {
     INTERNAL,
@@ -30,15 +35,15 @@ class ISpan {
 public:
     virtual ~ISpan() = default;
     virtual void End() = 0;
-    virtual void SetAttribute(const std::string& key, const std::string& value) = 0;
-    virtual void SetAttribute(const std::string& key, int64_t value) = 0;
-    virtual void AddEvent(const std::string& name, const std::map<std::string, std::string>& attributes = {}) = 0;
+    virtual void SetAttribute(std::string_view key, std::string_view value) = 0;
+    virtual void SetAttribute(std::string_view key, int64_t value) = 0;
+    virtual void AddEvent(std::string_view name, TAttributes attributes = {}) = 0;
 
     virtual std::unique_ptr<IScope> Activate() {
         return nullptr;
     }
 
-    virtual void SetStatus(ESpanStatus /*status*/, const std::string& /*description*/ = {}) {}
+    virtual void SetStatus(ESpanStatus /*status*/, std::string_view /*description*/ = {}) {}
 };
 
 class ITracer {
@@ -58,6 +63,8 @@ public:
         (void)parent;
         return StartSpan(name, kind);
     }
+
+    virtual std::string GetCurrentTraceparent() const = 0;
 };
 
 class ITraceProvider {

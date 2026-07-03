@@ -26,19 +26,23 @@ public:
         Ended_ = true;
     }
 
-    void SetAttribute(const std::string& key, const std::string& value) override {
+    void SetAttribute(std::string_view key, std::string_view value) override {
         std::lock_guard lock(Mutex_);
-        StringAttributes_[key] = value;
+        StringAttributes_[std::string(key)] = std::string(value);
     }
 
-    void SetAttribute(const std::string& key, int64_t value) override {
+    void SetAttribute(std::string_view key, int64_t value) override {
         std::lock_guard lock(Mutex_);
-        IntAttributes_[key] = value;
+        IntAttributes_[std::string(key)] = value;
     }
 
-    void AddEvent(const std::string& name, const std::map<std::string, std::string>& attributes) override {
+    void AddEvent(std::string_view name, NTrace::TAttributes attributes) override {
+        std::map<std::string, std::string> ownedAttrs;
+        for (const auto& [k, v] : attributes) {
+            ownedAttrs.emplace(std::string(k), std::string(v));
+        }
         std::lock_guard lock(Mutex_);
-        Events_.push_back({name, attributes});
+        Events_.push_back({std::string(name), std::move(ownedAttrs)});
     }
 
     std::unique_ptr<NTrace::IScope> Activate() override {
@@ -47,11 +51,11 @@ public:
         return std::make_unique<TFakeScope>();
     }
 
-    void SetStatus(NTrace::ESpanStatus status, const std::string& description) override {
+    void SetStatus(NTrace::ESpanStatus status, std::string_view description) override {
         std::lock_guard lock(Mutex_);
         StatusSet_ = true;
         Status_ = status;
-        StatusDescription_ = description;
+        StatusDescription_ = std::string(description);
     }
 
     bool IsEnded() const {
@@ -136,6 +140,10 @@ public:
         std::lock_guard lock(Mutex_);
         Spans_.push_back({name, kind, span, parent});
         return span;
+    }
+
+    std::string GetCurrentTraceparent() const override {
+        return {};
     }
 
     struct TSpanRecord {

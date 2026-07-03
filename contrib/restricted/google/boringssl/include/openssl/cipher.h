@@ -1,63 +1,21 @@
-/* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
- * All rights reserved.
- *
- * This package is an SSL implementation written
- * by Eric Young (eay@cryptsoft.com).
- * The implementation was written so as to conform with Netscapes SSL.
- *
- * This library is free for commercial and non-commercial use as long as
- * the following conditions are aheared to.  The following conditions
- * apply to all code found in this distribution, be it the RC4, RSA,
- * lhash, DES, etc., code; not just the SSL code.  The SSL documentation
- * included with this distribution is covered by the same copyright terms
- * except that the holder is Tim Hudson (tjh@cryptsoft.com).
- *
- * Copyright remains Eric Young's, and as such any Copyright notices in
- * the code are not to be removed.
- * If this package is used in a product, Eric Young should be given attribution
- * as the author of the parts of the library used.
- * This can be in the form of a textual message at program startup or
- * in documentation (online or textual) provided with the package.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *    "This product includes cryptographic software written by
- *     Eric Young (eay@cryptsoft.com)"
- *    The word 'cryptographic' can be left out if the rouines from the library
- *    being used are not cryptographic related :-).
- * 4. If you include any Windows specific code (or a derivative thereof) from
- *    the apps directory (application code) you must include an acknowledgement:
- *    "This product includes software written by Tim Hudson (tjh@cryptsoft.com)"
- *
- * THIS SOFTWARE IS PROVIDED BY ERIC YOUNG ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * The licence and distribution terms for any publically available version or
- * derivative of this code cannot be changed.  i.e. this code cannot simply be
- * copied and put under another distribution licence
- * [including the GNU Public Licence.] */
+// Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #ifndef OPENSSL_HEADER_CIPHER_H
 #define OPENSSL_HEADER_CIPHER_H
 
-#include <contrib/restricted/google/boringssl/include/openssl/base.h>
+#include <contrib/restricted/google/boringssl/include/openssl/base.h>   // IWYU pragma: export
 
 #if defined(__cplusplus)
 extern "C" {
@@ -170,60 +128,101 @@ OPENSSL_EXPORT int EVP_DecryptInit_ex(EVP_CIPHER_CTX *ctx,
 
 // Cipher operations.
 
-// EVP_EncryptUpdate encrypts |in_len| bytes from |in| to |out|. The number
-// of output bytes may be up to |in_len| plus the block length minus one and
-// |out| must have sufficient space. The number of bytes actually output is
-// written to |*out_len|. It returns one on success and zero otherwise.
+// EVP_EncryptUpdate_ex encrypts |in_len| bytes from |in| and writes up to
+// |max_out| bytes of ciphertext to |out|. On success, it sets |*out_len| to
+// the number of output bytes and returns one. Otherwise, it returns zero.
 //
-// If |ctx| is an AEAD cipher, e.g. |EVP_aes_128_gcm|, and |out| is NULL, this
-// function instead adds |in_len| bytes from |in| to the AAD and sets |*out_len|
-// to |in_len|. The AAD must be fully specified in this way before this function
-// is used to encrypt plaintext.
-OPENSSL_EXPORT int EVP_EncryptUpdate(EVP_CIPHER_CTX *ctx, uint8_t *out,
-                                     int *out_len, const uint8_t *in,
-                                     int in_len);
-
-// EVP_EncryptFinal_ex writes at most a block of ciphertext to |out| and sets
-// |*out_len| to the number of bytes written. If padding is enabled (the
-// default) then standard padding is applied to create the final block. If
-// padding is disabled (with |EVP_CIPHER_CTX_set_padding|) then any partial
-// block remaining will cause an error. The function returns one on success and
-// zero otherwise.
-OPENSSL_EXPORT int EVP_EncryptFinal_ex(EVP_CIPHER_CTX *ctx, uint8_t *out,
-                                       int *out_len);
-
-// EVP_DecryptUpdate decrypts |in_len| bytes from |in| to |out|. The number of
-// output bytes may be up to |in_len| plus the block length minus one and |out|
-// must have sufficient space. The number of bytes actually output is written
-// to |*out_len|. It returns one on success and zero otherwise.
+// If |max_out| is not large enough for the output, the function will return
+// zero. The size of output buffer needed depends on the cipher and the number
+// of bytes encrypted by |ctx| thus far.
 //
-// If |ctx| is an AEAD cipher, e.g. |EVP_aes_128_gcm|, and |out| is NULL, this
-// function instead adds |in_len| bytes from |in| to the AAD and sets |*out_len|
-// to |in_len|. The AAD must be fully specified in this way before this function
-// is used to decrypt ciphertext.
-OPENSSL_EXPORT int EVP_DecryptUpdate(EVP_CIPHER_CTX *ctx, uint8_t *out,
-                                     int *out_len, const uint8_t *in,
-                                     int in_len);
+// In ciphers whose block size is not 1, such as CBC, individual calls to
+// |EVP_EncryptUpdate_ex| may output more or less than |in_len| bytes: a single
+// call to |EVP_EncryptUpdate_ex| may output at most |in_len + block_size - 1|
+// bytes. Additionally, the total output across all |EVP_EncryptUpdate_ex| and
+// |EVP_EncryptFinal_ex2| calls will be at most the total input plus one byte,
+// rounded up to a multiple of the block size.
+OPENSSL_EXPORT int EVP_EncryptUpdate_ex(EVP_CIPHER_CTX *ctx, uint8_t *out,
+                                        size_t *out_len, size_t max_out_len,
+                                        const uint8_t *in, size_t in_len);
 
-// EVP_DecryptFinal_ex writes at most a block of ciphertext to |out| and sets
-// |*out_len| to the number of bytes written. If padding is enabled (the
-// default) then padding is removed from the final block.
+// EVP_EncryptFinal_ex2 finishes an encryption operation and writes up to
+// |max_out| bytes of output to out. On success, it sets |*out_len| to the
+// number of bytes written and returns one. Otherwise, it returns zero.
 //
-// WARNING: it is unsafe to call this function with unauthenticated
-// ciphertext if padding is enabled.
-OPENSSL_EXPORT int EVP_DecryptFinal_ex(EVP_CIPHER_CTX *ctx, uint8_t *out,
-                                       int *out_len);
+// If |max_out| is not large enough for the output, the function will return
+// zero. The size of output buffer needed depends on the cipher and the number
+// of bytes encrypted.
+//
+// If the block size is 1, there will be no final output at all; otherwise, at
+// most one block of ciphertext will be written to the output.
+//
+// If padding is enabled (the default) and the block size is not 1, then
+// standard padding is applied to create the final block. If padding is
+// disabled (with |EVP_CIPHER_CTX_set_padding|) then any partial block
+// remaining will cause an error. The function returns one on success and zero
+// otherwise.
+OPENSSL_EXPORT int EVP_EncryptFinal_ex2(EVP_CIPHER_CTX *ctx, uint8_t *out,
+                                        size_t *out_len, size_t max_out_len);
 
-// EVP_CipherUpdate calls either |EVP_EncryptUpdate| or |EVP_DecryptUpdate|
-// depending on how |ctx| has been setup.
-OPENSSL_EXPORT int EVP_CipherUpdate(EVP_CIPHER_CTX *ctx, uint8_t *out,
-                                    int *out_len, const uint8_t *in,
-                                    int in_len);
+// EVP_DecryptUpdate_ex decrypts |in_len| bytes from |in| and writes up to
+// |max_out| bytes of plaintext to |out|. On success, it sets |*out_len| to
+// the number of output bytes and returns one. Otherwise, it returns zero.
+//
+// If |max_out| is not large enough for the output, the function will return
+// zero. The size of output buffer needed depends on the cipher and the number
+// of bytes decrypted by |ctx| thus far.
+//
+// In ciphers whose block size is not 1, such as CBC, individual calls to
+// |EVP_DecryptUpdate_ex| may output more or less than |in_len| bytes: a single
+// call to |EVP_DecryptUpdate_ex| may output at most |in_len + block_size - 1|
+// bytes. Additionally, the total output across all |EVP_DecryptUpdate_ex| and
+// |EVP_DecryptFinal_ex2| calls will be at most the total input.
+//
+// WARNING: if the cipher is an AEAD cipher, decrypted data should not be
+// parsed or otherwise processed until success has been returned by
+// |EVP_EncryptFinal_ex2|.
+OPENSSL_EXPORT int EVP_DecryptUpdate_ex(EVP_CIPHER_CTX *ctx, uint8_t *out,
+                                        size_t *out_len, size_t max_out_len,
+                                        const uint8_t *in, size_t in_len);
 
-// EVP_CipherFinal_ex calls either |EVP_EncryptFinal_ex| or
-// |EVP_DecryptFinal_ex| depending on how |ctx| has been setup.
-OPENSSL_EXPORT int EVP_CipherFinal_ex(EVP_CIPHER_CTX *ctx, uint8_t *out,
-                                      int *out_len);
+// EVP_DecryptFinal_ex2 finishes a decryption operation and writes up to
+// |max_out| bytes of output to out. On success, it sets |*out_len| to the
+// number of bytes written and returns one. Otherwise, it returns zero.
+//
+// If |max_out| is not large enough for the output, the function will return
+// zero. The size of output buffer needed depends on the cipher and the number
+// of bytes decrypted.
+//
+// If the block size is 1, there will be no final output at all; otherwise, at
+// most one block of ciphertext will be written to the output.
+//
+// If padding is enabled (the default) and the block size is not 1, then
+// standard padding is removed from the final block.
+//
+// WARNING: it is unsafe to call this function after decrypting unauthenticated
+// ciphertext if padding is enabled and the block size is not 1 ("padding
+// oracle").
+OPENSSL_EXPORT int EVP_DecryptFinal_ex2(EVP_CIPHER_CTX *ctx, uint8_t *out,
+                                        size_t *out_len, size_t max_out_len);
+
+// EVP_CipherUpdate_ex calls either |EVP_EncryptUpdate_ex| or
+// |EVP_DecryptUpdate_ex| depending on how |ctx| has been setup.
+OPENSSL_EXPORT int EVP_CipherUpdate_ex(EVP_CIPHER_CTX *ctx, uint8_t *out,
+                                       size_t *out_len, size_t max_out_len,
+                                       const uint8_t *in, size_t in_len);
+
+// EVP_CipherUpdateAAD adds |in_len| bytes from |in| to the AAD. The AAD must
+// be fully specified in this way before any plaintext or ciphertext is
+// supplied to the other functions. Please consider moving to the |EVP_AEAD|
+// APIs instead.
+OPENSSL_EXPORT int EVP_CipherUpdateAAD(EVP_CIPHER_CTX *ctx, const uint8_t *in,
+                                       size_t in_len);
+
+// EVP_CipherFinal_ex2 calls either |EVP_EncryptFinal_ex2| or
+// |EVP_DecryptFinal_ex2| depending on how |ctx| has been setup.
+OPENSSL_EXPORT int EVP_CipherFinal_ex2(EVP_CIPHER_CTX *ctx, uint8_t *out,
+                                       size_t *out_len, size_t max_out_len);
 
 
 // Cipher context accessors.
@@ -321,11 +320,25 @@ OPENSSL_EXPORT uint32_t EVP_CIPHER_mode(const EVP_CIPHER *cipher);
 // Key derivation.
 
 // EVP_BytesToKey generates a key and IV for the cipher |type| by iterating
-// |md| |count| times using |data| and |salt|. On entry, the |key| and |iv|
-// buffers must have enough space to hold a key and IV for |type|. It returns
-// the length of the key on success or zero on error.
+// |md| |count| times using |data| and an optional |salt|, writing the result to
+// |key| and |iv|. If not NULL, the |key| and |iv| buffers must have enough
+// space to hold a key and IV for |type|, as returned by |EVP_CIPHER_key_length|
+// and |EVP_CIPHER_iv_length|. This function returns the length of the key
+// (without the IV) on success or zero on error.
+//
+// If |salt| is NULL, the empty string is used as the salt. Salt lengths other
+// than 0 and 8 are not supported by this function. Either of |key| or |iv| may
+// be NULL to skip that output.
+//
+// When the total data derived is less than the size of |md|, this function
+// implements PBKDF1 from RFC 8018. Otherwise, it generalizes PBKDF1 by
+// computing prepending the previous output to |data| and re-running PBKDF1 for
+// further output.
+//
+// This function is provided for compatibility with legacy uses of PBKDF1. New
+// applications should use a more modern algorithm, such as |EVP_PBE_scrypt|.
 OPENSSL_EXPORT int EVP_BytesToKey(const EVP_CIPHER *type, const EVP_MD *md,
-                                  const uint8_t *salt, const uint8_t *data,
+                                  const uint8_t salt[8], const uint8_t *data,
                                   size_t data_len, unsigned count, uint8_t *key,
                                   uint8_t *iv);
 
@@ -406,17 +419,80 @@ OPENSSL_EXPORT int EVP_DecryptInit(EVP_CIPHER_CTX *ctx,
                                    const EVP_CIPHER *cipher, const uint8_t *key,
                                    const uint8_t *iv);
 
+// EVP_CipherUpdate does the same as |EVP_CipherUpdate_ex|, except that no
+// output size is given and thus no bounds checking is performed.
+//
+// Additionally, if |ctx| is an AEAD cipher, e.g. |EVP_aes_128_gcm|, and |out|
+// is NULL, this function instead behaves like |EVP_CipherUpdateAAD|.
+//
+// WARNING: This function does not check bounds on |out|, and correctly sizing
+// the output buffer is difficult. Use |EVP_CipherUpdate_ex| or
+// |EVP_CipherUpdateAAD| instead.
+OPENSSL_EXPORT int EVP_CipherUpdate(EVP_CIPHER_CTX *ctx, uint8_t *out,
+                                    int *out_len, const uint8_t *in,
+                                    int in_len);
+
+// EVP_EncryptUpdate does the same as |EVP_EncryptUpdate_ex|, except that no
+// output size is given and thus no bounds checking is performed.
+//
+// Additionally, if |ctx| is an AEAD cipher, e.g. |EVP_aes_128_gcm|, and |out|
+// is NULL, this function instead behaves like |EVP_CipherUpdateAAD|.
+//
+// WARNING: This function does not check bounds on |out|, and correctly sizing
+// the output buffer is difficult. Use |EVP_EncryptUpdate_ex| or
+// |EVP_CipherUpdateAAD| instead.
+OPENSSL_EXPORT int EVP_EncryptUpdate(EVP_CIPHER_CTX *ctx, uint8_t *out,
+                                     int *out_len, const uint8_t *in,
+                                     int in_len);
+
+// EVP_DecryptUpdate does the same as |EVP_DecryptUpdate_ex|, except that no
+// output size is given and thus no bounds checking is performed.
+//
+// Additionally, if |ctx| is an AEAD cipher, e.g. |EVP_aes_128_gcm|, and |out|
+// is NULL, this function instead behaves like |EVP_CipherUpdateAAD|.
+//
+// WARNING: This function does not check bounds on out, and correctly sizing
+// the output buffer is difficult. Use |EVP_DecryptUpdate_ex| or
+// |EVP_CipherUpdateAAD| instead.
+OPENSSL_EXPORT int EVP_DecryptUpdate(EVP_CIPHER_CTX *ctx, uint8_t *out,
+                                     int *out_len, const uint8_t *in,
+                                     int in_len);
+
 // EVP_CipherFinal calls |EVP_CipherFinal_ex|.
 OPENSSL_EXPORT int EVP_CipherFinal(EVP_CIPHER_CTX *ctx, uint8_t *out,
                                    int *out_len);
+
+// EVP_CipherFinal_ex does the same as |EVP_CipherFinal_ex2|, except that no
+// output size is given and thus no bounds checking is performed.
+//
+// WARNING: This function does not check bounds on out, and correctly sizing
+// the output buffer is difficult. Use |EVP_CipherFinal_ex2| instead.
+OPENSSL_EXPORT int EVP_CipherFinal_ex(EVP_CIPHER_CTX *ctx, uint8_t *out,
+                                      int *out_len);
 
 // EVP_EncryptFinal calls |EVP_EncryptFinal_ex|.
 OPENSSL_EXPORT int EVP_EncryptFinal(EVP_CIPHER_CTX *ctx, uint8_t *out,
                                     int *out_len);
 
+// EVP_EncryptFinal_ex does the same as |EVP_EncryptFinal_ex2|, except that no
+// output size is given and thus no bounds checking is performed.
+//
+// WARNING: This function does not check bounds on out, and correctly sizing
+// the output buffer is difficult. Use |EVP_EncryptFinal_ex2| instead.
+OPENSSL_EXPORT int EVP_EncryptFinal_ex(EVP_CIPHER_CTX *ctx, uint8_t *out,
+                                       int *out_len);
+
 // EVP_DecryptFinal calls |EVP_DecryptFinal_ex|.
 OPENSSL_EXPORT int EVP_DecryptFinal(EVP_CIPHER_CTX *ctx, uint8_t *out,
                                     int *out_len);
+
+// EVP_DecryptFinal_ex does the same as |EVP_DecryptFinal_ex2|, except that no
+// output size is given and thus no bounds checking is performed.
+//
+// WARNING: This function does not check bounds on out, and correctly sizing
+// the output buffer is difficult. Use |EVP_DecryptFinal_ex2| instead.
+OPENSSL_EXPORT int EVP_DecryptFinal_ex(EVP_CIPHER_CTX *ctx, uint8_t *out,
+                                       int *out_len);
 
 // EVP_Cipher historically exposed an internal implementation detail of |ctx|
 // and should not be used. Use |EVP_CipherUpdate| and |EVP_CipherFinal_ex|

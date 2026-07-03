@@ -25,21 +25,27 @@ namespace NYdbWorkload {
                     .StoreResult(&AutoPartitioningByLoad);
                 break;
             case TWorkloadParams::ECommandType::Import:
-                opts.AddLongOption("index", "Fulltext index name.")
-                    .DefaultValue(IndexName)
-                    .StoreResult(&IndexName);
-                opts.AddLongOption("index-type", "Fulltext index type (fulltext_plain, fulltext_relevance).")
-                    .DefaultValue(IndexType)
-                    .StoreResult(&IndexType);
-                opts.AddLongOption("index-param", "Fulltext index param. Can be specified multiple times. Format: `--index-param=\"<name>=<value>\" --index-param=...`.")
-                    .InsertTo(&IndexParams)
-                    .DefaultValue("tokenizer=standard");
+                if (!ImportOptsRegistered) {
+                    ImportOptsRegistered = true;
+                    opts.AddLongOption("index", "Fulltext index name.")
+                        .DefaultValue(IndexName)
+                        .StoreResult(&IndexName);
+                    opts.AddLongOption("index-type", "Fulltext index type (fulltext_plain, fulltext_relevance).")
+                        .DefaultValue(IndexType)
+                        .StoreResult(&IndexType);
+                    opts.AddLongOption("index-param", "Fulltext index param. Can be specified multiple times. Format: `--index-param=\"<name>=<value>\" --index-param=...`.")
+                        .InsertTo(&IndexParams)
+                        .DefaultValue("tokenizer=standard");
+                }
                 break;
             case TWorkloadParams::ECommandType::Run:
+                if (workloadType < 0) {
+                    opts.AddLongOption("index", "Fulltext index name.")
+                        .DefaultValue(IndexName)
+                        .StoreResult(&IndexName);
+                    break;
+                }
                 RunWorkloadType = workloadType;
-                opts.AddLongOption("index-name", "Fulltext index name.")
-                    .DefaultValue(IndexName)
-                    .StoreResult(&IndexName);
                 switch (static_cast<EFulltextWorkloadType>(workloadType)) {
                     case EFulltextWorkloadType::Select:
                         opts.AddLongOption("query-table", "Name of the table with predefined queries. The table must have a 'query' column.")
@@ -53,7 +59,14 @@ namespace NYdbWorkload {
                             .StoreResult(&Limit);
                         opts.AddLongOption('m', "model", "Path to Markov chain model file (.tsv.gz) for generating queries")
                             .RequiredArgument("PATH")
+                            .DefaultValue(ModelPath)
                             .StoreResult(&ModelPath);
+                        opts.AddLongOption("quality", "Measure nDCG@10 quality after running queries")
+                            .NoArgument()
+                            .SetFlag(&Quality);
+                        opts.AddLongOption("query-relevance-table", "Name of the table with query relevance judgments")
+                            .DefaultValue(QueryRelevanceTable)
+                            .StoreResult(&QueryRelevanceTable);
                         opts.AddLongOption("min-query-len", "Minimum number of words in a generated query")
                             .DefaultValue(SelectMinQueryLen)
                             .StoreResult(&SelectMinQueryLen);
@@ -67,8 +80,11 @@ namespace NYdbWorkload {
                             .StoreResult(&UpsertBulkSize);
                         opts.AddLongOption('m', "model", "Path to Markov chain model file (.tsv.gz)")
                             .RequiredArgument("PATH")
-                            .Required()
+                            .DefaultValue(ModelPath)
                             .StoreResult(&ModelPath);
+                        opts.AddLongOption("upsert-query-table", "Name of the table with predefined upsert queries. If set, uses table data instead of Markov model.")
+                            .DefaultValue("")
+                            .StoreResult(&UpsertQueryTable);
                         opts.AddLongOption("min-sentence-len", "Minimum number of words in a generated sentence")
                             .DefaultValue(UpsertMinSentenceLen)
                             .StoreResult(&UpsertMinSentenceLen);

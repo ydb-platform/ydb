@@ -15,6 +15,10 @@
 
 #include <ydb/core/http_proxy/events.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
+
+#include <memory>
+
 namespace NKikimr::NSQS {
 
 constexpr TDuration CLOUD_AUTH_TIMEOUT = TDuration::Seconds(30);
@@ -47,8 +51,10 @@ public:
 private:
     bool IsYandexCloudMode_ {false};
     TAuthFactory AuthFactory_ {};
+    std::shared_ptr<NYdb::ICoreFacility> CoreFacility_;
     NYdb::TCredentialsProviderPtr CredentialsProvider_;
     bool UseResourceManagerFolderService_ {false};
+    bool EnableAccessServiceV2Interface_ {false};
 };
 
 class TBaseCloudAuthRequestProxy : public TActorBootstrapped<TBaseCloudAuthRequestProxy> {
@@ -57,7 +63,7 @@ public:
         return NKikimrServices::TActivity::SQS_ACTOR;
     }
 
-    TBaseCloudAuthRequestProxy(TAuthActorData&& data, TString infraToken)
+    TBaseCloudAuthRequestProxy(TAuthActorData&& data, TString infraToken, bool enableAccessServiceV2Interface)
         : RequestHolder_(std::move(data.SQSRequest))
         , Callback_(std::move(data.HTTPCallback))
         , RequestId_(RequestHolder_->GetRequestId())
@@ -72,6 +78,7 @@ public:
         , ResourceId_(std::move(data.ResourceID))
         , Counters_(*data.Counters)
         , UserSidCallback_(std::move(data.UserSidCallback))
+        , EnableAccessServiceV2Interface_(enableAccessServiceV2Interface)
     {
         Y_ABORT_UNLESS(RequestId_);
     }
@@ -90,7 +97,10 @@ public:
     void ScheduleAuthorizationRetry();
     void ScheduleAuthenticateRetry();
     void ScheduleFolderServiceRequestRetry();
+    template <typename TEvResponse>
+    void HandleAuthenticationResponse(typename TEvResponse::TPtr& ev);
     void HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev);
+    void HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev);
     void HandleAuthorizationResult(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev);
     void ProcessAuthorizationResult(const TEvTicketParser::TEvAuthorizeTicketResult& result);
     void HandleFolderServiceResponse(NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderResponse::TPtr& ev);
@@ -144,6 +154,7 @@ protected:
     TString ResourceId_;
     ui32 RequestsToWait_ = 0;
     EActionClass ActionClass_ = EActionClass::QueueSpecified;
+    bool AuthenticateIamToken_ = false;
     TCloudAuthCounters& Counters_;
     TInstant AuthenticateRequestStartTimestamp_;
     TInstant AuthorizeRequestStartTimestamp_;
@@ -157,6 +168,7 @@ protected:
     NKikimrClient::TSqsResponse Response_;
 
     std::function<void(TString)> UserSidCallback_;
+    bool EnableAccessServiceV2Interface_ {false};
 };
 
 class TCloudAuthRequestProxy : public TBaseCloudAuthRequestProxy {
@@ -171,8 +183,8 @@ protected:
 
 class THttpProxyAuthRequestProxy : public TBaseCloudAuthRequestProxy {
 public:
-    THttpProxyAuthRequestProxy(TAuthActorData&& data, TString infraToken, TActorId requester)
-        : TBaseCloudAuthRequestProxy(std::move(data), std::move(infraToken))
+    THttpProxyAuthRequestProxy(TAuthActorData&& data, TString infraToken, bool enableAccessServiceV2Interface, TActorId requester)
+        : TBaseCloudAuthRequestProxy(std::move(data), std::move(infraToken), enableAccessServiceV2Interface)
         , Requester_(std::move(requester))
     {
         Y_ABORT_UNLESS(RequestId_);

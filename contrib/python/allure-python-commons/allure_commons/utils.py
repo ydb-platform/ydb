@@ -21,7 +21,7 @@ def md5(*args):
         if not isinstance(arg, bytes):
             if not isinstance(arg, str):
                 arg = repr(arg)
-            arg = arg.encode('utf-8')
+            arg = arg.encode("utf-8")
         m.update(arg)
     return m.hexdigest()
 
@@ -37,11 +37,11 @@ def now():
 def platform_label():
     major_version, *_ = platform.python_version_tuple()
     implementation = platform.python_implementation().lower()
-    return f'{implementation}{major_version}'
+    return f"{implementation}{major_version}"
 
 
 def thread_tag():
-    return '{0}-{1}'.format(os.getpid(), threading.current_thread().name)
+    return "{0}-{1}".format(os.getpid(), threading.current_thread().name)
 
 
 def host_tag():
@@ -241,7 +241,7 @@ def func_parameters(func, *args, **kwargs):
         varargs = args[len(arg_spec.args):]
         parameters.update({arg_spec.varargs: varargs} if varargs else {})
 
-    if arg_spec.args and arg_spec.args[0] in ['cls', 'self']:
+    if arg_spec.args and arg_spec.args[0] in ["cls", "self"]:
         args_dict.pop(arg_spec.args[0], None)
 
     if kwargs:
@@ -269,7 +269,7 @@ def func_parameters(func, *args, **kwargs):
 
 
 def format_traceback(exc_traceback):
-    return ''.join(traceback.format_tb(exc_traceback)) if exc_traceback else None
+    return "".join(traceback.format_tb(exc_traceback)) if exc_traceback else None
 
 
 def format_exception(etype, value):
@@ -320,7 +320,7 @@ def format_exception(etype, value):
     ...     format_exception(etype, e) # doctest: +ELLIPSIS
     "AssertionError: \\nExpected:...but:..."
     """
-    return '\n'.join(format_exception_only(etype, value)) if etype or value else None
+    return "\n".join(format_exception_only(etype, value)) if etype or value else None
 
 
 def get_testplan():
@@ -328,7 +328,7 @@ def get_testplan():
     file_path = os.environ.get("ALLURE_TESTPLAN_PATH")
 
     if file_path and os.path.exists(file_path):
-        with open(file_path, 'r') as plan_file:
+        with open(file_path, "r") as plan_file:
             plan = json.load(plan_file)
             planned_tests = plan.get("tests", [])
 

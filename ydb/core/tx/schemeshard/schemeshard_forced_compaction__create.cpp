@@ -1,7 +1,7 @@
 #include "schemeshard_forced_compaction.h"
 #include "schemeshard_impl.h"
 
-#define LOG_N(stream) LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << Self->SelfTabletId() << "][ForcedCompaction] " << stream)
+#define LOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << Self->SelfTabletId() << "][ForcedCompaction] " << stream)
 
 namespace NKikimr::NSchemeShard {
 
@@ -20,7 +20,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
         const auto& request = Request->Get()->Record;
         const auto& settings = request.GetSettings();
-        LOG_N("TForcedCompaction::TTxCreate DoExecute " << request.ShortDebugString());
+        LOG_D("TForcedCompaction::TTxCreate DoExecute " << request.ShortDebugString());
 
         auto response = MakeHolder<TEvForcedCompaction::TEvCreateResponse>(Request->Get()->Record.GetTxId());
 
@@ -74,6 +74,10 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
             if (!checks) {
                 return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, checks.GetError());
             }
+        }
+
+        if (settings.max_shards_in_flight() == 0) {
+            return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, "max_shards_in_flight must be greater than 0");
         }
 
         auto info = MakeIntrusive<TForcedCompactionInfo>();
@@ -150,6 +154,13 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         info->TotalShardCount = shardsToCompact.size();
 
         NIceDb::TNiceDb db(txc.DB);
+
+        if (!Self->TryFreeForcedCompactionSlot(db, ctx)) {
+            return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder()
+                << "Number of stored forced compaction operations reached the limit of "
+                << Self->ForcedCompactionStoredOperationsLimit);
+        }
+
         Self->PersistForcedCompactionState(db, *info);
         Self->PersistForcedCompactionShards(db, *info, shardsToCompact);
 
@@ -165,8 +176,8 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        LOG_N("TForcedCompaction::TTxCreate DoComplete " << Request->Get()->Record.ShortDebugString());
-        Self->ProcessForcedCompactionQueues();
+        LOG_D("TForcedCompaction::TTxCreate DoComplete " << Request->Get()->Record.ShortDebugString());
+        Self->ScheduleForcedCompactionProgress(ctx);
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 
@@ -182,7 +193,6 @@ private:
             auto& issue = *record.MutableIssues()->Add();
             issue.set_severity(NYql::TSeverityIds::S_ERROR);
             issue.set_message(errorMessage);
-
         }
 
         SideEffects.Send(Request->Sender, std::move(response), 0, Request->Cookie);

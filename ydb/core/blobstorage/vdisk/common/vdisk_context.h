@@ -124,7 +124,6 @@ namespace NKikimr {
                         OutOfSpaceState.UpdateLocalLog(ev.StatusFlags);
                     }
                     return true;
-                case NKikimrProto::ERROR:
                 case NKikimrProto::INVALID_OWNER:
                 case NKikimrProto::INVALID_ROUND:
                     // BlobStorage group reconfiguration, just return false and wait until
@@ -134,6 +133,7 @@ namespace NKikimr {
                                 "CheckPDiskResponse: Group Reconfiguration: %s",
                                 FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
                     return false;
+                case NKikimrProto::ERROR:
                 case NKikimrProto::CORRUPTED:
                 case NKikimrProto::OUT_OF_SPACE: {
                     // Device is out of order

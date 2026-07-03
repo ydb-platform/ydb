@@ -1,20 +1,136 @@
 #include "kqp_rbo_physical_query_builder.h"
+
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
+#include <ydb/core/kqp/opt/rbo/kqp_operator.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_context.h>
+#include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_convertion_utils.h>
+#include <ydb/core/kqp/opt/rbo/traces/kqp_rbo_yql_ast_trace.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/dq/opt/dq_opt_build.h>
+#include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
-#include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
-#include <ydb/library/yql/dq/opt/dq_opt_build.h>
 
+#include <cctype>
+#include <optional>
+#include <sstream>
+
+namespace NKikimr::NKqp {
+
+using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NKikimr;
-using namespace NKikimr::NKqp;
+
+namespace {
+
+std::string TraceRootId(const std::string& title) {
+    std::string id = "physical-ast";
+    for (const char ch : title) {
+        id += (std::isalnum(static_cast<unsigned char>(ch)) ? ch : '-');
+    }
+    return id;
+}
+
+std::string ToStdString(TStringBuf value) {
+    return std::string(value.data(), value.size());
+}
+
+std::string FormatExprForTrace(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!node) {
+        return {};
+    }
+
+    return ToStdString(KqpExprToPrettyString(*node, ctx));
+}
+
+std::string FormatPhysicalStagesForTrace(const TVector<TExprNode::TPtr>& stages, TExprContext& ctx) {
+    std::ostringstream out;
+    for (size_t i = 0; i < stages.size(); ++i) {
+        if (i) {
+            out << "\n";
+        }
+        out << "----- Stage " << i << " -----\n"
+            << FormatExprForTrace(stages[i], ctx)
+            << "\n";
+    }
+
+    return out.str();
+}
+
+void AddAstInfoTabs(
+    optimizer_trace::Trace::Tile& tile,
+    const std::optional<optimizer_trace::Widget>& linkGraph,
+    const std::string& text)
+{
+    if (linkGraph) {
+        tile.info().tab("dag-links", "DAG links")
+            .widget(*linkGraph);
+    }
+    if (!text.empty()) {
+        tile.info().tab("yql-ast-text", "YQL AST text")
+            .widget(optimizer_trace::Widget::unwrappedText("Regular YQL AST", text, true));
+    }
+}
+
+void SubmitPhysicalAstTrace(TRBOContext& rboCtx, const std::string& title, NYqlAstTrace::TBuildResult astTrace, std::string text) {
+    if (!rboCtx.NeedToLog()) {
+        return;
+    }
+
+    auto& tile = rboCtx.TraceLog.currentStage().tree(title, astTrace.Root);
+    AddAstInfoTabs(tile, astTrace.LinkGraph, text);
+    rboCtx.TraceLog.Submit(tile);
+}
+
+void SubmitPhysicalStagesTrace(TRBOContext& rboCtx, const std::string& title, const TVector<TExprNode::TPtr>& stages) {
+    if (!rboCtx.NeedToLog()) {
+        return;
+    }
+
+    SubmitPhysicalAstTrace(
+        rboCtx,
+        title,
+        NYqlAstTrace::BuildStageListTreeWithInfo(stages, TraceRootId(title)),
+        FormatPhysicalStagesForTrace(stages, rboCtx.ExprCtx));
+}
+
+void SubmitPhysicalExprTrace(TRBOContext& rboCtx, const std::string& title, const TExprNode::TPtr& node) {
+    if (!rboCtx.NeedToLog() || !node) {
+        return;
+    }
+
+    SubmitPhysicalAstTrace(
+        rboCtx,
+        title,
+        NYqlAstTrace::BuildExprTreeWithInfo(node, TraceRootId(title)),
+        FormatExprForTrace(node, rboCtx.ExprCtx));
+}
+
+} // anonymous namespace
+
+TPhysicalQueryBuilder::TPhysicalQueryBuilder(TOpRoot& root, TStageGraph&& graph, THashMap<ui32, TExprNode::TPtr>&& stages, THashMap<ui32, TVector<TExprNode::TPtr>>&& stageArgs,
+    THashMap<ui32, TPositionHandle>&& stagePos, TRBOContext& rboCtx)
+    : Root(root)
+    , Graph(std::move(graph))
+    , Stages(std::move(stages))
+    , StageArgs(std::move(stageArgs))
+    , StagePos(std::move(stagePos))
+    , RBOCtx(rboCtx)
+{}
 
 TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery() {
     auto phyStages = BuildPhysicalStageGraph();
+    SubmitPhysicalStagesTrace(RBOCtx, "After physical stage graph build", phyStages);
     phyStages = EnableWideChannelsPhysicalStages(std::move(phyStages));
+    SubmitPhysicalStagesTrace(RBOCtx, "After wide channel rewrite", phyStages);
     phyStages = PeepHoleOptimizePhysicalStages(std::move(phyStages));
-    return BuildPhysicalQuery(std::move(phyStages));
+    SubmitPhysicalStagesTrace(RBOCtx, "After physical peephole", phyStages);
+    auto physicalQuery = BuildPhysicalQuery(std::move(phyStages));
+    SubmitPhysicalExprTrace(RBOCtx, "Final physical query", physicalQuery);
+    return physicalQuery;
 }
 
 TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
@@ -81,6 +197,7 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
                     .Done().Ptr();
                     // clang-format on
                     stage = ctx.ReplaceNode(std::move(stage), read.Ref(), newRead);
+                    phyStages.back() = stage;
                 }
             }
         }
@@ -89,10 +206,20 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
         YQL_CLOG(TRACE, CoreDq) << "Finalized stage " << id;
     }
 
-    const auto maybeFinalStage = phyStages.back();
+    // The root stage is last in the topologically sorted StageIds. It is usually also phyStages.back(),
+    // but a lone row-source stage is built into Stages without being appended to phyStages (see above),
+    // so deriving the final stage from finalizedStages is correct even when phyStages is empty.
+    Y_ENSURE(!stageIds.empty());
+    const auto maybeFinalStage = finalizedStages.at(stageIds.back());
     const auto finalStage = GetFinalStage(maybeFinalStage);
+    const bool needFinalNarrowing = NeedFinalNarrowing();
+    const auto finalResultStage = needFinalNarrowing ? BuildFinalNarrowStage(finalStage) : finalStage;
     if (finalStage.Get() != maybeFinalStage.Get()) {
-        phyStages.push_back(finalStage);
+        phyStages.push_back(finalResultStage);
+    } else if (needFinalNarrowing) {
+        Y_ENSURE(!phyStages.empty());
+        Y_ENSURE(phyStages.back().Get() == finalStage.Get());
+        phyStages.back() = finalResultStage;
     }
 
     return phyStages;
@@ -103,7 +230,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildMaterialize(TExprNode::TPtr node) {
 
     TExprNode::TPtr afterPeephole;
     auto status =
-        ::PeepHoleOptimize(TExprBase(node), afterPeephole, ctx, RBOCtx.PeepholeTypeAnnTransformer, RBOCtx.TypeCtx, RBOCtx.KqpCtx.Config, false, true, {});
+        ::NKikimr::NKqp::NOpt::PeepHoleOptimize(TExprBase(node), afterPeephole, ctx, RBOCtx.TypeCtx, RBOCtx.KqpCtx.Config, false, true, {});
     if (status != IGraphTransformer::TStatus::Ok) {
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Peephole optimization failed for materialize in NEW RBO"));
         return nullptr;
@@ -151,15 +278,37 @@ bool TPhysicalQueryBuilder::IsSingleTaskConnection(const TExprBase& input) const
     return input.Maybe<TDqCnUnionAll>() || input.Maybe<TDqCnMerge>();
 }
 
+bool TPhysicalQueryBuilder::NeedFinalNarrowing() {
+    const auto outputIUs = Root.GetInput()->GetOutputIUs();
+    if (outputIUs.size() != Root.ColumnOrder.size()) {
+        return true;
+    }
+
+    for (ui32 i = 0; i < Root.ColumnOrder.size(); ++i) {
+        if (outputIUs[i] != TInfoUnit(Root.ColumnOrder[i])) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 TExprNode::TPtr TPhysicalQueryBuilder::GetFinalStage(const TExprNode::TPtr& stage) const {
     auto& ctx = RBOCtx.ExprCtx;
     TExprNode::TPtr finalStage;
     bool needFinalUnionStage = false;
-    // Final stage, which is input for DqCnResult, should have only one 1 task.
-    for (const auto& input : TDqPhyStage(stage).Inputs()) {
-        if (!IsSingleTaskConnection(input)) {
-            needFinalUnionStage = true;
-            break;
+
+    const auto inputs = TDqPhyStage(stage).Inputs();
+    // If no inputs - need a final stage.
+    if (inputs.Empty()) {
+        needFinalUnionStage = true;
+    } else {
+        // Final stage, which is input for DqCnResult, should have only one 1 task.
+        for (const auto& input : TDqPhyStage(stage).Inputs()) {
+            if (!IsSingleTaskConnection(input)) {
+                needFinalUnionStage = true;
+                break;
+            }
         }
     }
 
@@ -187,6 +336,30 @@ TExprNode::TPtr TPhysicalQueryBuilder::GetFinalStage(const TExprNode::TPtr& stag
         finalStage = stage;
     }
     return finalStage;
+}
+
+TExprNode::TPtr TPhysicalQueryBuilder::BuildFinalNarrowStage(const TExprNode::TPtr& stage) const {
+    auto& ctx = RBOCtx.ExprCtx;
+    const auto dqStage = TDqPhyStage(stage);
+
+    TVector<TInfoUnit> finalColumns;
+    finalColumns.reserve(Root.ColumnOrder.size());
+    for (const auto& column : Root.ColumnOrder) {
+        finalColumns.emplace_back(column);
+    }
+
+    const auto narrowBody =
+        NPhysicalConvertionUtils::ExtractMembers(dqStage.Program().Body().Ptr(), ctx, std::move(finalColumns));
+
+    // clang-format off
+    return Build<TDqPhyStage>(ctx, stage->Pos())
+        .InitFrom(dqStage)
+        .Program()
+            .Args(dqStage.Program().Args())
+            .Body(narrowBody)
+        .Build()
+    .Done().Ptr();
+    // clang-format on
 }
 
 TVector<TKqpParamBinding> TPhysicalQueryBuilder::CollectParamBindings(const TVector<TExprNode::TPtr>& physicalStages) {
@@ -354,12 +527,15 @@ TKqpPhyQuerySettings TPhysicalQueryBuilder::GetPhysicalQuerySettings() const {
             querySettings.Type = EPhysicalQueryType::GenericQuery;
             break;
         }
+        case EKikimrQueryType::Scan: {
+            querySettings.Type = EPhysicalQueryType::Scan;
+            break;
+        }
         default: {
             // Should fallback to old pipeline.
             YQL_ENSURE(false, "Unsupported query type for NEW RBO " << kqpCtx.QueryCtx->Type);
         }
     }
-
     return querySettings;
 }
 
@@ -373,6 +549,10 @@ TKqpPhyTxSettings TPhysicalQueryBuilder::GetPhysicalTxSettings() const {
         }
         case EKikimrQueryType::Query: {
             txSettings.Type = EPhysicalTxType::Generic;
+            break;
+        }
+        case EKikimrQueryType::Scan: {
+            txSettings.Type = EPhysicalTxType::Scan;
             break;
         }
         default: {
@@ -559,14 +739,11 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(T
         programsMap[program.Raw()] = newProgram;
     }
 
-    TVector<TExprNode::TPtr> newStages;
-    newStages.reserve(physicalStages.size());
-    for (ui32 i = 0, e = physicalStages.size(); i < e; ++i) {
-        newStages.push_back(ctx.ReplaceNodes(std::move(physicalStages[i]), programsMap));
-    }
-
-    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO After peephole] " << KqpExprToPrettyString(TExprBase(newStages.back()), ctx);
-    return newStages;
+    auto rootStage = ctx.ReplaceNodes(std::move(physicalStages.back()), programsMap);
+    TVector<TExprNode::TPtr> stagesTopSorted;
+    TopologicalSort(TDqPhyStage(rootStage), stagesTopSorted);
+    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO After peephole] " << KqpExprToPrettyString(TExprBase(stagesTopSorted.back()), ctx);
+    return stagesTopSorted;
 }
 
 bool TPhysicalQueryBuilder::IsSuitableToPropagateWideBlocksThroughHashShuffleConnections(const TDqPhyStage& stage) const {
@@ -652,7 +829,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, c
     // auto &ctx = RBOCtx.ExprCtx;
     TExprNode::TPtr newProgram;
     auto status =
-        ::PeepHoleOptimize(program, newProgram, ctx, RBOCtx.PeepholeTypeAnnTransformer, RBOCtx.TypeCtx, RBOCtx.KqpCtx.Config, false, withFinalStageRules, {});
+        ::NKikimr::NKqp::NOpt::PeepHoleOptimize(program, newProgram, ctx, RBOCtx.TypeCtx, RBOCtx.KqpCtx.Config, false, withFinalStageRules, {});
     if (status != IGraphTransformer::TStatus::Ok) {
         ctx.AddError(TIssue(ctx.GetPosition(program.Pos()), "Peephole optimization failed for stage in NEW RBO"));
         return nullptr;
@@ -676,3 +853,5 @@ void TPhysicalQueryBuilder::TypeAnnotate(TExprNode::TPtr& input) {
 
     input = output;
 }
+
+} // namespace NKikimr::NKqp

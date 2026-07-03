@@ -1,0 +1,22 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    *
+FROM (
+    VALUES
+        (1, 2),
+        (2, 4)
+) AS x (
+    a,
+    cx
+)
+LEFT JOIN (
+    VALUES
+        (1, 3)
+) AS y (
+    a,
+    cy
+)
+ON
+    x.a == y.a
+;

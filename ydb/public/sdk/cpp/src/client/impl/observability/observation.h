@@ -23,6 +23,7 @@ public:
 private:
     std::shared_ptr<TRequestSpan> Span_;
     std::shared_ptr<TRequestMetrics> Metrics_;
+    std::weak_ptr<TDbDriverState> DbDriverState_;
 };
 
 } // namespace NYdb::NObservability

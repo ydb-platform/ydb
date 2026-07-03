@@ -61,6 +61,15 @@ class TestCompactionConfig(object):
         self.init(config)
         self.check("test_tiling")
 
+    def test_tiling_plus_plus(self):
+        config = KikimrConfigGenerator(
+            column_shard_config={
+                "default_compaction_preset": "tiling++",
+            })
+
+        self.init(config)
+        self.check("test_tiling_plus_plus")
+
     def test_wrong_preset(self):
         config = KikimrConfigGenerator(
             column_shard_config={

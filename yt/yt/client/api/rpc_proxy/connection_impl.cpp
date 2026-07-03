@@ -37,6 +37,7 @@
 namespace NYT::NApi::NRpcProxy {
 
 using namespace NBus;
+using namespace NBus::NTcp;
 using namespace NRpc;
 using namespace NNet;
 using namespace NHttp;
@@ -54,7 +55,7 @@ static const std::string ProxyUrlCanonicalSuffix = ".yt.yandex.net";
 
 ////////////////////////////////////////////////////////////////////////////////
 
-THashMap<std::string, std::string> ParseProxyUrlAliasingRules(const TString& envConfig)
+THashMap<std::string, std::string> ParseProxyUrlAliasingRules(const std::string& envConfig)
 {
     if (envConfig.empty()) {
         return {};
@@ -83,9 +84,9 @@ std::string NormalizeHttpProxyUrl(std::string url, const THashMap<std::string, s
 {
     ApplyProxyUrlAliasingRules(url, proxyUrlAliasingRules);
 
-    if (url.find('.') == TString::npos &&
-        url.find(':') == TString::npos &&
-        url.find("localhost") == TString::npos)
+    if (url.find('.') == std::string::npos &&
+        url.find(':') == std::string::npos &&
+        url.find("localhost") == std::string::npos)
     {
         url.append(ProxyUrlCanonicalSuffix);
     }
@@ -118,7 +119,7 @@ std::string MakeConnectionLoggingTag(const TConnectionConfigPtr& config, TGuid c
     return builder.Flush();
 }
 
-TString MakeEndpointDescription(const TConnectionConfigPtr& config, TGuid connectionId)
+std::string MakeEndpointDescription(const TConnectionConfigPtr& config, TGuid connectionId)
 {
     return Format("Rpc{%v}", MakeConnectionLoggingTag(config, connectionId));
 }
@@ -145,7 +146,7 @@ IAttributeDictionaryPtr MakeEndpointAttributes(const TConnectionConfigPtr& confi
     return attributes;
 }
 
-TString MakeConnectionClusterId(const TConnectionConfigPtr& config)
+std::string MakeConnectionClusterId(const TConnectionConfigPtr& config)
 {
     if (config->ClusterName) {
         return Format("Rpc(Name=%v)", *config->ClusterName);
@@ -387,7 +388,7 @@ std::vector<std::string> TConnection::DiscoverProxiesViaHttp()
     try {
         YT_LOG_DEBUG("Updating proxy list via HTTP (CorrelationId: %v)", correlationId);
 
-        auto poller = TTcpDispatcher::Get()->GetXferPoller();
+        auto poller = NYT::NBus::NTcp::TDispatcher::Get()->GetXferPoller();
         auto headers = New<THeaders>();
         SetUserAgent(headers, GetRpcUserAgent());
         if (auto token = DiscoveryToken_.Load(); !token.empty()) {

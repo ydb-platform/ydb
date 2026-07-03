@@ -1,9 +1,11 @@
 #include "columnshard_ut_common.h"
 #include "shard_reader.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/protos/data_events.pb.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/common/path.h>
 #include <ydb/core/sys_view/common/registry.h>
@@ -12,6 +14,7 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 #include <ydb/core/tx/tx_processing.h>
@@ -22,6 +25,35 @@ namespace NKikimr::NTxUT {
 
 using namespace NColumnShard;
 using namespace Tests;
+
+namespace {
+
+// The basic tablet test runtime has no LongTxService to keep a registry fresh, but cleanup that goes
+// through TRegistryScanSnapshotGuard needs a freshness marker (OldestCollectionTime) that advances
+// with the clock. This stand-in is an always-empty registry (border = Max, no snapshots) whose
+// OldestCollectionTime is the live "now", mirroring a single-node cluster where the local node's
+// collection time is always current. A frozen value (e.g. the default TInstant::Zero()) would
+// collapse the cleanup floor to 0 and nothing would ever be collected.
+class TLiveEmptySnapshotRegistry: public IImmutableSnapshotRegistry {
+public:
+    bool HasSnapshot(const NKikimr::TTableId&, const TRowVersion&) const override {
+        return false;
+    }
+
+    TSet<TRowVersion> GetActiveSnapshots(const NKikimr::TTableId&) const override {
+        return {};
+    }
+
+    TRowVersion GetBorder() const override {
+        return TRowVersion::Max();
+    }
+
+    TInstant GetOldestCollectionTime() const override {
+        return AppData()->TimeProvider->Now();
+    }
+};
+
+}   // namespace
 
 void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
@@ -49,7 +81,31 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     app.AddDomain(domain.Release());
     SetupTabletServices(runtime, &app);
 
+    // No LongTxService actor is created in this basic test runtime, so install a stand-in registry with a
+    // live OldestCollectionTime; otherwise TRegistryScanSnapshotGuard sees a frozen Zero freshness and
+    // never advances the cleanup floor. Tests that specifically test the registry path
+    // (ut_scan_snapshot_guard_integration.cpp) override these settings after calling Setup().
+    InstallTimingBasedSnapshotRegistry(runtime);
+
     runtime.UpdateCurrentTime(TInstant::Now());
+}
+
+void InstallTimingBasedSnapshotRegistry(TTestActorRuntime& runtime) {
+    // margin = LocalSnapshotPromotionTimeSeconds + MaxClockSkewMs = 1s + 12s = the old ~13s cleanup window,
+    // so TRegistryScanSnapshotGuard yields MinSnapshotForNewReads = now - 13s (see TLiveEmptySnapshotRegistry).
+    for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+        auto& appData = runtime.GetAppData(nodeIndex);
+        auto holder = CreateImmutableSnapshotRegistryHolder();
+        holder->Set(std::make_unique<TLiveEmptySnapshotRegistry>());
+        appData.SnapshotRegistryHolder = holder;
+        appData.LongTxServiceConfig.SetLocalSnapshotPromotionTimeSeconds(1);
+        appData.LongTxServiceConfig.SetMaxClockSkewMs(12000);
+        // If a real LongTxService is present (e.g. TTestEnv), it may take over this holder once its remote
+        // storage is ready. Keep its exchange/rebuild cadence short so the registry it publishes keeps a
+        // fresh OldestCollectionTime; harmless in runtimes that have no LongTxService.
+        appData.LongTxServiceConfig.SetSnapshotsExchangeIntervalSeconds(1);
+        appData.LongTxServiceConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
+    }
 }
 
 void RefreshTiering(TTestBasicRuntime& runtime, const TActorId& sender) {
@@ -88,6 +144,11 @@ TPlanStep ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TS
 }
 
 void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap) {
+    PlanSchemaTxStepOnly(runtime, sender, snap);
+    WaitSchemaTxCompletion(runtime, sender, snap.GetTxId());
+}
+
+void PlanSchemaTxStepOnly(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap) {
     auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(snap.GetTxId());
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evSubscribe.release());
 
@@ -98,8 +159,11 @@ void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSn
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, plan.release());
     UNIT_ASSERT(runtime.GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(sender));
+}
+
+void WaitSchemaTxCompletion(TTestBasicRuntime& runtime, const TActorId& sender, ui64 txId) {
     auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);
-    UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTxId(), snap.GetTxId());
+    UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTxId(), txId);
 }
 
 void PlanWriteTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap, bool waitResult) {
@@ -440,10 +504,9 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
         schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
     }
     if (specials.GetUseForcedCompaction()) {
-        NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer optimizer;
-        *schema->MutableOptions()->MutableCompactionPlannerConstructor()->MutableLBuckets() = optimizer;
-        schema->MutableOptions()->MutableCompactionPlannerConstructor()->SetClassName(
-            "l-buckets");   //TODO use appropriate lc-buckets configuration
+        auto* plannerConstructor = schema->MutableOptions()->MutableCompactionPlannerConstructor();
+        plannerConstructor->SetClassName("tiling++");
+        plannerConstructor->MutableTiling()->SetJson("{}");
     }
 }
 

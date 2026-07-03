@@ -1,3 +1,4 @@
+import io
 import logging
 import queue
 import os
@@ -20,6 +21,38 @@ from .benchmark_abstract import BenchmarkSample, DatabaseAccessor
 from .benchmark_factory import create_benchmark
 
 
+class _TeeWriter:
+    """File-like sink that fans writes out to multiple underlying sinks."""
+
+    def __init__(self, *sinks):
+        self._sinks = list(sinks)
+
+    def write(self, data):
+        for sink in self._sinks:
+            try:
+                sink.write(data)
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "Suppressed exception while writing to tee sink %r",
+                    sink,
+                    exc_info=True,
+                )
+
+    def flush(self):
+        for sink in self._sinks:
+            try:
+                sink.flush()
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "Suppressed exception while flushing tee sink %r",
+                    sink,
+                    exc_info=True,
+                )
+
+    def add_sink(self, sink):
+        self._sinks.append(sink)
+
+
 class SubprocessPtySpawn(fdpexpect.fdspawn):
     """pexpect-compatible spawn that uses subprocess.Popen with a manually allocated PTY.
 
@@ -31,6 +64,7 @@ class SubprocessPtySpawn(fdpexpect.fdspawn):
 
     def __init__(self, argv, env, encoding, timeout):
         master_fd, slave_fd = os.openpty()
+        self._pty_capture = io.StringIO()
         try:
             self._proc = subprocess.Popen(
                 argv,
@@ -47,6 +81,11 @@ class SubprocessPtySpawn(fdpexpect.fdspawn):
             raise
         os.close(slave_fd)
         super().__init__(master_fd, encoding=encoding, timeout=timeout)
+        self.logfile_read = _TeeWriter(self._pty_capture)
+
+    @property
+    def pty_log(self) -> str:
+        return self._pty_capture.getvalue()
 
     def close(self, force: bool = False):
         try:
@@ -138,6 +177,7 @@ class BenchmarkRunner:
             env["YDB_TOKEN"] = self.user
             env["YDB_CLI_AI_PROFILE_FILE"] = str(profile)
             env["YDB_CLI_AI_AUDIT_LOG"] = "1"
+            env["YDB_CLI_AI_DISABLE_HISTORY"] = "1"
             if self.model_token is not None:
                 env["YDB_CLI_AI_TOKEN"] = self.model_token
             child = SubprocessPtySpawn(
@@ -157,7 +197,10 @@ class BenchmarkRunner:
             )
 
             if logging.getLogger().level == logging.DEBUG:
-                child.logfile_read = sys.stdout
+                if isinstance(child.logfile_read, _TeeWriter):
+                    child.logfile_read.add_sink(sys.stdout)
+                else:
+                    child.logfile_read = sys.stdout
 
             return child
 
@@ -423,7 +466,7 @@ class BenchmarkRunner:
             elapsed = time.monotonic() - self._dataset_started_at
             avg = elapsed / completed
             remaining = max(0, amount - completed)
-            eta_suffix = f" (avg {self.__format_seconds(avg)}/sample, ETA {self.__format_seconds(avg * remaining)})"
+            eta_suffix = f" (avg {self.__format_seconds(avg)} / sample, ETA {self.__format_seconds(avg * remaining)})"
         self.logger.info(f"Running sample {index + 1} / {amount}...{eta_suffix}")
 
         with databases.get() as database:

@@ -11,7 +11,7 @@
 namespace NYql {
 
 namespace {
-    static constexpr bool UseDeterminsticHash = false;
+    constexpr bool UseDeterminsticHash = false;
 
     struct TLambdaFrame {
         TLambdaFrame(const TExprNode* lambda, const TLambdaFrame* prev)

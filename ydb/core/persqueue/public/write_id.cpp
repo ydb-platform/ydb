@@ -2,6 +2,8 @@
 
 #include <util/stream/output.h>
 
+#include <tuple>
+
 namespace NKikimr::NPQ {
 
 TWriteId::TWriteId(ui64 nodeId, ui64 keyId) :
@@ -120,7 +122,7 @@ void SetWriteId(NKikimrKqp::TTopicOperationsResponse& m, const TWriteId& writeId
     SetWriteIdImpl(m, writeId);
 }
 
-}
+} // namespace NKikimr::NPQ
 
 template <>
 void Out<NKikimr::NPQ::TWriteId>(IOutputStream& s, const NKikimr::NPQ::TWriteId& v)

@@ -1,5 +1,8 @@
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/mon_auth.h>
+#include <ydb/core/tx/schemeshard/schemeshard__monitoring.h_serialized.h>  // for enum ESweepAlert support methods
+
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/datashard/range_ops.h>
@@ -11,7 +14,29 @@
 
 #include <util/string/cast.h>
 
-static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
+#include <format>
+
+namespace std {
+
+// Inherit TString* formatters from std::string* ones.
+template <>
+struct std::formatter<TString> : std::formatter<std::string> {
+    auto format(const TString& s, std::format_context& ctx) const {
+        return std::formatter<std::string>::format(s, ctx);
+    }
+};
+template <>
+struct std::formatter<TStringBuf> : std::formatter<std::string_view> {
+    auto format(const TStringBuf& s, std::format_context& ctx) const {
+        return std::formatter<std::string_view>::format(s, ctx);
+    }
+};
+
+}  // namespace std
+
+namespace {
+
+ui64 TryParseTabletId(TStringBuf tabletIdParam) {
     ui64 tabletId = ui64(NKikimr::NSchemeShard::InvalidTabletId);
     if (tabletIdParam.StartsWith("0x")) {
         TryIntFromString<16>(tabletIdParam.substr(2), tabletId);
@@ -20,6 +45,19 @@ static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
     }
     return tabletId;
 }
+
+bool ParseTablePartitionsFormat(const TStringBuf& input, bool* result) {
+    if (input == "shardidx") {
+        *result = true;
+        return true;
+    } else if (input == "position") {
+        *result = false;
+        return true;
+    }
+    return false;
+}
+
+}  // anonymous namespace
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -86,6 +124,12 @@ struct TCgi {
     static const TParam UpdateCoordinatorsConfig;
     static const TParam UpdateCoordinatorsConfigDryRun;
     static const TParam Action;
+    static const TParam TablePartitionsFormat;
+    static const TParam Start;
+    static const TParam Pause;
+    static const TParam Resume;
+    static const TParam Cancel;
+    static const TParam SweepAlert;
 
     struct TPages {
         static constexpr TStringBuf MainPage = "Main";
@@ -102,6 +146,8 @@ struct TCgi {
     struct TActions {
         static constexpr TStringBuf SplitOneToOne = "SplitOneToOne";
         static constexpr TStringBuf ForceDropUnsafe = "ForceDropUnsafe";
+        static constexpr TStringBuf TablePartitionsFormatSwitch = "TablePartitionsFormatSwitch";
+        static constexpr TStringBuf TablePartitionsFormatSweep = "TablePartitionsFormatSweep";
     };
 };
 
@@ -123,8 +169,45 @@ const TCgi::TParam TCgi::Page = TStringBuf("Page");
 const TCgi::TParam TCgi::BuildIndexId = TStringBuf("BuildIndexId");
 const TCgi::TParam TCgi::UpdateCoordinatorsConfig = TStringBuf("UpdateCoordinatorsConfig");
 const TCgi::TParam TCgi::UpdateCoordinatorsConfigDryRun = TStringBuf("UpdateCoordinatorsConfigDryRun");
+const TCgi::TParam TCgi::TablePartitionsFormat = TStringBuf("format");
+const TCgi::TParam TCgi::Start = TStringBuf("Start");
+const TCgi::TParam TCgi::Pause = TStringBuf("Pause");
+const TCgi::TParam TCgi::Resume = TStringBuf("Resume");
+const TCgi::TParam TCgi::Cancel = TStringBuf("Cancel");
+const TCgi::TParam TCgi::SweepAlert = TStringBuf("sweepalert");
 const TCgi::TParam TCgi::Action = TStringBuf("Action");
 
+namespace {
+
+bool IsSchemeShardDevUiMonitoringPage(TStringBuf page) {
+    return page == TCgi::TPages::MainPage
+        || page == TCgi::TPages::TransactionList
+        || page == TCgi::TPages::TransactionInfo
+        || page == TCgi::TPages::PathInfo
+        || page == TCgi::TPages::ShardInfoByTabletId
+        || page == TCgi::TPages::ShardInfoByShardIdx
+        || page == TCgi::TPages::BuildIndexInfo;
+}
+
+bool IsSchemeShardDevUiAdminRequest(const TCgiParameters& cgi, const TActorContext& ctx) {
+    if (cgi.Has(TCgi::Action)) {
+        return true;
+    }
+
+    const TString& page = cgi.Has(TCgi::Page) ? cgi.Get(TCgi::Page) : ToString(TCgi::TPages::MainPage);
+    if (page == TCgi::TPages::AdminPage || page == TCgi::TPages::AdminRequest) {
+        return true;
+    }
+    if (IsSchemeShardDevUiMonitoringPage(page)) {
+        return false;
+    }
+
+    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "SchemeShard DevUI request to unknown page: " << page << ", cgi: " << cgi.Print());
+    return true;
+}
+
+} // namespace
 
 class TUpdateCoordinatorsConfigActor : public TActorBootstrapped<TUpdateCoordinatorsConfigActor> {
 public:
@@ -441,7 +524,10 @@ public:
         LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, TStringBuilder() << "TTxMonitoring.Execute: " << cgi.Print());
 
         if (cgi.Has(TCgi::Action)) {
-            HandleAction(cgi.Get(TCgi::Action), cgi, ctx);
+            NIceDb::TNiceDb db(txc.DB);
+            db.NoMoreReadsForTx();
+
+            HandleAction(cgi.Get(TCgi::Action), db, ctx);
             return true;
         }
 
@@ -498,6 +584,7 @@ public:
         else if (page == TCgi::TPages::AdminPage)
         {
             OutputAdminPage(Answer);
+            OutputTablePartitionsFormatSweepSection(Answer);
         }
         else if (page == TCgi::TPages::BuildIndexInfo)
         {
@@ -557,6 +644,7 @@ private:
             str.clear();
 
             OutputAdminPage(templateAnswer);
+            OutputTablePartitionsFormatSweepSection(templateAnswer);
 
             auto func = [templateAnswer] (const TMap<TPathId, TSet<TString>>& done) -> NActors::IEventBase* {
                 TStringStream str = templateAnswer;
@@ -608,6 +696,7 @@ private:
             str.clear();
 
             OutputAdminPage(templateAnswer);
+            OutputTablePartitionsFormatSweepSection(templateAnswer);
 
             auto func = [templateAnswer] (const TMap<TPathId, TSet<TString>>& done) -> NActors::IEventBase* {
                 TStringStream str = templateAnswer;
@@ -682,6 +771,7 @@ private:
 
             str << "</pre>";
             OutputAdminPage(str);
+            OutputTablePartitionsFormatSweepSection(str);
 
             auto callback = [sender = Ev->Sender, str = std::move(str)] (const TString& log, const TActorContext& ctx) mutable {
                 str << "<pre>" << log << "</pre>";
@@ -693,13 +783,21 @@ private:
             ctx.Register(new TUpdateCoordinatorsConfigActor(std::move(items), std::move(callback), valueDryRun));
             return;
         }
-
-        OutputAdminPage(str);
     }
 
-    TString SubmitButton(const TStringBuf value) const {
+    TString AttrDisabled(bool enabled) const {
+        return (enabled ? "" : "disabled='disabled'");
+    };
+
+    TString SubmitButton(const TStringBuf value, bool enabled = true) const {
         return TStringBuilder()
-            << "<div class=\"col-md-4\"><input class=\"btn btn-default\" type=\"submit\" value=\"" << value << "\"></div>" << Endl;
+            << "<div class='col-md-4'><input class='btn btn-default' type='submit' value='" << value << "'" << AttrDisabled(enabled) << "></div>" << Endl;
+    }
+
+    TStringBuf TabletDevUiAppPath() const {
+        return AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
+            ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
+            : TStringBuf("app");
     }
 
     void ActionForceDropUnsafe(const TPathId pathId, TStringStream& str) const {
@@ -707,7 +805,8 @@ private:
         // to give user clear knowledge what parameters were.
         // Params in the body are the actually used ones, query parameters will be ignored
         // (see ydb/core/tablet/tablet_monitoring_proxy.cpp).
-        const TString actionUrl = TStringBuilder() << "app?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
+        const TStringBuf appPath = TabletDevUiAppPath();
+        const TString actionUrl = TStringBuilder() << appPath << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
             << "&" << TCgi::Action.AsCgiParam(TCgi::TActions::ForceDropUnsafe)
             << "&" << TCgi::OwnerPathId.AsCgiParam(pathId.OwnerId)
             << "&" << TCgi::LocalPathId.AsCgiParam(pathId.LocalPathId)
@@ -719,6 +818,205 @@ private:
         str << TCgi::LocalPathId.AsHiddenInput(pathId.LocalPathId);
         str << R"(<div style='display: flex; align-items: center;'>)" << SubmitButton("ForceDropUnsafe") << "</div>";
         str << "</form>" << Endl;
+    }
+
+    void ActionSwitchTablePartitionsFormat(const TPathId pathId, TStringStream& str) const {
+        auto* tableInfoPtr = Self->Tables.FindPtr(pathId);
+        if (!tableInfoPtr) {
+            return;
+        }
+
+        const bool switchEnabled = AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx();
+
+        const bool currentShardIdxFormat = (*tableInfoPtr)->PartitionsInShardIdxFormat;
+        const TStringBuf format = currentShardIdxFormat ? "position" : "shardidx";
+
+        // Duplicate params in query string in addition to form-urlencoded body
+        // to give user clear knowledge what parameters were.
+        // Params in the body are the actually used ones, query parameters will be ignored
+        // (see ydb/core/tablet/tablet_monitoring_proxy.cpp, TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr))
+        const TStringBuf appPath = TabletDevUiAppPath();
+        const TString actionUrl = TStringBuilder() << appPath << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
+            << "&" << TCgi::Action.AsCgiParam(TCgi::TActions::TablePartitionsFormatSwitch)
+            << "&" << TCgi::OwnerPathId.AsCgiParam(pathId.OwnerId)
+            << "&" << TCgi::LocalPathId.AsCgiParam(pathId.LocalPathId)
+            << "&" << TCgi::TablePartitionsFormat.AsCgiParam(format)
+        ;
+
+        str << "Current table partitions storage format: <code>" << (currentShardIdxFormat ? "shardidx" : "position") << "</code><br>" << Endl;
+
+        str << std::format(R"(
+                <div class='container col-md-12'>
+                    <form method='POST' class='form-horizontal col-md-12' action='{0}' {7}>
+                        <input type='hidden' id='TabletID' name='{1}' value='{2}' />
+                        <input type='hidden' id='Action' name='{3}' value='{4}' />
+                        <input type='hidden' id='format' name='{5}' value='{6}'/>
+                        <div class='form-group col-md-12'>
+                            <input class='btn btn-primary btn-lg' type='submit' {7}>
+                        </div>
+                    </form>
+                </div>
+            )",
+            /* {0} */ actionUrl,
+            /* {1} */ TCgi::TabletID.Name,
+            /* {2} */ Self->TabletID(),
+            /* {3} */ TCgi::Action.Name,
+            /* {4} */ TCgi::TActions::TablePartitionsFormatSwitch,
+            /* {5} */ TCgi::TablePartitionsFormat.Name,
+            /* {6} */ format,
+            /* {7} */ AttrDisabled(switchEnabled)
+        );
+    }
+
+    void OutputTablePartitionsFormatSweepSection(TStringStream& str) const {
+        const auto& sweep = Self->TablePartitionsFormatSweep;
+
+        const bool switchEnabled = AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx()
+            && (Self->Tables.size() > 0)
+        ;
+
+        bool startEnabled = switchEnabled && (sweep.Status == TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Idle);
+        bool pauseEnabled = switchEnabled && (sweep.Status == TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Running);
+        bool resumeEnabled = switchEnabled && (sweep.Status == TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Paused);
+        bool cancelEnabled = switchEnabled && (sweep.Status != TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Idle);
+
+        // Duplicate params in query string in addition to form-urlencoded body
+        // to give user clear knowledge what parameters were.
+        // Params in the body are the actually used ones, query parameters will be ignored
+        // (see ydb/core/tablet/tablet_monitoring_proxy.cpp, TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr)).
+        const TStringBuf appPath = TabletDevUiAppPath();
+        const TString actionUrl = TStringBuilder() << appPath
+            << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
+            << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::AdminPage)
+            << "&" << TCgi::Action.AsCgiParam(TCgi::TActions::TablePartitionsFormatSweep)
+        ;
+
+        str << "<legend>Table partitions storage format sweep:</legend>" << Endl;
+
+        const TCgiParameters& params = Ev->Get()->Cgi();
+
+        // Alert
+        if (params.Has(TCgi::SweepAlert)) {
+            ui8 num;
+            if (TryFromString<ui8>(params.Get(TCgi::SweepAlert), num) && num < GetEnumItemsCount<ESweepAlert>()) {
+                str << "<div class='alert alert-info' role='alert'>" << ESweepAlert(num) << "</div>" << Endl;
+            }
+        }
+
+        // Current status
+        str << "<div class='container col-md-12'>" << Endl;
+        str << "<h4>Status</h4>" << Endl;
+        str << "Currently: <code>" << sweep.Status << "</code>";
+        if (sweep.Status != TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Idle) {
+            str << ", switch to format: <code>" << (sweep.TargetIsShardIdx ? "shardidx" : "position") << "</code>" << Endl;
+        }
+        str << "<br>" << Endl;
+        str << "Tables:"
+            << " " << Self->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Get() << " in <code>position</code>"
+            << ", " << Self->TabletCounters->Simple()[COUNTER_FORMAT_SHARDIDX_TABLE_COUNT].Get() << " in <code>shardidx</code>"
+            << ", total " << Self->Tables.size()
+            << "<br>" << Endl;
+        str << "</div>" << Endl;
+
+        // Progress
+        if (sweep.Status != TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Idle) {
+            str << std::format(R"(
+                    <div class='container col-md-12'>
+                        <h4>Progress</h4>
+                        <div class='col-md-2'>Done: {}</div>
+                        <div class='col-md-2'>Skipped: {}</div>
+                        <div class='col-md-2'>Queued: {}</div>
+                    </div>
+                )",
+                sweep.Done,
+                sweep.Skipped,
+                sweep.Queue.size()
+            );
+        }
+
+        // Start block
+        str << std::format(R"(
+                <div class='container col-md-12'>
+                    <h4>Start sweep</h4>
+                    <form method='POST' class='form-horizontal col-md-12' action='{0}' {9}>
+                        <input type='hidden' id='TabletID' name='{1}' value='{2}' />
+                        <input type='hidden' id='Page' name='{3}' value='{4}' />
+                        <input type='hidden' id='Action' name='{5}' value='{6}' />
+                        <input type='hidden' id='Start' name='{8}' value='1'/>
+                        <div class='form-inline'>
+                            <input class='form-control' type='radio' id='shardidx' name='{7}' value='shardidx' aria-describedby='start-help' checked {9}>
+                            <label class='control-label' for='shardidx'>shardidx</label>
+                            <input class='form-control' type='radio' id='position' name='{7}' value='position' aria-describedby='start-help' {9}>
+                            <label class='control-label' for='position'>position</label>
+                            <span id='start-help' class='help-block'>Tables will be converted to a selected partitions storage format.</span>
+                        </div>
+                        <div class='form-group col-md-12'>
+                            <input class='btn btn-primary btn-lg' type='submit' value='{8}' {9}>
+                        </div>
+                    </form>
+                </div>
+            )",
+            /* {0} */ actionUrl,
+            /* {1} */ TCgi::TabletID.Name,
+            /* {2} */ Self->TabletID(),
+            /* {3} */ TCgi::Page.Name,
+            /* {4} */ TCgi::TPages::AdminPage,
+            /* {5} */ TCgi::Action.Name,
+            /* {6} */ TCgi::TActions::TablePartitionsFormatSweep,
+            /* {7} */ TCgi::TablePartitionsFormat.Name,
+            /* {8} */ TCgi::Start.Name,
+            /* {9} */ AttrDisabled(startEnabled)
+        );
+
+        // Control block
+        str << std::format(R"(
+                <div class='container col-md-12'>
+                    <h4>Controls</h4>
+                    <div class='btn-toolbar'>
+                        <div class='btn-group'>
+                            <form method='POST' action='{0}' {8}>
+                                <input type='hidden' id='TabletID' name='{1}' value='{2}' />
+                                <input type='hidden' id='Page' name='{3}' value='{4}' />
+                                <input type='hidden' id='Action' name='{5}' value='{6}' />
+                                <input type='hidden' id='Pause' name='{7}' value='1'/>
+                                <input class='btn btn-default' type='submit' value='{7}' {8}/>
+                            </form>
+                        </div>
+                        <div class='btn-group'>
+                            <form method='POST' action='{0}' {10}>
+                                <input type='hidden' id='TabletID' name='{1}' value='{2}' />
+                                <input type='hidden' id='Page' name='{3}' value='{4}' />
+                                <input type='hidden' id='Action' name='{5}' value='{6}' />
+                                <input type='hidden' id='Resume' name='{9}' value='1'/>
+                                <input class='btn btn-default' type='submit' value='{9}' {10}/>
+                            </form>
+                        </div>
+                        <div class='btn-group'>
+                            <form method='POST' action='{0}' {12}>
+                                <input type='hidden' id='TabletID' name='{1}' value='{2}' />
+                                <input type='hidden' id='Page' name='{3}' value='{4}' />
+                                <input type='hidden' id='Action' name='{5}' value='{6}' />
+                                <input type='hidden' id='Cancel' name='{11}' value='1'/>
+                                <input class='btn btn-default' type='submit' value='{11}' {12}/>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )",
+            /* {0} */ actionUrl,
+            /* {1} */ TCgi::TabletID.Name,
+            /* {2} */ Self->TabletID(),
+            /* {3} */ TCgi::Page.Name,
+            /* {4} */ TCgi::TPages::AdminPage,
+            /* {5} */ TCgi::Action.Name,
+            /* {6} */ TCgi::TActions::TablePartitionsFormatSweep,
+            /* {7} */ TCgi::Pause.Name,
+            /* {8} */ AttrDisabled(pauseEnabled),
+            /* {9} */ TCgi::Resume.Name,
+            /* {10} */ AttrDisabled(resumeEnabled),
+            /* {11} */ TCgi::Cancel.Name,
+            /* {12} */ AttrDisabled(cancelEnabled)
+        );
     }
 
     void OutputAdminPage(TStringStream& str) const {
@@ -776,8 +1074,9 @@ private:
             TAG(TH3) {str << "SchemeShard main page:";}
 
             {
+                const TStringBuf appPath = TabletDevUiAppPath();
                 str << "<legend>";
-                str << "<a href='app?"
+                str << "<a href='" << appPath << "?"
                     << TCgi::TabletID.AsCgiParam(Self->TabletID())
                     << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::AdminPage)
                     << "'> Administration settings </a>";
@@ -1593,6 +1892,9 @@ private:
 
             TAG(TH3) {str << "Admin actions:";}
             ActionForceDropUnsafe(pathId, str);
+            if (path->IsTable()) {
+                ActionSwitchTablePartitionsFormat(pathId, str);
+            }
         }
     }
     void OutputShardInfoPageByShardIdx(TShardIdx shardIdx, TStringStream& str) const {
@@ -1644,15 +1946,36 @@ private:
             TStringBuilder() << "HTTP/1.1 400 Bad Request\r\nConnection: Close\r\n\r\n" << details << "\r\n"));
     }
 
+    void SendRedirect(const TString& location, const TActorContext& ctx) {
+        ctx.Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+            TStringBuilder() << "HTTP/1.1 303 See Other\r\nLocation: " << location << "\r\n\r\n"
+        ));
+    }
+
 private:
-    void HandleAction(const TString& action, const TCgiParameters& cgi, const TActorContext& ctx) {
+    void HandleAction(const TString& action, NIceDb::TNiceDb& db, const TActorContext& ctx) {
         if (Ev->Get()->GetMethod() != HTTP_METHOD_POST) {
             SendBadRequest("Action requires a POST method", ctx);
             return;
         }
 
+        TCgiParameters params;
+        {
+            const auto& request = *Ev->Get();
+            if (request.ExtendedQuery) {
+                for (const auto& i : request.ExtendedQuery->GetPostParams()) {
+                    params.emplace(i.GetKey(), i.GetValue());
+                }
+                for (const auto& i : request.ExtendedQuery->GetQueryParams()) {
+                    params.emplace(i.GetKey(), i.GetValue());
+                }
+            } else {
+                params = request.Cgi();
+            }
+        }
+
         if (action == TCgi::TActions::SplitOneToOne) {
-            TTabletId tabletId = TTabletId(TryParseTabletId(cgi.Get(TCgi::ShardID)));
+            TTabletId tabletId = TTabletId(TryParseTabletId(params.Get(TCgi::ShardID)));
             TShardIdx shardIdx = Self->GetShardIdx(tabletId);
             if (!shardIdx) {
                 SendBadRequest("Cannot find the specified shard", ctx);
@@ -1671,12 +1994,11 @@ private:
             }
 
             ctx.Register(new TMonitoringShardSplitOneToOne(std::move(Ev), Self->TabletID(), pathId, tabletId));
-            return;
 
         } else if (action == TCgi::TActions::ForceDropUnsafe) {
             const TPathId pathId(
-                FromStringWithDefault<ui64>(cgi.Get(TCgi::OwnerPathId), InvalidOwnerId),
-                FromStringWithDefault<ui64>(cgi.Get(TCgi::LocalPathId), InvalidLocalPathId)
+                FromStringWithDefault<ui64>(params.Get(TCgi::OwnerPathId), InvalidOwnerId),
+                FromStringWithDefault<ui64>(params.Get(TCgi::LocalPathId), InvalidLocalPathId)
             );
 
             const auto path = TPath::Init(pathId, Self);
@@ -1686,10 +2008,108 @@ private:
             }
 
             ctx.Register(new TMonitoringForceDropUnsafe(std::move(Ev), Self->TabletID(), path.PathString()));
-            return;
-        }
 
-        SendBadRequest("Action not supported", ctx);
+        } else if (action == TCgi::TActions::TablePartitionsFormatSwitch) {
+            const bool switchEnabled = AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx();
+            if (!switchEnabled) {
+                SendBadRequest("Format switching is disabled", ctx);
+                return;
+            }
+
+            const TPathId pathId(
+                FromStringWithDefault<ui64>(params.Get(TCgi::OwnerPathId), InvalidOwnerId),
+                FromStringWithDefault<ui64>(params.Get(TCgi::LocalPathId), InvalidLocalPathId)
+            );
+
+            const auto path = TPath::Init(pathId, Self);
+            if (!path) {
+                SendBadRequest(TStringBuilder() << "Cannot find path with PathId " << pathId, ctx);
+                return;
+            }
+            if (!Self->Tables.FindPtr(pathId)) {
+                SendBadRequest(TStringBuilder() << "PathId " << pathId << " is not a table", ctx);
+                return;
+            }
+
+            const TString input = params.Get(TCgi::TablePartitionsFormat);
+            bool formatShardIdx = false;
+            if (ParseTablePartitionsFormat(input, &formatShardIdx)) {
+                Self->Execute(Self->CreateTxTablePartitionsFormatSwitch(std::move(Ev), pathId, formatShardIdx), ctx);
+            } else {
+                SendBadRequest(
+                    TStringBuilder() << "Invalid target '" << input << "', expected 'position' or 'shardidx'",
+                    ctx
+                );
+            }
+
+        } else if (action == TCgi::TActions::TablePartitionsFormatSweep) {
+            ESweepAlert sweepAlert = ESweepAlert::NONE;
+
+            const bool switchEnabled = AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx();
+            if (switchEnabled) {
+                const auto& sweep = Self->TablePartitionsFormatSweep;
+
+                if (params.Has(TCgi::Start)) {
+                    if (sweep.Status == TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Idle) {
+                        const TString input = params.Get(TCgi::TablePartitionsFormat);
+                        bool formatShardIdx = false;
+                        if (ParseTablePartitionsFormat(input, &formatShardIdx)) {
+                            Self->StartTablePartitionsFormatSweep(db, formatShardIdx);
+                            sweepAlert = ESweepAlert::START_OK;
+                        } else {
+                            sweepAlert = ESweepAlert::START_ERROR_1;
+                        }
+                    } else {
+                        sweepAlert = ESweepAlert::START_ERROR_2;
+                    }
+
+                } else if (params.Has(TCgi::Pause)) {
+                    if (sweep.Status == TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Running) {
+                        Self->PauseTablePartitionsFormatSweep(db);
+                        sweepAlert = ESweepAlert::PAUSE_OK;
+                    } else {
+                        sweepAlert = ESweepAlert::PAUSE_ERROR;
+                    }
+
+                } else if (params.Has(TCgi::Resume)) {
+                    if (sweep.Status == TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Paused) {
+                        Self->ResumeTablePartitionsFormatSweep(db);
+                        sweepAlert = ESweepAlert::RESUME_OK;
+                    } else {
+                        sweepAlert = ESweepAlert::RESUME_ERROR;
+                    }
+
+                } else if (params.Has(TCgi::Cancel)) {
+                    if (sweep.Status != TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Idle) {
+                        Self->CancelTablePartitionsFormatSweep(db);
+                        sweepAlert = ESweepAlert::CANCEL_OK;
+                    } else {
+                        sweepAlert = ESweepAlert::CANCEL_ERROR;
+                    }
+                }
+                // else: return current status
+
+            } else {
+                sweepAlert = ESweepAlert::ERROR_DISABLED;
+            }
+
+            // make redirect with location relative to the original request url (path)
+            const TStringBuf appPath = TabletDevUiAppPath();
+            TStringBuilder location;
+            location << appPath
+                << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
+                << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::AdminPage)
+            ;
+            if (sweepAlert != ESweepAlert::NONE) {
+                // output an underlying number, not an associated string value
+                location << "&" << TCgi::SweepAlert.AsCgiParam(ToString(ui8(sweepAlert)));
+            }
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxMonitoring.Execute: redirect to " << location);
+            SendRedirect(location, ctx);
+
+        } else {
+            SendBadRequest("Action not supported", ctx);
+        }
     }
 };
 
@@ -1699,6 +2119,17 @@ bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
 
     if (!ev)
         return true;
+
+    const TCgiParameters& cgi = ev->Get()->Cgi();
+    if (!IsTabletDevUiAccessAllowed(
+            AppData(),
+            ev->Get()->PathInfo(),
+            ev->Get()->GetUserToken(),
+            !IsSchemeShardDevUiAdminRequest(cgi, ctx)))
+    {
+        Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+        return true;
+    }
 
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvRemoteHttpInfo: " << ev->Get()->Cgi().Print());
     Execute(new TTxMonitoring(this, ev), ctx);

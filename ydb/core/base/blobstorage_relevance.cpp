@@ -8,8 +8,14 @@ TMessageRelevance::TMessageRelevance(const TMessageRelevanceOwner& onwer,
     , ExternalWatcher(external)
 {}
 
-bool TMessageRelevance::IsRelevant() const {
-    return !InternalWatcher.expired() && (!ExternalWatcher || !ExternalWatcher->expired());
+TMessageRelevance::EStatus TMessageRelevance::GetStatus() const {
+    if (InternalWatcher.expired()) {
+        return EStatus::CancelledInternally;
+    }
+    if (ExternalWatcher && ExternalWatcher->expired()) {
+        return EStatus::CancelledExternally;
+    }
+    return EStatus::Relevant;
 }
 
 } // namespace NKikimr

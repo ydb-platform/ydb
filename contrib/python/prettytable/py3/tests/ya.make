@@ -5,10 +5,7 @@ PEERDIR(
     contrib/python/pytest-lazy-fixtures
 )
 
-TEST_SRCS(
-    test_colortable.py
-    test_prettytable.py
-)
+ALL_PYTEST_SRCS(RECURSIVE)
 
 NO_LINT()
 

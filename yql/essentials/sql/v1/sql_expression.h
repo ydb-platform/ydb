@@ -135,7 +135,7 @@ private:
         Ctx_.Error(tail.Pos) << "Unexpected token '?' at the end of expression";
     }
 
-    bool IsTopLevelGroupBy() const;
+    [[nodiscard]] bool IsTopLevelGroupBy() const;
     bool EnsureSubSelectAvailable(const ISource& source);
     TSourcePtr LangVersionedSubSelect(TSourcePtr source);
     TNodePtr ToSubSelectNode(TSourcePtr source);

@@ -14,6 +14,7 @@ private:
     std::vector<TPortionInfo::TConstPtr> PortionsToDrop;
     TRemovePortionsChange PortionsToRemove;
     THashSet<TInternalPathId> TablesToDrop;
+    TSnapshot MinSnapshotForNewReads = TSnapshot::Zero();
 
 protected:
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& /*context*/) override {
@@ -69,6 +70,10 @@ public:
 
     const std::vector<TPortionInfo::TConstPtr>& GetPortionsToDrop() const {
         return PortionsToDrop;
+    }
+
+    void SetMinSnapshotForNewReads(const TSnapshot& snapshot) {
+        MinSnapshotForNewReads = snapshot;
     }
 
     void AddPortionToDrop(const TPortionInfo::TConstPtr& portion) {

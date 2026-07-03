@@ -149,13 +149,7 @@ bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debu
         return false;
     }
 
-    const TVector<TDataCenterId>& allowedDataCenters = filter.AllowedDataCenters;
-
-    if (!allowedDataCenters.empty()
-            && std::find(
-                allowedDataCenters.begin(),
-                allowedDataCenters.end(),
-                GetDataCenter()) == allowedDataCenters.end()) {
+    if (!filter.IsAllowedDataCenter(GetDataCenter())) {
         if (debugState) {
             debugState->NodesInDatacentersNotAllowed++;
         }
@@ -234,7 +228,9 @@ i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet, TDataCenterPriori
     }
 
     priority += dcPriority[GetDataCenter()];
-    priority -= GetRestartsPerPeriod() / Hive.GetNodeRestartsForPenalty();
+    if (GetRestartsPerPeriod() >= Hive.GetNodeRestartsForPenalty()) {
+        --priority;
+    }
 
     return priority;
 }

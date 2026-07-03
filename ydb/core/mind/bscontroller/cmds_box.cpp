@@ -190,20 +190,18 @@ namespace NKikimr::NBsController {
             storagePools.insert(std::move(node));
 
             // process storage pool to group mapping
-            for (;;) {
-                auto node = storagePoolGroups.extract(origin);
-                if (node.empty()) {
-                    break;
-                }
+            for (auto it = storagePoolGroups.lower_bound({origin, Min<TGroupId>()});
+                    it != storagePoolGroups.end() && it->first == origin; ) {
+                auto node = storagePoolGroups.extract(it++);
 
                 // update storage pool id mapping in group itself
-                TGroupInfo *group = Groups.FindForUpdate(node.mapped());
+                TGroupInfo *group = Groups.FindForUpdate(node.value().second);
                 Y_ABORT_UNLESS(group);
                 Y_ABORT_UNLESS(group->StoragePoolId == origin);
                 group->StoragePoolId = target;
 
                 // update the key and insert item back into map
-                node.key() = target;
+                node.value().first = target;
                 storagePoolGroups.insert(std::move(node));
             }
         }
@@ -278,6 +276,7 @@ namespace NKikimr::NBsController {
             if (slot->Group) {
                 auto *m = VSlots.FindForUpdate(slot->VSlotId);
                 m->VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                m->OnlyPhantomsRemain = false;
                 m->IsReady = false;
                 TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
                 GroupFailureModelChanged.insert(slot->Group->ID);
@@ -302,6 +301,7 @@ namespace NKikimr::NBsController {
                 if (slot->Group) {
                     auto *m = VSlots.FindForUpdate(slot->VSlotId);
                     m->VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                    m->OnlyPhantomsRemain = false;
                     m->IsReady = false;
                     TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
                     GroupFailureModelChanged.insert(slot->Group->ID);
@@ -328,11 +328,78 @@ namespace NKikimr::NBsController {
             if (slot->Group) {
                 auto *m = VSlots.FindForUpdate(slot->VSlotId);
                 m->VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                m->OnlyPhantomsRemain = false;
                 m->IsReady = false;
                 TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
                 GroupFailureModelChanged.insert(slot->Group->ID);
                 group->CalculateGroupStatus();
             }
+        }
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TPopulatePDisk& cmd, TStatus& /*status*/) {
+        const TPDiskId destinationPDiskId = GetPDiskId(*this, cmd.GetDestinationPDisk());
+
+        const TPDiskInfo *destinationPDisk = PDisks.Find(destinationPDiskId);
+
+        if (!destinationPDisk) {
+            throw TExPDiskNotFound(destinationPDiskId.NodeId, destinationPDiskId.PDiskId);
+        }
+
+        const bool hasExplicitVDisks = cmd.VDiskIdSize() != 0;
+        if (!hasExplicitVDisks) {
+            throw TExError() << "Specify non-empty VDiskId list";
+        }
+
+        TVector<const TVSlotInfo*> selected;
+        THashSet<TVSlotId> selectedIds;
+
+        selected.reserve(cmd.VDiskIdSize());
+        for (const auto& protoVDiskId : cmd.GetVDiskId()) {
+            const TVDiskID vdiskId = VDiskIDFromVDiskID(protoVDiskId);
+
+            const TGroupInfo *group = Groups.Find(vdiskId.GroupID);
+            if (!group) {
+                throw TExGroupNotFound(vdiskId.GroupID.GetRawId());
+            }
+            if (group->VDisksInGroup.empty()) {
+                throw TExReassignNotViable() << "GroupId# " << group->ID << " has no active VDisks";
+            }
+            if (!group->Topology->IsValidId(vdiskId)) {
+                throw TExError() << "VDiskId# " << vdiskId << " out of range";
+            }
+            if (vdiskId.GroupGeneration && vdiskId.GroupGeneration != group->Generation) {
+                throw TExGroupGenerationMismatch(group->ID.GetRawId(), vdiskId.GroupGeneration, group->Generation);
+            }
+
+            const ui32 orderNumber = group->Topology->GetOrderNumber(vdiskId);
+            const TVSlotInfo *slot = group->VDisksInGroup.at(orderNumber);
+            Y_ABORT_UNLESS(slot);
+
+            if (slot->IsBeingDeleted() || slot->Mood == TMood::Donor) {
+                throw TExReassignNotViable() << "VDiskId# " << vdiskId << " is not movable at the moment";
+            }
+            if (!selectedIds.insert(slot->VSlotId).second) {
+                throw TExError() << "Duplicate VDiskId# " << vdiskId;
+            }
+
+            if (slot->VSlotId.ComprisingPDiskId() != destinationPDiskId) {
+                selected.push_back(slot);
+            }
+        }
+
+        for (const TVSlotInfo *slot : selected) {
+            Y_ABORT_UNLESS(slot->Group);
+            const auto [it, inserted] = ExplicitReconfigureMap.emplace(slot->VSlotId, destinationPDiskId);
+            if (!inserted) {
+                throw TExError() << "VSlotId# " << slot->VSlotId << " is already scheduled for reassignment";
+            }
+
+            if (cmd.GetSuppressDonorMode()) {
+                SuppressDonorMode.insert(slot->VSlotId);
+            }
+
+            Fit.PoolsAndGroups.emplace(slot->Group->StoragePoolId, slot->Group->ID);
         }
     }
 

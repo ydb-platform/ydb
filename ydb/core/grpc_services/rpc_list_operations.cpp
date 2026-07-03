@@ -17,6 +17,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 #include <ydb/core/tx/schemeshard/olap/bg_tasks/events/global.h>
+#include <ydb/core/statistics/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
@@ -61,6 +62,10 @@ class TListOperationsRPC
             return "[ListBackupCollectionRestores]";
         case TOperationId::COMPACTION:
             return "[ListForcedCompactions]";
+        case TOperationId::FULL_BACKUP:
+            return "[ListFullBackups]";
+        case TOperationId::ANALYZE:
+            return "[ListAnalyze]";
         default:
             return "[Untagged]";
         }
@@ -84,6 +89,8 @@ class TListOperationsRPC
             return new TEvBackup::TEvListBackupCollectionRestoresRequest(GetDatabaseName(), request.page_size(), request.page_token());
         case TOperationId::COMPACTION:
             return new TEvForcedCompaction::TEvListRequest(GetDatabaseName(), request.page_size(), request.page_token());
+        case TOperationId::FULL_BACKUP:
+            return new TEvBackup::TEvListFullBackupsRequest(GetDatabaseName(), request.page_size(), request.page_token());
         default:
             Y_ABORT("unreachable");
         }
@@ -187,6 +194,113 @@ class TListOperationsRPC
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvListScriptExecutionOperations(GetDatabaseName(), GetProtoRequest()->page_size(), GetProtoRequest()->page_token(), GetUserSID(*Request)));
     }
 
+    void ResolveStatisticsAggregatorForList() {
+        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+        auto request = MakeHolder<TNavigate>();
+        request->DatabaseName = GetDatabaseName();
+        auto& entry = request->ResultSet.emplace_back();
+        entry.Operation = TNavigate::OpPath;
+        entry.Path = NKikimr::SplitPath(GetDatabaseName());
+        entry.RedirectRequired = false;
+        Send(MakeSchemeCacheID(),
+            new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()),
+            0, AnalyzeSaCookie);
+    }
+
+    void HandleAnalyzeNavigateResult(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const auto& request = ev->Get()->Request;
+
+        if (request->ResultSet.empty() || request->ErrorCount > 0) {
+            return Reply(StatusIds::SCHEME_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR);
+        }
+        const auto& entry = request->ResultSet.front();
+        if (!entry.DomainInfo) {
+            return Reply(StatusIds::INTERNAL_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR);
+        }
+
+        if (!this->CheckAccess(CanonizePath(entry.Path), entry.SecurityObject, GetRequiredAccessRights())) {
+            return;
+        }
+
+        if (ev->Cookie == AnalyzeSaSecondCookie) {
+            if (entry.DomainInfo->Params.HasStatisticsAggregator()) {
+                SendAnalyzeListToSa(entry.DomainInfo->Params.GetStatisticsAggregator());
+            } else {
+                Reply(StatusIds::UNSUPPORTED, TIssuesIds::GENERIC_RESOLVE_ERROR,
+                    TStringBuilder() << "No statistics aggregator found for the database "
+                        << GetDatabaseName() << "; ANALYZE long-running operations are not available");
+            }
+            return;
+        }
+
+        const auto& domainInfo = entry.DomainInfo;
+        if (!domainInfo->IsServerless()) {
+            if (domainInfo->Params.HasStatisticsAggregator()) {
+                SendAnalyzeListToSa(domainInfo->Params.GetStatisticsAggregator());
+            } else {
+                NavigateAnalyzeDomainKey(domainInfo->DomainKey);
+            }
+        } else {
+            NavigateAnalyzeDomainKey(domainInfo->ResourcesDomainKey);
+        }
+    }
+
+    void NavigateAnalyzeDomainKey(const TPathId& domainKey) {
+        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+        auto navigate = MakeHolder<TNavigate>();
+        navigate->DatabaseName = GetDatabaseName();
+        auto& entry = navigate->ResultSet.emplace_back();
+        entry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
+        entry.Operation = TNavigate::EOp::OpPath;
+        entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+        entry.RedirectRequired = false;
+        Send(MakeSchemeCacheID(),
+            new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.Release()),
+            0, AnalyzeSaSecondCookie);
+    }
+
+    void SendAnalyzeListToSa(ui64 saTabletId) {
+        if (!AnalyzePipeClient) {
+            NTabletPipe::TClientConfig config;
+            config.RetryPolicy = {.RetryLimitCount = 3};
+            AnalyzePipeClient = RegisterWithSameMailbox(
+                NTabletPipe::CreateClient(SelfId(), saTabletId, config));
+        }
+        const auto& request = *GetProtoRequest();
+        NTabletPipe::SendData(SelfId(), AnalyzePipeClient,
+            new NStat::TEvStatistics::TEvAnalyzeOpListRequest(
+                GetDatabaseName(), request.page_size(), request.page_token()));
+    }
+
+    static constexpr ui64 AnalyzeSaCookie       = 100;
+    static constexpr ui64 AnalyzeSaSecondCookie  = 101;
+    TActorId AnalyzePipeClient;
+
+    void Handle(NStat::TEvStatistics::TEvAnalyzeOpListResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvAnalyzeOpListResponse: record# " << record.ShortDebugString());
+
+        TResponse response;
+        response.set_status(record.GetStatus());
+        if (record.GetIssues().size()) {
+            response.mutable_issues()->CopyFrom(record.GetIssues());
+        }
+        // Only populate operations when the SA reported SUCCESS. On non-success some entries may
+        // still be present (e.g. partial responses); ToOperation aborts if any entry has a bad
+        // OperationId, so don't iterate them on the error path.
+        if (record.GetStatus() == Ydb::StatusIds::SUCCESS) {
+            for (const auto& entry : record.GetEntries()) {
+                auto* operation = response.add_operations();
+                ::NKikimr::NGRpcService::ToOperation(entry, operation);
+            }
+        }
+        response.set_next_page_token(record.GetNextPageToken());
+
+        // AnalyzePipeClient is closed in PassAway (invoked by Reply), so no explicit close here.
+        Reply(response);
+    }
+
     void Handle(NKqp::TEvListScriptExecutionOperationsResponse::TPtr& ev) {
         TResponse response;
         response.set_status(ev->Get()->Status);
@@ -236,6 +350,24 @@ class TListOperationsRPC
         Reply(response);
     }
 
+    void Handle(TEvBackup::TEvListFullBackupsResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvBackup::TEvListFullBackupsResponse"
+            << ": record# " << record.ShortDebugString());
+
+        TResponse response;
+        response.set_status(record.GetStatus());
+        if (record.GetIssues().size()) {
+            response.mutable_issues()->CopyFrom(record.GetIssues());
+        }
+        for (const auto& entry : record.GetEntries()) {
+            *response.add_operations() = TFullBackupConv::ToOperation(entry);
+        }
+        response.set_next_page_token(record.GetNextPageToken());
+        Reply(response);
+    }
+
 public:
     using TRpcOperationRequestActor::TRpcOperationRequestActor;
 
@@ -250,9 +382,17 @@ public:
         case TOperationId::INCREMENTAL_BACKUP:
         case TOperationId::RESTORE:
         case TOperationId::COMPACTION:
+        case TOperationId::FULL_BACKUP:
             break;
         case TOperationId::SCRIPT_EXECUTION:
             SendListScriptExecutions();
+            return;
+        case TOperationId::ANALYZE:
+            if (!AppData()->FeatureFlags.GetEnableAnalyzeLongRunningOperation()) {
+                return Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR,
+                    "ANALYZE long-running operation is disabled");
+            }
+            ResolveStatisticsAggregatorForList();
             return;
 
         default:
@@ -260,6 +400,21 @@ public:
         }
 
         ResolveDatabase();
+    }
+
+    void HandleNavigateResult(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        if (ParseKind(GetProtoRequest()->kind()) == TOperationId::ANALYZE) {
+            HandleAnalyzeNavigateResult(ev);
+        } else {
+            TRpcOperationRequestActor::Handle(ev);
+        }
+    }
+
+    void PassAway() override {
+        // AnalyzePipeClient is opened only on the ANALYZE path. Closing the default actor id is a
+        // no-op, so this is safe for every operation kind.
+        NTabletPipe::CloseAndForgetClient(SelfId(), AnalyzePipeClient);
+        TRpcOperationRequestActor::PassAway();
     }
 
     STATEFN(StateWait) {
@@ -272,6 +427,9 @@ public:
             hFunc(NKqp::TEvListScriptExecutionOperationsResponse, Handle);
             hFunc(TEvBackup::TEvListIncrementalBackupsResponse, Handle);
             hFunc(TEvBackup::TEvListBackupCollectionRestoresResponse, Handle);
+            hFunc(TEvBackup::TEvListFullBackupsResponse, Handle);
+            hFunc(NStat::TEvStatistics::TEvAnalyzeOpListResponse, Handle);
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigateResult);
         default:
             return StateBase(ev);
         }

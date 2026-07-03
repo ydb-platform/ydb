@@ -942,8 +942,9 @@ namespace NKikimr {
                     // process all groups in this pool and skip the rest
                     processSingleStoragePool(spIt->first, spIt->second, true, [&](const auto& callback) {
                         const auto& storagePoolGroups = state.StoragePoolGroups.Get();
-                        for (auto [begin, end] = storagePoolGroups.equal_range(spIt->first); begin != end; ++begin) {
-                            callback(begin->second);
+                        for (auto it = storagePoolGroups.lower_bound({spIt->first, Min<TGroupId>()});
+                                it != storagePoolGroups.end() && it->first == spIt->first; ++it) {
+                            callback(it->second);
                         }
                     });
                     for (; it != poolsAndGroups.end() && std::get<0>(*it) == storagePoolId; ++it)

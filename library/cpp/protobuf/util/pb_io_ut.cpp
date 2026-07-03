@@ -88,6 +88,14 @@ Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
             NProtobufUtilUt::TTextTest message;
             UNIT_ASSERT(TryParseFromTextFormat(correctFileName, message));
         }
+
+        {
+            NProtobufUtilUt::TTextTest message;
+            UNIT_ASSERT(TryParseTextFormatFromString("Foo: 7", message));
+            UNIT_ASSERT_VALUES_EQUAL(message.GetFoo(), 7);
+            message = ParseTextFormatFromString<NProtobufUtilUt::TTextTest>("Foo: 8");
+            UNIT_ASSERT_VALUES_EQUAL(message.GetFoo(), 8);
+        }
         {
             NProtobufUtilUt::TTextTest message;
             UNIT_ASSERT(!TryParseFromTextFormat(incorrectFileName, message));

@@ -19,6 +19,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     , EventGroup(Counters->GetSubgroup("subsystem", "event"))
     , HandoffGroup(Counters->GetSubgroup("subsystem", "handoff"))
     , ActiveRequestsGroup(Counters->GetSubgroup("subsystem", "requests"))
+    , CancellationGroup(Counters->GetSubgroup("subsystem", "cancellation"))
 {
     if (info) {
         const TBlobStorageGroupInfo::TDynamicInfo& dyn = info->GetDynamicInfo();
@@ -117,6 +118,8 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     RespStatPatch.emplace(respStatGroup->GetSubgroup("request", "patch"));
     RespStatAssimilate.emplace(respStatGroup->GetSubgroup("request", "assimilate"));
     RespStatCheckIntegrity.emplace(respStatGroup->GetSubgroup("request", "checkIntegrity"));
+
+    CancelledEvents = CancellationGroup->GetCounter("CancelledEvents", true);
 }
 
 void TBlobStorageGroupProxyMon::BecomeFull() {

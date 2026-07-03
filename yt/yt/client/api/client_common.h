@@ -20,6 +20,12 @@ namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+DEFINE_ENUM(EClientPriority,
+    ((Local)            (0))
+    ((Remote)           (1))
+    ((Undefined)        (2))
+);
+
 struct TMutatingOptions
 {
     NRpc::TMutationId MutationId;
@@ -167,6 +173,8 @@ struct TSelectRowsOptionsBase
     //! The quality of the the "cardinality" aggregate function estimates.
     //! 2^HyperLogLogPrecision 8-bit cells will be used.
     std::optional<int> HyperLogLogPrecision;
+    //! Perform the final aggregation on proxy in parallel.
+    std::optional<bool> EnableParallelizeUnorderedGroupBy;
 };
 
 struct TSelectRowsOptions
@@ -177,7 +185,7 @@ struct TSelectRowsOptions
     //! If null then connection defaults are used.
     std::optional<i64> OutputRowLimit;
     //! Execution pool.
-    std::optional<TString> ExecutionPool;
+    std::optional<std::string> ExecutionPool;
     //! Used to prioritize requests.
     TUserWorkloadDescriptor WorkloadDescriptor;
     //! Memory limit per execution node.

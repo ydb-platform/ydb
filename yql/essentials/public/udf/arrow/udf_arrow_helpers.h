@@ -110,8 +110,8 @@ public:
 
             auto shape = blockInspector.IsScalar() ? arrow::ValueDescr::SCALAR : arrow::ValueDescr::ARRAY;
 
-            inTypes.emplace_back(arrow::compute::InputType(type, shape));
-            ArgsValuesDescr_.emplace_back(arrow::ValueDescr(type, shape));
+            inTypes.emplace_back(type, shape);
+            ArgsValuesDescr_.emplace_back(type, shape);
         }
 
         ReturnArrowTypeHandle_ = TypeInfoHelper_->MakeArrowType(outputType);

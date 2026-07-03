@@ -2,7 +2,7 @@
 
 A high performance core database driver for connecting ClickHouse to Python, Pandas, and Superset
 
-* Pandas DataFrames (numpy and arrow-backed). Pandas 2.x and above only, 1.x is deprecated and will be dropped in 1.0.
+* Pandas DataFrames (numpy and arrow-backed). Requires pandas 2.0 or later.
 * Numpy Arrays
 * PyArrow Tables
 * Polars DataFrames
@@ -17,8 +17,11 @@ ClickHouse Connect currently uses the ClickHouse HTTP interface for maximum comp
 pip install clickhouse-connect
 ```
 
-ClickHouse Connect requires Python 3.9 or higher. We officially test against Python 3.10 through 3.14.
-Python 3.9 is deprecated and support will be removed entirely in 1.0.
+ClickHouse Connect requires Python 3.10 or higher.
+
+#### Upgrading from 0.x
+
+The 1.0 release includes breaking changes. If you are upgrading from a 0.15.x or earlier release, see [MIGRATION.md](MIGRATION.md) for a guide to the changes and their replacements.
 
 ### Superset Connectivity
 
@@ -42,6 +45,7 @@ Supported features include:
   `ARRAY JOIN` (single and multi-column), `FINAL`, and `SAMPLE`
 - `VALUES` table function syntax
 - Lightweight `DELETE` statements
+- **Alembic** schema migrations (autogenerate, upgrade/downgrade, ClickHouse engine support)
 
 A small number of features require SQLAlchemy 2.x: `Values.cte()` and certain literal-rendering behaviors.
 All other dialect features, including those used by Superset, work on both 1.4 and 2.x.
@@ -51,15 +55,37 @@ Basic ORM usage works for insert-heavy, read-focused workloads: declarative mode
 provided. UPDATE compilation, foreign key/relationship reflection, autoincrement/RETURNING, and cascade operations
 are not implemented. The dialect is best suited for SQLAlchemy Core usage and Superset connectivity.
 
+#### Alembic Migrations
+
+ClickHouse Connect supports [Alembic](https://alembic.sqlalchemy.org/) for schema migrations, including
+autogeneration of migration scripts from SQLAlchemy metadata. ClickHouse table engines (`MergeTree`,
+`ReplacingMergeTree`, etc.) and dictionaries are preserved through the migration lifecycle.
+
+Supported operations include create/drop table, add/alter/drop/rename column, type and nullability
+changes, defaults, comments, and ClickHouse-specific features like `IF EXISTS` guards, column
+placement with `AFTER`, and operation-level `clickhouse_settings` on column add/alter/drop.
+
+To get started, install the Alembic extra:
+
+```bash
+pip install clickhouse-connect[alembic]
+```
+
+See the [Alembic worked example](clickhouse_connect/cc_sqlalchemy/alembic/WORKED_EXAMPLE.md) for a
+full end-to-end walkthrough covering setup, autogeneration, upgrades, downgrades, and manual
+migration operations.
+
 ### Asyncio Support
 
-ClickHouse Connect provides an `AsyncClient` for use in `asyncio` environments.
-See the [run_async example](./examples/run_async.py) for more details.
+ClickHouse Connect provides native async support using aiohttp. To use the async client,
+install the optional async dependency:
 
-The current `AsyncClient` is a thread-pool executor wrapper around the synchronous client and is deprecated.
-In 1.0.0 it will be replaced by a fully native async implementation. The API surface is the same,
-with one difference: you will no longer be able to create a sync client first and pass it to the
-`AsyncClient` constructor. Instead, use `clickhouse_connect.get_async_client()` directly.
+```
+pip install clickhouse-connect[async]
+```
+
+Then create a client with `clickhouse_connect.get_async_client()`. See the
+[run_async example](./examples/run_async.py) for more details.
 
 ### Complete Documentation
 

@@ -6,9 +6,9 @@ namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::vector<TString> FormatPermissions(EPermissionSet permissions)
+std::vector<std::string> FormatPermissions(EPermissionSet permissions)
 {
-    std::vector<TString> result;
+    std::vector<std::string> result;
     for (auto value : TEnumTraits<EPermission>::GetDomainValues()) {
         if (Any(permissions & value)) {
             result.push_back(FormatEnum(value));

@@ -1,14 +1,13 @@
 #include "two_level_fair_share_thread_pool.h"
 #include "notify_manager.h"
 #include "private.h"
-#include "profiling_helpers.h"
+#include "helpers.h"
 #include "scheduler_thread.h"
 #include "thread_pool_detail.h"
 
 #include <yt/yt/core/actions/current_invoker.h>
 
 #include <yt/yt/core/misc/finally.h>
-#include <yt/yt/core/misc/hazard_ptr.h>
 #include <yt/yt/core/misc/heap.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 #include <yt/yt/core/misc/ring_queue.h>
@@ -759,7 +758,8 @@ public:
             }
 
             YT_VERIFY(fetchNext);
-            MaybeRunMaintenance(&threadState, GetCpuInstant(), /*flush*/ true);
+
+            // NB: Hazard pointer reclamation is driven by Wait (the parking primitive).
             Wait(cookie, isStopping);
         }
     }
@@ -829,7 +829,6 @@ private:
         int LastActionsInQueue;
         TDuration TimeFromStart;
         TDuration TimeFromEnqueue;
-        TCpuInstant LastMaintenanceInstant = {};
     };
 
     static_assert(sizeof(TThreadState) >= CacheLineSize);
@@ -1211,7 +1210,7 @@ private:
                 WaitTimeObservers_.Fire(waitTime);
             }
 
-            MaybeRunMaintenance(&threadState, action.StartedAt, /*flush*/ false);
+            ReclaimHazardPointersPeriodically(action.StartedAt, /*force*/ false);
 
             CumulativeSchedulingTimeCounter_.Add(CpuDurationToDuration(GetCpuInstant() - cpuInstant));
 
@@ -1256,17 +1255,6 @@ private:
         NotifyAfterFetch(endInstant, newMinEnqueuedAt);
 
         return std::move(threadState.Action.Callback);
-    }
-
-    static void MaybeRunMaintenance(TThreadState* threadState, TCpuInstant now, bool flush)
-    {
-        YT_ASSERT(threadState);
-
-        constexpr i64 MaintenancePeriod = 1'000'000'000;
-        if (flush || now > threadState->LastMaintenanceInstant + MaintenancePeriod) {
-            ReclaimHazardPointers(false);
-            threadState->LastMaintenanceInstant  = now;
-        }
     }
 };
 

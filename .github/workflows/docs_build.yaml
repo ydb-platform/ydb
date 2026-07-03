@@ -1,42 +1,123 @@
 name: Build documentation
 
+# SECURITY: triggered by `pull_request` (not `pull_request_target`).
+# This means the workflow runs in fork-isolated context with a read-only
+# GITHUB_TOKEN and no access to base-repo secrets. PR-controlled documentation
+# code (including any JS extensions loaded by Diplodoc/YFM via `require()`)
+# cannot escalate to the privileged base context. The `workflow_dispatch`
+# entry point is used by `docs_build_rebuild.yaml` (and by maintainers) to
+# rebuild a specific PR; it runs with the same read-only permissions.
+
 on:
-  pull_request_target:
-    paths: 
-    - 'ydb/docs/**'
+  pull_request:
+    paths:
+      - 'ydb/docs/**'
+  workflow_dispatch:
+    inputs:
+      pull_number:
+        description: 'Pull Request number to build documentation'
+        required: true
+        type: string
 
 jobs:
-  add-label:
+  build-docs:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.state == 'open'
+    concurrency:
+      group: docs-build-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
-    steps:
-      - name: Add documentation label
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.addLabels({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              labels: ['documentation']
-            })
-            
-  build-docs:
-    needs: add-label
-    concurrency:
-      group: docs-build-${{ github.event.pull_request.number }}
-      cancel-in-progress: true
-    runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pull_number) || github.event.pull_request.head.sha }}
+
+      - name: Get commit SHA
+        id: sha
+        run: echo "value=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      # Branches listed below keep the old logic (use-ya-opensource: false).
+      # All other branches use the new logic (use-ya-opensource: true).
+      - name: Determine ya-opensource flag
+        id: ya
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const legacyBranches = [
+              'stable-25-1',
+              'stable-25-2',
+              'stable-25-2-1',
+              'stable-25-3',
+              'stable-25-3-1',
+              'stable-25-4',
+              'stable-25-4-1',
+              'stable-26-1',
+              'stable-26-1-1',
+              'stable-26-2',
+              'stable-26-2-1',
+            ];
+            let baseRef;
+            if (context.eventName === 'workflow_dispatch') {
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: Number(${{ inputs.pull_number }}),
+              });
+              baseRef = pr.base.ref;
+            } else {
+              baseRef = context.payload.pull_request.base.ref;
+            }
+            core.setOutput('use', legacyBranches.includes(baseRef) ? 'false' : 'true');
+
       - name: Build
         uses: diplodoc-platform/docs-build-action@v3
         with:
-          revision: "pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}"
+          revision: "pr-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"
           src-root: "./ydb/docs"
-          cli-version: stable
+          cli-version: "4.59.12"
+          use-ya-opensource: ${{ steps.ya.outputs.use }}
+
+      - name: Fail on documentation build issues
+        run: |
+          set -euo pipefail
+          if [[ ! -f build-html.log ]]; then
+            echo "::error::Documentation build log (build-html.log) not found"
+            exit 1
+          fi
+          issue_count=$(grep -cE '^(ERR|WARN)' build-html.log || true)
+          if [[ "$issue_count" -gt 0 ]]; then
+            echo "::error::Documentation build has ${issue_count} error(s)/warning(s)"
+            grep -E '^(ERR|WARN)' build-html.log | sort -u | head -20
+            if [[ "$issue_count" -gt 20 ]]; then
+              echo "... and $((issue_count - 20)) more (see PR comment for full log)"
+            fi
+            exit 1
+          fi
+          echo "No documentation build warnings or errors"
+
+      # docs-build-action writes github.event.number to inputs/pr-number.
+      # For workflow_dispatch this field is empty, so patch the artifact.
+      - name: Download inputs artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/download-artifact@v4
+        with:
+          name: inputs
+          path: ./inputs
+
+      - name: Save PR number to inputs artifact
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          PULL_NUMBER: ${{ inputs.pull_number }}
+        run: printf '%s' "$PULL_NUMBER" > ./inputs/pr-number
+
+      - name: Upload inputs artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: inputs
+          path: ./inputs/
+          overwrite: true

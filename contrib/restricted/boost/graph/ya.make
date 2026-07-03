@@ -46,7 +46,6 @@ PEERDIR(
     contrib/restricted/boost/serialization
     contrib/restricted/boost/smart_ptr
     contrib/restricted/boost/spirit
-    contrib/restricted/boost/static_assert
     contrib/restricted/boost/throw_exception
     contrib/restricted/boost/tti
     contrib/restricted/boost/tuple

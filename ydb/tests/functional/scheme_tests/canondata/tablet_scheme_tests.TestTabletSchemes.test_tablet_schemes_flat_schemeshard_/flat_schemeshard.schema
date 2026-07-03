@@ -508,6 +508,11 @@
                 "ColumnId": 13,
                 "ColumnName": "IsBuildInProgress",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "SetNotNullInProgress",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -526,7 +531,8 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1054,6 +1060,11 @@
                 "ColumnId": 13,
                 "ColumnName": "IsBuildInProgress",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "SetNotNullInProgress",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -1072,7 +1083,8 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -4116,6 +4128,11 @@
                 "ColumnId": 14,
                 "ColumnName": "IsBuildInProgress",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "SetNotNullInProgress",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -4135,7 +4152,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -4639,6 +4657,11 @@
                 "ColumnId": 14,
                 "ColumnName": "IsBuildInProgress",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "SetNotNullInProgress",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -4658,7 +4681,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5333,6 +5357,51 @@
                 "ColumnId": 49,
                 "ColumnName": "SubState",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 50,
+                "ColumnName": "CreateBuildSequenceTxId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 51,
+                "ColumnName": "CreateBuildSequenceTxStatus",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 52,
+                "ColumnName": "CreateBuildSequenceTxDone",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 53,
+                "ColumnName": "FulltextNeedsRowIdColumn",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 54,
+                "ColumnName": "FulltextNeedsUniqueIndex",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 55,
+                "ColumnName": "AutoUniqueIndexName",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 56,
+                "ColumnName": "RowIdColumnBuildId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 57,
+                "ColumnName": "RowIdUniqueBuildId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 58,
+                "ColumnName": "ParentBuildId",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -5387,7 +5456,16 @@
                     46,
                     47,
                     48,
-                    49
+                    49,
+                    50,
+                    51,
+                    52,
+                    53,
+                    54,
+                    55,
+                    56,
+                    57,
+                    58
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6809,6 +6887,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "IsReadOnly",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "PathId",
                 "ColumnType": "Uint64"
@@ -6843,6 +6926,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,
@@ -8172,6 +8256,16 @@
                 "ColumnId": 6,
                 "ColumnName": "FamilyName",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "DefaultFromSequence",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "BitReverseSequenceValue",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -8183,7 +8277,9 @@
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -8971,6 +9067,41 @@
                 "ColumnId": 4,
                 "ColumnName": "SerializedData",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "FinalStatus",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "FinalIssues",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "RestoreStartedAt",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "CurrentStageStartedAt",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "RetryScheduled",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "NextRetryAttemptAt",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "RetryNeeded",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -8980,7 +9111,14 @@
                     1,
                     2,
                     3,
-                    4
+                    4,
+                    5,
+                    6,
+                    7,
+                    8,
+                    9,
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -9575,6 +9713,11 @@
                 "ColumnId": 3,
                 "ColumnName": "LocalPathId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "LastTxId",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -9583,7 +9726,729 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 133,
+        "TableName": "IncrementalRestoreItem",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "OriginalOpId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "ItemSeq",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "ItemKind",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "TablePathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "WaitTxId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "SrcTablePathId",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 134,
+        "TableName": "TablePartitionsByShardIdx",
+        "TableKey": [
+            1,
+            2,
+            3,
+            4
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 7,
+                "ColumnName": "NextCondErase",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 1,
+                "ColumnName": "OwnerPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "LocalPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "OwnerShardIdx",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "LocalShardIdx",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "RangeEnd",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "LastCondErase",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    7,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 135,
+        "TableName": "TablePartitionStatsByShardIdx",
+        "TableKey": [
+            1,
+            2,
+            3,
+            4
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "OwnerPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "LocalPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "OwnerShardIdx",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "LocalShardIdx",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "SeqNoGeneration",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "SeqNoRound",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "RowCount",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "DataSize",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "IndexSize",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "LastAccessTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "LastUpdateTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "ImmediateTxCompleted",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "PlannedTxCompleted",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "TxRejectedByOverload",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "TxRejectedBySpace",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "TxCompleteLag",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "InFlightTxCount",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "RowUpdates",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 19,
+                "ColumnName": "RowDeletes",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 20,
+                "ColumnName": "RowReads",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 21,
+                "ColumnName": "RangeReads",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 22,
+                "ColumnName": "RangeReadRows",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 23,
+                "ColumnName": "CPU",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 24,
+                "ColumnName": "Memory",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 25,
+                "ColumnName": "Network",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 26,
+                "ColumnName": "Storage",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 27,
+                "ColumnName": "ReadThroughput",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 28,
+                "ColumnName": "WriteThroughput",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 29,
+                "ColumnName": "ReadIops",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 30,
+                "ColumnName": "WriteIops",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 31,
+                "ColumnName": "SearchHeight",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 32,
+                "ColumnName": "FullCompactionTs",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 33,
+                "ColumnName": "MemDataSize",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 34,
+                "ColumnName": "StoragePoolsStats",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 35,
+                "ColumnName": "ByKeyFilterSize",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 36,
+                "ColumnName": "LocksAcquired",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 37,
+                "ColumnName": "LocksWholeShard",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 38,
+                "ColumnName": "LocksBroken",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8,
+                    9,
+                    10,
+                    11,
+                    12,
+                    13,
+                    14,
+                    15,
+                    16,
+                    17,
+                    18,
+                    19,
+                    20,
+                    21,
+                    22,
+                    23,
+                    24,
+                    25,
+                    26,
+                    27,
+                    28,
+                    29,
+                    30,
+                    31,
+                    32,
+                    33,
+                    34,
+                    35,
+                    36,
+                    37,
+                    38
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 136,
+        "TableName": "FullBackups",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "Id",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "State",
+                "ColumnType": "Byte"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "DomainPathOwnerId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "DomainPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "UserSID",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "StartTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "EndTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "FinalIssues",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "BackupCollectionPathOwnerId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "BackupCollectionLocalPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "ExpectedItemCount",
+                "ColumnType": "Uint32"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8,
+                    9,
+                    10,
+                    11
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 137,
+        "TableName": "FullBackupItems",
+        "TableKey": [
+            1,
+            2,
+            3
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "Id",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "PathOwnerId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "PathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "State",
+                "ColumnType": "Byte"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 138,
+        "TableName": "SetColumnConstraint",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "OperationId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "TableOwnerId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "TableLocalId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "SerializedColumnNames",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "ValidationFailed",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "OperationState",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "SubStateTxId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "SubStateTxStatus",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "SubStateTxDone",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "LockTxId",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8,
+                    9,
+                    10
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 139,
+        "TableName": "SetColumnConstraintShardStatus",
+        "TableKey": [
+            1,
+            2,
+            3
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "OperationId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "OwnerShardIdx",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "LocalShardIdx",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "Status",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "Issue",
+                "ColumnType": "Utf8"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,

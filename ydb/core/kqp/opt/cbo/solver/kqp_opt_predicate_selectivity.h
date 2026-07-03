@@ -2,13 +2,40 @@
 
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_statistics.h>
 
 namespace NKikimr::NKqp {
 
 using namespace NYql::NNodes;
 using NYql::TExprNode;
 
-enum class EInequalityPredicateType : ui8 { Less, LessOrEqual, Greater, GreaterOrEqual, Equal };
+enum class EInequalityPredicateType : ui8 { Less, LessOrEqual, Greater, GreaterOrEqual, Equal, NotEqual };
+
+enum class ELogicalOperator : ui8 { And, Or, Leaf };
+
+struct TPredicateRange {
+    TMaybe<TExprBase> Left;
+    TMaybe<TString> LeftBound;
+    bool LeftInclusive = false;
+
+    TMaybe<TExprBase> Right;
+    TMaybe<TString> RightBound;
+    bool RightInclusive = false;
+};
+
+struct TTreeNode {
+    ELogicalOperator Operator;
+
+    // For And / Or
+    TVector<std::shared_ptr<TTreeNode>> Children;
+
+    // For Leaf
+    TString Column;
+    TString ColumnType;
+    TMaybe<TString> TableAlias;
+    double Selectivity = 0.0;
+    TPredicateRange Range;
+};
 
 class TPredicateSelectivityComputer {
 public:
@@ -52,6 +79,15 @@ public:
         , CollectConstantMembers(collectConstantMembers)
     {}
 
+    TPredicateSelectivityComputer(
+        std::shared_ptr<TOptimizerStatistics> stats,
+        TColumnLineage* lineage
+    )
+        : Stats(std::move(stats))
+        , Lineage(lineage)
+    {}
+
+
     double Compute(const TExprBase& input);
 
     TColumnStatisticsUsedMembers GetColumnStatsUsedMembers() {
@@ -68,7 +104,7 @@ public:
     }
 
 protected:
-    double ComputeImpl(
+    std::shared_ptr<TTreeNode> ComputeImpl(
         const TExprBase& input,
         bool underNot,
         bool collectConstantMembers
@@ -83,13 +119,62 @@ protected:
     double ComputeInequalitySelectivity(
         const TExprBase& left,
         const TExprBase& right,
-        EInequalityPredicateType predicate,
-        bool collectConstantMembers
+        bool collectConstantMembers,
+        EInequalityPredicateType predicate
     );
 
     double ComputeComparisonSelectivity(
         const TExprBase& left,
-        const TExprBase& right
+        const TExprBase& right,
+        bool containString
+    );
+
+    std::shared_ptr<TTreeNode> ConvertEqualityToRange(
+        const TExprBase& left,
+        const TExprBase& right,
+        bool underNot,
+        bool collectConstantMembers
+    );
+
+    std::shared_ptr<TTreeNode> ProcessSetPredicate(
+        const TExprBase& left,
+        const TExprNode::TPtr list,
+        bool underNot,
+        bool collectConstantMembers
+    );
+
+    std::shared_ptr<TTreeNode> ConvertInequalityToRange(
+        const TExprBase& left,
+        const TExprBase& right,
+        bool underNot,
+        bool collectConstantMembers,
+        EInequalityPredicateType inequalitySign
+    );
+
+    std::shared_ptr<TTreeNode> ProcessRegexPredicate(
+        bool underNot,
+        bool collectConstantMembers
+    );
+
+    std::shared_ptr<TTreeNode> ProcessStringPredicate(
+        const TExprBase& left,
+        const TExprBase& right,
+        bool underNot,
+        bool collectConstantMembers,
+        bool containString
+    );
+
+    TMaybe<TString> GetAttributeType(const TString& attributeName);
+    std::shared_ptr<TTreeNode> CreateLeafNode(TMaybe<TString> attribute);
+
+    double ComputeSelectivity(
+        const std::shared_ptr<TTreeNode>& node,
+        TSet<TString>& tableAliases
+    );
+
+    double ReComputeEstimation(
+        TString attributeName,
+        TPredicateRange& mergedRange
     );
 
 private:
@@ -103,6 +188,8 @@ private:
 
     bool CollectConstantMembers = false;
     TVector<TCoMember> ConstantMembers{};
+
+    TColumnLineage* Lineage = nullptr;
 };
 
 } // namespace NKikimr::NKqp

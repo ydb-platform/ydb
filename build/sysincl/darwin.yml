@@ -61,9 +61,11 @@
   - libkern/version.h
   - libproc.h
   - mach-o/dyld.h
+  - mach-o/fat.h
   - mach-o/fixup-chains.h
   - mach-o/getsect.h
   - mach-o/loader.h
+  - mach-o/nlist.h
   - mach/clock.h
   - mach/clock_types.h
   - mach/error.h
@@ -118,7 +120,11 @@
   - netinet6/in6.h
   - nlist.h
   - notify.h
+  - objc/Object.h
+  - objc/Protocol.h
+  - objc/objc-runtime.h
   - objc/objc-sync.h
+  - objc/objc.h
   - objc/runtime.h
   - os/availability.h
   - os/lock.h
@@ -226,11 +232,24 @@
   - FSKit/FSKit.h
   - Files.h
   - Foundation/Foundation.h
+  - Foundation/NSAutoreleasePool.h
+  - Foundation/NSBundle.h
+  - Foundation/NSData.h
+  - Foundation/NSDecimalNumber.h
+  - Foundation/NSDictionary.h
+  - Foundation/NSEnumerator.h
   - Foundation/NSException.h
+  - Foundation/NSHost.h
+  - Foundation/NSInvocation.h
   - Foundation/NSKeyValueObserving.h
+  - Foundation/NSMethodSignature.h
   - Foundation/NSObject.h
+  - Foundation/NSProcessInfo.h
   - Foundation/NSString.h
+  - Foundation/NSURL.h
+  - Foundation/NSValue.h
   - GLKit/GLKit.h
+  - GameplayKit/GameplayKit.h
   - Gestalt.h
   - IOKit/IOBSD.h
   - IOKit/IOCFPlugIn.h
@@ -254,6 +273,8 @@
   - ImageCompression.h
   - Kernel/IOKit/hidsystem/IOHIDUsageTables.h
   - Metal/Metal.h
+  - MetalPerformanceShaders/MetalPerformanceShaders.h
+  - ModelIO/ModelIO.h
   - Network/Network.h
   - NetworkExtension/NetworkExtension.h
   - OpenCL/cl.h

@@ -62,3 +62,21 @@ It has the same settings as PDiskReadLoad, with an additional parameter `LogMode
   - `LOG_SEQUENTIAL` - logging is performed after the successful completion of the write to the chunk; the entire operation is considered complete after the logging is finished, similar to what the current version of VDisk does.
   - `LOG_NONE` - logging is not performed; the operation is considered complete after the write to the chunk is finished.
 
+### Parameters for `DDiskTestList`
+These describe the load applied through the YDB storage layer code (DDisk).
+
+Each `DDiskTestList` entry contains one or more `DDiskLoad` sources.
+
+#### Parameters for `DDiskLoad`
+- `Tag` - a unique numeric identifier for the load source.
+- `DDiskId` - the DDisk address `{ NodeId, PDiskId, DDiskSlotId }`.
+- `DurationSeconds` - the duration of the load application in seconds.
+- `InFlight` - the number of concurrently sent requests.
+- `InitInFlight` - the maximum number of concurrent initialization requests (defaults to `InFlight` if omitted).
+- `IntervalMsMin` and `IntervalMsMax` - interval mode settings; `0/0` means continuous load.
+- `ExpectedChunkSize` - expected chunk size in bytes; must be divisible by `IoSizeBytes`.
+- `IoSizeBytes` - request size for DDisk read/write I/O in bytes (default `4096`).
+- `Areas` - the set of DDisk areas used by the load source; each `AreaSize` must be divisible by `IoSizeBytes`.
+- `IsReadLoad` - if `true`, run read load; if `false`, run write load.
+- `SQPoll` / `IOPoll` - enable io_uring SQPOLL / IOPOLL for direct I/O.
+

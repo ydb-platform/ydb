@@ -206,6 +206,7 @@ struct Schema : NIceDb::Schema {
         struct ProcessCPUTime    : Column<27, NScheme::NTypeIds::Uint64> {};
         struct TypeCol           : Column<28, NScheme::NTypeIds::Utf8> { static TString GetColumnName(const TString&) { return "Type"; } };
         struct RequestUnits      : Column<29, NScheme::NTypeIds::Uint64> {};
+        struct TraceId           : Column<30, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<IntervalEnd, Rank>;
         using TColumns = TableColumns<
@@ -237,7 +238,8 @@ struct Schema : NIceDb::Schema {
             CompileCPUTime,
             ProcessCPUTime,
             TypeCol,
-            RequestUnits>;
+            RequestUnits,
+            TraceId>;
     };
 
     struct PDisks : Table<4> {
@@ -305,6 +307,7 @@ struct Schema : NIceDb::Schema {
         struct Replicated      : Column<16, NScheme::NTypeIds::Bool> {};
         struct DiskSpace       : Column<17, NScheme::NTypeIds::Utf8> {};
         struct State           : Column<18, NScheme::NTypeIds::Utf8> {};
+        struct PhantomOnly     : Column<19, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<NodeId, PDiskId, VSlotId>;
         using TColumns = TableColumns<
@@ -322,7 +325,8 @@ struct Schema : NIceDb::Schema {
             Kind,
             FailRealm,
             Replicated,
-            DiskSpace>;
+            DiskSpace,
+            PhantomOnly>;
     };
 
     struct Groups : Table<6> {
@@ -540,10 +544,13 @@ struct Schema : NIceDb::Schema {
         struct CurrentAvailableSize    : Column<6, NScheme::NTypeIds::Uint64> {};
         struct AvailableGroupsToCreate : Column<7, NScheme::NTypeIds::Uint32> {};
         struct AvailableSizeToCreate   : Column<8, NScheme::NTypeIds::Uint64> {};
+        struct ImmediateGroupsToCreate : Column<9, NScheme::NTypeIds::Uint32> {};
+        struct ImmediateSizeToCreate   : Column<10, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PDiskFilter, ErasureSpecies>;
         using TColumns = TableColumns<PDiskFilter, ErasureSpecies, CurrentGroupsCreated, CurrentAllocatedSize,
-                                      CurrentAvailableSize, AvailableGroupsToCreate, AvailableSizeToCreate>;
+                                      CurrentAvailableSize, AvailableGroupsToCreate, AvailableSizeToCreate,
+                                      ImmediateGroupsToCreate, ImmediateSizeToCreate>;
     };
 
     struct TopPartitions : Table<12> {
@@ -595,6 +602,7 @@ struct Schema : NIceDb::Schema {
         struct WmState            : Column<18, NScheme::NTypeIds::Utf8> {};
         struct WmEnterTime        : Column<19, NScheme::NTypeIds::Timestamp> {};
         struct WmExitTime         : Column<20, NScheme::NTypeIds::Timestamp> {};
+        struct TraceId            : Column<21, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<SessionId>;
         using TColumns = TableColumns<
@@ -615,7 +623,8 @@ struct Schema : NIceDb::Schema {
             WmPoolId,
             WmState,
             WmEnterTime,
-            WmExitTime>;
+            WmExitTime,
+            TraceId>;
     };
 
     struct PrimaryIndexPortionStats : Table<14> {
@@ -816,6 +825,7 @@ struct Schema : NIceDb::Schema {
         struct TotalCpuLimitPercentPerNode    : Column<6, NScheme::NTypeIds::Double> {};
         struct QueryCpuLimitPercentPerNode    : Column<7, NScheme::NTypeIds::Double> {};
         struct QueryMemoryLimitPercentPerNode : Column<8, NScheme::NTypeIds::Double> {};
+        struct TotalMemoryLimitPercentPerNode : Column<9, NScheme::NTypeIds::Double> {};
 
         using TKey = TableKey<Name>;
         using TColumns = TableColumns<
@@ -826,7 +836,8 @@ struct Schema : NIceDb::Schema {
             ResourceWeight,
             TotalCpuLimitPercentPerNode,
             QueryCpuLimitPercentPerNode,
-            QueryMemoryLimitPercentPerNode>;
+            QueryMemoryLimitPercentPerNode,
+            TotalMemoryLimitPercentPerNode>;
     };
 
     struct TopPartitionsTli : Table<23> {

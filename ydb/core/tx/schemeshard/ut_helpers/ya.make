@@ -34,9 +34,14 @@ SRCS(
     helpers_flags_n.h
     ls_checks.cpp
     ls_checks.h
+    olap_helpers.cpp
+    olap_helpers.h
+    schemeshard_counters.cpp
+    schemeshard_counters.h
     shred_helpers.cpp
     test_env.cpp
     test_env.h
+    test_incremental_restore.h
     test_with_reboots.h
 )
 

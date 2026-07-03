@@ -378,7 +378,7 @@ void TCommandExecuteQuery::Config(TConfig& config) {
             .RequiredArgument("PATH").StoreResult(&FlameGraphPath);
     config.Opts->AddCharOption('s', "Collect statistics in basic mode").StoreTrue(&BasicStats);
     // Transaction modes description with color highlighting
-    TVector<TString> txModes = {"serializable-rw", "online-ro", "stale-ro", "snapshot-ro", "snapshot-rw", "no-tx"};
+    TVector<TString> txModes = {"serializable-rw", "online-ro", "stale-ro", "snapshot-ro", "snapshot-rw", "read-committed-rw", "no-tx"};
     TStringStream txDescription;
     txDescription << "Transaction mode (for generic & data queries). Available options: ";
     NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
@@ -677,6 +677,8 @@ namespace {
             txSettings = NQuery::TTxSettings::SnapshotRO();
         } else if (TxMode == "snapshot-rw") {
             txSettings = NQuery::TTxSettings::SnapshotRW();
+        } else if (TxMode == "read-committed-rw") {
+            txSettings = NQuery::TTxSettings::ReadCommittedRW();
         } else if (!TxMode.empty()) {
             throw TMisuseException() << "Unknown transaction mode.";
         }

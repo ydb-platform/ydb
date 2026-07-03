@@ -3,6 +3,7 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_state.h>
 
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
@@ -111,6 +112,7 @@ public:
         program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         program.SetRaw(lambda);
         program.SetLangVer(State->TypeCtx->LangVer);
+        *program.MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*State->TypeCtx->RuntimeSettings);
 
         auto outputDesc = task.AddOutputs();
         outputDesc->MutableMap();
@@ -1025,7 +1027,8 @@ private:
                         lambda, NActors::TActorId(),
                         NActors::TActorId(1, 0, 1, 0),
                         result.Input().Ref().GetTypeAnn(),
-                        State->TypeCtx->LangVer));
+                        State->TypeCtx->LangVer,
+                        State->TypeCtx->RuntimeSettings));
                 auto& tasks = executionPlanner->GetTasks();
                 Yql::DqsProto::TTaskMeta taskMeta;
                 tasks[0].MutableMeta()->UnpackTo(&taskMeta);
@@ -1269,6 +1272,18 @@ private:
         }
     }
 
+    static TString FormatTooManyStagesError(size_t count, size_t limit) {
+        return TStringBuilder()
+            << "The query plan is too complex: " << count << " stages exceeds the limit of " << limit
+            << ". Consider simplifying the query (e.g. reduce the number of joins, subqueries or unions).";
+    }
+
+    static TString FormatTooManyTasksError(size_t count, size_t limit) {
+        return TStringBuilder()
+            << "The query plan is too complex: " << count << " tasks exceeds the limit of " << limit
+            << ". Consider simplifying the query (e.g. reduce the number of joins, subqueries or unions).";
+    }
+
     TPublicIds::TPtr GetPublicIds(const TExprNode::TPtr& root) const {
         TPublicIds::TPtr publicIds = std::make_shared<TPublicIds>();
         VisitExpr(root, [&](const TExprNode::TPtr& node) {
@@ -1378,7 +1393,7 @@ private:
         const auto maxTasksPerOperation = State->Settings->MaxTasksPerOperation.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerOperation);
 
         auto maxDataSizePerJob = settings->MaxDataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::MaxDataSizePerJob);
-        auto stagesCount = executionPlanner->StagesCount();
+        const auto stagesCount = executionPlanner->StagesCount();
 
         if (!executionPlanner->CanFallback()) {
             settings->FallbackPolicy = State->TypeCtx->DqFallbackPolicy = EFallbackPolicy::Never;
@@ -1386,16 +1401,19 @@ private:
 
         bool canFallback = (settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) != EFallbackPolicy::Never && !State->TypeCtx->ForceDq);
 
-        if (stagesCount > maxTasksPerOperation && canFallback) {
-            return SyncStatus(FallbackWithMessage(
-                pull.Ref(),
-                TStringBuilder()
-                << "Too many stages: "
-                << stagesCount << " > "
-                << maxTasksPerOperation, ctx, true));
+        // Each stage produces at least one task, so stagesCount is a lower bound
+        // for the total task count. Use it as a fast-path check before running
+        // the full execution planner.
+        if (stagesCount > maxTasksPerOperation) {
+            if (canFallback) {
+                return SyncStatus(FallbackWithMessage(
+                    pull.Ref(),
+                    TStringBuilder() << "Too many stages: " << stagesCount << " > " << maxTasksPerOperation,
+                    ctx, true));
+            }
+            ctx.AddError(TIssue(ctx.GetPosition(pull.Ref().Pos()), FormatTooManyStagesError(stagesCount, maxTasksPerOperation)));
+            return SyncError();
         }
-
-        YQL_ENSURE(stagesCount <= maxTasksPerOperation);
 
         try {
             while (!executionPlanner->PlanExecution(canFallback) && tasksPerStage > 1) {
@@ -1423,16 +1441,16 @@ private:
 
         bool localRun = false;
         auto& tasks = executionPlanner->GetTasks();
-        if (tasks.size() > maxTasksPerOperation && canFallback) {
-            return SyncStatus(FallbackWithMessage(
-                pull.Ref(),
-                TStringBuilder()
-                << "Too many tasks: "
-                << tasks.size() << " > "
-                << maxTasksPerOperation, ctx, true));
+        if (tasks.size() > maxTasksPerOperation) {
+            if (canFallback) {
+                return SyncStatus(FallbackWithMessage(
+                    pull.Ref(),
+                    TStringBuilder() << "Too many tasks: " << tasks.size() << " > " << maxTasksPerOperation,
+                    ctx, true));
+            }
+            ctx.AddError(TIssue(ctx.GetPosition(pull.Ref().Pos()), FormatTooManyTasksError(tasks.size(), maxTasksPerOperation)));
+            return SyncError();
         }
-
-        YQL_ENSURE(tasks.size() <= maxTasksPerOperation);
 
         {
             TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
@@ -1443,6 +1461,7 @@ private:
                 fallbackFlag |= BuildUploadList(&uploadList, localRun, &lambda, typeEnv, files);
                 t.MutableProgram()->SetRaw(lambda);
                 t.MutableProgram()->SetLangVer(State->TypeCtx->LangVer);
+                *t.MutableProgram()->MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*State->TypeCtx->RuntimeSettings);
 
                 Yql::DqsProto::TTaskMeta taskMeta;
                 t.MutableMeta()->UnpackTo(&taskMeta);
@@ -1934,7 +1953,7 @@ private:
             const auto maxTasksPerOperation = State->Settings->MaxTasksPerOperation.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerOperation);
 
             auto maxDataSizePerJob = settings->MaxDataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::MaxDataSizePerJob);
-            auto stagesCount = executionPlanner->StagesCount();
+            const auto stagesCount = executionPlanner->StagesCount();
 
             if (!executionPlanner->CanFallback()) {
                 settings->FallbackPolicy = State->TypeCtx->DqFallbackPolicy = EFallbackPolicy::Never;
@@ -1942,16 +1961,18 @@ private:
 
             bool canFallback = (settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) != EFallbackPolicy::Never && !State->TypeCtx->ForceDq);
 
-            if (stagesCount > maxTasksPerOperation && canFallback) {
-                return FallbackWithMessage(
-                    *input,
-                    TStringBuilder()
-                    << "Too many stages: "
-                    << stagesCount << " > "
-                    << maxTasksPerOperation, ctx, false);
+            // Each stage produces at least one task, so stagesCount is a lower
+            // bound for the total task count. Use it as a fast-path check.
+            if (stagesCount > maxTasksPerOperation) {
+                if (canFallback) {
+                    return FallbackWithMessage(
+                        *input,
+                        TStringBuilder() << "Too many stages: " << stagesCount << " > " << maxTasksPerOperation,
+                        ctx, false);
+                }
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), FormatTooManyStagesError(stagesCount, maxTasksPerOperation)));
+                return IGraphTransformer::TStatus::Error;
             }
-
-            YQL_ENSURE(stagesCount <= maxTasksPerOperation);
 
             try {
                 while (!executionPlanner->PlanExecution(canFallback) && tasksPerStage > 1) {
@@ -1975,16 +1996,16 @@ private:
             }
 
             auto& tasks = executionPlanner->GetTasks();
-            if (tasks.size() > maxTasksPerOperation && canFallback) {
-                return FallbackWithMessage(
-                    *input,
-                    TStringBuilder()
-                    << "Too many tasks: "
-                    << tasks.size() << " > "
-                    << maxTasksPerOperation, ctx, false);
+            if (tasks.size() > maxTasksPerOperation) {
+                if (canFallback) {
+                    return FallbackWithMessage(
+                        *input,
+                        TStringBuilder() << "Too many tasks: " << tasks.size() << " > " << maxTasksPerOperation,
+                        ctx, false);
+                }
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), FormatTooManyTasksError(tasks.size(), maxTasksPerOperation)));
+                return IGraphTransformer::TStatus::Error;
             }
-
-            YQL_ENSURE(tasks.size() <= maxTasksPerOperation);
 
             {
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
@@ -1995,6 +2016,7 @@ private:
                     fallbackFlag |= BuildUploadList(&uploadList, false, &lambda, typeEnv, files);
                     t.MutableProgram()->SetRaw(lambda);
                     t.MutableProgram()->SetLangVer(State->TypeCtx->LangVer);
+                    *t.MutableProgram()->MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*State->TypeCtx->RuntimeSettings);
 
                     Yql::DqsProto::TTaskMeta taskMeta;
                     t.MutableMeta()->UnpackTo(&taskMeta);

@@ -323,14 +323,18 @@ TEST_W(TPeriodicTest, OnStartCancelled)
 
     auto startFuture1 = executor->StartAndGetFirstExecutedEvent();
     auto startFuture2 = executor->StartAndGetFirstExecutedEvent();
+
     startFuture1.Cancel(TError(NYT::EErrorCode::Canceled, "Canceled"));
 
     // NB(pavook): cancellation of a start future shouldn't cause an executor stop
     // and should not propagate to the underlying promise (and other futures).
-    EXPECT_TRUE(WaitForFast(callbackStarted.ToFuture()).IsOK());
+    auto callbackStartedResult = WaitForFast(callbackStarted.ToFuture());
+    EXPECT_TRUE(callbackStartedResult.IsOK());
     EXPECT_TRUE(executor->IsStarted());
-    EXPECT_TRUE(startFuture2.IsSet());
-    EXPECT_TRUE(WaitForFast(startFuture2).IsOK());
+
+    auto startFuture2Result = WaitForFast(startFuture2);
+    EXPECT_TRUE(startFuture2Result.IsOK());
+
     WaitFor(executor->Stop())
         .ThrowOnError();
 }

@@ -507,6 +507,24 @@ public:
     static const TEmptyConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
 };
 
+class TStreamingConstraintNode final: public TConstraintNode {
+    friend struct TExprContext;
+
+protected:
+    explicit TStreamingConstraintNode(TExprContext& ctx);
+    TStreamingConstraintNode(TExprContext& ctx, const NYT::TNode& serialized);
+
+public:
+    static constexpr std::string_view Name() {
+        return "Streaming";
+    }
+
+    bool Equals(const TConstraintNode& node) const final;
+    void ToJson(NJson::TJsonWriter& out) const final;
+    NYT::TNode ToYson() const final;
+    bool IsApplicableToType(const TTypeAnnotationNode& type) const final;
+};
+
 class TVarIndexConstraintNode final: public TConstraintNode {
 public:
     using TMapType = NSorted::TSimpleMap<ui32, ui32>;

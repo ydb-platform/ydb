@@ -1964,7 +1964,7 @@ private:
             return false;
         }
 
-        ctx.ColumnOrder.push_back(node->colname);
+        ctx.ColumnOrder.emplace_back(node->colname);
         return true;
     }
 

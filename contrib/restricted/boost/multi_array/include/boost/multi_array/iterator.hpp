@@ -1,6 +1,6 @@
 // Copyright 2002 The Trustees of Indiana University.
 
-// Use, modification and distribution is subject to the Boost Software 
+// Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
 
@@ -18,8 +18,11 @@
 // multi-dimensional array class
 //
 
-#include "boost/multi_array/base.hpp"
-#include "boost/iterator/iterator_facade.hpp"
+#include <boost/multi_array/base.hpp>
+#include <boost/type.hpp>
+#include <boost/iterator/iterator_facade.hpp>
+#include <boost/iterator/iterator_categories.hpp>
+#include <boost/iterator/enable_if_convertible.hpp>
 #include <algorithm>
 #include <cstddef>
 #include <iterator>
@@ -51,7 +54,7 @@ template <typename T, typename TPtr, typename NumDims, typename Reference,
           typename IteratorCategory>
 class array_iterator
   : public
-    iterator_facade<
+    iterators::iterator_facade<
         array_iterator<T,TPtr,NumDims,Reference,IteratorCategory>
       , typename associated_types<T,NumDims>::value_type
       , IteratorCategory
@@ -60,13 +63,13 @@ class array_iterator
     , private
           value_accessor_generator<T,NumDims>::type
 {
-  friend class ::boost::iterator_core_access;
+  friend class ::boost::iterators::iterator_core_access;
   typedef detail::multi_array::associated_types<T,NumDims> access_t;
 
-  typedef iterator_facade<
+  typedef iterators::iterator_facade<
             array_iterator<T,TPtr,NumDims,Reference,IteratorCategory>
       , typename detail::multi_array::associated_types<T,NumDims>::value_type
-      , boost::random_access_traversal_tag
+      , boost::iterators::random_access_traversal_tag
       , Reference
     > facade_type;
 
@@ -78,14 +81,14 @@ class array_iterator
     friend class array_iterator;
 #else
  public:
-#endif 
+#endif
 
   index idx_;
   TPtr base_;
   const size_type* extents_;
   const index* strides_;
   const index* index_base_;
- 
+
 public:
   // Typedefs to circumvent ambiguities between parent classes
   typedef typename facade_type::reference reference;
@@ -103,7 +106,7 @@ public:
   template <typename OPtr, typename ORef, typename Cat>
   array_iterator(
       const array_iterator<T,OPtr,NumDims,ORef,Cat>& rhs
-    , typename boost::enable_if_convertible<OPtr,TPtr>::type* = 0
+    , typename boost::iterators::enable_if_convertible<OPtr,TPtr>::type* = 0
   )
     : idx_(rhs.idx_), base_(rhs.base_), extents_(rhs.extents_),
     strides_(rhs.strides_), index_base_(rhs.index_base_) { }
@@ -115,7 +118,7 @@ public:
   {
     return operator_arrow_proxy<reference>(this->dereference());
   }
-  
+
 
   reference dereference() const
   {
@@ -127,7 +130,7 @@ public:
                             strides_,
                             index_base_);
   }
-  
+
   void increment() { ++idx_; }
   void decrement() { --idx_; }
 

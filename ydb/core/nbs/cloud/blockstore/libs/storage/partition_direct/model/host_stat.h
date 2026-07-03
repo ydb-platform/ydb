@@ -18,6 +18,7 @@ enum class EOperation
     Flush,
     FlushCrossNode,
     Erase,
+    BarrierErase,
 
     // Must remain the last entry. Used to size per-operation containers.
     Count_,

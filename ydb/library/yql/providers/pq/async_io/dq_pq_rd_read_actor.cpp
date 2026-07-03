@@ -18,7 +18,6 @@
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_meta_extractor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor_base.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
-#include <ydb/library/yql/providers/pq/common/pq_partition_key.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/utils/log/log.h>
@@ -290,7 +289,6 @@ private:
     ui64 CpuMicrosec = 0;
     // Set on both Parent (cumulative) and Children (separate)
 
-    using TPartitionKey = ::NPq::TPartitionKey;
     THashMap<ui64, ui64> NextOffsetFromRD;
     // Set on Children
     struct TClusterState {
@@ -913,12 +911,14 @@ std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
     std::vector<ui64> res;
 
     for (const auto& readParams : ReadParams) {
-        ui32 partitionsCount = readParams.GetPartitioningParams().GetTopicPartitionsCount();
-        ui64 currentPartition = readParams.GetPartitioningParams().GetEachTopicPartitionGroupId();
-        do {
-            res.emplace_back(currentPartition); // 0-based in topic API
-            currentPartition += readParams.GetPartitioningParams().GetDqPartitionsCount();
-        } while (currentPartition < partitionsCount);
+        for (const auto& partitioningParams : readParams.GetPartitioningParams()) {
+            ui32 partitionsCount = partitioningParams.GetTopicPartitionsCount();
+            ui64 currentPartition = partitioningParams.GetEachTopicPartitionGroupId();
+            do {
+                res.emplace_back(currentPartition); // 0-based in topic API
+                currentPartition += partitioningParams.GetDqPartitionsCount();
+            } while (currentPartition < partitionsCount);
+        }
     }
     return res;
 }
@@ -1333,16 +1333,17 @@ TString TDqPqRdReadActor::GetInternalState() {
         for (const auto partitionId : sessionInfo.Partitions) {
             str << " " << partitionId;
         }
-        str << " offsets";
-        for (const auto& [partitionId, offset] : NextOffsetFromRD) {
-            str << " " << partitionId << "=" << offset;
-        }
         str << " has pending data";
         for (const auto partitionId : sessionInfo.HasPendingData) {
             str << " " << partitionId;
         }
         str << "\n";
     }
+    str << " offsets";
+    for (const auto& [partitionId, offset] : NextOffsetFromRD) {
+        str << " " << partitionId << "=" << offset;
+    }
+    str << "\n";
     if (Parent->WatermarkTracker) {
         str << "WatermarksTracker:";
         Parent->WatermarkTracker->Out(str);
@@ -1475,7 +1476,7 @@ void TDqPqRdReadActor::StartClusterDiscovery() {
                         federatedCluster.GetPartitionsCount()
                     );
                 if (cluster.PartitionsCount == 0) {
-                    cluster.PartitionsCount = ReadParams.front().GetPartitioningParams().GetTopicPartitionsCount();
+                    cluster.PartitionsCount = ReadParams.front().GetPartitioningParams(0).GetTopicPartitionsCount();
                     SRC_LOG_W("PartitionsCount for offline server assumed to be " << cluster.PartitionsCount);
                 }
             }
@@ -1486,7 +1487,7 @@ void TDqPqRdReadActor::StartClusterDiscovery() {
                     .Endpoint = SourceParams.GetEndpoint(),
                     .Path = SourceParams.GetDatabase(),
                 },
-                ReadParams.front().GetPartitioningParams().GetTopicPartitionsCount()
+                ReadParams.front().GetPartitioningParams(0).GetTopicPartitionsCount()
             );
         }
         for (ui32 clusterIndex = 0; clusterIndex < Clusters.size(); ++clusterIndex) {
@@ -1594,7 +1595,11 @@ void TDqPqRdReadActor::StartCluster(ui32 clusterIndex) {
         Clusters[clusterIndex].ChildId = SelfId();
         SourceParams.SetEndpoint(TString(Clusters[clusterIndex].Info.Endpoint));
         SourceParams.SetDatabase(TString(Clusters[clusterIndex].Info.Path));
-        ReadParams.front().mutable_partitioningparams()->SetTopicPartitionsCount(Clusters[clusterIndex].PartitionsCount);
+        for (auto& readParam : ReadParams) {
+            for (auto& partitionParam : *readParam.MutablePartitioningParams()) {
+                partitionParam.SetTopicPartitionsCount(Clusters[clusterIndex].PartitionsCount);
+            }
+        }
         State = EState::INIT;
         Init();
         InitChild();
@@ -1728,7 +1733,7 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvCheckPartitionCountResult::TPtr& ev
         if (!Clusters[clusterIndex].Info.Name.empty()) {
             message << " (on cluster \"" << Clusters[clusterIndex].Info.Name << "\")";
         }
-        message << " is changed from " << Clusters[clusterIndex].PartitionsCount << " to " << partitionsCount 
+        message << " is changed from " << Clusters[clusterIndex].PartitionsCount << " to " << partitionsCount
             << ". You need to restart (alter with text or drop / create) query to read all partitions.";
         SRC_LOG_E(message);
         TIssue issue(message);

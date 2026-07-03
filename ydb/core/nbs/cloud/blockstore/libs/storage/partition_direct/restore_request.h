@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 
 #include <ydb/core/nbs/cloud/storage/core/protos/error.pb.h>
 
@@ -32,8 +33,8 @@ public:
     NThreading::TFuture<TAggregatedListPBufferResponse> GetFuture() const;
 
 private:
-    void DoRun(ui8 hostIndex);
-    void OnResponse(ui8 hostIndex, TListPBufferResponse response);
+    void DoRun(THostIndex hostIndex);
+    void OnResponse(THostIndex hostIndex, TListPBufferResponse response);
     void Reply(NProto::TError error);
 
     NActors::TActorSystem const* ActorSystem;

@@ -1,0 +1,1 @@
+UPDATE orders SET status = 'shipped', amount = 0 WHERE id = 1

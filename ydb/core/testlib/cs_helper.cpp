@@ -183,10 +183,7 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
 
 }
 
-void THelper::SetForcedCompaction(const TString& storeName) {
-    //In some tests we expect, that a compaction will start immidiately
-    //For now, we use l-bucket optimizer for this purpose
-    //In the future it should be replaced with lc-bucket or more sophisticated compaction optimizer planner
+void THelper::SetTilingPlanner(const TString& storeName) {
     auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     request->Record.SetExecTimeoutPeriod(Max<ui64>());
     NKikimrSchemeOp::TModifyScheme modyfySchemeOp;
@@ -198,13 +195,31 @@ void THelper::SetForcedCompaction(const TString& storeName) {
     schemaPreset->SetName("default");
     auto schemaOptions = schemaPreset->MutableAlterSchema()->MutableOptions();
     schemaOptions->SetSchemeNeedActualization(false);
-    auto plannerConstructot =schemaOptions->MutableCompactionPlannerConstructor();
-    plannerConstructot->SetClassName("l-buckets");
-    *plannerConstructot->MutableLBuckets() = NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer{};
+    auto plannerConstructor = schemaOptions->MutableCompactionPlannerConstructor();
+    plannerConstructor->SetClassName("tiling++");
+    plannerConstructor->MutableTiling()->SetJson(TILING_NO_COMPACTION_FEATURES_JSON);
 
     ExecuteModifyScheme(modyfySchemeOp);
 }
 
+void THelper::SetForcedCompaction(const TString& storeName) {
+    auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
+    request->Record.SetExecTimeoutPeriod(Max<ui64>());
+    NKikimrSchemeOp::TModifyScheme modyfySchemeOp;
+    modyfySchemeOp.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnStore);
+    modyfySchemeOp.SetWorkingDir(ROOT_PATH);
+    NKikimrSchemeOp::TAlterColumnStore* alterColumnStore = modyfySchemeOp.MutableAlterColumnStore();
+    alterColumnStore->SetName(storeName);
+    auto schemaPreset = alterColumnStore->AddAlterSchemaPresets();
+    schemaPreset->SetName("default");
+    auto schemaOptions = schemaPreset->MutableAlterSchema()->MutableOptions();
+    schemaOptions->SetSchemeNeedActualization(false);
+    auto* plannerConstructor = schemaOptions->MutableCompactionPlannerConstructor();
+    plannerConstructor->SetClassName("tiling++");
+    plannerConstructor->MutableTiling()->SetJson("{}");
+
+    ExecuteModifyScheme(modyfySchemeOp);
+}
 
 TString THelper::GetTestTableSchema() const {
     TStringBuilder sb;

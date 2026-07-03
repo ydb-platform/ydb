@@ -219,7 +219,8 @@ namespace NKikimr {
         NPDisk::TCommitRecord cr;
         cr.IsStartingPoint = true;
         Send(ScrubCtx->LoggerId, new NPDisk::TEvLog(ScrubCtx->PDiskCtx->Dsk->Owner, ScrubCtx->PDiskCtx->Dsk->OwnerRound,
-            TLogSignature::SignatureScrub, cr, data, seg, nullptr));
+            TLogSignature::SignatureScrub, cr, data, seg, nullptr, TWriteSource::ScrubCommit,
+            NPDisk::TEvLog::TCallback()));
     }
 
     void TScrubCoroImpl::Handle(NPDisk::TEvLogResult::TPtr ev) {
@@ -252,7 +253,8 @@ namespace NKikimr {
 
     void TScrubCoroImpl::CheckIntegrity(const TLogoBlobID& blobId, bool isHuge) {
         SendToBSProxy(SelfActorId, Info->GroupID, new TEvBlobStorage::TEvCheckIntegrity(blobId, TInstant::Max(),
-                NKikimrBlobStorage::EGetHandleClass::LowRead, true));
+                NKikimrBlobStorage::EGetHandleClass::LowRead,
+                /*singleLine*/ true, /*omitDataInfoUnlessError*/ true));
         auto res = WaitForPDiskEvent<TEvBlobStorage::TEvCheckIntegrityResult>();
 
         TErasureType::EErasureSpecies erasure = Info->Type.GetErasure();

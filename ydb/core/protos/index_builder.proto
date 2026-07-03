@@ -15,6 +15,14 @@ message TColumnBuildSetting {
     optional Ydb.TypedValue default_from_literal = 2;
     optional bool NotNull = 3;
     optional string Family = 4;
+    // Full path to a sequence used to generate per-row values during the build scan.
+    // Mutually exclusive with default_from_literal. When set, the build scan allocates
+    // values from the sequence and (optionally) bit-reverses them before writing.
+    optional string default_from_sequence = 5;
+    // If true, ReverseBits is applied to each value drawn from default_from_sequence
+    // before it is written into the row. Used for hot-shard mitigation of monotone
+    // sequences when the sequence column is part of a range-partitioned PK/index.
+    optional bool bit_reverse_sequence_value = 6;
 }
 
 message TColumnBuildSettings {

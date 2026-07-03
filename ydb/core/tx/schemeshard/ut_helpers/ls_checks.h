@@ -56,6 +56,7 @@ namespace NLs {
 
     TCheckFunc PathsInsideDomain(ui64 count);
     TCheckFunc PQPartitionsInsideDomain(ui64 count);
+    TCheckFunc PQGroupsInsideDomain(ui64 count);
     TCheckFunc TopicReservedStorage(ui64 expected);
     TCheckFunc TopicAccountSize(ui64 expected);
     TCheckFunc TopicAccountSizeGE(ui64 expected);

@@ -1621,6 +1621,25 @@ ui64 AsyncSplitTable(
         TActorId sender,
         const TString& path,
         ui64 sourceTablet,
+        TVector<NKikimrMiniKQL::TValue>&& splitKey)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
+    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableSplitMergeTablePartitions();
+    desc.SetTablePath(path);
+    desc.AddSourceTabletId(sourceTablet);
+    auto& keyPrefix = *desc.AddSplitBoundary()->MutableKeyPrefix();
+    for (auto& keyPart: splitKey) {
+        *keyPrefix.AddTuple()->MutableOptional() = std::move(keyPart);
+    }
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request), sender, true);
+}
+
+ui64 AsyncSplitTable(
+        Tests::TServer::TPtr server,
+        TActorId sender,
+        const TString& path,
+        ui64 sourceTablet,
         ui32 splitKey)
 {
     NKikimrMiniKQL::TValue protoKey;
@@ -2645,6 +2664,8 @@ namespace {
             switch (parser.GetPrimitiveType()) {
             PRINT_PRIMITIVE(Uint32);
             PRINT_PRIMITIVE(Uint64);
+            PRINT_PRIMITIVE(Int32);
+            PRINT_PRIMITIVE(Int64);
             PRINT_PRIMITIVE(Date);
             PRINT_PRIMITIVE(Datetime);
             PRINT_PRIMITIVE(Timestamp);
@@ -2932,6 +2953,26 @@ ui64 AsyncTruncateTable(
     op->SetTableName(tableName);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request), sender);
+}
+
+TString FormatIntReadResult(const TEvDataShard::TEvReadResult* msg) {
+    TStringBuilder sb;
+    if (msg->Record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS) {
+        size_t count = msg->GetRowsCount();
+        for (size_t i = 0; i < count; ++i) {
+            auto cells = msg->GetCells(i);
+            for (size_t j = 0; j < cells.size(); ++j) {
+                if (j != 0) {
+                    sb << ", ";
+                }
+                sb << cells[j].AsValue<i32>();
+            }
+            sb << "\n";
+        }
+    } else {
+        sb << "ERROR: " << msg->Record.GetStatus().GetCode();
+    }
+    return sb;
 }
 
 }

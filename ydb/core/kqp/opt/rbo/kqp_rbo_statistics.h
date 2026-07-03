@@ -1,6 +1,8 @@
 #pragma once
 
 #include "kqp_info_unit.h"
+#include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -90,6 +92,10 @@ public:
     TColumnLineage ColumnLineage;
     TVector<TInfoUnit> KeyColumns;
     ui32 ColumnsCount = 0;
+    // This is a descriptive fact: "this node's rows are physically partitioned by these columns".
+    // The per-side *requirement* ("shuffle this input by these keys for the parent join") is
+    // NOT stored here — it lives on TJoinOptimizerNode. It is propagated through renames, projections,
+    // joins and such. When it reaches leafs of a CBO Tree it's used to set the initial orderings.
     TVector<TInfoUnit> ShuffledByColumns;
     TVector<std::pair<TInfoUnit,bool>> SortColumns;
 
@@ -109,8 +115,7 @@ public:
     TString ToString(ui32 printOptions);
 };
 
-TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts);
-TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts, const TVector<TInfoUnit>& keyColumns);
+TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts, const NYql::TTypeAnnotationContext& typeCtx);
 
 }
 }

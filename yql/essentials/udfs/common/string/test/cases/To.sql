@@ -1,4 +1,13 @@
-/* syntax version 1 */
+$input = AsList(
+    <|value:"test"|>,
+    <|value:"\xD1\x82\xD0\xB5\xD1\x81\xD1\x82"|>,
+    <|value:"TeSt"|>,
+    <|value:"\xD1\x82\xD0\x95\xD1\x81\xD0\xA2"|>,
+    <|value:"Eyl\xC3\xBCl"|>,
+    <|value:"6"|>,
+    <|value:""|>
+);
+
 SELECT
     value,
     String::AsciiToLower(value) AS ascii_lower,
@@ -11,4 +20,4 @@ SELECT
     String::ToByteList(value) AS byte_list,
     String::FromByteList(String::ToByteList(value)) AS from_byte_list,
     String::FromByteList(YQL::LazyList(String::ToByteList(value))) AS from_lazy_byte_list
-FROM Input;
+FROM AS_TABLE($input);

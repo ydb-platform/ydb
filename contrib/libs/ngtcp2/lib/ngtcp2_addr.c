@@ -31,8 +31,11 @@
 
 ngtcp2_addr *ngtcp2_addr_init(ngtcp2_addr *dest, const ngtcp2_sockaddr *addr,
                               ngtcp2_socklen addrlen) {
-  dest->addrlen = addrlen;
-  dest->addr = (ngtcp2_sockaddr *)addr;
+  *dest = (ngtcp2_addr){
+    .addr = (ngtcp2_sockaddr *)addr,
+    .addrlen = addrlen,
+  };
+
   return dest;
 }
 

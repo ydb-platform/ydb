@@ -24,6 +24,7 @@ SRCS(
 
 PEERDIR(
     ydb/apps/version
+    ydb/core/audit/audit_config
     ydb/library/actors/core
     ydb/library/actors/interconnect
     ydb/public/sdk/cpp/src/library/grpc/client
@@ -54,7 +55,7 @@ PEERDIR(
     ydb/core/keyvalue
     ydb/core/kqp
     ydb/core/kqp/federated_query
-    ydb/core/kqp/federated_query/actors
+    ydb/services/scheme_secret
     ydb/core/kqp/finalize_script_service
     ydb/core/kqp/proxy_service
     ydb/core/metering

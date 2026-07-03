@@ -1,4 +1,5 @@
 #include "partition_index_generator.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NPQ {

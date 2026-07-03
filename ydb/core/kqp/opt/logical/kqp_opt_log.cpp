@@ -2,21 +2,25 @@
 #include "kqp_opt_cbo.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_rules.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join.h>
+#include <ydb/library/yql/dq/opt/dq_opt_log.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
 #include <yql/essentials/core/yql_opt_match_recognize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join.h>
-#include <ydb/library/yql/dq/opt/dq_opt_log.h>
-#include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
-#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
-#include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp::NOpt {
+
+namespace {
 
 using namespace NYql;
 using namespace NYql::NCommon;
@@ -33,6 +37,7 @@ public:
         , Config(config)
     {
 #define HNDL(name) "KqpLogical-"#name, Hndl(&TKqpLogicalOptTransformer::name)
+        AddHandler(0, &TCoTopBase::Match, HNDL(RewriteHybridRankTopSort));
         AddHandler(0, &TCoTop::Match, HNDL(TopSortSelectIndex));
         AddHandler(0, &TCoTopSort::Match, HNDL(TopSortSelectIndex));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(PushExtractedPredicateToReadTable));
@@ -72,6 +77,7 @@ public:
         AddHandler(0, &TCoWideMap::Match, HNDL(DqReadWideWrapFieldSubset));
         AddHandler(0, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
 
+        AddHandler(1, &TCoFlatMapBase::Match, HNDL(SelectJsonIndex));
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverFullTextMatch));
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverJsonRead));
         AddHandler(1, &TCoTop::Match, HNDL(RewriteTopSortOverIndexRead));
@@ -196,6 +202,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteStreamEquiJoinWithLookup(TExprBase node, TExprContext& ctx) {
+        // First step of stream lookup join with DQ external sources (not kqp tables)
         TExprBase output = DqRewriteStreamEquiJoinWithLookup(node, ctx, TypesCtx);
         DumpAppliedRule("KqpRewriteStreamEquiJoinWithLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -211,7 +218,7 @@ protected:
         auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel());
         bool useBlockJoin = Config->UseBlockHashJoin.Get().GetOrElse(false);
         bool enableShuffleElimination = KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleElimination());
-        auto providerCtx = TKqpProviderContext(KqpCtx, optLevel, useBlockJoin);
+        auto providerCtx = TKqpProviderContext(KqpCtx, optLevel, useBlockJoin, Config);
         auto stats = KqpCtx.KqpStats.GetStats(node.Raw());
         TTableAliasMap* tableAliases = stats? stats->TableAliases.Get(): nullptr;
         auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, settings, ctx, enableShuffleElimination, KqpCtx.KqpStats.ShufflingsFSM, tableAliases));
@@ -222,7 +229,8 @@ protected:
             KqpCtx.EquiJoinsCount,
             KqpCtx.GetOptimizerHints(),
             enableShuffleElimination,
-            &KqpCtx.ShufflingOrderingsByJoinLabels
+            &KqpCtx.ShufflingOrderingsByJoinLabels,
+            &KqpCtx.CBOStats
         );
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -230,8 +238,10 @@ protected:
 
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
         bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel()) >= 2;
-        TExprBase output = NKikimr::NKqp::KqpRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.KqpStats, KqpCtx.JoinsCount, KqpCtx.GetOptimizerHints());
-        DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Ptr(), ctx);
+        TMaybeNode<TExprBase> output = NKikimr::NKqp::KqpRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.KqpStats, KqpCtx.JoinsCount, KqpCtx.GetOptimizerHints());
+        if (output) {
+            DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Cast().Ptr(), ctx);
+        }
         return output;
     }
 
@@ -274,6 +284,16 @@ protected:
         return output;
     }
 
+    TMaybeNode<TExprBase> SelectJsonIndex(TExprBase node, TExprContext& ctx) {
+        auto output = KqpSelectJsonIndex(node, ctx, KqpCtx);
+        if (!output.IsValid()) {
+            return {};
+        }
+
+        DumpAppliedRule("SelectJsonIndex", node.Ptr(), output.Cast().Ptr(), ctx);
+        return output;
+    }
+
     TMaybeNode<TExprBase> RewriteFlatMapOverJsonRead(TExprBase node, TExprContext& ctx) {
         auto output = KqpRewriteFlatMapOverJsonRead(node, ctx, KqpCtx);
         if (!output.IsValid()) {
@@ -287,6 +307,16 @@ protected:
     TMaybeNode<TExprBase> RewriteTopSortOverIndexRead(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         TExprBase output = KqpRewriteTopSortOverIndexRead(node, ctx, TypesCtx, KqpCtx, *getParents());
         DumpAppliedRule("RewriteTopSortOverIndexRead", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteHybridRankTopSort(TExprBase node, TExprContext& ctx) {
+        auto output = KqpRewriteHybridRankTopSort(node, ctx, KqpCtx);
+        if (!output.IsValid()) {
+            return {};
+        }
+
+        DumpAppliedRule("RewriteHybridRankTopSort", node.Ptr(), output.Cast().Ptr(), ctx);
         return output;
     }
 
@@ -459,6 +489,8 @@ private:
     TKqpOptimizeContext& KqpCtx;
     const TKikimrConfiguration::TPtr& Config;
 };
+
+} // anonymous namespace
 
 TAutoPtr<IGraphTransformer> CreateKqpLogOptTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
     TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config)

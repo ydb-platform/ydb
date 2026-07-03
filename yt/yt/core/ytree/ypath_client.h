@@ -217,8 +217,8 @@ protected:
 // TODO(gritukan): It's not easy to find a proper return type for these functions
 // that is suitable both for vanilla and patched protobufs. In an ideal world,
 // it would be TYPathBuf, but for now it breaks the advantages for CoW of the
-// TString. Rethink it if and when YT will try to use std::string or non-CoW
-// TString everywhere.
+// std::string. Rethink it if and when YT will try to use std::string or non-CoW
+// std::string everywhere.
 using TYPathMaybeRef = std::conditional_t<IsArcadiaProtobuf, const TYPath&, TYPath>;
 
 TYPathMaybeRef GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
@@ -347,7 +347,7 @@ TFuture<std::vector<std::string>> AsyncYPathList(
  *  nested maps |a| and |b| get created. Note that the final key (i.e. |c|)
  *  is not forced (since we have no idea of its type anyway).
  */
-void ForceYPath(const INodePtr& root, const TYPath& path);
+void ForceYPath(const INodePtr& root, TYPathBuf path);
 
 //! Constructs an ephemeral deep copy of #node.
 INodePtr CloneNode(const INodePtr& node);
@@ -384,43 +384,35 @@ extern TNodeWalkOptions FindNodeByYPathNoThrowOptions;
 //! Generic function walking down the node according to given ypath.
 INodePtr WalkNodeByYPath(
     const INodePtr& root,
-    const TYPath& path,
+    TYPathBuf path,
     const TNodeWalkOptions& options);
 
 /*!
  *  Throws exception if the specified node does not exist.
  */
-INodePtr GetNodeByYPath(
-    const INodePtr& root,
-    const TYPath& path);
+INodePtr GetNodeByYPath(const INodePtr& root, TYPathBuf path);
 
 /*!
  *  Does not throw exception if the specified node does not exist, but still throws on attempt of
  *  moving to the child of a non-composite node.
  */
-INodePtr FindNodeByYPath(
-    const INodePtr& root,
-    const TYPath& path);
+INodePtr FindNodeByYPath(const INodePtr& root, TYPathBuf path);
 
 /*!
  *  A version of #FindNodeByYPath that never throws.
  */
-INodePtr FindNodeByYPathNoThrow(
-    const INodePtr& root,
-    const TYPath& path);
+INodePtr FindNodeByYPathNoThrow(const INodePtr& root, TYPathBuf path);
 
 void SetNodeByYPath(
     const INodePtr& root,
-    const TYPath& path,
+    TYPathBuf path,
     const INodePtr& value,
     bool force = false);
 
 /*!
  *  Returns |false| if the specified node does not exists.
  */
-bool RemoveNodeByYPath(
-    const INodePtr& root,
-    const TYPath& path);
+bool RemoveNodeByYPath(const INodePtr& root, TYPathBuf path);
 
 ////////////////////////////////////////////////////////////////////////////////
 

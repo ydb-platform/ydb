@@ -140,6 +140,7 @@ TYtQueryCacheItem::TYtQueryCacheItem(EQueryCacheMode mode, const TTransactionCac
     , LogCtx(logCtx)
     , MergeSpec(mergeSpec)
     , TableAttrs(tableAttrs)
+    , FailOnRace(Mode == EQueryCacheMode::Refresh && mode == EQueryCacheMode::Refresh)
 {
     if (!hash.empty()) {
         if (singleOutputHash) {
@@ -296,7 +297,7 @@ void TYtQueryCacheItem::StoreImpl() {
             nestedWriteTx->Abort();
         }
 
-        if (!IsRace(e) || Mode == EQueryCacheMode::Refresh) {
+        if (!IsRace(e) || FailOnRace) {
             throw;
         }
     };

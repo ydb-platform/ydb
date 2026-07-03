@@ -47,6 +47,12 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvWrite::TPtr ev) {
+        YDB_LOG_TRACE_COMP(BS_DDISK, "TDDiskActor::Handle(TEvWrite)",
+            {"marker", "BSDD50"},
+            {"DDiskId", DDiskId},
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie});
+
         if (!CheckQuery(*ev, &Counters.Interface.Write)) {
             return;
         }
@@ -66,6 +72,14 @@ namespace NKikimr::NDDisk {
                     << ", contiguousSize# " << dataIter.ContiguousSize()
                     << " dataSize# " << data.size()
                     << " aligned# " << (reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % DiskFormat->SectorSize == 0);
+
+                YDB_LOG_DEBUG_CTX_COMP(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK, "Dump DDiskId: payload must be contiguous and aligned",
+                    {"sectorSize", DiskFormat->SectorSize},
+                    {"contiguousSize", dataIter.ContiguousSize()},
+                    {"dataSize", data.size()},
+                    {"aligned", (reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % DiskFormat->SectorSize == 0)},
+                    {"DDiskId", DDiskId});
+
                 SendReply(*ev, std::make_unique<TEvWriteResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
                     ss.Str()));
@@ -113,8 +127,10 @@ namespace NKikimr::NDDisk {
 
 	void TDDiskActor::Handle(NPDisk::TEvChunkWriteRawResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD07,
-            "TDDiskActor::Handle(TEvChunkWriteRawResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
+        YDB_LOG_DEBUG_COMP(BS_DDISK, "TDDiskActor::Handle(TEvChunkWriteRawResult)",
+            {"marker", "BSDD07"},
+            {"DDiskId", DDiskId},
+            {"msg", msg});
 
         if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkWriteRawResult)")) {
             return;
@@ -134,8 +150,10 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvRead::TPtr ev) {
-        STLOG(PRI_TRACE, BS_DDISK, BSDD21,
-            "TDDiskActor::Handle(TEvRead)", (DDiskId, DDiskId), (Msg, ev->Get()->Record));
+        YDB_LOG_TRACE_COMP(BS_DDISK, "TDDiskActor::Handle(TEvRead)",
+            {"marker", "BSDD21"},
+            {"DDiskId", DDiskId},
+            {"msg", ev->Get()->Record});
 
         if (!CheckQuery(*ev, &Counters.Interface.Read)) {
             return;
@@ -186,8 +204,10 @@ namespace NKikimr::NDDisk {
 
 	void TDDiskActor::Handle(NPDisk::TEvChunkReadRawResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD08,
-            "TDDiskActor::Handle(TEvChunkReadRawResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
+        YDB_LOG_DEBUG_COMP(BS_DDISK, "TDDiskActor::Handle(TEvChunkReadRawResult)",
+            {"marker", "BSDD08"},
+            {"DDiskId", DDiskId},
+            {"msg", msg});
 
         if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkReadRawResult)")) {
             return;
@@ -360,6 +380,14 @@ namespace NKikimr::NDDisk {
             }
             case EWakeupTag::WakeupUpdateFreeSpaceInfo: {
                 UpdateFreeSpaceInfo();
+                break;
+            }
+            case EWakeupTag::WakeupCollectPbStats: {
+                CollectPbStatsSnapshot();
+                break;
+            }
+            case EWakeupTag::WakeupProcessPersistentBufferBatchWrite: {
+                ProcessPersistentBufferBatchWrite();
                 break;
             }
         }

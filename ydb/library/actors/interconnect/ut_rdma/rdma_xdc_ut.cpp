@@ -3,6 +3,7 @@
 #include <ydb/library/actors/interconnect/rdma/ut/utils/utils.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/gtest/gtest.h>
 
 #include <ydb/library/actors/interconnect/ut/protos/interconnect_test.pb.h>
@@ -308,6 +309,162 @@ TEvTestSerialization* MakeTestEvent(ui64 blobId, NInterconnect::NRdma::IMemPool*
     return ev;
 }
 
+static bool WaitForRdmaChecksumStatus(TTestICCluster& cluster, ui32 me, ui32 peer, const TString& expected, ui32 maxAttempt,
+        TString& lastStatus)
+{
+    while (maxAttempt--) {
+        try {
+            lastStatus = GetRdmaChecksumStatus(cluster, me, peer);
+            if (lastStatus == expected) {
+                return true;
+            }
+        } catch (const TPatternNotFound&) {
+            lastStatus.clear();
+        }
+        Sleep(TDuration::Seconds(1));
+    }
+    return false;
+}
+
+static bool WaitForRdmaSessionDropOrStatus(TTestICCluster& cluster, ui32 me, ui32 peer, const TString& expected, ui32 maxAttempt,
+        TString& lastStatus)
+{
+    ui32 missingAttempts = 0;
+    while (maxAttempt--) {
+        try {
+            lastStatus = GetRdmaChecksumStatus(cluster, me, peer);
+            missingAttempts = 0;
+            if (lastStatus == expected) {
+                return true;
+            }
+        } catch (const TPatternNotFound&) {
+            lastStatus.clear();
+            if (++missingAttempts >= 2) {
+                return true;
+            }
+        }
+        Sleep(TDuration::Seconds(1));
+    }
+    return false;
+}
+
+static TString FormatLastRdmaStatus(const TString& status) {
+    return status.empty() ? TString("<no session>") : status;
+}
+
+struct TCounterSumConsumer : NMonitoring::ICountableConsumer {
+    const TString CounterName;
+    ui64 Sum = 0;
+
+    explicit TCounterSumConsumer(TStringBuf counterName)
+        : CounterName(counterName)
+    {}
+
+    void OnCounter(const TString& /*labelName*/, const TString& labelValue,
+            const NMonitoring::TCounterForPtr* counter) override {
+        if (labelValue == CounterName) {
+            Sum += counter->Val();
+        }
+    }
+
+    void OnHistogram(const TString& /*labelName*/, const TString& /*labelValue*/,
+            NMonitoring::IHistogramSnapshotPtr /*snapshot*/, bool /*derivative*/) override {
+    }
+
+    void OnGroupBegin(const TString& /*labelName*/, const TString& /*labelValue*/,
+            const NMonitoring::TDynamicCounters* /*group*/) override {
+    }
+
+    void OnGroupEnd(const TString& /*labelName*/, const TString& /*labelValue*/,
+            const NMonitoring::TDynamicCounters* /*group*/) override {
+    }
+};
+
+static ui64 GetNodeCounterSum(TTestICCluster& cluster, ui32 nodeId, TStringBuf counterName) {
+    const auto nodeCounters = cluster.GetCounters()->FindSubgroup("nodeId", ToString(nodeId));
+    if (!nodeCounters) {
+        return 0;
+    }
+
+    TCounterSumConsumer consumer(counterName);
+    nodeCounters->Accept({}, {}, consumer);
+    return consumer.Sum;
+}
+
+static bool WaitForNodeCounterSum(TTestICCluster& cluster, ui32 nodeId, TStringBuf counterName, ui64 expected,
+        TDuration timeout, ui64& lastValue) {
+    const TInstant deadline = TInstant::Now() + timeout;
+    while (TInstant::Now() < deadline) {
+        lastValue = GetNodeCounterSum(cluster, nodeId, counterName);
+        if (lastValue == expected) {
+            return true;
+        }
+        Sleep(TDuration::MilliSeconds(100));
+    }
+    return false;
+}
+
+class TWaitForConnectionActor: public TActorBootstrapped<TWaitForConnectionActor> {
+public:
+    TWaitForConnectionActor(ui32 peerNodeId, NThreading::TPromise<bool> promise, ui32 attempts)
+        : PeerNodeId(peerNodeId)
+        , Promise(std::move(promise))
+        , AttemptsLeft(attempts)
+    {}
+
+    void Bootstrap() {
+        Become(&TWaitForConnectionActor::StateFunc);
+        SendConnect();
+    }
+
+private:
+    void SendConnect() {
+        if (!AttemptsLeft) {
+            return Finish(false);
+        }
+        --AttemptsLeft;
+        Send(TActivationContext::InterconnectProxy(PeerNodeId), new TEvInterconnect::TEvConnectNode);
+    }
+
+    void Finish(bool connected) {
+        Promise.SetValue(connected);
+        PassAway();
+    }
+
+    void Handle(TEvInterconnect::TEvNodeConnected::TPtr&) {
+        Send(TActivationContext::InterconnectProxy(PeerNodeId), new TEvents::TEvUnsubscribe);
+        Finish(true);
+    }
+
+    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr&) {
+        Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup);
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr&) {
+        SendConnect();
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvInterconnect::TEvNodeConnected, Handle);
+        hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
+        hFunc(TEvents::TEvWakeup, Handle);
+    )
+
+private:
+    const ui32 PeerNodeId;
+    NThreading::TPromise<bool> Promise;
+    ui32 AttemptsLeft;
+};
+
+static void WaitForInterconnectConnection(TTestICCluster& cluster, ui32 fromNode, ui32 toNode) {
+    auto promise = NThreading::NewPromise<bool>();
+    auto future = promise.GetFuture();
+    cluster.RegisterActor(new TWaitForConnectionActor(toNode, std::move(promise), 200), fromNode);
+
+    const bool connected = future.Wait(TDuration::Seconds(30)) && future.GetValueSync();
+    UNIT_ASSERT_C(connected, "failed to establish interconnect session from node " << fromNode << " to node " << toNode);
+}
+
 TEST_F(XdcRdmaTest, SerializeToRope) {
     auto common = MakeIntrusive<TInterconnectProxyCommon>();
     common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
@@ -386,7 +543,9 @@ namespace {
         ui32 DeclareSectionInline = 0;
         ui32 DeclareSectionRdma = 0;
         ui32 PushData = 0;
-        ui32 RdmaRead = 0;
+        ui32 RdmaReadWithChecksums = 0;
+        ui32 RdmaReadWithoutChecksums = 0;
+        ui32 RdmaRead() const { return RdmaReadWithChecksums + RdmaReadWithoutChecksums; }
     };
 
     static TString CollectStreamData(NInterconnect::TOutgoingStream& stream) {
@@ -436,22 +595,31 @@ namespace {
                         }
                         break;
                     }
-                    case EXdcCommand::PUSH_DATA: {
-                        constexpr size_t cmdLen = sizeof(ui16) + sizeof(ui32);
+                    case EXdcCommand::PUSH_DATA: 
+                    case EXdcCommand::PUSH_DATA_NO_CHECKSUMS: {
+                        const size_t cmdLen = sizeof(ui16) + (cmd == EXdcCommand::PUSH_DATA ? sizeof(ui32) : 0);
                         UNIT_ASSERT_C(static_cast<size_t>(partEnd - ptr) >= cmdLen, "invalid PUSH_DATA");
                         ptr += cmdLen;
                         ++counters.PushData;
                         break;
                     }
-                    case EXdcCommand::RDMA_READ: {
+                    case EXdcCommand::RDMA_READ: 
+                    case EXdcCommand::RDMA_READ_NO_CHECKSUMS: {
                         UNIT_ASSERT_C(static_cast<size_t>(partEnd - ptr) >= sizeof(ui16), "invalid RDMA_READ");
                         const ui16 credsSerializedSize = ReadUnaligned<ui16>(ptr);
                         ptr += sizeof(ui16);
                         UNIT_ASSERT_C(static_cast<size_t>(partEnd - ptr) >= credsSerializedSize + sizeof(ui32),
                             "invalid RDMA_READ payload");
                         ptr += credsSerializedSize;
+                        const ui32 checksum = ReadUnaligned<ui32>(ptr);
                         ptr += sizeof(ui32);
-                        ++counters.RdmaRead;
+                        if (cmd == EXdcCommand::RDMA_READ) {
+                            ++counters.RdmaReadWithChecksums;
+                            UNIT_ASSERT_C(checksum, "expected checksum");
+                        } else {
+                            ++counters.RdmaReadWithoutChecksums;
+                            UNIT_ASSERT_C(!checksum, "unexpected checksum");
+                        }
                         break;
                     }
                 }
@@ -547,13 +715,15 @@ TEST_F(XdcRdmaTest, ShuffleRdmaUsesIteratorOffsetInsideChunk) {
                         }
                         break;
                     }
-                    case EXdcCommand::PUSH_DATA: {
+                    case EXdcCommand::PUSH_DATA:
+                    case EXdcCommand::PUSH_DATA_NO_CHECKSUMS: {
                         constexpr size_t cmdLen = sizeof(ui16) + sizeof(ui32);
                         UNIT_ASSERT_C(static_cast<size_t>(partEnd - ptr) >= cmdLen, "invalid PUSH_DATA");
                         ptr += cmdLen;
                         break;
                     }
-                    case EXdcCommand::RDMA_READ: {
+                    case EXdcCommand::RDMA_READ: 
+                    case EXdcCommand::RDMA_READ_NO_CHECKSUMS: {
                         UNIT_ASSERT_C(static_cast<size_t>(partEnd - ptr) >= sizeof(ui16), "invalid RDMA_READ");
                         const ui16 credsSerializedSize = ReadUnaligned<ui16>(ptr);
                         ptr += sizeof(ui16);
@@ -580,6 +750,91 @@ TEST_F(XdcRdmaTest, ShuffleRdmaUsesIteratorOffsetInsideChunk) {
     UNIT_ASSERT_VALUES_EQUAL(rdmaReadSize, rdmaSize);
     UNIT_ASSERT_VALUES_EQUAL(rdmaReadAddr, expectedAddr);
 }
+
+struct TRdmaPayloadChecksumTestParams {
+    bool AllowDisablingPayloadChecksums = false;
+    bool DisablePayloadChecksumsFlag = false;
+};
+
+class XdcRdmaPayloadChecksumTest
+    : public XdcRdmaTest
+    , public ::testing::WithParamInterface<TRdmaPayloadChecksumTestParams>
+{};
+
+TEST_P(XdcRdmaPayloadChecksumTest, RdmaPayloadChecksums) {
+    const TRdmaPayloadChecksumTestParams params = GetParam();
+    const bool disablePayloadChecksums = params.AllowDisablingPayloadChecksums && params.DisablePayloadChecksumsFlag;
+
+    auto common = MakeIntrusive<TInterconnectProxyCommon>();
+    common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+    std::shared_ptr<IInterconnectMetrics> ctr = CreateInterconnectCounters(common);
+    ctr->SetPeerInfo("peer", "1", "peer");
+
+    auto callback = [](THolder<IEventBase>) {};
+    TEventHolderPool pool(common, callback);
+
+    const auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+
+    TSessionParams p;
+    p.UseExternalDataChannel = true;
+    p.UseXdcShuffle = true;
+    p.UseRdma = true;
+    p.ChecksumRdmaEvent = true;
+    p.AllowDisablingPayloadChecksums = params.AllowDisablingPayloadChecksums;
+    TEventOutputChannel channel(1, 1, 64 << 20, ctr, p, memPool);
+
+    constexpr size_t payloadSize = 257;
+    auto rcBuf = memPool->AllocRcBuf(payloadSize, 0).value();
+    for (size_t i = 0; i < payloadSize; ++i) {
+        rcBuf.GetDataMut()[i] = static_cast<char>(i);
+    }
+    const ui32 checksumIfCalculated = XXH3_64bits(rcBuf.GetData(), payloadSize);
+    UNIT_ASSERT_VALUES_UNEQUAL(checksumIfCalculated, 0u);
+
+    TEventSerializationInfo info;
+    info.Sections.push_back(TEventSectionInfo{0, payloadSize, 0, 0, false, true /*IsRdmaCapable*/});
+    auto serialized = MakeIntrusive<TEventSerializedData>(TRope(std::move(rcBuf)), std::move(info));
+
+    auto evHandle = MakeHolder<IEventHandle>(
+        TEvTestSerialization::EventType,
+        params.DisablePayloadChecksumsFlag ? IEventHandle::FlagDisablePayloadChecksums : 0,
+        TActorId(),
+        TActorId(),
+        serialized,
+        0
+    );
+    channel.Push(*evHandle, pool, TInstant::Zero());
+
+    NInterconnect::TOutgoingStream main;
+    NInterconnect::TOutgoingStream xdc;
+    TTcpPacketOutTask task(p, main, xdc);
+    UNIT_ASSERT(channel.FeedBuf(task, 1, 0));
+    task.Finish(1, 0);
+
+    TXdcCommandCounters counters;
+    AccumulateXdcCommandCounters(CollectStreamData(main), counters);
+
+    UNIT_ASSERT_VALUES_EQUAL(counters.DeclareSectionRdma, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaReadWithChecksums, disablePayloadChecksums ? 0u : 1u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaReadWithoutChecksums, disablePayloadChecksums ? 1u : 0u);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    DisablePayloadChecksums,
+    XdcRdmaPayloadChecksumTest,
+    ::testing::Values(
+        TRdmaPayloadChecksumTestParams{false, false},
+        TRdmaPayloadChecksumTestParams{false, true},
+        TRdmaPayloadChecksumTestParams{true, false},
+        TRdmaPayloadChecksumTestParams{true, true}
+    ),
+    [](const testing::TestParamInfo<TRdmaPayloadChecksumTestParams>& info) {
+        return std::string(info.param.AllowDisablingPayloadChecksums ? "AllowDisabling" : "DisablingNotAllowed")
+            + "_" + (info.param.DisablePayloadChecksumsFlag ? "FlagSet" : "FlagNotSet");
+    }
+);
 
 TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenDeviceIndexIsInvalid) {
     auto common = MakeIntrusive<TInterconnectProxyCommon>();
@@ -626,7 +881,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenDeviceIndexIsInvalid) {
     UNIT_ASSERT(counters.DeclareSection > 0u);
     UNIT_ASSERT_VALUES_EQUAL(counters.DeclareSectionRdma, 0u);
     UNIT_ASSERT(counters.PushData > 0u);
-    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead(), 0u);
 }
 
 TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenSerializeToRopeFails) {
@@ -664,7 +919,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenSerializeToRopeFails) {
     UNIT_ASSERT(counters.DeclareSection > 0u);
     UNIT_ASSERT_VALUES_EQUAL(counters.DeclareSectionRdma, 0u);
     UNIT_ASSERT(counters.PushData > 0u);
-    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead(), 0u);
 }
 
 #ifndef NDEBUG
@@ -716,7 +971,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenChunkIsNotRdmaRegistered) 
     UNIT_ASSERT(counters.DeclareSection > 0u);
     UNIT_ASSERT_VALUES_EQUAL(counters.DeclareSectionRdma, 0u);
     UNIT_ASSERT(counters.PushData > 0u);
-    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead(), 0u);
 }
 
 TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenRdmaPartContainsMixedChunks) {
@@ -775,7 +1030,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenRdmaPartContainsMixedChunk
     UNIT_ASSERT(counters.DeclareSection > 0u);
     UNIT_ASSERT_VALUES_EQUAL(counters.DeclareSectionRdma, 0u);
     UNIT_ASSERT(counters.PushData > 0u);
-    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead(), 0u);
 }
 #endif
 
@@ -940,6 +1195,8 @@ TEST_F(XdcRdmaTest, SendRdmaWithMultiGlue) {
 }
 
 TEST_F(XdcRdmaTest, RestoreRdmaSession) {
+    constexpr TStringBuf RdmaRetryWatchdogPendingSessions = "RdmaRetryWatchdogPendingSessions";
+
     const NInterconnect::NRdma::TMemPoolSettings settings {
         .SizeLimitMb = 256
     };
@@ -972,6 +1229,10 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
 
         UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
     }
+    ui64 lastWatchdogPending = 0;
+    UNIT_ASSERT_C(WaitForNodeCounterSum(cluster, 2, RdmaRetryWatchdogPendingSessions, 0,
+            TDuration::Seconds(5), lastWatchdogPending),
+        "last RDMA retry watchdog pending sessions: " << lastWatchdogPending);
 
     // Exhaust the same allocation class (5KB) that receiver uses for RDMA sections.
     // This makes the "undelivered due to no RDMA memory on receiver" check deterministic.
@@ -1001,16 +1262,13 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
     // Session is going to be recreated without RDMA,
     // but pending handshake timers are triggered (we can't check it directly in this UT).
     TString lastRdmaStatus;
-    for (size_t i = 0; i < 10; i++) {
-        lastRdmaStatus = GetRdmaChecksumStatus(cluster, 2, 1);
-        if (lastRdmaStatus == "Off") {
-            break;
-        }
-        Sleep(TDuration::Seconds(1));
-    }
-
-    UNIT_ASSERT_VALUES_EQUAL(lastRdmaStatus, "Off");
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, "Off", 30, lastRdmaStatus),
+        "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
+    UNIT_ASSERT_STRINGS_EQUAL(lastRdmaStatus.c_str(), "Off");
     lastRdmaStatus.clear();
+    UNIT_ASSERT_C(WaitForNodeCounterSum(cluster, 2, RdmaRetryWatchdogPendingSessions, 1,
+            TDuration::Seconds(30), lastWatchdogPending),
+        "last RDMA retry watchdog pending sessions: " << lastWatchdogPending);
 
     // Send one more time (will be delivered through TCP)
     {
@@ -1022,22 +1280,11 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
     UNIT_ASSERT(receiverPtr->WaitForReceive(2, 20));
     // Free memory
     occupiedBuffers.clear();
-    // Wait for the pending handshake timer
-    Sleep(TDuration::MilliSeconds(5000));
 
-    for (size_t i = 0; i < 5; i++) {
-        try {
-            lastRdmaStatus = GetRdmaChecksumStatus(cluster, 2, 1);
-        } catch (const TPatternNotFound&) {
-            // retry case if the session was not created yet
-            Sleep(TDuration::Seconds(1));
-            continue;
-        }
-        if (lastRdmaStatus == "On") {
-            break;
-        }
-        Sleep(TDuration::Seconds(1));
-    }
+    // Wait until the delayed RDMA retry closes the TCP-only session, or until RDMA
+    // is restored by an already pending reconnect.
+    UNIT_ASSERT_C(WaitForRdmaSessionDropOrStatus(cluster, 2, 1, "On | SoftwareChecksum", 45, lastRdmaStatus),
+        "last RDMA status before reconnect: " << FormatLastRdmaStatus(lastRdmaStatus));
 
     {
         auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
@@ -1046,8 +1293,12 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
         cluster.RegisterActor(senderPtr, 2);
     }
     UNIT_ASSERT(receiverPtr->WaitForReceive(3, 20));
-    lastRdmaStatus = GetRdmaChecksumStatus(cluster, 2, 1);
-    UNIT_ASSERT_VALUES_EQUAL(lastRdmaStatus, "On | SoftwareChecksum");
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, "On | SoftwareChecksum", 30, lastRdmaStatus),
+        "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
+    UNIT_ASSERT_STRINGS_EQUAL(lastRdmaStatus.c_str(), "On | SoftwareChecksum");
+    UNIT_ASSERT_C(WaitForNodeCounterSum(cluster, 2, RdmaRetryWatchdogPendingSessions, 0,
+            TDuration::Seconds(10), lastWatchdogPending),
+        "last RDMA retry watchdog pending sessions: " << lastWatchdogPending);
 }
 
 TEST_P(XdcRdmaTestCqMode, SendMix) {
@@ -1182,8 +1433,6 @@ static void DoSendHugePayloadsNum(const ui32 numPayloads, const size_t payloadSz
     });
     const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
 
-    Sleep(TDuration::MilliSeconds(100));
-
     {
         auto senderPtr = new TSendActor(receiver, ev);
         cluster.RegisterActor(senderPtr, 2);
@@ -1200,6 +1449,7 @@ TEST_F(XdcRdmaTest, Send1Payload) {
 
     TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
         TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+    WaitForInterconnectConnection(cluster, 2, 1);
 
     DoSendHugePayloadsNum(1, 8192, cluster, pool);
 }
@@ -1212,18 +1462,20 @@ TEST_F(XdcRdmaTest, Send2Payloads) {
 
     TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
         TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+    WaitForInterconnectConnection(cluster, 2, 1);
 
     DoSendHugePayloadsNum(2, 8192, cluster, pool);
 }
 
 TEST_F(XdcRdmaTest, Send250Payloads) {
-        const NInterconnect::NRdma::TMemPoolSettings settings {
+    const NInterconnect::NRdma::TMemPoolSettings settings {
         .SizeLimitMb = 256
     };
     auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
 
     TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
         TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+    WaitForInterconnectConnection(cluster, 2, 1);
 
     DoSendHugePayloadsNum(250, 512, cluster, pool);
 }
@@ -1236,6 +1488,7 @@ TEST_F(XdcRdmaTest, Send500Payloads) {
 
     TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
         TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+    WaitForInterconnectConnection(cluster, 2, 1);
 
     DoSendHugePayloadsNum(500, 512, cluster, pool);
 }
@@ -1248,6 +1501,7 @@ TEST_F(XdcRdmaTest, Send4000Payloads) {
 
     TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
         TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+    WaitForInterconnectConnection(cluster, 2, 1);
 
     DoSendHugePayloadsNum(4000, 512, cluster, pool);
 }
@@ -1260,6 +1514,7 @@ TEST_F(XdcRdmaTest, Send16000Payloads) {
 
     TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
         TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+    WaitForInterconnectConnection(cluster, 2, 1);
 
     DoSendHugePayloadsNum(16000, 512, cluster, pool);
 }
@@ -1272,6 +1527,7 @@ TEST_F(XdcRdmaTest, Send32000Payloads) {
 
     TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
         TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+    WaitForInterconnectConnection(cluster, 2, 1);
 
     DoSendHugePayloadsNum(32000, 512, cluster, pool);
 }
@@ -1284,6 +1540,7 @@ TEST_F(XdcRdmaTest, SendXPayloads) {
 
     TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
         TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+    WaitForInterconnectConnection(cluster, 2, 1);
 
     for (size_t i = 640; i < 650; i++) {
         DoSendHugePayloadsNum(i, 512, cluster, pool);
@@ -1298,6 +1555,7 @@ TEST_F(XdcRdmaTest, SendXPayloadsWithRandSize) {
 
     TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
         TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+    WaitForInterconnectConnection(cluster, 2, 1);
 
     for (size_t i = 640; i < 650; i++) {
         DoSendHugePayloadsNum(i, 512 + (RandomNumber<ui16>(4096) * 4), cluster, pool);

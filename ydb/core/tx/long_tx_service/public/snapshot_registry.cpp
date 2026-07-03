@@ -5,6 +5,14 @@
 namespace NKikimr {
 
 namespace {
+    NKikimr::TTableId NormalizeTableId(const NKikimr::TTableId& tableId) {
+        if (tableId.SchemaVersion == 0 && tableId.SysViewInfo.empty()) {
+            return tableId;
+        }
+        // Snapshot registry keys are path-based and intentionally ignore schema version
+        // and sys-view suffixes to keep lookup/add behavior stable for all callers.
+        return NKikimr::TTableId(tableId.PathId);
+    }
 
     class TImmutableSnapshotRegistry : public IImmutableSnapshotRegistry {
     public:
@@ -12,9 +20,10 @@ namespace {
 
         TImmutableSnapshotRegistry() = default;
         
-        explicit TImmutableSnapshotRegistry(TSnapshotMap&& snapshots, TRowVersion snapshotBorder)
+        explicit TImmutableSnapshotRegistry(TSnapshotMap&& snapshots, TRowVersion snapshotBorder, TInstant oldestCollectionTime)
             : Snapshots(std::move(snapshots))
             , SnapshotBorder(snapshotBorder)
+            , OldestCollectionTime(oldestCollectionTime)
         {}
 
         ~TImmutableSnapshotRegistry() override = default;
@@ -23,7 +32,24 @@ namespace {
             if (version >= SnapshotBorder) {
                 return true;
             }
-            return HasSnapshotImpl(tableId, version) || HasSnapshotImpl(NKikimr::TTableId{}, version);
+            const NKikimr::TTableId normalizedTableId = NormalizeTableId(tableId);
+            return HasSnapshotImpl(normalizedTableId, version) || HasSnapshotImpl(NKikimr::TTableId{}, version);
+        }
+
+        TSet<TRowVersion> GetActiveSnapshots(const NKikimr::TTableId& tableId) const override {
+            TSet<TRowVersion> result;
+            const NKikimr::TTableId normalizedTableId = NormalizeTableId(tableId);
+            AddSnapshotsImpl(normalizedTableId, result);
+            AddSnapshotsImpl(NKikimr::TTableId{}, result);
+            return result;
+        }
+
+        TRowVersion GetBorder() const override {
+            return SnapshotBorder;
+        }
+
+        TInstant GetOldestCollectionTime() const override {
+            return OldestCollectionTime;
         }
         
     private:        
@@ -39,8 +65,18 @@ namespace {
             return versionsIter != versions.end() && *versionsIter == version;
         }
 
+        void AddSnapshotsImpl(const NKikimr::TTableId& tableId, TSet<TRowVersion>& result) const {
+            auto snapshotsIter = Snapshots.find(tableId);
+            if (snapshotsIter == Snapshots.end()) {
+                return;
+            }
+
+            result.insert(snapshotsIter->second.begin(), snapshotsIter->second.end());
+        }
+
         const TSnapshotMap Snapshots;
         const TRowVersion SnapshotBorder;
+        const TInstant OldestCollectionTime;
     };
 
     class TImmutableSnapshotRegistryHolder : public IImmutableSnapshotRegistryHolder {
@@ -70,6 +106,10 @@ namespace {
         void SetSnapshotBorder(const TRowVersion& version) override {
             SnapshotBorder = version;
         }
+
+        void SetOldestCollectionTime(TInstant oldestCollectionTime) override {
+            OldestCollectionTime = oldestCollectionTime;
+        }
         
         void AddSnapshot(const TVector<NKikimr::TTableId>& tableIds, const TRowVersion& version) override {
             if (version >= SnapshotBorder) {
@@ -81,7 +121,7 @@ namespace {
             }
 
             for (const NKikimr::TTableId& tableId : tableIds) {
-                Snapshots[tableId].push_back(version);
+                Snapshots[NormalizeTableId(tableId)].push_back(version);
             }
         }
         
@@ -89,11 +129,12 @@ namespace {
             for (auto& [tableId, versions] : Snapshots) {
                 std::sort(versions.begin(), versions.end());
             }
-            return std::make_unique<TImmutableSnapshotRegistry>(std::move(Snapshots), SnapshotBorder);
+            return std::make_unique<TImmutableSnapshotRegistry>(std::move(Snapshots), SnapshotBorder, OldestCollectionTime);
         }
 
     private:
         TRowVersion SnapshotBorder = TRowVersion::Max();
+        TInstant OldestCollectionTime;
         THashMap<NKikimr::TTableId, TVector<TRowVersion>> Snapshots;
     };
 }

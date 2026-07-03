@@ -498,6 +498,63 @@ Y_UNIT_TEST_SUITE(TJsonSchemaBuilderTests) {
         UNIT_ASSERT_VALUES_EQUAL(schema["items"]["type"].GetString(), "array");
         UNIT_ASSERT_VALUES_EQUAL(schema["items"]["items"]["type"].GetString(), "string");
     }
+
+    Y_UNIT_TEST(BuildStringSchemaWithEnum) {
+        TJsonSchemaBuilder builder;
+        builder.Type(TJsonSchemaBuilder::EType::String)
+               .Enum({"red", "green", "blue"});
+        const auto schema = builder.Build();
+
+        UNIT_ASSERT_VALUES_EQUAL(schema["type"].GetString(), "string");
+        UNIT_ASSERT(schema.Has("enum"));
+
+        const auto& values = schema["enum"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(values[0].GetString(), "red");
+        UNIT_ASSERT_VALUES_EQUAL(values[1].GetString(), "green");
+        UNIT_ASSERT_VALUES_EQUAL(values[2].GetString(), "blue");
+    }
+
+    Y_UNIT_TEST(BuildObjectSchemaWithEnumProperty) {
+        TJsonSchemaBuilder builder;
+        builder.Type(TJsonSchemaBuilder::EType::Object)
+               .Property("status")
+                   .Type(TJsonSchemaBuilder::EType::String)
+                   .Enum({"new", "done"})
+                   .Done();
+        const auto schema = builder.Build();
+
+        UNIT_ASSERT_VALUES_EQUAL(schema["type"].GetString(), "object");
+
+        const auto& props = schema["properties"].GetMapSafe();
+        UNIT_ASSERT(props.contains("status"));
+        UNIT_ASSERT_VALUES_EQUAL(props.at("status")["type"].GetString(), "string");
+
+        const auto& values = props.at("status")["enum"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(values[0].GetString(), "new");
+        UNIT_ASSERT_VALUES_EQUAL(values[1].GetString(), "done");
+    }
+
+    Y_UNIT_TEST(BuildArraySchemaWithEnumItems) {
+        TJsonSchemaBuilder builder;
+        builder.Type(TJsonSchemaBuilder::EType::Array)
+               .Items()
+                   .Type(TJsonSchemaBuilder::EType::String)
+                   .Enum({"small", "medium", "large"})
+                   .Done();
+        const auto schema = builder.Build();
+
+        UNIT_ASSERT_VALUES_EQUAL(schema["type"].GetString(), "array");
+        UNIT_ASSERT(schema.Has("items"));
+        UNIT_ASSERT_VALUES_EQUAL(schema["items"]["type"].GetString(), "string");
+
+        const auto& values = schema["items"]["enum"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(values[0].GetString(), "small");
+        UNIT_ASSERT_VALUES_EQUAL(values[1].GetString(), "medium");
+        UNIT_ASSERT_VALUES_EQUAL(values[2].GetString(), "large");
+    }
 }
 
 Y_UNIT_TEST_SUITE(FormatJsonValueTests) {

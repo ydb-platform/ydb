@@ -118,7 +118,11 @@ namespace NYdbWorkload {
             TString key = MakeKey(context);
             TString next = NextWord(key, rng);
             if (next == END_TOKEN || next == START_TOKEN) {
-                break;
+                context.clear();
+                for (int i = 0; i < Order; ++i) {
+                    context.push_back(TString(START_TOKEN));
+                }
+                continue;
             }
             if (wordsWritten > 0) {
                 text << " ";

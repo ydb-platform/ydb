@@ -15,6 +15,7 @@
 
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
+#include <optional>
 
 namespace NYdb::inline Dev {
 
@@ -53,6 +54,7 @@ public:
     ~TGRpcConnectionsImpl();
 
     void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) override;
+    void PostToResponseQueue(std::function<void()>&& f) override;
 
     void ScheduleDelayedTask(TSimpleCb&& fn, TDeadline deadline);
     void ScheduleDelayedTask(TSimpleCb&& fn, TDeadline::Duration delay);
@@ -215,6 +217,11 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         Y_ABORT_UNLESS(dbState);
 
+        if (auto tlsValidationStatus = ValidateClientTlsCredentials(dbState)) {
+            userResponseCb(nullptr, std::move(*tlsValidationStatus));
+            return;
+        }
+
         if (!TryCreateContext(context)) {
             TPlainStatus status(EStatus::CLIENT_CANCELLED, "Client is stopped");
             userResponseCb(nullptr, TPlainStatus{status.Status, std::move(status.Issues)});
@@ -225,6 +232,7 @@ public:
             std::weak_ptr<TDbDriverState> weakState = dbState;
             const auto startTime = TInstant::Now();
             userResponseCb = std::move([cb = std::move(userResponseCb), weakState, startTime](TResponse* response, TPlainStatus status) {
+                Y_ABORT_UNLESS(!status.Ok() || response);
                 const auto resultSize = response ? response->ByteSizeLong() : 0;
                 cb(response, status);
 
@@ -246,14 +254,16 @@ public:
                     return;
                 }
 
+                Y_ABORT_UNLESS(serviceConnection != nullptr);
+
                 TCallMeta meta;
 
                 try {
                     meta = MakeCallMeta(requestSettings, dbState);
-                } catch (const TAuthenticationError& e) {
+                } catch (const TYdbException& e) {
                     userResponseCb(
                         nullptr,
-                        TPlainStatus(EStatus::CLIENT_UNAUTHENTICATED, e.what())
+                        TPlainStatus(dynamic_cast<const TAuthenticationError*>(&e) ? EStatus::CLIENT_UNAUTHENTICATED : EStatus::UNAVAILABLE, e.what())
                     );
                     return;
                 }
@@ -334,6 +344,7 @@ public:
         {
             if (response) {
                 Ydb::Operations::Operation* operation = response->mutable_operation();
+                Y_ABORT_UNLESS(operation);
                 if (!operation->ready() && poll) {
                     auto action = MakeIntrusive<TDeferredAction>(
                         operation->id(),
@@ -442,6 +453,11 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
 
+        if (auto tlsValidationStatus = ValidateClientTlsCredentials(dbState)) {
+            responseCb(std::move(*tlsValidationStatus), nullptr);
+            return;
+        }
+
         if (!TryCreateContext(context)) {
             responseCb(TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped"), nullptr);
             return;
@@ -454,12 +470,14 @@ public:
                     return;
                 }
 
+                Y_ABORT_UNLESS(serviceConnection != nullptr);
+
                 TCallMeta meta;
                 try {
                     meta = MakeCallMeta(requestSettings, dbState);
-                } catch (const TAuthenticationError& e) {
+                } catch (const TYdbException& e) {
                     responseCb(
-                        TPlainStatus(EStatus::CLIENT_UNAUTHENTICATED, e.what()),
+                        TPlainStatus(dynamic_cast<const TAuthenticationError*>(&e) ? EStatus::CLIENT_UNAUTHENTICATED : EStatus::UNAVAILABLE, e.what()),
                         nullptr
                     );
                     return;
@@ -515,6 +533,11 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr;
 
+        if (auto tlsValidationStatus = ValidateClientTlsCredentials(dbState)) {
+            connectedCallback(std::move(*tlsValidationStatus), nullptr);
+            return;
+        }
+
         if (!TryCreateContext(context)) {
             connectedCallback(TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped"), nullptr);
             return;
@@ -528,12 +551,14 @@ public:
                     return;
                 }
 
+                Y_ABORT_UNLESS(serviceConnection != nullptr);
+
                 TCallMeta meta;
                 try {
                     meta = MakeCallMeta(requestSettings, dbState);
-                } catch (const TAuthenticationError& e) {
+                } catch (const TYdbException& e) {
                     connectedCallback(
-                        TPlainStatus(EStatus::CLIENT_UNAUTHENTICATED, e.what()),
+                        TPlainStatus(dynamic_cast<const TAuthenticationError*>(&e) ? EStatus::CLIENT_UNAUTHENTICATED : EStatus::UNAVAILABLE, e.what()),
                         nullptr
                     );
                     return;
@@ -600,6 +625,20 @@ public:
     const TLog& GetLog() const override;
 
 private:
+    static std::optional<TPlainStatus> ValidateClientTlsCredentials(const TDbDriverStatePtr& dbState) {
+        Y_ABORT_UNLESS(dbState);
+        if (dbState->AreClientTlsCredentialsValid()) {
+            return std::nullopt;
+        }
+        std::string msg = "Client TLS credentials validation failed";
+        const auto& detail = dbState->GetClientTlsValidationDetail();
+        if (!detail.empty()) {
+            msg += ": ";
+            msg += detail;
+        }
+        return TPlainStatus(EStatus::TRANSPORT_UNAVAILABLE, msg);
+    }
+
     template <typename TService, typename TCallback>
     void WithServiceConnection(TCallback callback, TDbDriverStatePtr dbState,
         const TEndpointKey& preferredEndpoint, TRpcRequestSettings::TEndpointPolicy endpointPolicy)

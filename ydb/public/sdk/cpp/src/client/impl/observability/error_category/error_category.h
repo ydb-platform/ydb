@@ -11,4 +11,8 @@ namespace NYdb::inline Dev::NObservability {
 // "ydb_error"       for server-side YDB statuses.
 std::string_view CategorizeErrorType(EStatus status) noexcept;
 
+// Canonical values for the OTel `error.type` attribute.
+inline constexpr std::string_view kErrorTypeYdb = "ydb_error";
+inline constexpr std::string_view kErrorTypeTransport = "transport_error";
+
 } // namespace NYdb::NObservability

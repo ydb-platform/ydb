@@ -14,7 +14,7 @@ namespace NYT::NComplexTypes {
 using TPositionalYsonTranslator = std::function<
     NTableClient::TUnversionedValue(NTableClient::TUnversionedValue value)>;
 
-TPositionalYsonTranslator CreatePositionalYsonTranslator(
+std::optional<TPositionalYsonTranslator> CreatePositionalYsonTranslator(
     const NTableClient::TComplexTypeFieldDescriptor& sourceDescriptor,
     const NTableClient::TComplexTypeFieldDescriptor& targetDescriptor);
 

@@ -4,7 +4,7 @@
 #include "common.h"
 #include "event.h"
 
-#include <ydb/core/retro_tracing_impl/lazy_retro_span.h>
+#include <ydb/core/retro_tracing_impl/spans/lazy_retro_span.h>
 
 namespace NKikimr::NBsQueue {
 
@@ -66,10 +66,9 @@ class TBlobStorageQueue {
             , DirtyCost(true)
             , ProcessingTimer(useActorSystemTime)
         {
-            if (Span) {
-                Span
-                    .Attribute("event", TypeName<TEvent>())
-                    .Attribute("local", local);
+            if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                wilsonSpan->Attribute("event", TypeName<TEvent>());
+                wilsonSpan->Attribute("local", local);
             }
         }
 

@@ -117,6 +117,9 @@ message TColumnDescription {
     // operation.
     optional bool IsBuildInProgress = 11 [default = false];
     optional TColumnCompression Compression = 13;
+    // flag that indicates that SET NOT NULL operation is currently in progress
+    // for this column (full scan is running to verify no nulls exist).
+    optional bool SetNotNullInProgress = 14 [default = false];
 }
 
 message TStorageSettings {
@@ -211,6 +214,7 @@ message TPartitionConfig {
     optional uint64 KeepSnapshotTimeout = 25; // milliseconds
     reserved 26; // deprecated -> ByKeyFilterPrefixes
     repeated TByKeyFilterPrefix ByKeyFilterPrefixes = 27; // Bloom filters on PK prefixes
+    repeated uint32 DropByKeyFilterPrefixLengths = 28; // Bloom filter prefix lengths to drop
 }
 
 message TByKeyFilterPrefix {
@@ -372,6 +376,12 @@ message TTableIncrementalBackupConfig {
     optional EConsistency Consistency = 2;
 }
 
+enum ESpecialTableType {
+    ESpecialTableTypeNone = 0;
+    ESpecialTableTypeFulltextCompact = 1;
+    ESpecialTableTypeFulltextCompactRelevance = 2;
+}
+
 message TTableDescription {
     optional string Name = 1;
     optional uint64 Id_Deprecated = 2; // LocalPathId, deprecated
@@ -458,6 +468,9 @@ message TTableDescription {
      *       regardless of the detailed metrics settings at the database level.
      */
     optional TTableDetailedMetricsSettings DetailedMetricsSettings = 51;
+
+    // For fulltext indexes - to determine if the table is an impl table of an index
+    optional ESpecialTableType TableType = 52;
 }
 
 message TCompressionOptions {
@@ -1283,17 +1296,38 @@ message TIncrementalRestoreFinalize {
     repeated string BackupTablePaths = 4;
 }
 
-message TIncrementalRestoreOperationId {
+message TIncrementalRestoreSubOpId {
     optional uint64 TxId = 1;
     optional uint32 SubTxId = 2;
 }
 
+message TIncrementalRestoreSubOpState {
+    optional TIncrementalRestoreSubOpId Id = 1;
+
+    // Per-shard dispatch tracking for reboot recovery.
+    // TShardIdx.LocalId (ui64) is wire-stable; OwnerId is implicit (this SS).
+    repeated uint64 ExpectedShardLocalIds = 2;
+    repeated uint64 CompletedShardLocalIds = 3;
+    repeated uint64 FailedShardLocalIds = 4;
+    optional bool HasNonRetriableFailure = 5;
+    // Src/dst paths for re-dispatching failed shards after SS reboot.
+    optional uint64 SrcPathLocalId = 6;
+    optional uint64 DstPathLocalId = 7;
+}
+
 message TIncrementalRestoreOperationsList {
-    repeated TIncrementalRestoreOperationId Operations = 1;
+    repeated TIncrementalRestoreSubOpState SubOps = 1;
 }
 
 message TCreateLongIncrementalBackupOp {
     repeated NKikimrProto.TPathID StreamPathIds = 1;
+}
+
+// Control op for a BackupCollection full backup (runs first in the CCT decomposition).
+message TCreateFullBackupOp {
+    // Total CopyTable sub-ops expected (base tables + index impl tables).
+    // Used to detect when the control op is fully terminal.
+    optional uint32 ExpectedItemCount = 1;
 }
 
 message TTruncateTable {
@@ -1309,6 +1343,12 @@ enum EIndexType {
     EIndexTypeGlobalFulltextPlain = 5;
     EIndexTypeGlobalFulltextRelevance = 6;
     EIndexTypeGlobalJson = 7;
+    EIndexTypeLocalBloomFilter = 8;
+    EIndexTypeLocalBloomNgramFilter = 9;
+    EIndexTypeLocalMinMax = 10;
+    EIndexTypeGlobalFulltextCompact = 11;
+    EIndexTypeGlobalFulltextCompactRelevance = 12;
+    EIndexTypeGlobalJsonCompact = 13;
 }
 
 enum EIndexState {
@@ -1324,6 +1364,10 @@ message TVectorIndexKmeansTreeDescription {
 
 message TFulltextIndexDescription {
     optional Ydb.Table.FulltextIndexSettings Settings = 1;
+    // When true, the fulltext index uses the __ydb_row_id Uint64 column of the main table as doc_id
+    // instead of the main table PK. A unique secondary index on __ydb_row_id is required and is used
+    // at read time to resolve __ydb_row_id back to the main table PK.
+    optional bool UseRowIdAsDocId = 2;
 }
 
 message TIndexDescription {
@@ -1348,6 +1392,8 @@ message TIndexDescription {
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 11;
         TFulltextIndexDescription FulltextIndexDescription = 12;
+        TBloomFilter BloomFilterDescription = 13;
+        TBloomNGrammFilter BloomNGrammFilterDescription = 14;
     }
 }
 
@@ -1361,6 +1407,8 @@ message TIndexCreationConfig {
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 7;
         TFulltextIndexDescription FulltextIndexDescription = 8;
+        TBloomFilter BloomFilterDescription = 9;
+        TBloomNGrammFilter BloomNGrammFilterDescription = 10;
     }
 }
 
@@ -1378,6 +1426,13 @@ message TGenericTxInFlyExtraData {
 message TIndexAlteringConfig {
     optional string Name = 1;
     optional EIndexState State = 2;
+    repeated string KeyColumnNames = 4;
+    optional EIndexType Type = 5;
+    oneof SpecializedIndexDescription {
+        TBloomFilter BloomFilterDescription = 8;
+        TBloomNGrammFilter BloomNGrammFilterDescription = 9;
+    }
+    optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 3;
 }
 
 message TIndexedTableCreationConfig {
@@ -1856,6 +1911,7 @@ message TIndexBuildControl {
     optional string IndexName = 2;
     optional uint64 SnapshotTxId = 3;
     optional uint64 BuildIndexId = 4;
+    optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 5;
 }
 
 message TLockConfig {
@@ -2045,6 +2101,8 @@ message TModifyScheme {
 
     optional TChangePathState ChangePathState = 82;
 
+    optional TIncrementalRestoreLockTargets IncrementalRestoreLockTargets = 94;
+
     optional TIncrementalRestoreFinalize IncrementalRestoreFinalize = 84;
 
     optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
@@ -2064,6 +2122,8 @@ message TModifyScheme {
     optional TTruncateTable TruncateTable = 92;
 
     optional TPrepareIndexValidation PrepareIndexValidation = 93;
+
+    optional TCreateFullBackupOp CreateFullBackupOp = 95;
 
     // Some entries are grouped by semantics, so are out of order
 }
@@ -2147,6 +2207,9 @@ enum EPathSubType {
     EPathSubTypeVectorKmeansTreeIndexImplTable = 4;
     EPathSubTypeFulltextIndexImplTable = 5;
     EPathSubTypeJsonIndexImplTable = 6;
+    EPathSubTypeLocalBloomFilterIndex = 7;
+    EPathSubTypeLocalBloomNgramFilterIndex = 8;
+    EPathSubTypeLocalMinMaxIndex = 9;
 }
 
 enum EPathState {
@@ -2530,12 +2593,21 @@ message TLongIncrementalRestoreOp {
     repeated string TablePathList = 4;
     optional string FullBackupTrimmedName = 5;
     repeated string IncrementalBackupTrimmedNames = 6;
-    repeated uint64 InvolvedShards = 7;
+    reserved 7;
 }
 
 message TChangePathState {
     optional string Path = 1;
     optional EPathState TargetState = 2;
+}
+
+// Payload for ESchemeOpIncrementalRestoreLockTargets / UnlockTargets.
+// Dst paths transition to EPathStateIncomingIncrementalRestore; src paths to
+// EPathStateOutgoingIncrementalRestore (unlock reverses both to EPathStateNoChanges).
+message TIncrementalRestoreLockTargets {
+    repeated string DstPaths = 1;
+    repeated string SrcPaths = 2;
+    optional uint64 RestoreOpId = 3;
 }
 
 message TSecretDescription {

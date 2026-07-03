@@ -130,7 +130,7 @@ void TAdaptiveHedgingManagerConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("secondary_request_ratio", &TThis::SecondaryRequestRatio)
         .GreaterThan(0.)
-        .LessThanOrEqual(1.)
+        .LessThanOrEqual(100.)
         .Optional()
         .DontSerializeDefault();
 

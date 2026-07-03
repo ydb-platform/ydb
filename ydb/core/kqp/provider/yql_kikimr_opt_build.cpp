@@ -4,14 +4,18 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
-#include <yql/essentials/core/yql_opt_utils.h>
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
-#include <yql/essentials/providers/pg/expr_nodes/yql_pg_expr_nodes.h>
-#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/pg/expr_nodes/yql_pg_expr_nodes.h>
+#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <yql/essentials/utils/log/log.h>
+
 namespace NYql {
+
 namespace {
 
 using namespace NNodes;
@@ -95,6 +99,7 @@ struct TKiExploreTxResults {
     };
 
     bool ConcurrentResults = true;
+    bool IsolateEffects = false;
 
     THashSet<const TExprNode*> Ops;
     TVector<TExprBase> Sync;
@@ -176,8 +181,10 @@ struct TKiExploreTxResults {
             uncommittedChangesRead = HasWriteOps(tableMeta->Name);
         }
 
-        if (uncommittedChangesRead) {
+        if (uncommittedChangesRead || IsolateEffects) {
             AddQueryBlock();
+        }
+        if (uncommittedChangesRead) {
             SetBlockHasUncommittedChangesRead();
         }
     }
@@ -205,11 +212,13 @@ struct TKiExploreTxResults {
                 YQL_ENSURE(indexTables.size() >= 2, "K-means tree index should have at least 2 tables");
                 dataTable = indexTable = indexTables[1];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::NKMeans::PostingTable));
-            } else if (index.Type == TIndexDescription::EType::GlobalFulltextPlain) {
+            } else if (index.Type == TIndexDescription::EType::GlobalFulltextPlain ||
+                index.Type == TIndexDescription::EType::GlobalFulltextCompact) {
                 YQL_ENSURE(indexTables.size() == 1, "Global fulltext plain index should have 1 table");
                 dataTable = indexTable = indexTables[0];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
-            } else if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
+            } else if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
+                index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
                 YQL_ENSURE(indexTables.size() == 4, "Global fulltext relevance index should have 4 tables");
                 indexTable = indexTables[3];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
@@ -224,7 +233,8 @@ struct TKiExploreTxResults {
 
             if (!isUpdate) {
                 ops[indexTable] = TPrimitiveYdbOperation::Write;
-                if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
+                if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
+                    index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
                     ops[dictTable] |= TPrimitiveYdbOperation::Read|TPrimitiveYdbOperation::Write;
                 }
             } else {
@@ -232,7 +242,8 @@ struct TKiExploreTxResults {
                     if (updateColumns.contains(column)) {
                         // delete old index values and upsert rows into index table
                         ops[indexTable] = TPrimitiveYdbOperation::Write;
-                        if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
+                        if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
+                            index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
                             ops[dictTable] |= TPrimitiveYdbOperation::Read|TPrimitiveYdbOperation::Write;
                         }
                         break;
@@ -261,7 +272,7 @@ struct TKiExploreTxResults {
             }
         }
 
-        if (QueryBlocks.empty() || uncommittedChangesRead) {
+        if (QueryBlocks.empty() || uncommittedChangesRead || IsolateEffects) {
             AddQueryBlock();
         }
 
@@ -920,10 +931,10 @@ TString GetShowCreateType(const TExprNode& settings) {
     return "";
 }
 
-} // namespace
+} // anonymous namespace
 
 TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,
-    TTypeAnnotationContext& types, bool concurrentResults) {
+    TTypeAnnotationContext& types, bool concurrentResults, bool isolateEffects) {
     if (!node.Maybe<TCoCommit>().DataSink().Maybe<TKiDataSink>()) {
         return node.Ptr();
     }
@@ -1192,6 +1203,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
 
     TKiExploreTxResults txExplore;
     txExplore.ConcurrentResults = concurrentResults;
+    txExplore.IsolateEffects = isolateEffects;
     if (!ExploreTx(commit.World(), ctx, kiDataSink, txExplore, tablesData, types) || txExplore.HasErrors) {
         if (txExplore.HasErrors) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "ExploreTx failed"));

@@ -261,6 +261,23 @@ Y_UNIT_TEST(PlacementRecoverable4of6) {
         TEvCheckIntegrityResult::DS_OK);
 }
 
+Y_UNIT_TEST(PlacementRecoverableAllPartsAtTheSameSlot) {
+    TFixture fx(TBlobStorageGroupType::Erasure4Plus2Block);
+    auto& gm = fx.TestState->GetGroupMock();
+
+    auto blobId = fx.MakeBlobId(200001);
+    for (int i = 1; i <= 6; i++) {
+        gm.PutPartAtSlot(blobId, 0, i, fx.TestState->BlobData);
+    }
+    fx.SendCheckIntegrity(blobId);
+    fx.TestState->HandleVGetsWithMock(fx.SubgroupSize());
+
+    TAutoPtr<IEventHandle> h;
+    AssertResultOk(fx.GrabResult(h), blobId,
+        TEvCheckIntegrityResult::PS_BLOB_IS_RECOVERABLE,
+        TEvCheckIntegrityResult::DS_OK);
+}
+
 Y_UNIT_TEST(PlacementBlobIsLost) {
     // Part 4 is missing, part 3 is duplicated
     TFixture fx(TBlobStorageGroupType::Erasure4Plus2Block);
@@ -342,6 +359,28 @@ Y_UNIT_TEST(DataCorruptionTwoParts) {
 
     TAutoPtr<IEventHandle> h;
     AssertResultOk(fx.GrabResult(h), id,
+        TEvCheckIntegrityResult::PS_OK,
+        TEvCheckIntegrityResult::DS_ERROR);
+}
+
+Y_UNIT_TEST(DataCorruptionInconsistentParts) {
+    TFixture fx(TBlobStorageGroupType::Erasure4Plus2Block);
+    auto& gm = fx.TestState->GetGroupMock();
+
+    auto blobId = fx.MakeBlobId(200001);
+    for (ui32 slot = 0; slot < fx.SubgroupSize(); slot++) {
+        for (int part = 1; part <= 6; part++) {
+            gm.PutPartAtSlot(blobId, slot, part, fx.TestState->BlobData);
+            if (slot >= 3) {
+                gm.CorruptPart(blobId, slot, part);
+            }
+        }
+    }
+    fx.SendCheckIntegrity(blobId);
+    fx.TestState->HandleVGetsWithMock(fx.SubgroupSize());
+
+    TAutoPtr<IEventHandle> h;
+    AssertResultOk(fx.GrabResult(h), blobId,
         TEvCheckIntegrityResult::PS_OK,
         TEvCheckIntegrityResult::DS_ERROR);
 }

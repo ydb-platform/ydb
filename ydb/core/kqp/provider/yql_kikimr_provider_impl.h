@@ -1,17 +1,12 @@
 #pragma once
 
-#include "yql_kikimr_provider.h"
+#include "yql_kikimr_expr_nodes.h"
 
-#include <ydb/core/external_sources/external_source_factory.h>
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
-#include <ydb/core/kqp/provider/yql_kikimr_results.h>
-
-#include <yql/essentials/providers/common/provider/yql_provider.h>
-
+#include <yql/essentials/core/yql_graph_transformer.h>
 
 namespace NYql {
 
-class TKiSourceVisitorTransformer: public TSyncTransformerBase {
+class TKiSourceVisitorTransformer : public TSyncTransformerBase {
 public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
 
@@ -26,7 +21,7 @@ private:
 
 class TKiSinkVisitorTransformer : public TSyncTransformerBase {
 public:
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
 
     void Rewind() override {
     }
@@ -308,6 +303,8 @@ TAutoPtr<IGraphTransformer> CreateKiSourceTypeAnnotationTransformer(TIntrusivePt
     TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateKiSinkTypeAnnotationTransformer(TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types);
+TAutoPtr<IGraphTransformer> CreateKiSourceConstraintsTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
+TAutoPtr<IGraphTransformer> CreateKiSinkConstraintsTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
 TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateKiPhysicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
@@ -358,7 +355,7 @@ void FillLiteralProto(const NNodes::TCoPgConst& literal, Ydb::TypedValue& proto)
 
 // Optimizer rules
 TExprNode::TPtr KiBuildQuery(NNodes::TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,
-    TTypeAnnotationContext& types, bool sequentialResults);
+    TTypeAnnotationContext& types, bool concurrentResults, bool isolateEffects = false);
 TExprNode::TPtr KiBuildResult(NNodes::TExprBase node,  const TString& cluster, TExprContext& ctx);
 
 const THashSet<TStringBuf>& KikimrDataSourceFunctions();

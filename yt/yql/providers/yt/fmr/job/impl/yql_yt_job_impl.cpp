@@ -2,7 +2,9 @@
 #include <library/cpp/yson/node/node_io.h>
 
 #include <util/folder/tempdir.h>
+#include <util/generic/buffer.h>
 #include <util/stream/file.h>
+#include <util/stream/str.h>
 
 #include <util/system/shellcommand.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
@@ -42,6 +44,21 @@ public:
         , TvmSettings_(tvmSettings)
     {
         InitTableDataService(tvmSettings);
+    }
+
+    // Intraprocess constructor: bypasses HTTP, uses the passed TDS directly.
+    TFmrJob(
+        ITableDataService::TPtr tableDataService,
+        IYtJobService::TPtr ytJobService,
+        TFmrUserJobLauncher::TPtr jobLauncher,
+        const TFmrJobSettings& settings
+    )
+        : DirectTableDataService_(std::move(tableDataService))
+        , YtJobService_(ytJobService)
+        , JobLauncher_(jobLauncher)
+        , Settings_(settings)
+    {
+        TableDataService_ = DirectTableDataService_;
     }
 
     virtual std::variant<TFmrError, TStatistics> Download(
@@ -209,7 +226,7 @@ public:
 
     virtual std::variant<TFmrError, TStatistics> SortedMerge(
         const TSortedMergeTaskParams& params,
-        const std::unordered_map<TFmrTableId, TClusterConnection>& /*clusterConnections*/,
+        const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
         std::shared_ptr<std::atomic<bool>> cancelFlag
     ) override {
         auto sortedMergeJobFunc = [&, cancelFlag] () -> TStatistics {
@@ -230,8 +247,10 @@ public:
             );
             TMaybe<TMutex> mutex = TMutex();
             std::vector<IBlockIterator::TPtr> blockIterators;
+            std::vector<NYT::TRawTableReaderPtr> ytReaders;
+
             for (const auto& inputTableRef : taskTableInputRef.Inputs) {
-                if (auto fmrInput = std::get_if<TFmrTableInputRef>(&inputTableRef)) {
+                if (const auto* fmrInput = std::get_if<TFmrTableInputRef>(&inputTableRef)) {
                     blockIterators.push_back(MakeIntrusive<TTableDataServiceBlockIterator>(
                         fmrInput->TableId,
                         fmrInput->TableRanges,
@@ -247,12 +266,26 @@ public:
                         Settings_.FmrReaderSettings.ReadAheadChunks
                     ));
                 } else {
-                    throw TFmrNonRetryableJobException() << "YtTables unsupported inside SortedMerge task";
+                    const auto& ytTableTaskRef = std::get<TYtTableTaskRef>(inputTableRef);
+                    auto readers = GetYtTableReaders(YtJobService_, ytTableTaskRef, clusterConnections);
+                    for (auto& reader : readers) {
+                        ytReaders.push_back(std::move(reader));
+                    }
                 }
             }
 
-            NYT::TRawTableReaderPtr mergeReader = MakeIntrusive<TSortedMergeReader>(blockIterators);
-            ParseRecords(mergeReader, tableDataServiceWriter, parseRecordSettings.MergeReadBlockCount, parseRecordSettings.MergeReadBlockSize, cancelFlag, mutex);
+            YQL_ENSURE(blockIterators.empty() || ytReaders.empty(),
+                "SortedMerge task cannot mix FMR and YT table inputs");
+
+            if (!ytReaders.empty()) {
+                // Single YT table case: input is already sorted, read directly
+                for (auto& ytReader : ytReaders) {
+                    ParseRecords(ytReader, tableDataServiceWriter, parseRecordSettings.MergeReadBlockCount, parseRecordSettings.MergeReadBlockSize, cancelFlag, mutex);
+                }
+            } else {
+                NYT::TRawTableReaderPtr mergeReader = MakeIntrusive<TSortedMergeReader>(blockIterators);
+                ParseRecords(mergeReader, tableDataServiceWriter, parseRecordSettings.MergeReadBlockCount, parseRecordSettings.MergeReadBlockSize, cancelFlag, mutex);
+            }
 
             tableDataServiceWriter->Flush();
             return TStatistics({{output, tableDataServiceWriter->GetStats()}});
@@ -277,6 +310,9 @@ public:
             mapJob.Load(serializedJobStateStream);
             FillMapFmrJob(mapJob, params, clusterConnections, Discovery_, VanillaInfo_, userJobSettings, YtJobService_);
             mapJob.SetTvmSettings(TvmSettings_);
+            if (DirectTableDataService_) {
+                mapJob.SetDirectTableDataService(DirectTableDataService_);
+            }
             return JobLauncher_->LaunchJob(mapJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
         };
         return HandleFmrJob(mapJobFunc, ETaskType::Map);
@@ -361,9 +397,73 @@ public:
             reduceJob.Load(serializedJobStateStream);
             FillReduceFmrJob(reduceJob, params, clusterConnections, Discovery_, VanillaInfo_, userJobSettings, YtJobService_);
             reduceJob.SetTvmSettings(TvmSettings_);
+            if (DirectTableDataService_) {
+                reduceJob.SetDirectTableDataService(DirectTableDataService_);
+            }
             return JobLauncher_->LaunchJob(reduceJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
         };
         return HandleFmrJob(reduceFunc, ETaskType::Reduce);
+    }
+
+    std::variant<TFmrError, TStatistics> Fill(
+        const TFillTaskParams& params,
+        std::shared_ptr<std::atomic<bool>> /* cancelFlag */,
+        const TMaybe<TString>& jobEnvironmentDir,
+        const std::vector<TFileInfo>& jobFiles,
+        const std::vector<TYtResourceInfo>& jobYtResources,
+        const std::vector<TFmrResourceTaskInfo>& jobFmrResources
+    ) override {
+        auto fillJobFunc = [&, this] () {
+            TFmrUserJobSettings userJobSettings = Settings_.FmrUserJobSettings;
+            TFmrUserJob fillJob;
+            TStringStream serializedJobStateStream(params.SerializedFillJobState);
+            fillJob.Load(serializedJobStateStream);
+            FillFillFmrJob(fillJob, params, Discovery_, VanillaInfo_, userJobSettings, YtJobService_);
+            fillJob.SetTvmSettings(TvmSettings_);
+            if (DirectTableDataService_) {
+                fillJob.SetDirectTableDataService(DirectTableDataService_);
+            }
+            return JobLauncher_->LaunchJob(fillJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
+        };
+        return HandleFmrJob(fillJobFunc, ETaskType::Fill);
+    }
+
+    std::variant<TFmrError, TString> Pull(
+        const TPullTaskParams& params,
+        std::shared_ptr<std::atomic<bool>> cancelFlag
+    ) override {
+        try {
+            TString data;
+            TStringOutput output(data);
+            for (const auto& taskTableRef : params.Input.Inputs) {
+                auto& fmrInputRef = std::get<TFmrTableInputRef>(taskTableRef);
+                auto reader = MakeIntrusive<TFmrTableDataServiceReader>(
+                    fmrInputRef.TableId,
+                    fmrInputRef.TableRanges,
+                    TableDataService_,
+                    fmrInputRef.Columns,
+                    fmrInputRef.SerializedColumnGroups,
+                    Settings_.FmrReaderSettings
+                );
+                TBuffer buf(Settings_.ParseRecordSettings.DonwloadReadBlockSize);
+                while (true) {
+                    if (cancelFlag && cancelFlag->load()) {
+                        throw yexception() << "Pull job cancelled";
+                    }
+                    size_t bytesRead = reader->Read(buf.Data(), buf.Capacity());
+                    if (bytesRead == 0) {
+                        break;
+                    }
+                    output.Write(buf.Data(), bytesRead);
+                }
+            }
+            return std::move(data);
+        } catch (...) {
+            TString errorMessage = CurrentExceptionMessage();
+            EFmrErrorReason reason = ParseFmrReasonFromErrorMessage(errorMessage);
+            YQL_CLOG(ERROR, FastMapReduce) << "Exception inside fmr Pull job: " << errorMessage;
+            return TFmrError{.Reason = reason, .ErrorMessage = errorMessage};
+        }
     }
 
 private:
@@ -393,7 +493,8 @@ private:
         TableDataService_ = MakeTableDataServiceClient(Discovery_, TvmClient_, TableDataServiceTvmId_);
     }
 
-    ITableDataService::TPtr TableDataService_; // Table data service http client
+    ITableDataService::TPtr TableDataService_; // Table data service (http client or direct intraprocess)
+    ITableDataService::TPtr DirectTableDataService_; // Set for intraprocess mode, propagated to user jobs
     ITableDataServiceDiscovery::TPtr Discovery_;
     TMaybe<TVanillaInfo> VanillaInfo_;
     IYtJobService::TPtr YtJobService_;
@@ -415,17 +516,47 @@ IFmrJob::TPtr MakeFmrJob(
     return MakeIntrusive<TFmrJob>(std::move(discovery), std::move(vanillaInfo), ytJobService, jobLauncher, settings, workerTvmSettings);
 }
 
-TJobResult RunJob(
+IFmrJob::TPtr MakeFmrJob(
+    ITableDataService::TPtr tableDataService,
+    IYtJobService::TPtr ytJobService,
+    TFmrUserJobLauncher::TPtr jobLauncher,
+    const TFmrJobSettings& settings
+) {
+    return MakeIntrusive<TFmrJob>(std::move(tableDataService), ytJobService, jobLauncher, settings);
+}
+
+namespace {
+
+// Encapsulates the two job-creation modes so RunJobImpl can be written once.
+struct TDiscoveryJobSource {
+    ITableDataServiceDiscovery::TPtr Discovery;
+    TMaybe<TVanillaInfo> VanillaInfo;
+    TMaybe<TFmrTvmJobSettings> TvmSettings;
+};
+
+struct TDirectTdsJobSource {
+    ITableDataService::TPtr TableDataService;
+};
+
+using TJobSource = std::variant<TDiscoveryJobSource, TDirectTdsJobSource>;
+
+TJobResult RunJobImpl(
     TTask::TPtr task,
-    ITableDataServiceDiscovery::TPtr discovery,
-    TMaybe<TVanillaInfo> vanillaInfo,
     IYtJobService::TPtr ytJobService,
     TFmrUserJobLauncher::TPtr jobLauncher,
     std::shared_ptr<std::atomic<bool>> cancelFlag,
-    const TMaybe<TFmrTvmJobSettings>& tvmSettings
+    TJobSource jobSource
 ) {
     TFmrJobSettings jobSettings = GetJobSettingsFromTask(task);
-    IFmrJob::TPtr job = MakeFmrJob(std::move(discovery), std::move(vanillaInfo), ytJobService, jobLauncher, jobSettings, tvmSettings);
+
+    IFmrJob::TPtr job = std::visit([&](auto&& source) -> IFmrJob::TPtr {
+        using T = std::decay_t<decltype(source)>;
+        if constexpr (std::is_same_v<T, TDiscoveryJobSource>) {
+            return MakeFmrJob(std::move(source.Discovery), std::move(source.VanillaInfo), ytJobService, jobLauncher, jobSettings, source.TvmSettings);
+        } else {
+            return MakeFmrJob(std::move(source.TableDataService), ytJobService, jobLauncher, jobSettings);
+        }
+    }, std::move(jobSource));
 
     auto processTask = [job, task, cancelFlag] (auto&& taskParams) {
         using T = std::decay_t<decltype(taskParams)>;
@@ -446,6 +577,16 @@ TJobResult RunJob(
             return job->LocalSort(taskParams, task->ClusterConnections, cancelFlag);
         } else if constexpr (std::is_same_v<T, TReduceTaskParams>) {
             return job->Reduce(taskParams, task->ClusterConnections, cancelFlag, task->JobEnvironmentDir, task->Files, task->YtResources, task->FmrResources);
+        } else if constexpr (std::is_same_v<T, TFillTaskParams>) {
+            return job->Fill(taskParams, cancelFlag, task->JobEnvironmentDir, task->Files, task->YtResources, task->FmrResources);
+        } else if constexpr (std::is_same_v<T, TPullTaskParams>) {
+            auto pullResult = job->Pull(taskParams, cancelFlag);
+            if (auto* err = std::get_if<TFmrError>(&pullResult)) {
+                return std::variant<TFmrError, TStatistics>{*err};
+            }
+            TStatistics stats;
+            stats.TaskResult = TTaskPullResult{.Data = std::get<TString>(pullResult)};
+            return std::variant<TFmrError, TStatistics>{std::move(stats)};
         } else {
             ythrow yexception() << "Unsupported task type";
         }
@@ -458,7 +599,33 @@ TJobResult RunJob(
     }
     auto statistics = std::get_if<TStatistics>(&taskOutput);
     return {ETaskStatus::Completed, *statistics};
-};
+}
+
+} // namespace
+
+TJobResult RunJob(
+    TTask::TPtr task,
+    ITableDataServiceDiscovery::TPtr discovery,
+    TMaybe<TVanillaInfo> vanillaInfo,
+    IYtJobService::TPtr ytJobService,
+    TFmrUserJobLauncher::TPtr jobLauncher,
+    std::shared_ptr<std::atomic<bool>> cancelFlag,
+    const TMaybe<TFmrTvmJobSettings>& tvmSettings
+) {
+    return RunJobImpl(task, ytJobService, jobLauncher, cancelFlag,
+        TDiscoveryJobSource{std::move(discovery), std::move(vanillaInfo), tvmSettings});
+}
+
+TJobResult RunJob(
+    TTask::TPtr task,
+    ITableDataService::TPtr tableDataService,
+    IYtJobService::TPtr ytJobService,
+    TFmrUserJobLauncher::TPtr jobLauncher,
+    std::shared_ptr<std::atomic<bool>> cancelFlag
+) {
+    return RunJobImpl(task, ytJobService, jobLauncher, cancelFlag,
+        TDirectTdsJobSource{std::move(tableDataService)});
+}
 
 void FillMapFmrJob(
     TFmrUserJob& mapJob,
@@ -501,6 +668,25 @@ void FillReduceFmrJob(
     reduceJob.SetYtJobService(jobService);
     reduceJob.SetFmrJobType(EFmrJobType::Reduce);
     reduceJob.SetReduceOperationSpec(reduceTaskParams.ReduceOperationSpec);
+}
+
+void FillFillFmrJob(
+    TFmrUserJob& fillJob,
+    const TFillTaskParams& fillTaskParams,
+    ITableDataServiceDiscovery::TPtr discovery,
+    TMaybe<TVanillaInfo> vanillaInfo,
+    const TFmrUserJobSettings& userJobSettings,
+    IYtJobService::TPtr jobService
+) {
+    fillJob.SetSettings(userJobSettings);
+    if (vanillaInfo.Defined()) {
+        fillJob.SetVanillaInfo(*vanillaInfo);
+    }
+    fillJob.SetTableDataServiceDiscovery(std::move(discovery));
+    // Fill has no input tables — leave InputTables_ empty so the queue is immediately finished.
+    fillJob.SetTaskFmrOutputTables(fillTaskParams.Output);
+    fillJob.SetYtJobService(jobService);
+    fillJob.SetFmrJobType(EFmrJobType::Map);
 }
 
 TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task) {

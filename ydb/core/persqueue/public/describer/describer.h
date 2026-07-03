@@ -21,12 +21,32 @@ enum class EStatus {
     UNKNOWN_ERROR
 };
 
+
+struct TAccessRights {
+    TAccessRights() = default;
+
+    TAccessRights(ui32 access)
+        : Access(access)
+    {
+    }
+
+    TAccessRights(ui32 access, ui32 accessOr)
+        : Access(access)
+        , AccessOr(accessOr)
+    {
+    }
+
+   ui32 Access = NACLib::DescribeSchema;
+   std::optional<ui32> AccessOr;
+};
+
 struct TTopicInfo {
     EStatus Status = EStatus::NOT_FOUND;
 
     // Real topic path. If original topic path is CDC than real path is different.
     TString RealPath;
     bool CdcStream = false;
+    TString CdcStreamName;
 
     ui64 CreateStep = 0;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> Info;
@@ -49,7 +69,7 @@ struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopics
 
 struct TDescribeSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    NACLib::EAccessRights AccessRights;
+    TAccessRights AccessRights;
     bool ForceSyncVersion = false;
 };
 
@@ -61,4 +81,4 @@ NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent,
 Ydb::StatusIds::StatusCode Convert(const EStatus status);
 TString Description(const TString& topicPath, const EStatus status);
 
-}
+} // namespace NKikimr::NPQ::NDescriber

@@ -1,114 +1,17 @@
-/* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
- * All rights reserved.
- *
- * This package is an SSL implementation written
- * by Eric Young (eay@cryptsoft.com).
- * The implementation was written so as to conform with Netscapes SSL.
- *
- * This library is free for commercial and non-commercial use as long as
- * the following conditions are aheared to.  The following conditions
- * apply to all code found in this distribution, be it the RC4, RSA,
- * lhash, DES, etc., code; not just the SSL code.  The SSL documentation
- * included with this distribution is covered by the same copyright terms
- * except that the holder is Tim Hudson (tjh@cryptsoft.com).
- *
- * Copyright remains Eric Young's, and as such any Copyright notices in
- * the code are not to be removed.
- * If this package is used in a product, Eric Young should be given attribution
- * as the author of the parts of the library used.
- * This can be in the form of a textual message at program startup or
- * in documentation (online or textual) provided with the package.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *    "This product includes cryptographic software written by
- *     Eric Young (eay@cryptsoft.com)"
- *    The word 'cryptographic' can be left out if the rouines from the library
- *    being used are not cryptographic related :-).
- * 4. If you include any Windows specific code (or a derivative thereof) from
- *    the apps directory (application code) you must include an acknowledgement:
- *    "This product includes software written by Tim Hudson (tjh@cryptsoft.com)"
- *
- * THIS SOFTWARE IS PROVIDED BY ERIC YOUNG ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * The licence and distribution terms for any publically available version or
- * derivative of this code cannot be changed.  i.e. this code cannot simply be
- * copied and put under another distribution licence
- * [including the GNU Public Licence.]
- */
-/* ====================================================================
- * Copyright (c) 1998-2002 The OpenSSL Project.  All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *
- * 3. All advertising materials mentioning features or use of this
- *    software must display the following acknowledgment:
- *    "This product includes software developed by the OpenSSL Project
- *    for use in the OpenSSL Toolkit. (http://www.openssl.org/)"
- *
- * 4. The names "OpenSSL Toolkit" and "OpenSSL Project" must not be used to
- *    endorse or promote products derived from this software without
- *    prior written permission. For written permission, please contact
- *    openssl-core@openssl.org.
- *
- * 5. Products derived from this software may not be called "OpenSSL"
- *    nor may "OpenSSL" appear in their names without prior written
- *    permission of the OpenSSL Project.
- *
- * 6. Redistributions of any form whatsoever must retain the following
- *    acknowledgment:
- *    "This product includes software developed by the OpenSSL Project
- *    for use in the OpenSSL Toolkit (http://www.openssl.org/)"
- *
- * THIS SOFTWARE IS PROVIDED BY THE OpenSSL PROJECT ``AS IS'' AND ANY
- * EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE OpenSSL PROJECT OR
- * ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- * OF THE POSSIBILITY OF SUCH DAMAGE.
- * ====================================================================
- *
- * This product includes cryptographic software written by Eric Young
- * (eay@cryptsoft.com).  This product includes software written by Tim
- * Hudson (tjh@cryptsoft.com). */
-/* ====================================================================
- * Copyright 2002 Sun Microsystems, Inc. ALL RIGHTS RESERVED.
- * ECC cipher suite support in OpenSSL originally developed by
- * SUN MICROSYSTEMS, INC., and contributed to the OpenSSL project. */
+// Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+// Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <contrib/restricted/google/boringssl/include/openssl/ssl.h>
 
@@ -116,18 +19,20 @@
 #include <limits.h>
 #include <string.h>
 
+#include <algorithm>
 #include <tuple>
 
 #include <contrib/restricted/google/boringssl/include/openssl/buf.h>
 #include <contrib/restricted/google/boringssl/include/openssl/bytestring.h>
 #include <contrib/restricted/google/boringssl/include/openssl/err.h>
 #include <contrib/restricted/google/boringssl/include/openssl/evp.h>
-#include <contrib/restricted/google/boringssl/include/openssl/mem.h>
 #include <contrib/restricted/google/boringssl/include/openssl/md5.h>
+#include <contrib/restricted/google/boringssl/include/openssl/mem.h>
 #include <contrib/restricted/google/boringssl/include/openssl/nid.h>
 #include <contrib/restricted/google/boringssl/include/openssl/rand.h>
-#include <contrib/restricted/google/boringssl/include/openssl/sha.h>
+#include <contrib/restricted/google/boringssl/include/openssl/sha2.h>
 
+#include "../crypto/bytestring/internal.h"
 #include "../crypto/internal.h"
 #include "internal.h"
 
@@ -170,8 +75,8 @@ static bool add_record_to_flight(SSL *ssl, uint8_t type,
 
 bool tls_init_message(const SSL *ssl, CBB *cbb, CBB *body, uint8_t type) {
   // Pick a modest size hint to save most of the |realloc| calls.
-  if (!CBB_init(cbb, 64) ||
-      !CBB_add_u8(cbb, type) ||
+  if (!CBB_init(cbb, 64) ||      //
+      !CBB_add_u8(cbb, type) ||  //
       !CBB_add_u24_length_prefixed(cbb, body)) {
     OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
     CBB_cleanup(cbb);
@@ -192,12 +97,12 @@ bool tls_add_message(SSL *ssl, Array<uint8_t> msg) {
   // cipher. The benefit is smaller and there is a risk of breaking buggy
   // implementations.
   //
-  // TODO(davidben): See if we can do this uniformly.
+  // TODO(crbug.com/374991962): See if we can do this uniformly.
   Span<const uint8_t> rest = msg;
-  if (ssl->quic_method == nullptr &&
-      ssl->s3->aead_write_ctx->is_null_cipher()) {
+  if (!SSL_is_quic(ssl) && ssl->s3->aead_write_ctx->is_null_cipher()) {
     while (!rest.empty()) {
-      Span<const uint8_t> chunk = rest.subspan(0, ssl->max_send_fragment);
+      Span<const uint8_t> chunk =
+          rest.first(std::min(size_t{ssl->max_send_fragment}, rest.size()));
       rest = rest.subspan(chunk.size());
 
       if (!add_record_to_flight(ssl, SSL3_RT_HANDSHAKE, chunk)) {
@@ -215,8 +120,8 @@ bool tls_add_message(SSL *ssl, Array<uint8_t> msg) {
 
       size_t pending_len =
           ssl->s3->pending_hs_data ? ssl->s3->pending_hs_data->length : 0;
-      Span<const uint8_t> chunk =
-          rest.subspan(0, ssl->max_send_fragment - pending_len);
+      Span<const uint8_t> chunk = rest.first(
+          std::min(ssl->max_send_fragment - pending_len, rest.size()));
       assert(!chunk.empty());
       rest = rest.subspan(chunk.size());
 
@@ -234,7 +139,7 @@ bool tls_add_message(SSL *ssl, Array<uint8_t> msg) {
   ssl_do_msg_callback(ssl, 1 /* write */, SSL3_RT_HANDSHAKE, msg);
   // TODO(svaldez): Move this up a layer to fix abstraction for SSLTranscript on
   // hs.
-  if (ssl->s3->hs != NULL &&
+  if (ssl->s3->hs != nullptr &&  //
       !ssl->s3->hs->transcript.Update(msg)) {
     return false;
   }
@@ -247,12 +152,11 @@ bool tls_flush_pending_hs_data(SSL *ssl) {
   }
 
   UniquePtr<BUF_MEM> pending_hs_data = std::move(ssl->s3->pending_hs_data);
-  auto data =
-      MakeConstSpan(reinterpret_cast<const uint8_t *>(pending_hs_data->data),
-                    pending_hs_data->length);
-  if (ssl->quic_method) {
+  auto data = Span(reinterpret_cast<const uint8_t *>(pending_hs_data->data),
+                   pending_hs_data->length);
+  if (SSL_is_quic(ssl)) {
     if ((ssl->s3->hs == nullptr || !ssl->s3->hs->hints_requested) &&
-        !ssl->quic_method->add_handshake_data(ssl, ssl->s3->write_level,
+        !ssl->quic_method->add_handshake_data(ssl, ssl->s3->quic_write_level,
                                               data.data(), data.size())) {
       OPENSSL_PUT_ERROR(SSL, SSL_R_QUIC_INTERNAL_ERROR);
       return false;
@@ -264,13 +168,12 @@ bool tls_flush_pending_hs_data(SSL *ssl) {
 }
 
 bool tls_add_change_cipher_spec(SSL *ssl) {
-  static const uint8_t kChangeCipherSpec[1] = {SSL3_MT_CCS};
-
-  if (!tls_flush_pending_hs_data(ssl)) {
-    return false;
+  if (SSL_is_quic(ssl)) {
+    return true;
   }
 
-  if (!ssl->quic_method &&
+  static const uint8_t kChangeCipherSpec[1] = {SSL3_MT_CCS};
+  if (!tls_flush_pending_hs_data(ssl) ||
       !add_record_to_flight(ssl, SSL3_RT_CHANGE_CIPHER_SPEC,
                             kChangeCipherSpec)) {
     return false;
@@ -281,12 +184,12 @@ bool tls_add_change_cipher_spec(SSL *ssl) {
   return true;
 }
 
-int tls_flush_flight(SSL *ssl) {
+int tls_flush(SSL *ssl) {
   if (!tls_flush_pending_hs_data(ssl)) {
     return -1;
   }
 
-  if (ssl->quic_method) {
+  if (SSL_is_quic(ssl)) {
     if (ssl->s3->write_shutdown != ssl_shutdown_none) {
       OPENSSL_PUT_ERROR(SSL, SSL_R_PROTOCOL_IS_SHUTDOWN);
       return -1;
@@ -376,7 +279,7 @@ static ssl_open_record_t read_v2_client_hello(SSL *ssl, size_t *out_consumed,
     return ssl_open_record_partial;
   }
 
-  CBS v2_client_hello = CBS(ssl->s3->read_buffer.span().subspan(2, msg_length));
+  CBS v2_client_hello = CBS(in.subspan(2, msg_length));
   // The V2ClientHello without the length is incorporated into the handshake
   // hash. This is only ever called at the start of the handshake, so hs is
   // guaranteed to be non-NULL.
@@ -461,9 +364,9 @@ static ssl_open_record_t read_v2_client_hello(SSL *ssl, size_t *out_consumed,
   }
 
   // Add the null compression scheme and finish.
-  if (!CBB_add_u8(&hello_body, 1) ||
-      !CBB_add_u8(&hello_body, 0) ||
-      !CBB_finish(client_hello.get(), NULL, &ssl->s3->hs_buf->length)) {
+  if (!CBB_add_u8(&hello_body, 1) ||  //
+      !CBB_add_u8(&hello_body, 0) ||  //
+      !CBB_finish(client_hello.get(), nullptr, &ssl->s3->hs_buf->length)) {
     OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
     return ssl_open_record_error;
   }
@@ -484,7 +387,7 @@ static bool parse_message(const SSL *ssl, SSLMessage *out,
   uint32_t len;
   CBS_init(&cbs, reinterpret_cast<const uint8_t *>(ssl->s3->hs_buf->data),
            ssl->s3->hs_buf->length);
-  if (!CBS_get_u8(&cbs, &out->type) ||
+  if (!CBS_get_u8(&cbs, &out->type) ||  //
       !CBS_get_u24(&cbs, &len)) {
     *out_bytes_needed = 4;
     return false;
@@ -573,16 +476,16 @@ ssl_open_record_t tls_open_handshake(SSL *ssl, size_t *out_consumed,
     // Some dedicated error codes for protocol mixups should the application
     // wish to interpret them differently. (These do not overlap with
     // ClientHello or V2ClientHello.)
-    const char *str = reinterpret_cast<const char*>(in.data());
-    if (strncmp("GET ", str, 4) == 0 ||
-        strncmp("POST ", str, 5) == 0 ||
-        strncmp("HEAD ", str, 5) == 0 ||
-        strncmp("PUT ", str, 4) == 0) {
+    auto str = bssl::BytesAsStringView(in);
+    if (str.substr(0, 4) == "GET " ||   //
+        str.substr(0, 5) == "POST " ||  //
+        str.substr(0, 5) == "HEAD " ||  //
+        str.substr(0, 4) == "PUT ") {
       OPENSSL_PUT_ERROR(SSL, SSL_R_HTTP_REQUEST);
       *out_alert = 0;
       return ssl_open_record_error;
     }
-    if (strncmp("CONNE", str, 5) == 0) {
+    if (str.substr(0, 5) == "CONNE") {
       OPENSSL_PUT_ERROR(SSL, SSL_R_HTTPS_PROXY_REQUEST);
       *out_alert = 0;
       return ssl_open_record_error;
@@ -610,17 +513,6 @@ ssl_open_record_t tls_open_handshake(SSL *ssl, size_t *out_consumed,
     return ret;
   }
 
-  // WatchGuard's TLS 1.3 interference bug is very distinctive: they drop the
-  // ServerHello and send the remaining encrypted application data records
-  // as-is. This manifests as an application data record when we expect
-  // handshake. Report a dedicated error code for this case.
-  if (!ssl->server && type == SSL3_RT_APPLICATION_DATA &&
-      ssl->s3->aead_read_ctx->is_null_cipher()) {
-    OPENSSL_PUT_ERROR(SSL, SSL_R_APPLICATION_DATA_INSTEAD_OF_HANDSHAKE);
-    *out_alert = SSL_AD_UNEXPECTED_MESSAGE;
-    return ssl_open_record_error;
-  }
-
   if (type != SSL3_RT_HANDSHAKE) {
     OPENSSL_PUT_ERROR(SSL, SSL_R_UNEXPECTED_RECORD);
     *out_alert = SSL_AD_UNEXPECTED_MESSAGE;
@@ -638,8 +530,8 @@ ssl_open_record_t tls_open_handshake(SSL *ssl, size_t *out_consumed,
 
 void tls_next_message(SSL *ssl) {
   SSLMessage msg;
-  if (!tls_get_message(ssl, &msg) ||
-      !ssl->s3->hs_buf ||
+  if (!tls_get_message(ssl, &msg) ||  //
+      !ssl->s3->hs_buf ||             //
       ssl->s3->hs_buf->length < CBS_len(&msg.raw)) {
     assert(0);
     return;
@@ -659,44 +551,68 @@ void tls_next_message(SSL *ssl) {
   }
 }
 
-// CipherScorer produces a "score" for each possible cipher suite offered by
-// the client.
+namespace {
+
 class CipherScorer {
  public:
-  CipherScorer(bool has_aes_hw) : aes_is_fine_(has_aes_hw) {}
+  using Score = int;
+  static constexpr Score kMinScore = 0;
 
-  typedef std::tuple<bool, bool> Score;
+  virtual ~CipherScorer() = default;
 
-  // MinScore returns a |Score| that will compare less than the score of all
-  // cipher suites.
-  Score MinScore() const {
-    return Score(false, false);
-  }
+  virtual Score Evaluate(const SSL_CIPHER *cipher) const = 0;
+};
 
-  Score Evaluate(const SSL_CIPHER *a) const {
-    return Score(
+// AesHwCipherScorer scores cipher suites based on whether AES is supported in
+// hardware.
+class AesHwCipherScorer : public CipherScorer {
+ public:
+  explicit AesHwCipherScorer(bool has_aes_hw) : aes_is_fine_(has_aes_hw) {}
+
+  virtual ~AesHwCipherScorer() override = default;
+
+  Score Evaluate(const SSL_CIPHER *a) const override {
+    return
         // Something is always preferable to nothing.
-        true,
+        1 +
         // Either AES is fine, or else ChaCha20 is preferred.
-        aes_is_fine_ || a->algorithm_enc == SSL_CHACHA20POLY1305);
+        ((aes_is_fine_ || a->algorithm_enc == SSL_CHACHA20POLY1305) ? 1 : 0);
   }
 
  private:
   const bool aes_is_fine_;
 };
 
+// CNsaCipherScorer prefers AES-256-GCM over AES-128-GCM over anything else.
+class CNsaCipherScorer : public CipherScorer {
+ public:
+  virtual ~CNsaCipherScorer() override = default;
+
+  Score Evaluate(const SSL_CIPHER *a) const override {
+    if (a->protocol_id == SSL_CIPHER_AES_256_GCM_SHA384) {
+      return 3;
+    } else if (a->protocol_id == SSL_CIPHER_AES_128_GCM_SHA256) {
+      return 2;
+    }
+    return 1;
+  }
+};
+
+}  // namespace
+
 bool ssl_tls13_cipher_meets_policy(uint16_t cipher_id,
                                    enum ssl_compliance_policy_t policy) {
   switch (policy) {
     case ssl_compliance_policy_none:
+    case ssl_compliance_policy_cnsa_202407:
       return true;
 
     case ssl_compliance_policy_fips_202205:
       switch (cipher_id) {
-        case TLS1_3_CK_AES_128_GCM_SHA256 & 0xffff:
-        case TLS1_3_CK_AES_256_GCM_SHA384 & 0xffff:
+        case SSL_CIPHER_AES_128_GCM_SHA256:
+        case SSL_CIPHER_AES_256_GCM_SHA384:
           return true;
-        case TLS1_3_CK_CHACHA20_POLY1305_SHA256 & 0xffff:
+        case SSL_CIPHER_CHACHA20_POLY1305_SHA256:
           return false;
         default:
           assert(false);
@@ -704,11 +620,13 @@ bool ssl_tls13_cipher_meets_policy(uint16_t cipher_id,
       }
 
     case ssl_compliance_policy_wpa3_192_202304:
+    case ssl_compliance_policy_cnsa1_202603:
+    case ssl_compliance_policy_cnsa2_202603:
       switch (cipher_id) {
-        case TLS1_3_CK_AES_256_GCM_SHA384 & 0xffff:
+        case SSL_CIPHER_AES_256_GCM_SHA384:
           return true;
-        case TLS1_3_CK_AES_128_GCM_SHA256 & 0xffff:
-        case TLS1_3_CK_CHACHA20_POLY1305_SHA256 & 0xffff:
+        case SSL_CIPHER_AES_128_GCM_SHA256:
+        case SSL_CIPHER_CHACHA20_POLY1305_SHA256:
           return false;
         default:
           assert(false);
@@ -728,8 +646,13 @@ const SSL_CIPHER *ssl_choose_tls13_cipher(CBS cipher_suites, bool has_aes_hw,
   }
 
   const SSL_CIPHER *best = nullptr;
-  CipherScorer scorer(has_aes_hw);
-  CipherScorer::Score best_score = scorer.MinScore();
+  AesHwCipherScorer aes_hw_scorer(has_aes_hw);
+  CNsaCipherScorer cnsa_scorer;
+  CipherScorer *const scorer =
+      (policy == ssl_compliance_policy_cnsa_202407)
+          ? static_cast<CipherScorer *>(&cnsa_scorer)
+          : static_cast<CipherScorer *>(&aes_hw_scorer);
+  CipherScorer::Score best_score = CipherScorer::kMinScore;
 
   while (CBS_len(&cipher_suites) > 0) {
     uint16_t cipher_suite;
@@ -750,7 +673,7 @@ const SSL_CIPHER *ssl_choose_tls13_cipher(CBS cipher_suites, bool has_aes_hw,
       continue;
     }
 
-    const CipherScorer::Score candidate_score = scorer.Evaluate(candidate);
+    const CipherScorer::Score candidate_score = scorer->Evaluate(candidate);
     // |candidate_score| must be larger to displace the current choice. That way
     // the client's order controls between ciphers with an equal score.
     if (candidate_score > best_score) {

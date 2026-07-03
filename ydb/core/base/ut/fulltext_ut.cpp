@@ -1,4 +1,6 @@
 #include "fulltext.h"
+#include "fulltext_query.h"
+#include "table_index.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/xrange.h>
@@ -6,6 +8,128 @@
 namespace NKikimr::NFulltext {
 
 Y_UNIT_TEST_SUITE(NFulltext) {
+
+    // The compact rowid-mode doc-id layout: __ydb_row_id carries a dense seq in its low bits and a
+    // bit-reversed spread bucket in its high bits. RowIdFromSeq must be a bijection (SeqFromRowId is its
+    // left inverse) and consecutive seq values must spread across distinct high-bit buckets.
+    Y_UNIT_TEST(RowIdSeqRoundTrip) {
+        using namespace NKikimr::NTableIndex::NFulltext;
+
+        // Round-trip across a range, around the bucket-cycle boundary, and for large/high-bit seq values.
+        for (ui64 seq : xrange<ui64>(0, 5000)) {
+            UNIT_ASSERT_VALUES_EQUAL(SeqFromRowId(RowIdFromSeq(seq)), seq);
+        }
+        for (ui64 seq : {ui64(0), ui64(1), ui64((1ull << RowIdSpreadBits) - 1), ui64(1ull << RowIdSpreadBits),
+                         ui64(123456789), RowIdSeqMask - 1, RowIdSeqMask}) {
+            ui64 rowId = RowIdFromSeq(seq);
+            UNIT_ASSERT_VALUES_EQUAL_C(SeqFromRowId(rowId), seq, "seq=" << seq << " rowId=" << rowId);
+            // seq lives strictly in the low (64 - RowIdSpreadBits) bits.
+            UNIT_ASSERT_VALUES_EQUAL(seq & ~RowIdSeqMask, 0u);
+        }
+
+        // Injectivity + spread: a run of consecutive seq must map to distinct row ids, and the high-bit
+        // bucket must take many different values (not a monotonic tail) over a full bucket cycle.
+        THashSet<ui64> rowIds;
+        THashSet<ui64> buckets;
+        const ui64 cycle = 1ull << RowIdSpreadBits;
+        for (ui64 seq : xrange<ui64>(0, cycle)) {
+            ui64 rowId = RowIdFromSeq(seq);
+            UNIT_ASSERT(rowIds.insert(rowId).second);
+            buckets.insert(rowId >> (64 - RowIdSpreadBits));
+        }
+        // bit-reversal of the low RowIdSpreadBits is itself a bijection over [0, cycle), so every bucket appears.
+        UNIT_ASSERT_VALUES_EQUAL(buckets.size(), cycle);
+    }
+
+    Y_UNIT_TEST(MultiDeltaReader1) {
+        TDeltaWriter wr;
+        wr.Reset(false, false);
+        for (ui64 i = 1; i <= 100; i++) {
+            wr.Add(i, 1);
+        }
+        TDeltaWriter wr2;
+        for (ui64 i = 5; i <= 25; i += 2) {
+            wr2.Add(i, 1);
+        }
+        TMultiDeltaReader rdr;
+        rdr.Reset(false, false);
+        rdr.Add(true, wr.GetBuf());
+        rdr.Add(false, wr2.GetBuf());
+        rdr.Start();
+        ui64 docId;
+        ui32 freq;
+        for (ui64 i = 1; i <= 100; i++) {
+            if (i >= 5 && i <= 25 && !((i - 5) % 2)) {
+                continue;
+            }
+            UNIT_ASSERT(rdr.Read(docId, freq));
+            UNIT_ASSERT_VALUES_EQUAL(docId, i);
+            UNIT_ASSERT_VALUES_EQUAL(freq, 1);
+        }
+        UNIT_ASSERT(!rdr.Read(docId, freq));
+    }
+
+    Y_UNIT_TEST(MultiDeltaReader2) {
+        TDeltaReader r1(TConstArrayRef<ui8>((const ui8*)"2\x0A", 2), false, false);
+        r1.SetMaxId(203);
+        TMultiDeltaReader rdr;
+        rdr.Reset(false, false);
+        rdr.Add(true, &r1);
+        rdr.Add(false, TConstArrayRef<ui8>((const ui8*)"dd", 2));
+        rdr.Add(true, TConstArrayRef<ui8>((const ui8*)"\x0A\x0A\x0A", 3));
+        rdr.Add(true, TConstArrayRef<ui8>((const ui8*)"dd\x01\x02", 4));
+        rdr.Start();
+        ui64 docId;
+        ui32 freq;
+        auto check = [&](ui64 expectedDoc) {
+            UNIT_ASSERT(rdr.Read(docId, freq));
+            Cerr << "Read: " << docId << " == " << expectedDoc << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(docId, expectedDoc);
+            UNIT_ASSERT_VALUES_EQUAL(freq, 1);
+        };
+        check(10);
+        check(20);
+        check(30);
+        check(50);
+        check(60);
+        check(201);
+        check(203);
+        UNIT_ASSERT(!rdr.Read(docId, freq));
+    }
+
+    Y_UNIT_TEST(SignedDelta) {
+        TDeltaWriter wr;
+        wr.Reset(false, true);
+        wr.Add(-1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(wr.GetBuf().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(wr.GetBuf()[0], 1);
+        wr.Reset(true, true);
+        for (i64 i = -50; i <= 50; i++) {
+            wr.Add(i, 1 + ((i + 50) % 3));
+        }
+        TDeltaWriter wr2;
+        wr2.Reset(true, true);
+        for (i64 i = -25; i <= 25; i += 2) {
+            wr2.Add(i, 1 + ((i + 50) % 3));
+        }
+        TMultiDeltaReader rdr;
+        rdr.Reset(true, true);
+        rdr.Add(true, wr.GetBuf());
+        rdr.Add(false, wr2.GetBuf());
+        rdr.Start();
+        ui64 docId;
+        ui32 freq;
+        for (i64 i = -50; i <= 50; i++) {
+            if (i >= -25 && i <= 25 && !((i + 25) % 2)) {
+                continue;
+            }
+            UNIT_ASSERT(rdr.Read(docId, freq));
+            Cerr << "Read: " << (i64)docId << " " << freq << "\n";
+            UNIT_ASSERT_VALUES_EQUAL((i64)docId, i);
+            UNIT_ASSERT_VALUES_EQUAL(freq, 1 + ((i + 50) % 3));
+        }
+        UNIT_ASSERT(!rdr.Read(docId, freq));
+    }
 
     Y_UNIT_TEST(ValidateColumnsMatches) {
         TString error;
@@ -15,13 +139,21 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         settings.add_columns()->set_column("column2");
 
         UNIT_ASSERT(!ValidateColumnsMatches(TVector<TString>{"column2"}, settings, error));
-        UNIT_ASSERT_VALUES_EQUAL(error, "columns [ column1 column2 ] should be [ column2 ]");
+        UNIT_ASSERT_VALUES_EQUAL(error, "indexed columns [ column1 column2 ] should be the suffix of index columns [ column2 ]");
 
         UNIT_ASSERT(!ValidateColumnsMatches(TVector<TString>{"column2", "column1"}, settings, error));
-        UNIT_ASSERT_VALUES_EQUAL(error, "columns [ column1 column2 ] should be [ column2 column1 ]");
+        UNIT_ASSERT_VALUES_EQUAL(error, "indexed columns [ column1 column2 ] should be the suffix of index columns [ column2 column1 ]");
 
         UNIT_ASSERT(ValidateColumnsMatches(TVector<TString>{"column1", "column2"}, settings, error));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // prefix columns are allowed before the indexed (text) suffix
+        Ydb::Table::FulltextIndexSettings single;
+        single.add_columns()->set_column("text");
+        UNIT_ASSERT(ValidateColumnsMatches(TVector<TString>{"user_id", "text"}, single, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+        UNIT_ASSERT(ValidateColumnsMatches(TVector<TString>{"a", "b", "text"}, single, error));
+        UNIT_ASSERT(!ValidateColumnsMatches(TVector<TString>{"user_id", "other"}, single, error));
     }
 
     Y_UNIT_TEST(ValidateSettings) {
@@ -356,6 +488,51 @@ Y_UNIT_TEST_SUITE(NFulltext) {
             BuildNgrams("👨‍👩‍👧‍👦🇦🇨", 2, 2, false, ngrams);
             UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"👨\u200D", "\u200D👩", "👩\u200D", "\u200D👧", "👧\u200D", "\u200D👦", "👦🇦", "🇦🇨"}));
         }
+    }
+
+    Y_UNIT_TEST(BuildSearchTermsStructured) {
+        using T = TSearchTerm;
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+
+        // No `+`: every term optional, tokenized like BuildSearchTerms.
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("apple banana", analyzers),
+            (TVector<T>{{"apple", false}, {"banana", false}}));
+
+        // Leading `+` marks a required term; bare terms stay optional.
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("+apple banana", analyzers),
+            (TVector<T>{{"apple", true}, {"banana", false}}));
+
+        // Multiple required terms mixed with optional ones.
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("+apple +banana cherry", analyzers),
+            (TVector<T>{{"apple", true}, {"banana", true}, {"cherry", false}}));
+
+        // A `+` term that analyzes into several tokens marks all of them required.
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("+spaced-dog cat", analyzers),
+            (TVector<T>{{"spaced", true}, {"dog", true}, {"cat", false}}));
+
+        // Bare `+` (no body) is ignored.
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("+ apple", analyzers),
+            (TVector<T>{{"apple", false}}));
+
+        // A `+` inside a term (not at term start) is not an operator.
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("c++ test", analyzers),
+            (TVector<T>{{"c", false}, {"test", false}}));
+
+        // Extra whitespace between terms is collapsed.
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("+apple   banana", analyzers),
+            (TVector<T>{{"apple", true}, {"banana", false}}));
+
+        // Analyzer filters apply to the term body after stripping `+`.
+        analyzers.set_use_filter_lowercase(true);
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("+Apple banana", analyzers),
+            (TVector<T>{{"apple", true}, {"banana", false}}));
+        analyzers.set_use_filter_lowercase(false);
+
+        // Keyword tokenizer without `+` keeps the whole query as a single token.
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::KEYWORD);
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("foo bar", analyzers),
+            (TVector<T>{{"foo bar", false}}));
     }
 }
 

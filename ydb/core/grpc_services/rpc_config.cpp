@@ -13,6 +13,127 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/library/services/services.pb.h>
+
+namespace {
+
+TString DescribeConfigIdentity(const Ydb::DynamicConfig::ConfigIdentity& id)
+{
+    TStringBuilder descr;
+
+    switch (id.type_case()) {
+        case Ydb::DynamicConfig::ConfigIdentity::TypeCase::kCluster:
+            descr << "cluster=" << id.cluster();
+            break;
+        case Ydb::DynamicConfig::ConfigIdentity::TypeCase::kDatabase:
+            descr << "database=" << id.database();
+            break;
+        case Ydb::DynamicConfig::ConfigIdentity::TypeCase::TYPE_NOT_SET:
+            descr << "<TYPE_NOT_SET>";
+            break;
+        default:
+            descr << "<unknown-type:" << static_cast<int>(id.type_case()) << ">";
+            break;
+    }
+
+    descr << ";version=" << id.version();
+
+    return descr;
+}
+
+bool ConvertGetConfigToFetchConfigResult(
+    const Ydb::DynamicConfig::GetConfigResult &from,
+    Ydb::Config::FetchConfigResult &to,
+    TString& error)
+{
+    const auto identityCount = from.identity_size();
+    const auto configCount = from.config_size();
+
+    error.clear();
+
+    // Reject Ydb::DynamicConfig::GetConfigResult invariant violation
+    if (identityCount < configCount) {
+        TStringBuilder descr;
+        descr << (configCount - identityCount)
+              << " extra 'config' field with no corresponding 'identity' field";
+        error = descr;
+        return false;
+    }
+    if (identityCount > configCount) {
+        TStringBuilder descr;
+        descr << "no 'config' fields for 'identity' fields [";
+        for (int i = configCount; i < identityCount; i++) {
+            if (i > configCount) {
+                descr << ", ";
+            }
+            descr << "'" << DescribeConfigIdentity(from.identity(i)) << "'";
+        }
+        descr << "]";
+        error = descr;
+        return false;
+    }
+
+    // Reject TYPE_NOT_SET upfront so the error path leaves 'to' untouched
+    {
+        TStringBuilder descr;
+        int unsetCount = 0;
+
+        descr << "'identity' fields with no type set at indices [";
+        for (int i = 0; i < identityCount; i++) {
+            if (from.identity(i).type_case()
+                == Ydb::DynamicConfig::ConfigIdentity::TypeCase::TYPE_NOT_SET)
+            {
+                if (unsetCount > 0) {
+                    descr << ", ";
+                }
+                descr << "#" << i << " - " << "'" << DescribeConfigIdentity(from.identity(i)) << "'";
+                ++unsetCount;
+            }
+        }
+        descr << "]";
+
+        if (unsetCount > 0) {
+            error = descr;
+            return false;
+        }
+    }
+
+    for (int i = 0; i < identityCount; i++) {
+        const auto& srcIdentity = from.identity(i);
+        switch (srcIdentity.type_case()) {
+            case Ydb::DynamicConfig::ConfigIdentity::TypeCase::kCluster: {
+                auto dstEntry = to.add_config();
+                auto dstIdentity = dstEntry->mutable_identity();
+                dstIdentity->set_version(srcIdentity.version());
+                dstIdentity->set_cluster(srcIdentity.cluster());
+                dstIdentity->mutable_main();
+                dstEntry->set_config(from.config(i));
+                break;
+            }
+            case Ydb::DynamicConfig::ConfigIdentity::TypeCase::kDatabase: {
+                auto dstEntry = to.add_config();
+                auto dstIdentity = dstEntry->mutable_identity();
+                dstIdentity->set_version(srcIdentity.version());
+                dstIdentity->mutable_database()->set_database(srcIdentity.database());
+                dstEntry->set_config(from.config(i));
+                break;
+            }
+            case Ydb::DynamicConfig::ConfigIdentity::TypeCase::TYPE_NOT_SET:
+                // TYPE_NOT_SET is rejected with error by pre-validation above
+                break;
+            default:
+                // Any other value comes from a newer Console is skipped with a warning
+                // so we don't fail on forward-compatible additions
+                ALOG_NOTICE(NKikimrServices::GRPC_SERVER,
+                    "Convert Ydb::DynamicConfig::ConfigIdentity to Ydb::Config::FetchConfigResult: "
+                    << "skipped unknown config identity '" << DescribeConfigIdentity(srcIdentity) << "'" );
+                break;
+        }
+    }
+    return true;
+}
+
+} // namespace
 
 namespace NKikimr::NGRpcService {
 
@@ -153,11 +274,14 @@ public:
         if (shim.MainConfig) {
             if (NYamlConfig::IsDatabaseConfig(*shim.MainConfig)) {
                 DatabaseConfig = shim.MainConfig;
-                CheckDatabaseAuthorization();
+                if (!ResolveTargetDatabase()) {
+                    return;
+                }
+                CheckDatabaseAuthorization(*TargetDatabase);
                 return;
             }
         }
-        if (!NKikimr::IsAdministrator(AppData(), Request_->GetSerializedToken())) {
+        if (!NKikimr::IsAdministrator(AppData(), Request_->GetInternalToken().Get())) {
             self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a cluster administrator.",
                   NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
             return;
@@ -245,45 +369,6 @@ public:
         );
     }
 
-private:
-    std::optional<TString> DatabaseConfig;
-    std::optional<TString> TargetDatabase;
-
-    void CheckDatabaseAuthorization() {
-        const auto& metadata = NYamlConfig::GetDatabaseMetadata(*DatabaseConfig);
-
-        if (metadata.Database) {
-            TargetDatabase = metadata.Database;
-        }
-        else {
-            Reply(Ydb::StatusIds::BAD_REQUEST, "No database name found in metadata",
-                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
-            return;
-        }
-
-        if (*TargetDatabase == ("/" + AppData()->DomainsInfo->Domain->Name) ||
-            *TargetDatabase == AppData()->DomainsInfo->Domain->Name) {
-            Reply(Ydb::StatusIds::BAD_REQUEST, "Provided database is a domain database.",
-                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
-            return;
-        }
-        bool isAdministrator = NKikimr::IsAdministrator(AppData(), Request_->GetSerializedToken());
-        if (!isAdministrator) {
-            auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-            request->DatabaseName = *TargetDatabase;
-
-            auto& entry = request->ResultSet.emplace_back();
-            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-            entry.Path = NKikimr::SplitPath(*TargetDatabase);
-
-            auto* self = Self();
-            self->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
-            self->Become(&TReplaceStorageConfigRequest::StateWaitResolveDatabase);
-            return;
-        }
-        SendRequestToConsole();
-    }
-
     void SendRequestToConsole() {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {
@@ -314,39 +399,39 @@ private:
         Self()->Become(&TReplaceStorageConfigRequest::StateConsoleReplaceFunc);
     }
 
-    STFUNC(StateWaitResolveDatabase) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveDatabase);
-            default:
-                return TBase::StateFuncBase(ev);
-        }
-    }
+private:
+    std::optional<TString> DatabaseConfig;
+    std::optional<TString> TargetDatabase;
 
-    void HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request.Get();
-        auto *self = Self();
-        if (request.ResultSet.empty() || request.ErrorCount > 0) {
-            self->Reply(Ydb::StatusIds::SCHEME_ERROR, "Error resolving database",
-                  NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, self->ActorContext());
-            return;
+    bool ResolveTargetDatabase() {
+        const auto& metadata = NYamlConfig::GetDatabaseMetadata(*DatabaseConfig);
+
+        if (metadata.Database) {
+            TargetDatabase = CanonizePath(*metadata.Database);
+        } else {
+            Reply(Ydb::StatusIds::BAD_REQUEST, "No database name found in metadata",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+            return false;
         }
 
-        const auto& entry = request.ResultSet.front();
-        const auto& databaseOwner = entry.Self->Info.GetOwner();
-
-        NACLibProto::TUserToken tokenPb;
-        if (!tokenPb.ParseFromString(Request_->GetSerializedToken())) {
-            tokenPb = NACLibProto::TUserToken();
+        if (*TargetDatabase == ("/" + AppData()->DomainsInfo->Domain->Name) ||
+            *TargetDatabase == AppData()->DomainsInfo->Domain->Name) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, "Provided database is a domain database.",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+            return false;
         }
-        const auto& parsedToken = NACLib::TUserToken(tokenPb);
 
-        bool isDatabaseAdmin = NKikimr::IsDatabaseAdministrator(&parsedToken, databaseOwner);
-        if (!isDatabaseAdmin) {
-            self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a database administrator.",
-                  NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
-            return;
+        const auto& maybeDatabaseName = Request_->GetDatabaseName();
+        if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
+            if (*TargetDatabase != CanonizePath(maybeDatabaseName.GetRef())) {
+                Reply(Ydb::StatusIds::BAD_REQUEST,
+                    "Database in config metadata does not match the requested database.",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+                return false;
+            }
         }
-        SendRequestToConsole();
+
+        return true;
     }
 
     STFUNC(StateConsoleReplaceFunc) {
@@ -411,8 +496,16 @@ public:
         auto *self = Self();
         self->OnBootstrap();
 
-        if (self->Request_->GetDatabaseName()) {
-            SendRequestToConsole();
+        if (const auto& databaseName = self->Request_->GetDatabaseName()) {
+            // Database YAML config (Ydb::DynamicConfig::ConfigIdentity::TypeCase::kDatabase)
+            // is requested directly from Console (like legacy API)
+            CheckDatabaseAuthorization(*databaseName);
+            return;
+        }
+
+        if (!NKikimr::IsAdministrator(AppData(), Request_->GetInternalToken().Get())) {
+            self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a cluster administrator.",
+                  NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
             return;
         }
 
@@ -514,7 +607,6 @@ public:
         return ev;
     }
 
-private:
     void SendRequestToConsole() {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {
@@ -535,6 +627,7 @@ private:
         Self()->Become(&TFetchStorageConfigRequest::StateConsoleFetchFunc);
     }
 
+private:
     STFUNC(StateConsoleFetchFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NConsole::TEvConsole::TEvGetAllConfigsResponse, Handle);
@@ -544,7 +637,19 @@ private:
     }
 
     void Handle(NConsole::TEvConsole::TEvGetAllConfigsResponse::TPtr& ev) {
-        ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), ActorContext());
+        Ydb::Config::FetchConfigResult result;
+        TString error;
+
+        bool succeed = ConvertGetConfigToFetchConfigResult(ev->Get()->Record.GetResponse(), result, error);
+        if (succeed) {
+            ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ActorContext());
+        }
+        else {
+            // The malformed payload comes from the Console tablet (server-side),
+            // not from the gRPC client — so this is an internal-error condition.
+            Reply(Ydb::StatusIds::INTERNAL_ERROR, error,
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+        }
     }
 };
 

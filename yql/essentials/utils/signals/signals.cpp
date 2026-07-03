@@ -7,6 +7,7 @@
 #include <util/generic/yexception.h>
 #include <util/datetime/base.h>
 #include <util/network/socket.h>
+#include <util/string/builder.h>
 #include <util/system/getpid.h>
 
 #ifdef _linux_
@@ -17,6 +18,7 @@
 #include <csignal>
 #include <cerrno>
 #include <cstdlib>
+#include <array>
 
 namespace NYql {
 
@@ -195,6 +197,56 @@ void InitSignalsWithSelfPipe()
     SetSignalHandlers(handlerDescs.data());
 }
 
+void ResetSignalFlags()
+{
+    // we do not reset NeedTerminate and NeedQuit here
+    // they should be preserved after fork
+    NeedReconfigure = 0;
+    NeedReopenLog = 0;
+    NeedReapZombies = 0;
+    NeedInterrupt = 0;
+}
+
+void EnsureSignalsAreBlocked() {
+#ifdef _unix_
+    sigset_t currentMask = {};
+    SigEmptySet(&currentMask);
+    if (sigprocmask(SIG_BLOCK, nullptr, &currentMask) == -1) {
+        ythrow TSystemError() << "Cannot get current signal mask";
+    }
+
+    const auto requiredSignals = std::to_array({SIGTERM, SIGINT, SIGQUIT,
+                                                SIGHUP, SIGUSR1, SIGCHLD});
+
+    std::vector<int> unblockedSignals;
+
+    for (int signo : requiredSignals) {
+        const int r = sigismember(&currentMask, signo);
+        if (r == -1) {
+            ythrow TSystemError() << "Error in sigismember";
+        }
+        if (r == 0) {
+            unblockedSignals.push_back(signo);
+        }
+    }
+
+    if (!unblockedSignals.empty()) {
+        TStringBuilder errorMsg;
+        errorMsg << "Required signals are not blocked: ";
+
+        for (size_t i = 0; i < unblockedSignals.size(); ++i) {
+            if (i > 0) {
+                errorMsg << ", ";
+            }
+            const char* signalName = strsignal(unblockedSignals[i]);
+            errorMsg << (signalName ? signalName : "unknown");
+        }
+
+        ythrow yexception() << errorMsg;
+    }
+#endif
+}
+
 void CatchInterruptSignal(bool doCatch) {
     CatchInterrupt = doCatch;
 }
@@ -202,7 +254,9 @@ void CatchInterruptSignal(bool doCatch) {
 void SigSuspend(const sigset_t* mask)
 {
 #ifdef _unix_
-    sigsuspend(mask);
+    if (sigsuspend(mask) == -1 && errno != EINTR) {
+        ythrow TSystemError() << "sigsuspend failed";
+    }
 #else
     Y_UNUSED(mask);
     Sleep(TDuration::Seconds(1));

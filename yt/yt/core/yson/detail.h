@@ -139,11 +139,11 @@ public:
     }
 
     // Return pair <context, context_position>.
-    std::pair<TString, size_t> GetContextFromCheckpoint() const
+    std::pair<std::string, size_t> GetContextFromCheckpoint() const
     {
-        TString result(MaxContextSize, '\0');
+        std::string result(MaxContextSize, '\0');
         size_t size, position;
-        SaveContext(result.Detach(), &size, &position);
+        SaveContext(result.data(), &size, &position);
         result.resize(size);
         return {result, position};
     }
@@ -216,7 +216,7 @@ public:
     void CheckpointContext()
     { }
 
-    std::pair<TString, size_t> GetContextFromCheckpoint() const
+    std::pair<std::string, size_t> GetContextFromCheckpoint() const
     {
         return {"<context is disabled>", 0};
     }

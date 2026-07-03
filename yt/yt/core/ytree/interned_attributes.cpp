@@ -12,7 +12,7 @@ namespace {
 class TInternedAttributeRegistry
 {
 public:
-    void Intern(const TString& uninternedKey, TInternedAttributeKey internedKey)
+    void Intern(const std::string& uninternedKey, TInternedAttributeKey internedKey)
     {
         YT_VERIFY(AttributeNameToIndex_.emplace(uninternedKey, internedKey).second);
         YT_VERIFY(AttributeIndexToName_.emplace(internedKey, uninternedKey).second);
@@ -24,19 +24,19 @@ public:
         return it == AttributeNameToIndex_.end() ? InvalidInternedAttribute : it->second;
     }
 
-    const TString& GetUninterned(TInternedAttributeKey internedKey)
+    const std::string& GetUninterned(TInternedAttributeKey internedKey)
     {
         return GetOrCrash(AttributeIndexToName_, internedKey);
     }
 
 private:
-    THashMap<TString, TInternedAttributeKey> AttributeNameToIndex_;
-    THashMap<TInternedAttributeKey, TString> AttributeIndexToName_;
+    THashMap<std::string, TInternedAttributeKey> AttributeNameToIndex_;
+    THashMap<TInternedAttributeKey, std::string> AttributeIndexToName_;
 };
 
 } // namespace
 
-void InternAttribute(const TString& uninternedKey, TInternedAttributeKey internedKey)
+void InternAttribute(const std::string& uninternedKey, TInternedAttributeKey internedKey)
 {
     Singleton<TInternedAttributeRegistry>()->Intern(uninternedKey, internedKey);
 }
@@ -58,7 +58,7 @@ void TInternedAttributeKey::Load(TStreamLoadContext& context)
 {
     using NYT::Load;
 
-    auto uninternedKey = Load<TString>(context);
+    auto uninternedKey = Load<std::string>(context);
     Code_ = Lookup(uninternedKey).Code_;
 }
 
@@ -67,7 +67,7 @@ void TInternedAttributeKey::Load(TStreamLoadContext& context)
     return Singleton<TInternedAttributeRegistry>()->GetInterned(uninternedKey);
 }
 
-const TString& TInternedAttributeKey::Unintern() const
+const std::string& TInternedAttributeKey::Unintern() const
 {
     return Singleton<TInternedAttributeRegistry>()->GetUninterned(*this);
 }

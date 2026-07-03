@@ -12,9 +12,9 @@
 namespace NKikimr::NMiniKQL {
 
 struct TFuzzOptions {
-    bool FuzzZeroOptionalBitmaskRemove = false;
-    bool FuzzOffsetShift = false;
-    bool FuzzImmutable = false;
+    bool FuzzZeroOptionalBitmaskRemove = true;
+    bool FuzzOffsetShift = true;
+    bool FuzzImmutable = true;
 
     static TFuzzOptions FuzzAll() {
         return TFuzzOptions{.FuzzZeroOptionalBitmaskRemove = true, .FuzzOffsetShift = true, .FuzzImmutable = true};
@@ -25,10 +25,9 @@ class IFuzzer {
 public:
     virtual ~IFuzzer() = default;
 
-    virtual NYql::NUdf::TUnboxedValue Fuzz(NYql::NUdf::TUnboxedValue input,
-                                           const THolderFactory& holderFactory,
-                                           arrow::MemoryPool& memoryPool,
-                                           IRandomProvider& randomProvider) const = 0;
+    virtual arrow::Datum Fuzz(const arrow::ArrayData& input,
+                              arrow::MemoryPool& memoryPool,
+                              IRandomProvider& randomProvider) const = 0;
 };
 
 using TFuzzerList = TVector<THolder<IFuzzer>>;

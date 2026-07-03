@@ -1,10 +1,10 @@
 #include "describer.h"
 
-#include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NPQ {
 using namespace NPersQueue;
@@ -111,6 +111,8 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto& topicInfo = topics["/Root/table1/feed"];
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/table1/feed/streamImpl");
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStream, true);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStreamName, "feed");
     }
 
     Y_UNIT_TEST(TopicWithoutDatabase) {

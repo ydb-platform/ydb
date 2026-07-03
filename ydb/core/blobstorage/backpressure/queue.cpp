@@ -1,5 +1,7 @@
 #include "queue.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_QUEUE
+
 namespace NKikimr::NBsQueue {
 
 TBlobStorageQueue::TBlobStorageQueue(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, TString& logPrefix,
@@ -170,30 +172,53 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
             }
         };
 
-        QLOG_DEBUG_S("BSQ25", "sending"
-                << " T# " << getTypeName()
-                << " SequenceId# " << item.SequenceId
-                << " MsgId# " << item.MsgId
-                << " Cookie# " << item.QueueCookie
-                << " InFlightCost# " << InFlightCost
-                << " Cost# " << item.Cost
-                << " WindowSize# " << WindowSize
-                << " InFlightCount# " << InFlightCount()
-                << " Postpone# " << (postpone ? "true" : "false")
-                << " SendMeCostSettings# " << (sendMeCostSettings ? "true" : "false"));
+        YDB_LOG_DEBUG_CTX(ctx, "Sending",
+            {"logPrefix", LogPrefix},
+            {"func", __func__},
+            {"t", getTypeName()},
+            {"sequenceId", item.SequenceId},
+            {"msgId", item.MsgId},
+            {"cookie", item.QueueCookie},
+            {"inFlightCost", InFlightCost},
+            {"cost", item.Cost},
+            {"windowSize", WindowSize},
+            {"inFlightCount", InFlightCount()},
+            {"postpone", (postpone ? "true" : "false")},
+            {"sendMeCostSettings", (sendMeCostSettings ? "true" : "false")},
+            {"marker", "BSQ25"});
 
         // check if window has enough space for such item
         if (postpone) {
             // can't send more items now
-            QLOG_DEBUG_S("BSQ26", "Queue overflow: InFlightCost# " << InFlightCost << " WindowSize# "
-                << WindowSize << " item.Cost# " << item.Cost << " InFlightCount# " << InFlightCount());
+            YDB_LOG_DEBUG_CTX(ctx, "Queue overflow",
+                {"logPrefix", LogPrefix},
+                {"func", __func__},
+                {"inFlightCost", InFlightCost},
+                {"windowSize", WindowSize},
+                {"itemCost", item.Cost},
+                {"inFlightCount", InFlightCount()},
+                {"marker", "BSQ26"});
             ++*QueueOverflow;
             break;
         }
 
-        if (!item.Event.Relevant()) {
+        bool isRelevant = true;
+        switch (item.Event.GetRelevanceStatus()) {
+        case TMessageRelevance::EStatus::CancelledExternally:
+            // signal to make DSProxy finalize event processing
+            ReplyWithError(item, NKikimrProto::ERROR, "external cancellation", ctx);
+            [[fallthrough]];
+        case TMessageRelevance::EStatus::CancelledInternally:
+            isRelevant = false;
             ++*QueueItemsPruned;
             it = EraseItem(Queues.Waiting, it);
+            break;
+        default:
+            // event is relevant
+            break;
+        }
+
+        if (!isRelevant) {
             continue;
         }
 
@@ -207,9 +232,12 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
         ++*QueueItemsSent;
 
         // send item
-        item.Span && item.Span.Event("SendToVDisk", {
-            {"VDiskOrderNumber", vdiskOrderNumber}
-        });
+
+        if (NWilson::TSpan* wilsonSpan = item.Span.GetWilsonSpanPtr()) {
+            wilsonSpan->Event("SendToVDisk", {
+                {"VDiskOrderNumber", vdiskOrderNumber}
+            });
+        }
         item.Event.SendToVDisk(ctx, remoteVDisk, item.QueueCookie, item.MsgId, item.SequenceId, sendMeCostSettings,
             item.Span.GetTraceId(), ClientId, item.ProcessingTimer);
 
@@ -221,16 +249,21 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
 void TBlobStorageQueue::ReplyWithError(TItem& item, NKikimrProto::EReplyStatus status, const TString& errorReason,
         const TActorContext& ctx) {
     const TDuration processingTime = TDuration::Seconds(item.ProcessingTimer.Passed());
-    QLOG_INFO_S("BSQ03", "Reply error type# " << item.Event.GetType()
-        << " status# " << NKikimrProto::EReplyStatus_Name(status)
-        << " errorReason# " << '"' << EscapeC(errorReason) << '"'
-        << " cookie# " << item.Event.GetCookie()
-        << " processingTime# " << processingTime);
+    YDB_LOG_INFO_CTX(ctx, "Reply error",
+        {"logPrefix", LogPrefix},
+        {"func", __func__},
+        {"type", item.Event.GetType()},
+        {"status", NKikimrProto::EReplyStatus_Name(status)},
+        {"cookie", item.Event.GetCookie()},
+        {"processingTime", processingTime},
+        {"marker", "BSQ03"});
 
-    if (item.Span) {
-        item.Span.EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(status) << ": " << errorReason);
-        item.Span.Reset();
+    if (NWilson::TSpan* wilsonSpan = item.Span.GetWilsonSpanPtr()) {
+        wilsonSpan->EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(status) << ": " << errorReason);
+    } else if (TNamedSpan* retroSpan = item.Span.GetRetroSpanPtr()) {
+        retroSpan->EndError();
     }
+    item.Span.Reset();
 
     ctx.Send(item.Event.GetSender(), item.Event.MakeErrorReply(status, errorReason, QueueDeserializedItems,
             QueueDeserializedBytes), 0, item.Event.GetCookie());
@@ -253,13 +286,15 @@ bool TBlobStorageQueue::OnResponse(ui64 msgId, ui64 sequenceId, ui64 cookie, TAc
     Y_ABORT_UNLESS(InFlightCost >= it->Cost);
     InFlightCost -= it->Cost;
 
-    const bool relevant = it->Event.Relevant();
+    const bool dsproxyAwaitingResponse =
+            it->Event.GetRelevanceStatus() == TMessageRelevance::EStatus::Relevant ||
+            it->Event.GetRelevanceStatus() == TMessageRelevance::EStatus::CancelledExternally;
 
     *outSender = it->Event.GetSender();
     *outCookie = it->Event.GetCookie();
     *processingTime = TDuration::Seconds(it->ProcessingTimer.Passed());
     LWTRACK(DSQueueVPutResultRecieved, it->Event.GetOrbit(), processingTime->SecondsFloat() * 1e3,
-            it->Event.GetByteSize(), !relevant);
+            it->Event.GetByteSize(), !dsproxyAwaitingResponse);
 
     InFlightLookup.erase(lookupIt);
     auto span = std::exchange(it->Span, {});
@@ -272,7 +307,7 @@ bool TBlobStorageQueue::OnResponse(ui64 msgId, ui64 sequenceId, ui64 cookie, TAc
     }
 
     ++*QueueItemsProcessed;
-    return relevant;
+    return dsproxyAwaitingResponse;
 }
 
 void TBlobStorageQueue::Unwind(ui64 failedMsgId, ui64 failedSequenceId, ui64 expectedMsgId, ui64 expectedSequenceId) {
@@ -287,7 +322,7 @@ void TBlobStorageQueue::Unwind(ui64 failedMsgId, ui64 failedSequenceId, ui64 exp
         const ui32 erased = InFlightLookup.erase(std::make_pair(x->SequenceId, x->MsgId));
         Y_ABORT_UNLESS(erased);
         cost += x->Cost; // count item's cost
-        if (!x->Event.Relevant()) {
+        if (x->Event.GetRelevanceStatus() == TMessageRelevance::EStatus::CancelledInternally) {
             if (x == it) {
                 ++it; // advance starting iterator as the item pointed to is being erased
             }
@@ -320,7 +355,7 @@ void TBlobStorageQueue::DrainQueue(NKikimrProto::EReplyStatus status, const TStr
 
     auto flushQueue = [&](TItemList& queue) {
         for (auto it = queue.begin(); it != queue.end(); it = EraseItem(queue, it)) {
-            if (it->Event.Relevant()) {
+            if (it->Event.GetRelevanceStatus() != TMessageRelevance::EStatus::CancelledInternally) {
                 ReplyWithError(*it, status, errorReason, ctx);
             }
         }
@@ -341,7 +376,11 @@ void TBlobStorageQueue::OnConnect() {
 
 TBlobStorageQueue::TItemList::iterator TBlobStorageQueue::EraseItem(TItemList& queue, TItemList::iterator it) {
     SetItemQueue(*it, EItemQueue::NotSet);
-    it->Span.EndError("EraseItem called");
+    if (NWilson::TSpan* wilsonSpan = it->Span.GetWilsonSpanPtr()) {
+        wilsonSpan->EndError("Erase item called");
+    } else if (TNamedSpan* retroSpan = it->Span.GetRetroSpanPtr()) {
+        retroSpan->EndError();
+    }
     TItemList::iterator nextIter = std::next(it);
     if (Queues.Unused.size() < MaxUnusedItems) {
         Queues.Unused.splice(Queues.Unused.end(), queue, it);

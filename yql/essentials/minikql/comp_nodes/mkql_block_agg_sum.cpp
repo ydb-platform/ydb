@@ -62,7 +62,7 @@ public:
     }
 
     NUdf::TUnboxedValue Build() final {
-        return Ctx_.HolderFactory.CreateArrowBlock(Builder_.Build(true));
+        return Ctx_.HolderFactory.CreateArrowBlock(Builder_.Build(true), Ctx_.RuntimeSettings.DatumValidation.Get());
     }
 
 private:
@@ -91,7 +91,7 @@ public:
     }
 
     NUdf::TUnboxedValue Build() final {
-        return Ctx_.HolderFactory.CreateArrowBlock(Builder_->Build(true));
+        return Ctx_.HolderFactory.CreateArrowBlock(Builder_->Build(true), Ctx_.RuntimeSettings.DatumValidation.Get());
     }
 
 private:
@@ -118,7 +118,7 @@ public:
     }
 
     NUdf::TUnboxedValue Build() final {
-        return Ctx_.HolderFactory.CreateArrowBlock(Builder_.Build(true));
+        return Ctx_.HolderFactory.CreateArrowBlock(Builder_.Build(true), Ctx_.RuntimeSettings.DatumValidation.Get());
     }
 
 private:

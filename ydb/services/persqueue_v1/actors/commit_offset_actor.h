@@ -82,7 +82,6 @@ private:
     void SendCommit(const TTopicInitInfo& topicInitInfo, const Ydb::Topic::CommitOffsetRequest* commitRequest, const TActorContext& ctx);
 
     void AnswerError(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx);
-    void ProcessAnswers(const TActorContext& ctx);
 
 private:
     TActorId SchemeCache;

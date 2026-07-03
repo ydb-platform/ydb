@@ -181,6 +181,7 @@ public:
         bool AssumeYes = false;
         std::optional<std::string> StorageUrl = std::nullopt;
         bool EnableAiInteractive = false;
+        bool EnableInteractiveTransactions = false;
         TUsageInfoGetter UsageInfoGetter;
 
         // Filled by ValidateAndRun to point at the leaf command being executed
@@ -292,7 +293,15 @@ public:
             throw TNeedToExitWithCode(EXIT_FAILURE);
         }
 
+        // Build a driver config WITHOUT any CLI build info; the underlying
+        // driver will only carry the default SDK build info.
+        // Use this method only if you want to use the driver without the CLI build info intentionally.
         TDriverConfig CreateDriverConfig();
+
+        // Build a driver config and append CLI build info plus a command tag.
+        // If buildInfoCommandTag is empty, the tag is derived from the active
+        // command chain via GetBuildInfoCommandTag().
+        TDriverConfig CreateDriverConfigWithBuildInfo(const TString& buildInfoCommandTag = "");
 
         TString GetBuildInfoCommandTag() const;
 

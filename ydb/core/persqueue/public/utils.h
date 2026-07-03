@@ -1,14 +1,23 @@
 #pragma once
 
-#include <util/datetime/base.h>
-#include <util/string/builder.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
+#include <util/datetime/base.h>
+#include <util/string/builder.h>
+
+#include <functional>
+#include <memory>
+#include <set>
+#include <unordered_map>
+#include <vector>
+
 namespace NKikimrPQ {
-    class TUpdateBalancerConfig;
-}
+
+class TUpdateBalancerConfig;
+
+} // namespace NKikimrPQ
 
 namespace NKikimr::NPQ {
 
@@ -78,6 +87,7 @@ public:
 
     TString DebugString() const;
 
+    std::vector<ui32> GetRootPartitions() const;
 private:
     std::unordered_map<ui32, Node> Partitions;
 };
@@ -91,4 +101,4 @@ TPartitionGraph::TPtr MakeSharedPartitionGraph(const NKikimrSchemeOp::TPersQueue
 
 Y_PURE_FUNCTION bool PreciseReadFromTimestampBehaviourEnabled(const NKikimr::TAppData& appData);
 
-} // NKikimr::NPQ
+} // namespace NKikimr::NPQ

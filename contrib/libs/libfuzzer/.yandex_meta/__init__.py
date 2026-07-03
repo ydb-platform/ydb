@@ -41,7 +41,6 @@ def post_install(self):
 
     with self.yamakes["lib/fuzzer/afl"] as m:
         m.NO_SANITIZE = True
-        m.PEERDIR = ["contrib/libs/afl/llvm_mode"]
 
 
 llvm_libfuzzer = CMakeNinjaNixProject(

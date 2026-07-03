@@ -21,7 +21,6 @@ PEERDIR(
     contrib/restricted/boost/integer
     contrib/restricted/boost/intrusive
     contrib/restricted/boost/move
-    contrib/restricted/boost/static_assert
     contrib/restricted/boost/type_traits
     contrib/restricted/boost/unordered
     contrib/restricted/boost/winapi

@@ -1,0 +1,14 @@
+#pragma once
+
+#include <memory>
+
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+////////////////////////////////////////////////////////////////////////////////
+
+class IOracle;
+using IOraclePtr = IOracle*;
+
+////////////////////////////////////////////////////////////////////////////////
+
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

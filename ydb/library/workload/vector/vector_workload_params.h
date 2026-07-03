@@ -56,8 +56,8 @@ public:
     std::optional<std::string> PrefixType;
     NYdb::NTable::TVectorIndexSettings::EMetric Metric;
     TString Distance;
-    size_t KmeansTreeLevels = 1;
-    size_t KmeansTreeClusters = 10;
+    size_t KmeansTreeLevels = 0;
+    size_t KmeansTreeClusters = 0;
     size_t Targets = 0;
     size_t VectorInitCount = 0;
     size_t KmeansTreeSearchClusters = 0;

@@ -333,6 +333,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
                        const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                        const NKikimrPQ::TPQTabletConfig& tabletConfig, const std::shared_ptr<TTabletCountersBase>& counters, bool subDomainOutOfSpace, ui32 numChannels,
                        const TActorId& writeQuoterActorId,
+                       const TActorId& batchProcessorActorId,
                        TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
                        bool newPartition)
     : TBaseTabletActor(tabletId, tablet, NKikimrServices::PERSQUEUE)
@@ -362,9 +363,11 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , SubDomainOutOfSpace(subDomainOutOfSpace)
     , HasDataReqNum(0)
     , WriteQuotaTrackerActor(writeQuoterActorId)
+    , BatchProcessorActor(batchProcessorActorId)
     , AvgWriteBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
     , AvgReadBytes(TDuration::Minutes(1), 1000)
     , AvgQuotaBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
+    , AvgQuotaMessages(TDuration::Minutes(1), 1000)
     , ReservedSize(0)
     , Channel(0)
     , NumChannels(numChannels)
@@ -461,6 +464,208 @@ bool TPartition::ImportantConsumersNeedToKeepCurrentKey(const TDataKey& currentK
     return false;
 }
 
+bool TPartition::ImportantConsumersNeedToKeepLastKey(const TDataKey& currentKey, const TInstant now) const {
+    for (const auto& [name, userInfo] : UsersInfoStorage->ViewImportant()) {
+        const TDuration availabilityPeriod = GetAvailabilityPeriod(userInfo);
+        if (availabilityPeriod == TDuration::Zero()) {
+            continue;
+        }
+        const TInstant endOfLife = currentKey.Timestamp + availabilityPeriod;
+        if (endOfLife < now) {
+            continue;
+        }
+        ui64 curOffset = GetStartOffset();
+        if (userInfo.Offset >= 0) {
+            curOffset = userInfo.Offset;
+        }
+        if (curOffset < GetEndOffset()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void TPartition::FinalizeEmptyBlobEncoder(TPartitionBlobEncoder& encoder, ui64 startOffset, bool updateEndOffset) {
+    while (!encoder.HeadKeys.empty()) {
+        encoder.ScheduleDelete(encoder.HeadKeys.front());
+        encoder.HeadKeys.pop_front();
+    }
+    encoder.DataKeysBody.clear();
+    encoder.CompactedKeys.clear();
+    encoder.BodySize = 0;
+    encoder.Head.Clear();
+    encoder.Head.PartNo = 0;
+    encoder.NewHead.Clear();
+    encoder.NewHeadKey = TDataKey{TKey{}, 0, TInstant::Zero(), 0};
+    encoder.StartOffset = startOffset;
+    if (updateEndOffset) {
+        encoder.EndOffset = startOffset;
+        encoder.Head.Offset = startOffset;
+        encoder.NewHead.Offset = startOffset;
+    }
+    for (ui32 i = 0; i < TotalLevels; ++i) {
+        encoder.DataKeysHead[i].Clear();
+    }
+}
+
+bool TPartition::CleanUpBlobsInEncoder(TPartitionBlobEncoder& encoder, bool isCompactionZone, const TActorContext& ctx) {
+    if (encoder.DataKeysBody.empty() && encoder.HeadKeys.empty()) {
+        return false;
+    }
+
+    const auto& partConfig = Config.GetPartitionConfig();
+    const TDuration lifetimeLimit{TDuration::Seconds(partConfig.GetLifetimeSeconds())};
+    const bool hasStorageLimit = partConfig.HasStorageLimitBytes();
+    const auto now = ctx.Now();
+    const ui64 partitionEndOffset = GetEndOffset();
+
+    auto getEncoderDataSize = [&]() {
+        ui64 size = encoder.BodySize;
+        for (const auto& key : encoder.HeadKeys) {
+            size += key.Size;
+        }
+        return size;
+    };
+
+    auto getFwzFirstKey = [&]() -> const TDataKey* {
+        if (!BlobEncoder.DataKeysBody.empty()) {
+            return &BlobEncoder.DataKeysBody.front();
+        }
+        if (!BlobEncoder.HeadKeys.empty()) {
+            return &BlobEncoder.HeadKeys.front();
+        }
+        return nullptr;
+    };
+
+    auto isLastBlobInPartition = [&](bool hasMoreInEncoder) {
+        if (hasMoreInEncoder) {
+            return false;
+        }
+        if (isCompactionZone) {
+            return BlobEncoder.DataKeysBody.empty() && BlobEncoder.HeadKeys.empty();
+        }
+        return true;
+    };
+
+    auto updateStartOffsetFromKey = [&](const TKey& key) {
+        encoder.StartOffset = key.GetOffset();
+        if (key.GetPartNo() > 0) {
+            ++encoder.StartOffset;
+        }
+    };
+
+    auto updateStartOffsetFromFront = [&]() {
+        if (!encoder.DataKeysBody.empty()) {
+            updateStartOffsetFromKey(encoder.DataKeysBody.front().Key);
+        } else if (!encoder.HeadKeys.empty()) {
+            updateStartOffsetFromKey(encoder.HeadKeys.front().Key);
+        }
+    };
+
+    auto popFrontHead = [&]() {
+        encoder.PopFrontHeadKey();
+    };
+
+    auto canDrop = [&](const TDataKey& firstKey, const TDataKey* nextKey, bool isLastBlob) {
+        if (isLastBlob) {
+            if (ImportantConsumersNeedToKeepLastKey(firstKey, now)) {
+                return false;
+            }
+        } else {
+            Y_ABORT_UNLESS(nextKey);
+            if (ImportantConsumersNeedToKeepCurrentKey(firstKey, *nextKey, now)) {
+                return false;
+            }
+        }
+
+        if (hasStorageLimit) {
+            const auto dataSizeAfterDrop = getEncoderDataSize() - firstKey.Size;
+            if (dataSizeAfterDrop < partConfig.GetStorageLimitBytes()) {
+                return false;
+            }
+        } else if (now < firstKey.Timestamp + lifetimeLimit) {
+            return false;
+        }
+        return true;
+    };
+
+    auto finalizeIfEmpty = [&]() {
+        if (!encoder.DataKeysBody.empty() || !encoder.HeadKeys.empty()) {
+            return;
+        }
+        if (isCompactionZone) {
+            GapOffsets.clear();
+            GapSize = 0;
+        }
+        FinalizeEmptyBlobEncoder(encoder, partitionEndOffset, !isCompactionZone);
+    };
+
+    bool hasDrop = false;
+
+    while (!encoder.DataKeysBody.empty()) {
+        const auto& firstKey = encoder.DataKeysBody.front();
+        const bool hasMoreInEncoder = encoder.DataKeysBody.size() > 1 || !encoder.HeadKeys.empty();
+        const bool isLastBlob = isLastBlobInPartition(hasMoreInEncoder);
+        const TDataKey* nextKey = nullptr;
+        if (encoder.DataKeysBody.size() > 1) {
+            nextKey = &encoder.DataKeysBody[1];
+        } else if (!encoder.HeadKeys.empty()) {
+            nextKey = &encoder.HeadKeys.front();
+        } else if (isCompactionZone) {
+            nextKey = getFwzFirstKey();
+        }
+
+        if (!canDrop(firstKey, nextKey, isLastBlob)) {
+            break;
+        }
+
+        encoder.pop_front();
+
+        if (isCompactionZone && nextKey && !GapOffsets.empty()
+            && nextKey->Key.GetOffset() == GapOffsets.front().second) {
+            GapSize -= GapOffsets.front().second - GapOffsets.front().first;
+            GapOffsets.pop_front();
+        }
+
+        hasDrop = true;
+        finalizeIfEmpty();
+
+        if (isLastBlob) {
+            break;
+        }
+    }
+
+    while (encoder.DataKeysBody.empty() && !encoder.HeadKeys.empty()) {
+        const auto& firstKey = encoder.HeadKeys.front();
+        const bool hasMoreInEncoder = encoder.HeadKeys.size() > 1;
+        const bool isLastBlob = isLastBlobInPartition(hasMoreInEncoder);
+        const TDataKey* nextKey = nullptr;
+        if (encoder.HeadKeys.size() > 1) {
+            nextKey = &encoder.HeadKeys[1];
+        } else if (isCompactionZone) {
+            nextKey = getFwzFirstKey();
+        }
+
+        if (!canDrop(firstKey, nextKey, isLastBlob)) {
+            break;
+        }
+
+        popFrontHead();
+        hasDrop = true;
+        finalizeIfEmpty();
+
+        if (isLastBlob) {
+            break;
+        }
+    }
+
+    if (hasDrop) {
+        updateStartOffsetFromFront();
+    }
+
+    return hasDrop;
+}
+
 
 TInstant TPartition::GetEndWriteTimestamp() const {
     return EndWriteTimestamp;
@@ -505,10 +710,15 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     for (auto& avg : AvgQuotaBytes) {
         avg.Update(now);
     }
+    AvgQuotaMessages.Update(now);
 
     TryRunCompaction();
 
     AutopartitioningManager->CleanUp();
+
+    if (AppData()->FeatureFlags.GetEnableTopicRetentionDeleteLastBlob()) {
+        ProcessTxsAndUserActs(ctx);
+    }
 }
 
 void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
@@ -517,8 +727,8 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     TKeyPrefix ikey(TKeyPrefix::TypeMeta, Partition);
 
     NKikimrPQ::TPartitionMeta meta;
-    //meta.SetStartOffset(GetStartOffset());
-    //meta.SetEndOffset(Max(BlobEncoder.NewHead.GetNextOffset(), GetEndOffset()));
+    meta.SetStartOffset(GetStartOffset());
+    meta.SetEndOffset(GetEndOffset());
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
     meta.SetNextMessageIdDeduplicatorWAL(MessageIdDeduplicator.NextMessageIdDeduplicatorWAL);
@@ -564,7 +774,22 @@ bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& 
     return haveChanges;
 }
 
-bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorContext& ctx) {
+ui64 TPartition::GetCompactionZoneEmptyStartOffset() const {
+    if (!CompactionBlobEncoder.HeadKeys.empty()) {
+        const auto& key = CompactionBlobEncoder.HeadKeys.front().Key;
+        return key.GetOffset() + (key.GetPartNo() > 0 ? 1 : 0);
+    }
+    if (!BlobEncoder.DataKeysBody.empty()) {
+        return BlobEncoder.StartOffset;
+    }
+    if (!BlobEncoder.HeadKeys.empty()) {
+        const auto& key = BlobEncoder.HeadKeys.front().Key;
+        return key.GetOffset() + (key.GetPartNo() > 0 ? 1 : 0);
+    }
+    return GetEndOffset();
+}
+
+bool TPartition::CleanUpBlobsLegacy(TEvKeyValue::TEvRequest *request, const TActorContext& ctx) {
     if (GetStartOffset() == GetEndOffset() || CompactionBlobEncoder.DataKeysBody.size() <= 1) {
         return false;
     }
@@ -625,6 +850,41 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
     return true;
 }
 
+bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorContext& ctx) {
+    if (!AppData()->FeatureFlags.GetEnableTopicRetentionDeleteLastBlob()) {
+        return CleanUpBlobsLegacy(request, ctx);
+    }
+
+    Y_UNUSED(request);
+    if (Config.GetEnableCompactification()) {
+        return false;
+    }
+
+    bool hasDrop = CleanUpBlobsInEncoder(CompactionBlobEncoder, true, ctx);
+
+    if (CompactionBlobEncoder.DataKeysBody.empty() && CompactionBlobEncoder.HeadKeys.empty()) {
+        const ui64 compactionZoneEnd = GetCompactionZoneEmptyStartOffset();
+        CompactionBlobEncoder.StartOffset = compactionZoneEnd;
+        CompactionBlobEncoder.EndOffset = compactionZoneEnd;
+        CompactionBlobEncoder.Head.Offset = compactionZoneEnd;
+        CompactionBlobEncoder.Head.PartNo = 0;
+
+        hasDrop |= CleanUpBlobsInEncoder(BlobEncoder, false, ctx);
+    }
+
+    if (CompactionBlobEncoder.DataKeysBody.empty() && CompactionBlobEncoder.HeadKeys.empty()
+        && BlobEncoder.DataKeysBody.empty() && BlobEncoder.HeadKeys.empty()) {
+        const ui64 endOffset = GetEndOffset();
+        CompactionBlobEncoder.StartOffset = endOffset;
+        CompactionBlobEncoder.EndOffset = endOffset;
+        CompactionBlobEncoder.Head.Offset = endOffset;
+        CompactionBlobEncoder.Head.PartNo = 0;
+        BlobEncoder.StartOffset = endOffset;
+    }
+
+    return hasDrop;
+}
+
 void TPartition::Handle(TEvPQ::TEvMirrorerCounters::TPtr& ev, const TActorContext& /*ctx*/) {
     if (Mirrorer) {
         TabletCounters.Populate(ev->Get()->Counters);
@@ -681,7 +941,9 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         UsersInfoStorage->Clear(ctx);
     }
 
-    Send(ReadQuotaTrackerActor, new TEvents::TEvPoisonPill());
+    if (ReadQuotaTrackerActor) {
+        Send(ReadQuotaTrackerActor, new TEvents::TEvPoisonPill());
+    }
     if (!IsSupportive()) {
         Send(WriteQuotaTrackerActor, new TEvents::TEvPoisonPill());
     }
@@ -1430,10 +1692,10 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCommit> ev, con
 {
     if (PlanStep.Defined() && TxId.Defined()) {
         if (GetStepAndTxId(*ev) < GetStepAndTxId(*PlanStep, *TxId)) {
-            LOG_D("Send TEvTxDone (commit)" <<
+            LOG_D("Stale TEvTxCommit: persist tx meta then TEvTxDone" <<
                      " Step " << ev->Step <<
                      ", TxId " << ev->TxId);
-            ctx.Send(TabletActorId, MakeTxDone(ev->Step, ev->TxId).Release());
+            EnqueueStaleTxMetaPersist(std::move(ev), ctx);
             return;
         }
     }
@@ -1887,6 +2149,23 @@ void TPartition::Handle(TEvPQ::TEvUpdateReadMetrics::TPtr& ev, const TActorConte
     UsersInfoStorage->SetLastReadMetricsUpdateTime(ctx.Now());
 }
 
+void TPartition::Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const TActorContext& ctx) {
+    Y_UNUSED(ctx);
+    const auto* event = ev->Get();
+    TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE] += event->CPUUsage;
+
+    if (!UsersInfoStorage) {
+        return;
+    }
+
+    auto userInfo = UsersInfoStorage.Get()->GetIfExists(event->User);
+    if (!userInfo) {
+        return;
+    }
+
+    userInfo->ConsumerBatchProcessorCPUUsage += event->CPUUsage;
+}
+
 void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->IsInternal) {
         CompacterPartitionRequestInflight = false;
@@ -1967,6 +2246,14 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             continue;
         }
         bool haveChanges = false;
+
+        if (userInfo.ConsumerBatchProcessorCPUUsage) {
+            auto& counter = userInfo.LabeledCounters->GetCounters()[METRIC_CONSUMER_BATCH_PROCESSOR_CPU_USAGE];
+            counter.Set(counter.Get() + userInfo.ConsumerBatchProcessorCPUUsage);
+            userInfo.ConsumerBatchProcessorCPUUsage = 0;
+            haveChanges = true;
+        }
+
         const auto snapshot = CreateSnapshot(userInfo);
 
         auto ts = snapshot.LastCommittedMessage.WriteTimestamp.MilliSeconds();
@@ -2097,6 +2384,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     SET_METRICS_COUPLE(PartitionCountersLabeled, METRIC_GAPS_COUNT, gapsCount, METRIC_MAX_GAPS_COUNT);
 
     SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES, TotalPartitionWriteSpeed);
+    SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES, TotalPartitionWriteSpeedInMessages);
 
     ui32 id = METRIC_TOTAL_WRITE_SPEED_1;
     for (ui32 i = 0; i < AvgWriteBytes.size(); ++i) {
@@ -2123,9 +2411,27 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     }
     PQ_ENSURE(id == METRIC_MAX_QUOTA_SPEED_4 + 1);
 
+    ui64 bytesThrottledMicroseconds = 0;
+    ui64 messagesThrottledMicroseconds = 0;
+    bool hasWriteQuotaUsage = false;
+
     if (TotalPartitionWriteSpeed) {
-        ui64 quotaUsage = ui64(AvgQuotaBytes[1].GetValue()) * 1000000 / TotalPartitionWriteSpeed / 60;
-        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_USAGE, quotaUsage);
+        const ui64 avgQuotaBytes = AvgQuotaBytes[1].GetValue();
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES_USAGE, avgQuotaBytes);
+        bytesThrottledMicroseconds = avgQuotaBytes * 1000000 / TotalPartitionWriteSpeed / 60;
+        hasWriteQuotaUsage = true;
+    }
+
+    if (TotalPartitionWriteSpeedInMessages) {
+        const ui64 avgQuotaMessages = AvgQuotaMessages.GetValue();
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES_USAGE, avgQuotaMessages);
+        messagesThrottledMicroseconds = avgQuotaMessages * 1000000 / TotalPartitionWriteSpeedInMessages / 60;
+        hasWriteQuotaUsage = true;
+    }
+
+    if (hasWriteQuotaUsage) {
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_USAGE,
+            Max(bytesThrottledMicroseconds, messagesThrottledMicroseconds));
     }
 
     ui64 storageSize = StorageSize(ctx);
@@ -2642,6 +2948,8 @@ void TPartition::RunPersist() {
         PersistRequest = MakeHolder<TEvKeyValue::TEvRequest>();
     }
 
+    TryAppendStaleTxMetaWrites();
+
     if (ManageWriteTimestampEstimate) {
         WriteTimestampEstimate = now;
     }
@@ -2728,6 +3036,7 @@ void TPartition::RunPersist() {
             MsgsWrittenGrpc.Inc(writeInfo->MessagesWrittenTotal);
 
             WriteNewSizeFromSupportivePartitions += writeInfo->BytesWrittenTotal;
+            WriteNewMessagesFromSupportivePartitions += writeInfo->MessagesWrittenTotal;
 
             std::unordered_map<TString, std::pair<ui64, ui64>> perSourceMetrics;
             const auto& psm = writeInfo->WriteStats.PerSourceMetrics;
@@ -2949,30 +3258,101 @@ bool TPartition::HasPendingCommitsOrPendingWrites() const
 
 void TPartition::TryAddCmdWriteForTransaction(const TTransaction& tx)
 {
-    Y_ENSURE(!IsSupportive());
+    PQ_ENSURE(!IsSupportive());
 
     if (!tx.SerializedTx.Defined()) {
         return;
     }
 
-    PQ_ENSURE(PersistRequest);
-    TMaybe<ui64> txId = tx.GetTxId();
+    const TMaybe<ui64> txId = tx.GetTxId();
+    const TMaybe<ui64> step = tx.GetStep();
     PQ_ENSURE(txId.Defined());
+    PQ_ENSURE(step.Defined());
 
-    TString value;
-    PQ_ENSURE(tx.SerializedTx->SerializeToString(&value));
+    TStaleTxMetaEntry entry;
+    entry.Step = *step;
+    entry.TxId = *txId;
+    entry.SerializedTx = tx.SerializedTx;
+    entry.TabletConfig = tx.TabletConfig;
+    entry.BootstrapConfig = tx.BootstrapConfig;
+    entry.PartitionsData = tx.PartitionsData;
 
-    auto command = PersistRequest->Record.AddCmdWrite();
-    command->SetKey(GetTxKey(*txId, Partition.OriginalPartitionId));
-    command->SetValue(value);
-    command->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+    AddCmdWritePersistStaleTxMeta(entry);
+}
 
-    if (!tx.TabletConfig.Defined()) {
+void TPartition::EnqueueStaleTxMetaPersist(std::unique_ptr<TEvPQ::TEvTxCommit> ev, const TActorContext& ctx)
+{
+    if (!ev->SerializedTx.Defined()) {
+        ctx.Send(TabletActorId, MakeTxDone(ev->Step, ev->TxId).Release());
         return;
     }
 
+    TStaleTxMetaEntry entry;
+    entry.Step = ev->Step;
+    entry.TxId = ev->TxId;
+    entry.SerializedTx = std::move(ev->SerializedTx);
+    entry.TabletConfig = std::move(ev->TabletConfig);
+    entry.BootstrapConfig = std::move(ev->BootstrapConfig);
+    entry.PartitionsData = std::move(ev->PartitionsData);
+    StaleTxMetaPending[ev->TxId] = std::move(entry);
+
+    ProcessTxsAndUserActs(ctx);
+}
+
+void TPartition::TryAppendStaleTxMetaWrites()
+{
+    if (IsSupportive() || StaleTxMetaPending.empty()) {
+        return;
+    }
+
+    PQ_ENSURE(StaleTxMetaInFlight.empty())("StaleTxMetaInFlight", StaleTxMetaInFlight.size());
+
+    while (!StaleTxMetaPending.empty()) {
+        auto it = StaleTxMetaPending.begin();
+        const ui64 txId = it->first;
+        TStaleTxMetaEntry entry = std::move(it->second);
+        StaleTxMetaPending.erase(it);
+
+        AddCmdWritePersistStaleTxMeta(entry);
+        StaleTxMetaInFlight.emplace(txId, std::move(entry));
+    }
+}
+
+void TPartition::FlushStaleTxMetaDone(const TActorContext& ctx)
+{
+    for (const auto& [txId, entry] : StaleTxMetaInFlight) {
+        Y_UNUSED(txId);
+        ctx.Send(TabletActorId, MakeTxDone(entry.Step, entry.TxId).Release());
+    }
+    StaleTxMetaInFlight.clear();
+}
+
+void TPartition::AddCmdWritePersistStaleTxMeta(const TStaleTxMetaEntry& entry)
+{
+    PQ_ENSURE(!IsSupportive());
+
+    if (!entry.SerializedTx.Defined()) {
+        return;
+    }
+
+    PQ_ENSURE(PersistRequest);
+
+    TString value;
+    PQ_ENSURE(entry.SerializedTx->SerializeToString(&value));
+
+    auto command = PersistRequest->Record.AddCmdWrite();
+    command->SetKey(GetTxKey(entry.TxId, Partition.OriginalPartitionId));
+    command->SetValue(value);
+    command->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+
+    if (!entry.TabletConfig.Defined()) {
+        return;
+    }
+
+    PQ_ENSURE(entry.BootstrapConfig.Defined() && entry.PartitionsData.Defined());
+
     value.clear();
-    PQ_ENSURE(tx.TabletConfig->SerializeToString(&value));
+    PQ_ENSURE(entry.TabletConfig->SerializeToString(&value));
 
     command = PersistRequest->Record.AddCmdWrite();
     command->SetKey("_config");
@@ -2981,9 +3361,9 @@ void TPartition::TryAddCmdWriteForTransaction(const TTransaction& tx)
 
     const TActorContext& ctx = ActorContext();
 
-    const auto graph = MakePartitionGraph(*tx.TabletConfig);
-    for (const auto& partition : tx.TabletConfig->GetPartitions()) {
-        const auto explicitMessageGroups = CreateExplicitMessageGroups(*tx.BootstrapConfig, *tx.PartitionsData, graph, partition.GetPartitionId());
+    const auto graph = MakePartitionGraph(*entry.TabletConfig);
+    for (const auto& partition : entry.TabletConfig->GetPartitions()) {
+        const auto explicitMessageGroups = CreateExplicitMessageGroups(*entry.BootstrapConfig, *entry.PartitionsData, graph, partition.GetPartitionId());
 
         TSourceIdWriter sourceIdWriter(ESourceIdFormat::Proto);
         for (const auto& [id, mg] : *explicitMessageGroups) {
@@ -3453,6 +3833,9 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
             }
 
             Send(ReadQuotaTrackerActor, new TEvPQ::TEvConsumerRemoved(user));
+            if (BatchProcessorActor) {
+                Send(BatchProcessorActor, new TEvPQ::TEvConsumerRemoved(user));
+            }
         }
     }
 
@@ -3501,9 +3884,14 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         AutopartitioningManager->UpdateConfig(Config);
     }
 
-    Send(ReadQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
-    Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    if (ReadQuotaTrackerActor) {
+        Send(ReadQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    }
+    if (!IsSupportive()) {
+        Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    }
     TotalPartitionWriteSpeed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
+    TotalPartitionWriteSpeedInMessages = config.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond();
 
     CreateCompacter();
     InitializeMLPConsumers();
@@ -4013,7 +4401,9 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         auto counter = createSession ? COUNTER_PQ_CREATE_SESSION_OK : (dropSession ? COUNTER_PQ_DELETE_SESSION_OK : COUNTER_PQ_SET_CLIENT_OFFSET_OK);
         TabletCounters.Cumulative()[counter].Increment(1);
         auto *userInfoFull = UsersInfoStorage->GetIfExists(userInfo.User);
-        if (userInfoFull && userInfo.Offset > userInfoFull->GetReadOffset()) {
+        if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET &&
+                userInfoFull && userInfo.Offset > userInfoFull->GetReadOffset() &&
+                userInfoFull->WriteTimestamp > TInstant::Zero()) {
             auto timestamps = GetTime(*userInfoFull, userInfo.Offset);
             userInfoFull->UpdateReadOffset(userInfo.Offset - 1, timestamps.first, timestamps.second, ctx.Now(), true);
         }
@@ -4654,12 +5044,12 @@ void TPartition::Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr&) {
 IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration,
     const TActorId& blobCache, const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
     const NKikimrPQ::TPQTabletConfig& config, const std::shared_ptr<TTabletCountersBase>& counters, bool SubDomainOutOfSpace,
-    ui32 numChannels, const TActorId& writeQuoterActorId,
+    ui32 numChannels, const TActorId& writeQuoterActorId, const TActorId& batchProcessorActorId,
     TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl, bool newPartition
 ) {
 
     return new TPartition(tabletId, partition, tablet, tabletGeneration, blobCache, topicConverter, dcId, isServerless,
-        config, counters, SubDomainOutOfSpace, numChannels, writeQuoterActorId, samplingControl,
+        config, counters, SubDomainOutOfSpace, numChannels, writeQuoterActorId, batchProcessorActorId, samplingControl,
         newPartition);
 }
 

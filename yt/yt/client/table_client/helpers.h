@@ -52,7 +52,7 @@ TVersionedOwningRow YsonToVersionedRow(
     const std::vector<TTimestamp>& deleteTimestamps = {},
     const std::vector<TTimestamp>& extraWriteTimestamps = {});
 TUnversionedOwningRow YsonToKey(TStringBuf yson);
-TString KeyToYson(TUnversionedRow row);
+std::string KeyToYson(TUnversionedRow row);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -237,6 +237,11 @@ void FromUnversionedValue(
     THashMap<TKey, TValue>* map,
     TUnversionedValue unversionedValue)
     requires std::is_convertible<TValue*, ::google::protobuf::Message*>::value;
+template <class TKey, class TValue>
+void FromUnversionedValue(
+    THashMap<TKey, TValue>* map,
+    TUnversionedValue unversionedValue)
+    requires TUnversionedValueConversionTraits<TValue>::Scalar;
 
 //! Values get sequential ids 0..N-1 (unless wrapped into TValueWithId).
 template <class... Ts>

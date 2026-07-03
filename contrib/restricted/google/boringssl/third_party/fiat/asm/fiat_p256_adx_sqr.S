@@ -3,7 +3,6 @@
 #if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_X86_64) && \
     (defined(__APPLE__) || defined(__ELF__))
 
-.intel_syntax noprefix
 .text
 #if defined(__APPLE__)
 .private_extern _fiat_p256_adx_sqr
@@ -18,147 +17,147 @@ fiat_p256_adx_sqr:
 
 .cfi_startproc
 _CET_ENDBR
-push rbp
+pushq %rbp
 .cfi_adjust_cfa_offset 8
 .cfi_offset rbp, -16
-mov rbp, rsp
-mov rdx, [ rsi + 0x0 ]
-mulx r10, rax, [ rsi + 0x18 ]
-mulx rcx, r11, rdx
-mulx r9, r8, [ rsi + 0x8 ]
-mov [ rsp - 0x80 ], rbx
+movq %rsp, %rbp
+movq (%rsi), %rdx
+mulxq 0x18(%rsi), %rax, %r10
+mulxq %rdx, %r11, %rcx
+mulxq 0x8(%rsi), %r8, %r9
+movq %rbx, -0x80(%rsp)
 .cfi_offset rbx, -16-0x80
-xor rbx, rbx
-adox r8, r8
-mov [ rsp - 0x78 ], r12
+xorq %rbx, %rbx
+adoxq %r8, %r8
+movq %r12, -0x78(%rsp)
 .cfi_offset r12, -16-0x78
-mulx r12, rbx, [ rsi + 0x10 ]
-mov rdx, [ rsi + 0x8 ]
-mov [ rsp - 0x70 ], r13
+mulxq 0x10(%rsi), %rbx, %r12
+movq 0x8(%rsi), %rdx
+movq %r13, -0x70(%rsp)
 .cfi_offset r13, -16-0x70
-mov [ rsp - 0x68 ], r14
+movq %r14, -0x68(%rsp)
 .cfi_offset r14, -16-0x68
-mulx r14, r13, rdx
-mov [ rsp - 0x60 ], r15
+mulxq %rdx, %r13, %r14
+movq %r15, -0x60(%rsp)
 .cfi_offset r15, -16-0x60
-mov [ rsp - 0x58 ], rdi
-mulx rdi, r15, [ rsi + 0x10 ]
-adcx r12, r15
-mov [ rsp - 0x50 ], r11
-mulx r11, r15, [ rsi + 0x18 ]
-adcx r10, rdi
-mov rdi, 0x0
-adcx r11, rdi
+movq %rdi, -0x58(%rsp)
+mulxq 0x10(%rsi), %r15, %rdi
+adcxq %r15, %r12
+movq %r11, -0x50(%rsp)
+mulxq 0x18(%rsi), %r15, %r11
+adcxq %rdi, %r10
+movq $0x0, %rdi
+adcxq %rdi, %r11
 clc
-adcx rbx, r9
-adox rbx, rbx
-adcx rax, r12
-adox rax, rax
-adcx r15, r10
-adox r15, r15
-mov rdx, [ rsi + 0x10 ]
-mulx r12, r9, [ rsi + 0x18 ]
-adcx r9, r11
-adcx r12, rdi
-mulx r11, r10, rdx
+adcxq %r9, %rbx
+adoxq %rbx, %rbx
+adcxq %r12, %rax
+adoxq %rax, %rax
+adcxq %r10, %r15
+adoxq %r15, %r15
+movq 0x10(%rsi), %rdx
+mulxq 0x18(%rsi), %r9, %r12
+adcxq %r11, %r9
+adcxq %rdi, %r12
+mulxq %rdx, %r10, %r11
 clc
-adcx rcx, r8
-adcx r13, rbx
-adcx r14, rax
-adox r9, r9
-adcx r10, r15
-mov rdx, [ rsi + 0x18 ]
-mulx rbx, r8, rdx
-adox r12, r12
-adcx r11, r9
-mov rsi, [ rsp - 0x50 ]
-adcx r8, r12
-mov rax, 0x100000000
-mov rdx, rax
-mulx r15, rax, rsi
-adcx rbx, rdi
-adox rbx, rdi
-xor r9, r9
-adox rax, rcx
-adox r15, r13
-mulx rcx, rdi, rax
-adcx rdi, r15
-adox rcx, r14
-mov rdx, 0xffffffff00000001
-mulx r14, r13, rsi
-adox r14, r10
-adcx r13, rcx
-mulx r12, r10, rax
-adox r12, r11
-mov r11, r9
-adox r11, r8
-adcx r10, r14
-mov r8, r9
-adcx r8, r12
-mov rax, r9
-adcx rax, r11
-mov r15, r9
-adox r15, rbx
-mov rdx, 0x100000000
-mulx rcx, rbx, rdi
-mov r14, r9
-adcx r14, r15
-mov r12, r9
-adox r12, r12
-adcx r12, r9
-adox rbx, r13
-mulx r11, r13, rbx
-mov r15, 0xffffffff00000001
-mov rdx, r15
-mulx rsi, r15, rbx
-adox rcx, r10
-adox r11, r8
-mulx r8, r10, rdi
-adcx r13, rcx
-adox r8, rax
-adcx r10, r11
-adox rsi, r14
-mov rdi, r12
-mov rax, r9
-adox rdi, rax
-adcx r15, r8
-mov r14, rax
-adcx r14, rsi
-adcx rdi, r9
-dec r9
-mov rbx, r13
-sub rbx, r9
-mov rcx, 0xffffffff
-mov r11, r10
-sbb r11, rcx
-mov r8, r15
-sbb r8, rax
-mov rsi, r14
-sbb rsi, rdx
-sbb rdi, rax
-cmovc rbx, r13
-cmovc r8, r15
-cmovc r11, r10
-cmovc rsi, r14
-mov rdi, [ rsp - 0x58 ]
-mov [ rdi + 0x18 ], rsi
-mov [ rdi + 0x0 ], rbx
-mov [ rdi + 0x8 ], r11
-mov [ rdi + 0x10 ], r8
-mov rbx, [ rsp - 0x80 ]
+adcxq %r8, %rcx
+adcxq %rbx, %r13
+adcxq %rax, %r14
+adoxq %r9, %r9
+adcxq %r15, %r10
+movq 0x18(%rsi), %rdx
+mulxq %rdx, %r8, %rbx
+adoxq %r12, %r12
+adcxq %r9, %r11
+movq -0x50(%rsp), %rsi
+adcxq %r12, %r8
+movq $0x100000000, %rax
+movq %rax, %rdx
+mulxq %rsi, %rax, %r15
+adcxq %rdi, %rbx
+adoxq %rdi, %rbx
+xorq %r9, %r9
+adoxq %rcx, %rax
+adoxq %r13, %r15
+mulxq %rax, %rdi, %rcx
+adcxq %r15, %rdi
+adoxq %r14, %rcx
+movq $0xffffffff00000001, %rdx
+mulxq %rsi, %r13, %r14
+adoxq %r10, %r14
+adcxq %rcx, %r13
+mulxq %rax, %r10, %r12
+adoxq %r11, %r12
+movq %r9, %r11
+adoxq %r8, %r11
+adcxq %r14, %r10
+movq %r9, %r8
+adcxq %r12, %r8
+movq %r9, %rax
+adcxq %r11, %rax
+movq %r9, %r15
+adoxq %rbx, %r15
+movq $0x100000000, %rdx
+mulxq %rdi, %rbx, %rcx
+movq %r9, %r14
+adcxq %r15, %r14
+movq %r9, %r12
+adoxq %r12, %r12
+adcxq %r9, %r12
+adoxq %r13, %rbx
+mulxq %rbx, %r13, %r11
+movq $0xffffffff00000001, %r15
+movq %r15, %rdx
+mulxq %rbx, %r15, %rsi
+adoxq %r10, %rcx
+adoxq %r8, %r11
+mulxq %rdi, %r10, %r8
+adcxq %rcx, %r13
+adoxq %rax, %r8
+adcxq %r11, %r10
+adoxq %r14, %rsi
+movq %r12, %rdi
+movq %r9, %rax
+adoxq %rax, %rdi
+adcxq %r8, %r15
+movq %rax, %r14
+adcxq %rsi, %r14
+adcxq %r9, %rdi
+decq %r9
+movq %r13, %rbx
+subq %r9, %rbx
+movq $0xffffffff, %rcx
+movq %r10, %r11
+sbbq %rcx, %r11
+movq %r15, %r8
+sbbq %rax, %r8
+movq %r14, %rsi
+sbbq %rdx, %rsi
+sbbq %rax, %rdi
+cmovcq %r13, %rbx
+cmovcq %r15, %r8
+cmovcq %r10, %r11
+cmovcq %r14, %rsi
+movq -0x58(%rsp), %rdi
+movq %rsi, 0x18(%rdi)
+movq %rbx, (%rdi)
+movq %r11, 0x8(%rdi)
+movq %r8, 0x10(%rdi)
+movq -0x80(%rsp), %rbx
 .cfi_restore rbx
-mov r12, [ rsp - 0x78 ]
+movq -0x78(%rsp), %r12
 .cfi_restore r12
-mov r13, [ rsp - 0x70 ]
+movq -0x70(%rsp), %r13
 .cfi_restore r13
-mov r14, [ rsp - 0x68 ]
+movq -0x68(%rsp), %r14
 .cfi_restore r14
-mov r15, [ rsp - 0x60 ]
+movq -0x60(%rsp), %r15
 .cfi_restore r15
-pop rbp
+popq %rbp
 .cfi_restore rbp
 .cfi_adjust_cfa_offset -8
-ret
+retq
 .cfi_endproc
 #if defined(__ELF__)
 .size fiat_p256_adx_sqr, .-fiat_p256_adx_sqr

@@ -1,4 +1,5 @@
 """Pytest configuration and fixtures."""
+
 # 3rd party
 import pytest
 
@@ -10,6 +11,7 @@ except ImportError:
     @pytest.fixture
     def benchmark():
         """No-op benchmark fixture for environments without pytest-codspeed."""
+
         def _passthrough(func, *args, **kwargs):
             return func(*args, **kwargs)
         return _passthrough

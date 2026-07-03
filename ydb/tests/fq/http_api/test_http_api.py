@@ -6,6 +6,7 @@ import logging
 import os
 import pytest
 import re
+import time
 import yaml
 from yaml.loader import SafeLoader
 
@@ -103,7 +104,19 @@ class TestHttpApi(TestBase):
 
             assert client.get_query_status(query_id) in ["STARTING", "RUNNING", "COMPLETED", "COMPLETING"]
 
-            response = client.stop_query(query_id)
+            # `select 1` after restart may be in the transient COMPLETING state, which
+            # rejects stop_query until the query reaches a terminal status.
+            for _ in range(10):
+                try:
+                    response = client.stop_query(query_id)
+                    break
+                except YQHttpClientException as e:
+                    if e.details and "COMPLETING" in str(e.details):
+                        time.sleep(0.1)
+                        continue
+                    raise
+            else:
+                pytest.fail("stop_query did not succeed after 10 retries while query remained in COMPLETING state")
             assert response.status_code == 204
 
     def test_empty_query(self):
@@ -112,7 +125,7 @@ class TestHttpApi(TestBase):
                 YQHttpClientException,
                 match=re.escape(
                     """Error occurred. http code=400, status=400010, msg=BAD_REQUEST, details=[{'message': """
-                    """"text's length is not in [1; 102400]", 'issue_code': 200800, 'severity': 'ERROR', 'issues': []}]"""
+                    """"text's length is not in [1; 1024000]", 'issue_code': 200800, 'severity': 'ERROR', 'issues': []}]"""
                 ),
             ):  # noqa
                 client.create_query()

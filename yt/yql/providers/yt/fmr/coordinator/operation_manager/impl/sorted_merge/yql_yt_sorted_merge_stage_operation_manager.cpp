@@ -21,6 +21,46 @@ public:
         const auto& fmrOperationSpec = context.FmrOperationSpec;
         const auto& partIdsForTables = context.PartIdsForTables;
         const auto& partIdStats = context.PartIdStats;
+        const auto& clusterConnections = context.ClusterConnections;
+
+        std::vector<TYtTableRef> ytInputTables;
+        std::vector<TFmrTableRef> fmrInputTables;
+        for (const auto& table : operationParams.Input) {
+            if (const auto* ytTable = std::get_if<TYtTableRef>(&table)) {
+                ytInputTables.emplace_back(*ytTable);
+            } else {
+                fmrInputTables.emplace_back(std::get<TFmrTableRef>(table));
+            }
+        }
+
+        if (!ytInputTables.empty() && !fmrInputTables.empty()) {
+            return TPartitionResult{.Error = TFmrError{
+                .Component = EFmrComponent::Coordinator,
+                .Reason = EFmrErrorReason::FallbackOperation,
+                .ErrorMessage = "SortedMerge does not support mixed YT and FMR inputs"
+            }};
+        }
+
+        if (!ytInputTables.empty()) {
+            YQL_ENSURE(ytInputTables.size() == 1, "SortedMerge supports at most one YT input table");
+            auto ytPartitionerSettings = GetYtPartitionerSettings(fmrOperationSpec);
+            ytPartitionerSettings.PartitionMode = NYT::ETablePartitionMode::Ordered;
+            auto [ytTasks, ytPartitionStatus] = context.YtCoordinatorService->PartitionYtTables(ytInputTables, clusterConnections, ytPartitionerSettings);
+            if (!ytPartitionStatus) {
+                YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: failed to partition single YT input table for SortedMerge";
+                return TPartitionResult{.Error = TFmrError{
+                    .Component = EFmrComponent::Coordinator,
+                    .Reason = EFmrErrorReason::FallbackOperation,
+                    .ErrorMessage = "Failed to partition single YT input table for SortedMerge"
+                }};
+            }
+            std::vector<TTaskTableInputRef> taskInputs;
+            taskInputs.reserve(ytTasks.size());
+            for (auto& ytTask : ytTasks) {
+                taskInputs.emplace_back(TTaskTableInputRef{.Inputs = {std::move(ytTask)}});
+            }
+            return TPartitionResult{.TaskInputs = std::move(taskInputs)};
+        }
 
         auto sortedPartitionerSettings = GetSortedPartitionerSettings(fmrOperationSpec);
 

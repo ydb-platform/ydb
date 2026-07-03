@@ -4,7 +4,6 @@
 #include "dq_compute_actor_channels.h"
 #include "dq_compute_actor_checkpoints.h"
 #include "dq_compute_actor_metrics.h"
-#include "dq_compute_actor_watermarks.h"
 #include "dq_compute_actor.h"
 #include "dq_compute_issues_buffer.h"
 #include "dq_compute_memory_quota.h"
@@ -13,6 +12,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <ydb/library/yql/dq/runtime/streaming/dq_watermark_generator_tracker.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
@@ -24,6 +24,7 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/actors/compute/dq_request_context.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -137,12 +138,21 @@ protected:
         RlNoResourceTag = 102,
     };
 
+    // See the comment on the call site in Bootstrap(): we re-arm the timeout wakeup in
+    // bounded chunks so the scheduler heap never holds a far-future entry per CA.
+    static constexpr TDuration TimeoutChunkSize = TDuration::Seconds(15);
+
+    void ScheduleNextTimeoutChunk(TDuration remaining) {
+        this->Schedule(Min(TimeoutChunkSize, remaining),
+            new NActors::TEvents::TEvWakeup(EEvWakeupTag::TimeoutTag));
+    }
+
 public:
     void Bootstrap() {
         try {
             StartTime = TInstant::Now();
             InitializeLogPrefix(); // re-initialize with SelfId
-            CA_LOG_D("Start compute actor " << this->SelfId() << ", task: " << Task.GetId());
+            CA_LOG_D("Start compute actor " << this->SelfId() << ", task: " << Task.GetId() << ", running: " << Running);
 
             if (Task.GetDqChannelVersion() <= 1u) {
                 Channels = new TDqComputeActorChannels(this->SelfId(), TxId, Task, !RuntimeSettings.FailOnUndelivery,
@@ -154,7 +164,12 @@ public:
 
             if (RuntimeSettings.Timeout) {
                 CA_LOG_D("Set execution timeout " << *RuntimeSettings.Timeout);
-                this->Schedule(*RuntimeSettings.Timeout, new NActors::TEvents::TEvWakeup(EEvWakeupTag::TimeoutTag));
+                // Schedule a chunked timeout wakeup instead of a single full-timeout one.
+                // A full-timeout Schedule (potentially many minutes/hours ahead) pins an entry
+                // in the actor system's scheduler heap per CA until it fires, even when the CA
+                // dies normally well before the deadline.
+                TimeoutDeadline = NActors::TActivationContext::Monotonic() + *RuntimeSettings.Timeout;
+                ScheduleNextTimeoutChunk(*RuntimeSettings.Timeout);
             }
 
             if (auto reportStatsSettings = RuntimeSettings.ReportStatsSettings) {
@@ -204,6 +219,7 @@ protected:
         , CheckpointingMode(GetTaskCheckpointingMode(Task))
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
         , WatermarksTracker(LogPrefix, taskCounters)
+        , WatermarkGeneratorTracker(LogPrefix, taskCounters)
         , TaskCounters(taskCounters)
         , MetricsReporter(taskCounters)
         , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, std::move(traceId), "ComputeActor")
@@ -268,6 +284,7 @@ protected:
         LogPrefix = std::move(prefixBuilder);
 
         WatermarksTracker.SetLogPrefix(LogPrefix);
+        WatermarkGeneratorTracker.SetLogPrefix(LogPrefix);
         for (auto& [_, info]: InputTransformsMap) {
             info.SetLogPrefix(LogPrefix);
         }
@@ -437,6 +454,10 @@ protected:
                         outputChannel.Finished = true;
                     } else {
                         ProcessOutputsState.HasDataToSend = true;
+                        CA_LOG_T("Wait for finish of channelId: " << channelId
+                            << ", Push/Pop=" << outputChannel.Channel->GetPushStats().Bytes << '/' << outputChannel.Channel->GetPopStats().Bytes
+                            << ", EarlyFinish=" << outputChannel.EarlyFinish
+                        );
                     }
                 }
             } else {
@@ -810,21 +831,6 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
 
     // void InjectBarrierToOutputs(const NDqProto::TCheckpoint& checkpoint) is pure and must be overriden in a derived class
 
-    void ResumeInputsByWatermark(TInstant watermark) {
-        for (auto& [id, sourceInfo] : SourcesMap) {
-            if (sourceInfo.WatermarksMode == NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED) {
-                continue;
-            }
-
-            const auto channelId = id;
-            CA_LOG_T("Resume source " << channelId << " by completed watermark");
-
-            sourceInfo.ResumeByWatermark(watermark);
-        }
-        // sources or input channels was unpaused, trigger new poll
-        ResumeExecution(EResumeSource::CAResumeByWatermark);
-    }
-
     void ResumeInputsByCheckpoint() override final {
         for (auto& [id, channelInfo] : InputChannelsMap) {
             if (channelInfo.PendingCheckpoint) {
@@ -1170,6 +1176,15 @@ protected:
         auto tag = (EEvWakeupTag) ev->Get()->Tag;
         switch (tag) {
             case EEvWakeupTag::TimeoutTag: {
+                // re-arm until the configured deadline has actually elapsed.
+                if (RuntimeSettings.Timeout) {
+                    const TMonotonic now = NActors::TActivationContext::Monotonic();
+                    if (now < TimeoutDeadline) {
+                        ScheduleNextTimeoutChunk(TimeoutDeadline - now);
+                        break;
+                    }
+                }
+
                 if (ComputeActorSpan) {
                     ComputeActorSpan.EndError(
                         TStringBuilder()
@@ -1189,7 +1204,7 @@ protected:
                 break;
             }
             case EEvWakeupTag::PeriodicStatsTag: {
-                if (Running && State == NDqProto::COMPUTE_STATE_EXECUTING) {
+                if (State == NDqProto::COMPUTE_STATE_EXECUTING || State == NDqProto::COMPUTE_STATE_UNKNOWN) {
                     ReportStats();
                     this->Schedule(RuntimeSettings.ReportStatsSettings->MaxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
                 }
@@ -1250,7 +1265,9 @@ protected:
         if (!Checkpoints) {
             Checkpoints = new TDqComputeActorCheckpoints(this->SelfId(), TxId, Task, this);
             Checkpoints->Init(this->SelfId(), this->RegisterWithSameMailbox(Checkpoints));
-            Channels->SetCheckpointsSupport();
+            if (Channels) {
+                Channels->SetCheckpointsSupport();
+            }
         }
         TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Checkpoints->SelfId(), ev->Sender, ev->Release().Release());
         Checkpoints->Receive(handle);
@@ -1441,7 +1458,6 @@ protected:
             html << "<h4>Input Transform Id: " << id << "</h4>";
             DUMP(info, LogPrefix);
             DUMP(info, Type);
-            html << "PendingWatermark: " << !!info.PendingWatermark << " " << (!info.PendingWatermark ? TString{} : info.PendingWatermark->ToString()) << "<br />";
             html << "WatermarksMode: " << NDqProto::EWatermarksMode_Name(info.WatermarksMode) << "<br />";
             html << "FreeSpace: " << info.GetFreeSpace() << "<br />";
             auto buffer = info.Buffer;
@@ -1587,7 +1603,6 @@ protected:
             DUMP(info, LogPrefix);
             DUMP(info, Index);
             DUMP(info, Finished);
-            html << "IsPausedByWatermark: " << info.IsPausedByWatermark() << "<br />";
             html << "FreeSpace: " << info.GetFreeSpace() << "<br />";
             if (info.AsyncInput) {
                 const auto& input = *info.AsyncInput;
@@ -1620,6 +1635,7 @@ protected:
                 str << "  TaskId: " << Task.GetId() << Endl;
                 str << "  StageId: " << Task.GetStageId() << Endl;
                 str << "  State: " << NDqProto::EComputeState_Name(State) << Endl;
+                str << "  Running: " << this->Running << Endl;
                 str << "  ExecuterId: ";
                 HREF(NActors::NMon::BuildActorsLink("kqp_node", cgi, {{"ex", ToString(ExecuterId)}, {"ca", ""}, {"sf", ""}, {"view", ""}}))  {
                     str << ExecuterId;
@@ -2070,11 +2086,9 @@ protected:
             return pollResult;
         }
 
-        auto* watermarksTracker = std::is_same_v<TDerived, TDqAsyncComputeActor> ? &WatermarksTracker : nullptr;
-
         CA_LOG_T("Poll inputs");
         for (auto& [inputIndex, transform] : InputTransformsMap) {
-            if (auto resume = transform.PollAsyncInput(MetricsReporter, watermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
+            if (auto resume = transform.PollAsyncInput(MetricsReporter, RuntimeSettings.AsyncInputPushLimit)) {
                 if (!pollResult || *pollResult == EResumeSource::CAPollAsyncNoSpace) {
                     pollResult = resume;
                 }
@@ -2089,7 +2103,7 @@ protected:
 
         CA_LOG_T("Poll sources");
         for (auto& [inputIndex, source] : SourcesMap) {
-            if (auto resume =  source.PollAsyncInput(MetricsReporter, watermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
+            if (auto resume =  source.PollAsyncInput(MetricsReporter, RuntimeSettings.AsyncInputPushLimit)) {
                 if (!pollResult || *pollResult == EResumeSource::CAPollAsyncNoSpace) {
                     pollResult = resume;
                 }
@@ -2189,6 +2203,9 @@ protected:
                 ResumeExecution(EResumeSource::CAWatermarkIdleness);
             }
         }
+        if (WatermarkGeneratorTracker.ProcessIdlenessCheck(checkTime)) {
+            ResumeExecution(EResumeSource::CAWatermarkIdleness);
+        }
         ScheduleIdlenessCheck();
     }
 
@@ -2213,6 +2230,11 @@ protected:
             CA_LOG_T("Schedule next idleness check at " << checkTime);
             this->Schedule(*checkTime, new TEvPrivate::TEvCheckIdleness(*checkTime));
         }
+    }
+
+    void ScheduleSourceIdlenessCheck(TInstant checkTime) {
+        CA_LOG_T("Schedule next source idleness check at " << checkTime);
+        this->Schedule(checkTime, new TEvPrivate::TEvCheckIdleness(checkTime));
     }
 
     bool AllAsyncOutputsFinished() const {
@@ -2339,6 +2361,10 @@ protected:
 
 private:
     void InitializeWatermarks() {
+        if constexpr (std::is_same_v<TDerived, TDqAsyncComputeActor>) {
+            return;
+        }
+
         TInstant now = TInstant::Now();
         for (const auto& [id, source] : SourcesMap) {
             if (source.WatermarksMode == NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT) {
@@ -2655,7 +2681,10 @@ public:
 protected:
     void ReportStats() {
         auto now = TInstant::Now();
-        if (State != NDqProto::COMPUTE_STATE_EXECUTING || !RuntimeSettings.ReportStatsSettings || now - LastSendStatsTime < RuntimeSettings.ReportStatsSettings->MinInterval) {
+        if ((State != NDqProto::COMPUTE_STATE_EXECUTING && !Task.GetCreateSuspended())      // non streaming queries
+            || ((State != NDqProto::COMPUTE_STATE_UNKNOWN && State != NDqProto::COMPUTE_STATE_EXECUTING) && Task.GetCreateSuspended())
+            || !RuntimeSettings.ReportStatsSettings
+            || now - LastSendStatsTime < RuntimeSettings.ReportStatsSettings->MinInterval) {
             return;
         }
         auto evState = std::make_unique<TEvDqCompute::TEvState>();
@@ -2726,6 +2755,7 @@ protected:
 
     THolder<TDqMemoryQuota> MemoryQuota;
     TDqComputeActorWatermarks WatermarksTracker;
+    TDqWatermarkGeneratorTracker WatermarkGeneratorTracker;
     ::NMonitoring::TDynamicCounterPtr TaskCounters;
     TDqComputeActorMetrics MetricsReporter;
     NWilson::TSpan ComputeActorSpan;
@@ -2733,6 +2763,7 @@ protected:
     TDuration InputTransformCpuTime;
 private:
     TInstant StartTime;
+    TMonotonic TimeoutDeadline;
     bool Running = true;
     TInstant LastSendStatsTime;
     bool PassExceptions = false;

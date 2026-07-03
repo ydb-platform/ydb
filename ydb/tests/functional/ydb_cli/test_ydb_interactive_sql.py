@@ -12,6 +12,7 @@ import yaml
 from pathlib import Path
 from typing import List, Optional
 from ydb.tests.functional.ydb_cli.ydb_cli_interactive_helpers import BaseInteractiveTest
+from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin
 
 logger = logging.getLogger(__name__)
 
@@ -918,3 +919,656 @@ class TestInteractiveHighlightAndCompletion(BaseSqlInteractiveTest):
         finally:
             self._discard_and_exit(child)
             child.close()
+
+
+# =============================================================================
+# Interactive transactions (BEGIN / COMMIT / ROLLBACK)
+# =============================================================================
+
+
+class TestInteractiveTransactions(BaseSqlInteractiveTest):
+    """Verify interactive transaction control via Query service session (experimental ydb client only)."""
+
+    CLI_BINARY_ENV = "YDB_CLI_EXPERIMENTAL_BINARY"
+
+    @classmethod
+    def run_interactive_session(cls, queries: List[str], tmp_path: Path, extra_args: List[str] = None, endpoint: Optional[str] = None) -> BaseInteractiveTest.ExecutionResult:
+        import yatest.common
+
+        extra_args = cls._with_profile_isolation(extra_args)
+
+        stdin_content = "\n".join(queries) + "\n"
+        stdin_path = str(tmp_path / f"interactive_stdin_{uuid.uuid4().hex}.txt")
+        with open(stdin_path, "w") as f:
+            f.write(stdin_content)
+
+        with open(stdin_path, "r") as stdin_file:
+            execution = yatest.common.execute(
+                [
+                    ydb_bin(cls.CLI_BINARY_ENV),
+                    "--endpoint", endpoint or cls.grpc_endpoint(),
+                    "--database", cls.root_dir,
+                ] + (extra_args or []),
+                stdin=stdin_file,
+                check_exit_code=False,
+            )
+
+        logger.debug("stdin:\n%s", stdin_content)
+        return cls.ExecutionResult(
+            stdout=execution.std_out.decode("utf-8") if execution.std_out else "",
+            stderr=execution.std_err.decode("utf-8") if execution.std_err else "",
+            exit_code=execution.exit_code,
+        )
+
+    @staticmethod
+    def _combined_output(result: "BaseInteractiveTest.ExecutionResult") -> str:
+        return result.stdout + result.stderr
+
+    @classmethod
+    def _combined_lower(cls, result: "BaseInteractiveTest.ExecutionResult") -> str:
+        return cls._combined_output(result).lower()
+
+    def _assert_show_create_table_ran(self, result: "BaseInteractiveTest.ExecutionResult") -> None:
+        """SHOW CREATE TABLE returned DDL for the fixture table (see create_table)."""
+        combined = self._combined_lower(result)
+        assert "cannot be executed inside an interactive transaction" not in combined
+        assert "create table" in combined
+        assert "`id`" in combined
+        assert "`name`" in combined
+        assert "primary key" in combined
+        assert self.tmp_path.name.lower() in combined
+
+    @staticmethod
+    def _assert_stdout_contains(result: "BaseInteractiveTest.ExecutionResult", *values: str) -> None:
+        for value in values:
+            assert value in result.stdout
+
+    @staticmethod
+    def _assert_combined_has_error(combined_lower: str) -> None:
+        """YDB/CLI errors are wording-dependent; match a small stable set."""
+        assert any(
+            marker in combined_lower
+            for marker in (
+                "error",
+                "failed",
+                "not found",
+                "does not exist",
+                "path not found",
+                "unknown",
+            )
+        )
+
+    # ------------------------------------------------------------------
+    # Happy path: BEGIN / COMMIT / ROLLBACK forms
+    # ------------------------------------------------------------------
+
+    def test_bare_begin_commit_select(self):
+        result = self.run_interactive_session(
+            ["BEGIN", "SELECT 1;", "COMMIT", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "BEGIN" in result.stdout
+        assert "COMMIT" in result.stdout
+        assert "1" in result.stdout
+
+    def test_begin_with_ydb_tx_mode(self):
+        # snapshot-ro is used here (and in similar tests below) instead of
+        # read-committed-rw because read-committed-rw is gated by server-side
+        # configuration and is not enabled in the default CI YDB setup.
+        result = self.run_interactive_session(
+            ["BEGIN snapshot-ro", "SELECT 3;", "COMMIT", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "BEGIN" in result.stdout
+        assert "COMMIT" in result.stdout
+        assert "3" in result.stdout
+
+    def test_begin_transaction_with_ydb_tx_mode(self):
+        result = self.run_interactive_session(
+            ["BEGIN TRANSACTION serializable-rw", "SELECT 11;", "COMMIT", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "BEGIN" in result.stdout
+        assert "COMMIT" in result.stdout
+
+    def test_rollback(self):
+        result = self.run_interactive_session(
+            ["BEGIN", "SELECT 4;", "ROLLBACK", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "ROLLBACK" in result.stdout
+        assert "4" in result.stdout
+
+    def test_rollback_transaction(self):
+        result = self.run_interactive_session(
+            ["BEGIN", "SELECT 41;", "ROLLBACK TRANSACTION", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "ROLLBACK" in result.stdout
+
+    def test_lowercase_keywords(self):
+        """TCL keywords must be case-insensitive."""
+        result = self.run_interactive_session(
+            ["begin", "SELECT 12;", "commit", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "BEGIN" in result.stdout
+        assert "COMMIT" in result.stdout
+
+    # ------------------------------------------------------------------
+    # Trailing semicolons
+    # ------------------------------------------------------------------
+
+    def test_trailing_semicolon_in_begin(self):
+        result = self.run_interactive_session(
+            ["BEGIN;", "SELECT 21;", "COMMIT", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "BEGIN" in result.stdout
+        assert "COMMIT" in result.stdout
+
+    def test_trailing_semicolon_in_begin_with_mode(self):
+        result = self.run_interactive_session(
+            ["BEGIN snapshot-ro;", "SELECT 22;", "COMMIT", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "BEGIN" in result.stdout
+        assert "COMMIT" in result.stdout
+
+    def test_trailing_semicolon_in_commit(self):
+        result = self.run_interactive_session(
+            ["BEGIN", "SELECT 23;", "COMMIT;", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "COMMIT" in result.stdout
+
+    def test_trailing_semicolon_in_rollback(self):
+        result = self.run_interactive_session(
+            ["BEGIN", "SELECT 24;", "ROLLBACK;", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "ROLLBACK" in result.stdout
+
+    # ------------------------------------------------------------------
+    # Modes that the Query service rejects for interactive transactions
+    # ------------------------------------------------------------------
+
+    def test_online_ro_rejected_as_interactive_mode(self):
+        """online-ro is one-shot only; BEGIN must reject it client-side with a hint."""
+        result = self.run_interactive_session(
+            ["BEGIN online-ro", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        # Specific diagnostic must mention --tx-mode hint, not the generic
+        # "unknown mode" path (which would imply the user mistyped).
+        assert "online-ro" in combined
+        assert "--tx-mode" in combined
+        assert "BEGIN" not in result.stdout
+
+    def test_stale_ro_rejected_as_interactive_mode(self):
+        """stale-ro is one-shot only; BEGIN must reject it client-side with a hint."""
+        result = self.run_interactive_session(
+            ["BEGIN stale-ro", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "stale-ro" in combined
+        assert "--tx-mode" in combined
+        assert "BEGIN" not in result.stdout
+
+    def test_begin_rejects_trailing_tokens(self):
+        """Extra tokens after a supported mode must not open a transaction."""
+        result = self.run_interactive_session(
+            ["BEGIN serializable-rw extra", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = self._combined_lower(result)
+        assert "unknown" in combined or "malformed" in combined
+        assert "BEGIN" not in result.stdout
+        assert "Supported modes:" in self._combined_output(result)
+
+    # ------------------------------------------------------------------
+    # Negative parsing: rejected forms
+    # ------------------------------------------------------------------
+
+    def test_invalid_mode_rejected(self):
+        result = self.run_interactive_session(
+            ["BEGIN garbage-mode", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = self._combined_lower(result)
+        assert "unknown" in combined or "malformed" in combined
+        assert "BEGIN" not in result.stdout
+
+    def test_psql_isolation_level_syntax_rejected(self):
+        """The PostgreSQL-style "ISOLATION LEVEL READ COMMITTED" form is not supported.
+
+        Only YDB-native mode names are accepted; using the psql wording must
+        produce a parsing error and leave no transaction open.
+        """
+        result = self.run_interactive_session(
+            [
+                "BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED",
+                "exit",
+            ],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = self._combined_lower(result)
+        assert "unknown" in combined or "malformed" in combined
+        assert "BEGIN" not in result.stdout
+
+    def test_draft_tcl_keywords_from_pr_41859_not_supported(self):
+        """Legacy TCL from the draft PR must not open or commit interactive transactions."""
+        # Not recognized as BEGIN — goes to YQL, no TCL BEGIN acknowledgement.
+        result = self.run_interactive_session(
+            ["START TRANSACTION", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "BEGIN" not in result.stdout
+
+        # Parsed as BEGIN with unknown mode token WORK.
+        result = self.run_interactive_session(
+            ["BEGIN WORK", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "unknown" in combined.lower() or "malformed" in combined.lower()
+        assert "BEGIN" not in result.stdout
+
+        # END / COMMIT WORK / ROLLBACK WORK are not COMMIT/ROLLBACK aliases.
+        result = self.run_interactive_session(
+            ["BEGIN", "SELECT 1;", "END", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "COMMIT" not in result.stdout
+
+        result = self.run_interactive_session(
+            ["BEGIN", "SELECT 1;", "COMMIT WORK", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "COMMIT" not in result.stdout
+
+        result = self.run_interactive_session(
+            ["BEGIN", "SELECT 1;", "ROLLBACK WORK", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "ROLLBACK" not in result.stdout
+
+    def test_begin_word_boundary(self):
+        """An identifier starting with the letters BEGIN must not be parsed as BEGIN."""
+        result = self.run_interactive_session(
+            ['SELECT 1 AS BEGINNING;', "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        # Must not produce TCL-related diagnostics.
+        combined = result.stdout + result.stderr
+        assert "no active transaction" not in combined.lower()
+        assert "already a transaction" not in combined.lower()
+        assert "BEGINNING" in result.stdout
+
+    # ------------------------------------------------------------------
+    # State-machine errors
+    # ------------------------------------------------------------------
+
+    def test_commit_without_transaction_fails(self):
+        result = self.run_interactive_session(["COMMIT", "exit"], self.tmp_path)
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "no active transaction" in combined.lower()
+
+    def test_rollback_without_transaction_fails(self):
+        result = self.run_interactive_session(["ROLLBACK", "exit"], self.tmp_path)
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "no active transaction" in combined.lower()
+
+    def test_nested_begin_fails(self):
+        result = self.run_interactive_session(
+            ["BEGIN", "BEGIN", "ROLLBACK", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "already a transaction" in combined.lower()
+
+    def test_exit_with_open_transaction_warns(self):
+        result = self.run_interactive_session(
+            ["BEGIN", "SELECT 1;", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "open transaction" in combined.lower()
+
+    # ------------------------------------------------------------------
+    # Real DML rollback / commit semantics
+    # ------------------------------------------------------------------
+
+    def test_rollback_actually_reverts_dml(self):
+        """ROLLBACK after UPSERT must leave no row in the table."""
+        marker_id = 7777
+        marker_name = "rollback-marker"
+        result = self.run_interactive_session(
+            [
+                "BEGIN",
+                'UPSERT INTO `{}` (id, name) VALUES ({}u, "{}");'.format(
+                    self.table_path, marker_id, marker_name
+                ),
+                "ROLLBACK",
+                "SELECT name FROM `{}` WHERE id = {}u;".format(self.table_path, marker_id),
+                "exit",
+            ],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "ROLLBACK" in result.stdout
+        assert marker_name not in result.stdout
+
+    def test_select_after_rollback_runs_outside_transaction(self):
+        """After ROLLBACK the REPL must not reuse the closed transaction id."""
+        result = self.run_interactive_session(
+            ["BEGIN", "SELECT 1;", "ROLLBACK", "SELECT 2;", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "Transaction not found" not in combined
+        assert "ROLLBACK" in result.stdout
+        assert "2" in result.stdout
+
+    def test_commit_actually_persists_dml(self):
+        """COMMIT after UPSERT must persist the row."""
+        marker_id = 7778
+        marker_name = "commit-marker"
+        result = self.run_interactive_session(
+            [
+                "BEGIN",
+                'UPSERT INTO `{}` (id, name) VALUES ({}u, "{}");'.format(
+                    self.table_path, marker_id, marker_name
+                ),
+                "COMMIT",
+                "SELECT name FROM `{}` WHERE id = {}u;".format(self.table_path, marker_id),
+                "exit",
+            ],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "COMMIT" in result.stdout
+        assert marker_name in result.stdout
+
+    def test_sequential_transactions(self):
+        """Driver/session must be cleanly recreated between transactions."""
+        result = self.run_interactive_session(
+            [
+                "BEGIN", "SELECT 51;", "COMMIT",
+                "BEGIN", "SELECT 52;", "COMMIT",
+                "BEGIN", "SELECT 53;", "ROLLBACK",
+                "exit",
+            ],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        # All three TCL boundaries must have fired.
+        assert result.stdout.count("BEGIN") >= 3
+        assert result.stdout.count("COMMIT") >= 2
+        assert result.stdout.count("ROLLBACK") >= 1
+        self._assert_stdout_contains(result, "51", "52", "53")
+
+    def test_ddl_rejected_inside_transaction(self):
+        """CREATE TABLE must not be sent to the server while a transaction is open."""
+        ddl_table = f"ddl_blocked_{uuid.uuid4().hex}"
+        result = self.run_interactive_session(
+            [
+                "BEGIN",
+                f"CREATE TABLE `{ddl_table}` (id Uint64, PRIMARY KEY (id));",
+                "ROLLBACK",
+                f"SELECT COUNT(*) FROM `{ddl_table}`;",
+                "exit",
+            ],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = self._combined_lower(result)
+        assert "cannot be executed inside an interactive transaction" in combined
+        assert "ROLLBACK" in result.stdout
+        # CREATE was blocked; the table must not exist for the post-ROLLBACK scan.
+        self._assert_combined_has_error(combined)
+
+    def test_show_create_allowed_inside_transaction(self):
+        """SHOW CREATE TABLE is read-only DDL and must pass through inside a transaction."""
+        result = self.run_interactive_session(
+            [
+                "BEGIN",
+                "SHOW CREATE TABLE `{}`;".format(self.table_path),
+                "ROLLBACK",
+                "exit",
+            ],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        self._assert_show_create_table_ran(result)
+        assert "ROLLBACK" in result.stdout
+
+    def test_failed_query_invalidates_transaction(self):
+        """After a failed in-tx query the CLI must drop local tx state (server auto-rollback)."""
+        result = self.run_interactive_session(
+            [
+                "BEGIN",
+                "SELECT * FROM `/path/that/does/not/exist`;",
+                "SELECT 2;",
+                "exit",
+            ],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "automatically rolled back" in combined
+        assert "Transaction not found" not in combined
+        assert "2" in result.stdout
+
+
+class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
+    """
+    Verify TAB-completion for transaction control commands.
+
+    These tests run the experimental ydb client under a pty so we can drive
+    the completer the way a human user would: send a partial prefix, press
+    TAB, observe the result.
+    """
+
+    CLI_BINARY_ENV = "YDB_CLI_EXPERIMENTAL_BINARY"
+    COMPLETION_TIMEOUT = 10
+
+    @classmethod
+    def spawn_interactive(cls, timeout=15, extra_args=None, env=None):
+        return super().spawn_interactive(
+            timeout=timeout,
+            extra_args=extra_args,
+            env_name=cls.CLI_BINARY_ENV,
+            env=env,
+        )
+
+    def _discard_and_exit(self, child):
+        for _ in range(4):
+            child.sendcontrol('c')
+
+    def _expect_keyword(self, child, keyword: str, *, anchor: str = ""):
+        # Replxx may interleave color escape sequences inside the rendered
+        # keyword/candidate text, so accept ANSI noise between letters.
+        pattern = ".*".join(keyword)
+        if anchor:
+            pattern = ".*".join(anchor) + ".*" + pattern
+        child.expect(pattern, timeout=self.COMPLETION_TIMEOUT)
+
+    def _expect_s_prefixed_tx_modes(self, child, anchor: str):
+        """Expect all tx modes starting with 's' in one completion list."""
+        pattern = (
+            ".*".join(anchor)
+            + ".*"
+            + ".*".join("serializable-rw")
+            + ".*"
+            + ".*".join("snapshot-ro")
+            + ".*"
+            + ".*".join("snapshot-rw")
+        )
+        child.expect(pattern, timeout=self.COMPLETION_TIMEOUT)
+
+    def _expect_no_keyword(self, child, keyword: str, *, timeout: float = 1):
+        pattern = ".*".join(keyword)
+        try:
+            child.expect(pattern, timeout=timeout)
+            raise AssertionError(f"{keyword!r} must not appear in completions")
+        except pexpect.TIMEOUT:
+            pass
+
+    def _wait_for_ready_after_begin(self, child):
+        """Wait until BEGIN finished and replxx is ready for the next line."""
+        child.expect("BEGIN", timeout=15)
+        # Replxx may not echo the full colored prompt into the pty buffer; the empty-line
+        # placeholder is a reliable readiness signal (same as other completion tests).
+        child.expect("Type YQL query", timeout=self.PROMPT_TIMEOUT)
+
+    def _send_line(self, child, line: str):
+        child.send(line)
+        child.send("\r")
+
+    def test_no_ddl_completion_inside_transaction(self):
+        """Inside a transaction, hints hide destructive DDL but keep SHOW CREATE.
+
+        TAB completion lists are not rendered reliably in a pty (replxx may use
+        inline completion only), so we use the same hint-based checks as
+        test_hints_showed_for_ambiguous_prefix. Check CRE before S so that a
+        prior SHOW CREATE hint does not pollute the negative assertion.
+        """
+        child = self.spawn_interactive()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_prompt(child)
+            self._send_line(child, "BEGIN")
+            self._wait_for_ready_after_begin(child)
+
+            child.send("CRE")
+            self._expect_no_keyword(child, "CREATE", timeout=2)
+
+            child.sendcontrol("u")
+            child.send("S")
+            child.expect("SELECT", timeout=self.COMPLETION_TIMEOUT)
+            child.expect("SHOW CREATE", timeout=self.COMPLETION_TIMEOUT)
+        finally:
+            self._discard_and_exit(child)
+            child.close()
+
+    def test_tab_completes_beg_to_begin(self):
+        """`BEG<TAB>` should expand to BEGIN."""
+        child = self.spawn_interactive()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_prompt(child)
+            child.send("BEG")
+            child.send("\t")
+            self._expect_keyword(child, "BEGIN")
+        finally:
+            self._discard_and_exit(child)
+            child.close()
+
+    def test_tab_completes_partial_transaction(self):
+        """`BEGIN T<TAB>` should expand to TRANSACTION (single candidate)."""
+        child = self.spawn_interactive()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_prompt(child)
+            child.send("BEGIN T")
+            child.send("\t")
+            self._expect_keyword(child, "TRANSACTION")
+        finally:
+            self._discard_and_exit(child)
+            child.close()
+
+    def test_tab_after_begin_with_s_proposes_modes(self):
+        """`BEGIN s<TAB>` proposes the s-prefixed mode names only."""
+        # We exercise TAB on a non-empty partial because Replxx in pty mode
+        # only renders the candidate list when the current partial is
+        # non-empty; this matches the existing test_tab_shows_candidate_list_for_ambiguous_prefix.
+        child = self.spawn_interactive()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_prompt(child)
+            child.send("BEGIN s")
+            child.send("\t")
+            # Single expect: avoid false positives on "Server" in the welcome
+            # banner (s.*e.*r matches) and require the full candidate list.
+            self._expect_s_prefixed_tx_modes(child, "BEGIN s")
+        finally:
+            self._discard_and_exit(child)
+            child.close()
+
+    def test_tab_completes_com_to_commit(self):
+        """`COM<TAB>` should expand to COMMIT."""
+        child = self.spawn_interactive()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_prompt(child)
+            child.send("COM")
+            child.send("\t")
+            self._expect_keyword(child, "COMMIT")
+        finally:
+            self._discard_and_exit(child)
+            child.close()
+
+    def test_tab_completes_rol_to_rollback(self):
+        """`ROL<TAB>` should expand to ROLLBACK."""
+        child = self.spawn_interactive()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_prompt(child)
+            child.send("ROL")
+            child.send("\t")
+            self._expect_keyword(child, "ROLLBACK")
+        finally:
+            self._discard_and_exit(child)
+            child.close()
+
+
+class TestInteractiveTransactionsNotInPublicYdb(BaseSqlInteractiveTest):
+    """Public ydb CLI must not expose interactive transaction commands."""
+
+    def test_begin_not_available_in_public_ydb(self):
+        result = self.run_interactive_session(["BEGIN", "exit"], self.tmp_path)
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "experimental" in combined.lower()
+        assert "BEGIN" not in result.stdout.split("\n")[-5:]
+
+    def test_commit_not_available_in_public_ydb(self):
+        result = self.run_interactive_session(["COMMIT", "exit"], self.tmp_path)
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "experimental" in combined.lower()
+
+    def test_rollback_not_available_in_public_ydb(self):
+        result = self.run_interactive_session(["ROLLBACK", "exit"], self.tmp_path)
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "experimental" in combined.lower()

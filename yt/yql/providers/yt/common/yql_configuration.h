@@ -163,4 +163,12 @@ constexpr ETmpSecurityMode DEFAULT_TMP_FOLDER_SECURITY = ETmpSecurityMode::Disab
 
 constexpr bool DEFAULT_ENABLE_QL_FILTER = false;
 
+const ui64 DEFAULT_MIN_JOB_STATE_SIZE_TO_PASS_VIA_FILE = 32_KB;
+
+constexpr bool DEFAULT_QUERY_CACHE_COMBINE_CHUNKS_REPLACE = false;
+
+constexpr bool DEFAULT_PARSE_EXPRESSION_COLUMNS = false;
+
+constexpr TDuration DEFAULT_SECURE_TMP_TOKEN_USERS_ACCESS_PERIOD = TDuration::Days(10);
+
 } // NYql

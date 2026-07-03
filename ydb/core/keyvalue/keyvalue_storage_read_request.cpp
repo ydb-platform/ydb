@@ -1,5 +1,6 @@
 #include "keyvalue_storage_read_request.h"
 #include "keyvalue_const.h"
+#include "keyvalue_state.h"
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/util/stlog.h>
@@ -9,22 +10,11 @@
 #include <util/generic/overloaded.h>
 #include <library/cpp/time_provider/time_provider.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KEYVALUE
+
 
 namespace NKikimr {
 namespace NKeyValue {
-
-#define STLOG_WITH_ERROR_DESCRIPTION(VARIABLE, PRIO, COMP, ...) \
-    do { \
-        VARIABLE += "\n"; \
-        STLOG_STREAM(__stream, __VA_ARGS__); \
-        const TString message = __stream.Str(); \
-        VARIABLE += message; \
-        const auto priority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
-        const auto component = [&]{ using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }(); \
-        LOG_LOG_S(*TlsActivationContext, priority, component, message); \
-    } while(false) \
-// STLOG_WITH_ERROR_DESCRIPTION
-
 
 class TKeyValueStorageReadRequest : public TActorBootstrapped<TKeyValueStorageReadRequest> {
     struct TGetBatch {
@@ -53,6 +43,8 @@ class TKeyValueStorageReadRequest : public TActorBootstrapped<TKeyValueStorageRe
     TString ErrorDescription;
 
     TStackVec<TReadItemInfo, 1> ReadItems;
+    TKeyValueState *State;
+    std::weak_ptr<TKeyValueStateLifetimeToken> StateLifetimeToken;
 
     NWilson::TSpan Span;
 
@@ -80,13 +72,14 @@ public:
         if (IntermediateResult->Deadline != TInstant::Max()) {
             TInstant now = TActivationContext::Now();
             if (IntermediateResult->Deadline <= now) {
-                STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV313,
-                        "Deadline reached before processing request.",
-                        (KeyValue, TabletInfo->TabletID),
-                        (Deadline, IntermediateResult->Deadline.MilliSeconds()),
-                        (Now, now.MilliSeconds()),
-                        (GotAt, IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()),
-                        (EnqueuedAs, IntermediateResult->Stat.EnqueuedAs));
+                YDB_LOG_ERROR("Deadline reached before processing request",
+                    {"marker", "KV313"},
+                    {"errorDescription", ErrorDescription},
+                    {"keyValue", TabletInfo->TabletID},
+                    {"deadline", IntermediateResult->Deadline.MilliSeconds()},
+                    {"now", now.MilliSeconds()},
+                    {"gotAt", IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()},
+                    {"enqueuedAs", IntermediateResult->Stat.EnqueuedAs});
                 ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT);
                 return;
             }
@@ -119,24 +112,28 @@ public:
             };
             NKikimrProto::EReplyStatus status = std::visit(getStatus, GetCommand());
 
-            STLOG(NLog::PRI_INFO, NKikimrServices::KEYVALUE, KV320, "Inline read request",
-                    (KeyValue, TabletInfo->TabletID),
-                    (Status, status));
+            YDB_LOG_INFO("Inline read request",
+                {"marker", "KV320"},
+                {"keyValue", TabletInfo->TabletID},
+                {"status", status});
             bool isError = status != NKikimrProto::OK
                     && status != NKikimrProto::UNKNOWN
                     && status != NKikimrProto::NODATA
                     && status != NKikimrProto::OVERRUN;
             if (isError) {
-                STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV321,
-                    "Expected OK, UNKNOWN, NODATA or OVERRUN but given " << NKikimrProto::EReplyStatus_Name(status));
+                YDB_LOG_ERROR("Expected OK, UNKNOWN, NODATA or OVERRUN but given status",
+                    {"marker", "KV321"},
+                    {"errorDescription", ErrorDescription},
+                    {"status", NKikimrProto::EReplyStatus_Name(status)});
                 ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
             } else {
-                STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE, KV322,
-                    "Expected OK or UNKNOWN and given " << NKikimrProto::EReplyStatus_Name(status)
-                    << " readCount# " << readCount);
+                YDB_LOG_DEBUG("Expected OK or UNKNOWN and given",
+                    {"marker", "KV322"},
+                    {"status", NKikimrProto::EReplyStatus_Name(status)},
+                    {"readCount", readCount});
 
                 NKikimrKeyValue::Statuses::ReplyStatus replyStatus;
-                if (status == NKikimrProto::UNKNOWN || status == NKikimrProto::NODATA) {
+                if (status == NKikimrProto::UNKNOWN || (!IsRead() && status == NKikimrProto::NODATA)) {
                     replyStatus = NKikimrKeyValue::Statuses::RSTATUS_OK;
                 } else {
                     replyStatus = ConvertStatus(status);
@@ -160,11 +157,12 @@ public:
 
             // INVALID GROUP
             if (group == Max<ui32>()) {
-                STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV315,
-                        "InternalError can't find correct group",
-                        (KeyValue, TabletInfo->TabletID),
-                        (Channel, id.Channel()),
-                        (Generation, id.Generation()));
+                YDB_LOG_ERROR("InternalError can't find correct group",
+                    {"marker", "KV315"},
+                    {"errorDescription", ErrorDescription},
+                    {"keyValue", TabletInfo->TabletID},
+                    {"channel", id.Channel()},
+                    {"generation", id.Generation()});
                 ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
                 return;
             }
@@ -202,26 +200,28 @@ public:
 
     void Handle(TEvBlobStorage::TEvGetResult::TPtr &ev) {
         TEvBlobStorage::TEvGetResult *result = ev->Get();
-        STLOG(NLog::PRI_INFO, NKikimrServices::KEYVALUE, KV20, "Received GetResult",
-                (KeyValue, TabletInfo->TabletID),
-                (GroupId, result->GroupId),
-                (Status, result->Status),
-                (ResponseSz, result->ResponseSz),
-                (ErrorReason, result->ErrorReason),
-                (ReadRequestCookie, IntermediateResult->Cookie));
+        YDB_LOG_INFO("Received GetResult",
+            {"marker", "KV20"},
+            {"keyValue", TabletInfo->TabletID},
+            {"groupId", result->GroupId},
+            {"status", result->Status},
+            {"responseSz", result->ResponseSz},
+            {"errorReason", result->ErrorReason},
+            {"readRequestCookie", IntermediateResult->Cookie});
 
         if (ev->Cookie >= Batches.size()) {
-            STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV319,
-                    "Received EvGetResult with an unexpected cookie.",
-                    (KeyValue, TabletInfo->TabletID),
-                    (Cookie, ev->Cookie),
-                    (SentGets, Batches.size()),
-                    (GroupId, result->GroupId),
-                    (Status, result->Status),
-                    (Deadline, IntermediateResult->Deadline.MilliSeconds()),
-                    (Now, TActivationContext::Now().MilliSeconds()),
-                    (GotAt, IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()),
-                    (ErrorReason, result->ErrorReason));
+            YDB_LOG_ERROR("Received EvGetResult with an unexpected cookie",
+                {"marker", "KV319"},
+                {"errorDescription", ErrorDescription},
+                {"keyValue", TabletInfo->TabletID},
+                {"cookie", ev->Cookie},
+                {"sentGets", Batches.size()},
+                {"groupId", result->GroupId},
+                {"status", result->Status},
+                {"deadline", IntermediateResult->Deadline.MilliSeconds()},
+                {"now", TActivationContext::Now().MilliSeconds()},
+                {"gotAt", IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()},
+                {"errorReason", result->ErrorReason});
             ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
             return;
         }
@@ -229,31 +229,33 @@ public:
         TGetBatch &batch = Batches[ev->Cookie];
 
         if (result->GroupId != batch.GroupId) {
-            STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV318,
-                    "Received EvGetResult from an unexpected storage group.",
-                    (KeyValue, TabletInfo->TabletID),
-                    (GroupId, result->GroupId),
-                    (ExpecetedGroupId, batch.GroupId),
-                    (Status, result->Status),
-                    (Deadline, IntermediateResult->Deadline.MilliSeconds()),
-                    (Now, TActivationContext::Now().MilliSeconds()),
-                    (SentAt, batch.SentTime),
-                    (GotAt, IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()),
-                    (ErrorReason, result->ErrorReason));
+            YDB_LOG_ERROR("Received EvGetResult from an unexpected storage group",
+                {"marker", "KV318"},
+                {"errorDescription", ErrorDescription},
+                {"keyValue", TabletInfo->TabletID},
+                {"groupId", result->GroupId},
+                {"expecetedGroupId", batch.GroupId},
+                {"status", result->Status},
+                {"deadline", IntermediateResult->Deadline.MilliSeconds()},
+                {"now", TActivationContext::Now().MilliSeconds()},
+                {"sentAt", batch.SentTime},
+                {"gotAt", IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()},
+                {"errorReason", result->ErrorReason});
             ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
             return;
         }
 
         if (result->Status == NKikimrProto::BLOCKED) {
-            STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV323,
-                    "Received BLOCKED EvGetResult.",
-                    (KeyValue, TabletInfo->TabletID),
-                    (Status, result->Status),
-                    (Deadline, IntermediateResult->Deadline.MilliSeconds()),
-                    (Now, TActivationContext::Now().MilliSeconds()),
-                    (SentAt, batch.SentTime),
-                    (GotAt, IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()),
-                    (ErrorReason, result->ErrorReason));
+            YDB_LOG_ERROR("Received BLOCKED EvGetResult",
+                {"marker", "KV323"},
+                {"errorDescription", ErrorDescription},
+                {"keyValue", TabletInfo->TabletID},
+                {"status", result->Status},
+                {"deadline", IntermediateResult->Deadline.MilliSeconds()},
+                {"now", TActivationContext::Now().MilliSeconds()},
+                {"sentAt", batch.SentTime},
+                {"gotAt", IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()},
+                {"errorReason", result->ErrorReason});
             // kill the key value tablet due to it's obsolete generation
             ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_BLOCKED);
             Send(IntermediateResult->KeyValueActorId, new TKikimrEvents::TEvPoisonPill);
@@ -261,15 +263,16 @@ public:
         }
 
         if (result->Status != NKikimrProto::OK) {
-            STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV316,
-                    "Unexpected EvGetResult.",
-                    (KeyValue, TabletInfo->TabletID),
-                    (Status, result->Status),
-                    (Deadline, IntermediateResult->Deadline.MilliSeconds()),
-                    (Now, TActivationContext::Now().MilliSeconds()),
-                    (SentAt, batch.SentTime),
-                    (GotAt, IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()),
-                    (ErrorReason, result->ErrorReason));
+            YDB_LOG_ERROR("Unexpected EvGetResult",
+                {"marker", "KV316"},
+                {"errorDescription", ErrorDescription},
+                {"keyValue", TabletInfo->TabletID},
+                {"status", result->Status},
+                {"deadline", IntermediateResult->Deadline.MilliSeconds()},
+                {"now", TActivationContext::Now().MilliSeconds()},
+                {"sentAt", batch.SentTime},
+                {"gotAt", IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()},
+                {"errorReason", result->ErrorReason});
             ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
             return;
         }
@@ -294,22 +297,39 @@ public:
                 IntermediateResult->Stat.GroupReadBytes[std::make_pair(response.Id.Channel(), batch.GroupId)] += response.Buffer.size();
                 IntermediateResult->Stat.GroupReadIops[std::make_pair(response.Id.Channel(), batch.GroupId)] += 1;
                 read.Value.Write(readItem.ValueOffset, std::move(response.Buffer));
+            } else if (response.Status == NKikimrProto::NODATA) {
+                const ui32 refCount = StateLifetimeToken.lock() ? State->GetRefCount(readItem.LogoBlobId) : 0;
+                if (refCount != 0) {
+                    TStringStream str;
+                    str << "NODATA received for TEvGet, but blob is still referenced"
+                        << " TabletId# " << TabletInfo->TabletID
+                        << " BlobId# " << readItem.LogoBlobId.ToString()
+                        << " GroupId# " << batch.GroupId
+                        << " RefCount# " << refCount;
+                    Y_DEBUG_ABORT_UNLESS(false, "%s", str.Str().c_str());
+                    YDB_LOG_ERROR("NODATA received for TEvGet, but blob is still referenced",
+                        {"marker", "KV324"},
+                        {"errorDescription", ErrorDescription},
+                        {"keyValue", TabletInfo->TabletID},
+                        {"blobId", readItem.LogoBlobId},
+                        {"groupId", batch.GroupId},
+                        {"refCount", refCount});
+                    ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
+                    return;
+                }
             } else {
-                Y_VERIFY_DEBUG_S(response.Status != NKikimrProto::NODATA, "NODATA received for TEvGet"
-                    << " TabletId# " << TabletInfo->TabletID
-                    << " Id# " << response.Id
-                    << " Key# " << read.Key);
-                STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV317,
-                        "Unexpected EvGetResult.",
-                        (KeyValue, TabletInfo->TabletID),
-                        (Status, result->Status),
-                        (Id, response.Id),
-                        (ResponseStatus, response.Status),
-                        (Deadline, IntermediateResult->Deadline),
-                        (Now, TActivationContext::Now()),
-                        (SentAt, batch.SentTime),
-                        (GotAt, IntermediateResult->Stat.IntermediateCreatedAt),
-                        (ErrorReason, result->ErrorReason));
+                YDB_LOG_ERROR("Unexpected EvGetResult",
+                    {"marker", "KV317"},
+                    {"errorDescription", ErrorDescription},
+                    {"keyValue", TabletInfo->TabletID},
+                    {"status", result->Status},
+                    {"id", response.Id},
+                    {"responseStatus", response.Status},
+                    {"deadline", IntermediateResult->Deadline},
+                    {"now", TActivationContext::Now()},
+                    {"sentAt", batch.SentTime},
+                    {"gotAt", IntermediateResult->Stat.IntermediateCreatedAt},
+                    {"errorReason", result->ErrorReason});
                 hasErrorResponses = true;
             }
 
@@ -324,9 +344,13 @@ public:
 
         ReceivedGetResults++;
         if (ReceivedGetResults == Batches.size()) {
-            SendResponseAndPassAway(IntermediateResult->IsTruncated ?
-                    NKikimrKeyValue::Statuses::RSTATUS_OVERRUN :
-                    NKikimrKeyValue::Statuses::RSTATUS_OK);
+            auto status = NKikimrKeyValue::Statuses::RSTATUS_OK;
+            if (IntermediateResult->IsTruncated) {
+                status = NKikimrKeyValue::Statuses::RSTATUS_OVERRUN;
+            } else if (IsRead()) {
+                status = ConvertStatus(std::get<TIntermediate::TRead>(GetCommand()).CumulativeStatus());
+            }
+            SendResponseAndPassAway(status);
         }
     }
 
@@ -429,6 +453,8 @@ public:
     NKikimrKeyValue::Statuses::ReplyStatus ConvertStatus(NKikimrProto::EReplyStatus status) {
         if (status == NKikimrProto::OK) {
             return NKikimrKeyValue::Statuses::RSTATUS_OK;
+        } else if (status == NKikimrProto::NODATA) {
+            return NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND;
         } else if (status == NKikimrProto::OVERRUN) {
             return NKikimrKeyValue::Statuses::RSTATUS_OVERRUN;
         } else if (status == NKikimrProto::BLOCKED) {
@@ -499,10 +525,11 @@ public:
     }
 
     void SendResponseAndPassAway(NKikimrKeyValue::Statuses::ReplyStatus status = NKikimrKeyValue::Statuses::RSTATUS_OK) {
-        STLOG(NLog::PRI_INFO, NKikimrServices::KEYVALUE, KV34, "Send respose",
-                (KeyValue, TabletInfo->TabletID),
-                (Status, NKikimrKeyValue::Statuses_ReplyStatus_Name(status)),
-                (ReadRequestCookie, IntermediateResult->Cookie));
+        YDB_LOG_INFO("Send respose",
+            {"marker", "KV34"},
+            {"keyValue", TabletInfo->TabletID},
+            {"status", NKikimrKeyValue::Statuses_ReplyStatus_Name(status)},
+            {"readRequestCookie", IntermediateResult->Cookie});
         std::unique_ptr<IEventBase> response = MakeResponse(status);
         Send(IntermediateResult->RespondTo, response.release());
         IntermediateResult->IsReplied = true;
@@ -520,10 +547,14 @@ public:
    }
 
     TKeyValueStorageReadRequest(THolder<TIntermediate> &&intermediate,
-            const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration)
+            const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration,
+            TKeyValueState *state,
+            std::weak_ptr<TKeyValueStateLifetimeToken> stateLifetimeToken)
         : IntermediateResult(std::move(intermediate))
         , TabletInfo(const_cast<TTabletStorageInfo*>(tabletInfo))
         , TabletGeneration(tabletGeneration)
+        , State(state)
+        , StateLifetimeToken(std::move(stateLifetimeToken))
         , Span(TWilsonTablet::TabletBasic, IntermediateResult->Span.GetTraceId(), "KeyValue.StorageReadRequest")
     {
         IntermediateResult->Stat.KeyvalueStorageRequestSentAt = TAppData::TimeProvider->Now();
@@ -532,9 +563,11 @@ public:
 
 
 IActor* CreateKeyValueStorageReadRequest(THolder<TIntermediate>&& intermediate,
-        const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration)
+        const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration,
+        TKeyValueState *state,
+        std::weak_ptr<TKeyValueStateLifetimeToken> stateLifetimeToken)
 {
-    return new TKeyValueStorageReadRequest(std::move(intermediate), tabletInfo, tabletGeneration);
+    return new TKeyValueStorageReadRequest(std::move(intermediate), tabletInfo, tabletGeneration, state, std::move(stateLifetimeToken));
 }
 
 } // NKeyValue

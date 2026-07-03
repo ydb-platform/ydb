@@ -14,8 +14,6 @@
 
 #include <library/cpp/logger/backend.h>
 
-#include <grpcpp/grpcpp.h>
-
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NYdb::inline Dev {

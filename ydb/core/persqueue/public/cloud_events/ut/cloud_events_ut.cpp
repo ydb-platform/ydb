@@ -1,14 +1,10 @@
-#include <ydb/core/persqueue/public/cloud_events/cloud_events.h>
-#include <ydb/core/persqueue/public/cloud_events/actor.h>
-#include <ydb/core/persqueue/public/cloud_events/proto/topics.pb.h>
-
 #include <ydb/core/base/events.h>
+#include <ydb/core/persqueue/public/cloud_events/actor.h>
+#include <ydb/core/persqueue/public/cloud_events/cloud_events.h>
+#include <ydb/core/persqueue/public/cloud_events/proto/topics.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
-
-#include <google/protobuf/util/json_util.h>
-
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
@@ -16,9 +12,12 @@
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/string.h>
-#include <memory>
 #include <util/generic/maybe.h>
+#include <util/generic/string.h>
+
+#include <google/protobuf/util/json_util.h>
+
+#include <memory>
 
 namespace NKikimr::NPQ::NCloudEvents {
 

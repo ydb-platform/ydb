@@ -9,6 +9,7 @@ RECURSE(
     log_backend
     memory_log
     prof
+    struct_log
     testlib
     util
     wilson

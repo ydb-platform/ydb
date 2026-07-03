@@ -1,0 +1,85 @@
+From 2c4580c119cc40ca5341d634bb579a77f6d88ce6 Mon Sep 17 00:00:00 2001
+From: Matt Borland <matt@mattborland.com>
+Date: Tue, 28 Apr 2026 11:27:23 -0400
+Subject: [PATCH 1/3] Allow fallthrough of Android to 128-bit float
+
+---
+ include/boost/math/special_functions/detail/fp_traits.hpp | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/include/boost/math/special_functions/detail/fp_traits.hpp b/include/boost/math/special_functions/detail/fp_traits.hpp
+index 7cdb12b188..368df69f3b 100644
+--- a/include/boost/math/special_functions/detail/fp_traits.hpp
++++ b/include/boost/math/special_functions/detail/fp_traits.hpp
+@@ -305,9 +305,12 @@ template<> struct fp_traits_non_native<long double, double_precision>
+ 
+ // long double (>64 bits), x86 and x64 -----------------------------------------
+ 
+-#elif defined(__i386) || defined(__i386__) || defined(_M_IX86) \
++// Andorid is a known exception because on x64 it reports LDBL_MANT_DIG == 113
++// See: https://github.com/boostorg/math/issues/1389
++
++#elif (defined(__i386) || defined(__i386__) || defined(_M_IX86) \
+     || defined(__amd64) || defined(__amd64__)  || defined(_M_AMD64) \
+-    || defined(__x86_64) || defined(__x86_64__) || defined(_M_X64)
++    || defined(__x86_64) || defined(__x86_64__) || defined(_M_X64)) && !defined(__ANDROID__)
+ 
+ // Intel extended double precision format (80 bits)
+ 
+
+From 8d8f4e4b22a02943023de47283d4948e10e20d9e Mon Sep 17 00:00:00 2001
+From: Matt Borland <matt@mattborland.com>
+Date: Tue, 28 Apr 2026 13:28:33 -0400
+Subject: [PATCH 2/3] Match drone.sh to boost.sh
+
+---
+ .drone/drone.sh | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/include/boost/math/special_functions/detail/fp_traits.hpp b/include/boost/math/special_functions/detail/fp_traits.hpp
+index 368df69f3b..7362d0fada 100644
+--- a/include/boost/math/special_functions/detail/fp_traits.hpp
++++ b/include/boost/math/special_functions/detail/fp_traits.hpp
+@@ -270,13 +270,7 @@ template<> struct fp_traits_non_native<double, double_precision>
+ 
+ // long double (64 bits) -------------------------------------------------------
+ 
+-#if defined(BOOST_NO_INT64_T) || defined(BOOST_NO_INCLASS_MEMBER_INITIALIZATION)\
+-   || defined(BOOST_BORLANDC) || defined(__CODEGEAR__) || (defined(__APPLE__) && defined(__aarch64__)) || defined(_MSC_VER)\
+-    || (defined(__GNUC__) && defined(__aarch64__) && defined(_WIN32))\
+-     || (defined(__GNUC__) && (defined(__arm__) || defined(__thumb__)))\
+-      || defined(__SYCL_DEVICE_ONLY__) || (LDBL_MANT_DIG == 53)
+-
+-static_assert(LDBL_MANT_DIG == 53, "Oops, assumption that long double is a 64-bit quantity is incorrect!!");
++#if LDBL_MANT_DIG == 53 || defined(__SYCL_DEVICE_ONLY__)
+ 
+ template<> struct fp_traits_non_native<long double, double_precision>
+ {
+@@ -305,17 +299,10 @@ template<> struct fp_traits_non_native<long double, double_precision>
+ 
+ // long double (>64 bits), x86 and x64 -----------------------------------------
+ 
+-// Andorid is a known exception because on x64 it reports LDBL_MANT_DIG == 113
+-// See: https://github.com/boostorg/math/issues/1389
+-
+-#elif (defined(__i386) || defined(__i386__) || defined(_M_IX86) \
+-    || defined(__amd64) || defined(__amd64__)  || defined(_M_AMD64) \
+-    || defined(__x86_64) || defined(__x86_64__) || defined(_M_X64)) && !defined(__ANDROID__)
++#elif LDBL_MANT_DIG == 64
+ 
+ // Intel extended double precision format (80 bits)
+ 
+-static_assert(LDBL_MANT_DIG == 64, "Oops, assumption that long double is an 80-bit quantity is incorrect!!");
+-
+ template<>
+ struct fp_traits_non_native<long double, extended_double_precision>
+ {
+@@ -443,8 +430,6 @@ struct fp_traits_non_native<long double, extended_double_precision>
+ 
+ // IEEE extended double precision format with 15 exponent bits (128 bits)
+ 
+-static_assert(LDBL_MANT_DIG == 113, "Oops, assumption that long double is a 128-bit quantity is incorrect!!");
+-
+ template<>
+ struct fp_traits_non_native<long double, extended_double_precision>
+ {

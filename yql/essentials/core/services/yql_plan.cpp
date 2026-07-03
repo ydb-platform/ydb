@@ -401,7 +401,7 @@ public:
             if (!info.Provider) {
                 info.IsVisible = false;
                 for (auto& child : node->Children()) {
-                    dependencies.push_back(child.Get());
+                    dependencies.emplace_back(child.Get());
                 }
             }
         }

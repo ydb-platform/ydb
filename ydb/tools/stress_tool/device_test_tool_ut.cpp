@@ -255,6 +255,7 @@ Y_UNIT_TEST(DDiskTestWrite) {
                 InFlight: 64
                 IntervalMsMin: 0
                 IntervalMsMax: 0
+                IoSizeBytes: 4096
                 ExpectedChunkSize: 10485760
             }
         }
@@ -279,8 +280,34 @@ Y_UNIT_TEST(DDiskTestRead) {
                 InFlight: 64
                 IntervalMsMin: 0
                 IntervalMsMax: 0
+                IoSizeBytes: 4096
                 ExpectedChunkSize: 10485760
                 IsReadLoad: true
+            }
+        }
+    )___";
+
+    ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(perfCfg.Str(), true);
+}
+
+Y_UNIT_TEST(DDiskTestWriteLargeIo) {
+    TStringStream perfCfg;
+    perfCfg << R"___(
+        DDiskTestList: {
+            DDiskLoad: {
+                Tag: 6
+                DDiskId: {
+                    NodeId: 1
+                    PDiskId: 1
+                    DDiskSlotId: 1
+                }
+                Areas: { AreaSize: 10485760 Sequential: false }
+                DurationSeconds: )___" << TestDurationSec << R"___(
+                InFlight: 64
+                IntervalMsMin: 0
+                IntervalMsMax: 0
+                IoSizeBytes: 65536
+                ExpectedChunkSize: 10485760
             }
         }
     )___";

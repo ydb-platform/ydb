@@ -11,6 +11,7 @@
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/protos/grpc_pq_old.pb.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/datastreams/codes/datastreams_codes.h>
@@ -18,6 +19,7 @@
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 #include <ydb/core/persqueue/public/list_topics/list_all_topics_actor.h>
+#include <ydb/core/persqueue/public/schema/schema.h>
 
 #include <util/folder/path.h>
 
@@ -149,11 +151,12 @@ namespace NKikimr::NDataStreams::V1 {
         ~TCreateStreamActor() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx);
-        void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
-                                const TString& workingDir, const TString& name);
         void StateWork(TAutoPtr<IEventHandle>& ev);
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
-        void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
+
+    private:
+        void CreateTopic(const TActorContext& ctx);
+        void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev, const TActorContext& ctx);
+        TIntrusiveConstPtr<NACLib::TUserToken> GetUserToken() const;
     };
 
 
@@ -164,21 +167,24 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TCreateStreamActor::Bootstrap(const NActors::TActorContext& ctx) {
         TBase::Bootstrap(ctx);
-        SendProposeRequest(ctx);
+        const bool internalRequest = !!dynamic_cast<NGRpcService::IInternalRequestCtx*>(Request_.get());
+        if (Request_->GetSerializedToken().empty() && !internalRequest) {
+            if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+                return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
+                                      "Unauthenticated access is forbidden, please provide credentials");
+            }
+        }
+        CreateTopic(ctx);
         Become(&TCreateStreamActor::StateWork);
     }
 
-    void TCreateStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        Y_UNUSED(ev);
+    TIntrusiveConstPtr<NACLib::TUserToken> TCreateStreamActor::GetUserToken() const {
+        return Request_->GetSerializedToken().empty() ? nullptr : new NACLib::TUserToken(Request_->GetSerializedToken());
     }
 
-
-    void TCreateStreamActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal,
-            const TActorContext& ctx, const TString& workingDir, const TString& name)
-    {
-        NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
-
+    void TCreateStreamActor::CreateTopic(const TActorContext& ctx) {
         Ydb::Topic::CreateTopicRequest topicRequest;
+        topicRequest.set_path(GetTopicPath());
         topicRequest.mutable_partitioning_settings()->set_min_active_partitions(GetProtoRequest()->shard_count());
         switch (GetProtoRequest()->retention_case()) {
             case Ydb::DataStreams::V1::CreateStreamRequest::RetentionCase::kRetentionPeriodHours:
@@ -249,41 +255,41 @@ namespace NKikimr::NDataStreams::V1 {
             }
         }
 
-        auto pqDescr = modifyScheme.MutableCreatePersQueueGroup();
-        if (GetProtoRequest()->retention_case() ==
-            Ydb::DataStreams::V1::CreateStreamRequest::RetentionCase::kRetentionStorageMegabytes) {
-            modifyScheme.MutableCreatePersQueueGroup()->MutablePQTabletConfig()->
-                MutablePartitionConfig()->SetLifetimeSeconds(TDuration::Hours(DEFAULT_STREAM_WEEK_RETENTION).Seconds());
-        }
-
-        modifyScheme.SetWorkingDir(workingDir);
-
-        pqDescr->SetPartitionPerTablet(1);
-        TString error;
-        TYdbPqCodes codes = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(name, topicRequest, modifyScheme, AppData(ctx), error,
-                                                                      workingDir, proposal.Record.GetDatabaseName());
-        if (codes.YdbCode != Ydb::StatusIds::SUCCESS) {
-            return ReplyWithError(codes.YdbCode, codes.PQCode, error);
-        }
+        ctx.RegisterWithSameMailbox(NPQ::NSchema::CreateCreateTopicActor(SelfId(), {
+            .Database = Request_->GetDatabaseName().GetOrElse(""),
+            .PeerName = Request_->GetPeerName(),
+            .Request = std::move(topicRequest),
+            .UserToken = GetUserToken(),
+            .IfNotExists = false,
+        }));
     }
 
-    void TCreateStreamActor::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
-        auto msg = ev->Get();
-        const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(ev->Get()->Record.GetStatus());
-        if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete
-            && msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusAlreadyExists)
-        {
-            return ReplyWithError(Ydb::StatusIds::ALREADY_EXISTS,
+    void TCreateStreamActor::Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev, const TActorContext& ctx) {
+        const auto* result = ev->Get();
+
+        switch(result->Status) {
+            case Ydb::StatusIds::SUCCESS:
+                return ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::DataStreams::V1::CreateStreamResponse(), ctx);
+            case Ydb::StatusIds::ALREADY_EXISTS:
+                return ReplyWithError(Ydb::StatusIds::ALREADY_EXISTS,
                                   static_cast<size_t>(NYds::EErrorCodes::IN_USE),
                                   TStringBuilder() << "Stream with name " << GetProtoRequest()->stream_name() << " already exists");
+            case Ydb::StatusIds::INTERNAL_ERROR:
+            case Ydb::StatusIds::UNAVAILABLE:
+                return ReplyWithError(result->Status,
+                    static_cast<size_t>(NYds::EErrorCodes::ERROR),
+                    result->ErrorMessage);
+            default:
+                return ReplyWithError(result->Status,
+                                      static_cast<size_t>(NYds::EErrorCodes::VALIDATION_ERROR),
+                                      result->ErrorMessage);
         }
-        return TBase::TBase::Handle(ev, ctx);
     }
 
     void TCreateStreamActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
-            default: TBase::StateWork(ev);
+            HFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
+            default: TBase::TBase::StateWork(ev);
         }
     }
 
@@ -1496,6 +1502,7 @@ namespace NKikimr::NDataStreams::V1 {
         cmdRead->SetReadTimestampMs(ShardIterator.GetReadTimestamp());
         cmdRead->SetTimeoutMs(READ_TIMEOUT_MS);
         cmdRead->SetExternalOperation(true);
+        cmdRead->SetCanReadBatches(true);
 
         TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
         req->Record.Swap(&request);
@@ -1582,8 +1589,21 @@ namespace NKikimr::NDataStreams::V1 {
                         "Partition ended");
             }
 
-            const auto& results = readResult.GetResult();
-            for (auto& r : results) {
+            TMaybe<ui64> nextSequenceNumber;
+            TMaybe<ui64> lastWriteTimestampMs;
+            const ui64 readOffset = ShardIterator.GetSequenceNumber();
+
+            for (const auto& r : readResult.GetResult()) {
+                lastWriteTimestampMs = r.GetWriteTimestampMS();
+                const ui64 nextResultOffset = r.GetOffset() + r.GetLogicalMessageCount();
+                if (nextResultOffset <= readOffset) {
+                    nextSequenceNumber = Max(nextSequenceNumber.GetOrElse(readOffset), nextResultOffset);
+                    continue;
+                }
+                if (Result.records_size() >= Limit) {
+                    break;
+                }
+
                 auto proto(NKikimr::GetDeserializedData(r.GetData()));
                 auto record = Result.add_records();
                 record->set_data(proto.GetData());
@@ -1594,12 +1614,17 @@ namespace NKikimr::NDataStreams::V1 {
                 if (proto.GetCodec() > 0) {
                     record->set_codec(proto.GetCodec() + 1);
                 }
+
+                nextSequenceNumber = nextResultOffset;
+                if (Result.records_size() >= Limit) {
+                    break;
+                }
             }
-            if (!results.empty()) {
-                auto last = results.rbegin();
+
+            if (nextSequenceNumber) {
                 shardIterator.SetReadTimestamp(0);
-                shardIterator.SetSequenceNumber(last->GetOffset() + 1);
-                Result.set_millis_behind_latest(TInstant::Now().MilliSeconds() - last->GetWriteTimestampMS());
+                shardIterator.SetSequenceNumber(*nextSequenceNumber);
+                Result.set_millis_behind_latest(TInstant::Now().MilliSeconds() - *lastWriteTimestampMs);
             } else { // remove else?
                 Result.set_millis_behind_latest(0);
             }

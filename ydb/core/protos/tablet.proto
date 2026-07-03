@@ -53,14 +53,15 @@ message TTabletTypes {
         BackupController = 42;
         BlockStorePartitionDirect = 43;
         BlockStoreVolumeDirect = 44;
+        NbsLoadTablet = 45;
 
         // when adding a new tablet type and keeping parse compatibility with the old version
         // rename existing reserved item to desired one, and add new reserved item to
         // the end of reserved list
-        Reserved45 = 45;
         Reserved46 = 46;
         Reserved47 = 47;
         Reserved48 = 48;
+        Reserved49 = 49;
 
         UserTypeStart = 255;
         TypeInvalid = -1;
@@ -283,4 +284,11 @@ message TEvTabletStateUpdate {
     optional uint64 SeqNo = 2;
     optional EState State = 3;
     optional NActorsProto.TActorId UserActorId = 4;
+}
+
+message TEvMoveData {
+}
+
+message TEvMoveDataResponse {
+    optional uint64 TabletId = 1;
 }

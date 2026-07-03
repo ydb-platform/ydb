@@ -4,6 +4,6 @@
 
 namespace NYdb::NConsoleClient::NLocalPaths {
 
-TFsPath GetAiHistoryFile();
+std::optional<TString> GetAiHistoryFile();
 
 } // namespace NYdb::NConsoleClient::NLocalPaths

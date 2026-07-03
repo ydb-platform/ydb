@@ -105,6 +105,8 @@ public:
 
     void KillTopicPqrbTablet(const std::string& topicPath);
 
+    TIntrusivePtr<NMonitoring::TDynamicCounters> GetCounters(const TString& svc = "kqp", ui32 nodeIdx = 0);
+
     // External YDB recipe
 
     std::shared_ptr<NYdb::TDriver> GetExternalDriver();
@@ -119,13 +121,21 @@ public:
 
     void CreateTopic(const std::string& topicName, std::optional<NYdb::NTopic::TCreateTopicSettings> settings = std::nullopt, bool local = false);
 
+    void DropTopic(const std::string& topicName, bool local = false);
+
     void WriteTopicMessage(const std::string& topicName, const std::string& message, ui64 partition = 0, bool local = false);
 
     void WriteTopicMessages(const std::string& topicName, const std::vector<std::string>& messages, ui64 partition = 0);
 
     void ReadTopicMessage(const std::string& topicName, const std::string& expectedMessage, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool local = false);
 
-    void ReadTopicMessages(const std::string& topicName, std::vector<std::string> expectedMessages, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool sort = false, bool local = false);
+    std::vector<std::pair<std::string, TInstant>> ReadTopicMessages(
+        const std::string& topicName,
+        std::vector<std::string> expectedMessages,
+        TInstant disposition = TInstant::Now() - TDuration::Seconds(100),
+        bool sort = false,
+        bool local = false,
+        bool checkResult = true);
 
     void TestReadTopicBasic(const std::string& testSuffix);
 
@@ -194,10 +204,6 @@ public:
     // Should be called at most once
     static void SetupMockConnectorTableData(std::shared_ptr<NYql::NConnector::NTest::TConnectorClientMock> mockClient, const TMockConnectorReadSplitsSettings& settings);
 
-    // Other helpers
-
-    static std::function<void(const std::string&)> AstChecker(ui64 txCount, ui64 stagesCount);
-
 private:
     void EnsureNotInitialized(const std::string& info);
 
@@ -212,6 +218,7 @@ protected:
     TTestLogSettings LogSettings;
     bool InternalInitFederatedQuerySetupFactory = false;
     TVector<TString> StoragePoolTypes;
+    bool NeedsStatsCollectors = false;
     NYdb::NQuery::TClientSettings QueryClientSettings = NYdb::NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT);
     NYdb::NTopic::TTopicClientSettings TopicClientSettings = NYdb::NTopic::TTopicClientSettings().AuthToken(BUILTIN_ACL_ROOT);
 

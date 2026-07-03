@@ -180,6 +180,7 @@ int TCommandConfigFetch::Run(TConfig& config) {
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     TString clusterConfig;
     TString storageConfig;
+    TString databaseConfig;
 
     for (const auto& entry : result.GetConfigs()) {
         std::visit([&](auto&& arg) {
@@ -192,6 +193,8 @@ int TCommandConfigFetch::Run(TConfig& config) {
                 if (DedicatedStorageSection || !DedicatedClusterSection) {
                     storageConfig = entry.Config;
                 }
+            } else if constexpr (std::is_same_v<T, NYdb::NConfig::TDatabaseConfigIdentity>) {
+                databaseConfig = entry.Config;
             }
         }, entry.Identity);
     }
@@ -208,7 +211,9 @@ int TCommandConfigFetch::Run(TConfig& config) {
             // and will get attention that something went horribly wrong
             Cerr << "Unable to bump main config version, returning as-is" << Endl;
         }
-        if (!storageConfig.empty() || DedicatedStorageSection) {
+        if (!storageConfig.empty() || !databaseConfig.empty() ||
+            DedicatedStorageSection)
+        {
             Cerr << "cluster config: " << Endl;
         }
         Cout << clusterConfig << Endl;
@@ -224,13 +229,36 @@ int TCommandConfigFetch::Run(TConfig& config) {
             // and will get attention that something went horribly wrong
             Cerr << "Unable to bump storage config version, returning as-is" << Endl;
         }
-        if (!clusterConfig.empty() || DedicatedClusterSection) {
+        if (!clusterConfig.empty() || !databaseConfig.empty() ||
+            DedicatedClusterSection)
+        {
             Cerr << "storage config:" << Endl;
         }
         Cout << storageConfig << Endl;
     }
 
-    if (clusterConfig.empty() && storageConfig.empty()) {
+    if (!databaseConfig.empty()) {
+        // NOTE: there is no native new-API path for per-database YAML config fetch yet —
+        // the request is routed through Console via the legacy API (see
+        // TFetchStorageConfigRequest::Bootstrap() in rpc_config.cpp).
+        // Console's contract for per-database YAML config replace is
+        // wire metadata.version == stored version, so the CLI must return the fetched
+        // body as-is. Bumping metadata.version here would break the next
+        // fetch | edit | replace round-trip — the user would have to manually fix
+        // the version before re-submitting. Once a native new-API path lands,
+        // this branch can mirror the cluster/storage branches and call
+        // UpgradeDatabaseConfigVersion.
+
+        if (!clusterConfig.empty() || !storageConfig.empty() ||
+            DedicatedStorageSection || DedicatedClusterSection)
+        {
+            Cerr << "database config:" << Endl;
+        }
+        Cout << databaseConfig << Endl;
+    }
+
+    if (clusterConfig.empty() && storageConfig.empty() && databaseConfig.empty())
+    {
         Cerr << "No config returned." << Endl;
         return EXIT_FAILURE;
     }

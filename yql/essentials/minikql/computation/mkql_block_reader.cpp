@@ -232,6 +232,35 @@ private:
     mutable TVector<TBlockItem> Items_;
 };
 
+class TVariantBlockItemConverter: public IBlockItemConverter {
+public:
+    explicit TVariantBlockItemConverter(TVector<std::unique_ptr<IBlockItemConverter>>&& children)
+        : Children_(std::move(children))
+        , Item_()
+    {
+    }
+
+    NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
+        const ui32 index = item.GetVariantIndex();
+        Y_DEBUG_ABORT_UNLESS(index < Children_.size(), "Variant index out of range in MakeValue");
+        NUdf::TUnboxedValuePod inner = Children_[index]->MakeValue(item.GetVariantItem(), holderFactory);
+        return holderFactory.CreateVariantHolder(inner, index);
+    }
+
+    TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
+        const ui32 index = value.GetVariantIndex();
+        Y_DEBUG_ABORT_UNLESS(index < Children_.size(), "Variant index out of range in MakeItem");
+        InnerValue_ = value.GetVariantItem();
+        Item_ = Children_[index]->MakeItem(InnerValue_);
+        return TBlockItem(index, &Item_);
+    }
+
+private:
+    const TVector<std::unique_ptr<IBlockItemConverter>> Children_;
+    mutable TBlockItem Item_;
+    mutable NUdf::TUnboxedValue InnerValue_;
+};
+
 template <typename TTzDate, bool Nullable>
 class TTzDateBlockItemConverter: public IBlockItemConverter {
 public:
@@ -293,6 +322,7 @@ struct TConverterTraits {
     using TResult = IBlockItemConverter;
     template <bool Nullable>
     using TTuple = TTupleBlockItemConverter<Nullable>;
+    using TVariant = TVariantBlockItemConverter;
     template <typename T, bool Nullable>
     using TFixedSize = TFixedSizeBlockItemConverter<T, Nullable>;
     template <

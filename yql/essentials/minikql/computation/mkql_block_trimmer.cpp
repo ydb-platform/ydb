@@ -104,7 +104,7 @@ public:
         auto trimmedBuffer = CreateResizableBuffer<NUdf::TResizableManagedBuffer<NUdf::TUnboxedValue>>(dataSize);
         auto trimmedBufferData = reinterpret_cast<NUdf::TUnboxedValue*>(trimmedBuffer->mutable_data());
 
-        for (int64_t i = 0; i < array->length; i++) {
+        for (i64 i = 0; i < array->length; i++) {
             ::new (&trimmedBufferData[i]) NUdf::TUnboxedValue(origData[i]);
         }
 
@@ -156,7 +156,7 @@ public:
         auto trimmedOffsetBufferData = reinterpret_cast<TOffset*>(trimmedOffsetBuffer->mutable_data());
         auto trimmedStringBufferData = reinterpret_cast<char*>(trimmedStringBuffer->mutable_data());
 
-        for (int64_t i = 0; i < array->length + 1; i++) {
+        for (i64 i = 0; i < array->length + 1; i++) {
             trimmedOffsetBufferData[i] = origOffsetData[i] - origOffsetData[0];
         }
         memcpy(trimmedStringBufferData, origStringData, stringDataSize);
@@ -246,10 +246,65 @@ private:
     IBlockTrimmer::TPtr Inner_;
 };
 
+class TVariantBlockTrimmer: public TBlockTrimmerBase {
+public:
+    TVariantBlockTrimmer(std::vector<IBlockTrimmer::TPtr> children, arrow::MemoryPool* pool)
+        : TBlockTrimmerBase(pool)
+        , Children_(std::move(children))
+    {
+    }
+
+    std::shared_ptr<arrow::ArrayData> Trim(const std::shared_ptr<arrow::ArrayData>& array) override {
+        auto typeCodesSize = array->length * sizeof(ui8);
+        auto trimmedTypeCodes = CreateResizableBuffer(typeCodesSize);
+        const auto* srcTypeCodes = array->GetValues<i8>(1);
+        std::copy(srcTypeCodes, srcTypeCodes + typeCodesSize, trimmedTypeCodes->mutable_data());
+
+        const auto* sourceValueOffsets = array->GetValues<i32>(2);
+        const auto* destinationTypeCodes = reinterpret_cast<const i8*>(trimmedTypeCodes->mutable_data());
+
+        TVector<i64> minChildOffsets(Children_.size(), std::numeric_limits<i64>::max());
+        for (i64 i = 0; i < array->length; ++i) {
+            const i8 typeCode = destinationTypeCodes[i];
+            minChildOffsets[typeCode] = std::min<i64>(minChildOffsets[typeCode], sourceValueOffsets[i]);
+        }
+
+        auto valueOffsetsSize = array->length * sizeof(i32);
+        auto trimmedValueOffsets = CreateResizableBuffer(valueOffsetsSize);
+        auto* destinationValueOffsets = reinterpret_cast<i32*>(trimmedValueOffsets->mutable_data());
+        TVector<i32> childCounts(Children_.size(), 0);
+        for (i64 i = 0; i < array->length; ++i) {
+            const i8 typeCode = destinationTypeCodes[i];
+            const i32 base = (minChildOffsets[typeCode] == std::numeric_limits<i64>::max()) ? 0 : minChildOffsets[typeCode];
+            const i32 newOffset = sourceValueOffsets[i] - base;
+            destinationValueOffsets[i] = newOffset;
+            childCounts[typeCode] = std::max(childCounts[typeCode], newOffset + 1);
+        }
+
+        std::vector<std::shared_ptr<arrow::ArrayData>> trimmedChildren;
+        trimmedChildren.reserve(Children_.size());
+        for (size_t i = 0; i < Children_.size(); ++i) {
+            const i32 startOffsetIndex = (minChildOffsets[i] == std::numeric_limits<i64>::max()) ? 0 : minChildOffsets[i];
+            auto childSlice = DeepSlice(*array->child_data[i], startOffsetIndex, childCounts[i]);
+            trimmedChildren.push_back(Children_[i]->Trim(childSlice));
+        }
+
+        return arrow::ArrayData::Make(
+            array->type, array->length,
+            {nullptr, std::move(trimmedTypeCodes), std::move(trimmedValueOffsets)},
+            std::move(trimmedChildren),
+            /*null_count=*/0);
+    }
+
+private:
+    std::vector<IBlockTrimmer::TPtr> Children_;
+};
+
 struct TTrimmerTraits {
     using TResult = IBlockTrimmer;
     template <bool Nullable>
     using TTuple = TTupleBlockTrimmer<Nullable>;
+    using TVariant = TVariantBlockTrimmer;
     template <typename T, bool Nullable>
     using TFixedSize = TFixedSizeBlockTrimmer<T, Nullable>;
     template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot>

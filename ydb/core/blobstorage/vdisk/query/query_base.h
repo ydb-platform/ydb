@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/core/retro_tracing_impl/spans/lazy_retro_span.h>
 
 namespace NKikimr {
 
@@ -25,7 +26,7 @@ namespace NKikimr {
         TQueryResultSizeTracker ResultSize;
         const TActorId ReplSchedulerId;
 
-        NWilson::TSpan Span;
+        TLazyRetroSpan Span;
 
         TLevelIndexQueryBase(
                 std::shared_ptr<TQueryCtx> &queryCtx,
@@ -45,10 +46,10 @@ namespace NKikimr {
             , ShowInternals(Record.GetShowInternals())
             , Result(std::move(result))
             , ReplSchedulerId(replSchedulerId)
-            , Span(TWilson::VDiskTopLevel, std::move(BatcherCtx->OrigEv->TraceId), name)
+            , Span(TWilson::VDiskTopLevel, std::move(BatcherCtx->OrigEv->TraceId), name, NWilson::EFlags::AUTO_END)
         {
-            if (Span) {
-                Span.Attribute("event", TEvBlobStorage::TEvVGet::ToString(BatcherCtx->OrigEv->Get()->Record));
+            if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                wilsonSpan->Attribute("event", TEvBlobStorage::TEvVGet::ToString(BatcherCtx->OrigEv->Get()->Record));
             }
             Y_VERIFY_DEBUG_S(Result, QueryCtx->HullCtx->VCtx->VDiskLogPrefix);
         }
@@ -101,7 +102,11 @@ namespace NKikimr {
                             ResultSize.GetSize(), BatcherCtx->OrigEv->Get()->ToString().data());
                 LOG_CRIT(ctx, NKikimrServices::BS_VDISK_GET, msg);
 
-                Span.EndError(std::move(msg));
+                if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                    wilsonSpan->EndError(std::move(msg));
+                } else if (TNamedSpan* retroSpan = Span.GetRetroSpanPtr()) {
+                    retroSpan->EndError();
+                }
             } else {
                 ui64 total = 0;
                 for (const auto& result : Result->Record.GetResult()) {

@@ -1,25 +1,30 @@
 #pragma once
 
 #include "inflight_info.h"
-#include "location.h"
 #include "range_locker.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
 #include <library/cpp/threading/future/core/future.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/set.h>
+#include <util/generic/vector.h>
+
+#include <span>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+class TVChunkConfig;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TReadRangeHint
 {
     TReadRangeHint(
-        TLocationMask locationMask,
+        THostMask hostMask,
         ui64 lsn,
         TBlockRange64 requestRelativeRange,
         TBlockRange64 vchunkRange,
@@ -28,7 +33,10 @@ struct TReadRangeHint
     TReadRangeHint(TReadRangeHint&& other) noexcept;
     TReadRangeHint& operator=(TReadRangeHint&& other) noexcept;
 
-    TLocationMask LocationMask;
+    THostMask HostMask;
+    // 0 -> read from DDisk (HostMask is the DDisk hosts to choose from).
+    // >0 -> read from a PBuffer that holds the inflight write at this lsn
+    // (HostMask is the PBuffer hosts that confirmed the write).
     ui64 Lsn = 0;
 
     // Range relative to the request.
@@ -53,29 +61,34 @@ struct TReadHint
     [[nodiscard]] TString DebugPrint() const;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
 struct TPBufferSegment
 {
     ui64 Lsn = 0;
     TBlockRange64 Range;
 
-    [[nodiscard]] TString DebugPrint() const;
+    static TVector<ui64> MakeLsnVector(
+        std::span<const TPBufferSegment> segments);
+
+    [[nodiscard]] TString DebugPrint(bool brief) const;
 };
 
 struct TFlushHint
 {
     TVector<TPBufferSegment> Segments;
 
-    [[nodiscard]] TString DebugPrint() const;
+    [[nodiscard]] TString DebugPrint(bool brief) const;
 };
 
 class TFlushHints
 {
 public:
-    using THints = TMap<TRoute, TFlushHint>;
+    using THints = TMap<THostRoute, TFlushHint>;
 
     void AddHint(
-        ELocation source,
-        ELocation destination,
+        THostIndex source,
+        THostIndex destination,
         ui64 lsn,
         TBlockRange64 range);
 
@@ -90,19 +103,30 @@ private:
     THints Hints;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+struct TEraseSegment
+{
+    ui32 Generation = 0;
+    ui64 Lsn = 0;
+
+    [[nodiscard]] TString DebugPrint(bool brief) const;
+};
+
+using TEraseSegments = TVector<TEraseSegment>;
+
 struct TEraseHint
 {
-    TVector<TPBufferSegment> Segments;
+    TEraseSegments Segments;
 
-    [[nodiscard]] TString DebugPrint() const;
+    [[nodiscard]] TString DebugPrint(bool brief) const;
 };
 
 class TEraseHints
 {
 public:
-    using THints = TMap<ELocation, TEraseHint>;
+    using THints = TMap<THostIndex, TEraseHint>;
 
-    void AddHint(ELocation location, ui64 lsn, TBlockRange64 range);
+    void AddHint(THostIndex host, ui64 lsn);
 
     [[nodiscard]] bool Empty() const;
 
@@ -115,18 +139,28 @@ private:
     THints Hints;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
 class TDDiskState
 {
 public:
     enum class EState
     {
-        Operational,   // The ddisk is fully functional and can be read from
+        Disabled,   // There are no DDisks with data on the host and DDisk
+                    // cannot be used.
+
+        Operational,   // The DDisk is fully functional and can be read from
                        // anywhere.
         Fresh,   // The ddisk is only partially filled, and you can only read
                  // from the blocks below the OperationalBlockCount.
     };
 
+    // Enables the use of DDisk. If the operational blocks count less then total
+    // block count, then the DDisk is only partially filled (fresh).
     void Init(ui64 totalBlockCount, ui64 operationalBlockCount);
+
+    // Completely disables DDisk usage.
+    void SwitchOffline();
 
     [[nodiscard]] EState GetState() const;
     [[nodiscard]] bool CanReadFromDDisk(TBlockRange64 range) const;
@@ -141,7 +175,7 @@ public:
 private:
     void UpdateState();
 
-    EState State = EState::Operational;
+    EState State = EState::Disabled;
 
     ui64 TotalBlockCount = 0;
 
@@ -156,15 +190,26 @@ private:
 
 struct TPBufferCounters
 {
+    // The current count of records stored in PBuffer
     size_t CurrentRecordsCount = 0;
+    // The current count of bytes stored in PBuffer
     size_t CurrentBytesCount = 0;
+    // Total count of records written to PBuffer and possibly already deleted
     size_t TotalRecordsCount = 0;
+    // Total count of bytes written to PBuffer and possibly already deleted
     size_t TotalBytesCount = 0;
 
+    // The current number of records prohibited for deletion from PBuffer
     size_t CurrentLockedRecordsCount = 0;
+    // The current number of bytes prohibited for deletion from PBuffer
     size_t CurrentLockedBytesCount = 0;
+
+    // The total number of records ever prohibited for deletion from PBuffer
     size_t TotalLockedRecordsCount = 0;
+    // The total number of bytes ever prohibited for deletion from PBuffer
     size_t TotalLockedBytesCount = 0;
+
+    [[nodiscard]] TString DebugPrint() const;
 };
 
 class TBlocksDirtyMap
@@ -173,91 +218,118 @@ class TBlocksDirtyMap
     , public TDisableCopyMove
 {
 public:
-    TBlocksDirtyMap(ui32 blockSize, ui64 blockCount);
+    enum class EEraseType
+    {
+        Standard,
+        Belated
+    };
+    TBlocksDirtyMap(
+        const TVChunkConfig& vChunkConfig,
+        ui32 blockSize,
+        ui64 blockCount);
     ~TBlocksDirtyMap() override;
 
-    void UpdateConfig(TLocationMask desired, TLocationMask disabled);
+    // Note. Fresh watermarks are not applying for exists DDisks.
+    void UpdateConfig(const TVChunkConfig& vChunkConfig);
 
-    void RestorePBuffer(ui64 lsn, TBlockRange64 range, ELocation location);
+    void RestorePBuffer(ui64 lsn, TBlockRange64 range, THostIndex host);
 
     // MakeReadHint can work with multiple locations and returns multiple
     // RangeHints
     [[nodiscard]] TReadHint MakeReadHint(TBlockRange64 range);
     [[nodiscard]] TFlushHints MakeFlushHint(size_t batchSize);
     [[nodiscard]] TEraseHints MakeEraseHint(size_t batchSize);
+    [[nodiscard]] TEraseHints MakeEraseBelatedHint();
+
+    // Registers a write as pending (lsn generated, data not in any PBuffer
+    // yet) so that the cleanup bound covers it from the moment of generation.
+    void RegisterInflightWrite(ui64 lsn, TBlockRange64 range);
 
     void WriteFinished(
         ui64 lsn,
         TBlockRange64 range,
-        TLocationMask requested,
-        TLocationMask confirmed);
+        THostMask requested,
+        THostMask confirmed);
     void FlushFinished(
-        TRoute route,
+        THostRoute route,
         const TVector<ui64>& flushOk,
         const TVector<ui64>& flushFailed);
     void EraseFinished(
-        ELocation location,
+        THostIndex host,
         const TVector<ui64>& eraseOk,
         const TVector<ui64>& eraseFailed);
 
+    void UpdateBelatedEraseQueue(
+        THostMask completedWrites,
+        ui64 lsn,
+        TBlockRange64 range);
+
     // Sets a mark on the ddisk to which offset it contains data and can be read
     // from it.
-    void MarkFresh(ELocation location, ui64 bytesOffset);
+    void MarkFresh(THostIndex host, ui64 bytesOffset);
     // Returns the offset to which ddisk contains the data. nullopt means that
     // the disk is completely full of data. And you can read it from anywhere.
-    [[nodiscard]] std::optional<ui64> GetFreshWatermark(
-        ELocation location) const;
+    [[nodiscard]] std::optional<ui64> GetFreshWatermark(THostIndex host) const;
     // Sets the mark up to which the disk can be read.
-    void SetReadWatermark(ELocation location, ui64 bytesOffset);
+    void SetReadWatermark(THostIndex host, ui64 bytesOffset);
     // Sets the mark to which writes should be flushed to the ddisk.
-    void SetFlushWatermark(ELocation location, ui64 bytesOffset);
+    void SetFlushWatermark(THostIndex host, ui64 bytesOffset);
 
     // Returns the number of in-flight write requests.
     [[nodiscard]] size_t GetInflightCount() const;
     [[nodiscard]] size_t GetFlushPendingCount() const;
     [[nodiscard]] size_t GetErasePendingCount() const;
+    [[nodiscard]] size_t GetEraseBelatedCount() const;
     [[nodiscard]] ui64 GetMinFlushPendingLsn() const;
     [[nodiscard]] ui64 GetMinErasePendingLsn() const;
+    [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
     [[nodiscard]] const TPBufferCounters& GetPBufferCounters(
-        ELocation pbuffer) const;
+        THostIndex host) const;
 
     // ILockableRanges implementation
     void LockPBuffer(ui64 lsn) override;
     void UnlockPBuffer(ui64 lsn) override;
     TLockRangeHandle LockDDiskRange(
         TBlockRange64 range,
-        TLocationMask mask) override;
+        THostMask mask) override;
     void UnLockDDiskRange(TLockRangeHandle handle) override;
 
     // IReadyQueue implementation
     void Register(ui64 lsn, EQueueType queueType) override;
     void UnRegister(ui64 lsn) override;
     void DataToPBufferAdded(
-        ELocation location,
+        THostIndex host,
         EPBufferCounter counter,
         size_t byteCount) override;
     void DataFromPBufferReleased(
-        ELocation location,
+        THostIndex host,
         EPBufferCounter counter,
         size_t byteCount) override;
 
+    [[nodiscard]] bool NeedFlush() const;
+    [[nodiscard]] bool NeedErase() const;
+
     // Debug purposes
+    [[nodiscard]] TString DebugPrintPBuffers();
+    [[nodiscard]] TString DebugPrintPBuffersUsage() const;
     [[nodiscard]] TString DebugPrintLockedDDiskRanges();
     [[nodiscard]] TString DebugPrintDDiskState() const;
+    [[nodiscard]] TString DebugPrintReadyToClone() const;
     [[nodiscard]] TString DebugPrintReadyToFlush() const;
+    [[nodiscard]] TString DebugPrintReadyToErase() const;
 
 private:
     using TInflightMap = TBlockRangeMap<ui64, TInflightInfo>;
     using TInflightDDiskReadsMap =
-        TBlockRangeMap<ILockableRanges::TLockRangeHandle, TLocationMask>;
+        TBlockRangeMap<ILockableRanges::TLockRangeHandle, THostMask>;
 
-    [[nodiscard]] TLocationMask FilterLocations(
-        TLocationMask mask,
+    [[nodiscard]] THostMask FilterLocations(
+        THostMask mask,
         TBlockRange64 range) const;
 
     // Create single readRangeHint for specified parameters
     [[nodiscard]] TReadRangeHint MakeReadRangeHint(
-        TLocationMask locationMask,
+        THostMask mask,
         ui64 lsn,
         TBlockRange64 range,
         ui64 offsetBlocks);
@@ -265,9 +337,8 @@ private:
     const ui32 BlockSize;
     const ui64 BlockCount;
 
-    TLocationMask DesiredPBuffers = TLocationMask::MakePrimaryPBuffers();
-    TLocationMask DesiredDDisks = TLocationMask::MakePrimaryDDisks();
-    TLocationMask DisabledLocations;
+    THostMask DesiredDDisks;
+    THostMask DisabledHosts;
 
     // Inflight write requests.
     TInflightMap Inflight;
@@ -284,16 +355,32 @@ private:
     // Using TSet for O(1) min LSN access.
     TSet<ui64> ReadyToErase;
 
+    struct TInfoEraseBelated
+    {
+        ui64 Lsn{};
+        THostMask Hosts;
+        TBlockRange64 Range;
+
+        bool operator<(const TInfoEraseBelated& other) const;
+    };
+
+    TSet<TInfoEraseBelated> ReadyToEraseBelated;
+
     // In-flight reads and the locks they create.
     ILockableRanges::TLockRangeHandle InflightDDiskReadsGenerator = 0;
     TInflightDDiskReadsMap InflightDDiskReads;
 
     // DDisks freshness state.
-    THolderForLocation<TDDiskState> DDiskStates;
+    TVector<TDDiskState> DDiskStates;
 
     // PBuffers space usage counters.
-    THolderForLocation<TPBufferCounters> PBufferCounters;
+    TVector<TPBufferCounters> PBufferCounters;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+TVector<ui64> MakeLsnVector(std::span<const TPBufferSegment> segments);
+TVector<ui64> MakeLsnVector(std::span<const TEraseSegment> segments);
 
 ////////////////////////////////////////////////////////////////////////////////
 

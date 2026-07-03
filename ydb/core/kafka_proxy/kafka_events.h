@@ -306,16 +306,7 @@ struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffse
 struct TEvTopicModificationResponse : public NActors::TEventLocal<TEvTopicModificationResponse, EvCreateTopicsResponse>
                                     , public NKikimr::NGRpcProxy::V1::TLocalResponseBase
 {
-    enum EStatus {
-        OK,
-        ERROR,
-        BAD_REQUEST,
-        INVALID_CONFIG,
-        TOPIC_DOES_NOT_EXIST,
-    };
-
-    TEvTopicModificationResponse()
-    {}
+    TEvTopicModificationResponse() = default;
 
     TString TopicPath;
     EKafkaErrors Status;

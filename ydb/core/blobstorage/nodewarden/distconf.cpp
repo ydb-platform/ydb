@@ -7,6 +7,8 @@
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <library/cpp/streams/zstd/zstd.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
+
 namespace NKikimr::NStorage {
 
     TDistributedConfigKeeper::TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg,
@@ -25,7 +27,8 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::Bootstrap() {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
+        YDB_LOG_DEBUG("Bootstrap",
+            {"marker", "NWDC00"});
 
         auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
         auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
@@ -376,9 +379,12 @@ namespace NKikimr::NStorage {
 #endif
 
     STFUNC(TDistributedConfigKeeper::StateWaitForInit) {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC53, "StateWaitForInit event", (Type, ev->GetTypeRewrite()),
-            (StorageConfigLoaded, StorageConfigLoaded), (NodeListObtained, NodeListObtained),
-            (PendingEvents.size, PendingEvents.size()));
+        YDB_LOG_DEBUG("StateWaitForInit event",
+            {"marker", "NWDC53"},
+            {"type", ev->GetTypeRewrite()},
+            {"storageConfigLoaded", StorageConfigLoaded},
+            {"nodeListObtained", NodeListObtained},
+            {"pendingEventsSize", PendingEvents.size()});
 
         auto processPendingEvents = [&] {
             if (PendingEvents.empty()) {
@@ -443,11 +449,18 @@ namespace NKikimr::NStorage {
         THPTimer timer;
         Y_DEFER {
             if (auto duration = TDuration::Seconds(timer.Passed()); duration >= TDuration::MilliSeconds(5)) {
-                STLOG(PRI_WARN, BS_NODE, NWDC01, "StateFunc too long", (Type, type), (Duration, duration));
+                YDB_LOG_WARN("StateFunc too long",
+                    {"marker", "NWDC01"},
+                    {"type", type},
+                    {"duration", duration});
             }
         };
-        STLOG(PRI_DEBUG, BS_NODE, NWDC15, "StateFunc", (Type, ev->GetTypeRewrite()), (Sender, ev->Sender),
-            (SessionId, ev->InterconnectSession), (Cookie, ev->Cookie));
+        YDB_LOG_DEBUG("StateFunc",
+            {"marker", "NWDC15"},
+            {"type", ev->GetTypeRewrite()},
+            {"sender", ev->Sender},
+            {"sessionId", ev->InterconnectSession},
+            {"cookie", ev->Cookie});
         const ui32 senderNodeId = ev->Sender.NodeId();
         if (ev->InterconnectSession && SubscribedSessions.contains(senderNodeId)) {
             // keep session actors intact
@@ -486,10 +499,17 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeWardenUpdateConfigFromPeer, Handle);
             fFunc(TEvPrivate::EvRetryCollectConfigsAndPropose, HandleRetryCollectConfigsAndPropose);
             cFunc(TEvPrivate::EvRetryPersistConfig, HandleRetryPersistConfig);
+            cFunc(TEvPrivate::EvFlushRetroTraceBatch, HandleFlushRetroTraceBatch);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);
         }
+
+        if (!InvokeOnRootPending.empty() && (!Binding || Binding->RootNodeId)) {
+            std::ranges::for_each(std::exchange(InvokeOnRootPending, {}), std::bind(&TThis::HandleInvokeOnRoot,
+                this, std::placeholders::_1));
+        }
+
         if (IsSelfStatic && StorageConfig && NodeListObtained) {
             UpdateQuorums();
             IssueNextBindRequest();
@@ -497,10 +517,6 @@ namespace NKikimr::NStorage {
         }
         if (StorageConfig && NodeListObtained) {
             ReportStorageConfigToNodeWarden();
-        }
-        if (!InvokeOnRootPending.empty() && (!Binding || Binding->RootNodeId)) {
-            std::ranges::for_each(std::exchange(InvokeOnRootPending, {}), std::bind(&TThis::HandleInvokeOnRoot,
-                this, std::placeholders::_1));
         }
         ConsistencyCheck();
     }

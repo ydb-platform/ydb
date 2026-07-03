@@ -45,7 +45,7 @@ template <>
 struct LogRecordSetterTrait<EventId>
 {
   template <class ArgumentType>
-  inline static LogRecord *Set(LogRecord *log_record, ArgumentType &&arg) noexcept
+  inline static LogRecord *Set(LogRecord *log_record, const ArgumentType &arg) noexcept
   {
     log_record->SetEventId(arg.id_, nostd::string_view{arg.name_.get()});
 
@@ -57,7 +57,7 @@ template <>
 struct LogRecordSetterTrait<trace::SpanContext>
 {
   template <class ArgumentType>
-  inline static LogRecord *Set(LogRecord *log_record, ArgumentType &&arg) noexcept
+  inline static LogRecord *Set(LogRecord *log_record, const ArgumentType &arg) noexcept
   {
     log_record->SetSpanId(arg.span_id());
     log_record->SetTraceId(arg.trace_id());
@@ -131,7 +131,7 @@ template <>
 struct LogRecordSetterTrait<common::KeyValueIterable>
 {
   template <class ArgumentType>
-  inline static LogRecord *Set(LogRecord *log_record, ArgumentType &&arg) noexcept
+  inline static LogRecord *Set(LogRecord *log_record, const ArgumentType &arg) noexcept
   {
     arg.ForEachKeyValue(
         [&log_record](nostd::string_view key, common::AttributeValue value) noexcept {
@@ -173,7 +173,7 @@ struct LogRecordSetterTrait
   template <class ArgumentType,
             nostd::enable_if_t<common::detail::is_key_value_iterable<ArgumentType>::value, int> * =
                 nullptr>
-  inline static LogRecord *Set(LogRecord *log_record, ArgumentType &&arg) noexcept
+  inline static LogRecord *Set(LogRecord *log_record, const ArgumentType &arg) noexcept
   {
     for (auto &argv : arg)
     {

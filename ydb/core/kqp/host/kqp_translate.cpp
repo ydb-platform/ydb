@@ -1,6 +1,11 @@
 #include "kqp_translate.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
+
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v0/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
@@ -9,12 +14,7 @@
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 
-#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
-#include <ydb/public/api/protos/ydb_query.pb.h>
-
-
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 TKqpAutoParamBuilder::TKqpAutoParamBuilder()
     : TypeProxy(*this)
@@ -136,8 +136,6 @@ NYql::IAutoParamBuilderPtr TKqpAutoParamBuilderFactory::MakeBuilder() {
     return MakeIntrusive<TKqpAutoParamBuilder>();
 }
 
-
-
 NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type) {
     switch (type) {
         case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
@@ -255,6 +253,13 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
         settings.Flags.insert("AnsiInForEmptyOrNullableItemsCollections");
     }
 
+    // __ydb_row_id (added to a user table for the fulltext UseRowIdAsDocId opt-in) must not surface
+    // in SELECT *, yet stay readable when named explicitly. Only this synthetic column leaks onto
+    // user tables; the other __ydb_-prefixed columns live on index impl tables, where they must stay
+    // visible when the impl table is read directly -- so we hide this column specifically, not the
+    // whole __ydb_ system prefix.
+    settings.ExtraSystemColumnPrefixes.push_back(NKikimr::NTableIndex::NFulltext::RowIdColumn);
+
     if (QueryParameters) {
         NSQLTranslation::TTranslationSettings versionSettings = settings;
         NYql::TIssues versionIssues;
@@ -278,6 +283,8 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
     if (YqlSelect) {
         settings.YqlSelect = *YqlSelect;
     }
+
+    settings.ValidateViewStatement = ValidateViewStatement;
 
     return settings;
 }
@@ -386,5 +393,4 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Q
     return ParseStatements(queryText, isSql, sqlVersion, deprecatedSQL, ctx, settingsBuilder);
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

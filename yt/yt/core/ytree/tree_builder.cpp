@@ -52,7 +52,7 @@ public:
     void OnMyStringScalar(TStringBuf value) override
     {
         auto node = Factory_->CreateString();
-        node->SetValue(TString(value));
+        node->SetValue(std::string(value));
         AddNode(node, false);
     }
 
@@ -111,7 +111,7 @@ public:
 
     void OnMyKeyedItem(TStringBuf key) override
     {
-        Key_ = TString(key);
+        Key_ = std::string(key);
     }
 
     void OnMyEndMap() override
@@ -138,7 +138,7 @@ private:
 
     //! Contains nodes forming the current path in the tree.
     std::stack<INodePtr> NodeStack_;
-    std::optional<TString> Key_;
+    std::optional<std::string> Key_;
     INodePtr ResultNode_;
     std::unique_ptr<TAttributeConsumer> AttributeConsumer_;
     IAttributeDictionaryPtr Attributes_;

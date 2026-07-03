@@ -209,6 +209,10 @@ message TEvLockRows {
     // When true rows already locked by other transactions are skipped without
     // waiting for conflicting transactions to commit or abort.
     optional bool SkipLocked = 7;
+    // When true, keys that are absent or deleted in the latest version are skipped
+    // and not locked. If the skipped key was modified/deleted above the snapshot,
+    // its index will NOT appear in the ModifiedKeys result field.
+    optional bool SkipAbsent = 13;
 
     // Destination global table id, must include SchemaVersion to detect schema changes
     optional TTableId TableId = 8;
@@ -268,8 +272,11 @@ message TEvLockRowsResult {
     // A list of row indexes from the request which have been successfully locked
     repeated uint32 LockedKeys = 6 [packed = true];
 
-    // A list of row indexes from the request which have been skipped when SkipLocked is true
-    repeated uint32 SkippedKeys = 7 [packed = true];
+    // A list of row indexes from the request which have been skipped because SkipLocked is true
+    repeated uint32 SkippedLockedKeys = 7 [packed = true];
+
+    // A list of row indexes from the request which have been skipped because SkipAbsent is true
+    repeated uint32 SkippedAbsentKeys = 9 [packed = true];
 
     // A list of row indexes from the request which have been modified since the specified Snapshot
     repeated uint32 ModifiedKeys = 8 [packed = true];

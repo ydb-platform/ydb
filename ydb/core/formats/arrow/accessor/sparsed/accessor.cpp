@@ -1,6 +1,6 @@
 #include "accessor.h"
 
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/splitter/simple.h>
@@ -202,10 +202,12 @@ ui32 TSparsedArrayChunk::GetFirstIndexNotDefault() const {
 
 TMinMax TSparsedArrayChunk::GetMinMaxScalars() const {
     TMinMax value = TMinMax::Compute(ColValue);
-    if (value.IsNull() && DefaultValue) {
-        value.Min() = DefaultValue;
-        value.Max() = DefaultValue;
+    TMinMax defaultMinMax = TMinMax::MakeNull(value.ElementType());
+    if (DefaultValue) {
+        defaultMinMax.Min() = DefaultValue;
+        defaultMinMax.Max() = DefaultValue;
     }
+    value.UniteWith(defaultMinMax);
     return value;
 }
 

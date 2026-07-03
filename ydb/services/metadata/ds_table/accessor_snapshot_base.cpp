@@ -83,10 +83,10 @@ void TDSAccessorBase::Handle(TTableExistsActor::TEvController::TEvError::TPtr& e
     auto it = ExistenceChecks.find(ev->Get()->GetPath());
     if (it == ExistenceChecks.end() || it->second.RetryCount == 0) {
         AFL_ERROR(NKikimrServices::METADATA_PROVIDER)("action", "cannot detect path existence")("path", ev->Get()->GetPath())("error", ev->Get()->GetErrorMessage());
-        Schedule(TDuration::Seconds(1), new TEvRecheckExistence(ev->Get()->GetPath()));
-        return;
     }
-    ++it->second.RetryCount;
+    if (it != ExistenceChecks.end()) {
+        ++it->second.RetryCount;
+    }
     Schedule(TDuration::Seconds(1), new TEvRecheckExistence(ev->Get()->GetPath()));
 }
 
@@ -98,6 +98,7 @@ void TDSAccessorBase::Handle(TTableExistsActor::TEvController::TEvResult::TPtr& 
     } else {
         it->second.State = EState::NON_EXISTS;
     }
+    it->second.RetryCount = 0;
     bool hasExists = false;
     for (auto&& i : ExistenceChecks) {
         if (i.second.State == EState::UNKNOWN) {

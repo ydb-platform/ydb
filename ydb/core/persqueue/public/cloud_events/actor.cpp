@@ -1,24 +1,23 @@
 #include "actor.h"
 
-#include <ydb/core/persqueue/public/cloud_events/proto/topics.pb.h>
-
-#include <util/generic/guid.h>
 #include <ydb/core/audit/audit_log.h>
-#include <google/protobuf/util/json_util.h>
-#include <google/protobuf/util/time_util.h>
 #include <ydb/core/audit/audit_log_impl.h>
 #include <ydb/core/audit/audit_log_service.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/persqueue/public/cloud_events/proto/topics.pb.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/security/util/net.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
-#include <ydb/core/security/util/net.h>
+
+#include <util/generic/guid.h>
 #include <util/network/address.h>
 
-
+#include <google/protobuf/util/json_util.h>
+#include <google/protobuf/util/time_util.h>
 
 namespace NKikimr::NPQ::NCloudEvents {
 
@@ -108,7 +107,7 @@ i32 MapSchemeStatusToGoogleRpcCode(NKikimrScheme::EStatus status) {
     return GoogleRpcUnknown;
 }
 
-} // anonymous namespace
+} // namespace
 
 TString GetCloudEventType(const TCloudEventInfo& info) {
     return TString("yandex.cloud.events.ydb.topics.") + GetOperationType(info.ModifyScheme);
@@ -384,7 +383,7 @@ TString BuildTopicCloudEvent(const TCloudEventInfo& info) {
     return data;
 }
 
-} // anonymous namespace
+} // namespace
 
 TCloudEventsActor::TCloudEventsActor()
 {

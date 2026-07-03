@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
-#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
 namespace NKikimr::NPQ {
 
@@ -11,4 +11,4 @@ std::optional<NPersQueueCommon::ECodec> FromV1Codec(const NYdb::NPersQueue::ECod
 
 i32 FromTopicCodec(const NYdb::NTopic::ECodec codec);
 
-} // NKikimr::NPQ
+} // namespace NKikimr::NPQ

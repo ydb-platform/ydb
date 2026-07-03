@@ -1,6 +1,8 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
@@ -597,6 +599,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     ui64 tableId = 1;
 
     auto planStep = SetupSchema(runtime, sender, tableId, table, codec);
+    const NOlap::TSnapshot preWriteSnapshot(planStep, Max<ui64>());
 
     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema = table.Schema;
     const std::vector<NArrow::NTest::TTestColumn>& testYdbPk = table.Pk;
@@ -618,7 +621,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 1);
 
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 1));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, preWriteSnapshot);
         reader.SetReplyColumnIds(table.GetColumnIds({ "resource_type" }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -635,7 +638,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 2);
 
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 1));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, preWriteSnapshot);
         reader.SetReplyColumnIds(table.GetColumnIds({ "resource_type" }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -712,7 +715,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     // read 6, planstep 0
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 6);
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 1));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, preWriteSnapshot);
         reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp", "message" }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(!rb);
@@ -1556,6 +1559,74 @@ void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
 
 }   // namespace
 
+Y_UNIT_TEST_SUITE(TColumnShardInit) {
+    // Regression test for the "Unhandled StateInit event" crash: while a columnshard is
+    // still booting (StateInit), the scheme cache may answer the subdomain watch with
+    // TEvWatchNotifyUnavailable (e.g. the subdomain can't be resolved during a cluster
+    // version change). Before the fix this event was unhandled and fell through to
+    // TTabletExecutedFlat::Enqueue, which had Y_DEBUG_ABORT. So it crashed in debug mode
+    // and ran with a possibly inconsistent state in release.
+    // The current fix is to die and restart in loop until a proper init happens.
+    //
+    // Note: TTabletExecutedFlat::Enqueue only Y_DEBUG_ABORTs, which is a no-op in release
+    // builds, so without the fix the unhandled event is silently dropped there and the
+    // shard boots to StateWork as if nothing happened. Asserting "the tablet eventually
+    // becomes active" is therefore not enough - it holds with or without the fix in release.
+    // What the fix actually changes is that the shard's user part *dies and is re-created*:
+    // the bootstrapper boots a brand new user actor with a different TActorId. We assert on
+    // that. (We can't count TEvRestored events: the test tablet framework delivers two per
+    // physical boot, to the same user actor, so the count is 2 even with no restart.)
+    Y_UNIT_TEST(SubDomainUnavailableDuringInit) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        auto controller = NKikimr::NYDBTest::TControllers::GetControllerAs<NKikimr::NYDBTest::NColumnShard::TController>();
+
+        const ui64 tabletId = TTestTxConfig::TxTablet0;
+
+        // Inject the unavailable notification exactly once, the moment the shard's user
+        // actor first appears (it is in StateInit until TTxInit finishes), reproducing the
+        // production ordering where the reply lands before the switch to StateWork. Track
+        // the set of distinct user actors that boot for this tablet: a real restart of the
+        // user part shows up as a second, different TActorId.
+        bool injected = false;
+        THashSet<TActorId> userActors;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTablet::TEvRestored::EventType) {
+                const auto* msg = ev->Get<TEvTablet::TEvRestored>();
+                if (msg->TabletID == tabletId && !msg->Follower) {
+                    userActors.insert(msg->UserTabletActor);
+                    if (!injected) {
+                        injected = true;
+                        runtime.Send(new IEventHandle(msg->UserTabletActor, TActorId(),
+                                         new TEvTxProxySchemeCache::TEvWatchNotifyUnavailable(0, "/Root", TPathId(1, 1))), 0, true);
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        // With the fix the shard dies on the injected event and the bootstrapper restarts
+        // it; the restart is not re-injected (guarded by `injected`) and reaches StateWork.
+        while (!controller->IsActiveTablet(tabletId)) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT(injected);
+
+        // The fix's contract: the shard's user part must have died on the injected event and
+        // been re-created by the bootstrapper, so a second distinct user actor exists.
+        // Without the fix the event is dropped and the original user actor reaches StateWork
+        // untouched, so there is only ever one - and this fails.
+        UNIT_ASSERT_GE_C(userActors.size(), 2, "shard did not restart after TEvWatchNotifyUnavailable (only one user actor booted)");
+
+        // The recovered shard is fully functional.
+        TActorId sender = runtime.AllocateEdgeActor();
+        Y_UNUSED(SetupSchema(runtime, sender, 1, TestTableDescription{}));
+    }
+}
+
 Y_UNIT_TEST_SUITE(EvWrite) {
     Y_UNIT_TEST(WriteInTransaction) {
         using namespace NArrow;
@@ -1708,6 +1779,83 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2 * 2048);
+    }
+
+    Y_UNIT_TEST(WriteIntoReadOnlyTableFails) {
+        using namespace NArrow;
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        const ui64 dstPathId = 2;
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
+        const std::vector<ui32> columnIds = { 1, 2 };
+
+        auto planStep = PrepareTablet(runtime, srcPathId, schema);
+
+        NConstruction::IArrayBuilder::TPtr keyColumn =
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
+        NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
+            "field", NConstruction::TStringPoolFiller(8, 100));
+        auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
+
+        // Sanity check: writing into the source table works before any copy is made.
+        {
+            const ui64 lockId = 111;
+            NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, srcPathId, lockId);
+            AFL_VERIFY(writer.Write(batch, columnIds, lockId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            AFL_VERIFY(writer.Abort() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+
+        // Create a read-only copy of the source table at dstPathId.
+        ui64 schemaTxId = 10;
+        {
+            const auto copyPlanStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, dstPathId, 1), ++schemaTxId);
+            PlanSchemaTx(runtime, sender, NOlap::TSnapshot(copyPlanStep, schemaTxId));
+            planStep = copyPlanStep;
+        }
+
+        // Writing into the read-only destination table must fail with STATUS_BAD_REQUEST
+        // and the response must contain a "table is read only" error issue.
+        {
+            const ui64 lockId = 222;
+            TActorId roSender = runtime.AllocateEdgeActor();
+            TString blobData = NArrow::SerializeBatchNoCompression(batch);
+
+            auto evWrite = std::make_unique<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            evWrite->SetTxId(lockId);
+            evWrite->SetLockId(lockId, 1);
+            const ui64 payloadIndex = NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
+            evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, { 0, dstPathId, 1 /*schemaVersion*/ }, columnIds,
+                payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
+
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, roSender, evWrite.release());
+
+            TAutoPtr<NActors::IEventHandle> handle;
+            auto event = runtime.GrabEdgeEvent<NEvents::TDataEvents::TEvWriteResult>(handle);
+            UNIT_ASSERT(event);
+
+            const auto& record = event->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetOrigin(), TTestTxConfig::TxTablet0);
+            UNIT_ASSERT_VALUES_EQUAL_C(record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                NKikimrDataEvents::TEvWriteResult::EStatus_Name(record.GetStatus()));
+
+            const TString issuesText = NYql::IssuesFromMessageAsString(record.GetIssues());
+            UNIT_ASSERT_C(issuesText.Contains("table is read only"), "expected 'table is read only' in error issues, got: " << issuesText);
+        }
+
+        // The original source table must remain writable.
+        {
+            const ui64 lockId = 333;
+            NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, srcPathId, lockId);
+            AFL_VERIFY(writer.Write(batch, columnIds, lockId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            AFL_VERIFY(writer.Abort() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
     }
 }
 
@@ -2505,6 +2653,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         csDefaultControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csDefaultControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
         TTester::Setup(runtime);
+        runtime.GetAppData(0).FeatureFlags.SetEnableSnapshotsLocking(true);
+        runtime.GetAppData(0).ColumnShardConfig.SetDefaultCompactionPreset("tiling");
 
         runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_INFO);
 
@@ -2733,8 +2883,18 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
         AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsSave().Val() == 1);
         AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsRemove().Val() == 1);
-        csDefaultControllerGuard->SetOverrideMaxReadStaleness(TDuration::Zero());
-        csDefaultControllerGuard->WaitCleaning(TDuration::Seconds(20), &runtime);
+        // With the registry guard (delay = 1+1+1+10 = 13s per phase), cleanup requires two
+        // plan-step advances of 13s each (phase-1 marking, then phase-2 deletion). In this test
+        // runtime plan step follows simulated time, so advance it explicitly to avoid relying on
+        // wall-clock processing speed of writes.
+        for (ui32 i = 0; i < 60 && deletedPortions.size() < oldPortions.size(); ++i, ++writeId, ++txId) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
+            planStep = ProposeCommit(runtime, sender, txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+        csDefaultControllerGuard->WaitCleaning(TDuration::Seconds(5), &runtime);
         Cerr << "Compactions happened: " << csDefaultControllerGuard->GetCompactionStartedCounter().Val() << Endl;
         Cerr << "Cleanups happened: " << csDefaultControllerGuard->GetCleaningStartedCounter().Val() << Endl;
         Cerr << "Old portions: " << JoinStrings(oldPortions.begin(), oldPortions.end(), " ") << Endl;
@@ -2746,12 +2906,169 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         UNIT_ASSERT_VALUES_EQUAL_C(oldPortions.size(), deletedPortions.size(), "All old portions must be deleted after read has finished");
     }
 
+    void TestCleanupSnapshotPersistenceAfterReboot() {
+        TTestBasicRuntime runtime;
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        csDefaultControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csDefaultControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+        TTester::Setup(runtime);
+        runtime.GetAppData(0).FeatureFlags.SetEnableSnapshotsLocking(true);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        ui64 writeId = 0;
+        ui64 tableId = 1;
+        ui64 txId = 1000;
+        auto ydbSchema = TTestSchema::YdbSchema();
+        const auto schemaSnapshotPlanStep = SetupSchema(runtime, sender, tableId);
+
+        ui64 cleanupDropsHappened = 0;
+        runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvWriteIndex>(ev)) {
+                if (auto cleanup = dynamic_pointer_cast<NOlap::TCleanupPortionsColumnEngineChanges>(msg->IndexChanges)) {
+                    if (!cleanup->GetPortionsToDrop().empty()) {
+                        ++cleanupDropsHappened;
+                    }
+                }
+            }
+            return false;
+        });
+
+        const TString triggerData = MakeTestBlob({ 0, 75 * 1000 }, ydbSchema);
+        auto planStep = schemaSnapshotPlanStep;
+
+        // Produce multiple versions of the same data to create removable portions.
+        for (ui32 i = 0; i < 20; ++i, ++writeId, ++txId) {
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
+            planStep = ProposeCommit(runtime, sender, txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        // Cleanup with registry guard needs enough logical-time advancement for mark+delete phases.
+        for (ui32 i = 0; i < 80 && cleanupDropsHappened == 0; ++i, ++writeId, ++txId) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
+            planStep = ProposeCommit(runtime, sender, txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+        UNIT_ASSERT_GT(cleanupDropsHappened, 0);
+
+        // Make service delay very large; after reboot this would allow very old snapshots unless
+        // persisted cleanup watermark is restored and applied.
+        auto& longTxConfig = runtime.GetAppData(0).LongTxServiceConfig;
+        longTxConfig.SetLocalSnapshotPromotionTimeSeconds(24 * 60 * 60);
+        longTxConfig.SetSnapshotsExchangeIntervalSeconds(24 * 60 * 60);
+        longTxConfig.SetSnapshotsRegistryUpdateIntervalSeconds(24 * 60 * 60);
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(schemaSnapshotPlanStep, Max<ui64>()));
+        reader.SetReplyColumnIds(TTestSchema::GetColumnIds(ydbSchema, { "timestamp", "message" }));
+        reader.ReadAll();
+        UNIT_ASSERT(reader.IsError());
+    }
+
     Y_UNIT_TEST(CompactionGC) {
         TestCompactionGC<TDefaultTestsController>();
     }
 
     Y_UNIT_TEST(CompactionGCFailingBs) {
         TestCompactionGC<NOlap::TFailingBSController>();
+    }
+
+    Y_UNIT_TEST(CleanupSnapshotPersistenceAfterReboot) {
+        TestCleanupSnapshotPersistenceAfterReboot();
+    }
+
+    Y_UNIT_TEST(CleanupDroppedTableRespectsBatchLimits) {
+        TTestBasicRuntime runtime;
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        csDefaultControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csDefaultControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+        csDefaultControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        csDefaultControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
+        TTester::Setup(runtime);
+        // Keep each write in indexed-portions path and prevent merges during setup.
+        TControlBoard::SetValue(1024, runtime.GetAppData(0).Icb->ColumnShardControls.MinBytesToIndex);
+        runtime.GetAppData(0).FeatureFlags.SetEnableWritePortionsOnInsert(true);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        ui64 writeId = 0;
+        ui64 tableId = 1;
+        ui64 txId = 1000;
+        auto ydbSchema = TTestSchema::YdbSchema();
+        auto planStep = SetupSchema(runtime, sender, tableId);
+
+        ui64 maxCleanupBatchSize = 0;
+        ui64 droppedPathCleanupBatches = 0;
+        THashSet<ui64> uniqueDroppedPortionsSeen;
+        runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvWriteIndex>(ev)) {
+                if (auto cleanup = dynamic_pointer_cast<NOlap::TCleanupPortionsColumnEngineChanges>(msg->IndexChanges)) {
+                    if (cleanup->GetPortionsToDrop().empty() && !cleanup->GetPortionsToAccess().empty()) {
+                        ++droppedPathCleanupBatches;
+                        maxCleanupBatchSize = std::max<ui64>(maxCleanupBatchSize, cleanup->GetPortionsToAccess().size());
+                        for (const auto& portion : cleanup->GetPortionsToAccess()) {
+                            uniqueDroppedPortionsSeen.insert(portion->GetPortionId());
+                        }
+                    }
+                }
+            }
+            return false;
+        });
+
+        // Build many active portions so dropped-table cleanup path has to batch.
+        constexpr ui32 writesCount = 1300;
+        constexpr ui32 writesPerTx = 25;
+        constexpr ui32 rowsPerWrite = 256;
+        std::vector<ui64> pendingWriteIds;
+        pendingWriteIds.reserve(writesPerTx);
+        for (ui32 i = 0; i < writesCount; ++i, ++writeId) {
+            const ui64 start = (ui64)i * rowsPerWrite;
+            const TString triggerData = MakeTestBlob({ start, start + rowsPerWrite }, ydbSchema);
+            UNIT_ASSERT_C(triggerData.size() > 1024, TStringBuilder() << "payload too small: " << triggerData.size());
+            UNIT_ASSERT_C(triggerData.size() < NColumnShard::TLimits::GetMaxBlobSize(), "payload is too large");
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
+            pendingWriteIds.insert(pendingWriteIds.end(), writeIds.begin(), writeIds.end());
+            if (pendingWriteIds.size() >= writesPerTx || i + 1 == writesCount) {
+                planStep = ProposeCommit(runtime, sender, txId, pendingWriteIds);
+                PlanCommit(runtime, sender, planStep, txId);
+                pendingWriteIds.clear();
+                ++txId;
+            }
+        }
+        csDefaultControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
+
+        // Drop the table and let cleanup process dropped-path portions.
+        const auto dropTxBody = TTestSchema::DropTableTxBody(tableId, 100500);
+        const auto dropPlanStep = ProposeSchemaTx(runtime, sender, dropTxBody, ++txId);
+        PlanSchemaTx(runtime, sender, NOlap::TSnapshot(dropPlanStep, txId));
+
+        for (ui32 i = 0; i < 120 && droppedPathCleanupBatches < 2; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
+        }
+
+        UNIT_ASSERT_C(droppedPathCleanupBatches >= 2,
+            TStringBuilder() << "expected at least 2 dropped-table cleanup batches, got " << droppedPathCleanupBatches);
+        UNIT_ASSERT_C(uniqueDroppedPortionsSeen.size() > 1000,
+            TStringBuilder() << "expected >1000 unique dropped-table portions to cleanup, got " << uniqueDroppedPortionsSeen.size());
+        UNIT_ASSERT_C(maxCleanupBatchSize <= 1000, TStringBuilder()
+                                                       << "Cleanup batch exceeded portions limit (batches=" << droppedPathCleanupBatches
+                                                       << "), max batch size: " << maxCleanupBatchSize);
     }
 
     Y_UNIT_TEST(PortionInfoSize) {
@@ -2764,6 +3081,128 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         Cerr << sizeof(NOlap::TSnapshot) << Endl;
         Cerr << sizeof(NArrow::TReplaceKey) << Endl;
         Cerr << sizeof(NArrow::NMerger::TSortableBatchPosition) << Endl;
+    }
+
+    Y_UNIT_TEST(InternalScanAfterDropColumn) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        ui64 writeId = 0;
+        ui64 tableId = 1;
+        ui64 txId = 100;
+
+        const std::vector<NArrow::NTest::TTestColumn> ydbSchema = {
+            NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)),
+            NArrow::NTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("level", TTypeInfo(NTypeIds::Int32)),
+            NArrow::NTest::TTestColumn("message", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("extra", TTypeInfo(NTypeIds::Int32)),
+        };
+
+        const std::vector<NArrow::NTest::TTestColumn> ydbPk = {
+            NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)),
+            NArrow::NTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)),
+        };
+
+        const std::vector<NArrow::NTest::TTestColumn> ydbSchemaV2 = {
+            NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)),
+            NArrow::NTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("level", TTypeInfo(NTypeIds::Int32)),
+            NArrow::NTest::TTestColumn("message", TTypeInfo(NTypeIds::Utf8)),
+        };
+
+        auto planStep = SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, ydbPk), ++txId);
+
+        const auto testData = MakeTestBlob({ 0, 100 }, ydbSchema);
+        std::vector<ui64> writeIds;
+        UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds));
+        planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, planStep, txId);
+
+        TDeque<TAutoPtr<IEventHandle>> capturedInternalScans;
+        const auto captureInternalScan = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (!capturedInternalScans.empty()) {
+                return false;
+            }
+
+            if (TryGetPrivateEvent<TEvColumnShard::TEvInternalScan>(ev)) {
+                capturedInternalScans.push_back(ev.Release());
+                return true;
+            }
+
+            return false;
+        };
+
+        runtime.SetEventFilter(captureInternalScan);
+
+        {
+            auto write = std::make_unique<NEvents::TDataEvents::TEvWrite>(++writeId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            auto& operation = write->AddOperation(
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE, TTableId(0, tableId, 1), {}, 0, NKikimrDataEvents::FORMAT_ARROW);
+            *operation.MutablePayloadSchema() = NArrow::SerializeSchema(*NArrow::MakeArrowSchema(ydbSchema));
+            NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite> writer(*write);
+            auto dataCopy = testData;
+            writer.AddDataToPayload(std::move(dataCopy));
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, write.release());
+        }
+
+        const TInstant waitStart = TInstant::Now();
+        while (capturedInternalScans.empty() && TInstant::Now() - waitStart < TDuration::Seconds(30)) {
+            runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+        }
+
+        UNIT_ASSERT_C(!capturedInternalScans.empty(), "Update write without MvccSnapshot should trigger restore internal scan");
+
+        runtime.SetEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+            return false;
+        });
+
+        Y_UNUSED(SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 2, ydbSchemaV2, ydbPk, {}), ++txId));
+
+        TDeque<TAutoPtr<IEventHandle>> capturedScanErrors;
+        const auto captureScanError = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (TryGetPrivateEvent<NKqp::TEvKqpCompute::TEvScanError>(ev)) {
+                capturedScanErrors.push_back(ev.Release());
+                return true;
+            }
+
+            return false;
+        };
+
+        runtime.SetEventFilter(captureScanError);
+
+        while (!capturedInternalScans.empty()) {
+            runtime.Send(capturedInternalScans.front().Release());
+            capturedInternalScans.pop_front();
+        }
+
+        const TInstant scanWaitStart = TInstant::Now();
+        while (capturedScanErrors.empty() && TInstant::Now() - scanWaitStart < TDuration::Seconds(30)) {
+            runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+        }
+
+        UNIT_ASSERT_C(!capturedScanErrors.empty(), "Internal scan must fail gracefully on schema version mismatch");
+        const auto* scanError = TryGetPrivateEvent<NKqp::TEvKqpCompute::TEvScanError>(capturedScanErrors.front());
+        UNIT_ASSERT(scanError);
+        UNIT_ASSERT_VALUES_EQUAL(scanError->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
+        const TString issuesText = NYql::IssuesFromMessageAsString(scanError->Record.GetIssues());
+        UNIT_ASSERT_C(issuesText.Contains("schema version mismatch"), issuesText);
+        UNIT_ASSERT_C(issuesText.Contains("request_schema_version=1"), issuesText);
+        UNIT_ASSERT_C(issuesText.Contains("snapshot_schema_version=2"), issuesText);
     }
 }
 

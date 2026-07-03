@@ -18,4 +18,5 @@ RECURSE_FOR_TESTS(
     s3
     streaming
     yds
+    streaming/streaming_large
 )

@@ -14,6 +14,12 @@ namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NStorage::NPartitionDirect {
+class TVChunkConfig;
+}   // namespace NStorage::NPartitionDirect
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct IPartitionDirectService
 {
     virtual ~IPartitionDirectService() = default;
@@ -26,6 +32,17 @@ struct IPartitionDirectService
         TExecutorPtr executor,
         TDuration delay,
         TCallback callback) = 0;
+
+    // Asynchronously persists the given vchunk config to the partition's
+    // local DB. Caller must ensure cfg.IsValid().
+    virtual void UpdateVChunkConfig(
+        const NStorage::NPartitionDirect::TVChunkConfig& cfg) = 0;
+
+    // Generates the next tablet-wide write LSN. Called by a vchunk on its
+    // executor thread when it starts processing a write, so generation and
+    // dirty-map registration happen on the same thread. Also drives periodic
+    // persistent buffer cleanup.
+    virtual ui64 GenerateLsn() = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

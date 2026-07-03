@@ -1970,7 +1970,7 @@ void TProducer::GetSessionClosedEventAndDie(WrappedWriteSessionPtr wrappedSessio
 }
 
 TStringBuilder TProducer::LogPrefix() {
-    return TStringBuilder() << " Id: " << Id << " Epoch: " << Epoch.load() << " ";
+    return TStringBuilder() << " Id: " << Id << " Epoch: " << Epoch.load() << " TraceId: " << Settings.TraceId_ << " ";
 }
 
 void TProducer::NextEpoch() {

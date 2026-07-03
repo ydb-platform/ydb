@@ -162,6 +162,7 @@ void UploadData(const NJson::TJsonValue& json, const NTable::TScheme::TTableInfo
     }
 
     TVector<TRawTypeValue> key(table->KeyColumns.size());
+    TVector<bool> keyFound(table->KeyColumns.size(), false);
     TVector<NTable::TUpdateOp> ops;
 
     if (!json.IsMap()) {
@@ -182,6 +183,7 @@ void UploadData(const NJson::TJsonValue& json, const NTable::TScheme::TTableInfo
 
         if (column.KeyOrder != Max<ui32>()) {
             key.at(column.KeyOrder) = MakeTypeValueFromJson(column.PType.GetTypeId(), value, pool);
+            keyFound.at(column.KeyOrder) = true;
         } else {
             ops.emplace_back(NIceDb::TUpdateOp(
                 column.Id,
@@ -191,8 +193,8 @@ void UploadData(const NJson::TJsonValue& json, const NTable::TScheme::TTableInfo
         }
     }
 
-    for (size_t i = 0; i < key.size(); ++i) {
-        if (key[i].IsEmpty()) {
+    for (size_t i = 0; i < keyFound.size(); ++i) {
+        if (!keyFound[i]) {
             ui32 keyColId = table->KeyColumns.at(i);
             const auto& col = table->Columns.at(keyColId);
             throw yexception() << "Key column " << col.Name << " is missing in table " << table->Name;
@@ -316,7 +318,8 @@ public:
     NMetrics::TResourceMetrics* GetResourceMetrics() const override { Y_TABLET_ERROR("Not supported"); }
     float GetRejectProbability() const override { Y_TABLET_ERROR("Not supported"); }
     void SetPreloadTablesData(THashSet<ui32>) override { Y_TABLET_ERROR("Not supported"); }
-    void StartVacuum(ui64) override { Y_TABLET_ERROR("Not supported"); }
+    void StartVacuum(TVacuumTag) override { Y_TABLET_ERROR("Not supported"); }
+    void VacuumComplete(TVacuumGeneration, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
     void MakeSnapshot(TIntrusivePtr<TTableSnapshotContext>) override { Y_TABLET_ERROR("Not supported"); }
     void DropSnapshot(TIntrusivePtr<TTableSnapshotContext>) override { Y_TABLET_ERROR("Not supported"); }
     void MoveSnapshot(const TTableSnapshotContext&, ui32, ui32) override { Y_TABLET_ERROR("Not supported"); }
@@ -327,6 +330,7 @@ public:
     void EnableReadMissingReferences() override { Y_TABLET_ERROR("Not supported"); }
     void DisableReadMissingReferences() override { Y_TABLET_ERROR("Not supported"); }
     ui64 MissingReferencesSize() const override { Y_TABLET_ERROR("Not supported"); }
+    void MoveData(TEvTablet::TEvMoveData::TPtr&) override { Y_TABLET_ERROR("Not supported"); }
 
 private:
     void ScheduleProcessPending() {

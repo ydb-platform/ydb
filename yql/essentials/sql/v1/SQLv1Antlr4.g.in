@@ -87,6 +87,7 @@ sql_stmt_core:
   | alter_secret_stmt
   | drop_secret_stmt
   | truncate_table_stmt
+  | materialize_stmt
 ;
 
 expr:
@@ -233,7 +234,9 @@ json_query: JSON_QUERY LPAREN
   (json_query_handler ON ERROR)?
 RPAREN;
 
-select_subexpr:
+select_subexpr: cte_with_clause? select_subexpr_core;
+
+select_subexpr_core:
   select_subexpr_intersect (union_op select_subexpr_intersect)*
 ;
 
@@ -348,9 +351,11 @@ type_name_composite:
   | type_name_dynamiclinear
   ) QUESTION*;
 
+type_name_null: NULL;
+
 type_name:
     type_name_composite
-  | (type_name_decimal | type_name_simple) QUESTION*;
+  | (type_name_decimal | type_name_simple | type_name_null) QUESTION*;
 
 type_name_or_bind: type_name | bind_parameter;
 
@@ -385,11 +390,23 @@ sort_specification: expr (ASC | DESC)?;
 
 sort_specification_list: sort_specification (COMMA sort_specification)*;
 
-select_stmt: select_stmt_intersect (union_op select_stmt_intersect)*;
+cte_with_clause: WITH cte_binding (COMMA cte_binding)* COMMA?;
+
+cte_binding: RECURSIVE? cte_key AS LPAREN cte_value RPAREN;
+
+cte_key: id_table_or_type pure_column_list?;
+
+cte_value: select_stmt | values_stmt;
+
+select_stmt: cte_with_clause? select_stmt_core;
+
+select_stmt_core: select_stmt_intersect (union_op select_stmt_intersect)*;
 
 select_stmt_intersect: select_kind_parenthesis (intersect_op select_kind_parenthesis)*;
 
-select_unparenthesized_stmt: select_unparenthesized_stmt_intersect (union_op select_stmt_intersect)*;
+select_unparenthesized_stmt: cte_with_clause? select_unparenthesized_stmt_core;
+
+select_unparenthesized_stmt_core: select_unparenthesized_stmt_intersect (union_op select_stmt_intersect)*;
 
 select_unparenthesized_stmt_intersect: select_kind_partial (intersect_op select_kind_parenthesis)*;
 
@@ -403,7 +420,7 @@ select_kind_partial: select_kind
   (LIMIT expr ((OFFSET | COMMA) expr)?)?
   ;
 
-select_kind: (DISCARD)? (process_core | reduce_core | select_core) (INTO RESULT pure_column_or_named)?;
+select_kind: (DISCARD)? (process_core | reduce_core | select_core | combine_core) (INTO RESULT pure_column_or_named)?;
 
 process_core:
   PROCESS STREAM? named_single_source (COMMA named_single_source)* (USING using_call_expr (AS an_id)?
@@ -426,6 +443,14 @@ select_core:
   (FROM join_source)? SELECT STREAM? opt_set_quantifier result_column (COMMA result_column)* COMMA? (WITHOUT (IF EXISTS)? without_column_list)? (FROM join_source)? (WHERE expr)?
   group_by_clause? (HAVING expr)? window_clause? ext_order_by_clause?
 ;
+
+combine_core:
+  COMBINE named_single_source (PRESORT sort_specification_list)?
+  WITH named_single_source (PRESORT sort_specification_list)?
+  ON expr USING using_call_expr
+;
+
+materialize_stmt: MATERIALIZE named_single_source (ON cluster_expr)? table_hints? INTO bind_parameter;
 
 // ISO/IEC 9075-2:2016(E) 7.7 <row pattern recognition clause>
 row_pattern_recognition_clause: MATCH_RECOGNIZE LPAREN
@@ -574,7 +599,9 @@ flatten_by_arg:
 
 flatten_source: named_single_source (FLATTEN ((OPTIONAL|LIST|DICT)? BY flatten_by_arg | COLUMNS))?;
 
-named_single_source: single_source row_pattern_recognition_clause? ((AS an_id | an_id_as_compat) pure_column_list?)? (sample_clause | tablesample_clause)?;
+named_single_source: hinted_single_source row_pattern_recognition_clause? ((AS an_id | an_id_as_compat) pure_column_list?)? (sample_clause | tablesample_clause)?;
+
+hinted_single_source: single_source table_hints?;
 
 single_source:
     table_ref
@@ -1068,7 +1095,7 @@ define_action_or_subquery_body: SEMICOLON* (sql_stmt_core (SEMICOLON+ sql_stmt_c
 if_stmt: EVALUATE? IF expr do_stmt (ELSE do_stmt)?;
 for_stmt: EVALUATE? PARALLEL? FOR bind_parameter IN expr do_stmt (ELSE do_stmt)?;
 
-table_ref: (cluster_expr DOT)? COMMAT? (table_key | an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN | bind_parameter (LPAREN expr_list? RPAREN)? (VIEW view_name)?) table_hints?;
+table_ref: (cluster_expr DOT)? COMMAT? (table_key | an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN | bind_parameter (LPAREN expr_list? RPAREN)? (VIEW view_name)?);
 
 table_key: id_table_or_type (VIEW view_name)?;
 table_arg: COMMAT? named_expr (VIEW view_name)?;
@@ -1428,6 +1455,7 @@ keyword_window_uncompat:
 keyword_hint_uncompat:
     SCHEMA
   | COLUMNS
+  | WATERMARK
 ;
 
 keyword_as_compat:
@@ -1458,6 +1486,7 @@ keyword_as_compat:
   | CLASSIFIER
   // | COLLATE
   | COLLECTION
+  | COMBINE
   | COMMIT
   | COMPRESSION
   | CONDITIONAL
@@ -1549,6 +1578,7 @@ keyword_as_compat:
   | MATCH
   | MATCHES
   | MATCH_RECOGNIZE
+  | MATERIALIZE
   | MEASURES
   | MICROSECONDS
   | MILLISECONDS
@@ -1593,6 +1623,7 @@ keyword_as_compat:
   | QUEUE
   | RAISE
 //  | READ
+  | RECURSIVE
   | REFERENCES
   | REGEXP
   | REINDEX
@@ -1695,6 +1726,7 @@ keyword_compat: (
   | CLASSIFIER
   | COLLATE
   | COLLECTION
+  | COMBINE
   | COMMIT
   | COMPRESSION
   | CONDITIONAL
@@ -1786,6 +1818,7 @@ keyword_compat: (
   | MATCH
   | MATCHES
   | MATCH_RECOGNIZE
+  | MATERIALIZE
   | MEASURES
   | MICROSECONDS
   | MILLISECONDS
@@ -1830,6 +1863,7 @@ keyword_compat: (
   | QUEUE
   | RAISE
 //  | READ
+  | RECURSIVE
   | REFERENCES
   | REGEXP
   | REINDEX
@@ -1896,7 +1930,7 @@ keyword_compat: (
   | VALUES
   | VIEW
   | VIRTUAL
-  | WATERMARK
+//  | WATERMARK
   | WITH
   | WRAPPER
 //  | WRITE
@@ -2041,6 +2075,7 @@ CLASSIFIER: C L A S S I F I E R;
 COLLATE: C O L L A T E;
 COLUMN: C O L U M N;
 COLUMNS: C O L U M N S;
+COMBINE: C O M B I N E;
 COMMIT: C O M M I T;
 COMPACT: C O M P A C T;
 COMPRESSION: C O M P R E S S I O N;
@@ -2158,6 +2193,7 @@ MANAGE: M A N A G E;
 MATCH: M A T C H;
 MATCHES: M A T C H E S;
 MATCH_RECOGNIZE: M A T C H '_' R E C O G N I Z E;
+MATERIALIZE: M A T E R I A L I Z E;
 MEASURES: M E A S U R E S;
 MICROSECONDS: M I C R O S E C O N D S;
 MILLISECONDS: M I L L I S E C O N D S;
@@ -2207,6 +2243,7 @@ QUEUE: Q U E U E;
 RAISE: R A I S E;
 RANGE: R A N G E;
 //READ: R E A D;
+RECURSIVE: R E C U R S I V E;
 REDUCE: R E D U C E;
 REFERENCES: R E F E R E N C E S;
 REGEXP: R E G E X P;

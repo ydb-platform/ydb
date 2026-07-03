@@ -13,6 +13,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 
+#include <memory>
 #include <variant>
 
 namespace Ydb {
@@ -43,6 +44,8 @@ class TableIndexDescription;
 class ValueSinceUnixEpochModeSettings;
 class EvictionToExternalStorageSettings;
 class CompactItem;
+class LocalBloomFilterIndex;
+class LocalBloomNgramFilterIndex;
 
 } // namespace Table
 } // namespace Ydb
@@ -62,6 +65,7 @@ class TRetryContext;
 namespace NRetry {
 template <typename TClient>
 class TRetryDeadlineHelper;
+class TBulkUpsertRetryState;
 } // namespace NRetry
 
 namespace NScheme {
@@ -416,6 +420,25 @@ public:
 };
 
 //! Represents index description
+// If FalsePositiveProbability is left unset, the server applies its built-in default of 0.1.
+struct TLocalBloomFilterSettings {
+    std::optional<double> FalsePositiveProbability;
+
+    static TLocalBloomFilterSettings FromProto(const Ydb::Table::LocalBloomFilterIndex& proto);
+    void SerializeTo(Ydb::Table::LocalBloomFilterIndex& proto) const;
+};
+
+// All fields are optional. If a field is left unset, the server applies its built-in
+// default: NgramSize = 3, CaseSensitive = true, FalsePositiveProbability = 0.1.
+struct TLocalBloomNgramFilterSettings {
+    std::optional<uint32_t> NgramSize;
+    std::optional<bool> CaseSensitive;
+    std::optional<double> FalsePositiveProbability;
+
+    static TLocalBloomNgramFilterSettings FromProto(const Ydb::Table::LocalBloomNgramFilterIndex& proto);
+    void SerializeTo(Ydb::Table::LocalBloomNgramFilterIndex& proto) const;
+};
+
 class TIndexDescription {
     friend class NYdb::TProtoAccessor;
 
@@ -426,7 +449,7 @@ public:
         const std::vector<std::string>& indexColumns,
         const std::vector<std::string>& dataColumns = {},
         const std::vector<TGlobalIndexSettings>& globalIndexSettings = {},
-        const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& specializedIndexSettings = {}
+        const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings, TLocalBloomFilterSettings, TLocalBloomNgramFilterSettings>& specializedIndexSettings = {}
     );
 
     TIndexDescription(
@@ -440,7 +463,7 @@ public:
     EIndexType GetIndexType() const;
     const std::vector<std::string>& GetIndexColumns() const;
     const std::vector<std::string>& GetDataColumns() const;
-    const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& GetIndexSettings() const;
+    const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings, TLocalBloomFilterSettings, TLocalBloomNgramFilterSettings>& GetIndexSettings() const;
     uint64_t GetSizeBytes() const;
     void SetParallel(uint32_t parallel);
 
@@ -520,7 +543,7 @@ private:
     std::vector<std::string> IndexColumns_;
     std::vector<std::string> DataColumns_;
     std::vector<TGlobalIndexSettings> GlobalIndexSettings_;
-    std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings> SpecializedIndexSettings_;
+    std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings, TLocalBloomFilterSettings, TLocalBloomNgramFilterSettings> SpecializedIndexSettings_;
     uint64_t SizeBytes_ = 0;
     uint32_t Parallel_ = 0;
 };
@@ -575,6 +598,24 @@ public:
         uint32_t MaxInFlight = 0;
         uint32_t Total = 0;
         uint32_t Done = 0;
+    };
+
+    const TMetadata& Metadata() const;
+private:
+    TMetadata Metadata_;
+};
+
+class TAnalyzeOperation : public TOperation {
+public:
+    using TOperation::TOperation;
+    TAnalyzeOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
+
+    struct TMetadata {
+        EAnalyzeState State = EAnalyzeState::Unspecified;
+        float Progress = 0;
+        std::vector<std::string> Paths;           // All paths covered by this analyze.
+        std::vector<std::string> InProgressPaths; // Subset of Paths currently being traversed
+        std::vector<std::string> DonePaths;       // Subset of Paths whose analysis completed
     };
 
     const TMetadata& Metadata() const;
@@ -1519,17 +1560,29 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
 
     // Settings of session pool
     FLUENT_SETTING(TSessionPoolSettings, SessionPoolSettings);
+
+    // Optional pool name surfaced through the OTel tag
+    // ydb.table.session.pool.name. When empty the default
+    // "<database>@<endpoint>" is used.
+    FLUENT_SETTING(std::string, PoolName);
+
+    FLUENT_SETTING_DEFAULT(TRetryOperationSettings, RetrySettings, TRetryOperationSettings());
 };
 
 struct TBulkUpsertSettings : public TOperationRequestSettings<TBulkUpsertSettings> {
     // Format setting proto serialized into string. If not set format defaults are used.
     // I.e. it's Ydb.Table.CsvSettings for CSV.
     FLUENT_SETTING_DEFAULT(std::string, FormatSettings, "");
+    FLUENT_SETTING_OPTIONAL(TRetryOperationSettings, RetrySettings);
     google::protobuf::Arena* Arena_ = nullptr;
     TBulkUpsertSettings& Arena(google::protobuf::Arena* arena) { Arena_ = arena; return *this; }
+
+    // Internal: BulkUpsert retry backup hook.
+    std::shared_ptr<NRetry::TBulkUpsertRetryState> RetryRowsState_;
 };
 
 struct TReadRowsSettings : public TOperationRequestSettings<TReadRowsSettings> {
+    FLUENT_SETTING_OPTIONAL(TRetryOperationSettings, RetrySettings);
 };
 
 struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQuerySettings> {
@@ -1555,6 +1608,8 @@ class TTableClient {
     friend class TSessionPool;
     friend class NRetry::Sync::TRetryContext<TTableClient, TStatus>;
     friend class NRetry::Async::TRetryContext<TTableClient, TAsyncStatus>;
+    friend class NRetry::Async::TRetryContext<TTableClient, TAsyncBulkUpsertResult>;
+    friend class NRetry::Async::TRetryContext<TTableClient, TAsyncReadRowsResult>;
 
 public:
     using TOperationFunc = std::function<TAsyncStatus(TSession session)>;
@@ -1584,6 +1639,10 @@ public:
 
     //! Returns the size of session pool
     int64_t GetCurrentPoolSize() const;
+
+    // Internal: used by retry wrappers to suppress nested retries.
+    bool GetInRetryOperationContext() const;
+    void SetInRetryOperationContext(bool value);
 
     //! Returns new table builder
     TTableBuilder GetTableBuilder();
@@ -1659,6 +1718,7 @@ struct TTxOnlineSettings {
     FLUENT_SETTING_DEFAULT(bool, AllowInconsistentReads, false);
 };
 
+
 class TTxSettings {
     friend class TTableClient;
 
@@ -1688,6 +1748,10 @@ public:
         return TTxSettings(TS_SNAPSHOT_RW);
     }
 
+    static TTxSettings StrictSerializableRW() {
+        return TTxSettings(TS_STRICT_SERIALIZABLE_RW);
+    }
+
     void Out(IOutputStream& out) const {
         switch (Mode_) {
         case TS_SERIALIZABLE_RW:
@@ -1705,6 +1769,9 @@ public:
         case TS_SNAPSHOT_RW:
             out << "SnapshotRW";
             break;
+        case TS_STRICT_SERIALIZABLE_RW:
+            out << "StrictSerializableRW";
+            break;
         default:
             out << "Unknown";
             break;
@@ -1718,6 +1785,7 @@ private:
         TS_STALE_RO,
         TS_SNAPSHOT_RO,
         TS_SNAPSHOT_RW,
+        TS_STRICT_SERIALIZABLE_RW,
     };
 
     FLUENT_SETTING(TTxOnlineSettings, OnlineSettings);
@@ -2698,6 +2766,7 @@ class TReadRowsResult : public TStatus {
     TResultSet ResultSet;
 
   public:
+    explicit TReadRowsResult(TStatus&& status);
     explicit TReadRowsResult(TStatus&& status, TResultSet&& resultSet);
 
     TResultSet GetResultSet() {

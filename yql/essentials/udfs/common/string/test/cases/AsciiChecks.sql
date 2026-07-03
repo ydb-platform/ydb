@@ -1,3 +1,11 @@
+$input = AsList(
+    <|value:"qweRTY123$%?"|>,
+    <|value:"asdFGHjkl:'|"|>,
+    <|value:"zxcvbnm"|>,
+    <|value:"1234567890"|>,
+    <|value:"!@#$%^&*()_+{}"|>
+);
+
 SELECT
     String::IsAscii(value) as isascii,
     String::IsAsciiSpace(value) as isspace,
@@ -7,4 +15,4 @@ SELECT
     String::IsAsciiAlpha(value) as isalpha,
     String::IsAsciiAlnum(value) as isalnum,
     String::IsAsciiHex(value) as ishex
-FROM Input
+FROM AS_TABLE($input)

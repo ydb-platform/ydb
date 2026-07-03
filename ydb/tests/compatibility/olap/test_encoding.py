@@ -19,7 +19,7 @@ class TestEncoding(RollingUpgradeAndDowngradeFixture):
         self.rows_count = 640
 
         yield from self.setup_cluster(
-            extra_feature_flags={"enable_cs_dictionary_encoding": True},
+            extra_feature_flags=["enable_cs_dictionary_encoding"],
             column_shard_config={
                 "disabled_on_scheme_shard": False,
                 "alter_object_enabled": True,
@@ -121,8 +121,8 @@ class TestEncoding(RollingUpgradeAndDowngradeFixture):
                     assert len(result_sets[0].rows) > 0, "Query returned no rows"
 
     def skip_if_unsupported(self):
-        if min(self.versions) < (26, 3):
-            pytest.skip("Only available since stable-26-3")
+        if min(self.versions) < (26, 2):
+            pytest.skip("Only available since stable-26-2")
 
     def test_encoding(self):
         self.skip_if_unsupported()

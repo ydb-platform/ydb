@@ -33,7 +33,7 @@ jobs:
     runs-on: [self-hosted, tiny-worker]
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 1
           ref: ${{ inputs.script_version_sha }}
@@ -60,7 +60,15 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_RUN_ID: ${{ github.run_id }}
         run: |
+          export RESULTS_PATH=$(realpath created_pulls.json)
           python3 ./.github/scripts/cherry_pick_v2.py \
             --commits="${{ inputs.commits_and_prs }}" \
             --target-branches="${{ inputs.target_branches }}" \
             ${{ inputs.allow_unmerged == true && '--allow-unmerged' || '' }}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: created-pulls
+          path: created_pulls.json
+          archive: false

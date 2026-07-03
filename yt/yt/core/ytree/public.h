@@ -142,7 +142,7 @@ using TTypedYPathServiceContext = NRpc::TGenericTypedServiceContext<
 
 //! A static node type.
 DEFINE_ENUM(ENodeType,
-    // Node contains a string (TString).
+    // Node contains a string (std::string).
     (String)
     // Node contains an int64 number (i64).
     (Int64)

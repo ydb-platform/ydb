@@ -1,6 +1,6 @@
 #pragma once
 
-#include "location.h"
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
 
@@ -42,23 +42,47 @@ struct IReadyQueue
 
     // Notification about the change of byte counters in PBuffer
     virtual void DataToPBufferAdded(
-        ELocation location,
+        THostIndex host,
         EPBufferCounter counter,
         size_t byteCount) = 0;
     // Notification about the change of byte counters in PBuffer
     virtual void DataFromPBufferReleased(
-        ELocation location,
+        THostIndex host,
         EPBufferCounter counter,
         size_t byteCount) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TReadSource
+{
+    THostMask Mask;
+    // 0 -> read from DDisk (Mask is the set of DDisk hosts to read from).
+    // >0 -> read from a PBuffer that holds the inflight write at this lsn
+    // (Mask is the set of PBuffer hosts that confirmed the write).
+    ui64 Lsn = 0;
+
+    [[nodiscard]] bool Empty() const
+    {
+        return Mask.Empty();
+    }
+
+    [[nodiscard]] bool OnlyDDisk() const
+    {
+        return Lsn == 0;
+    }
+};
+
 class TInflightInfo: public TDisableCopy
 {
 public:
     enum class EState
     {
+        // The lsn is generated but the write has not been acknowledged yet.
+        // Tracked only to hold the cleanup watermark; invisible to reads (a
+        // concurrent read sees the pre-write data on DDisk, as before).
+        PBufferPendingWrite,
+
         // During the recovery, a item without quorum was detected. It must be
         // copied to other PBuffers.
         // Reading will be possible only after receiving a quorum.
@@ -89,13 +113,12 @@ public:
         IReadyQueue* readyQueues,
         ui64 lsn,
         size_t byteCount,
-        ELocation location);
-    TInflightInfo(
-        IReadyQueue* readyQueues,
-        ui64 lsn,
-        size_t byteCount,
-        TLocationMask writeRequested,
-        TLocationMask writeConfirmed);
+        THostIndex host);
+
+    // Pending write: lsn is generated but data is not in any PBuffer yet.
+    // ReadMask is empty (reads wait on the quorum future) and the write is not
+    // flushable. Call OnWritten once a quorum of PBuffers confirms the write.
+    TInflightInfo(IReadyQueue* readyQueue, ui64 lsn, size_t byteCount);
 
     TInflightInfo(TInflightInfo&& other) noexcept;
 
@@ -104,7 +127,11 @@ public:
     // Detach from ReadyQueue.
     void Detach();
 
-    void RestorePBuffer(ELocation location);
+    void RestorePBuffer(THostIndex host);
+
+    // Transitions a pending write (see the byteCount-only constructor) to the
+    // written state once a quorum of PBuffers confirmed it.
+    void OnWritten(THostMask writeRequested, THostMask writeConfirmed);
 
     [[nodiscard]] EState GetState() const;
 
@@ -112,35 +139,41 @@ public:
     [[nodiscard]] NThreading::TFuture<void> GetQuorumReadyFuture();
 
     // The mask from which data sources can be read.
-    [[nodiscard]] TLocationMask ReadMask() const;
+    [[nodiscard]] TReadSource ReadMask() const;
 
     // Returns the PBuffer source from where the data will be transferred to
-    // DDisk, specified in the parameter destination. If ELocation::Unknown is
+    // DDisk, specified in the parameter destination. If InvalidHostIndex is
     // returned, it means that the transfer of data to destination has already
     // been requested earlier.
-    [[nodiscard]] ELocation RequestFlush(ELocation destination);
-    void ConfirmFlush(TRoute route);
-    void FlushFailed(TRoute route);
-    [[nodiscard]] TLocationMask GetRequestedFlushes() const;
+    [[nodiscard]] THostIndex RequestFlush(
+        THostIndex destination,
+        THostMask disabledHosts);
+    void ConfirmFlush(THostRoute route);
+    void FlushFailed(THostRoute route);
+    [[nodiscard]] THostMask GetRequestedFlushes() const;
 
     // Returns true when erase request needed.
-    [[nodiscard]] bool RequestErase(ELocation location);
+    [[nodiscard]] bool RequestErase(THostIndex host);
     // Returns true when all erases confirmed.
-    [[nodiscard]] bool ConfirmErase(ELocation location);
-    void EraseFailed(ELocation location);
+    [[nodiscard]] bool ConfirmErase(THostIndex host);
+    void EraseFailed(THostIndex host);
 
     // Sets a lock that prohibits erasing the PBuffer.
     void LockPBuffer();
     // Removes the lock that prohibits erasing the PBuffer.
     void UnlockPBuffer();
 
+    [[nodiscard]] THostMask GetWriteRequested() const;
+
+    TString DebugPrint(TInstant now) const;
+
 private:
     void ApplyBytes(
-        ELocation location,
+        THostIndex host,
         IReadyQueue::EPBufferCounter counter,
         bool add) const;
     void ApplyBytes(
-        TLocationMask mask,
+        THostMask mask,
         IReadyQueue::EPBufferCounter counter,
         bool add) const;
 
@@ -153,13 +186,13 @@ private:
     size_t PBuffersLockCount = 0;
     NThreading::TPromise<void> QuorumReadyPromise;
 
-    TLocationMask WriteRequested;
-    TLocationMask WriteConfirmed;
-    TLocationMask FlushDesired;
-    TLocationMask FlushRequested;
-    TLocationMask FlushConfirmed;
-    TLocationMask EraseRequested;
-    TLocationMask EraseConfirmed;
+    THostMask WriteRequested;
+    THostMask WriteConfirmed;
+    THostMask FlushDesired;
+    THostMask FlushRequested;
+    THostMask FlushConfirmed;
+    THostMask EraseRequested;
+    THostMask EraseConfirmed;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

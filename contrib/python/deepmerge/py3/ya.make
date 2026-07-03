@@ -4,7 +4,7 @@ PY3_LIBRARY()
 
 SUBSCRIBER(g:python-contrib)
 
-VERSION(1.1.1)
+VERSION(2.0)
 
 LICENSE(MIT)
 
@@ -14,7 +14,6 @@ PY_SRCS(
     TOP_LEVEL
     deepmerge/__init__.py
     deepmerge/_version.py
-    deepmerge/compat.py
     deepmerge/exception.py
     deepmerge/extended_set.py
     deepmerge/merger.py
@@ -31,6 +30,7 @@ RESOURCE_FILES(
     PREFIX contrib/python/deepmerge/py3/
     .dist-info/METADATA
     .dist-info/top_level.txt
+    deepmerge/py.typed
 )
 
 END()

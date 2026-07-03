@@ -200,7 +200,8 @@ bool TKqpQueryState::TryGetFromCache(
     const TGUCSettings::TPtr& gUCSettingsPtr,
     TIntrusivePtr<TKqpCounters>& counters,
     const TActorId& sender,
-    TKqpTransactionContext* txCtx)
+    TKqpTransactionContext* txCtx,
+    EWarmupAttributionMode warmupAttribution)
 {
     if (QueryPhysicalGraph) {
         YQL_ENSURE(QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT);
@@ -262,7 +263,8 @@ bool TKqpQueryState::TryGetFromCache(
         counters,
         DbCounters,
         sender,
-        TlsActivationContext->AsActorContext());
+        TlsActivationContext->AsActorContext(),
+        warmupAttribution);
 
     if (compileResult) {
         if (SaveAndCheckCompileResult(compileResult)) {
@@ -287,7 +289,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     settings.UsePessimisticLocks = (GetIsolationLevel(txCtx) == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
 
     bool keepInCache = false;
-    bool perStatementResult = (settings.UsePessimisticLocks || HasImplicitTx());
+    bool perStatementResult = HasImplicitTx();
     TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
 
     switch (GetAction()) {
@@ -624,10 +626,17 @@ NKqpProto::EIsolationLevel TKqpQueryState::GetIsolationLevel(TKqpTransactionCont
             case Ydb::Table::TransactionSettings::kSerializableReadWrite:
                 isolationLevel = NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
                 break;
+            case Ydb::Table::TransactionSettings::kStrictSerializableReadWrite:
+                isolationLevel = NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE;
+                break;
             case Ydb::Table::TransactionSettings::kOnlineReadOnly:
-                isolationLevel = txSettings.online_read_only().allow_inconsistent_reads()
-                    ? NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO
-                    : NKqpProto::ISOLATION_LEVEL_ONLINE_RO;
+                if (AppData()->FeatureFlags.GetDisableOnlineRO()) {
+                    isolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
+                } else {
+                    isolationLevel = txSettings.online_read_only().allow_inconsistent_reads()
+                        ? NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO
+                        : NKqpProto::ISOLATION_LEVEL_ONLINE_RO;
+                }
                 break;
             case Ydb::Table::TransactionSettings::kStaleReadOnly:
                 isolationLevel = NKqpProto::ISOLATION_LEVEL_READ_STALE;

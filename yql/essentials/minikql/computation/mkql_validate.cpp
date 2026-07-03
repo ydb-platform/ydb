@@ -11,7 +11,7 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
-static const TString VERIFY_DELIMITER = "\n - ";
+const TString VERIFY_DELIMITER = "\n - ";
 
 using namespace NUdf;
 

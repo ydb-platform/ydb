@@ -1,5 +1,8 @@
 #include "erase_request.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -11,17 +14,22 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 TEraseRequestExecutor::TEraseRequestExecutor(
     NActors::TActorSystem* actorSystem,
+    const TLogTitle& logTitle,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
-    ELocation location,
+    THostIndex host,
     TEraseHint hint,
     NWilson::TSpan span)
     : ActorSystem(actorSystem)
+    , LogTitle(logTitle.GetChildWithTags(
+          GetCycleCount(),
+          {{"t", "BatchErase"}, {"h", PrintHostIndex(host)}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Span(std::move(span))
-    , Location(location)
+    , Host(host)
     , Hint(std::move(hint))
+    , RequestTimeout(DirectBlockGroup->GetOracle()->GetEraseRequestTimeout())
 {}
 
 TEraseRequestExecutor::~TEraseRequestExecutor()
@@ -30,7 +38,8 @@ TEraseRequestExecutor::~TEraseRequestExecutor()
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TEraseRequestExecutor. Reply not sent");
+            "%s Reply not sent",
+            LogTitle.GetWithTime().c_str());
 
         Y_ABORT_UNLESS(false);
     }
@@ -38,9 +47,10 @@ TEraseRequestExecutor::~TEraseRequestExecutor()
 
 void TEraseRequestExecutor::Run()
 {
-    auto future = DirectBlockGroup->EraseFromPBuffer(
-        VChunkConfig.VChunkIndex,
-        VChunkConfig.GetHostIndex(Location),
+    ScheduleRequestTimeout();
+
+    auto future = DirectBlockGroup->BatchEraseFromPBuffer(
+        Host,
         Hint.Segments,
         Span.GetTraceId());
     future.Subscribe(
@@ -52,6 +62,15 @@ void TEraseRequestExecutor::Run()
         });
 }
 
+TString TEraseRequestExecutor::Print()
+{
+    TStringBuilder result;
+    result << LogTitle.GetWithTime();
+    result << Hint.DebugPrint(true);
+    result << (Promise.IsReady() ? ",Replied" : ",NotReplied");
+    return result;
+}
+
 NThreading::TFuture<TEraseRequestExecutor::TResponse>
 TEraseRequestExecutor::GetFuture() const
 {
@@ -60,24 +79,19 @@ TEraseRequestExecutor::GetFuture() const
 
 void TEraseRequestExecutor::OnEraseResponse(const TDBGEraseResponse& response)
 {
-    TVector<ui64> lsns;
-    lsns.reserve(Hint.Segments.size());
-    for (const auto& segment: Hint.Segments) {
-        lsns.push_back(segment.Lsn);
-    }
-
     if (HasError(response.Error)) {
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TEraseRequestExecutor. Erase failed: %s",
+            "%s Erase failed: %s",
+            LogTitle.GetWithTime().c_str(),
             FormatError(response.Error).c_str());
 
-        Reply({}, std::move(lsns));
+        Reply({}, MakeLsnVector(Hint.Segments));
         return;
     }
 
-    Reply(std::move(lsns), {});
+    Reply(MakeLsnVector(Hint.Segments), {});
 }
 
 void TEraseRequestExecutor::Reply(
@@ -85,9 +99,47 @@ void TEraseRequestExecutor::Reply(
     TVector<ui64> eraseFailed)
 {
     Promise.TrySetValue(TResponse{
-        .Location = Location,
+        .Host = Host,
         .EraseOk = std::move(eraseOk),
         .EraseFailed = std::move(eraseFailed)});
+}
+
+void TEraseRequestExecutor::ScheduleRequestTimeout()
+{
+    if (!RequestTimeout) {
+        return;
+    }
+
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Schedule OnRequestTimeout %s",
+        LogTitle.GetWithTime().c_str(),
+        FormatDuration(RequestTimeout).c_str());
+
+    DirectBlockGroup->Schedule(
+        RequestTimeout,
+        [weakSelf = weak_from_this()]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->OnRequestTimeout();
+            }
+        });
+}
+
+void TEraseRequestExecutor::OnRequestTimeout()
+{
+    if (Promise.IsReady()) {
+        return;
+    }
+
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s OnRequestTimeout.",
+        LogTitle.GetWithTime().c_str());
+
+    Reply({}, MakeLsnVector(Hint.Segments));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

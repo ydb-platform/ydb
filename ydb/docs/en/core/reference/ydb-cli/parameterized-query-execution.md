@@ -1,80 +1,77 @@
-# Running parameterized queries
+# Executing parameterized queries
 
 ## Overview
 
-{{ ydb-short-name }} CLI can execute parameterized queries. To use parameters, you need to declare them using [the YQL `DECLARE` command](../../yql/reference/syntax/declare.md) in your query text.
+{{ ydb-short-name }} CLI supports executing parameterized queries. To work with parameters, the query text must contain their definitions using the [YQL `DECLARE` command](../../yql/reference/syntax/declare.md).
 
-The preferred way to run parameterized queries in {{ ydb-short-name }} CLI is to use the [`ydb sql`](sql.md) command.
-
-Parameter values can be set via the command-line arguments, uploaded from [JSON](https://en.wikipedia.org/wiki/JSON) files, and read from `stdin` in binary or JSON format. Binary data can be encoded as base64 or UTF-8. While reading from `stdin` or a file, you can stream multiple parameter values, triggering multiple query executions with batching options.
+The main tool for executing parameterized queries in {{ ydb-short-name }} CLI is the [{{ ydb-cli }} sql](sql.md) command.
 
 ## Why use parameterized queries?
 
-Using parameterized queries offers several key advantages:
+Using parameterized queries provides several important benefits:
 
-* **Enhanced Performance:** Parameterized queries significantly boost performance when executing multiple similar queries that differ only in input parameters. This is achieved through the use of [prepared statements](https://en.wikipedia.org/wiki/Prepared_statement). The query is compiled once and then cached on the server. Subsequent requests with the same query text bypass the compilation phase, allowing for immediate execution.
+* **Improved performance:** Parameterized queries significantly improve performance when executing many similar operations that differ only in input values. This is due to query plan caching. After the first compilation of a query, its plan is stored in the [LRU cache](https://en.wikipedia.org/wiki/Cache_replacement_policies) of the [{{ ydb-short-name }} node](../../concepts/glossary.md#node). All subsequent calls of the same query with new parameters skip the compilation stage and start executing immediately, saving time and resources.
+* **Protection against SQL injection:** Another important advantage of using parameterized queries is protection against [SQL injection](https://en.wikipedia.org/wiki/SQL_injection). This security feature ensures proper handling of input data, reducing the risk of malicious code execution.
 
-* **Protection Against SQL Injection:** Another critical benefit of using parameterized queries is the protection they offer against [SQL injection](https://en.wikipedia.org/wiki/SQL_injection) attacks. This security feature ensures that the input parameters are appropriately handled, mitigating the risk of malicious code execution.
+## Single query execution {#one-request}
 
-## Executing a single query {#one-request}
-
-To provide parameters for a single query execution, you can use the command-line arguments, JSON files, or `stdin`, using the following {{ ydb-short-name }} CLI options:
-
-| Name | Description |
-| --- | --- |
-| `-p, --param` | The value of a single query parameter in the `name=value` or `$name=value` format, where `name` is the parameter name and `value` is its value (a valid [JSON value](https://www.json.org/json-en.html)). This option can be specified multiple times.<br/><br/>All specified parameters must be declared in the query using the [DECLARE operator](../../yql/reference/syntax/declare.md). Otherwise, you will receive the "Query does not contain parameter" error. If you specify the same parameter multiple times, you will receive the "Parameter value found in more than one source" error.<br/><br/>Depending on your operating system, you might need to escape the `$` character or enclose your expression in single quotes (`'`). |
-| `--input-file` | The name of a file in [JSON](https://en.wikipedia.org/wiki/JSON) format and [UTF-8](https://en.wikipedia.org/wiki/UTF-8) encoding that contains parameter values matched against the query parameters by key names. Only one input file can be used.<br/><br/>If values for the same parameter are found in multiple files or set by the `--param` command-line option, you will receive the "Parameter value found in more than one source" error.<br/><br/>Keys that are present in the file but not declared in the query will be ignored without an error message. |
-| `--input-format` | The format of parameter values applied to all sources of parameters (command line, file, or `stdin`).<br/>Available options:<ul><li>`json` (default): JSON format.</li><li>`csv`: [CSV](https://en.wikipedia.org/wiki/Comma-separated_values) format.</li><li>`tsv`: [TSV](https://en.wikipedia.org/wiki/Tab-separated_values) format.</li><li>`raw`: Input is read as parameter values with no transformation or parsing. The parameter name should be set with the `--input-param-name` option.</li></ul> |
-| `--input-binary-strings` | The input binary string encoding format. Defines how binary strings in the input should be interpreted.<br/>Available options:<ul><li>`unicode`: Every byte in binary strings that is not a printable ASCII symbol (codes 32-126) should be encoded as UTF-8.</li><li>`base64`: Binary strings should be fully encoded with base64.</li></ul> |
-
-If values are specified for all non-optional (i.e., NOT NULL) parameters [in the `DECLARE` clause](../../yql/reference/syntax/declare.md), the query will be executed on the server. If a value is absent for even one such parameter, the command fails with the error message "Missing value for parameter".
-
-### More specific options for input parameters {#specific-param-options}
-
-The following options are not described in the `--help` output. To see their descriptions, use the `-hh` option instead.
+This command supports passing parameters via command-line options, a file, and also via `stdin`. When passing parameters via `stdin` or a file, repeated streaming execution of the query with different parameter values and batching capability is supported. For this purpose, the [{{ ydb-cli }} sql](sql.md) command provides the following parameters:
 
 | Name | Description |
 | --- | --- |
-| `--input-framing` | The input framing format. Defines how parameter sets are delimited in the input.<br/>Available options:<br/><ul><li>`no-framing` (default): Data from the input is taken as a single set of parameters.</li><li>`newline-delimited`: A newline character delimits parameter sets in the input and triggers processing according to the `--input-batch` option.</li></ul> |
-| `--input-param-name` | The parameter name in the input stream, required when the input format contains only values (that is, when `--input-format raw` is used). |
-| `--input-columns` | A string with column names that replaces the CSV/TSV header. Relevant only when passing parameters in CSV/TSV format. It is assumed that the file does not contain a header. |
-| `--input-skip-rows` | The number of CSV/TSV header rows to skip in the input data (excluding the row of column names if the `--header` option is used). Relevant only when passing parameters in CSV/TSV format. |
-| `--input-batch` | The batch mode applied to parameter sets from `stdin` or `--input-file`.<br/>Available options:<br/><ul><li>`iterative` (default): Executes the query for each parameter set (exactly one execution when `no-framing` is specified for `--input-framing`).</li><li>`full`: A simplified batch mode where the query runs only once and all the parameter sets received from the input (`stdin` or `--input-file`) are wrapped into a `List<...>`.</li><li>`adaptive`: Executes the query with a JSON list of parameter sets when either the number of sets reaches `--input-batch-max-rows` or the waiting time reaches `--input-batch-max-delay`.</li></ul> |
-| `--input-batch-max-rows` | The maximum size of the list for the input adaptive batching mode (default: 1000). |
-| `--input-batch-max-delay` | The maximum delay before submitting a received parameter set for processing in the `adaptive` batch mode. The value is specified as a number with a time unit: `s` (seconds), `ms` (milliseconds), `m` (minutes), etc. Default value: `1s` (1 second).<br/><br/>The {{ ydb-short-name }} CLI starts a timer when it receives the first set of parameters for the batch from the input and sends the accumulated batch for execution once the timer expires. This parameter enables efficient batching when the arrival rate of new parameter sets is unpredictable. |
+| `-p, --param` | Value of a single query parameter in `$name=value` or `name=value` format, where `name` is the parameter name and `value` is its value (a valid [JSON value](https://www.json.org/index.html)). |
+| `--input-file` | Name of a file in [JSON](https://en.wikipedia.org/wiki/JSON) format encoded in [UTF-8](https://en.wikipedia.org/wiki/UTF-8), which contains parameter values mapped to query parameters by key names. At most one parameter file can be used. |
+| `--input-format` | Format for representing parameter values. Applies to all methods of passing them (via a command parameter, file, or `stdin`).<br/>Possible values:<ul><li>`json` (default): [JSON](https://en.wikipedia.org/wiki/JSON) format.</li><li>`csv` — [CSV](https://en.wikipedia.org/wiki/CSV) format. By default, parameter names must be in the CSV file header. For a single query execution, only one row is allowed in the file, not counting the header.</li><li>`tsv` — [TSV](https://en.wikipedia.org/wiki/TSV) format.</li><li>`raw`: The input stream from `stdin` or `--input-file` contains only the parameter value as binary data. The parameter name must be specified with the `--input-param-name` option.</li></ul> |
+| `--input-binary-strings` | Encoding format for parameter values of the 'binary string' type (`DECLARE $par AS String`). Specifies how binary strings from the input stream should be interpreted.<br/>Possible values:<ul><li>`unicode`: Each byte in a binary string that is not a printable ASCII character (codes 32-126) must be encoded in [UTF-8](https://en.wikipedia.org/wiki/UTF-8).</li><li>`base64`: Binary strings are represented in [Base64](https://en.wikipedia.org/wiki/Base64) encoding. This allows passing binary data, which {{ ydb-short-name }} CLI will decode from Base64.</li></ul> |
+
+If values are specified for all parameters that do not allow `NULL` (i.e., with the NOT NULL type), [as part of the `DECLARE` statement](../../yql/reference/syntax/declare.md), the query will be executed on the server. If a value is missing for at least one such parameter, the command will fail with an error and the message "Parameter value not set".
+
+### More specific options for using input parameters {#specific-param-options}
+
+The following options are not shown in the `--help` output. Their description can only be seen in the `-hh` output.
+
+| Name | Description |
+| --- | --- |
+| `--input-framing` | Sets the framing for the input stream (`stdin` or `--input-file`). Determines how the input stream is split into separate parameter sets.<br/>Possible values:<br/><ul><li>`no-framing` (default): One parameter set is expected from the input stream, the query is executed once.</li><li>`newline-delimited`: A newline character marks the end of one parameter set in the input stream, separating it from the next. A parameter set is considered complete each time a newline character is received in the input stream.</li></ul> |
+| `--input-param-name` | The name of the parameter whose value is passed to the input stream. Specified without the `$` character. Required when using the `raw` format in `--input-format`.<br/><br/>When used with the JSON format, the input stream is interpreted not as a JSON document, but as a JSON value, with the value passed to the parameter with the specified name. |
+| `--input-columns` | A string with column names replacing the header of the CSV/TSV document read from the input stream. When this option is specified, the header is considered absent. The option is only valid with CSV and TSV formats. |
+| `--input-skip-rows` | The number of lines from the beginning of the data read from stdin to skip, not including the header line if present. The option is only valid with stdin formats CSV and TSV. |
+| `--input-batch` | Batching mode for parameter set values received from the input stream (`stdin` or `--input-file`).<br/>Possible values:<br/><ul><li>`iterative` (default): Batching is [disabled](#streaming-iterate). The query is executed for each parameter set (exactly once if option `--input-framing` uses `no-framing`)</li><li>`full`: Full batch. The query is executed once after reading the input stream is complete; all received parameter sets are wrapped into `List<...>`, the parameter name is set by option `--input-param-name`</li><li>`adaptive`: Adaptive batching. The query is executed each time a limit on the number of parameter sets in a single query (`--input-batch-max-rows`) or a processing delay limit (`--input-batch-max-delay`) is triggered. All parameter sets received up to that point are wrapped into `List<...>`, the parameter name is set by option `--input-param-name`.</li></ul> |
+| `--input-batch-max-rows` | Maximum number of parameter sets in a batch for adaptive batching mode. The next batch will be sent for execution together with the query if the number of data sets in it reaches the specified value. Setting to `0` removes the limit.<br/><br/>Default value — `1000`.<br/><br/>Parameters are passed to the query without streaming, and the total size of a single gRPC request that includes parameter values has an upper limit of about 5 MB. |
+| `--input-batch-max-delay` | Maximum delay for sending a received parameter set for processing in adaptive batching mode. Specified as a number with a time dimension - `s` (seconds), `ms` (milliseconds), `m` (minutes), etc. Default value — `1s` (1 second).<br/><br/>{{ ydb-short-name }} CLI will count time from the moment the first parameter set for a batch is received and will send the accumulated batch for execution as soon as the time exceeds the specified value. This parameter allows efficient batching in case of an unpredictable rate of new parameter sets arriving at `stdin`. |
 
 ### Examples {#examples-one-request}
 
 {% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
-#### Passing the value of a single parameter {#example-simple}
+#### Passing a single parameter value {#example-simple}
 
-From the command line using `--param` option:
+On the command line, via the `--param` option:
 
 ```bash
 {{ ydb-cli }} -p quickstart sql -s 'DECLARE $a AS Int64; SELECT $a' --param '$a=10'
 ```
 
-Using a file in JSON format (which is used by default):
+Via a file in JSON format (which is used by default):
 
 ```bash
 echo '{"a":10}' > p1.json
 {{ ydb-cli }} -p quickstart sql -s 'DECLARE $a AS Int64; SELECT $a' --input-file p1.json
 ```
 
-Via `stdin` passing a JSON string as a set of one parameter:
+Via `stdin`, passing a JSON string as a single parameter set:
 
 ```bash
 echo '{"a":10}' | {{ ydb-cli }} -p quickstart sql -s 'DECLARE $a AS Int64; SELECT $a'
 ```
 
-Via `stdin` passing only a parameter value and setting a parameter name via the `--input-param-name` option:
+Via `stdin`, passing only the parameter value and specifying the parameter name via the `--input-param-name` option:
 
 ```bash
 echo '10' | {{ ydb-cli }} -p quickstart sql -s 'DECLARE $a AS Int64; SELECT $a' --input-param-name a
 ```
 
-#### Passing the values of parameters of different types from multiple sources {#example-multisource}
+#### Passing parameter values of different types from multiple sources {#example-multisource}
 
 ```bash
 # Create a JSON file with fields 'a', 'b', and 'x', where 'x' will be ignored in the query
@@ -101,7 +98,7 @@ Command output:
 └─────────┴─────────────┴─────────┘
 ```
 
-#### Passing Base64-encoded binary strings {#example-base64}
+#### Passing binary strings in Base64 encoding {#example-base64}
 
 ```bash
 {{ ydb-cli }} -p quickstart sql \
@@ -122,7 +119,7 @@ Command output:
 └──────────────────┘
 ```
 
-#### Passing raw binary content directly {#example-raw}
+#### Direct binary content passing {#example-raw}
 
 ```bash
 curl -Ls http://ydb.tech/docs/en | {{ ydb-cli }} -p quickstart sql \
@@ -132,7 +129,7 @@ curl -Ls http://ydb.tech/docs/en | {{ ydb-cli }} -p quickstart sql \
   --input-param-name a
 ```
 
-Command output (the exact number of bytes may vary):
+Command output (exact number of bytes may differ):
 
 ```text
 ┌─────────┐
@@ -142,7 +139,7 @@ Command output (the exact number of bytes may vary):
 └─────────┘
 ```
 
-#### Passing CSV data {#example-csv}
+#### Passing a file in CSV format {#example-csv}
 
 ```bash
 echo '10,Some text' | {{ ydb-cli }} -p quickstart sql \
@@ -165,21 +162,21 @@ Command output:
 
 ## Iterative streaming processing {#streaming-iterate}
 
-{{ ydb-short-name }} CLI supports executing a query multiple times with different sets of parameter values provided via `stdin` **or** an input file (but not both). In this case, the database connection is established once, and the query execution plan is cached. This approach significantly improves performance compared to making separate CLI calls.
+{{ ydb-short-name }} CLI supports the ability to execute a query multiple times with different sets of parameter values, when they are passed via `stdin` **or** an input file (not simultaneously). In this case, the database connection is established once, and the query execution plan is cached, which significantly improves the performance of this approach compared to separate CLI invocations.
 
-To use this feature, stream different sets of values for the same parameters to the command input (`stdin` or `--input-file`) one after another, specifying a rule for the {{ ydb-short-name }} CLI to separate the sets.
+To use this feature, you need to pass different sets of values for the same parameters one after another to the command input, telling {{ ydb-short-name }} CLI the rule by which these sets can be separated from each other.
 
-The query is executed as many times as there are parameter value sets received from the input. Each set is combined with the parameter values defined using the `--param` options. The command completes once the input stream is closed. Each query is executed within a dedicated transaction.
+The query is executed as many times as the number of parameter value sets received. Each set received via the input stream (`stdin` or `--input-file`) is merged with the parameter values defined via the `--param` options. Command execution will finish after the input stream ends. Each query is executed in its own transaction.
 
-A rule for separating parameter sets (framing) complements the `--input-format` option:
+The rule for separating parameter sets from each other (framing) complements the description of the parameter representation format on the input stream, specified by the `--input--framing` parameter:
 
 | Name | Description |
 | --- | --- |
-| `--input-framing` | Input framing format. Defines how parameter sets are delimited on the input.<br/>Available options:<br/><ul><li>`no-framing` (default): Data from the input is taken as a single set of parameters.</li><li>`newline-delimited`: A newline character delimits parameter sets in the input and triggers processing according to the `--input-batch` option.</li></ul> |
+| `--input-framing` | Specifies framing for the input stream (file or `stdin`). <br/>Possible values:<ul><li>`no-framing` (default) — one parameter set is expected at the input, the query is executed once after reading the stream completes.</li><li>`newline-delimited` — a newline character marks the end of one parameter set at the input, separating it from the next. The query is executed each time a newline character is received.</li></ul> |
 
 {% note warning %}
 
-When using a newline character as a separator between parameter sets, ensure that newline characters are not used inside the parameter sets. Quoting a text value does not allow newlines within the text. Multiline JSON documents are also not allowed.
+When using a newline character as a separator for parameter sets, you must ensure it is absent inside the parameter sets. Quoting text does not make a newline inside such text valid. Multiline JSON documents are not allowed.
 
 {% endnote %}
 
@@ -191,13 +188,13 @@ When using a newline character as a separator between parameter sets, ensure tha
 
 - JSON
 
-  Suppose you need to run your query three times with the following sets of values for the `a` and `b` parameters:
+  Suppose we need to execute the query three times, with the following sets of parameter values `a` and `b`:
 
   1. `a` = 10, `b` = 20
   2. `a` = 15, `b` = 25
   3. `a` = 35, `b` = 48
 
-  Let's create a file that contains lines with JSON representations of these sets:
+  Let's create a file that will contain lines with JSON representation of these sets:
 
   ```bash
   echo -e '{"a":10,"b":20}\n{"a":15,"b":25}\n{"a":35,"b":48}' | tee par1.txt
@@ -211,14 +208,14 @@ When using a newline character as a separator between parameter sets, ensure tha
   {"a":35,"b":48}
   ```
 
-  Let's execute the query by passing the content of this file to `stdin`, formatting the output as JSON:
+  Execute the query by passing the contents of this file to `stdin`, with output formatting in JSON:
 
   ```bash
   cat par1.txt | \
   {{ ydb-cli }} -p quickstart sql \
     -s 'DECLARE $a AS Int64;
         DECLARE $b AS Int64;
-        SELECT $a + $b' \
+        SELECT $a+$b' \
     --input-framing newline-delimited \
     --format json-unicode
   ```
@@ -231,7 +228,7 @@ When using a newline character as a separator between parameter sets, ensure tha
   {"column0":83}
   ```
 
-  Or just by passing the input file name to the `--input-file` option:
+  Or simply by passing the file name to the `--input-file` option:
 
   ```bash
   {{ ydb-cli }} -p quickstart sql \
@@ -251,17 +248,17 @@ When using a newline character as a separator between parameter sets, ensure tha
   {"column0":83}
   ```
 
-  This output can be passed as input to the next query command if it has a `column0` parameter.
+  The result obtained in this format can be used as input to the command executing the next query.
 
 - CSV
 
-  Suppose you need to run your query three times with the following sets of values for the `a` and `b` parameters:
+  Suppose we need to execute the query three times, with the following sets of parameter values `a` and `b`:
 
   1. `a` = 10, `b` = 20
   2. `a` = 15, `b` = 25
   3. `a` = 35, `b` = 48
 
-  Let's create a file that contains lines with CSV representations of these sets:
+  Let's create a file with sets of parameter values in CSV format:
 
   ```bash
   echo -e 'a,b\n10,20\n15,25\n35,48' | tee par1.txt
@@ -276,7 +273,7 @@ When using a newline character as a separator between parameter sets, ensure tha
   35,48
   ```
 
-  Let's execute the query by passing the content of this file to `stdin`, formatting the output as CSV:
+  Let's execute the query by passing the contents of this file to `stdin`, with output formatting in CSV:
 
   ```bash
   cat par1.txt | \
@@ -297,7 +294,7 @@ When using a newline character as a separator between parameter sets, ensure tha
   83
   ```
 
-  Or just by passing the input file name to the `--input-file` option:
+  Or simply by passing the file name to the `--input-file` option:
 
   ```bash
   {{ ydb-cli }} -p quickstart sql \
@@ -318,17 +315,17 @@ When using a newline character as a separator between parameter sets, ensure tha
   83
   ```
 
-  This output can be passed as input to another command running a different parameterized query.
+  The result obtained in this format can be used as input to the command executing the next query, by specifying the header data in CSV format with the `--input-columns` option.
 
 - TSV
 
-  Suppose you need to run your query three times, with the following sets of values for the `a` and `b` parameters:
+  Suppose we need to execute the query three times, with the following sets of parameter values `a` and `b`:
 
-  1. `a` = 10, `b` = 20
-  2. `a` = 15, `b` = 25
-  3. `a` = 35, `b` = 48
+  1. `a` = 10, `b` = row1
+  2. `a` = 15, `b` = row  2
+  3. `a` = 35, `b` = "row"\n3
 
-  Let's create a file that includes lines with TSV representations of these sets:
+  Let's create a file with sets of parameter values in TSV format:
 
   ```bash
   echo -e 'a\tb\n10\t20\n15\t25\n35\t48' | tee par1.txt
@@ -343,16 +340,16 @@ When using a newline character as a separator between parameter sets, ensure tha
   35 48
   ```
 
-  Let's execute the query by passing the content of this file to `stdin`, formatting the output as TSV:
+  Let's execute the query by passing the contents of this file to `stdin`, with output formatting in TSV:
 
   ```bash
   cat par1.txt | \
   {{ ydb-cli }} -p quickstart sql \
     -s 'DECLARE $a AS Int64;
-        DECLARE $b AS Int64;
-        SELECT $a + $b' \
-    --input-format tsv \
+        DECLARE $b AS Utf8;
+        SELECT $a, $b' \
     --input-framing newline-delimited \
+    --input-format tsv \
     --format tsv
   ```
 
@@ -364,7 +361,7 @@ When using a newline character as a separator between parameter sets, ensure tha
   83
   ```
 
-  Or just by passing the input file name to the `--input-file` option:
+  Or simply by passing the file name to the `--input-file` option:
 
   ```bash
   {{ ydb-cli }} -p quickstart sql \
@@ -385,13 +382,13 @@ When using a newline character as a separator between parameter sets, ensure tha
   83
   ```
 
-  This output can be passed as input to the next query command.
+  The result obtained in this format can be used as input to the command executing the next query, by specifying the header data in TSV format with the `--input-columns` option.
 
 {% endlist %}
 
-#### Streaming processing with joining parameter values from different sources {#example-iterate-union}
+#### Stream processing with merging parameter values from different sources {#example-iterate-union}
 
-For example, you need to run your query three times with the following sets of values for the `a` and `b` parameters:
+Suppose we need to execute the query three times, with the following sets of parameter values `a` and `b`:
 
 1. `a` = 10, `b` = 100
 2. `a` = 15, `b` = 100
@@ -417,48 +414,48 @@ Command output:
 {"sum1":135}
 ```
 
-## Batched streaming processing {#streaming-batch}
+## Batch stream processing {#streaming-batch}
 
-The {{ ydb-short-name }} CLI supports automatic conversion of multiple consecutive parameter sets to a `List<...>`, enabling you to process them in a single request and transaction. As a result, you can achieve a substantial performance gain compared to one-by-one query processing.
+The {{ ydb-short-name }} CLI supports automatic conversion of parameter sets into `List<...>`, allowing a single server request to process multiple parameter sets in one transaction, which can further significantly improve performance compared to executing queries "one by one".
 
-Two batch modes are supported:
+Two batching modes are supported:
 
-- Full
-- Adaptive
+- Full (`full`)
+- Adaptive (`adaptive`)
 
-### Full batch mode {#batch-full}
+### Full batching mode {#batch-full}
 
-The `full` mode is a simplified batch mode where the query runs only once, and all the parameter sets received from the input (`stdin` or `--input-file`) are wrapped into a `List<...>`. If the request is too large, you will receive an error.
+The full (`full`) mode is a simplified batching option where the query is executed once, wrapping all parameter sets received from the input stream into `List<...>`. If the query size turns out to be too large, an error will be raised.
 
-Use this batch mode when you want to ensure transaction atomicity by applying all the parameters within a single transaction.
+This batching option is necessary when atomicity must be guaranteed by applying all parameters in a single transaction.
 
-### Adaptive batch mode {#batch-adaptive}
+### Adaptive batching mode {#batch-adaptive}
 
-In the `adaptive` mode, the input stream is split into multiple transactions, with the batch size automatically determined for each of them.
+When operating in adaptive (`adaptive`) mode, the input stream processing is split into multiple transactions, with automatic selection of the batch size for each of them.
 
-In this mode, you can process a broad range of dynamic workloads with unpredictable or infinite amounts of data, as well as workloads with an unpredictable or significantly varying rate of new sets appearing in the input. For example, this scenario is common when sending the output of another command to `stdin` using the `|` operator.
+This mode allows efficient processing of a wide range of input loads, with unpredictable or infinite amounts of data, as well as unpredictable or rapidly changing input rates. In particular, this profile is typical when feeding the output of another command to `stdin` via the `|` operator.
 
-The adaptive mode solves two key issues of dynamic stream processing:
+Adaptive mode solves two main problems of dynamic stream processing:
 
 1. Limiting the maximum batch size.
 2. Limiting the maximum data processing delay.
 
 ### Syntax {#batch-syntax}
 
-To use the batching capabilities, define the `List<...>` or `List<Struct<...>>` parameter in the query's `DECLARE` clause, and use the following options:
+To use the batching feature, you need to declare a parameter of type `List<...>` or `List<Struct<...>>` in the DECLARE section of the query, and select the mode with the following parameter:
 
 | Name | Description |
 | --- | --- |
-| `--input-batch` | The batch mode applied to parameter sets on `stdin` or `--input-file`.<br/>Available options:<br/><ul><li>`iterative` (default): Executes the query for each parameter set (exactly one execution when `no-framing` is specified for `--input-framing`).</li><li>`full`: A simplified batch mode where the query runs only once and all the parameter sets received from the input (`stdin` or `--input-file`) are wrapped into a `List<...>`.</li><li>`adaptive`: Executes the query with a JSON list of parameter sets whenever the number of sets reaches `--input-batch-max-rows` or the waiting time reaches `--input-batch-max-delay`.</li></ul> |
+| `--input-batch` | Mode for batching values of parameter sets obtained from the input stream (`stdin` or `--input-file`).<br/>Possible values:<br/><ul><li>`iterative` (default): Batching is [disabled](#streaming-iterate). The query is executed for each parameter set (exactly once if the `--input-framing` option uses `no-framing`)</li><li>`full`: Full batch. The query will run once after the input stream is read, all received parameter sets are wrapped in `List<...>`, the parameter name is set by the `--input-param-name` option</li><li>`adaptive`: Adaptive batching. The query is executed each time the limit on the number of parameter sets in one query (`--input-batch-max-rows`) or the processing delay (`--input-batch-max-delay`) is triggered. All parameter sets received by this point are wrapped in `List<...>`, the parameter name is set by the `--input-param-name` option.</li></ul> |
 
-In the adaptive batch mode, you can use the following additional parameters:
+Additional parameters are available in adaptive batching mode:
 
 | Name | Description |
 | --- | --- |
-| `--input-batch-max-rows` | The maximum number of parameter sets per batch in the `adaptive` batch mode. The next batch will be sent with the query if the number of parameter sets reaches the specified limit. When set to `0`, there is no limit.<br/><br/>Default value: `1000`.<br/><br/>Parameter values are sent to each query execution without streaming, so the total size per gRPC request that includes the parameter values has an upper limit of about 5 MB. |
-| `--input-batch-max-delay` | The maximum delay before submitting a received parameter set for processing in the `adaptive` batch mode. The value is specified as a number with a time unit: `s` (seconds), `ms` (milliseconds), `m` (minutes), etc. Default value: `1s` (1 second).<br/><br/>The {{ ydb-short-name }} CLI starts a timer when it receives the first set of parameters for the batch from the input and sends the accumulated batch for execution once the timer expires. This parameter enables efficient batching when the arrival rate of new parameter sets is unpredictable. |
+| `--input-batch-max-rows` | Maximum number of parameter sets in a batch for adaptive batching mode. The next batch will be sent for execution together with the query if the number of data sets in it has reached the specified value. Setting to `0` removes the limit.<br/><br/>Default value — `1000`.<br/><br/>Parameters are passed to the query without streaming, and the total size of a single gRPC request that includes parameter values has an upper limit of about 5 MB. |
+| `--input-batch-max-delay` | Maximum delay for sending a received parameter set for processing in adaptive batching mode. Specified as a number with a time dimension - `s` (seconds), `ms` (milliseconds), `m` (minutes), etc. Default value — `1s` (1 second).<br/><br/>The {{ ydb-short-name }} CLI will count time from the moment the first parameter set for a batch is received and will send the accumulated batch for execution as soon as the time exceeds the specified value. This parameter allows efficient batching in case of an unpredictable rate of new parameter sets arriving at `stdin`. |
 
-### Examples: Full batch processing {#example-batch-full}
+### Examples - full batch processing {#example-batch-full}
 
 ```bash
 echo -e '{"a":10,"b":20}\n{"a":15,"b":25}\n{"a":35,"b":48}' | \
@@ -480,11 +477,11 @@ Command output:
 └─────────┴───────────────────────────────────────────────────┘
 ```
 
-### Examples: Adaptive batch processing {#example-batch-adaptive}
+### Examples - adaptive batch processing {#example-batch-adaptive}
 
-#### Limiting the maximum data processing delay {#example-adaptive-delay}
+#### Limiting the maximum processing delay {#example-adaptive-delay}
 
-This example demonstrates adaptive batching triggered by a processing delay. In the first line of the command below, we generate 1,000 rows with a delay of 0.2 seconds on `stdout` and pipe them to `stdin` for the `ydb sql` query execution command. The query execution command displays the parameter batches in each subsequent query call.
+To demonstrate adaptive batching with the processing delay limit trigger, the first line of the command below generates 1000 lines with a 0.2 second delay in `stdout`, which are passed to the `stdin` query execution command. The query execution command, in turn, displays parameter batches in each subsequent query call.
 
 ```bash
 for i in $(seq 1 1000); do echo "Line$i"; sleep 0.2; done | \
@@ -497,7 +494,7 @@ for i in $(seq 1 1000); do echo "Line$i"; sleep 0.2; done | \
   --input-batch adaptive
 ```
 
-Command output (the actual values may differ):
+Command output (exact values may differ):
 
 ```text
 ┌─────────┬────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -518,15 +515,15 @@ Command output (the actual values may differ):
 ^C
 ```
 
-The first batch includes all the rows accumulated at the input while the database connection was being established, which is why it is larger than the subsequent ones.
+The first batch includes all lines accumulated at the input during the database connection opening time, and therefore it is larger than subsequent ones.
 
-You can terminate the command by pressing Ctrl+C or wait 200 seconds until the input generation is finished.
+You can interrupt the command execution with Ctrl+C, or wait until 200 seconds have passed, during which the input is generated.
 
-#### Limit on the number of records {#example-adaptive-limit}
+#### Limiting by number of records {#example-adaptive-limit}
 
-This example demonstrates adaptive batching triggered by the number of parameter sets. In the first line of the command below, we generate 200 rows. The command displays parameter batches in each subsequent query call, applying the specified limit `--input-batch-max-rows` of 20 (the default limit is 1,000).
+To demonstrate adaptive batching with the trigger by the number of parameter sets, the first line of the command below generates 200 lines. The command will display parameter batches in each subsequent query call, taking into account the specified limit `--input-batch-max-rows` equal to 20 (default 1000).
 
-This example also demonstrates the option to join parameters from different sources and generate JSON as output.
+This example also shows the ability to combine parameters from different sources and generate JSON output.
 
 ```bash
 for i in $(seq 1 200); do echo "Line$i"; done | \
@@ -553,24 +550,23 @@ Command output:
 {"count":20,"p2":10,"items":["Line181","Line182","Line183","Line184","Line185","Line186","Line187","Line188","Line189","Line190","Line191","Line192","Line193","Line194","Line195","Line196","Line197","Line198","Line199","Line200"]}
 ```
 
-#### Deleting multiple records from a {{ ydb-short-name }} table based on primary keys {#example-adaptive-delete-pk}
+#### Deleting multiple records from a row table {{ ydb-short-name }} by primary keys {#example-adaptive-delete-pk}
 
-If you attempt to delete a large number of rows from a substantial table using a simple `DELETE FROM large_table WHERE id > 10;` statement, you may encounter an error due to exceeding the transaction record limit. This example shows how to delete an unlimited number of records from {{ ydb-short-name }} tables without breaching this limitation.
-
-Let's create a test table:
+If you try to delete a large number of rows from a large table using a simple `DELETE FROM large_table WHERE id > 10;` query, you may encounter an error due to exceeding the limit on the number of records in a transaction. This example shows how to delete an unlimited number of records from {{ ydb-short-name }} tables without violating this limit.
+Let's create a test row table:
 
 ```bash
 {{ ydb-cli }} -p quickstart sql -s 'CREATE TABLE test_delete_1(id UInt64 NOT NULL, PRIMARY KEY (id))'
 ```
 
-Add 100,000 records to it:
+Let's insert 100,000 records into it:
 
 ```bash
-for i in $(seq 1 100000); do echo "$i"; done | \
+for i in $(seq 1 100000); do echo "$i";done | \
 {{ ydb-cli }} -p quickstart import file csv -p test_delete_1
 ```
 
-Delete all records with `id` greater than 10:
+Let's delete all records with `id` values greater than 10:
 
 ```bash
 {{ ydb-cli }} -p quickstart sql \
@@ -587,7 +583,7 @@ Delete all records with `id` greater than 10:
 
 #### Processing messages read from a topic {#example-adaptive-pipeline-from-topic}
 
-Examples of processing messages read from a topic are provided in [{#T}](topic-pipeline.md#example-read-to-yql-param).
+Examples of processing messages read from a topic are given in the article [{#T}](topic-pipeline.md#example-read-to-yql-param).
 
 ## See also {#see-also}
 

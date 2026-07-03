@@ -88,6 +88,15 @@ cmake --build . --target otel_tracing_example -j$(nproc)
 | `--iterations`,`-n`| `20`                      | Итераций в Query- и Table-нагрузке                                       |
 | `--retry-workers`  | `6`                       | Параллельных воркеров в retry-нагрузке (`0` чтобы пропустить)            |
 | `--retry-ops`      | `30`                      | Операций на каждого retry-воркера                                        |
+| `--disable-tracing`| off                       | Не передавать `TraceProvider` в YDB SDK                                   |
+| `--disable-metrics`| off                       | Не передавать `MetricRegistry` в YDB SDK                                  |
+| `--trace-max-queue-size`        | `4096` | `BatchSpanProcessor`: ёмкость in-process очереди спанов               |
+| `--trace-schedule-delay-ms`     | `1000` | `BatchSpanProcessor`: интервал между экспортами, мс                   |
+| `--trace-max-export-batch-size` | `512`  | `BatchSpanProcessor`: максимум спанов в одном OTLP-вызове             |
+| `--metric-export-interval-ms`   | `5000` | `PeriodicExportingMetricReader`: интервал экспорта метрик, мс         |
+| `--metric-export-timeout-ms`    | `3000` | `PeriodicExportingMetricReader`: таймаут одного экспорта, мс          |
+| `--metric-buffer-flush-ms`      | `100`  | `TMetricBuffer`: интервал flush'а внутреннего буфера, мс (`0` отключает буфер) |
+| `--telemetry-drain-sleep-ms`    | `3000` | Пауза после `ForceFlush`, чтобы внешние системы успели принять demo-данные (`0` для бенчмарка) |
 
 #### Демонстрация реальных ретраев
 
@@ -100,15 +109,15 @@ cmake --build . --target otel_tracing_example -j$(nproc)
 В трейсах появятся:
 
 ```
-ydb.RunWithRetry                                                              (INTERNAL, ydb.retry.count=N)
-├── ydb.Try                                                                   (INTERNAL)              # первая попытка: ydb.retry.attempt и ydb.retry.backoff_ms отсутствуют
-│   ├── ydb.CreateSession
-│   ├── ydb.ExecuteQuery
-│   └── ydb.Commit            db.response.status_code=ABORTED, error.type=ydb_error, exception event
-├── ydb.Try   ydb.retry.attempt=1                                             (INTERNAL, ydb.retry.backoff_ms=...)
+RunWithRetry                                                              (INTERNAL, ydb.retry.count=N)
+├── Try                                                                   (INTERNAL)  # первая попытка: ydb.retry.attempt и ydb.retry.backoff_ms отсутствуют
+│   ├── CreateSession
+│   ├── ExecuteQuery
+│   └── Commit            db.response.status_code=ABORTED, error.type=ydb_error, exception event
+├── Try   ydb.retry.attempt=1                                             (INTERNAL, ydb.retry.backoff_ms=...)
 │   └── ...                  db.response.status_code=ABORTED, error.type=ydb_error
-└── ydb.Try   ydb.retry.attempt=N                                             (INTERNAL, ydb.retry.backoff_ms=...)
-    └── ...                  db.response.status_code=SUCCESS
+└── Try   ydb.retry.attempt=N                                             (INTERNAL, ydb.retry.backoff_ms=...)
+    └── ...                  (SUCCESS — атрибут db.response.status_code не выставляется)
 ```
 
 Для усиления конфликтов поднимите воркеров и операций:
@@ -136,66 +145,233 @@ ydb.RunWithRetry                                                              (I
 > wait
 > ```
 
+#### Конвейер доставки телеметрии
+
+Демо явно демонстрирует **двойной** уровень батчинга на пути «приложение
+→ backend» — это и есть пункт «доставка и пакетная обработка данных»
+для телеметрии:
+
+```
+   приложение
+      │
+      │  span                                  metric points
+      ▼                                            ▼
+  BatchSpanProcessor                  PeriodicExportingMetricReader
+  ───────────────────                 ─────────────────────────────
+  - in-process очередь                - in-process агрегация
+    (max_queue_size)                  - export_interval_ms (push-pull)
+  - schedule_delay_ms                 - export_timeout_ms
+  - max_export_batch_size                       │
+      │  OTLP/HTTP                              │  OTLP/HTTP
+      ▼                                         ▼
+                  OpenTelemetry Collector
+                  ──────────────────────
+                  processors: batch
+                  (timeout: 1s, send_batch_size: 1024)
+                          │
+                  ┌───────┴────────┐
+                  ▼                ▼
+              Jaeger          Prometheus → Grafana
+```
+
+* **Spans.** В демо используется `BatchSpanProcessor` (а не
+  `SimpleSpanProcessor`): спаны накапливаются в ограниченной очереди и
+  отправляются пачками. Параметры доступны через флаги
+  `--trace-max-queue-size`, `--trace-schedule-delay-ms`,
+  `--trace-max-export-batch-size`.
+
+* **Метрики.** `PeriodicExportingMetricReader` уже реализует pull-batch
+  модель: SDK агрегирует точки в памяти и сбрасывает их на коллектор
+  каждые `--metric-export-interval-ms`.
+
+* **Коллектор.** `processors: batch` (см. `otel-collector/config.yml`)
+  делает второй уровень батчинга поверх входящих OTLP-потоков перед
+  пересылкой в Jaeger / Prometheus.
+
+#### Внутренний батчинг эмиссии метрик — `NObservability::TMetricBuffer`
+
+Поверх двух транспортных уровней OTel (`BatchSpanProcessor` и
+`PeriodicExportingMetricReader`) в SDK добавлен **третий, внутренний**
+уровень пакетной обработки телеметрических данных —
+`NObservability::TMetricBuffer`. Он стоит **до** OTel-плагина, на
+горячем пути вызовов `IMetricRegistry::Counter()->Inc()` /
+`Histogram()->Record()` из `TStatCollector`:
+
+```
+   SDK hot-path:                                  ┌────────────────────┐
+   TRequestMetrics::End()       Inc/Record   ──▶ │  TMetricBuffer     │
+   TStatCollector ...                            │  (этот компонент)  │
+                                                 │                    │
+                                                 │  thread-local      │
+                                                 │  буферы            │
+                                                 │  flush раз в       │
+                                                 │  MetricBuffer-     │
+                                                 │  FlushInterval ms  │
+                                                 └─────────┬──────────┘
+                                                           │ Add(N),
+                                                           │ RecordMany([...])
+                                                           ▼
+                                                 ┌────────────────────┐
+                                                 │  IMetricRegistry   │
+                                                 │  (OTel-плагин)     │
+                                                 └─────────┬──────────┘
+                                                           │
+                                                           ▼
+                                       PeriodicExportingMetricReader
+                                                           │  OTLP
+                                                           ▼
+                                                   OTel Collector
+```
+
+Зачем он нужен сверх того, что уже делает OTel:
+
+* OTel-плагин в C++ выполняет агрегацию **на каждом** `Inc()`/`Record()`:
+  hash набора атрибутов → захват мьютекса аггрегатора в OTel SDK →
+  обновление бакетов. При высокой нагрузке и общих счётчиках это
+  становится узким местом — N потоков сериализуются на одной мьютекс-
+  локации в OTel SDK.
+* `TMetricBuffer` сдвигает эту работу на отдельный фоновой поток.
+  Application-потоки пишут только в свои **thread-local** агрегаты
+  (счётчики — `uint64`-инкременты, гистограммы — `small_vector` сэмплов);
+  раз в `MetricBufferFlushIntervalMs` фоновый поток обходит все
+  буферы и сбрасывает накопленные данные **одним** вызовом
+  `ICounter::Add(uint64_t)` / `IHistogram::RecordMany(values)` на
+  каждый (instrument, поток).
+* Это классический LongAdder / striped counter, недостающий в
+  `opentelemetry-cpp`: OTel батчит **экспорт**, `TMetricBuffer`
+  батчит **эмиссию**.
+
+Конфигурируется одним флагом — `--metric-buffer-flush-ms` (по умолчанию
+`100` ms). `0` отключает буфер и возвращает поведение «прямой записи».
+
+Сам буфер инструментирован собственным набором метрик
+(тегируются префиксом `ydb_sdk_metric_buffer_*` — см. раздел Grafana).
+
 ### 4. Открыть дашборды
 
 | Сервис     | URL                          | Описание                        |
 |-----------|------------------------------|---------------------------------|
 | Grafana   | http://localhost:3000         | Дашборд "YDB QueryService"     |
 | Jaeger    | http://localhost:16686        | Поиск трейсов по сервису        |
-| Prometheus| http://localhost:9090         | Метрики `db_client_operation_*` |
+| Prometheus| http://localhost:9090         | Метрики `ydb_client_operation_*`, `ydb_query_session_*` |
 
 **Grafana**: логин `admin` / пароль `admin`.
 
 ### 5. Что смотреть
 
 #### В Grafana (дашборд "YDB QueryService"):
-- **Request Rate by Operation** — RPS по операциям (ExecuteQuery, ExecuteDataQuery, CreateSession, Commit, Rollback)
-- **Error Rate by Operation** — частота ошибок
-- **Duration p50/p95/p99** — распределение длительности операций
-- **Error Ratio** — процент ошибок
-- **Recent Traces** — таблица трейсов из Jaeger
+- **Operation Rate** — RPS по операциям из `ydb_client_operation_duration_seconds_count`.
+- **Failed Operations Rate by status_code** — частота ошибок из
+  `ydb_client_operation_failed_total`, разрезано по
+  `db.response.status_code`.
+- **Operation Duration p50/p95/p99** — распределение из
+  `ydb_client_operation_duration_seconds_bucket`.
+- **Error Ratio** — `failed / total` по операциям.
+- **Query Session Pool** — count по состояниям, pending/timeouts rate,
+  configured min/max и create_time-перцентили.
+- **Recent Traces** — таблица трейсов из Jaeger.
 
 #### В Jaeger UI:
 - Выберите сервис `ydb-cpp-sdk-demo`.
 - RPC-спаны (`SpanKind = CLIENT`):
-  `ydb.CreateSession`, `ydb.ExecuteQuery`, `ydb.ExecuteDataQuery`,
-  `ydb.BeginTransaction`, `ydb.Commit`, `ydb.Rollback`,
-  `ydb.ExecuteSchemeQuery`, `ydb.BulkUpsert`.
+  `CreateSession`, `ExecuteQuery`, `ExecuteDataQuery`,
+  `BeginTransaction`, `Commit`, `Rollback`,
+  `ExecuteSchemeQuery`, `BulkUpsert`.
 - Retry-спаны (`SpanKind = INTERNAL`):
-  - `ydb.RunWithRetry` — обёртка над всей retryable-логикой.
+  - `RunWithRetry` — обёртка над всей retryable-логикой.
     При фактических повторах содержит атрибут `ydb.retry.count` (общее число
     выполненных повторов, `>= 1`).
-  - `ydb.Try` — по одному на каждую попытку. На retry-попытках содержит
+  - `Try` — по одному на каждую попытку. На retry-попытках содержит
     атрибуты `ydb.retry.attempt` (`1..N`) и `ydb.retry.backoff_ms`
     (длительность sleep перед этой попыткой). На первой (не retry) попытке
     эти атрибуты не выставляются.
 - Общие атрибуты на всех YDB-спанах:
   - `db.system.name = ydb`
   - `db.namespace` (имя базы)
+  - `db.operation.name`
   - `server.address`, `server.port` (эндпоинт балансера)
   - `network.peer.address`, `network.peer.port` (фактический узел кластера)
-- На ошибках добавляются:
-  - `db.response.status_code` — строковый статус YDB (например, `ABORTED`)
-  - `error.type` — категория источника ошибки: `ydb_error` (ошибка,
-    возвращённая YDB) или `transport_error` (ошибка транспортного уровня)
-  - событие `exception` с `exception.type` и `exception.message`
+  - `ydb.node.id`, `ydb.node.dc` — когда удаётся резолвнуть из endpoint pool
+- На ошибках:
+  - `db.response.status_code` ставится **только** когда
+    `error.type == ydb_error`. Для transport / cancellation / прочих исключений
+    `status_code` не выставляется.
+  - `error.type`:
+    - `ydb_error` — серверный YDB-статус;
+    - `transport_error` — транспортный/клиентский статус;
+    - полное имя типа исключения (`std::system_error`, `TAuthenticationError`, …)
+      — для нераспознанных исключений вне retry-классификации.
+  - событие `exception` с `exception.type` и `exception.message`.
 
-#### В Prometheus:
-- `db_client_operation_duration_seconds_bucket` — гистограмма длительности
-  (OTel Semantic Conventions). Лейблы: `db.system.name`, `db.namespace`,
-  `db.operation.name` (с префиксом `ydb.`), `ydb.client.api`
-  (`Query` / `Table`). Для ошибок добавляются `db.response.status_code`
-  (точный YDB-статус, например `ABORTED`) и `error.type` —
-  низкокардинальная категория источника ошибки: `ydb_error` (статусы YDB-сервера)
-  или `transport_error` (клиентские/транспортные статусы).
-- `db_client_operation_requests_total` — счётчик начатых операций
-  (включая каждую попытку ретрая).
-- `db_client_operation_errors_total` — счётчик неуспешных попыток.
-  Полезно сравнивать с `requests_total`: для retry-нагрузки на той же
-  «горячей» строке коэффициент ошибок будет очень высоким — это и есть
-  индикатор работы ретраев.
+#### В Prometheus
 
-### 6. Остановить
+Operation-уровень:
+- `ydb_client_operation_duration_seconds_*` — гистограмма длительности
+  (`s`). Лейблы: `db.system.name`, `db.namespace`, `db.operation.name`,
+  `server.address`, `server.port`.
+- `ydb_client_operation_failed_total` — счётчик неуспешных
+  попыток (`{operation}`). Дополнительно к набору лейблов duration-метрики
+  присутствует обязательный `db.response.status_code` со значением статуса
+  YDB (например `ABORTED`, `TIMEOUT`, `CLIENT_INTERNAL_ERROR`).
+
+Session-pool метрики (для **Query**-клиента — `ydb_query_session_*`,
+для **Table**-клиента — `ydb_table_session_*`):
+- `*_count` (Gauge, `{session}`) — `state ∈ {idle, used}`.
+- `*_create_time_seconds_*` (Histogram, `s`).
+- `*_pending_requests_request_total` (Counter, `{request}`) —
+  инкрементируется один раз в момент, когда вызывающий встаёт в очередь
+  ожидания сессии.
+- `*_timeouts_timeout_total` (Counter, `{timeout}`).
+- `*_max`, `*_min` (Gauge, `{session}`) — конфигурация пула.
+
+Все pool-метрики имеют тэг `ydb.{query,table}.session.pool.name`. Имя пула
+определяется в порядке: явный `TClientSettings::PoolName` → дефолт
+`<database>@<endpoint>`.
+
+Метрики `TMetricBuffer` (см. row «SDK Metric Buffer» в дашборде Grafana):
+- `ydb_sdk_metric_buffer_pending_updates{instrument=counter|histogram|gauge}` —
+  текущее число накопленных, но ещё не сброшенных обновлений по типам
+  инструментов; растёт между flush'ами и обнуляется в момент сброса.
+- `ydb_sdk_metric_buffer_flush_duration_seconds_*` — гистограмма
+  длительности одного flush'а буфера; p50/p95/p99 нарисованы в Grafana.
+- `ydb_sdk_metric_buffer_events_buffered_total` — суммарное число
+  «логических» обновлений, прошедших через буфер (`Inc()`, `Record()`,
+  `Set()`). Делённое на `flushes_total` даёт средний коэффициент
+  коалесинга: чем он больше, тем меньше нагрузка на OTel-аггрегатор.
+- `ydb_sdk_metric_buffer_flushes_total{trigger=interval|shutdown|threshold}` —
+  счётчик сбросов по причине срабатывания.
+- `ydb_sdk_metric_buffer_underlying_calls_total{kind=add|record_many|set}` —
+  фактическое число вызовов к нижестоящему `IMetricRegistry`; для
+  диагностики выигрыша от батчинга.
+
+### 6. Бенчмарк внутреннего батчинга метрик
+
+В `examples/metric_buffer_benchmark` лежит standalone-бенчмарк, который
+сравнивает два режима эмиссии в синтетической нагрузке (8 потоков ×
+N инкрементов / `Record()` на общий счётчик и общую гистограмму):
+
+1. **`direct`** — без `TMetricBuffer`: каждый `Inc()` / `Record()`
+   идёт сразу в `IMetricRegistry` (как сейчас по умолчанию).
+2. **`buffered`** — через `TMetricBuffer` с настраиваемым
+   `FlushIntervalMs`.
+
+Бенчмарк прогоняется на `TFakeMetricRegistry`, так что измеряется
+именно overhead клиентской стороны (без YDB и без OTel-плагина) и
+печатает:
+- общее время `duration_ms`,
+- пропускную способность `ops/sec`,
+- число фактических `Inc()`/`Record()` вызовов в registry,
+- коэффициент коалесинга (`logical_ops / underlying_calls`).
+
+Запуск:
+
+```bash
+cmake --build . --target metric_buffer_benchmark -j$(nproc)
+./examples/metric_buffer_benchmark/metric_buffer_benchmark \
+    --threads 8 --ops 200000 --flush-ms 100
+```
+
+### 7. Остановить
 
 ```bash
 cd examples/otel_tracing

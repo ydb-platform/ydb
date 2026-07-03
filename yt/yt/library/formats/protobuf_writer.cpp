@@ -653,7 +653,7 @@ public:
     {
         if (MatchesCompositeType(fieldDescription)) {
             ValidateUnversionedValueType(value, EValueType::Composite);
-            TMemoryInput input(value.Data.String, value.Length);
+            TMemoryInput input(value.AsStringBuf());
             TYsonPullParser parser(&input, EYsonType::Node);
             auto maxVarIntSize = GetMaxVarIntSizeOfProtobufSizeOfComplexType();
             Traverse(writer, fieldDescription, &parser, maxVarIntSize);
@@ -889,11 +889,11 @@ private:
         parser->ParseEndList();
     }
 
-    static size_t GetMaxEmbeddingsSize(const TProtobufWriterFormatDescriptionPtr& description)
+    static ssize_t GetMaxEmbeddingsSize(const TProtobufWriterFormatDescriptionPtr& description)
     {
-        size_t maxSize = 0;
+        ssize_t maxSize = 0;
         for (int i = 0; i < description->GetTableCount(); ++i) {
-            maxSize = std::max(maxSize, description->GetTableDescription(i).Embeddings.size());
+            maxSize = std::max(maxSize, std::ssize(description->GetTableDescription(i).Embeddings));
         }
         return maxSize;
     }

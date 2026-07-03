@@ -1,7 +1,9 @@
 RECURSE(
     auth
+    iam
     basic_example
     bulk_upsert
+    key_conflict
     metrics
     server_restart
     sessions

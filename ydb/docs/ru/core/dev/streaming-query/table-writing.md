@@ -31,7 +31,7 @@ SELECT
     Count
 FROM
     -- Чтение событий из топика
-    ydb_source.input_topic
+    input_topic
 WITH (
     -- Формат данных в топике
     FORMAT = json_each_row,

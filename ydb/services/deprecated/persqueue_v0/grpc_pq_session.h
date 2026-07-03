@@ -118,7 +118,7 @@ protected:
                 Session->HaveWriteInflight = false;
                 if (Session->NeedFinish) {
                     lock.Release();
-                    if (!NYdbGrpc::GrpcDead) {
+                    if (!Session->IsShuttingDown()) {
                         Session->Stream.Finish(Status::OK, new TFinishDone(Session));
                     }
                 }
@@ -127,7 +127,7 @@ protected:
                 Session->Responses.pop();
                 lock.Release();
                 ui64 sz = resp.ByteSize();
-                if (!NYdbGrpc::GrpcDead) {
+                if (!Session->IsShuttingDown()) {
                     Session->Stream.Write(resp, new TWriteDone(Session, sz));
                 }
             }
@@ -274,7 +274,7 @@ protected:
             }
             HaveWriteInflight = true;
         }
-        if (!NYdbGrpc::GrpcDead) {
+        if (!this->IsShuttingDown()) {
             Stream.Finish(Status::OK, new TFinishDone(this));
         }
     }
@@ -294,7 +294,7 @@ protected:
         }
 
         ui64 size = resp.ByteSize();
-        if (!NYdbGrpc::GrpcDead) {
+        if (!this->IsShuttingDown()) {
             Stream.Write(resp, new TWriteDone(this, size));
         }
     }
@@ -307,7 +307,7 @@ protected:
             }
         }
 
-        if (!NYdbGrpc::GrpcDead) {
+        if (!this->IsShuttingDown()) {
             auto read = new TReadDone(this);
             Stream.Read(&read->Request, read);
         }

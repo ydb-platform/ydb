@@ -466,6 +466,7 @@ message TInterconnectConfig {
         PER_DATA_CENTER = 2;
         NO_MERGE = 3;
         PER_HOST = 4;
+        PER_SCOPE_CLASS = 5;
     }
 
     enum EEncryptionMode {
@@ -525,6 +526,10 @@ message TInterconnectConfig {
     optional uint32 RdmaMemPoolSizeLimitMb = 56 [default = 4096];
     optional bool UseKernelKeepAlive = 58 [default = false];
     optional bool CollectSubscriptionStackTrace = 59 [default = false];
+    optional uint32 RdmaPayloadCopySizeThreshold = 60 [default = 65536]; // 0 disables copying RDMA payload to regular memory
+    optional uint32 MaxRdmaRetryBackoffLevel = 61 [default = 8]; // 5s * 2^8 = 1280s, about 21 minutes by default
+    optional bool UseUring = 62 [default = false];
+    optional bool EnableUringSQPOLL = 63 [default = false]; // only effective when UseUring is set
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;
@@ -1596,6 +1601,21 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 411000000000,
             DefaultValue: 3600 }];
+        optional int64 MaxIncrementalRestoreTablesInFlight = 16 [(ControlOptions) = {
+            Description: "Max concurrent per-table restore sub-operations within a single incremental backup. -1 disables the cap.",
+            MinValue: -1,
+            MaxValue: 1000000,
+            DefaultValue: 32 }];
+        optional int64 MaxIncrementalRestoreOverallDurationSeconds = 17 [(ControlOptions) = {
+            Description: "Max wall-clock duration (seconds) of the whole incremental restore (across all incremental backups in the chain), from first dispatch to terminal state. -1 disables the deadline.",
+            MinValue: -1,
+            MaxValue: 604800,
+            DefaultValue: 86400 }];
+        optional int64 MaxIncrementalRestoreStageDurationSeconds = 18 [(ControlOptions) = {
+            Description: "Max wall-clock duration (seconds) for restoring a single incremental backup in the chain; resets when the orchestrator advances to the next incremental. Must be <= MaxIncrementalRestoreOverallDurationSeconds. -1 disables the per-incremental deadline (only the overall deadline applies). Defaults to the overall deadline so single-incremental restores see one effective limit; lower this knob if per-incremental progress should be enforced.",
+            MinValue: -1,
+            MaxValue: 604800,
+            DefaultValue: 86400 }];
     }
 
     message TTCMallocControls {
@@ -1622,6 +1642,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 134217728,
             DefaultValue: 8388608 }];
+        optional uint64 UseDwarfBacktracePrinting = 6 [(ControlOptions) = {
+            Description: "Use DWARF symbolization for TCMalloc heap/profile dump backtraces.",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TVDiskControls {
@@ -1650,6 +1675,16 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1024,
             DefaultValue: 10 }];
+        optional uint64 SyncLogMaxDiskAmount = 49 [(ControlOptions) = {
+            Description: "Maximum amount of SyncLog data stored on disk in bytes; effective chunk count is max(2, amount / PDisk chunk size)",
+            MinValue: 0,
+            MaxValue: 1099511627776,
+            DefaultValue: 0 }];
+        optional uint64 SyncLogMaxMemAmount = 50 [(ControlOptions) = {
+            Description: "Maximum amount of SyncLog data stored in memory in bytes; effective page count is max(2, amount / append block size)",
+            MinValue: 0,
+            MaxValue: 1073741824,
+            DefaultValue: 67108864 }];
 
         optional uint64 BurstThresholdNsHDD = 6 [(ControlOptions) = {
             Description: "Minumum operation queue size that is considered a burst, setting for HDD",
@@ -1847,6 +1882,44 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0,
         }];
+
+        optional uint64 MaxInProgressStartupDataSyncCount = 43 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous startup data sync processes; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressStartupDataSyncPerPDiskCount = 44 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous startup data sync processes per PDisk; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressLocalRecoveryCount = 45 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous local recovery processes; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressLocalRecoveryPerPDiskCount = 46 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous local recovery processes per PDisk; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 EnableFreshSyncDataThrottling = 47 [(ControlOptions) = {
+            Description: "Enables throttling of sync data being applied to fresh index",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
+
+        optional uint64 VolatilePhantomFlagStorageBlobSizeLimitBytes = 48 [(ControlOptions) = {
+            Description: "Minimum size of a blob in bytes covered by PhantomFlagStorage",
+            MinValue: 1,
+            MaxValue: 10000000,     // 10 MB
+            DefaultValue: 1000000,  // 1 MB
+        }];
     }
 
     message TTabletControls {
@@ -1963,6 +2036,14 @@ message TImmediateControlsConfig {
             DefaultValue: 1000 }];
     }
 
+    message TBlobDepotControls {
+        optional uint64 MaxLoadedTrashRecords = 1 [(ControlOptions) = {
+            Description: "Maximum number of trash records kept in BlobDepot memory at once",
+            MinValue: 1,
+            MaxValue: 100000000,
+            DefaultValue: 1000000 }];
+    }
+
     message TPDiskControls {
         optional uint64 MaxCommonLogChunksHDD = 1 [(ControlOptions) = {
             Description: "Regulate the maximum of log chunks on the PDisk, setting for HDD",
@@ -2062,6 +2143,12 @@ message TImmediateControlsConfig {
         }];
         optional uint64 UseCustomSerialization = 3 [(ControlOptions) = {
             Description: "Use custom serialization for KeyValue requests and responses",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0
+        }];
+        optional uint64 RejectNonExistentStorageChannel = 4 [(ControlOptions) = {
+            Description: "Return error on write/getstatus to non-existent storage channel instead of fallback to MAIN",
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0
@@ -2256,6 +2343,7 @@ message TImmediateControlsConfig {
     optional TGroupMapperControls GroupMapperControls = 18;
     optional TBackupControls BackupControls = 19;
     optional TBootstrapperControls BootstrapperControls = 20;
+    optional TBlobDepotControls BlobDepotControls = 22;
 
     message TQuoterControls {
         optional uint64 ProxyProtocolVersion = 1 [(ControlOptions) = {
@@ -2414,6 +2502,19 @@ message THiveConfig {
         optional double Priority = 2;
     }
 
+    message THiveTabletAllowedMetrics {
+        enum EAllowedMetricValue {
+            Default = 0;  // Not configured, take from hive defaults
+            Disabled = 1; // Explicitly disabled
+            Enabled = 2;  // Explicitly enabled
+        }
+
+        repeated NKikimrTabletBase.TTabletTypes.EType TabletType = 1;
+        optional EAllowedMetricValue CPU = 2;
+        optional EAllowedMetricValue Memory = 3;
+        optional EAllowedMetricValue Network = 4;
+    }
+
     optional uint64 MaxTabletsScheduled = 2 [default = 100];
     optional uint64 MaxResourceCounter = 3 [default = 100000000];
     optional uint64 MaxResourceCPU = 4 [default = 10000000];
@@ -2503,6 +2604,7 @@ message THiveConfig {
     optional bool LockedTabletsSendMetrics = 89 [default = false]; // if true then hive will process metrics from locked tablets
     optional uint64 MaxDeleteTabletInProgress = 90 [default = 100];
     optional uint64 DataCenterChangeReactionPeriod = 91 [default = 1]; // seconds
+    repeated THiveTabletAllowedMetrics DefaultTabletAllowedMetrics = 92;
 }
 
 message THealthCheckConfig {
@@ -2617,7 +2719,7 @@ message TColumnShardConfig {
     optional uint32 ProxyMaxRetriesPerShard = 60 [default = 10];
 
     oneof DefaultCompaction {
-        string DefaultCompactionPreset = 61 [default = "tiling"];
+        string DefaultCompactionPreset = 61 [default = "tiling++"];
         NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
     }
 
@@ -2628,6 +2730,14 @@ message TColumnShardConfig {
     optional bool EnableIntervalTreeForMetadataSelect = 67 [default = true];
     optional bool EnableCursorV1 = 68 [default = false];
     optional uint64 LimitSortedStartInFlight = 69 [default = 16];
+
+    message TReadRetryPolicy {
+        optional uint32 InitialRetryDelayMs = 1 [default = 100];
+        optional uint32 MaxRetryDelayMs = 2 [default = 5000];
+        optional uint32 MaxRetries = 3 [default = 10];
+    }
+
+    optional TReadRetryPolicy ReadRetryPolicy = 70;
 }
 
 // TSchemeShardConfig has been moved to ydb/core/protos/schemeshard_config.proto
@@ -2713,6 +2823,16 @@ message TCompactionConfig {
 
         // maximum time of unpersisted batch of shards
         optional uint32 PersistBatchMaxTimeMs = 6 [default = 100];
+
+        // The maximum number of stored operations regardless of status.
+        // Creating an operation beyond this limit fails, unless AutoForgetOperations is enabled.
+        // 0 means unlimited.
+        optional uint32 StoredOperationsLimit = 7 [default = 1000];
+
+        // When the StoredOperationsLimit is reached, automatically forget the oldest finished
+        // (Done or Cancelled) operations to make room for a new one instead of failing the request.
+        // If there are still not enough finished operations to forget, the request fails.
+        optional bool AutoForgetOperations = 8 [default = true];
     }
 
     optional TBackgroundCompactionConfig BackgroundCompactionConfig = 1;
@@ -2916,6 +3036,7 @@ message TLocalPgWireConfig {
     optional string SslCertificate = 5 [(Ydb.sensitive) = true];
     optional string Address = 6 [default = "::"];
     optional bool TcpNotDelay = 7 [default = true];
+    optional bool EnableLocalPgWire = 8 [default = false];
 }
 
 message TKafkaProxyConfig {
@@ -3054,6 +3175,8 @@ message TSystemTabletBackupConfig {
     }
     optional EFailBehaviour FailBehaviour = 6 [default = RETRY_BACKUP];
     optional uint32 RetryBackupTimeoutSeconds = 7 [default = 60];
+    optional uint32 RetryBackupMaxTimeoutSeconds = 8 [default = 900];
+    optional uint32 SnapshotWorkBudgetPercent = 9 [default = 25];
 }
 
 message TClusterDiagnosticsConfig {
@@ -3068,6 +3191,13 @@ message TNbsConfig {
 
 message TTliConfig {
     repeated string IgnoredTableRegexes = 1;
+}
+
+// Opaque (NMarkers.OpaqueConfig), end-node-owned configuration.
+// Authored as a nested YAML map under config.<opaque_config>.
+// See NMarkers.OpaqueConfig comments
+message TOpaqueConfig {
+    // Empty
 }
 
 message TAppConfig {
@@ -3159,6 +3289,7 @@ message TAppConfig {
     optional TBridgeConfig BridgeConfig = 91;
     optional TGroupedMemoryLimiterConfig CompGroupedMemoryLimiterConfig = 92;
     optional TBlockstoreConfig BlockstoreConfig = 93;
+    optional TOpaqueConfig PrivateDatabaseConfig = 94 [(NMarkers.AllowInDatabaseConfig) = true, (NMarkers.OpaqueConfig) = true];
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

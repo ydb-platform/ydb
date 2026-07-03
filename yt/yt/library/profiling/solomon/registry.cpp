@@ -1,8 +1,7 @@
 #include "registry.h"
 
-#include "sensor.h"
-
 #include <yt/yt/library/profiling/percpu.h>
+#include <yt/yt/library/profiling/sensor_impl.h>
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 

@@ -4,7 +4,7 @@
 
     Lexers for configuration file formats.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -44,14 +44,23 @@ class IniLexer(RegexLexer):
             (r'\s+', Whitespace),
             (r'[;#].*', Comment.Single),
             (r'(\[.*?\])([ \t]*)$', bygroups(Keyword, Whitespace)),
-            (r'(.*?)([  \t]*)([=:])([ \t]*)([^;#\n]*)(\\)(\s+)',
+            (r'''(.*?)([ \t]*)([=:])([ \t]*)(["'])''',
+             bygroups(Name.Attribute, Whitespace, Operator, Whitespace, String),
+             "quoted_value"),
+            (r'(.*?)([ \t]*)([=:])([ \t]*)([^;#\n]*)(\\)(\s+)',
              bygroups(Name.Attribute, Whitespace, Operator, Whitespace, String,
                       Text, Whitespace),
              "value"),
-            (r'(.*?)([ \t]*)([=:])([  \t]*)([^ ;#\n]*(?: +[^ ;#\n]+)*)',
+            (r'(.*?)([ \t]*)([=:])([ \t]*)([^ ;#\n]*(?: +[^ ;#\n]+)*)',
              bygroups(Name.Attribute, Whitespace, Operator, Whitespace, String)),
             # standalone option, supported by some INI parsers
             (r'(.+?)$', Name.Attribute),
+        ],
+        'quoted_value': [
+            (r'''([^"'\n]*)(["'])(\s*)''',
+             bygroups(String, String, Whitespace), "#pop"),
+            (r'[;#].*', Comment.Single),
+            (r'$', String, "#pop"),
         ],
         'value': [     # line continuation
             (r'\s+', Whitespace),
@@ -1118,7 +1127,7 @@ class TOMLLexer(RegexLexer):
     # Based on the TOML spec: https://toml.io/en/v1.0.0
 
     # The following is adapted from CPython's tomllib:
-    _time = r"\d\d:\d\d:\d\d(\.\d+)?"
+    _time = r"\d\d:\d\d(:\d\d(\.\d+)?)?"
     _datetime = rf"""(?x)
                   \d\d\d\d-\d\d-\d\d # date, e.g., 1988-10-27
                 (
@@ -1229,9 +1238,9 @@ class TOMLLexer(RegexLexer):
             default('value'),
         ],
         'inline-table': [
-            # Note that unlike inline arrays, inline tables do not
-            # allow newlines or comments.
-            (r'[ \t]+', Whitespace),
+            # Whitespace (since TOML 1.1.0, same as in array)
+            (r'\s+', Whitespace),
+            (r'#.*', Comment.Single),
 
             # Keys
             include('key'),
@@ -1266,7 +1275,7 @@ class TOMLLexer(RegexLexer):
             (r"'", String.Single),
         ],
         'escapes': [
-            (r'\\u[0-9a-fA-F]{4}|\\U[0-9a-fA-F]{8}', String.Escape),
+            (r'\\x[0-9a-fA-F]{2}|\\u[0-9a-fA-F]{4}|\\U[0-9a-fA-F]{8}', String.Escape),
             (r'\\.', String.Escape),
         ],
     }

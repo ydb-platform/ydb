@@ -4,6 +4,11 @@ items:
   include:
     mode: link
     path: backup-collections/toc_p.yaml
+- name: System tablet backup recipes
+  href: system-tablet-backup/index.md
+  include:
+    mode: link
+    path: system-tablet-backup/toc_p.yaml
 - name: YDB SDK
   include:
     mode: link
@@ -27,6 +32,11 @@ items:
   include:
     mode: link
     path: fulltext-search/toc_p.yaml
+- name: Local indexes
+  href: local-indexes/index.md
+  include:
+    mode: link
+    path: local-indexes/toc_p.yaml
 - name: Transfer
   href: transfer/index.md
   include:

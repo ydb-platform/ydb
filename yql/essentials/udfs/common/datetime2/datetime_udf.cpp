@@ -139,15 +139,15 @@ TString BuildBoundaryPolyArgs(ESecondPolyArg secondArg = ESecondPolyArg::None) {
 }
 
 template <typename Type>
-static void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
-                                  ITypeInfoHelper::TPtr typeInfoHelper, TStringBuilder& strBuilder)
+void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
+                           ITypeInfoHelper::TPtr typeInfoHelper, TStringBuilder& strBuilder)
 {
     TTypePrinter(*typeInfoHelper, builder.SimpleType<Type>()).Out(strBuilder.Out);
 }
 
 template <typename Type, typename Head, typename... Tail>
-static void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
-                                  ITypeInfoHelper::TPtr typeInfoHelper, TStringBuilder& strBuilder)
+void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
+                           ITypeInfoHelper::TPtr typeInfoHelper, TStringBuilder& strBuilder)
 {
     PrintTypeAlternatives<Type>(builder, typeInfoHelper, strBuilder);
     strBuilder << " or ";
@@ -155,8 +155,8 @@ static void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
 }
 
 template <typename... Types>
-static void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
-                                ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
+void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
+                         ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
 {
     ::TStringBuilder sb;
     sb << "Invalid argument type: got ";
@@ -167,34 +167,34 @@ static void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
     builder.SetError(sb);
 }
 
-static void SetResourceExpectedError(NUdf::IFunctionTypeInfoBuilder& builder,
-                                     ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
+void SetResourceExpectedError(NUdf::IFunctionTypeInfoBuilder& builder,
+                              ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
 {
     SetInvalidTypeError<
         TResource<TMResourceName>,
         TResource<TM64ResourceName>>(builder, typeInfoHelper, argType);
 }
 
-static void SetIntervalExpectedError(NUdf::IFunctionTypeInfoBuilder& builder,
-                                     ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
+void SetIntervalExpectedError(NUdf::IFunctionTypeInfoBuilder& builder,
+                              ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
 {
     SetInvalidTypeError<TInterval, TInterval64>(builder, typeInfoHelper, argType);
 }
 
 template <const char* TResourceName>
-static void PrintTagAlternatives(TStringBuilder& strBuilder) {
+void PrintTagAlternatives(TStringBuilder& strBuilder) {
     strBuilder << "'" << TResourceName << "'";
 }
 
 template <const char* TResourceName, const char* Head, const char*... Tail>
-static void PrintTagAlternatives(TStringBuilder& strBuilder) {
+void PrintTagAlternatives(TStringBuilder& strBuilder) {
     PrintTagAlternatives<TResourceName>(strBuilder);
     strBuilder << " or ";
     PrintTagAlternatives<Head, Tail...>(strBuilder);
 }
 
-static void SetUnexpectedTagError(NUdf::IFunctionTypeInfoBuilder& builder,
-                                  TStringRef tag)
+void SetUnexpectedTagError(NUdf::IFunctionTypeInfoBuilder& builder,
+                           TStringRef tag)
 {
     ::TStringBuilder sb;
     sb << "Unexpected Resource tag: got '" << tag << "', but ";
@@ -2873,11 +2873,11 @@ struct PrintNDigits {
 
 // Format
 
-static constexpr size_t OSize = sizeof("+0000") - 1;
-static constexpr size_t CSize = sizeof("+00:00") - 1;
+constexpr size_t OSize = sizeof("+0000") - 1;
+constexpr size_t CSize = sizeof("+00:00") - 1;
 
 template <bool WriteOffsetWithColon>
-static size_t PrintUTCOffset(char* out) {
+size_t PrintUTCOffset(char* out) {
     if constexpr (WriteOffsetWithColon) {
         std::memcpy(out, "+00:00", CSize);
         return CSize;
@@ -2888,7 +2888,7 @@ static size_t PrintUTCOffset(char* out) {
 }
 
 template <bool WriteOffsetWithColon>
-static size_t PrintTzOffset(char* out, i32 offset) {
+size_t PrintTzOffset(char* out, i32 offset) {
     Y_ENSURE(offset != 0);
     *out++ = offset > 0 ? '+' : '-';
     offset = std::abs(offset);

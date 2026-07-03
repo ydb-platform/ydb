@@ -20,7 +20,6 @@ PEERDIR(
     contrib/restricted/boost/iterator
     contrib/restricted/boost/lexical_cast
     contrib/restricted/boost/smart_ptr
-    contrib/restricted/boost/static_assert
     contrib/restricted/boost/throw_exception
     contrib/restricted/boost/tokenizer
     contrib/restricted/boost/type_traits

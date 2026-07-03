@@ -6,6 +6,7 @@ SRCS(
     settings.cpp
     type_ann.cpp
     physical_opt.cpp
+    intervals_converter.cpp
 )
 
 PEERDIR(

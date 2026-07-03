@@ -789,7 +789,7 @@ void roaring64_bitmap_remove_bulk(roaring64_bitmap_t *r,
         }
         if (!container_nonzero_cardinality(container2, typecode2)) {
             container_free(container2, typecode2);
-            leaf_t leaf;
+            leaf_t leaf = 0;
             bool erased = art_erase(art, high48, (art_val_t *)&leaf);
             assert(erased);
             (void)erased;
@@ -875,7 +875,7 @@ void roaring64_bitmap_remove_range_closed(roaring64_bitmap_t *r, uint64_t min,
 
     art_iterator_t it = art_upper_bound(art, min_high48);
     while (it.value != NULL && art_compare_keys(it.key, max_high48) < 0) {
-        leaf_t leaf;
+        leaf_t leaf = 0;
         bool erased = art_iterator_erase(&it, (art_val_t *)&leaf);
         assert(erased);
         (void)erased;
@@ -1315,7 +1315,7 @@ void roaring64_bitmap_and_inplace(roaring64_bitmap_t *r1,
 
         if (!it2_present || compare_result < 0) {
             // Cases 1 and 3a: it1 is the only iterator or is before it2.
-            leaf_t leaf;
+            leaf_t leaf = 0;
             bool erased = art_iterator_erase(&it1, (art_val_t *)&leaf);
             assert(erased);
             (void)erased;
@@ -2895,6 +2895,114 @@ uint64_t roaring64_iterator_read(roaring64_iterator_t *it, uint64_t *buf,
         }
     }
     return consumed;
+}
+
+uint64_t roaring64_iterator_read_backward(roaring64_iterator_t *it,
+                                          uint64_t *buf, uint64_t count) {
+    uint64_t consumed = 0;
+    while (it->has_value && consumed < count) {
+        uint32_t container_consumed;
+        leaf_t leaf = *it->art_it.value;
+        uint16_t low16 = (uint16_t)it->value;
+        uint32_t container_count = UINT32_MAX;
+        if (count - consumed < (uint64_t)UINT32_MAX) {
+            container_count = count - consumed;
+        }
+        bool has_value = container_iterator_read_backward_into_uint64(
+            get_container(it->r, leaf), get_typecode(leaf), &it->container_it,
+            it->high48, buf, container_count, &container_consumed, &low16);
+        consumed += container_consumed;
+        buf += container_consumed;
+        if (has_value) {
+            it->has_value = true;
+            it->value = it->high48 | low16;
+            assert(consumed == count);
+            return consumed;
+        }
+        it->has_value = art_iterator_prev(&it->art_it);
+        if (it->has_value) {
+            roaring64_iterator_init_at_leaf_last(it);
+        } else {
+            it->saturated_forward = false;
+        }
+    }
+    return consumed;
+}
+
+size_t roaring64_iterator_read_ranges(roaring64_iterator_t *it,
+                                      roaring64_range_closed_t *buf,
+                                      size_t count) {
+    size_t ret = 0;
+    while (it->has_value && ret < count) {
+        buf[ret].min = it->value;
+        for (;;) {
+            uint16_t low16 = (uint16_t)it->value;
+            leaf_t leaf = (leaf_t)*it->art_it.value;
+            bool container_has_more;
+            uint16_t run_end_low16 = container_iterator_find_run_end(
+                get_container(it->r, leaf), get_typecode(leaf),
+                &it->container_it, &low16, &container_has_more);
+            buf[ret].max = it->high48 | run_end_low16;
+
+            if (container_has_more) {
+                it->value = it->high48 | low16;
+                break;
+            }
+            // Move to next leaf
+            it->has_value = art_iterator_next(&it->art_it);
+            if (it->has_value) {
+                roaring64_iterator_init_at_leaf_first(it);
+            } else {
+                it->saturated_forward = true;
+                break;
+            }
+            // Continue merging only if the run reached the container
+            // boundary and the next leaf starts exactly at max+1.
+            if (run_end_low16 != UINT16_MAX || it->value != buf[ret].max + 1) {
+                break;
+            }
+        }
+        ret++;
+    }
+    return ret;
+}
+
+size_t roaring64_iterator_read_prev_ranges(roaring64_iterator_t *it,
+                                           roaring64_range_closed_t *buf,
+                                           size_t count) {
+    size_t ret = 0;
+    while (it->has_value && ret < count) {
+        buf[ret].max = it->value;
+        for (;;) {
+            uint16_t low16 = (uint16_t)it->value;
+            leaf_t leaf = (leaf_t)*it->art_it.value;
+            bool container_has_more;
+            uint16_t run_start_low16 = container_iterator_find_run_start(
+                get_container(it->r, leaf), get_typecode(leaf),
+                &it->container_it, &low16, &container_has_more);
+            buf[ret].min = it->high48 | run_start_low16;
+
+            if (container_has_more) {
+                it->value = it->high48 | low16;
+                break;
+            }
+            // Move to previous leaf
+            it->has_value = art_iterator_prev(&it->art_it);
+            if (it->has_value) {
+                roaring64_iterator_init_at_leaf_last(it);
+            } else {
+                it->saturated_forward = false;
+                break;
+            }
+            // Continue merging only if the run reached the container
+            // boundary and the previous leaf ends exactly at min-1.
+            if (run_start_low16 != 0 || it->value != buf[ret].min - 1) {
+                break;
+            }
+        }
+        ret++;
+    }
+    return ret;
 }
 
 #ifdef __cplusplus

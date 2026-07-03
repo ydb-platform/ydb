@@ -56,7 +56,7 @@ enum class EProtobufOneofMode
 struct TProtobufOneofOptions
 {
     EProtobufOneofMode Mode = EProtobufOneofMode::Variant;
-    TString VariantFieldName;
+    std::string VariantFieldName;
 };
 
 struct TProtobufFieldOptions
@@ -88,7 +88,7 @@ TProtobufOneofOptions GetOneofOptions(
     const ::google::protobuf::OneofDescriptor* oneofDescriptor,
     const TMaybe<TProtobufOneofOptions>& defaultOneofOptions = {});
 
-TString GetColumnName(const ::google::protobuf::FieldDescriptor* field);
+std::string GetColumnName(const ::google::protobuf::FieldDescriptor* field);
 
 void ValidateProtobufType(
     const ::google::protobuf::FieldDescriptor* fieldDescriptor,

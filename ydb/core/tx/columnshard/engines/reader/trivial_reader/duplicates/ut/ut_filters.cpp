@@ -271,7 +271,7 @@ Y_UNIT_TEST_SUITE(TFilterAccumulatorTests) {
         accumulator->AddFilter(std::move(filter));
 
         UNIT_ASSERT(subscriber->FilterReady);
-        auto trivialFilter = subscriber->ReceivedFilter.BuildTrivialFilter();
+        auto trivialFilter = subscriber->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(trivialFilter.size(), 5);
         UNIT_ASSERT_VALUES_EQUAL(trivialFilter[0], true);
         UNIT_ASSERT_VALUES_EQUAL(trivialFilter[1], true);

@@ -19,6 +19,7 @@
 
 #include <iterator>
 #include <boost/assert.hpp>
+#include <boost/mpl/if.hpp>
 #include <boost/iterator/iterator_traits.hpp>
 #include <boost/iterator/iterator_facade.hpp>
 #include <boost/range/begin.hpp>

@@ -2,6 +2,7 @@
 
 #include <ydb/core/formats/arrow/program/aggr_keys.h>
 #include <ydb/core/formats/arrow/program/assign_internal.h>
+#include <ydb/core/formats/arrow/program/distinct_marker.h>
 #include <ydb/core/formats/arrow/program/filter.h>
 #include <ydb/core/formats/arrow/program/projection.h>
 #include <ydb/core/formats/arrow/program/stream_logic.h>
@@ -437,6 +438,16 @@ TConclusionStatus TProgramBuilder::ReadGroupBy(const NKikimrSSA::TProgram::TGrou
         }
     }
 
+    return TConclusionStatus::Success();
+}
+
+TConclusionStatus TProgramBuilder::ReadDistinct(const NKikimrSSA::TProgram::TDistinct& distinct) {
+    if (!distinct.HasKeyColumn() || !distinct.GetKeyColumn().HasId() || !distinct.GetKeyColumn().GetId()) {
+        return TConclusionStatus::Fail("Distinct: KeyColumn is not set");
+    }
+    // DISTINCT is handled at the reader level (distinct-limit sync point).
+    GetColumnInfo(distinct.GetKeyColumn());
+    Builder.Add(std::make_shared<TDistinctMarkerProcessor>(distinct.GetKeyColumn().GetId()));
     return TConclusionStatus::Success();
 }
 

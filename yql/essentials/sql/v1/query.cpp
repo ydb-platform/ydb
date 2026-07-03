@@ -4,6 +4,7 @@
 
 #include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 #include <library/cpp/charset/ci_string.h>
@@ -829,6 +830,11 @@ public:
             return Y("MrWalkFolders", initPath, rootAttributes, pickledInitState, initStateType,
                      preHandler, resolveHandler, diveHandler, postHandler);
         } else if (func == "tables") {
+            if (!ctx.Settings.AllowTablesFunction) {
+                ctx.Error(Pos_) << Func_ << " is not allowed in this context";
+                return nullptr;
+            }
+
             if (!Args_.empty()) {
                 ctx.Error(Pos_) << Func_ << " doesn't accept arguments";
                 return nullptr;
@@ -869,11 +875,7 @@ public:
             result = L(result, Q(settings));
             return result;
         } else if (func == "partitionlist" || func == "partitionliststrict") {
-            if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
-                    Pos_,
-                    "PARTITION_LIST table function",
-                    MakeLangVersion(2025, 4)))
-            {
+            if (!ctx.EnsureAvailable(Pos_, NYql::NFeature::PartitionListTableFunction)) {
                 return nullptr;
             }
 
@@ -908,11 +910,7 @@ public:
             }
             return partitionList;
         } else if (func == "partitions" || func == "partitionsstrict") {
-            if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
-                    Pos_,
-                    "PARTITIONS table function",
-                    MakeLangVersion(2025, 4)))
-            {
+            if (!ctx.EnsureAvailable(Pos_, NYql::NFeature::PartitionsTableFunction)) {
                 return nullptr;
             }
 
@@ -3640,9 +3638,9 @@ public:
                                             BuildQuotedAtom(Pos_, "DebugPositions"))));
                 }
 
-                if (ctx.WindowNewPipeline) {
+                if (!ctx.WindowNewPipeline) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
-                                            BuildQuotedAtom(Pos_, "WindowNewPipeline"))));
+                                            BuildQuotedAtom(Pos_, "DisableWindowNewPipeline"))));
                 }
 
                 if (ctx.DirectRowDependsOn.Defined()) {
@@ -3689,8 +3687,8 @@ public:
                     const auto& ref = block->GetLabel();
                     YQL_ENSURE(!ref.empty());
                     Add(block);
-                    currentWorlds->Add(Y("let", "world", Y("Nth", *subqueryAliasPtr, Q("0"))));
-                    Add(Y("let", ref, Y("Nth", *subqueryAliasPtr, Q("1"))));
+                    currentWorlds->Add(Y("let", "world", Y("Left!", *subqueryAliasPtr)));
+                    Add(Y("let", ref, Y("Right!", *subqueryAliasPtr)));
                 }
             } else {
                 const auto& ref = block->GetLabel();

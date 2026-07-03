@@ -39,6 +39,7 @@ message TTableServiceConfig {
 
         optional uint64 MaxTotalChannelBuffersSize = 11 [default = 2147483648]; // 2 GB
         optional uint64 MinChannelBufferSize = 12 [default = 2048];             // 2 KB
+        optional uint32 MaxChannelCountPerNode = 31 [default = 7300];
 
         reserved 13;
         reserved 14;
@@ -59,6 +60,9 @@ message TTableServiceConfig {
         optional uint64 MaxNonParallelDataQueryTasksLimit = 28 [default = 1000];
 
         optional bool VerboseMemoryLimitException = 29 [default = false];
+
+        optional uint64 KqpLevelCacheMaxSizeBytes = 32 [default = 0];
+        optional uint64 KqpLevelCacheIncreaseBatchSizeBytes = 33 [default = 33554432];
     }
 
     message TSpillingServiceConfig {
@@ -66,8 +70,8 @@ message TTableServiceConfig {
             optional bool Enable = 1 [default = true];
             optional string Root = 2 [default = ""];
             optional uint64 MaxTotalSize = 3 [default = 21474836480];  // 20 GiB
-            optional uint64 MaxFileSize = 4 [default = 5368709120];    // 5 GiB
-            optional uint64 MaxFilePartSize = 5 [default = 104857600]; // 100 MB
+            optional uint64 MaxFileSize = 4 [default = 5368709120, deprecated = true];    // 5 GiB
+            optional uint64 MaxFilePartSize = 5 [default = 104857600, deprecated = true]; // 100 MB
 
             message TIoThreadPoolConfig {
                 optional uint32 WorkersCount = 1 [default = 2];
@@ -376,7 +380,7 @@ message TTableServiceConfig {
 
     optional bool EnableSnapshotIsolationRW = 76 [default = true, (InvalidateCompileCache) = true];
     optional bool EnableStreamWrite = 77 [default = false, (InvalidateCompileCache) = true];
-    optional bool EnableBatchUpdates = 78 [default = true];
+    optional bool EnableBatchUpdates = 78 [default = true, deprecated = true];
 
     optional bool AllowMultiBroadcasts = 79 [default = true, (InvalidateCompileCache) = true];
 
@@ -401,7 +405,7 @@ message TTableServiceConfig {
     optional bool EnableOlapScalarApply = 86 [default = true, (InvalidateCompileCache) = true];
     optional bool EnableOlapSubstringPushdown = 87 [default = true, (InvalidateCompileCache) = true];
 
-    optional bool EnableIndexStreamWrite = 88 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableIndexStreamWrite = 88 [default = true, (InvalidateCompileCache) = true];
 
     reserved 89;
 
@@ -454,15 +458,15 @@ message TTableServiceConfig {
 
     optional bool EnableFallbackToYqlOptimizer = 109 [default = false, (InvalidateCompileCache) = true];
 
-    optional bool EnableWatermarks = 110 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableWatermarks = 110 [default = true, (InvalidateCompileCache) = true];
 
-    optional uint64 LocalChannelInflightBytes  = 111 [default = 8388608];
-    optional uint64 RemoteChannelInflightBytes = 112 [default = 16777216];
-    optional uint64 NodeSessionIcInflightBytes = 113 [default = 67108864];
+    optional uint64 LocalChannelInflightBytes  = 111 [default = 8388608]; // deprecated
+    optional uint64 RemoteChannelInflightBytes = 112 [default = 16777216]; // deprecated
+    optional uint64 NodeSessionIcInflightBytes = 113 [default = 67108864]; // deprecated
 
     optional uint32 DqChannelVersion = 114 [ default = 2, (InvalidateCompileCache) = true];
 
-    optional bool EnableDiscardSelect = 115 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableDiscardSelect = 115 [default = true, (InvalidateCompileCache) = true];
 
     enum ETxMode {
         SerializableRW = 0;
@@ -502,7 +506,37 @@ message TTableServiceConfig {
 
     optional uint64 QueryDeadlockTimeoutMs = 126 [default = 600000];
 
-    optional uint64 DqChannelReconciliationCount = 127 [default = 3];
+    optional uint64 DqChannelReconciliationCount = 127 [default = 3]; // deprecated
 
     optional bool EnableReadCommittedIsolation = 128 [default = false, (InvalidateCompileCache) = true];
+
+    optional bool EnableStreamingPartitionBalancing = 129 [default = false, (InvalidateCompileCache) = true];
+
+    optional bool EnableWatermarksAdvanced = 130 [default = false, (InvalidateCompileCache) = true];
+
+    optional bool EnableCompileCacheWarmup = 131 [default = false, (InvalidateCompileCache) = false];
+
+    optional bool EnableChannelMemoryTracking = 132 [default = true];
+
+    message TDqChannelConfig {
+        optional uint64 LocalChannelInflightBytes  = 1 [default = 8388608];
+        optional uint64 RemoteChannelInflightBytes = 2 [default = 16777216];
+        optional uint64 RemoteChannelColdInflightBytes = 8 [default = 524288];
+        optional uint64 RemoteSessionInflightBytes = 3 [default = 67108864];
+        optional uint64 ReconciliationCount = 4 [default = 3];
+        optional uint64 CleanupPeriodMs = 5 [default = 30000];
+        optional uint64 IdlePingPeriodMs = 6 [default = 60000];
+        optional uint64 IdleDestroyPeriodMs = 7 [default = 120000];
+    }
+
+    optional TDqChannelConfig DqChannelConfig = 133 [(InvalidateCompileCache) = false];
+
+    optional bool UseKqpTasksGraphV2 = 134 [default = false, (InvalidateCompileCache) = true];
+
+    // Kill-switch for hybrid search (ORDER BY HybridRank(...) fusion). On by default; gates the
+    // KqpRewriteHybridRankTopSort logical rewrite, so it changes the compiled plan shape and must
+    // invalidate the compile cache when toggled.
+    optional bool EnableHybridSearch = 135 [default = true, (InvalidateCompileCache) = true];
+
+    optional bool EnableStrictSerializableIsolation = 136 [default = false, (InvalidateCompileCache) = true];
 };

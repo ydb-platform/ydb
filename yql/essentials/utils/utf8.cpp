@@ -44,7 +44,7 @@ struct TUtf8Ranges {
 // see https://lemire.me/blog/2018/05/09/how-quickly-can-you-check-that-a-string-is-valid-unicode-utf-8
 // NOLINTBEGIN(modernize-use-designated-initializers)
 // clang-format off
-inline static const std::vector<TUtf8Ranges> Utf8Ranges = {
+inline const std::vector<TUtf8Ranges> Utf8Ranges = {
     { 1, { {0x00, 0x7f}, {0x00, 0x00}, {0x00, 0x00}, {0x00, 0x00}, } },
     { 2, { {0xc2, 0xdf}, {0x80, 0xbf}, {0x00, 0x00}, {0x00, 0x00}, } },
     { 3, { {0xe0, 0xe0}, {0xa0, 0xbf}, {0x80, 0xbf}, {0x00, 0x00}, } },

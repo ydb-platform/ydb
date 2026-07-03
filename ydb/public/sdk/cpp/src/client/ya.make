@@ -41,6 +41,7 @@ RECURSE(
     rate_limiter
     resources
     result
+    row_ranges
     scheme
     secret
     table
@@ -51,6 +52,7 @@ RECURSE(
     topic/impl
     trace
     types
+    types/core_facility
     types/credentials
     types/exceptions
     types/fatal_error_handlers

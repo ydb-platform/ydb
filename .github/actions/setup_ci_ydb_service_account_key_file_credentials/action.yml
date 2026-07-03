@@ -4,10 +4,13 @@ inputs:
   ci_ydb_service_account_key_file_credentials:
     required: false
     description: "token for access"
+  ydb_qa_config:
+    required: false
+    description: "YDB QA JSON config (pass vars.YDB_QA_CONFIG); exported as YDB_QA_CONFIG for ydb_wrapper"
 runs:
   using: "composite"
   steps:
-    - name: drop file and set environment variable 
+    - name: Setup YDB service account credentials
       if: "${{ inputs.ci_ydb_service_account_key_file_credentials != '' }}"
       shell: bash
       run: |
@@ -18,3 +21,17 @@ runs:
         EOF
 
         echo "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=$CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" >> $GITHUB_ENV
+
+    - name: Setup YDB QA config
+      if: "${{ inputs.ydb_qa_config != '' }}"
+      shell: bash
+      env:
+        YDB_QA_CONFIG_INPUT: ${{ inputs.ydb_qa_config }}
+      run: |
+        set -eu
+        DELIM="YDB_QA_CONFIG_$(openssl rand -hex 8)"
+        {
+          echo "YDB_QA_CONFIG<<$DELIM"
+          printf '%s\n' "$YDB_QA_CONFIG_INPUT"
+          echo "$DELIM"
+        } >> "$GITHUB_ENV"

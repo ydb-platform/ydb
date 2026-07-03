@@ -283,7 +283,7 @@ public:
                     YQL_ENSURE(body->HasResult());
                 } else if (status.Level == TStatus::Repeat || status.Level == TStatus::Async) {
                     output->SetState(TExprNode::EState::ExecutionPending);
-                    FreshPendingNodes_.push_back(output.Get());
+                    FreshPendingNodes_.emplace_back(output.Get());
                 }
                 return status;
             } else {
@@ -310,7 +310,7 @@ public:
                     output->SetState(TExprNode::EState::ExecutionPending);
                     status = ExecuteChildren(output, output, ctx, depth + 1);
                     if (TExprNode::EState::ExecutionPending == output->GetState()) {
-                        FreshPendingNodes_.push_back(output.Get());
+                        FreshPendingNodes_.emplace_back(output.Get());
                     }
                     if (status.Level != TStatus::Repeat) {
                         return status;
@@ -980,7 +980,7 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
 
             return true;
         };
-        static const THashSet<TStringBuf> NoExecutionList = {"InstanceOf", "Lag", "Lead", "RowNumber", "Rank", "DenseRank", "PercentRank", "CumeDist", "NTile"};
+        static const THashSet<TStringBuf> NoExecutionList = {"InstanceOf", "Lag", "Lead", "RowNumber", "Rank", "DenseRank", "PercentRank", "CumeDist", "NTile", "WatermarkGenerator"};
         static const THashSet<TStringBuf> NoExecutionListForCalcOverWindow = {"InstanceOf"};
         VisitExpr(input, [funcCheckExecution](const TExprNode::TPtr& node) {
             bool collectCalcOverWindow = true;

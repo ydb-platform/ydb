@@ -20,6 +20,8 @@ YT_DEFINE_STRONG_TYPEDEF(TAsyncBarrierCookie, i64);
 //! A sentinel value that can never be returned by TAsyncBarrier::Insert.
 inline const TAsyncBarrierCookie InvalidAsyncBarrierCookie = TAsyncBarrierCookie(0);
 
+constexpr std::string_view BarrierAbandonedError = "Barrier has been abandoned";
+
 //! Maintains (but does not store) a set of items and enables tracking moments
 //! when all items that are currently present in the set become removed.
 /*!
@@ -29,9 +31,12 @@ inline const TAsyncBarrierCookie InvalidAsyncBarrierCookie = TAsyncBarrierCookie
 class TAsyncBarrier final
 {
 public:
+    //! Clears the state and returns an error to all active subscribers.
+    ~TAsyncBarrier();
+
     //! Inserts a new item into the set.
     //! Returns the cookie to be used later for removal.
-    TAsyncBarrierCookie Insert();
+    [[nodiscard]] TAsyncBarrierCookie Insert();
 
     //! Removes an existing item from the set.
     void Remove(TAsyncBarrierCookie cookie);
@@ -42,6 +47,10 @@ public:
 
     //! Clears the state and also propagates #error to all subscribers.
     void Clear(const TError& error);
+
+    //! Returns |true| if no elements are currently present in the barrier.
+    //! This is inherently racy.
+    bool Empty() const;
 
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);

@@ -1,9 +1,10 @@
-#include "utils.h"
 #include "constants.h"
+#include "utils.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+
 #include <util/generic/algorithm.h>
 
 #include <deque>
@@ -264,6 +265,17 @@ TString TPartitionGraph::DebugString() const {
     return sb;
 }
 
+std::vector<ui32> TPartitionGraph::GetRootPartitions() const {
+    std::vector<ui32> rootPartitions;
+
+    for (auto& [id, n] : Partitions) {
+        if (n.IsRoot()) {
+            rootPartitions.push_back(id);
+        }
+    }
+    return rootPartitions;
+}
+
 template<typename TPartition>
 inline int GetPartitionId(TPartition p) {
     return p.GetPartitionId();
@@ -388,4 +400,4 @@ bool PreciseReadFromTimestampBehaviourEnabled(const NKikimr::TAppData& appData) 
     return appData.PQConfig.GetTopicsAreFirstClassCitizen() || appData.FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp();
 }
 
-} // NKikimr::NPQ
+} // namespace NKikimr::NPQ

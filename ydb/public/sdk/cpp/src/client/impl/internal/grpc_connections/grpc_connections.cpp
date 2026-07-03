@@ -2,6 +2,9 @@
 #include "grpc_connections.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <ydb/public/sdk/cpp/src/client/impl/observability/constants.h>
+
+#include <string>
 
 
 namespace NYdb::inline Dev {
@@ -23,7 +26,9 @@ std::string GetAuthInfo(TDbDriverStatePtr p) {
         }
         return token;
     } catch (const TAuthenticationError& e) {
-        throw e;
+        throw;
+    } catch (const TYdbException& e) {
+        throw;
     } catch (const std::exception& e) {
         throw TAuthenticationError(TStringBuilder() << "Can't get Authentication info from CredentialsProvider. " << e.what());
     }
@@ -240,6 +245,10 @@ void TGRpcConnectionsImpl::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration
             period);
         action->Start();
     }
+}
+
+void TGRpcConnectionsImpl::PostToResponseQueue(std::function<void()>&& f) {
+    ResponseQueue_->Post(std::move(f));
 }
 
 void TGRpcConnectionsImpl::ScheduleDelayedTask(TSimpleCb&& fn, TDeadline deadline) {
@@ -508,6 +517,13 @@ TCallMeta TGRpcConnectionsImpl::MakeCallMeta(const TRpcRequestSettings& requestS
 
     if (!requestSettings.TraceParent.empty()) {
         meta.Aux.push_back({OTEL_TRACE_HEADER, requestSettings.TraceParent});
+    } else if (TraceProvider_) {
+        if (auto tracer = TraceProvider_->GetTracer(std::string(NObservability::Tracer::kSdkName))) {
+            auto traceParent = tracer->GetCurrentTraceparent();
+            if (!traceParent.empty()) {
+                meta.Aux.push_back({OTEL_TRACE_HEADER, std::move(traceParent)});
+            }
+        }
     }
 
     if (!dbState->Database.empty()) {

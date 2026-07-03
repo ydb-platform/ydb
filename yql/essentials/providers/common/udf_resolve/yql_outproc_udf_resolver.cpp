@@ -41,8 +41,13 @@ void RunResolver(
     TShellCommandOptions shellOptions;
     shellOptions
         .SetUseShell(false)
-        .SetDetachSession(false)
-        .SetInputStream(input); // input can be nullptr
+        .SetDetachSession(true)
+        .SetInputStream(input) // input can be nullptr
+        .SetFuncAfterFork([]() {
+#ifdef _unix_
+            signal(SIGUSR1, SIG_IGN);
+#endif
+        });
 
     if (ldLibraryPath) {
         YQL_LOG(DEBUG) << "Using LD_LIBRARY_PATH = " << ldLibraryPath << " for Udf resolver";
@@ -227,7 +232,7 @@ public:
             }
 
             udfRequest->SetLangVer(udf->LangVer);
-            udfRequest->MutableRuntimeSettings()->MergeFrom(SerializeRuntimeSettingsToProto(*udf->RuntimeSettings));
+            *udfRequest->MutableRuntimeSettings() = SerializeRuntimeSettingsToProto(*udf->RuntimeSettings);
         }
 
         TResolveResult response;

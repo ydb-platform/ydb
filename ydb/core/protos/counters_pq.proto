@@ -187,6 +187,7 @@ enum EClientLabeledCounters {
     METRIC_READ_QUOTA_PER_CONSUMER_USAGE = 26                        [(LabeledCounterOpts) = {Name: "PartitionMaxReadQuotaUsage" AggrFunc : EAF_MAX SVName: "topic.partition.read.throttled_microseconds_max"}];
     METRIC_TOTAL_COMMIT_MESSAGE_LAG = 27                             [(LabeledCounterOpts) = {Name: "TotalMessageLagByCommitted" AggrFunc : EAF_SUM SVName: "topic.committed_lag_messages"}];
     METRIC_IN_FLIGHT_LIMIT_REACHED_DURATION_MS = 28                  [(LabeledCounterOpts) = {Name: "InFlightLimitReachedDurationMs" AggrFunc : EAF_MAX SVName: "topic.partition.read.inflight_limit_reached_duration_milliseconds"}];
+    METRIC_CONSUMER_BATCH_PROCESSOR_CPU_USAGE = 29                   [(LabeledCounterOpts) = {Name: "ConsumerBatchProcessorCPUUsage" AggrFunc : EAF_SUM Type : CT_DERIV SVName: "topic.partition.read.recompression_cpu_usage"}];
 }
 
 
@@ -246,6 +247,9 @@ enum EPartitionLabeledCounters {
 
     METRIC_READ_QUOTA_NO_CONSUMER_BYTES = 40                      [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MIN SVName: "topic.partition.read_without_consumer.speed_limit_bytes_per_second"}];
     METRIC_READ_QUOTA_NO_CONSUMER_USAGE = 41                      [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.read_without_consumer.throttled_microseconds_max"}];
+    METRIC_WRITE_QUOTA_MESSAGES_USAGE = 42                        [(LabeledCounterOpts) = {Name: "PartitionMaxWriteMessagesMax" AggrFunc : EAF_MAX SVName: "topic.partition.write.messages_max"}];
+    METRIC_WRITE_QUOTA_BYTES_USAGE = 43                           [(LabeledCounterOpts) = {Name: "PartitionMaxWriteBytesMax" AggrFunc : EAF_MAX SVName: "topic.partition.write.bytes_max"}];
+    METRIC_WRITE_QUOTA_MESSAGES = 44                              [(LabeledCounterOpts) = {Name: "WriteMessagesQuota" AggrFunc : EAF_MIN SVName: "topic.partition.write.speed_limit_messages_per_second"}];
 }
 
 enum EPartitionKeyCompactionLabeledCounters {

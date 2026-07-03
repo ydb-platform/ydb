@@ -4,8 +4,11 @@
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -131,7 +134,6 @@ TExprBase DeduplicateByMembers(const TExprBase& expr,  const TMaybeNode<TCoLambd
                 .Build()
             .Done();
 }
-
 
 [[maybe_unused]]
 bool IsKqlPureExpr(const TExprBase& expr) {
@@ -470,7 +472,6 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
     return builtJoin;
 }
 
-
 TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!join.RightLabel().Maybe<TCoAtom>()) {
         // Lookup only in tables
@@ -498,7 +499,24 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     size_t rightPrefixSize;
     TMaybeNode<TExprBase> rightPrefixExpr;
 
-    auto prefixLookup = RewriteReadToPrefixLookup(rightReadMatch->Read, ctx, kqpCtx, kqpCtx.Config->GetIdxLookupJoinPointsLimit());
+    auto rightRead = rightReadMatch->Read;
+    if (!kqpCtx.Config->IsAutoIndexSelectionDisabled()) {
+        if (auto maybeRanges = rightRead.Maybe<TKqlReadTableRanges>()) {
+            const auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, maybeRanges.Cast().Table().Path());
+            if (mainTableDesc.Metadata->Kind != NYql::EKikimrTableKind::Olap) {
+                THashSet<TString> rightJoinKeys;
+                for (ui32 i = 0; i < join.JoinKeys().Size(); ++i) {
+                    TString key = TString(join.JoinKeys().Item(i).RightColumn().Value());
+                    rightJoinKeys.insert(key);
+                }
+                if (auto idx = ChooseIndexForLookupJoin(mainTableDesc, rightJoinKeys)) {
+                    rightRead = RedirectReadToIndex(rightRead, *idx, ctx);
+                }
+            }
+        }
+    }
+
+    auto prefixLookup = RewriteReadToPrefixLookup(rightRead, ctx, kqpCtx, kqpCtx.Config->GetIdxLookupJoinPointsLimit());
     if (prefixLookup) {
         lookupTable = prefixLookup->LookupTableName;
         indexName = prefixLookup->IndexName;
@@ -972,6 +990,10 @@ TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const T
     }
 
     if (useCBO && algo != EJoinAlgoType::LookupJoin && algo != EJoinAlgoType::LookupJoinReverse){
+        return node;
+    }
+
+    if (join.Ref().GetConstraint<TStreamingConstraintNode>()) {
         return node;
     }
 

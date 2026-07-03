@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/audit)
+UNITTEST()
 
 PEERDIR(
     ydb/library/actors/testlib

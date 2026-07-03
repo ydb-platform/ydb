@@ -1,6 +1,6 @@
-Metadata-Version: 2.4
+Metadata-Version: 2.1
 Name: parso
-Version: 0.8.6
+Version: 0.8.7
 Summary: A Python Parser
 Home-page: https://github.com/davidhalter/parso
 Author: David Halter
@@ -32,27 +32,13 @@ Classifier: Typing :: Typed
 Requires-Python: >=3.6
 License-File: LICENSE.txt
 License-File: AUTHORS.txt
-Provides-Extra: testing
-Requires-Dist: pytest; extra == "testing"
-Requires-Dist: docopt; extra == "testing"
 Provides-Extra: qa
-Requires-Dist: flake8==5.0.4; extra == "qa"
-Requires-Dist: zuban==0.5.1; extra == "qa"
-Requires-Dist: types-setuptools==67.2.0.1; extra == "qa"
-Dynamic: author
-Dynamic: author-email
-Dynamic: classifier
-Dynamic: description
-Dynamic: home-page
-Dynamic: keywords
-Dynamic: license
-Dynamic: license-file
-Dynamic: maintainer
-Dynamic: maintainer-email
-Dynamic: platform
-Dynamic: provides-extra
-Dynamic: requires-python
-Dynamic: summary
+Requires-Dist: flake8 ==5.0.4 ; extra == 'qa'
+Requires-Dist: types-setuptools ==67.2.0.1 ; extra == 'qa'
+Requires-Dist: zuban ==0.5.1 ; extra == 'qa'
+Provides-Extra: testing
+Requires-Dist: docopt ; extra == 'testing'
+Requires-Dist: pytest ; extra == 'testing'
 
 ###################################################################
 parso - A Python Parser
@@ -159,6 +145,11 @@ Changelog
 
 Unreleased
 ++++++++++
+
+0.8.7 (2026-05-02)
+++++++++++++++++++
+
+- Add PEP 695 type parameter syntax
 
 0.8.6 (2026-02-09)
 ++++++++++++++++++

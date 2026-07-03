@@ -19,7 +19,8 @@ namespace NKikimr {
 namespace NMsgBusProxy {
 
 template<typename TDerived, typename TTabletReplyEvent>
-class TMessageBusTabletRequest : public TActorBootstrapped<TDerived>, public TMessageBusSessionIdentHolder {
+class TMessageBusTabletRequest : public TMessageBusCancellableRequest<TDerived> {
+    using TActorBase = TMessageBusCancellableRequest<TDerived>;
 
 protected:
     const TDuration Timeout;
@@ -43,7 +44,7 @@ private:
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
         Y_UNUSED(ev);
         PipeClient = TActorId();
-        SendReplyMove(CreateErrorReply(MSTATUS_ERROR, ctx, "Tablet pipe client destroyed Marker# MBT2"));
+        this->SendReplyMove(CreateErrorReply(MSTATUS_ERROR, ctx, "Tablet pipe client destroyed Marker# MBT2"));
         return Die(ctx);
     }
 
@@ -56,23 +57,26 @@ protected:
             NTabletPipe::CloseClient(ctx, PipeClient);
             PipeClient = TActorId();
         }
-        TActorBootstrapped<TDerived>::Die(ctx);
+        TActorBase::Die(ctx);
     }
 
     virtual NBus::TBusMessage* CreateErrorReply(EResponseStatus status, const TActorContext &ctx,
             const TString& text = TString()) {
-        LOG_ERROR_S(ctx, NKikimrServices::MSGBUS_REQUEST, "TabletRequest TabletId# " << TabletId
-            << " status# " << status << " text# \"" << text << "\"" << Endl);
+        YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::MSGBUS_REQUEST, "TabletRequest",
+            {"tabletId", TabletId},
+            {"status", status},
+            {"text", text},
+            {"endl", Endl});
         return new TBusResponseStatus(status, text);
     }
 
     void SendReplyAndDie(NBus::TBusMessage *reply, const TActorContext &ctx) {
-        SendReplyMove(reply);
+        this->SendReplyMove(reply);
         return Die(ctx);
     }
 
     TMessageBusTabletRequest(TBusMessageContext &msg, bool withRetry, TDuration timeout, bool connectToFollower)
-        : TMessageBusSessionIdentHolder(msg)
+        : TActorBase(msg)
         , Timeout(timeout)
         , WithRetry(withRetry)
         , ConnectToFollower(connectToFollower)
@@ -115,6 +119,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            CFunc(TEvents::TSystem::PoisonPill, TActorBase::Cancel);
         }
     }
 };

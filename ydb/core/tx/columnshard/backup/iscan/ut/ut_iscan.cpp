@@ -213,7 +213,8 @@ Y_UNIT_TEST_SUITE(IScan) {
             "{\n  name: \"value\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  "
             "}\n}\npartitioning_settings {\n  min_partitions_count: 4\n}\nstore_type: STORE_TYPE_COLUMN\n");
         auto metadata = NTestUtils::GetObject("test", "metadata.json", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(metadata, "{\"version\":0,\"full_backups\":[{\"snapshot_vts\":[0,0]}],\"permissions\":1,\"changefeeds\":[]}");
+        UNIT_ASSERT_VALUES_EQUAL(
+            metadata, "{\"version\":0,\"full_backups\":[{\"snapshot_vts\":[0,0]}],\"permissions\":1,\"changefeeds\":[],\"indexes\":[]}");
         auto data = NTestUtils::GetObject("test", "data_00.csv", s3Client);
         UNIT_ASSERT_VALUES_EQUAL(data, "\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n");
     }
@@ -248,7 +249,8 @@ Y_UNIT_TEST_SUITE(IScan) {
             "{\n  name: \"value\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  "
             "}\n}\npartitioning_settings {\n  min_partitions_count: 4\n}\nstore_type: STORE_TYPE_COLUMN\n");
         auto metadata = NTestUtils::GetObject("test1", "metadata.json", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(metadata, "{\"version\":0,\"full_backups\":[{\"snapshot_vts\":[0,0]}],\"permissions\":1,\"changefeeds\":[]}");
+        UNIT_ASSERT_VALUES_EQUAL(
+            metadata, "{\"version\":0,\"full_backups\":[{\"snapshot_vts\":[0,0]}],\"permissions\":1,\"changefeeds\":[],\"indexes\":[]}");
         auto data = NTestUtils::GetObject("test1", "data_00.csv", s3Client);
         UNIT_ASSERT_VALUES_EQUAL(data, "\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n");
     }
@@ -286,7 +288,8 @@ Y_UNIT_TEST_SUITE(IScan) {
             "{\n  name: \"value\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  "
             "}\n}\npartitioning_settings {\n  min_partitions_count: 4\n}\nstore_type: STORE_TYPE_COLUMN\n");
         auto metadata = NTestUtils::GetObject("test2", "metadata.json", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(metadata, "{\"version\":0,\"full_backups\":[{\"snapshot_vts\":[0,0]}],\"permissions\":1,\"changefeeds\":[]}");
+        UNIT_ASSERT_VALUES_EQUAL(
+            metadata, "{\"version\":0,\"full_backups\":[{\"snapshot_vts\":[0,0]}],\"permissions\":1,\"changefeeds\":[],\"indexes\":[]}");
         auto data = NTestUtils::GetObject("test2", "data_00.csv", s3Client);
         UNIT_ASSERT_VALUES_EQUAL(
             data, "\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n");

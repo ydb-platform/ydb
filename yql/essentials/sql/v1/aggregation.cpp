@@ -380,14 +380,7 @@ public:
 
 private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
-        TStringBuf suffix;
-        if (src != nullptr) {
-            suffix = src->GetGroupBySuffix();
-        } else {
-            suffix = "";
-        }
-
-        bool isOverState = !(suffix.empty() || suffix == "Combine" || suffix == "Finalize");
+        bool isOverState = IsOverStatePhase(src);
 
         ui32 adjustArgsCount;
         if (isFactory) {
@@ -488,14 +481,7 @@ public:
 
 private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
-        TStringBuf suffix;
-        if (src != nullptr) {
-            suffix = src->GetGroupBySuffix();
-        } else {
-            suffix = "";
-        }
-
-        bool isOverState = !(suffix.empty() || suffix == "Combine" || suffix == "Finalize");
+        bool isOverState = IsOverStatePhase(src);
 
         ui32 adjustArgsCount;
         if (isFactory) {
@@ -602,15 +588,8 @@ public:
 
 private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
-        TStringBuf suffix;
-        if (src != nullptr) {
-            suffix = src->GetGroupBySuffix();
-        } else {
-            suffix = "";
-        }
-
-        bool isOverState = !(suffix.empty() || suffix == "Combine" || suffix == "Finalize");
-        bool isMany = (suffix == "MergeManyFinalize");
+        bool isOverState = IsOverStatePhase(src);
+        bool isMany = IsManyPhase(src);
 
         if (isFactory) {
             if (exprs.size() > 1) {
@@ -676,6 +655,7 @@ private:
         return Y("InstanceOf",
                  Y("MatchType", x,
                    Q("Optional"), Y("lambda", Q(Y()), Y("OptionalType", t)),
+                   Q("Null"), Y("lambda", Q(Y()), Y("NullType")),
                    /*          */ Y("lambda", Q(Y()), t)));
     }
 
@@ -830,7 +810,10 @@ private:
     }
 
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
-        ui32 adjustArgsCount = isFactory ? 0 : 1;
+        const TStringBuf suffix = GetGroupByPhase(src);
+        const bool isPercentileAllowed = IsFinalizingPhase(src);
+
+        ui32 adjustArgsCount = isFactory ? 0 : (isPercentileAllowed ? 1 : 0);
         if (exprs.size() < 0 + adjustArgsCount || exprs.size() > 1 + adjustArgsCount) {
             ctx.Error(Pos_) << "Aggregation function " << (isFactory ? "factory " : "") << Name_ << " requires "
                             << (0 + adjustArgsCount) << " or " << (1 + adjustArgsCount) << " arguments, given: " << exprs.size();
@@ -855,13 +838,20 @@ private:
         }
 
         TNodePtr x;
-        if (1 + adjustArgsCount == exprs.size()) {
-            x = exprs.back();
-            if (!x->Init(ctx, FakeSource_.Get())) {
-                return false;
+        if (isPercentileAllowed) {
+            if (1 + adjustArgsCount == exprs.size()) {
+                x = exprs.back();
+                if (!x->Init(ctx, FakeSource_.Get())) {
+                    return false;
+                }
+            } else {
+                x = Y("Double", Q("0.5"));
             }
         } else {
-            x = Y("Double", Q("0.5"));
+            TString message = TStringBuilder() << "Unexpected percentile usage at " << suffix << " phase";
+            x = Y("Unwrap",
+                  Y("Nothing", Y("OptionalType", Y("DataType", Q("Double")))),
+                  Y("String", BuildQuotedAtom(Pos_, message)));
         }
 
         if (isFactory) {
@@ -964,15 +954,8 @@ private:
         constexpr double DefaultBufferC = 1.5;
         constexpr ui32 MinBuffer = 100;
 
-        TStringBuf suffix;
-        if (src != nullptr) {
-            suffix = src->GetGroupBySuffix();
-        } else {
-            suffix = "";
-        }
-
-        bool isOverState = !(suffix.empty() || suffix == "Combine" || suffix == "Finalize");
-        bool isMany = (suffix == "MergeManyFinalize");
+        bool isOverState = IsOverStatePhase(src);
+        bool isMany = IsManyPhase(src);
 
         ui32 adjustArgsMinCount;
         ui32 adjustArgsMaxCount;
@@ -1044,6 +1027,7 @@ private:
         return Y(
             "MatchType", x,
             Q("Optional"), Y("lambda", Q(Y()), GetFromState1(x, /*isOptional=*/true)),
+            Q("Null"), Y("lambda", Q(Y()), Y("Null")),
             /*          */ Y("lambda", Q(Y()), GetFromState1(x, /*isOptional=*/false)));
     }
 
@@ -1152,15 +1136,8 @@ public:
 
 private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
-        TStringBuf suffix;
-        if (src != nullptr) {
-            suffix = src->GetGroupBySuffix();
-        } else {
-            suffix = "";
-        }
-
-        bool isOverState = !(suffix.empty() || suffix == "Combine" || suffix == "Finalize");
-        bool isMany = (suffix == "MergeManyFinalize");
+        bool isOverState = IsOverStatePhase(src);
+        bool isMany = IsManyPhase(src);
 
         ui32 adjustArgsCount;
         if (isFactory) {
@@ -1242,8 +1219,9 @@ private:
         return Y(
             "MatchType", x,
             Q("Optional"), Y("lambda", Q(Y()), GetFromState2(x, /*isOptional=*/true, isKey)),
+            Q("Null"), Y("lambda", Q(Y()), Y("Null")),
             /*          */ Y("lambda", Q(Y()), GetFromState2(x, /*isOptional=*/false, isKey)));
-    };
+    }
 
     // Expecting:
     //   `Tuple<Uint32, V>`              `(!isOptional && !HasKey)`
@@ -1256,8 +1234,19 @@ private:
         x = isOptional ? Y("OptionalItemType", x) : x;
         x = Y("ListItemType", x);
         x = HasKey ? Y("TupleElementType", x, Q(isKey ? "0" : "1")) : x;
-        x = isOptional && HasKey ? Y("OptionalItemType", x) : x;
-        x = isOptional ? Y("OptionalType", x) : x;
+
+        TNodePtr y = x;
+        y = isOptional && HasKey ? Y("OptionalItemType", y) : y;
+        y = isOptional ? Y("OptionalType", y) : y;
+
+        if (HasKey) {
+            x = Y("MatchType", x,
+                  Q("Null"), Y("lambda", Q(Y()), Y("NullType")),
+                  /*      */ Y("lambda", Q(Y()), y));
+        } else {
+            x = y;
+        }
+
         x = Y("InstanceOf", x);
         return x;
     }
@@ -1352,9 +1341,20 @@ public:
 
 private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
-        ui32 adjustArgsCount = (isFactory ? 0 : 1) + !IsValue_;
+        bool isOverState = IsOverStatePhase(src);
+        bool isMany = IsManyPhase(src);
+
+        ui32 adjustArgsCount;
+        if (isFactory) {
+            adjustArgsCount = 0 + !IsValue_;
+        } else if (isOverState) {
+            adjustArgsCount = 1;
+        } else {
+            adjustArgsCount = 1 + !IsValue_;
+        }
+
         if (exprs.size() != adjustArgsCount) {
-            ctx.Error(Pos_) << "Reservoir Samplig aggregation " << (isFactory ? "factory " : "") << " function requires exactly " << adjustArgsCount << " arguments, given: " << exprs.size();
+            ctx.Error(Pos_) << "Reservoir Sampling aggregation " << (isFactory ? "factory " : "") << " function requires exactly " << adjustArgsCount << " arguments, given: " << exprs.size();
             return false;
         }
 
@@ -1364,15 +1364,25 @@ private:
 
         Limit_ = nullptr;
         if (!IsValue_) {
-            auto limitArgPos = exprs[1]->GetPos();
-            Limit_ = exprs[1];
-            if (!Limit_->Init(ctx, FakeSource_.Get())) {
-                return false;
+            if (isOverState) {
+                Limit_ = Y("InstanceOf", Y("DataType", Q("Uint64")));
+            } else {
+                auto limitArgPos = exprs[1]->GetPos();
+                Limit_ = exprs[1];
+                if (!Limit_->Init(ctx, FakeSource_.Get())) {
+                    return false;
+                }
             }
         }
 
         if (!isFactory) {
             Expr_ = exprs[0];
+
+            FactoryExpr_ = Expr_;
+            if (isOverState) {
+                FactoryExpr_ = ItemFromState(std::move(FactoryExpr_), isMany);
+            }
+
             Name_ = src->MakeLocalName(Name_);
         }
 
@@ -1397,7 +1407,10 @@ private:
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
         Y_UNUSED(allowAggApply);
-        auto apply = Y("Apply", Factory_, type, BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Expr_) : Expr_));
+        Y_UNUSED(many);
+
+        auto apply = Y("Apply", Factory_, type,
+                       BuildLambda(Pos_, Y("row"), FactoryExpr_));
         AddFactoryArguments(apply);
         return apply;
     }
@@ -1406,13 +1419,36 @@ private:
         if (IsValue_) {
             return;
         }
+
         apply = L(apply, Limit_);
     }
 
 private:
+    TNodePtr ItemFromState(TNodePtr x, bool isMany) {
+        x = isMany ? Y("Unwrap", x) : x;
+        return Y(
+            "MatchType", x,
+            Q("Optional"), Y("lambda", Q(Y()), ItemFromState1(x, /*isOptional=*/true)),
+            Q("Null"), Y("lambda", Q(Y()), Y("Null")),
+            /*          */ Y("lambda", Q(Y()), ItemFromState1(x, /*isOptional=*/false)));
+    }
+
+    /// Expecting:
+    /// Tuple<List<Int32>, Uint64, Uint64>
+    TNodePtr ItemFromState1(TNodePtr x, bool isOptional) const {
+        x = Y("TypeOf", x);
+        x = isOptional ? Y("OptionalItemType", x) : x;
+        x = Y("TupleElementType", x, Q("0"));
+        x = Y("ListItemType", x);
+        x = isOptional ? Y("OptionalType", x) : x;
+        x = Y("InstanceOf", x);
+        return x;
+    }
+
     TSourcePtr FakeSource_;
     TNodePtr Limit_;
     bool IsValue_;
+    TNodePtr FactoryExpr_;
 };
 
 TAggregationPtr BuildReservoirSamplingFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode, bool isValue) {

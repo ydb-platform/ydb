@@ -4,7 +4,6 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
-
 namespace NKikimr::NPQ {
 
 using namespace NActors;
@@ -163,4 +162,4 @@ NActors::IActor* MakeListAllTopicsActor(
     return new TListAllTopicsActor(respondTo, databasePath, token, recursive, startFrom, limit);
 }
 
-} // namespace
+} // namespace NKikimr::NPQ

@@ -21,6 +21,9 @@ class TestViewer(object):
             'enable_alter_database_create_hive_first': True,
             'enable_topic_transfer': True,
             'enable_script_execution_operations': True,
+            'enable_local_bloom_filter_index': True,
+            'enable_local_index_as_scheme_object': True,
+            'enable_extra_sids_control_for_http_viewer': True,
             },
             enable_static_auth=True)
         config.yaml_config['domains_config']['security_config']['enforce_user_token_requirement'] = False
@@ -58,8 +61,10 @@ class TestViewer(object):
         cls.cluster.wait_tenant_up(cls.serverless_db, token=cls.root_token)
         cls.databases = [cls.domain_name, cls.dedicated_db, cls.shared_db, cls.serverless_db]
         cls.databases_and_no_database = ['no-database', cls.domain_name, cls.dedicated_db, cls.shared_db, cls.serverless_db]
+        cls.csrf_token = 'test-csrf-token'
         cls.default_headers = {
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+            'Cookie': 'ydb_session_id=' + cls.root_session_id + '; csrf_token=' + cls.csrf_token,
+            'X-CSRF-Token': cls.csrf_token,
         }
         cls.wait_for_cluster_ready()
         yield
@@ -82,6 +87,13 @@ class TestViewer(object):
                 name, value = part.split('=', 1)
                 cookies[name.strip()] = value.strip()
         return headers, cookies
+
+    @classmethod
+    def make_cookie_headers(cls, session_id):
+        return {
+            'Cookie': 'ydb_session_id=' + session_id + '; csrf_token=' + cls.csrf_token,
+            'X-CSRF-Token': cls.csrf_token,
+        }
 
     @classmethod
     def call_viewer_api_get(cls, url, headers=None):
@@ -637,6 +649,19 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def normalize_result_viewer_config(cls, result):
+        """Normalize dynamic local cluster settings returned by /viewer/config."""
+        return cls.replace_values_by_key(result, {'BackendFileName',
+                                                  'MaxInFlight',
+                                                  'MaxInFlightBySize',
+                                                  'MonitoringPort',
+                                                  'NetDataFilePath',
+                                                  'NumWorkers',
+                                                  'Port',
+                                                  'StartupConfigYaml',
+                                                  })
+
+    @classmethod
     def normalize_result_healthcheck(cls, result):
         result = cls.replace_values_by_key_and_value(result, ['self_check_result'], ['GOOD', 'DEGRADED', 'MAINTENANCE_REQUIRED', 'EMERGENCY'])
         cls.delete_keys_recursively(result, {'issue_log'})
@@ -745,6 +770,43 @@ class TestViewer(object):
                 'filter_group': 'GREEN'
             })
         ]
+
+    @classmethod
+    def test_viewer_groups_sort_by_vdisk_slot_usage_with_allocation_units(cls):
+        def request_and_check(fields_required):
+            result = cls.get_viewer("/viewer/groups", {
+                'fields_required': fields_required,
+                'sort': '-MaxVDiskSlotUsage',
+                'limit': 1,
+            })
+            assert 'status_code' not in result, result
+            assert not result.get('NeedFilter'), result
+            assert not result.get('NeedSort'), result
+            assert not result.get('NeedLimit'), result
+            assert result.get('Problems', []) == [], result
+            groups = result.get('StorageGroups', [])
+            assert len(groups) == 1, result
+            assert 'MaxVDiskSlotUsage' in groups[0], result
+            return {
+                'FoundGroups': result.get('FoundGroups'),
+                'ReturnedGroups': len(groups),
+                'HasMaxVDiskSlotUsage': 'MaxVDiskSlotUsage' in groups[0],
+                'NeedFilter': result.get('NeedFilter', False),
+                'NeedSort': result.get('NeedSort', False),
+                'NeedLimit': result.get('NeedLimit', False),
+                'Problems': result.get('Problems', []),
+            }
+
+        return {
+            'without_allocation_units': request_and_check('MaxVDiskSlotUsage'),
+            'with_allocation_units': request_and_check('AllocationUnits,MaxVDiskSlotUsage'),
+        }
+
+    @classmethod
+    def test_viewer_groups_allocation_units_without_pool_name(cls):
+        return cls.get_viewer_normalized("/viewer/groups", {
+            'fields_required': 'AllocationUnits',
+        })
 
     @classmethod
     def test_viewer_groups_with_invalid_database(cls):
@@ -889,7 +951,8 @@ class TestViewer(object):
             'database': cls.dedicated_db,
             'path': cls.dedicated_db
         }, headers={
-            'Cookie': 'ydb_session_id=XXX',
+            'Cookie': 'ydb_session_id=XXX; csrf_token=' + cls.csrf_token,
+            'X-CSRF-Token': cls.csrf_token,
         }, body={
             'AddAccess': [{
                 'Subject': 'userX',
@@ -1158,6 +1221,7 @@ class TestViewer(object):
             res = cls.replace_values_by_key(resp, ['CreateTimestamp',
                                                    'WriteTimestamp',
                                                    'ProducerId',
+                                                   'Ip',
                                                    ])
             res = cls.replace_types_by_key(res, ['TimestampDiff'])
             logging.info(res)
@@ -1522,11 +1586,12 @@ class TestViewer(object):
             'action': 'execute-query',
             'schema': 'multipart',
         }
-        response = cls.call_viewer_api_post("/viewer/query", body, headers={
+        headers = dict(cls.default_headers)
+        headers.update({
             'Content-Type': 'application/json',
             'Accept': 'text/event-stream',
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
         })
+        response = cls.call_viewer_api_post("/viewer/query", body, headers=headers)
         result = {
             'status_code': response.status_code,
             'content_type': response.headers.get('Content-Type')
@@ -1595,27 +1660,109 @@ class TestViewer(object):
         return result
 
     @classmethod
-    def assert_access_denied(cls, response, case_name):
-        assert response.get('status_code') == 403, f"{case_name}: expected status_code=403, got {response}"
-        text = response.get('text', '')
-        assert (
-            text == 'Access denied'
-            or text == 'Administration access required when force=true'
-            or 'SID is not allowed' in text
-        ), (
-            f"{case_name}: expected access denied/admin-force message or HTML SID rejection, got {response}"
-        )
+    def test_viewer_query_forget_immediate(cls):
+        """Test execute-query-and-forget immediate return when query finishes quickly"""
+        # Run query that executes and completes before forget_after (10 seconds)
+        result = cls.call_viewer("/viewer/query", {
+            'database': cls.dedicated_db,
+            'action': 'execute-query-and-forget',
+            'query': 'SELECT 7*6;',
+            'schema': 'multi',
+            'forget_after': 10000
+        })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
-    def assert_force_retry_possible(cls, response, expected, case_name):
-        has_force_retry_possible = 'forceRetryPossible' in response
-        assert has_force_retry_possible == expected, (
-            f"{case_name}: expected forceRetryPossible present={expected}, got {response}"
-        )
-        if expected:
-            assert response.get('forceRetryPossible') is True, (
-                f"{case_name}: expected forceRetryPossible=true, got {response}"
-            )
+    def test_viewer_query_forget_delayed(cls):
+        """Test execute-query-and-forget when query takes longer than forget_after"""
+        # Run query with very small forget_after (1ms) so it will be forgotten and run in background
+        result = cls.call_viewer("/viewer/query", {
+            'database': cls.dedicated_db,
+            'action': 'execute-query-and-forget',
+            'query': 'SELECT * FROM table1 LIMIT 3;',
+            'schema': 'multi',
+            'forget_after': 1
+        })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
+
+    @classmethod
+    def test_viewer_external_http_access_controls(cls):
+        result = {}
+
+        result['viewer_simple_counter_root'] = cls.get_viewer("/viewer/simple_counter", params={
+            'max_counter': 1,
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+        result['viewer_simple_counter_monitoring'] = cls.get_viewer("/viewer/simple_counter", params={
+            'max_counter': 1,
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        })
+        result['viewer_simple_counter_viewer'] = cls.get_viewer("/viewer/simple_counter", params={
+            'max_counter': 1,
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
+        })
+        result['viewer_simple_counter_database'] = cls.get_viewer("/viewer/simple_counter", params={
+            'max_counter': 1,
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+
+        result['administration_bscontrollerinfo_root'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+        result['administration_bscontrollerinfo_monitoring'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        })
+        result['administration_bscontrollerinfo_viewer'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
+            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
+        })
+        result['administration_bscontrollerinfo_database'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+
+        result['viewer_config_root'] = cls.normalize_result_viewer_config(cls.get_viewer("/viewer/config", headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        }))
+        result['viewer_config_monitoring'] = cls.normalize_result_viewer_config(cls.get_viewer("/viewer/config", headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        }))
+        result['viewer_config_viewer'] = cls.normalize_result_viewer_config(cls.get_viewer("/viewer/config", headers={
+            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
+        }))
+        result['viewer_config_database'] = cls.get_viewer("/viewer/config", headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+
+        result['database_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
+        result['database_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
+        result['database_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id))
+        result['database_nodes_database'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+        result['database_nodes_missing_database_database'] = cls.get_viewer("/viewer/nodes", params={
+            'fields_required': 'NodeId',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+
+        return result
 
     @classmethod
     def test_security(cls):
@@ -1623,203 +1770,134 @@ class TestViewer(object):
         result['database_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'database': cls.dedicated_db,
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
         result['database_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'database': cls.dedicated_db,
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
         result['database_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'database': cls.dedicated_db,
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id))
         result['database_nodes_database'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'database': cls.dedicated_db,
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.database_session_id))
 
         result['cluster_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
         result['cluster_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
         result['cluster_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id))
         result['cluster_nodes_database'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.database_session_id))
 
         result['storage_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
             'database': cls.dedicated_db,
             'type': 'storage',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
         result['storage_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
             'database': cls.dedicated_db,
             'type': 'storage',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
         result['storage_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
             'database': cls.dedicated_db,
             'type': 'storage',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id))
         result['storage_nodes_database'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
             'database': cls.dedicated_db,
             'type': 'storage',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.database_session_id))
 
         result['down_node_root'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
             'down': '0',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
         result['down_node_monitoring'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
             'down': '0',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
         result['down_node_viewer'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
             'down': '0',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id))
         result['down_node_database'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
             'down': '0',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.database_session_id))
 
         # /pdisk/restart had undefined behavior when pdisk_id is empty or had more than two '-' parts
         result['restart_pdisk_empty_pdisk_id_root'] = cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
         result['restart_pdisk_three_part_pdisk_id_root'] = cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-2-3',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
-        result['restart_pdisk_missing_pdisk_id_root'] = cls.post_viewer("/pdisk/restart", body={}, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
+        result['restart_pdisk_missing_pdisk_id_root'] = cls.post_viewer("/pdisk/restart", body={}, headers=cls.make_cookie_headers(cls.root_session_id))
 
         result['status_pdisk_empty_pdisk_id_root'] = cls.post_viewer("/pdisk/status", body={
             'pdisk_id': '',
             'status': 'ACTIVE',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
         result['status_pdisk_three_part_pdisk_id_root'] = cls.post_viewer("/pdisk/status", body={
             'pdisk_id': '1-2-3',
             'status': 'ACTIVE',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
 
         result['restart_pdisk_root'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        }), ['debugMessage'])
-        cls.assert_force_retry_possible(result['restart_pdisk_root'], True, 'restart_pdisk_root')
+        }, headers=cls.make_cookie_headers(cls.root_session_id)), ['debugMessage'])
         result['restart_pdisk_monitoring'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        }), ['debugMessage'])
-        cls.assert_force_retry_possible(result['restart_pdisk_monitoring'], False, 'restart_pdisk_monitoring')
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id)), ['debugMessage'])
         result['restart_pdisk_viewer'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id)), ['debugMessage'])
         result['restart_pdisk_database'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.database_session_id)), ['debugMessage'])
 
         result['restart_pdisk_database_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
             'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        }), ['debugMessage'])
-        cls.assert_access_denied(result['restart_pdisk_database_force'], 'restart_pdisk_database_force')
+        }, headers=cls.make_cookie_headers(cls.database_session_id)), ['debugMessage'])
         result['restart_pdisk_viewer_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
             'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        }), ['debugMessage'])
-        cls.assert_access_denied(result['restart_pdisk_viewer_force'], 'restart_pdisk_viewer_force')
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id)), ['debugMessage'])
         result['restart_pdisk_monitoring_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
             'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        }), ['debugMessage'])
-        cls.assert_access_denied(result['restart_pdisk_monitoring_force'], 'restart_pdisk_monitoring_force')
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id)), ['debugMessage'])
         result['restart_pdisk_root_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
-            'pdisk_id': '1-1',
+            'pdisk_id': '1-999999',
             'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.root_session_id)), ['debugMessage'])
 
         result['status_pdisk_monitoring_force'] = cls.post_viewer("/pdisk/status", body={
             'pdisk_id': '1-1',
             'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
-        cls.assert_access_denied(result['status_pdisk_monitoring_force'], 'status_pdisk_monitoring_force')
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
         result['evict_vdisk_monitoring_force'] = cls.post_viewer("/vdisk/evict", body={
             'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
-        cls.assert_access_denied(result['evict_vdisk_monitoring_force'], 'evict_vdisk_monitoring_force')
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
         return result
 
     @classmethod
@@ -1852,3 +1930,155 @@ class TestViewer(object):
             'filter_peer_role': 'database',
         })
         return result
+
+    @classmethod
+    def test_viewer_nodes_deleted_tablets(cls):
+        def tablet_summary(tablets):
+            return sorted(
+                [{
+                    'Overall': tablet.get('Overall'),
+                    'State': tablet.get('State'),
+                    'Type': tablet.get('Type'),
+                } for tablet in tablets],
+                key=lambda tablet: (tablet['Type'], tablet['State'], tablet['Overall']))
+
+        def node_tablets():
+            response = cls.get_viewer_normalized("/viewer/nodes", {
+                'database': cls.dedicated_db,
+                'tablets': 'true',
+            })
+            tablets = []
+            for node in response.get('Nodes', []):
+                for tablet in node.get('Tablets', []):
+                    tablets.append({
+                        'Count': tablet.get('Count', 1),
+                        'State': tablet.get('State'),
+                        'Type': tablet.get('Type'),
+                    })
+            return sorted(tablets, key=lambda tablet: (tablet['Type'], tablet['State'], tablet['Count']))
+
+        def count_tablets(tablets, tablet_type):
+            return sum(int(tablet.get('Count', 1)) for tablet in tablets if tablet.get('Type') == tablet_type)
+
+        def non_green_datashards(tablets):
+            return [
+                tablet for tablet in tablets
+                if tablet.get('Type') == 'DataShard' and tablet.get('State') != 'Green'
+            ]
+
+        table_name = 'table_deleted_tablet_state'
+        table_path = cls.dedicated_db + '/' + table_name
+
+        cls.call_viewer("/viewer/query", {
+            'database': cls.dedicated_db,
+            'query': 'drop table if exists ' + table_name,
+            'schema': 'multi'
+        })
+
+        baseline_node_tablets = node_tablets()
+        baseline_datashards = count_tablets(baseline_node_tablets, 'DataShard')
+
+        create_result = cls.call_viewer("/viewer/query", {
+            'database': cls.dedicated_db,
+            'query': 'create table ' + table_name + '(id int64, primary key(id))',
+            'schema': 'multi'
+        })
+        assert create_result.get('status') == 'SUCCESS', create_result
+
+        created_tablets = []
+        created_tablet_info = {}
+        for _ in range(30):
+            created_tablet_info = cls.call_viewer("/viewer/tabletinfo", {
+                'database': cls.dedicated_db,
+                'path': table_path,
+                'enums': 'true',
+            })
+            created_tablets = [
+                tablet for tablet in created_tablet_info.get('TabletStateInfo', [])
+                if tablet.get('Type') == 'DataShard'
+            ]
+            if created_tablets and all(
+                tablet.get('State') == 'Active' and tablet.get('Overall') == 'Green'
+                for tablet in created_tablets
+            ):
+                break
+            time.sleep(1)
+        assert created_tablets, created_tablet_info
+        created_tablet_ids = {tablet['TabletId'] for tablet in created_tablets}
+
+        drop_result = cls.call_viewer("/viewer/query", {
+            'database': cls.dedicated_db,
+            'query': 'drop table ' + table_name,
+            'schema': 'multi'
+        })
+        assert drop_result.get('status') == 'SUCCESS', drop_result
+
+        deleted_tablets = []
+        deleted_tablet_info = {}
+        after_drop_node_tablets = []
+        for _ in range(30):
+            deleted_tablet_info = cls.call_viewer("/viewer/tabletinfo", {
+                'database': cls.dedicated_db,
+                'enums': 'true',
+            })
+            deleted_tablets = [
+                tablet for tablet in deleted_tablet_info.get('TabletStateInfo', [])
+                if tablet.get('TabletId') in created_tablet_ids and tablet.get('State') == 'Deleted'
+            ]
+            after_drop_node_tablets = node_tablets()
+            if deleted_tablets and count_tablets(after_drop_node_tablets, 'DataShard') == baseline_datashards:
+                break
+            time.sleep(1)
+
+        assert deleted_tablets, deleted_tablet_info
+        assert all(tablet.get('Overall') == 'Grey' for tablet in deleted_tablets), deleted_tablets
+        assert count_tablets(after_drop_node_tablets, 'DataShard') == baseline_datashards, after_drop_node_tablets
+        assert not non_green_datashards(after_drop_node_tablets), after_drop_node_tablets
+
+        return {
+            'created_tablets': tablet_summary(created_tablets),
+            'deleted_tablets': tablet_summary(deleted_tablets),
+            'nodes': {
+                'datashards_delta': count_tablets(after_drop_node_tablets, 'DataShard') - baseline_datashards,
+                'non_green_datashards': non_green_datashards(after_drop_node_tablets),
+            },
+        }
+
+    @classmethod
+    def test_viewer_describe_column_table_local_index(cls):
+        cls.call_viewer("/viewer/query", {
+            'database': cls.dedicated_db,
+            'query': '''CREATE TABLE TestColumnTable (
+                `timestamp` Timestamp NOT NULL,
+                `data` Utf8,
+                PRIMARY KEY (`timestamp`),
+                INDEX bloom_data LOCAL USING bloom_filter ON (`data`) WITH (false_positive_probability = 0.05)
+            ) WITH (STORE = COLUMN)''',
+            'schema': 'multi'
+        })
+
+        describe_table = cls.call_viewer("/viewer/describe", {
+            'database': cls.dedicated_db,
+            'path': cls.dedicated_db + '/TestColumnTable',
+            'subs': '1',
+        })
+
+        table_children = [
+            {'Name': c['Name'], 'PathType': c['PathType']}
+            for c in describe_table['PathDescription']['Children']
+        ]
+
+        describe_root = cls.call_viewer("/viewer/describe", {
+            'path': cls.domain_name,
+            'subs': '1',
+        })
+
+        root_child_names = sorted([
+            c['Name'] for c in describe_root['PathDescription']['Children']
+        ])
+
+        return {
+            'table_children_exist': describe_table['PathDescription']['Self']['ChildrenExist'],
+            'table_children': table_children,
+            'root_child_names': root_child_names,
+        }

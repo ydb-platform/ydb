@@ -8,6 +8,8 @@
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/library/yql/dq/runtime/dq_packer_version_helper.h>
 
+#include <ydb/library/actors/core/log.h>
+
 namespace NYql::NDq {
 
 template<bool fast>
@@ -52,18 +54,28 @@ public:
 
     void Flush(bool finished) override {
         if (Packer.PackedSizeEstimate() > 0) {
-            Buffer->Push(TDataChunk(Packer.Finish(), Rows, TransportVersion, PackerVersion, Buffer->GetLeading(), finished));
+            Buffer->Push(TDataChunk(Packer.Finish(), Rows, TransportVersion, PackerVersion, finished));
         } else if (finished) {
             Buffer->SendFinish();
         }
         Rows = 0;
     }
 
+    void Push(NDqProto::TCheckpoint&& checkpoint) override {
+        Flush(false);
+        Buffer->Push(TDataChunk(std::move(checkpoint)));
+    }
+
+    void Push(NDqProto::TWatermark&& watermark) override {
+        Flush(false);
+        Buffer->Push(TDataChunk(std::move(watermark)));
+    }
+
     void Push(NUdf::TUnboxedValue&& value) override {
         Packer.AddItem(value);
         Rows++;
         if (Packer.PackedSizeEstimate() > MaxChunkBytes) {
-            Buffer->Push(TDataChunk(Packer.Finish(), Rows, TransportVersion, PackerVersion, Buffer->GetLeading(), false));
+            Buffer->Push(TDataChunk(Packer.Finish(), Rows, TransportVersion, PackerVersion, false));
             Rows = 0;
         }
     }
@@ -91,7 +103,7 @@ public:
 
     void Flush(bool finished) override {
         if (Packer.PackedSizeEstimate() > 0) {
-            Buffer->Push(TDataChunk(Packer.Finish(), Rows, TransportVersion, PackerVersion, Buffer->GetLeading(), finished));
+            Buffer->Push(TDataChunk(Packer.Finish(), Rows, TransportVersion, PackerVersion, finished));
         } else if (finished) {
             Buffer->SendFinish();
         }
@@ -102,6 +114,16 @@ public:
         YQL_ENSURE(false, "Push to Wide Channel");
     }
 
+    void Push(NDqProto::TCheckpoint&& checkpoint) override {
+        Flush(false);
+        Buffer->Push(TDataChunk(std::move(checkpoint)));
+    }
+
+    void Push(NDqProto::TWatermark&& watermark) override {
+        Flush(false);
+        Buffer->Push(TDataChunk(std::move(watermark)));
+    }
+
     void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {
         Packer.AddWideItem(values, width);
         Rows++;
@@ -109,7 +131,7 @@ public:
             values[i] = {};
         }
         if (Packer.PackedSizeEstimate() > MaxChunkBytes) {
-            Buffer->Push(TDataChunk(Packer.Finish(), Rows, TransportVersion, PackerVersion, Buffer->GetLeading(), false));
+            Buffer->Push(TDataChunk(Packer.Finish(), Rows, TransportVersion, PackerVersion, false));
             Rows = 0;
         }
     }
@@ -140,13 +162,21 @@ public:
         YQL_ENSURE(false, "Push to Wide Channel");
     }
 
+    void Push(NDqProto::TCheckpoint&& checkpoint) override {
+        Buffer->Push(TDataChunk(std::move(checkpoint)));
+    }
+
+    void Push(NDqProto::TWatermark&& watermark) override {
+        Buffer->Push(TDataChunk(std::move(watermark)));
+    }
+
     void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {
         ui32 rows = NKikimr::NMiniKQL::TArrowBlock::From(values[width - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
         Packer.AddWideItem(values, width);
         for (ui32 i = 0; i < width; ++i) {
             values[i] = {};
         }
-        Buffer->Push(TDataChunk(Packer.Finish(), rows, TransportVersion, PackerVersion, Buffer->GetLeading(), false));
+        Buffer->Push(TDataChunk(Packer.Finish(), rows, TransportVersion, PackerVersion, false));
     }
 };
 
@@ -166,7 +196,8 @@ public:
                 NKikimr::NMiniKQL::TUnboxedValueVector outputValues;
                 outputValues.reserve(block.size());
                 for (auto& datum : block) {
-                    outputValues.emplace_back(HolderFactory.CreateArrowBlock(std::move(datum)));
+                    // Pass NYql::EDatumValidationMode::None since we do not create new blocks and just pass existing ones.
+                    outputValues.emplace_back(HolderFactory.CreateArrowBlock(std::move(datum), NYql::EDatumValidationMode::None));
                 }
                 TBlockSerializer<fast>::WidePush(outputValues.data(), outputValues.size());
             }

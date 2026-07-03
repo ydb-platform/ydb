@@ -498,7 +498,7 @@ bool HtLinkDecode(const TStringBuf& in, char* out, size_t buflen, size_t& writte
             if (asciiCompl && NotRecoded.NotRecoded(*p)) {
                 charval = *p;
             } else {
-                DoSymbol(cp, reinterpret_cast<const unsigned char*>(p), 6, &charval);
+                DoSymbol(cp, reinterpret_cast<const unsigned char*>(p), inpEnd - p, &charval);
                 if (charval == BROKEN_RUNE)
                     return false;
             }

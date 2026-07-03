@@ -57,12 +57,21 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     using TSessionPoolSettings = TSessionPoolSettings;
     using TSelf = TClientSettings;
     FLUENT_SETTING(TSessionPoolSettings, SessionPoolSettings);
+
+    // Optional pool name surfaced through the OTel tag
+    // ydb.query.session.pool.name. When empty the default
+    // "<database>@<endpoint>" is used.
+    FLUENT_SETTING(std::string, PoolName);
+
+    FLUENT_SETTING_DEFAULT(TRetryOperationSettings, RetrySettings, TRetryOperationSettings());
 };
 
 class TQueryClient {
     friend class TSession;
     friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
     friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncStatus>;
+    friend class NRetry::Async::TRetryContext<TQueryClient, NThreading::TFuture<TScriptExecutionOperation>>;
+    friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncFetchScriptResultsResult>;
     friend class NRetry::Sync::TRetryContext<TQueryClient, TStatus>;
 
 public:
@@ -105,13 +114,16 @@ public:
         TDuration timeout, bool isIndempotent);
 
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const std::string& script,
-        const TExecuteScriptSettings& settings = TExecuteScriptSettings());
+        const TExecuteScriptSettings& settings = TExecuteScriptSettings(),
+        const std::optional<TRetryOperationSettings>& retrySettings = std::nullopt);
 
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const std::string& script,
-        const TParams& params, const TExecuteScriptSettings& settings = TExecuteScriptSettings());
+        const TParams& params, const TExecuteScriptSettings& settings = TExecuteScriptSettings(),
+        const std::optional<TRetryOperationSettings>& retrySettings = std::nullopt);
 
     TAsyncFetchScriptResultsResult FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetIndex,
-        const TFetchScriptResultsSettings& settings = TFetchScriptResultsSettings());
+        const TFetchScriptResultsSettings& settings = TFetchScriptResultsSettings(),
+        const std::optional<TRetryOperationSettings>& retrySettings = std::nullopt);
 
     TAsyncCreateSessionResult GetSession(const TCreateSessionSettings& settings = TCreateSessionSettings());
 
@@ -123,6 +135,10 @@ public:
 
     //! Returns the size of session pool
     int64_t GetCurrentPoolSize() const;
+
+    // Internal: used by retry wrappers to suppress nested retries.
+    bool GetInRetryOperationContext() const;
+    void SetInRetryOperationContext(bool value);
 
 private:
     class TImpl;

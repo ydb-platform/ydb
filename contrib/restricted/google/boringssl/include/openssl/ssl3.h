@@ -1,117 +1,17 @@
-/* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
- * All rights reserved.
- *
- * This package is an SSL implementation written
- * by Eric Young (eay@cryptsoft.com).
- * The implementation was written so as to conform with Netscapes SSL.
- *
- * This library is free for commercial and non-commercial use as long as
- * the following conditions are aheared to.  The following conditions
- * apply to all code found in this distribution, be it the RC4, RSA,
- * lhash, DES, etc., code; not just the SSL code.  The SSL documentation
- * included with this distribution is covered by the same copyright terms
- * except that the holder is Tim Hudson (tjh@cryptsoft.com).
- *
- * Copyright remains Eric Young's, and as such any Copyright notices in
- * the code are not to be removed.
- * If this package is used in a product, Eric Young should be given attribution
- * as the author of the parts of the library used.
- * This can be in the form of a textual message at program startup or
- * in documentation (online or textual) provided with the package.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *    "This product includes cryptographic software written by
- *     Eric Young (eay@cryptsoft.com)"
- *    The word 'cryptographic' can be left out if the rouines from the library
- *    being used are not cryptographic related :-).
- * 4. If you include any Windows specific code (or a derivative thereof) from
- *    the apps directory (application code) you must include an acknowledgement:
- *    "This product includes software written by Tim Hudson (tjh@cryptsoft.com)"
- *
- * THIS SOFTWARE IS PROVIDED BY ERIC YOUNG ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * The licence and distribution terms for any publically available version or
- * derivative of this code cannot be changed.  i.e. this code cannot simply be
- * copied and put under another distribution licence
- * [including the GNU Public Licence.]
- */
-/* ====================================================================
- * Copyright (c) 1998-2002 The OpenSSL Project.  All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *
- * 3. All advertising materials mentioning features or use of this
- *    software must display the following acknowledgment:
- *    "This product includes software developed by the OpenSSL Project
- *    for use in the OpenSSL Toolkit. (http://www.openssl.org/)"
- *
- * 4. The names "OpenSSL Toolkit" and "OpenSSL Project" must not be used to
- *    endorse or promote products derived from this software without
- *    prior written permission. For written permission, please contact
- *    openssl-core@openssl.org.
- *
- * 5. Products derived from this software may not be called "OpenSSL"
- *    nor may "OpenSSL" appear in their names without prior written
- *    permission of the OpenSSL Project.
- *
- * 6. Redistributions of any form whatsoever must retain the following
- *    acknowledgment:
- *    "This product includes software developed by the OpenSSL Project
- *    for use in the OpenSSL Toolkit (http://www.openssl.org/)"
- *
- * THIS SOFTWARE IS PROVIDED BY THE OpenSSL PROJECT ``AS IS'' AND ANY
- * EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE OpenSSL PROJECT OR
- * ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- * OF THE POSSIBILITY OF SUCH DAMAGE.
- * ====================================================================
- *
- * This product includes cryptographic software written by Eric Young
- * (eay@cryptsoft.com).  This product includes software written by Tim
- * Hudson (tjh@cryptsoft.com).
- *
- */
-/* ====================================================================
- * Copyright 2002 Sun Microsystems, Inc. ALL RIGHTS RESERVED.
- * ECC cipher suite support in OpenSSL originally developed by
- * SUN MICROSYSTEMS, INC., and contributed to the OpenSSL project.
- */
+// Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+// Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #ifndef OPENSSL_HEADER_SSL3_H
 #define OPENSSL_HEADER_SSL3_H
@@ -123,77 +23,22 @@ extern "C" {
 #endif
 
 
-// These are kept to support clients that negotiates higher protocol versions
+// These are kept to support clients that negotiate higher protocol versions
 // using SSLv2 client hello records.
 #define SSL2_MT_CLIENT_HELLO 1
 #define SSL2_VERSION 0x0002
 
-// Signalling cipher suite value from RFC 5746.
+// The following constants are equal to TLS cipher suite values, OR-d with
+// 0x03000000. This is part of OpenSSL's SSL 2.0 legacy. SSL 2.0 has long since
+// been removed from BoringSSL.
+// TODO(davidben): Define these in terms of |SSL_CIPHER_*| constants. The
+// challenge is that existing code expects them to be defined in ssl3.h, so we
+// must first merge ssl3.h into ssl.h.
+#define SSL3_CK_RSA_DES_192_CBC3_SHA 0x0300000A
 #define SSL3_CK_SCSV 0x030000FF
-// Fallback signalling cipher suite value from RFC 7507.
 #define SSL3_CK_FALLBACK_SCSV 0x03005600
 
-#define SSL3_CK_RSA_NULL_MD5 0x03000001
-#define SSL3_CK_RSA_NULL_SHA 0x03000002
-#define SSL3_CK_RSA_RC4_40_MD5 0x03000003
-#define SSL3_CK_RSA_RC4_128_MD5 0x03000004
-#define SSL3_CK_RSA_RC4_128_SHA 0x03000005
-#define SSL3_CK_RSA_RC2_40_MD5 0x03000006
-#define SSL3_CK_RSA_IDEA_128_SHA 0x03000007
-#define SSL3_CK_RSA_DES_40_CBC_SHA 0x03000008
-#define SSL3_CK_RSA_DES_64_CBC_SHA 0x03000009
-#define SSL3_CK_RSA_DES_192_CBC3_SHA 0x0300000A
-
-#define SSL3_CK_DH_DSS_DES_40_CBC_SHA 0x0300000B
-#define SSL3_CK_DH_DSS_DES_64_CBC_SHA 0x0300000C
-#define SSL3_CK_DH_DSS_DES_192_CBC3_SHA 0x0300000D
-#define SSL3_CK_DH_RSA_DES_40_CBC_SHA 0x0300000E
-#define SSL3_CK_DH_RSA_DES_64_CBC_SHA 0x0300000F
-#define SSL3_CK_DH_RSA_DES_192_CBC3_SHA 0x03000010
-
-#define SSL3_CK_EDH_DSS_DES_40_CBC_SHA 0x03000011
-#define SSL3_CK_EDH_DSS_DES_64_CBC_SHA 0x03000012
-#define SSL3_CK_EDH_DSS_DES_192_CBC3_SHA 0x03000013
-#define SSL3_CK_EDH_RSA_DES_40_CBC_SHA 0x03000014
-#define SSL3_CK_EDH_RSA_DES_64_CBC_SHA 0x03000015
-#define SSL3_CK_EDH_RSA_DES_192_CBC3_SHA 0x03000016
-
-#define SSL3_CK_ADH_RC4_40_MD5 0x03000017
-#define SSL3_CK_ADH_RC4_128_MD5 0x03000018
-#define SSL3_CK_ADH_DES_40_CBC_SHA 0x03000019
-#define SSL3_CK_ADH_DES_64_CBC_SHA 0x0300001A
-#define SSL3_CK_ADH_DES_192_CBC_SHA 0x0300001B
-
-#define SSL3_TXT_RSA_NULL_MD5 "NULL-MD5"
-#define SSL3_TXT_RSA_NULL_SHA "NULL-SHA"
-#define SSL3_TXT_RSA_RC4_40_MD5 "EXP-RC4-MD5"
-#define SSL3_TXT_RSA_RC4_128_MD5 "RC4-MD5"
-#define SSL3_TXT_RSA_RC4_128_SHA "RC4-SHA"
-#define SSL3_TXT_RSA_RC2_40_MD5 "EXP-RC2-CBC-MD5"
-#define SSL3_TXT_RSA_IDEA_128_SHA "IDEA-CBC-SHA"
-#define SSL3_TXT_RSA_DES_40_CBC_SHA "EXP-DES-CBC-SHA"
-#define SSL3_TXT_RSA_DES_64_CBC_SHA "DES-CBC-SHA"
 #define SSL3_TXT_RSA_DES_192_CBC3_SHA "DES-CBC3-SHA"
-
-#define SSL3_TXT_DH_DSS_DES_40_CBC_SHA "EXP-DH-DSS-DES-CBC-SHA"
-#define SSL3_TXT_DH_DSS_DES_64_CBC_SHA "DH-DSS-DES-CBC-SHA"
-#define SSL3_TXT_DH_DSS_DES_192_CBC3_SHA "DH-DSS-DES-CBC3-SHA"
-#define SSL3_TXT_DH_RSA_DES_40_CBC_SHA "EXP-DH-RSA-DES-CBC-SHA"
-#define SSL3_TXT_DH_RSA_DES_64_CBC_SHA "DH-RSA-DES-CBC-SHA"
-#define SSL3_TXT_DH_RSA_DES_192_CBC3_SHA "DH-RSA-DES-CBC3-SHA"
-
-#define SSL3_TXT_EDH_DSS_DES_40_CBC_SHA "EXP-EDH-DSS-DES-CBC-SHA"
-#define SSL3_TXT_EDH_DSS_DES_64_CBC_SHA "EDH-DSS-DES-CBC-SHA"
-#define SSL3_TXT_EDH_DSS_DES_192_CBC3_SHA "EDH-DSS-DES-CBC3-SHA"
-#define SSL3_TXT_EDH_RSA_DES_40_CBC_SHA "EXP-EDH-RSA-DES-CBC-SHA"
-#define SSL3_TXT_EDH_RSA_DES_64_CBC_SHA "EDH-RSA-DES-CBC-SHA"
-#define SSL3_TXT_EDH_RSA_DES_192_CBC3_SHA "EDH-RSA-DES-CBC3-SHA"
-
-#define SSL3_TXT_ADH_RC4_40_MD5 "EXP-ADH-RC4-MD5"
-#define SSL3_TXT_ADH_RC4_128_MD5 "ADH-RC4-MD5"
-#define SSL3_TXT_ADH_DES_40_CBC_SHA "EXP-ADH-DES-CBC-SHA"
-#define SSL3_TXT_ADH_DES_64_CBC_SHA "ADH-DES-CBC-SHA"
-#define SSL3_TXT_ADH_DES_192_CBC_SHA "ADH-DES-CBC3-SHA"
 
 #define SSL3_SSL_SESSION_ID_LENGTH 32
 #define SSL3_MAX_SSL_SESSION_ID_LENGTH 32
@@ -259,13 +104,11 @@ extern "C" {
 #define SSL3_RT_MAX_PACKET_SIZE \
   (SSL3_RT_MAX_ENCRYPTED_LENGTH + SSL3_RT_HEADER_LENGTH)
 
-#define SSL3_MD_CLIENT_FINISHED_CONST "\x43\x4C\x4E\x54"
-#define SSL3_MD_SERVER_FINISHED_CONST "\x53\x52\x56\x52"
-
 #define SSL3_RT_CHANGE_CIPHER_SPEC 20
 #define SSL3_RT_ALERT 21
 #define SSL3_RT_HANDSHAKE 22
 #define SSL3_RT_APPLICATION_DATA 23
+#define SSL3_RT_ACK 26
 
 // Pseudo content type for SSL/TLS header info
 #define SSL3_RT_HEADER 0x100

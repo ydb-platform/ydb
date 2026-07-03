@@ -7,8 +7,10 @@ SRCS(
 
 PEERDIR(
     library/cpp/regex/pcre
+    yql/essentials/utils/string
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/core/sql_types
+    yql/essentials/core/langver
     yql/essentials/sql
     yql/essentials/sql/pg_dummy
     yql/essentials/sql/v1/format

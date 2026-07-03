@@ -17,7 +17,7 @@
 #include "xsimd_register.hpp"
 
 #if XSIMD_WITH_SVE
-#error #include <arm_sve.h>
+#include <arm_sve.h>
 #endif
 
 namespace xsimd

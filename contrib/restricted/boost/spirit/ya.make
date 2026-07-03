@@ -31,7 +31,6 @@ PEERDIR(
     contrib/restricted/boost/proto
     contrib/restricted/boost/range
     contrib/restricted/boost/smart_ptr
-    contrib/restricted/boost/static_assert
     contrib/restricted/boost/thread
     contrib/restricted/boost/throw_exception
     contrib/restricted/boost/type_traits

@@ -22,6 +22,7 @@ TEST_SRCS(
     test_ctas.py
     test_vector_index.py
     test_unique_index.py
+    test_json_index.py
     test_batch_operations.py
     test_compact.py
     test_topic.py
@@ -36,6 +37,7 @@ TEST_SRCS(
     test_infer_pdisk_expected_slot_count.py
     test_bloom_filter_index.py
     test_show_create_table.py
+    test_snapshot_isolation.py
     udf/test_datetime2.py
     udf/test_digest.py
     udf/test_digest_regression.py

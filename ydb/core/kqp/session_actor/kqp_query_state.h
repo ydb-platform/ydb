@@ -15,6 +15,7 @@
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
+#include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>
 
@@ -357,19 +358,38 @@ public:
                 }
 
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
-                    addTable(source.GetFullTextSource().GetTable());
+                    const auto& fullText = source.GetFullTextSource();
+                    addTable(fullText.GetTable());
+                    // The compiled plan also pins each index impl table's (dict/docs/stats/posting)
+                    // schema version, and those advance independently of the main table (e.g. on
+                    // build finalize). Track them too, otherwise a cached plan with a stale impl-table
+                    // version is never invalidated and every read fails with SCHEME_ERROR until the
+                    // plan is evicted.
+                    for (const auto& indexTable : fullText.GetIndexTables()) {
+                        addTable(indexTable.GetTable());
+                    }
                 }
             }
 
+            auto fillFromSink = [&addTable](const auto& sink) {
+                YQL_ENSURE(sink.GetInternalSink().GetSettings().template Is<NKikimrKqp::TKqpTableSinkSettings>());
+                NKikimrKqp::TKqpTableSinkSettings settings;
+                YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                addTable(settings.GetTable());
+                for (const auto& index : settings.GetIndexes()) {
+                    addTable(index.GetTable());
+                }
+            };
+
             for (const auto& sink : stage.GetSinks()) {
                 if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink) {
-                    YQL_ENSURE(sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
-                    NKikimrKqp::TKqpTableSinkSettings settings;
-                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-                    addTable(settings.GetTable());
-                    for (const auto& index : settings.GetIndexes()) {
-                        addTable(index.GetTable());
-                    }
+                    fillFromSink(sink);
+                }
+            }
+
+            for (const auto& transform : stage.GetOutputTransforms()) {
+                if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink) {
+                    fillFromSink(transform);
                 }
             }
         }
@@ -456,7 +476,6 @@ public:
 
         if (TxCtx->NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
             if (tx && tx->GetHasEffects()) {
-                YQL_ENSURE(tx->ResultsSize() == 0);
                 // commit can be applied to the last transaction with effects
                 return CurrentTx + 1 == phyQuery.TransactionsSize();
             }
@@ -471,6 +490,7 @@ public:
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         Y_UNUSED(tx);
         if (*TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
+                *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE &&
                 *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW &&
                 *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW) {
             return false;
@@ -587,7 +607,8 @@ public:
         const TGUCSettings::TPtr& gUCSettingsPtr,
         TIntrusivePtr<TKqpCounters>& counters,
         const TActorId& sender,
-        TKqpTransactionContext* txCtx = nullptr);
+        TKqpTransactionContext* txCtx = nullptr,
+        EWarmupAttributionMode warmupAttribution = EWarmupAttributionMode::None);
 
     // build the compilation request.
     std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx = nullptr);

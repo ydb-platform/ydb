@@ -61,13 +61,16 @@ struct X509CertificateReader {
 
     using X509Ptr = std::unique_ptr<X509, deleter_from_fn<&::X509_free>>;
     using BIOPtr = std::unique_ptr<BIO, deleter_from_fn<&::BIO_free>>;
+    using EVPPKeyPtr = std::unique_ptr<EVP_PKEY, deleter_from_fn<&::EVP_PKEY_free>>;
 
     static X509Ptr ReadCertAsPEM(const TStringBuf& cert);
+    static X509Ptr ReadCertAsDER(const TStringBuf& cert);
     static TVector<std::pair<TString, TString>> ReadSubjectTerms(const X509Ptr& x509);
     static TVector<TString> ReadSubjectDns(const X509Ptr& x509, const std::vector<std::pair<TString, TString>>& subjectTerms);
     static TVector<std::pair<TString, TString>> ReadAllSubjectTerms(const X509Ptr& x509);
     static TVector<std::pair<TString, TString>> ReadIssuerTerms(const X509Ptr& x509);
     static TString GetFingerprint(const X509Ptr& x509);
+    static TString GetPublicKey(const X509Ptr& x509);
 private:
     static std::pair<TString, TString> GetTermFromX509Name(X509_NAME* name, int nid);
     static TVector<std::pair<TString, TString>> ReadTerms(X509_NAME* name);

@@ -3,6 +3,8 @@
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_effective_acl.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
@@ -3136,6 +3138,48 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished,
                             NLs::ChildrenCount(3)});
+    }
+
+    // https://github.com/ydb-platform/ydb/issues/41037, drop during copy
+    Y_UNIT_TEST(CopyTableSourceDropRejectedWhileWaitingForProposedParts) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 123;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "Value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TVector<THolder<IEventHandle>> suppressed;
+        auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvSchemaChanged::EventType);
+
+        TestCopyTable(runtime, ++txId, "/MyRoot", "Copy", "/MyRoot/Table", NKikimrScheme::StatusAccepted);
+        const ui64 copyTxId = txId;
+
+        WaitForSuppressed(runtime, suppressed, 1, prevObserver);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table", {NKikimrScheme::StatusMultipleModifications});
+        const ui64 dropTxId = txId;
+
+        for (auto& msg : suppressed) {
+            runtime.Send(msg.Release());
+        }
+        suppressed.clear();
+
+        env.TestWaitNotification(runtime, {copyTxId, dropTxId});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::Finished,
+            NLs::IsTable,
+        });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Copy"), {
+            NLs::Finished,
+            NLs::IsTable,
+        });
     }
 
     Y_UNIT_TEST(CopyTableAndConcurrentChanges) { //+
@@ -6890,6 +6934,352 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         }
     }
 
+    Y_UNIT_TEST(RowTableLocalBloomIndexMigration) {
+        // Tests migration of legacy nameless ByKeyFilterPrefixes to named TTableIndex
+        // scheme objects. Migration should be idempotent and leave engine prefixes untouched.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        ui64 txId = 100;
+
+        auto getTable = [&]() {
+            return DescribePath(runtime, "/MyRoot/Table", true)
+                .GetPathDescription().GetTable();
+        };
+        // Assert the migrated set matches the legacy prefixes: idx_bloom_1 over (Key1)
+        // and idx_bloom_2 over (Key1, Key2).
+        auto checkMigratedBloomIndexes = [&]() {
+            const auto table = getTable();
+            THashMap<TString, TVector<TString>> keysByName;
+            for (const auto& idx : table.GetTableIndexes()) {
+                if (idx.GetType() != NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
+                    continue;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(idx.GetState(), NKikimrSchemeOp::EIndexStateReady);
+                keysByName[idx.GetName()] = TVector<TString>(
+                    idx.GetKeyColumnNames().begin(), idx.GetKeyColumnNames().end());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(keysByName.size(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(keysByName.at("idx_bloom_1"), (TVector<TString>{"Key1"}));
+            UNIT_ASSERT_VALUES_EQUAL(keysByName.at("idx_bloom_2"), (TVector<TString>{"Key1", "Key2"}));
+        };
+
+        // Two PK columns and two legacy prefixes (length 1 and 2) - no named indexes specified.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "Key1" Type: "Uint64"}
+            Columns { Name: "Key2" Type: "Uint64"}
+            Columns { Name: "Value" Type: "Utf8"}
+            KeyColumnNames: ["Key1", "Key2"]
+            PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 1 FalsePositiveProbability: 0.02 }
+                ByKeyFilterPrefixes { PrefixLength: 2 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT_VALUES_EQUAL(getTable().GetPartitionConfig().ByKeyFilterPrefixesSize(), 2);
+
+        // Restart SchemeShard to deterministically run/settle the migrator actor.
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
+        // After migration: a named scheme object per prefix; engine prefixes unchanged.
+        checkMigratedBloomIndexes();
+        UNIT_ASSERT_VALUES_EQUAL(getTable().GetPartitionConfig().ByKeyFilterPrefixesSize(), 2);
+
+        // Restart again to verify migration is idempotent (no duplicate scheme objects).
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        runtime.SimulateSleep(TDuration::Seconds(5));
+        checkMigratedBloomIndexes();
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexConsistentCopy) {
+        // Consistent copy of a row table must carry the prefix bloom filter scheme object
+        // to the copy, keeping it consistent with the engine ByKeyFilterPrefixes.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "src"
+              Columns { Name: "Key1" Type: "Uint64" }
+              Columns { Name: "Key2" Type: "Uint64" }
+              Columns { Name: "Value" Type: "Utf8" }
+              KeyColumnNames: ["Key1", "Key2"]
+              PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 1 FalsePositiveProbability: 0.01 }
+              }
+            }
+            IndexDescription {
+              Name: "idx_bloom_1"
+              Type: EIndexTypeLocalBloomFilter
+              State: EIndexStateReady
+              KeyColumnNames: ["Key1"]
+              BloomFilterDescription { FalsePositiveProbability: 0.01 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        // Source has both the scheme object child and the engine prefix.
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/src", "idx_bloom_1",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"Key1"});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/src"), 1);
+
+        TestConsistentCopyTables(runtime, ++txId, "/", R"(
+            CopyTableDescriptions {
+              SrcPath: "/MyRoot/src"
+              DstPath: "/MyRoot/dst"
+            })");
+        env.TestWaitNotification(runtime, txId);
+
+        // The copy carries the bloom scheme object child and the engine prefix.
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/dst", "idx_bloom_1",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"Key1"});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/dst"), 1);
+    }
+
+    // Creates "/MyRoot/<name>" as a row table with one prefix bloom filter scheme object
+    // (idx_bloom_1 over Key1) plus the matching engine ByKeyFilterPrefix.
+    static void CreateRowTableWithBloomIndex(TTestBasicRuntime& runtime, NSchemeShardUT_Private::TTestEnv& env,
+            ui64& txId, const TString& name)
+    {
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+              Name: "%s"
+              Columns { Name: "Key1" Type: "Uint64" }
+              Columns { Name: "Key2" Type: "Uint64" }
+              Columns { Name: "Value" Type: "Utf8" }
+              KeyColumnNames: ["Key1", "Key2"]
+              PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 1 FalsePositiveProbability: 0.01 }
+              }
+            }
+            IndexDescription {
+              Name: "idx_bloom_1"
+              Type: EIndexTypeLocalBloomFilter
+              State: EIndexStateReady
+              KeyColumnNames: ["Key1"]
+              BloomFilterDescription { FalsePositiveProbability: 0.01 }
+            }
+        )", name.c_str()));
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexCopyTable) {
+        // CopyTable of a row table must carry the prefix bloom filter scheme object
+        // and the engine ByKeyFilterPrefix.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        CreateRowTableWithBloomIndex(runtime, env, txId, "src");
+
+        TestCopyTable(runtime, ++txId, "/MyRoot", "dst", "/MyRoot/src");
+        env.TestWaitNotification(runtime, txId);
+
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/dst", "idx_bloom_1",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"Key1"});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/dst"), 1);
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexMoveTable) {
+        // Moving a row table keeps its prefix bloom filter scheme object and
+        // engine ByKeyFilterPrefix consistent.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        CreateRowTableWithBloomIndex(runtime, env, txId, "src");
+
+        TestMoveTable(runtime, ++txId, "/MyRoot/src", "/MyRoot/moved");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/src"), {NLs::PathNotExist});
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/moved", "idx_bloom_1",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"Key1"});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/moved"), 1);
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexMoveIndex) {
+        // Renaming a row-table prefix bloom filter index renames the scheme object;
+        // the engine ByKeyFilterPrefix is unaffected.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableMoveIndex(true));
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        CreateRowTableWithBloomIndex(runtime, env, txId, "Table");
+
+        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "idx_bloom_1", "idx_bloom_renamed", false);
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_bloom_1"), {NLs::PathNotExist});
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/Table", "idx_bloom_renamed",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"Key1"});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 1);
+
+        // Move non-existent index -> error; move to an existing name without overwrite -> error.
+        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "non_existent", "something", false,
+            {NKikimrScheme::StatusPathDoesNotExist});
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexCreate) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        CreateRowTableWithBloomIndex(runtime, env, txId, "Table");
+
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/Table", "idx_bloom_1",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"Key1"});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 1);
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexDropIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        CreateRowTableWithBloomIndex(runtime, env, txId, "Table");
+
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 1);
+
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            IndexName: "idx_bloom_1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_bloom_1"), {NLs::PathNotExist});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 0);
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexDropOneOfMany) {
+        // Dropping one bloom index must leave the other index and its ByKeyFilterPrefix intact.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "Key1" Type: "Uint64" }
+              Columns { Name: "Key2" Type: "Uint64" }
+              Columns { Name: "Value" Type: "Utf8" }
+              KeyColumnNames: ["Key1", "Key2"]
+              PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 1 FalsePositiveProbability: 0.01 }
+                ByKeyFilterPrefixes { PrefixLength: 2 FalsePositiveProbability: 0.01 }
+              }
+            }
+            IndexDescription {
+              Name: "idx_bloom_1"
+              Type: EIndexTypeLocalBloomFilter
+              State: EIndexStateReady
+              KeyColumnNames: ["Key1"]
+              BloomFilterDescription { FalsePositiveProbability: 0.01 }
+            }
+            IndexDescription {
+              Name: "idx_bloom_2"
+              Type: EIndexTypeLocalBloomFilter
+              State: EIndexStateReady
+              KeyColumnNames: ["Key1", "Key2"]
+              BloomFilterDescription { FalsePositiveProbability: 0.01 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 2);
+
+        // Drop only idx_bloom_1 (prefix length 1).
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            IndexName: "idx_bloom_1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // idx_bloom_1 gone; idx_bloom_2 and its prefix (length 2, not 1) survive.
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_bloom_1"), {NLs::PathNotExist});
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/Table", "idx_bloom_2",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"Key1", "Key2"});
+        {
+            const auto cfg = DescribePath(runtime, "/MyRoot/Table", true).GetPathDescription()
+                .GetTable().GetPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 2);
+        }
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexDisableFilter) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        CreateRowTableWithBloomIndex(runtime, env, txId, "Table");
+
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 1);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                EnableFilterByKey: false
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_bloom_1"), {NLs::PathNotExist});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 0);
+    }
+
     Y_UNIT_TEST(CreatePersQueueGroup) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -7054,6 +7444,102 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::CheckPartCount("PQGroup", 400, 10, 40, 400),
                             NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(41)});
+    }
+
+    Y_UNIT_TEST(PQGroupsCount) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 1000;
+
+        // Initially the domain has no PQ groups.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(0),
+                            NLs::PQPartitionsInsideDomain(0)});
+
+        // Create first topic with 4 partitions.
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot",
+                        "Name: \"PQGroup_1\""
+                        "TotalGroupCount: 4 "
+                        "PartitionPerTablet: 2 "
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(1),
+                            NLs::PQPartitionsInsideDomain(4)});
+
+        // Create second topic with 6 partitions.
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot",
+                        "Name: \"PQGroup_2\""
+                        "TotalGroupCount: 6 "
+                        "PartitionPerTablet: 3 "
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(2),
+                            NLs::PQPartitionsInsideDomain(10)});
+
+        // Altering an existing topic must not change the topic count
+        // even when the partition count grows.
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot",
+                        "Name: \"PQGroup_2\""
+                        "TotalGroupCount: 8 "
+                        "PartitionPerTablet: 3 "
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(2),
+                            NLs::PQPartitionsInsideDomain(12)});
+
+        // Drop the first topic.
+        TestDropPQGroup(runtime, ++txId, "/MyRoot", "PQGroup_1");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(1),
+                            NLs::PQPartitionsInsideDomain(8)});
+
+        // Drop the second topic - the domain is empty again.
+        TestDropPQGroup(runtime, ++txId, "/MyRoot", "PQGroup_2");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(0),
+                            NLs::PQPartitionsInsideDomain(0)});
+    }
+
+    Y_UNIT_TEST(PQGroupsCountAfterReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 1000;
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot",
+                        "Name: \"PQGroup_A\""
+                        "TotalGroupCount: 3 "
+                        "PartitionPerTablet: 1 "
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot",
+                        "Name: \"PQGroup_B\""
+                        "TotalGroupCount: 5 "
+                        "PartitionPerTablet: 1 "
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(2),
+                            NLs::PQPartitionsInsideDomain(8)});
+
+        // Reboot SchemeShard - the counter must be recovered from persisted state.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PQGroupsInsideDomain(2),
+                            NLs::PQPartitionsInsideDomain(8)});
     }
 
     Y_UNIT_TEST(CreatePersQueueGroupWithKeySchema) {

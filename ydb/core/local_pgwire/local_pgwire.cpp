@@ -1,4 +1,3 @@
-#include "log_impl.h"
 #include "local_pgwire.h"
 #include "local_pgwire_util.h"
 #include <ydb/core/pgproxy/pg_proxy_events.h>
@@ -6,6 +5,8 @@
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/base/ticket_parser.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_PGWIRE
 
 namespace NLocalPgWire {
 
@@ -38,7 +39,9 @@ public:
     }
 
     void Handle(NPG::TEvPGEvents::TEvAuth::TPtr& ev) {
-        BLOG_D("TEvAuth " << ev->Get()->InitialMessage->Dump() << " cookie " << ev->Cookie);
+        YDB_LOG_DEBUG("TEvAuth",
+            {"initialMessageDump", ev->Get()->InitialMessage->Dump()},
+            {"cookie", ev->Cookie});
         std::unordered_map<TString, TString> clientParams = ev->Get()->InitialMessage->GetClientParams();
         TPgWireAuthData pgWireAuthData;
         pgWireAuthData.UserName = clientParams["user"];
@@ -58,7 +61,9 @@ public:
     }
 
     void Handle(NPG::TEvPGEvents::TEvConnectionOpened::TPtr& ev) {
-        BLOG_D("TEvConnectionOpened " << ev->Sender << " cookie " << ev->Cookie);
+        YDB_LOG_DEBUG("TEvConnectionOpened",
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie});
         auto params = ev->Get()->Message->GetClientParams();
         auto itSecurityState = SecurityState.find(ev->Sender);
         if (itSecurityState != SecurityState.end()) {
@@ -74,15 +79,21 @@ public:
         IActor* actor = CreateConnection(std::move(params), std::move(ev), {.ConnectionNum = connectionState.ConnectionNum});
         TActorId actorId = Register(actor);
         connectionState.YdbConnection = actorId;
-        BLOG_D("Created ydb connection " << actorId << " num " << connectionState.ConnectionNum);
+        YDB_LOG_DEBUG("Created ydb connection",
+            {"actorId", actorId},
+            {"connectionNum", connectionState.ConnectionNum});
     }
 
     void Handle(NPG::TEvPGEvents::TEvConnectionClosed::TPtr& ev) {
-        BLOG_D("TEvConnectionClosed " << ev->Sender << " cookie " << ev->Cookie);
+        YDB_LOG_DEBUG("TEvConnectionClosed",
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie});
         auto itConnection = ConnectionState.find(ev->Sender);
         if (itConnection != ConnectionState.end()) {
             Send(itConnection->second.YdbConnection, new TEvents::TEvPoisonPill());
-            BLOG_D("Destroyed ydb connection " << itConnection->second.YdbConnection << " num " << itConnection->second.ConnectionNum);
+            YDB_LOG_DEBUG("Destroyed ydb connection",
+                {"ydbConnection", itConnection->second.YdbConnection},
+                {"connectionNum", itConnection->second.ConnectionNum});
         }
         SecurityState.erase(ev->Sender);
         ConnectionState.erase(itConnection);
@@ -136,14 +147,17 @@ public:
             uint32_t connectionNum = ev->Get()->Record.GetSecretKey();
             for (const auto& [pgConnectionId, connectionState] : ConnectionState) {
                 if (connectionState.ConnectionNum == connectionNum) {
-                    BLOG_D("Cancelling ConnectionNum " << connectionNum);
+                    YDB_LOG_DEBUG("Cancelling",
+                        {"connectionNum", connectionNum});
                     Forward(ev, connectionState.YdbConnection);
                     return;
                 }
             }
-            BLOG_W("Cancelling ConnectionNum " << connectionNum << " - connection not found");
+            YDB_LOG_WARN_CTX(*NActors::TlsActivationContext, "Cancelling - connection not found",
+                {"connectionNum", connectionNum});
         } else {
-            BLOG_D("Forwarding TEvCancelRequest to Node " << nodeId);
+            YDB_LOG_DEBUG("Forwarding TEvCancelRequest to Node",
+                {"nodeId", nodeId});
             Forward(ev, CreateLocalPgWireProxyId(nodeId));
         }
     }

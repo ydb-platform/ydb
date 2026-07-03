@@ -3,6 +3,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
@@ -34,10 +35,89 @@ bool SetName<TTag>(
 
 } // namespace NOperation
 
+// Detects fulltext/JSON indexes in an indexed-table create that need a synthetic __ydb_row_id doc_id
+// and rewrites the request in place: appends the __ydb_row_id Uint64 NOT NULL column (defaulted from a
+// sequence) and its backing sequence, appends the __ydb_unique_row_id GlobalUnique index over it, and
+// sets UseRowIdAsDocId on the affected indexes. Returns a reject sub-operation on a malformed request
+// or a disabled feature, otherwise nullptr (including when there is nothing to provision). Mirrors the
+// build-index auto-provisioning in build_index__create.cpp / ClassifyFulltextRowId.
+ISubOperation::TPtr MaybeProvisionFulltextRowId(
+    TOperationId nextId,
+    NKikimrSchemeOp::TIndexedTableCreationConfig& indexedTable,
+    TOperationContext& context)
+{
+    bool needRowIdColumn = false;
+    bool needUniqueIndex = false;
+    TVector<int> rowIdModeIndexes;
+
+    for (int i = 0; i < static_cast<int>(indexedTable.IndexDescriptionSize()); ++i) {
+        TString error;
+        const auto classification = ClassifyFulltextRowIdForCreate(
+            indexedTable, indexedTable.GetIndexDescription(i), error);
+        switch (classification.Plan) {
+            case EFulltextRowIdPlan::NotApplicable:
+            case EFulltextRowIdPlan::LegacyIntegerPk:
+                break;
+            case EFulltextRowIdPlan::Error:
+                return CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, error);
+            case EFulltextRowIdPlan::Reuse:
+                rowIdModeIndexes.push_back(i);
+                break;
+            case EFulltextRowIdPlan::Provision:
+                if (!context.SS->EnableInitialUniqueIndex) {
+                    return CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed,
+                        TStringBuilder() << "Auto-provisioning '" << NTableIndex::NFulltext::RowIdColumn
+                            << "' for a fulltext/JSON index on a non-integer-PK table requires the unique-index feature");
+                }
+                needRowIdColumn |= classification.NeedColumn;
+                needUniqueIndex |= classification.NeedUniqueIndex;
+                rowIdModeIndexes.push_back(i);
+                break;
+        }
+    }
+
+    if (needRowIdColumn) {
+        // Reached only when no __ydb_row_id column was supplied (else the plan is Reuse or a
+        // unique-index-only Provision), so this never duplicates a user column.
+        auto* column = indexedTable.MutableTableDescription()->AddColumns();
+        column->SetName(NTableIndex::NFulltext::RowIdColumn);
+        column->SetType("Uint64");
+        column->SetNotNull(true);
+        // Table-local leaf name, matching the create-table sequence convention.
+        column->SetDefaultFromSequence(NTableIndex::NFulltext::RowIdSequenceName);
+
+        auto* sequence = indexedTable.AddSequenceDescription();
+        sequence->SetName(NTableIndex::NFulltext::RowIdSequenceName);
+    }
+
+    if (needUniqueIndex) {
+        auto* uniqueIndex = indexedTable.AddIndexDescription();
+        uniqueIndex->SetName(NTableIndex::NFulltext::RowIdUniqueIndexName);
+        uniqueIndex->SetType(NKikimrSchemeOp::EIndexTypeGlobalUnique);
+        uniqueIndex->AddKeyColumnNames(NTableIndex::NFulltext::RowIdColumn);
+    }
+
+    for (const int i : rowIdModeIndexes) {
+        indexedTable.MutableIndexDescription(i)->MutableFulltextIndexDescription()->SetUseRowIdAsDocId(true);
+    }
+
+    return nullptr;
+}
+
 TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable);
 
     auto indexedTable = tx.GetCreateIndexedTable();
+
+    // __ydb_row_id auto-provisioning. A fulltext/JSON index over a table whose PK is not a single
+    // integer needs a synthetic Uint64 doc_id; mirror the build-index path (ClassifyFulltextRowId) by
+    // injecting the __ydb_row_id column (+ its backing sequence) and a unique secondary index over it,
+    // and switching the affected indexes to rowid mode. Done before the object counts below so the
+    // injected paths/shards are charged against the scheme limits like any other create.
+    if (auto reject = MaybeProvisionFulltextRowId(nextId, indexedTable, context)) {
+        return {reject};
+    }
+
     const NKikimrSchemeOp::TTableDescription& baseTableDescription = indexedTable.GetTableDescription();
 
     TIndexObjectCounts totalCounts;
@@ -132,8 +212,30 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     TTableColumns baseTableColumns = ExtractInfo(baseTableDescription);
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
         const auto& indexName = indexDescription.GetName();
+        const auto indexType = GetIndexType(indexDescription);
 
-        switch (GetIndexType(indexDescription)) {
+        if (TTableIndexInfo::IsLocalIndex(indexType)) {
+            // Row-table local indexes (prefix bloom filters) have no impl table. Full column
+            // validation is done in KQP; here we enforce a valid, unique name and a non-empty
+            // primary-key prefix - drop logic later treats IndexKeys.size() as the prefix length.
+            if (indexType != NKikimrSchemeOp::EIndexTypeLocalBloomFilter || indexDescription.KeyColumnNamesSize() == 0) {
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
+                    TStringBuilder() << "Local index '" << indexName
+                        << "' must be a local bloom filter over a non-empty primary-key prefix")};
+            }
+            TPath indexPath = baseTablePath.Child(indexName);
+            TString msg = "invalid table index name: ";
+            if (!indexPath.IsValidLeafName(context.UserToken.Get(), msg)) {
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
+            }
+            if (indexes.contains(indexName)) {
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
+                    TStringBuilder() << "Can't create indexes with not unique names for table, for example: " << indexName)};
+            }
+            indexes.emplace(indexName, TTableColumns{});
+            continue;
+        }
+        switch (indexType) {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
                 // no feature flag, everything is fine
@@ -145,13 +247,19 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
                 TString msg;
-                if (!NKikimr::NKMeans::ValidateSettings(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings(), msg)) {
+                if (!NKikimr::NKMeans::ValidateSettingsPartial(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings(), msg)) {
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+                }
+                if (NKikimr::NKMeans::NeedsVectorSettingsAutoSelect(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings().settings())) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed,
+                        "Cannot build vector index: table is empty and vector_type/vector_dimension were not specified")};
                 }
                 break;
             }
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
-            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
                 if (!context.SS->EnableFulltextIndex) {
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Fulltext index support is disabled")};
                 }
@@ -161,7 +269,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 }
                 break;
             }
-            case NKikimrSchemeOp::EIndexTypeGlobalJson: {
+            case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact: {
                 if (!context.SS->EnableJsonIndex) {
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "JSON index support is disabled")};
                 }
@@ -188,6 +297,11 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
         if (indexes.contains(indexName)) {
             TString msg = TStringBuilder() << "Can't create indexes with not unique names for table, for example: " << indexDescription.GetName();
+            return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+        }
+
+        if (baseTableDescription.HasTTLSettings() && !DoesIndexSupportTTL(indexType)) {
+            auto msg = TStringBuilder() << "Table with " << indexType << " index doesn't support TTL";
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
         }
 
@@ -299,6 +413,11 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), scheme));
         }
 
+        if (TTableIndexInfo::IsLocalIndex(GetIndexType(indexDescription))) {
+            // Local index (e.g. row-table prefix bloom filter) has no impl table
+            continue;
+        }
+
         auto createIndexImplTable = [&] (NKikimrSchemeOp::TTableDescription&& implTableDesc, const THashSet<TString>& localSequences = {}) {
             auto scheme = TransactionTemplate(
                 tx.GetWorkingDir() + "/" + baseTableDescription.GetName() + "/" + indexDescription.GetName(),
@@ -314,6 +433,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
         const auto& implTableColumns = indexes.at(indexDescription.GetName());
         const auto indexType = GetIndexType(indexDescription);
+
         switch (indexType) {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -363,6 +483,48 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 }
                 break;
             }
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
+                NKikimrSchemeOp::TTableDescription userIndexDesc, docsTableDesc, dictTableDesc, statsTableDesc;
+                if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
+                    if (indexDescription.IndexImplTableDescriptionsSize() == 4) {
+                        dictTableDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DictTablePosition);
+                        docsTableDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DocsTablePosition);
+                        statsTableDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::StatsTablePosition);
+                        userIndexDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition);
+                    }
+                } else if (indexDescription.IndexImplTableDescriptionsSize() == 1) {
+                    userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
+                }
+
+                result.push_back(createIndexImplTable(CalcFulltextCompactImplTableDesc(
+                    baseTableDescription, baseTableDescription.GetPartitionConfig(),
+                    userIndexDesc, &indexDescription.GetFulltextIndexDescription(), indexType,
+                        NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames()), false),
+                    THashSet<TString>{NTableIndex::NFulltext::GenSequence}));
+
+                // Create the sequence
+                auto outTx = TransactionTemplate(tx.GetWorkingDir() + "/" + baseTableDescription.GetName() + "/" +
+                    indexDescription.GetName() + "/" + NTableIndex::ImplTable,
+                    NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
+                outTx.MutableSequence()->SetName(NTableIndex::NFulltext::GenSequence);
+                outTx.MutableSequence()->SetStartValue(static_cast<i64>(Max<NTableIndex::NFulltext::TGen>() - 1));
+                outTx.MutableSequence()->SetIncrement(-1);
+                outTx.MutableSequence()->SetMaxValue(static_cast<i64>(Max<NTableIndex::NFulltext::TGen>() - 1));
+                outTx.SetFailOnExist(tx.GetFailOnExist());
+                outTx.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
+                outTx.SetInternal(tx.GetInternal());
+                result.push_back(CreateNewSequence(NextPartId(nextId, result), outTx));
+
+                if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
+                    const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                    result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc, indexDescription.GetFulltextIndexDescription())));
+                    result.push_back(createIndexImplTable(CalcFulltextDictImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), dictTableDesc, indexDescription.GetFulltextIndexDescription())));
+                    result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc)));
+                }
+                break;
+            }
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
                 NKikimrSchemeOp::TTableDescription userIndexDesc;
@@ -371,7 +533,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 }
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
                 result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
-                    indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType)));
+                    indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType,
+                    NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames()))));
                 break;
             }
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
@@ -384,8 +547,9 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 }
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
                 result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
-                    indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType)));
-                result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc)));
+                    indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType,
+                    NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames()))));
+                result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc, indexDescription.GetFulltextIndexDescription())));
                 result.push_back(createIndexImplTable(CalcFulltextDictImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), dictTableDesc, indexDescription.GetFulltextIndexDescription())));
                 result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc)));
                 break;

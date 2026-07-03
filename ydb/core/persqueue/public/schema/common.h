@@ -1,6 +1,7 @@
 #pragma once
 
 #include "schema.h"
+#include "schema_propose.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
@@ -11,6 +12,7 @@
 #include <expected>
 #include <map>
 #include <optional>
+#include <string_view>
 
 namespace NKikimr::NPQ::NSchema {
 
@@ -24,30 +26,6 @@ template<typename T>
 constexpr T IfEqualThenDefault(const T& value, const T& compareTo, const T& defaultValue) {
     return value == compareTo ? defaultValue : value;
 }
-
-struct TResult : public std::pair<Ydb::StatusIds::StatusCode, TString>{
-    TResult()
-        : std::pair<Ydb::StatusIds::StatusCode, TString>(Ydb::StatusIds::SUCCESS, TString())
-    {
-    }
-
-    TResult(Ydb::StatusIds::StatusCode YdbCode, TString&& errorMessage)
-        : std::pair<Ydb::StatusIds::StatusCode, TString>(YdbCode, std::move(errorMessage))
-    {
-    }
-
-    Ydb::StatusIds::StatusCode GetStatus() const {
-        return first;
-    }
-
-    TString& GetErrorMessage() {
-        return second;
-    }
-
-    operator bool() const {
-        return GetStatus() == Ydb::StatusIds::SUCCESS;
-    }
-};
 
 std::pair<TString, TString> GetWorkingDirAndName(const TString& fullName);
 
@@ -109,16 +87,6 @@ TResult AddConsumer(
     const bool checkServiceType,
     NGRpcProxy::V1::TConsumersAdvancedMonitoringSettings* consumersAdvancedMonitoringSettings
 );
-TResult ProcessAlterConsumer(
-    Ydb::Topic::Consumer& consumer,
-    const Ydb::Topic::AlterConsumer& alter
-);
-
-TResult ApplyChangesInt(
-    const Ydb::Topic::AlterTopicRequest& request,
-    NKikimrSchemeOp::TPersQueueGroupDescription& config,
-    bool isCdcStream
-);
 
 TResult ProcessConsumerType(
     NKikimrPQ::TPQTabletConfig::TConsumer* consumer,
@@ -179,4 +147,4 @@ TResult ProcessConsumerType(
     return {};
 }
 
-}
+} // namespace NKikimr::NPQ::NSchema

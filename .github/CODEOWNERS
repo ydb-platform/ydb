@@ -9,6 +9,13 @@
 /CLAUDE.md @ydb-platform/ai-reviewers
 
 /.cursorindexingignore-personal @ydb-platform/ai-reviewers
+
+/.github/ @ydb-platform/ci
+/.github/workflows/docs_*
+/.github/workflows/ydbdoc-*
+/.github/config/muted_ya*
+/.github/CODEOWNERS
+/.github/TESTOWNERS
 /.github/docker @ydb-platform/appteam
 
 /build @ydb-platform/ci
@@ -27,7 +34,10 @@
 /ydb/core/kqp/ @ydb-platform/qp
 /ydb/core/kqp/ut/federated_query @ydb-platform/fq
 /ydb/core/kqp/ut/olap/ @ydb-platform/cs
-/ydb/core/kqp/ut/indexes/ @ydb-platform/qp @ydb-platform/datashard
+/ydb/core/kqp/ut/indexes/ @ydb-platform/qp
+/ydb/core/kqp/ut/indexes/vector @ydb-platform/datashard
+/ydb/core/kqp/ut/indexes/prefixed_vector @ydb-platform/datashard
+/ydb/core/kqp/ut/indexes/fulltext @ydb-platform/datashard
 /ydb/core/kqp/ut/knn/ @ydb-platform/datashard
 /ydb/core/kqp/ut/tli/ @ydb-platform/datashard
 /ydb/core/public_http/ @ydb-platform/fq
@@ -35,12 +45,12 @@
 /ydb/docs/ @ydb-platform/docs
 
 /ydb/library/yql/ @ydb-platform/qp
-/ydb/library/yql/dq @ydb-platform/qp @ydb-platform/yql
+/ydb/library/yql/dq @ydb-platform/qp @ydb-platform/yt
 /ydb/library/yql/dq/actors/common @ydb-platform/fq
 /ydb/library/yql/providers/common/http_gateway @ydb-platform/fq
 /ydb/library/yql/providers/common/db_id_async_resolver @ydb-platform/fq
 /ydb/library/yql/providers/common/pushdown @ydb-platform/fq
-/ydb/library/yql/providers/dq @ydb-platform/yql
+/ydb/library/yql/providers/dq @ydb-platform/yt
 /ydb/library/yql/providers/generic @ydb-platform/fq
 /ydb/library/yql/providers/pq @ydb-platform/fq
 /ydb/library/yql/providers/s3 @ydb-platform/fq
@@ -95,14 +105,17 @@
 /ydb/core/tx/datashard @ydb-platform/datashard
 /ydb/core/tx/coordinator @ydb-platform/datashard
 /ydb/core/tx/schemeshard/index @ydb-platform/datashard
+/ydb/core/tx/schemeshard/ut_index @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_index_build @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_index_build_reboots @ydb-platform/datashard
+/ydb/core/tx/schemeshard/ut_shred @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_shred_reboots @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_vector_index_build_reboots @ydb-platform/datashard
 
 /ydb/core/formats/arrow @ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
 /ydb/core/tx/schemeshard/olap @ydb-platform/cs
+/ydb/core/tx/schemeshard/ut_olap @ydb-platform/cs
 /ydb/core/tx/schemeshard/ut_olap_reboots @ydb-platform/cs
 
 /ydb/library/actors/core @ydb-platform/blobstorage
@@ -124,6 +137,7 @@
 /ydb/library/aclib @ydb-platform/Security
 /ydb/library/login @ydb-platform/Security
 /ydb/library/security @ydb-platform/Security
+/ydb/services/scheme_secret @ydb-platform/Security
 /ydb/services/ydb/ydb_ldap_login_ut.cpp @ydb-platform/Security
 /ydb/services/ydb/ydb_register_node_ut.cpp @ydb-platform/Security
 /ydb/core/sys_view/common/registry.h @ydb-platform/Security
@@ -131,6 +145,8 @@
 /ydb/core/sys_view/ut_registry.cpp @ydb-platform/Security
 /ydb/tests/compatibility/test_system_views.py @ydb-platform/Security
 /ydb/tests/functional/tenants/test_system_views.py @ydb-platform/Security
+/ydb/tests/functional/secrets @ydb-platform/Security
+/ydb/tests/functional/security @ydb-platform/Security
 
 /ydb/tests/library @ydb-platform/Engineering
 

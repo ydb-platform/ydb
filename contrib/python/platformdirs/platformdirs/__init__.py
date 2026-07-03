@@ -344,6 +344,31 @@ def user_desktop_dir() -> str:
     return PlatformDirs().user_desktop_dir
 
 
+def user_projects_dir() -> str:
+    """:returns: projects directory tied to the user"""
+    return PlatformDirs().user_projects_dir
+
+
+def user_publicshare_dir() -> str:
+    """:returns: public share directory tied to the user"""
+    return PlatformDirs().user_publicshare_dir
+
+
+def user_templates_dir() -> str:
+    """:returns: templates directory tied to the user"""
+    return PlatformDirs().user_templates_dir
+
+
+def user_fonts_dir() -> str:
+    """:returns: fonts directory tied to the user"""
+    return PlatformDirs().user_fonts_dir
+
+
+def user_preference_dir() -> str:
+    """:returns: preference directory tied to the user"""
+    return PlatformDirs().user_preference_dir
+
+
 def user_bin_dir() -> str:
     """:returns: bin directory tied to the user"""
     return PlatformDirs().user_bin_dir
@@ -720,6 +745,31 @@ def user_desktop_path() -> Path:
     return PlatformDirs().user_desktop_path
 
 
+def user_projects_path() -> Path:
+    """:returns: projects path tied to the user"""
+    return PlatformDirs().user_projects_path
+
+
+def user_publicshare_path() -> Path:
+    """:returns: public share path tied to the user"""
+    return PlatformDirs().user_publicshare_path
+
+
+def user_templates_path() -> Path:
+    """:returns: templates path tied to the user"""
+    return PlatformDirs().user_templates_path
+
+
+def user_fonts_path() -> Path:
+    """:returns: fonts path tied to the user"""
+    return PlatformDirs().user_fonts_path
+
+
+def user_preference_path() -> Path:
+    """:returns: preference path tied to the user"""
+    return PlatformDirs().user_preference_path
+
+
 def user_bin_path() -> Path:
     """:returns: bin path tied to the user"""
     return PlatformDirs().user_bin_path
@@ -842,16 +892,26 @@ __all__ = [
     "user_documents_path",
     "user_downloads_dir",
     "user_downloads_path",
+    "user_fonts_dir",
+    "user_fonts_path",
     "user_log_dir",
     "user_log_path",
     "user_music_dir",
     "user_music_path",
     "user_pictures_dir",
     "user_pictures_path",
+    "user_preference_dir",
+    "user_preference_path",
+    "user_projects_dir",
+    "user_projects_path",
+    "user_publicshare_dir",
+    "user_publicshare_path",
     "user_runtime_dir",
     "user_runtime_path",
     "user_state_dir",
     "user_state_path",
+    "user_templates_dir",
+    "user_templates_path",
     "user_videos_dir",
     "user_videos_path",
 ]

@@ -64,18 +64,17 @@ namespace NTabletFlatExecutor {
             {
             }
 
-            void Start(TActorId owner, TActorId changelogWriter, ui64 inFlightBytesLimit) {
+            void Start(TActorId owner, TActorId changelogWriter) {
                 Owner = owner;
                 Writer = changelogWriter;
-                InFlightBytesLimit = inFlightBytesLimit;
                 Running = true;
 
                 Manager->MonCo->Simple()[TMonCo::BACKUP_RUNNING].Set(1);
             }
 
-            void Stop() {
+            void Stop(bool flush = false) {
                 if (Running) {
-                    Manager->Ops->Send(Writer, new TEvents::TEvPoisonPill);
+                    Manager->Ops->Send(Writer, new NBackup::TEvStop(flush));
 
                     Manager->MonCo->Simple()[TMonCo::BACKUP_RUNNING].Set(0);
                     Manager->MonCo->Simple()[TMonCo::BACKUP_CHANGELOG_INFLIGHT_BYTES].Set(0);
@@ -92,10 +91,6 @@ namespace NTabletFlatExecutor {
                     return false;
                 }
 
-                if (InFlightOverflow) {
-                    return false;
-                }
-
                 return commit.Type == ECommit::Redo;
             }
 
@@ -105,26 +100,7 @@ namespace NTabletFlatExecutor {
                 }
 
                 auto ev = MakeHolder<NBackup::TEvWriteChangelog>(commit.Step, commit.Embedded, commit.Refs, TActivationContext::Monotonic());
-                ui64 evSize = ev->GetTotalSize();
-                if (evSize <= InFlightBytesLimit - InFlightBytes) {
-                    InFlightBytes += evSize;
-                    Manager->Ops->Send(Writer, ev.Release());
-                    Manager->MonCo->Simple()[TMonCo::BACKUP_CHANGELOG_INFLIGHT_BYTES].Set(InFlightBytes);
-                } else {
-                    InFlightOverflow = true;
-                    auto error = TStringBuilder()
-                        << "Backup changelog in flight bytes limit exceeded: "
-                        << "InFlightBytes# " << InFlightBytes << ", "
-                        << "evSize# " << evSize << ", "
-                        << "InFlightBytesLimit# " << InFlightBytesLimit;
-                    TActivationContext::Send(new IEventHandle(Owner, Writer, new NBackup::TEvChangelogFailed(error)));
-                }
-            }
-
-            void OnProcessedBytes(ui64 bytes) {
-                Y_ENSURE(InFlightBytes >= bytes);
-                InFlightBytes -= bytes;
-                Manager->MonCo->Simple()[TMonCo::BACKUP_CHANGELOG_INFLIGHT_BYTES].Set(InFlightBytes);
+                Manager->Ops->Send(Writer, ev.Release());
             }
 
             void OnSnapshotCompleted(NBackup::TEvSnapshotCompleted::TPtr& ev) {
@@ -135,18 +111,11 @@ namespace NTabletFlatExecutor {
                 return Writer;
             }
 
-            ui64 GetInFlightBytes() const {
-                return InFlightBytes;
-            }
-
         private:
             TCommitManager* Manager = nullptr;
             TActorId Owner;
             TActorId Writer;
             bool Running = false;
-            ui64 InFlightBytes = 0;
-            ui64 InFlightBytesLimit = Max<ui64>();
-            bool InFlightOverflow = false;
         };
 
         TCommitManager(NBoot::TSteppedCookieAllocatorFactory &steppedCookieAllocatorFactory, TIntrusivePtr<NSnap::TWaste> waste, TGcLogic *logic)

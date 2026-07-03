@@ -3,6 +3,7 @@
 /* custom error: YqlSelect unsupported: GROUP BY aliases */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
+PRAGMA YqlSelectAllowUnnamedGroupByExpr;
 
 $frequent_ss_items = (
     SELECT
@@ -63,11 +64,11 @@ $best_ss_customer = (
     GROUP BY
         c_customer_sk
     HAVING
-        Sum(ss_quantity * ss_sales_price) > (95.0 / 100.0) * (
+        Sum(ss_quantity * ss_sales_price) > cast("0.95" as decimal(35,2)) * (
             SELECT
                 *
             FROM
-                max_store_sales
+                $max_store_sales
         )
 );
 
@@ -75,7 +76,7 @@ SELECT
     Sum(sales)
 FROM (
     SELECT
-        cs_quantity * cs_list_price sales
+        cs_quantity * cs_list_price AS sales
     FROM
         `/Root/test/ds/catalog_sales`
     ,
@@ -88,13 +89,13 @@ FROM (
             SELECT
                 item_sk
             FROM
-                frequent_ss_items
+                $frequent_ss_items
         )
         AND cs_bill_customer_sk IN (
             SELECT
                 c_customer_sk
             FROM
-                best_ss_customer
+                $best_ss_customer
         )
     UNION ALL
     SELECT
@@ -111,13 +112,13 @@ FROM (
             SELECT
                 item_sk
             FROM
-                frequent_ss_items
+                $frequent_ss_items
         )
         AND ws_bill_customer_sk IN (
             SELECT
                 c_customer_sk
             FROM
-                best_ss_customer
+                $best_ss_customer
         )
 )
 LIMIT 100;
@@ -181,11 +182,11 @@ $best_ss_customer = (
     GROUP BY
         c_customer_sk
     HAVING
-        Sum(ss_quantity * ss_sales_price) > (95.0 / 100.0) * (
+        Sum(ss_quantity * ss_sales_price) > cast("0.95" as decimal(35,2)) * (
             SELECT
                 *
             FROM
-                max_store_sales
+                $max_store_sales
         )
 );
 
@@ -212,13 +213,13 @@ FROM (
             SELECT
                 item_sk
             FROM
-                frequent_ss_items
+                $frequent_ss_items
         )
         AND cs_bill_customer_sk IN (
             SELECT
                 c_customer_sk
             FROM
-                best_ss_customer
+                $best_ss_customer
         )
         AND cs_bill_customer_sk == c_customer_sk
     GROUP BY
@@ -243,13 +244,13 @@ FROM (
             SELECT
                 item_sk
             FROM
-                frequent_ss_items
+                $frequent_ss_items
         )
         AND ws_bill_customer_sk IN (
             SELECT
                 c_customer_sk
             FROM
-                best_ss_customer
+                $best_ss_customer
         )
         AND ws_bill_customer_sk == c_customer_sk
     GROUP BY

@@ -42,7 +42,12 @@ using MultiObservableCallbackPtr = void (*)(MultiObserverResult &, void *);
 class Meter
 {
 public:
-  virtual ~Meter() = default;
+  Meter()                             = default;
+  Meter(const Meter &)                = default;
+  Meter(Meter &&) noexcept            = default;
+  Meter &operator=(const Meter &)     = default;
+  Meter &operator=(Meter &&) noexcept = default;
+  virtual ~Meter()                    = default;
 
   /**
    * Creates a Counter with the passed characteristics and returns a unique_ptr to that Counter.

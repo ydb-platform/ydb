@@ -40,7 +40,9 @@ enum EOperationType {
     SortedUpload = 5,
     SortedMerge = 6,
     Sort = 7,
-    Reduce = 8
+    Reduce = 8,
+    Pull = 9,
+    Fill = 10
 };
 
 enum class ETaskType {
@@ -52,7 +54,9 @@ enum class ETaskType {
     SortedUpload = 5,
     SortedMerge = 6,
     LocalSort = 7,
-    Reduce = 8
+    Reduce = 8,
+    Pull = 9,
+    Fill = 10
 };
 
 enum class EFmrComponent {
@@ -294,12 +298,19 @@ struct TTaskMergeResult {};
 
 struct TTaskMapResult {};
 
+struct TTaskFillResult {};
+
+
 struct TTaskSortedUploadResult {
     TString FragmentResultYson;
     ui64 FragmentOrder;
 };
 
-using TTaskResult = std::variant<TTaskUploadResult, TTaskDownloadResult, TTaskMergeResult, TTaskMapResult, TTaskSortedUploadResult>;
+struct TTaskPullResult {
+    TString Data; // YSON rows concatenated
+};
+
+using TTaskResult = std::variant<TTaskUploadResult, TTaskDownloadResult, TTaskMergeResult, TTaskMapResult, TTaskSortedUploadResult, TTaskPullResult, TTaskFillResult>;
 
 struct TStatistics {
     std::unordered_map<TFmrTableOutputRef, TTableChunkStats> OutputTables;
@@ -430,6 +441,7 @@ struct TMapOperationParams {
     std::vector<TFmrTableRef> Output;
     TString SerializedMapJobState;
     EFmrJobType MapJobType;
+    bool ForceSingleTask = false;
 };
 
 struct TMapTaskParams {
@@ -437,6 +449,16 @@ struct TMapTaskParams {
     std::vector<TFmrTableOutputRef> Output;
     TString SerializedMapJobState;
     EFmrJobType MapJobType;
+};
+
+struct TFillOperationParams {
+    std::vector<TFmrTableRef> Output;
+    TString SerializedFillJobState;
+};
+
+struct TFillTaskParams {
+    std::vector<TFmrTableOutputRef> Output;
+    TString SerializedFillJobState;
 };
 
 struct TSortOperationParams {
@@ -470,6 +492,14 @@ struct TReduceOperationParams {
     TReduceOperationSpec ReduceOperationSpec;
 };
 
+struct TPullOperationParams {
+    std::vector<TOperationTableRef> Input;
+};
+
+struct TPullTaskParams {
+    TTaskTableInputRef Input;
+};
+
 struct TReduceTaskParams {
     //std::vector<TFmrTableInputRef> Input; // all reduce inputs should be in fmr.
     TTaskTableInputRef Input;
@@ -478,9 +508,9 @@ struct TReduceTaskParams {
     TReduceOperationSpec ReduceOperationSpec;
 };
 
-using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams, TSortOperationParams, TReduceOperationParams>;
+using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams, TSortOperationParams, TReduceOperationParams, TPullOperationParams, TFillOperationParams>;
 
-using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TSortedMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams, TLocalSortTaskParams, TReduceTaskParams>;
+using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TSortedMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams, TLocalSortTaskParams, TReduceTaskParams, TPullTaskParams, TFillTaskParams>;
 
 struct TFileInfo {
     TString LocalPath; // Path to local file, filled in worker.

@@ -63,7 +63,11 @@ Transaction locks invalidated. ... VictimQuerySpanId: 1111111111111111.
 
 По этому `VictimQuerySpanId` можно найти в логах сервера полный контекст конфликта: какой запрос установил блокировки и какой их сломал. Подробнее о включении логирования, формате записей и корреляции событий, а также об утилите `find_tli_chain` для автоматического анализа логов см. в [{#T}](tli-logging.md).
 
-### Анализ через системное представление
+### Анализ через системные представления
+
+Для анализа конфликтов блокировок доступны следующие системные представления:
+
+#### Анализ на уровне запросов
 
 Для выявления запросов с наибольшим числом конфликтов используйте системное представление [`.sys/query_metrics_one_minute`](../../../dev/system-views.md#query-metrics):
 
@@ -80,3 +84,36 @@ ORDER BY LocksBrokenAsBreaker + LocksBrokenAsVictim DESC;
 | `LocksBrokenAsVictim` | Сколько раз блокировки этого запроса были сняты |
 
 Запросы с высоким `LocksBrokenAsBreaker` — нарушители: именно они вызывают откаты других транзакций. Запросы с высоким `LocksBrokenAsVictim` — жертвы.
+
+#### Анализ на уровне партиций
+
+Для анализа сломанных блокировок на уровне партиций таблиц используйте следующие системные представления:
+
+* [`.sys/partition_stats`](../../../dev/system-views.md#partitions) — текущая статистика по партициям, содержит кумулятивное поле `LocksBroken`
+* [`.sys/top_partitions_by_tli_one_minute`](../../../dev/system-views.md#top-tli-partitions) — топ-10 партиций с ненулевым числом сломанных блокировок за минутный интервал
+* [`.sys/top_partitions_by_tli_one_hour`](../../../dev/system-views.md#top-tli-partitions) — топ-10 партиций с ненулевым числом сломанных блокировок за часовой интервал
+
+Пример запроса для поиска партиций с наибольшим числом сломанных блокировок:
+
+```sql
+SELECT
+    Path,
+    SUM(LocksBroken) as TotalLocksBroken
+FROM `.sys/partition_stats`
+GROUP BY Path
+ORDER BY TotalLocksBroken DESC
+LIMIT 10;
+```
+
+Пример запроса для просмотра истории сломанных блокировок по партициям:
+
+```sql
+SELECT
+    IntervalEnd,
+    LocksBroken,
+    Path
+FROM `.sys/top_partitions_by_tli_one_hour`
+WHERE IntervalEnd BETWEEN Timestamp("2000-01-01T00:00:00Z") AND Timestamp("2099-12-31T00:00:00Z")
+ORDER BY IntervalEnd DESC, LocksBroken DESC
+LIMIT 100;
+```

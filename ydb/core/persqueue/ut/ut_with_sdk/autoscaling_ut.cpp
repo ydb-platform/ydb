@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         SimpleTest(SdkVersion::PQv1, false);
     }
 
-    void ReadingAfterSplitTest(SdkVersion sdk, bool autoscaleAwareSDK, bool autoCommit) {
+    void ReadingAfterSplitTest(SdkVersion sdk, bool autoscaleAwareSDK, bool autoCommit, bool withoutConsumer) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale();
 
@@ -86,11 +86,14 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         UNIT_ASSERT(writeSession->Write(Msg("message_3.1", 5)));
 
-        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 3, .AutoCommit = autoCommit, .AutoPartitioningSupport = autoscaleAwareSDK });
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 3, .AutoCommit = autoCommit, .AutoPartitioningSupport = autoscaleAwareSDK, .WithoutConsumer = withoutConsumer });
         readSession->Run();
         readSession->WaitAllMessages();
 
+        std::vector<ui32> expectedPartionsOrder{0, 2, 4};
+        auto expectedNextPartionId = expectedPartionsOrder.begin();
         for(const auto& info : readSession->GetReceivedMessages()) {
+            UNIT_ASSERT_VALUES_EQUAL(*expectedNextPartionId++, info.PartitionId);
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_VALUES_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_VALUES_EQUAL(2, info.SeqNo);
@@ -110,22 +113,26 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_BeforeAutoscaleAwareSDK) {
-        ReadingAfterSplitTest(SdkVersion::Topic, false, true);
+        ReadingAfterSplitTest(SdkVersion::Topic, false, true, false);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_AutoscaleAwareSDK) {
-        ReadingAfterSplitTest(SdkVersion::Topic, true, false);
+        ReadingAfterSplitTest(SdkVersion::Topic, true, false, false);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_AutoscaleAwareSDK_AutoCommit) {
-        ReadingAfterSplitTest(SdkVersion::Topic, true, true);
+        ReadingAfterSplitTest(SdkVersion::Topic, true, true, false);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_PQv1) {
-        ReadingAfterSplitTest(SdkVersion::PQv1, false, true);
+        ReadingAfterSplitTest(SdkVersion::PQv1, false, true, false);
     }
 
-    void ReadingAfterSplitTest_PreferedPartition(SdkVersion sdk, bool autoscaleAwareSDK) {
+    Y_UNIT_TEST(ReadingAfterSplitTest_AutoscaleAwareSDK_WithoutConsumer) {
+        ReadingAfterSplitTest(SdkVersion::Topic, true, false, true);
+    }
+
+    void ReadingAfterSplitTest_PreferedPartition(SdkVersion sdk, bool autoscaleAwareSDK, bool withoutConsumer) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale();
 
@@ -144,7 +151,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         UNIT_ASSERT(writeSession->Write(Msg("message_3.1", 5)));
 
-        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 1, .AutoCommit = !autoscaleAwareSDK, .Partitions= {2}, .AutoPartitioningSupport = autoscaleAwareSDK });
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 1, .AutoCommit = !autoscaleAwareSDK, .Partitions= {2}, .AutoPartitioningSupport = autoscaleAwareSDK, .WithoutConsumer = withoutConsumer });
         readSession->Run();
         readSession->WaitAllMessages();
 
@@ -164,15 +171,19 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_PreferedPartition_BeforeAutoscaleAwareSDK) {
-        ReadingAfterSplitTest_PreferedPartition(SdkVersion::Topic, false);
+        ReadingAfterSplitTest_PreferedPartition(SdkVersion::Topic, false, false);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_PreferedPartition_AutoscaleAwareSDK) {
-        ReadingAfterSplitTest_PreferedPartition(SdkVersion::Topic, true);
+        ReadingAfterSplitTest_PreferedPartition(SdkVersion::Topic, true, false);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_PreferedPartition_PQv1) {
-        ReadingAfterSplitTest_PreferedPartition(SdkVersion::PQv1, false);
+        ReadingAfterSplitTest_PreferedPartition(SdkVersion::PQv1, false, false);
+    }
+
+    Y_UNIT_TEST(ReadingAfterSplitTest_PreferedPartition_AutoscaleAwareSDK_ReadWithoutConsumer) {
+        ReadingAfterSplitTest_PreferedPartition(SdkVersion::Topic, true, true);
     }
 
     void PartitionSplit_oldSDK(SdkVersion sdk) {
@@ -1368,13 +1379,62 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             }
         };
 
-        auto writeToPartition = [](const std::shared_ptr<IProducer>& producer, const TString& body, ui64 seqNo, ui32 partitionId) {
+        auto describePartitionCount = [&]() -> size_t {
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe);
+            return describe.GetTopicDescription().GetPartitions().size();
+        };
+
+        // Autosplit is async; fixed sleeps are flaky on slow CI.
+        auto waitAtLeastPartitions = [&](size_t minPartitions, TDuration maxWait) -> size_t {
+            const TInstant deadline = TInstant::Now() + maxWait;
+            size_t last = describePartitionCount();
+            while (last < minPartitions && TInstant::Now() < deadline) {
+                Sleep(TDuration::Seconds(1));
+                last = describePartitionCount();
+            }
+            return last;
+        };
+
+        // KLL autosplit may split partition 1 before the third load phase; pick any leaf partition.
+        auto findWritableLeafPartition = [&](ui32 preferredId) -> ui32 {
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe);
+            TVector<ui32> leafPartitionIds;
+            for (const auto& partition : describe.GetTopicDescription().GetPartitions()) {
+                if (partition.GetChildPartitionIds().empty()) {
+                    leafPartitionIds.push_back(partition.GetPartitionId());
+                }
+            }
+            UNIT_ASSERT_C(!leafPartitionIds.empty(), "no leaf partitions in describe");
+            for (const ui32 id : leafPartitionIds) {
+                if (id == preferredId) {
+                    return preferredId;
+                }
+            }
+            for (const ui32 id : leafPartitionIds) {
+                if (id != 0) {
+                    return id;
+                }
+            }
+            return leafPartitionIds.front();
+        };
+
+        // Producer rejects explicit writes to a partition that already has Children_ in its cache
+        // (see TProducer::WriteInternal). Returns false if the partition was split mid-test.
+        auto writeToPartition = [](const std::shared_ptr<IProducer>& producer, const TString& body, ui64 seqNo, ui32 partitionId) -> bool {
             TWriteMessage message(partitionId, body);
             message.SeqNo(seqNo);
             auto result = producer->Write(std::move(message));
-            if (!result.IsQueued()) {
-                UNIT_ASSERT_C(false, "failed to write message: " << result.ErrorMessage.value_or("unknown error") << " " << (result.ClosedDescription ? result.ClosedDescription->DebugString() : "no description"));
+            if (result.IsQueued()) {
+                return true;
             }
+            if (result.ErrorMessage == "Partition was split") {
+                return false;
+            }
+            UNIT_ASSERT_C(false, "failed to write message: " << result.ErrorMessage.value_or("unknown error") << " "
+                << (result.ClosedDescription ? result.ClosedDescription->DebugString() : "no description"));
+            return false;
         };
 
         auto msg = TString(1_MB, 'a');
@@ -1386,10 +1446,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             writeToPartition(producer1, msg, 1, 0);
             writeToPartition(producer2, msg, 2, 0);
             flushAll({producer1, producer2});
-            Sleep(TDuration::Seconds(5));
-            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-            auto partitionsCount = describe.GetTopicDescription().GetPartitions().size();
-            UNIT_ASSERT_EQUAL_C(partitionsCount, 3, "partitions: " << partitionsCount << " expected: 1");
+            auto partitionsCount = waitAtLeastPartitions(3, TDuration::Seconds(60));
+            UNIT_ASSERT_EQUAL_C(partitionsCount, 3, "partitions: " << partitionsCount << " expected: 3");
         }
 
         {
@@ -1398,21 +1456,27 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             writeToPartition(producer1, msg, 5, 0);
             writeToPartition(producer2, msg, 6, 0);
             flushAll({producer1, producer2});
-            Sleep(TDuration::Seconds(5));
-            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-            auto partitionsCount = describe.GetTopicDescription().GetPartitions().size();
+            auto partitionsCount = waitAtLeastPartitions(5, TDuration::Seconds(60));
             UNIT_ASSERT_EQUAL_C(partitionsCount, 5, "partitions: " << partitionsCount << " expected: 5");
         }
 
         {
-            writeToPartition(producer1, msg, 7, 1);
-            writeToPartition(producer2, msg, 8, 1);
-            writeToPartition(producer1, msg, 9, 1);
-            writeToPartition(producer2, msg, 10, 1);
-            flushAll({producer1, producer2});
-            Sleep(TDuration::Seconds(5));
-            auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-            auto partitionsCount = describe2.GetTopicDescription().GetPartitions().size();
+            auto partitionsCount = describePartitionCount();
+            if (partitionsCount < 7) {
+                // Refresh producers so Children_ matches current describe.
+                UNIT_ASSERT_C(producer1->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-1");
+                UNIT_ASSERT_C(producer2->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-2");
+                producer1 = makeProducer("producer-1");
+                producer2 = makeProducer("producer-2");
+
+                const ui32 targetPartition = findWritableLeafPartition(1);
+                writeToPartition(producer1, msg, 7, targetPartition);
+                writeToPartition(producer2, msg, 8, targetPartition);
+                writeToPartition(producer1, msg, 9, targetPartition);
+                writeToPartition(producer2, msg, 10, targetPartition);
+                flushAll({producer1, producer2});
+                partitionsCount = waitAtLeastPartitions(7, TDuration::Seconds(60));
+            }
             UNIT_ASSERT_EQUAL_C(partitionsCount, 7, "partitions: " << partitionsCount << " expected: 7");
         }
 
@@ -1649,6 +1713,34 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             auto v = f.GetValueSync();
             UNIT_ASSERT_C(!v.IsSuccess(),  "Error: " << v);
         }
+    }
+
+    Y_UNIT_TEST(PartitionSplit_AutosplitByMinPartitionCount) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto tableClient = setup.MakeTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TOPIC `/Root/dir/origin`
+                WITH (
+                    AUTO_PARTITIONING_STRATEGY = 'SCALE_UP_AND_DOWN',
+                    MIN_ACTIVE_PARTITIONS = 3
+                );
+        )");
+
+        AssertPartitionCount(setup, "/Root/dir/origin", 3);
+
+        // MAX_ACTIVE_PARTITIONS has to be not less than MIN_ACTIVE_PARTITIONS
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            ALTER TOPIC `/Root/dir/origin`
+                SET (
+                    MAX_ACTIVE_PARTITIONS = 20,
+                    MIN_ACTIVE_PARTITIONS = 20
+                );
+        )");
+        WaitAndAssertPartitionCount(setup, "/Root/dir/origin", 37); // 17 inactive, 20 active
     }
 
     Y_UNIT_TEST(BalancingAfterSplit_sessionsWithPartition) {

@@ -652,7 +652,6 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesServerCerts) {
 }
 
 void TestCorruptedClientAuthData(const TCertAndKey& caCert, const TCertAndKey& clientServerCert) {
-    const auto timeout = TDuration::Seconds(2);
     const auto expectedStatus = EStatus::TRANSPORT_UNAVAILABLE;
 
     for (bool enforceUserToken : {true, false}) {
@@ -673,9 +672,9 @@ void TestCorruptedClientAuthData(const TCertAndKey& caCert, const TCertAndKey& c
             .SetDatabase(database)
             .SetEndpoint(location);
 
-        CheckAccessDenied(RegisterNode(config, timeout), expectedStatus);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT), timeout), expectedStatus);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token"), timeout), expectedStatus);
+        CheckAccessDenied(RegisterNode(config), expectedStatus);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedStatus);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedStatus);
     }
 }
 

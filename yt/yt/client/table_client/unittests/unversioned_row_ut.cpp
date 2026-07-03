@@ -13,6 +13,11 @@ namespace {
 
 using namespace NYson;
 
+DEFINE_ENUM(EMapTestEnum,
+    (First)
+    (Second)
+);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TEST(TUnversionedOwningValueTest, DefaultCtor)
@@ -224,6 +229,101 @@ TEST(TUnversionedRowTest, YsonNullValue)
     TYsonStringBuf buf = ysonMap;
     FromUnversionedValue(&buf, unversioned);
     EXPECT_FALSE(buf);
+}
+
+TEST(TUnversionedRowTest, ScalarHashMapRoundTrip)
+{
+    auto buffer = New<TRowBuffer>();
+
+    {
+        THashMap<TString, i64> map = {
+            {"one", 1},
+            {"two", 2},
+        };
+        auto value = ToUnversionedValue(map, buffer);
+        auto reconstructed = FromUnversionedValue<THashMap<TString, i64>>(value);
+        EXPECT_EQ(map, reconstructed);
+    }
+
+    {
+        THashMap<TString, TString> map = {
+            {"hello", "world"},
+            {"foo", "bar"},
+        };
+        auto value = ToUnversionedValue(map, buffer);
+        auto reconstructed = FromUnversionedValue<THashMap<TString, TString>>(value);
+        EXPECT_EQ(map, reconstructed);
+    }
+
+    {
+        THashMap<TString, bool> map = {
+            {"yes", true},
+            {"no", false},
+        };
+        auto value = ToUnversionedValue(map, buffer);
+        auto reconstructed = FromUnversionedValue<THashMap<TString, bool>>(value);
+        EXPECT_EQ(map, reconstructed);
+    }
+
+    {
+        THashMap<TString, EMapTestEnum> map = {
+            {"a", EMapTestEnum::First},
+            {"b", EMapTestEnum::Second},
+        };
+        auto value = ToUnversionedValue(map, buffer);
+        auto reconstructed = FromUnversionedValue<THashMap<TString, EMapTestEnum>>(value);
+        EXPECT_EQ(map, reconstructed);
+    }
+
+    {
+        THashMap<TString, std::optional<i64>> map = {
+            {"one", 1},
+            {"none", std::nullopt},
+        };
+        auto value = ToUnversionedValue(map, buffer);
+        auto reconstructed = FromUnversionedValue<THashMap<TString, std::optional<i64>>>(value);
+        EXPECT_EQ(map, reconstructed);
+    }
+
+    {
+        auto reconstructed = FromUnversionedValue<THashMap<TString, i64>>(MakeUnversionedNullValue());
+        EXPECT_TRUE(reconstructed.empty());
+    }
+}
+
+TEST(TUnversionedRowTest, ScalarHashMapRejectsMalformedInput)
+{
+    EXPECT_THROW_WITH_SUBSTRING((
+        FromUnversionedValue<THashMap<TString, i64>>(MakeUnversionedInt64Value(42))),
+        "Cannot parse map from");
+
+    {
+        auto malformed = MakeUnversionedAnyValue("{nested={x=1}}");
+        EXPECT_THROW_WITH_SUBSTRING((
+            FromUnversionedValue<THashMap<TString, i64>>(malformed)),
+            "YSON maps are not supported in scalar maps");
+    }
+
+    {
+        auto malformed = MakeUnversionedAnyValue("{list=[1;2;3]}");
+        EXPECT_THROW_WITH_SUBSTRING((
+            FromUnversionedValue<THashMap<TString, i64>>(malformed)),
+            "YSON lists are not supported in scalar maps");
+    }
+
+    {
+        auto malformed = MakeUnversionedAnyValue("{str=%true}");
+        EXPECT_THROW_WITH_SUBSTRING((
+            FromUnversionedValue<THashMap<TString, i64>>(malformed)),
+            "Cannot parse \"int64\" value from");
+    }
+
+    {
+        auto malformed = MakeUnversionedAnyValue("{a=<attr=1>1}");
+        EXPECT_THROW_WITH_SUBSTRING((
+            FromUnversionedValue<THashMap<TString, i64>>(malformed)),
+            "YSON attributes are not supported in scalar maps");
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

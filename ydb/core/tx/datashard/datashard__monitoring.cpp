@@ -1,6 +1,7 @@
 #include "datashard_impl.h"
 #include "operation.h"
 
+#include <ydb/core/base/mon_auth.h>
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 #include <ydb/core/util/pb.h>
 
@@ -8,6 +9,7 @@
 #include <library/cpp/resource/resource.h>
 
 #include <library/cpp/html/pcdata/pcdata.h>
+#include <util/string/subst.h>
 
 namespace NKikimr::NDataShard {
 
@@ -23,6 +25,11 @@ void TDataShard::HandleMonIndexPage(NMon::TEvRemoteHttpInfo::TPtr& ev) {
         Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPNOTFOUND));
         return;
     }
+
+    const TStringBuf monRoot = NKikimr::IsTabletDevUiSecurePath(ev->Get()->PathInfo())
+        ? TStringBuf("../..")
+        : TStringBuf("..");
+    SubstGlobal(blob, "{{MON_ROOT}}", monRoot);
 
     TStringBuilder response;
     response << "HTTP/1.1 200 Ok\r\n";

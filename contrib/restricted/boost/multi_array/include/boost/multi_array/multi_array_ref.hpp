@@ -103,7 +103,7 @@ public:
     boost::function_requires<
       CollectionConcept<ExtentList> >();
 
-    index_base_list_.assign(0);
+    index_base_list_.fill(0);
     init_multi_array_ref(extents.begin());
   }
   
@@ -340,7 +340,7 @@ public:
      init_multi_array_ref(extents);
    } else {
      boost::array<index,NumDims> extent_list;
-     extent_list.assign(0);
+     extent_list.fill(0);
      init_multi_array_ref(extent_list.begin());
    }
  }

@@ -3083,7 +3083,23 @@ public:
 void TPQTabletFixture::SendAcquireReadQuota(ui64 cookie, const TActorId& sender) {
     EnsureReadQuoterExists();
 
-    auto request = MakeHolder<TEvPQ::TEvRead>(cookie, 0, 99999, 0, 9999, "", "client", 999, 99999, 99999, 0, "", false, TActorId{});
+    auto request = MakeHolder<TEvPQ::TEvRead>(
+        cookie,
+        0, // offset
+        99999, // lastOffset
+        0, // partNo
+        9999, // count
+        "", // sessionId
+        "client", // clientId
+        999, // timeout
+        99999, // size
+        true, // readToBlobEnd
+        99999, // maxTimeLagMs
+        0, // readTimestampMs
+        "", // clientDC
+        false, // externalOperation
+        TActorId{} // pipeClient
+    );
     auto handle = new TEvReadTestEventHandle(std::move(request), sender);
     Ctx->Runtime->Send(ReadQuoter->Quoter,
                        Ctx->Edge,

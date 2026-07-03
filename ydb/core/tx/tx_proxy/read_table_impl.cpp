@@ -2027,12 +2027,28 @@ private:
                 code = NKikimrIssues::TStatusIds::ERROR;
                 break;
 
-            case NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST:
+            case NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST: {
                 TxProxyMon->TxResultCancelled->Inc();
-                status = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest;
-                code = NKikimrIssues::TStatusIds::BAD_REQUEST;
-                break;
+                const auto& errors = msg->Record.GetError();
+                if (!errors.empty()
+                    && std::all_of(errors.begin(), errors.end(), [](const auto& err) {
+                        return err.GetKind() == NKikimrTxDataShard::TError_EKind_SNAPSHOT_NOT_EXIST;
+                    })) {
+                    // The shard replied that the snapshot that we need is not available there.
+                    // This can happen after two shards are merged, one with the snapshot, another
+                    // without (the snapshot won't be available on the merged shard).
+                    // In this case there isn't much we can do, except signal to the client that
+                    // there is nothing wrong with the request and that it can be retried
+                    // (ProxyShardTryLater maps to UNAVAILABLE grpc response status).
+                    status = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardTryLater;
+                    code = NKikimrIssues::TStatusIds::REJECTED;
+                } else {
+                    status = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest;
+                    code = NKikimrIssues::TStatusIds::BAD_REQUEST;
+                }
 
+                break;
+            }
             default:
                 TxProxyMon->TxResultFatal->Inc();
                 status = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardUnknown;
@@ -2670,7 +2686,7 @@ private:
                     shardRange.To.GetCells(), shardRange.ToInclusive,
                     oldShard->Ranges.front().From.GetCells(), oldShard->Ranges.front().FromInclusive))
             {
-                TXLOG_T("Ignoring new shard ShardId# " << oldShard->ShardId << " (nothing to read)");
+                TXLOG_T("Ignoring new shard ShardId# " << (oldShard ? oldShard->ShardId : 0) << " (nothing to read)");
 
                 // We don't want to read anything from current shard
                 state.ShardPosition = ShardList.end();

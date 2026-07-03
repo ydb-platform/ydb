@@ -4,9 +4,11 @@ import itertools
 import logging
 
 from hamcrest import assert_that, equal_to
+import pytest
 import requests
 
 from ydb.tests.oss.ydb_sdk_import import ydb
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.common.wait_for import wait_for
 
@@ -16,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 CLUSTER_CONFIG = dict(
     use_in_memory_pdisks=False,
+    extra_feature_flags=["enable_snapshots_locking"],
     additional_log_configs={
         'STATISTICS': LogLevels.DEBUG,
     },
@@ -23,6 +26,21 @@ CLUSTER_CONFIG = dict(
         'max_read_staleness_ms': 200,
     },
 )
+
+LONG_TX_SERVICE_CONFIG = {
+    'local_snapshot_promotion_time_seconds': 1,
+    'snapshots_exchange_interval_seconds': 1,
+    'snapshots_registry_update_interval_seconds': 1,
+}
+
+
+@pytest.fixture(scope="module")
+def ydb_configurator(ydb_cluster_configuration):
+    config_generator = KikimrConfigGenerator(**ydb_cluster_configuration)
+    # Explicitly configure snapshot registry timings for CS min-read-snapshot
+    # calculation. Total service delay is up to 1+1+1+10 = 13s.
+    config_generator.yaml_config["long_tx_service_config"] = LONG_TX_SERVICE_CONFIG
+    return config_generator
 
 
 def test_basic(ydb_cluster, ydb_database, ydb_client):
@@ -87,7 +105,7 @@ def test_basic(ydb_cluster, ydb_database, ydb_client):
 
     # SchemeShard will wait for 120 seconds before sending the first update
     # to StatisticsAggregator so provide a generous timeout.
-    assert_that(wait_for(base_stats_ready, timeout_seconds=150), "base stats ready")
+    assert_that(wait_for(base_stats_ready, timeout_seconds=300), "base stats ready")
 
     logger.info("restart and check that table stats are still the same")
 

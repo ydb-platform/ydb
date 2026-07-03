@@ -5,6 +5,7 @@
 #include "collections/limit_sorted.h"
 #include "collections/not_sorted.h"
 #include "sync_points/aggr.h"
+#include "sync_points/distinct_limit.h"
 #include "sync_points/limit.h"
 #include "sync_points/result.h"
 
@@ -26,6 +27,10 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
     : Context(context)
 {
     auto readMetadataContext = context->GetReadMetadata();
+    const auto distinctKeyColumnId = readMetadataContext->GetProgram().GetDistinctKeyColumnIdOptional();
+    const auto robustLimit = readMetadataContext->GetLimitRobustOptional();
+    const std::optional<ui64> distinctLimit =
+        distinctKeyColumnId && robustLimit && *robustLimit > 0 ? std::optional<ui64>(static_cast<ui64>(*robustLimit)) : std::nullopt;
     if (auto script = Context->GetSourcesAggregationScript()) {
         SourcesCollection =
             std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), readMetadataContext->GetLimitRobustOptional());
@@ -41,10 +46,18 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
         } else {
             SourcesCollection = std::make_shared<TSortedFullScanCollection>(Context, std::move(sourcesConstructor));
         }
+        if (distinctLimit) {
+            SyncPoints.emplace_back(std::make_shared<TSyncPointDistinctLimitControl>(
+                *distinctLimit, *distinctKeyColumnId, SyncPoints.size(), context, SourcesCollection));
+        }
         SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
     } else {
         SourcesCollection =
             std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), readMetadataContext->GetLimitRobustOptional());
+        if (distinctLimit) {
+            SyncPoints.emplace_back(std::make_shared<TSyncPointDistinctLimitControl>(
+                *distinctLimit, *distinctKeyColumnId, SyncPoints.size(), context, SourcesCollection));
+        }
         SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
     }
     for (ui32 i = 0; i + 1 < SyncPoints.size(); ++i) {

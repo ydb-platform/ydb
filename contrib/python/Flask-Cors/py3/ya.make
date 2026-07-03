@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(6.0.2)
+VERSION(6.0.3)
 
 LICENSE(MIT)
 
@@ -19,7 +19,6 @@ PY_SRCS(
     flask_cors/core.py
     flask_cors/decorator.py
     flask_cors/extension.py
-    flask_cors/version.py
 )
 
 RESOURCE_FILES(

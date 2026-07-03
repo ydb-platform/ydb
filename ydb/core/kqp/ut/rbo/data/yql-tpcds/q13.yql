@@ -29,7 +29,7 @@ WHERE
             AND cd_demo_sk == ss_cdemo_sk
             AND cd_marital_status == 'D'
             AND cd_education_status == '2 yr Degree'
-            AND ss_sales_price BETWEEN 100.00 AND 150.00
+            AND ss_sales_price BETWEEN $to_decimal(100) AND $to_decimal(150)
             AND hd_dep_count == 3
         )
         OR (
@@ -37,7 +37,7 @@ WHERE
             AND cd_demo_sk == ss_cdemo_sk
             AND cd_marital_status == 'S'
             AND cd_education_status == 'Secondary'
-            AND ss_sales_price BETWEEN 50.00 AND 100.00
+            AND ss_sales_price BETWEEN $to_decimal(50) AND $to_decimal(100)
             AND hd_dep_count == 1
         )
         OR (
@@ -45,7 +45,7 @@ WHERE
             AND cd_demo_sk == ss_cdemo_sk
             AND cd_marital_status == 'W'
             AND cd_education_status == 'Advanced Degree'
-            AND ss_sales_price BETWEEN 150.00 AND 200.00
+            AND ss_sales_price BETWEEN $to_decimal(150) AND $to_decimal(200)
             AND hd_dep_count == 1
         )
     )
@@ -54,19 +54,19 @@ WHERE
             ss_addr_sk == ca_address_sk
             AND ca_country == 'United States'
             AND ca_state IN ('CO', 'IL', 'MN')
-            AND ss_net_profit BETWEEN 100 AND 200
+            AND ss_net_profit BETWEEN $to_decimal(100) AND $to_decimal(200)
         )
         OR (
             ss_addr_sk == ca_address_sk
             AND ca_country == 'United States'
             AND ca_state IN ('OH', 'MT', 'NM')
-            AND ss_net_profit BETWEEN 150 AND 300
+            AND ss_net_profit BETWEEN $to_decimal(150) AND $to_decimal(300)
         )
         OR (
             ss_addr_sk == ca_address_sk
             AND ca_country == 'United States'
             AND ca_state IN ('TX', 'MO', 'MI')
-            AND ss_net_profit BETWEEN 50 AND 250
+            AND ss_net_profit BETWEEN $to_decimal(50) AND $to_decimal(250)
         )
     )
 ;

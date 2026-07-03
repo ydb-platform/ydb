@@ -114,4 +114,4 @@ void TRlHelpers::Handle(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev) {
     MeteringMode = result->DescribeSchemeResult.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetMeteringMode();
 }
 
-}
+} // namespace NKikimr::NPQ

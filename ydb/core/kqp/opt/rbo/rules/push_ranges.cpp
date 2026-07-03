@@ -1,10 +1,17 @@
-#include "kqp_rules_include.h"
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 #include <yql/essentials/core/extract_predicate/extract_predicate.h>
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+
+namespace NKikimr::NKqp {
 
 namespace {
+
 using namespace NYql::NNodes;
 using namespace NKikimr;
-using namespace NKikimr::NKqp;
 
 bool IsValidForRange(const NYql::TExprNode::TPtr& node) {
     TExprBase expr(node);
@@ -87,7 +94,7 @@ TExprNode::TPtr GetLambdaForRangeExtractor(TExprNode::TPtr node, const TTypeAnno
 
     TExprNode::TPtr afterPeephole;
     bool hasNonDeterministicFunctions;
-    if (const auto status = PeepHoleOptimizeNode(predicateClosure.Ptr(), afterPeephole, ctx, rboCtx.TypeCtx, &(rboCtx.PeepholeTypeAnnTransformer),
+    if (const auto status = PeepHoleOptimizeNode(predicateClosure.Ptr(), afterPeephole, ctx, rboCtx.TypeCtx, nullptr,
                                                  hasNonDeterministicFunctions);
         status != IGraphTransformer::TStatus::Ok) {
         YQL_CLOG(ERROR, ProviderKqp) << "[NEW RBO] Peephole failed with status: " << status << Endl;
@@ -139,24 +146,49 @@ TPredicateExtractorSettings PrepareExtractorSettings(TKqpOptimizeContext& kqpCtx
     return settings;
 }
 
-const TStructExprType* PrepareSchemeType(const TString& alias, const TStructExprType* schemeType, TExprContext& ctx) {
-    const auto itemTypes = schemeType->GetItems();
-    // If scheme type does not have aliases - add it.
-    if (!alias.empty() && std::any_of(itemTypes.begin(), itemTypes.end(), [](const TItemExprType* itemType) { return itemType->GetName().find(".") == TString::npos; })) {
-        TVector<const TItemExprType*> newItemTypes;
-        for (const auto itemType : itemTypes) {
-            const auto newName = alias + "." + itemType->GetName();
-            newItemTypes.push_back(ctx.MakeType<TItemExprType>(newName, itemType->GetItemType()));
-        }
-        return ctx.MakeType<TStructExprType>(newItemTypes);
+// Map a physical table column name to the name the read actually exposes. Projection elimination
+// can rename read outputs (most commonly by stripping the alias), so Columns[i] (physical) is
+// aligned with OutputIUs[i] (exposed). Columns not selected by the read are absent from the map.
+THashMap<TString, TString> BuildPhysicalToExposedName(const TOpRead& read) {
+    THashMap<TString, TString> result;
+    const size_t count = std::min(read.Columns.size(), read.OutputIUs.size());
+    for (size_t i = 0; i < count; ++i) {
+        result[read.Columns[i]] = read.OutputIUs[i].GetFullName();
     }
-    return schemeType;
+    return result;
 }
 
-} // namespace
+// Resolve the name a physical column should carry so it stays consistent with the read's exposed
+// outputs and the lambda the predicate extractor is typed against.
+TString ResolveExposedName(const TString& physicalName, const TOpRead& read,
+                           const THashMap<TString, TString>& physicalToExposed, bool exposesQualified) {
+    if (const auto it = physicalToExposed.find(physicalName); it != physicalToExposed.end()) {
+        return it->second;
+    }
+    if (exposesQualified && !read.Alias.empty()) {
+        return read.Alias + "." + physicalName;
+    }
+    return physicalName;
+}
 
-namespace NKikimr {
-namespace NKqp {
+const TStructExprType* PrepareSchemeType(const TOpRead& read, const TStructExprType* schemeType, TExprContext& ctx) {
+    const auto physicalToExposed = BuildPhysicalToExposedName(read);
+    const bool exposesQualified = std::any_of(read.OutputIUs.begin(), read.OutputIUs.end(),
+                                              [](const TInfoUnit& iu) { return !iu.GetAlias().empty(); });
+
+    TVector<const TItemExprType*> newItemTypes;
+    bool changed = false;
+    for (const auto itemType : schemeType->GetItems()) {
+        const TString physicalName(itemType->GetName());
+        const auto newName = ResolveExposedName(physicalName, read, physicalToExposed, exposesQualified);
+        changed |= newName != physicalName;
+        newItemTypes.push_back(ctx.MakeType<TItemExprType>(newName, itemType->GetItemType()));
+    }
+
+    return changed ? ctx.MakeType<TStructExprType>(newItemTypes) : schemeType;
+}
+
+} // anonymous namespace
 
 TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& rboCtx, TPlanProps& props) {
     Y_UNUSED(props);
@@ -192,18 +224,18 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     THashSet<TString> possibleKeys;
     auto settings = PrepareExtractorSettings(kqpCtx);
     auto extractor = MakePredicateRangeExtractor(settings);
-    auto schemeType = PrepareSchemeType(read->Alias, tableDesc->SchemeNode, ctx);
+    auto schemeType = PrepareSchemeType(*read, tableDesc->SchemeNode, ctx);
     const bool prepareSuccess = extractor->Prepare(lambda.Ptr(), *schemeType, possibleKeys, ctx, typeCtx);
     YQL_ENSURE(prepareSuccess);
 
+    // Key columns must be named exactly as the scheme type exposes them, so the compute node lines up
+    // with the names the predicate extractor resolved.
+    const auto physicalToExposed = BuildPhysicalToExposedName(*read);
+    const bool exposesQualified = std::any_of(read->OutputIUs.begin(), read->OutputIUs.end(),
+                                              [](const TInfoUnit& iu) { return !iu.GetAlias().empty(); });
     TVector<TString> keyColumns;
-    if (std::any_of(possibleKeys.begin(), possibleKeys.end(), [](const TString& key) { return key.find(".") != TString::npos; })) {
-        for (const auto& key : tableDesc->Metadata->KeyColumnNames) {
-            auto newName = read->Alias + "." + key;
-            keyColumns.emplace_back(std::move(newName));
-        }
-    } else {
-        keyColumns = tableDesc->Metadata->KeyColumnNames;
+    for (const auto& key : tableDesc->Metadata->KeyColumnNames) {
+        keyColumns.emplace_back(ResolveExposedName(key, *read, physicalToExposed, exposesQualified));
     }
 
     auto buildResult = extractor->BuildComputeNode(keyColumns, ctx, typeCtx);
@@ -219,5 +251,5 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
                                           read->Limit, ranges, TExpression(originalLambda, &ctx, &props), read->SortDir, read->Props, read->Pos);
     return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(buildResult.PrunedLambda, &ctx, &props));
 }
-} // namespace NKqp
-} // namespace NKikimr
+
+} // namespace NKikimr::NKqp

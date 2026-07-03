@@ -3,6 +3,9 @@
 #include "kqp_info_unit.h"
 #include "kqp_rbo_context.h"
 #include "kqp_plan_props.h"
+
+#include <optional>
+
 #include <ydb/core/kqp/common/kqp_yql.h>
 
 
@@ -29,8 +32,12 @@ class TExpression {
     ~TExpression() = default;
 
     // Split a conjunct into a vector of expressions. If the is no conjunction at the top level,
-    // just return a vector with this node. Handles pg conversions as well
+    // just return a vector with this node.
     TVector<TExpression> SplitConjunct() const;
+
+    // Split a disjunct into a vector of expressions. If the is no disjunction at the top level,
+    // just return a vector with this node.
+    TVector<TExpression> SplitDisjunct() const;
 
     // Check if the expression is just getting a single column from a tuple
     bool IsColumnAccess() const;
@@ -68,11 +75,17 @@ class TExpression {
     // Apply a generic replace map to the lambda of the expression
     TExpression ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) const;
 
+    // Extract common conjuncts from OR branches.
+    std::optional<TExpression> TryExtractCommonConjuncts() const;
+
     // Remove a cast from the expression
     TExpression PruneCast() const;
 
     // Produce a pretty string for this expression
     TString ToString() const;
+
+    // Produce a compact string suitable for explain output. Complex expressions are summarized by dependencies.
+    TString ToExplainString() const;
 
     TExprNode::TPtr Node;
     TExprContext* Ctx;

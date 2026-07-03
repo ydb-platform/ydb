@@ -652,14 +652,14 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
 
         if (CanRetry(error)) {
-            if (error.GetExceptionName() == "FsUploadSessionLost") {
+            if (error.GetExceptionName() == "FsCompleteMultipartUploadFailed") {
                 ForceNewUpload = true;
             }
             UploadId.Clear(); // force getting info after restart
             Retry();
         } else {
-            Error = TStringBuilder() << "S3 error: " << error;
-            this->PassAway();
+            Error = TStringBuilder() << LogPrefix() << " error: " << error;
+            PassAway();
         }
     }
 
@@ -682,7 +682,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             Y_ENSURE(Error);
             Error = TStringBuilder() << *Error << " Additionally, 'AbortMultipartUpload' has failed: "
                 << error;
-            this->PassAway();
+            PassAway();
         }
     }
 
@@ -714,7 +714,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         if (CanRetry(error)) {
             Retry();
         } else {
-            Finish(false, TStringBuilder() << "S3 error: " << error);
+            Finish(false, TStringBuilder() << LogPrefix() << " error: " << error);
         }
     }
 
@@ -735,7 +735,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
                 return;
             }
 
-            this->PassAway();
+            PassAway();
         } else {
             if (success) {
                 this->Send(DataShard, new TEvDataShard::TEvChangeS3UploadStatus(this->SelfId(), TxId,
@@ -768,14 +768,7 @@ public:
     }
 
     static constexpr TStringBuf LogPrefix() {
-        if constexpr (std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>) {
-            return "s3"sv;
-        } else if constexpr (std::is_same_v<TSettings, NKikimrSchemeOp::TFSSettings>) {
-            return "fs"sv;
-        }
-
-        static_assert(std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>
-            || std::is_same_v<TSettings, NKikimrSchemeOp::TFSSettings>);
+        return NBackup::NFieldsWrappers::GetStorageName<TSettings>();
     }
 
     static TMaybe<THttpResolverConfig> GetHttpResolverConfigSafe(

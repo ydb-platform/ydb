@@ -138,6 +138,12 @@ public:
             },
             State_->Types->RuntimeLogLevel);
 
+        THashMap<TString, TString> secureParams;
+        State_->Types->Credentials->ForEach([&secureParams](const TString& name, const TCredential& cred) {
+            secureParams[TString("token:") + name] = cred.Content;
+        });
+        auto secureParamsProvider = NKikimr::NMiniKQL::MakeSimpleSecureParamsProvider(secureParams);
+
         TComputationPatternOpts patternOpts(alloc.Ref(),
                                             env,
                                             compFactory,
@@ -148,7 +154,7 @@ public:
                                             EGraphPerProcess::Multi,
                                             nullptr,
                                             nullptr,
-                                            nullptr,
+                                            secureParamsProvider.get(),
                                             logProvider.Get(),
                                             State_->Types->LangVer,
                                             State_->Types->RuntimeSettings);
@@ -161,11 +167,11 @@ public:
                                                *State_->Types->RandomProvider,
                                                *State_->Types->TimeProvider,
                                                NUdf::EValidatePolicy::Exception,
-                                               nullptr,
+                                               secureParamsProvider.get(),
                                                nullptr,
                                                logProvider.Get(),
                                                State_->Types->LangVer,
-                                               *State_->Types->RuntimeSettings);
+                                               State_->Types->RuntimeSettings);
         auto graph = pattern->Clone(computeOpts);
         const TBindTerminator bind(graph->GetTerminator());
         graph->Prepare();

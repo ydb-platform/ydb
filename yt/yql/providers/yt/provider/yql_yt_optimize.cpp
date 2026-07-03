@@ -324,7 +324,7 @@ TMaybeNode<TYtSection> UpdateSectionWithFilters(TYtSection section, const TVecto
         .Done();
 }
 
-} //namespace
+} // namespace
 
 TMaybeNode<TYtSection> UpdateSectionWithSettings(TExprBase world, TYtSection section, TYtDSink dataSink, TYqlRowSpecInfo::TPtr outRowSpec, bool keepSortness, bool allowWorldDeps, bool allowMaterialize,
     TSyncMap& syncList, const TYtState::TPtr& state, TExprContext& ctx)
@@ -373,7 +373,7 @@ TMaybeNode<TYtSection> UpdateSectionWithSettings(TExprBase world, TYtSection sec
 
 TYtSection MakeEmptySection(TYtSection section, NNodes::TYtDSink dataSink, bool keepSortness, const TYtState::TPtr& state, TExprContext& ctx) {
     TYtOutTableInfo outTable(GetSequenceItemType(section, false)->Cast<TStructExprType>(),
-        GetNativeYtTypeCompatibility(dataSink.Cluster().StringValue(), *state->Configuration));
+        state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
     if (section.Paths().Size() == 1) {
         auto srcTableInfo = TYtTableBaseInfo::Parse(section.Paths().Item(0).Table());
         if (keepSortness && srcTableInfo->RowSpec && srcTableInfo->RowSpec->IsSorted()) {
@@ -826,9 +826,6 @@ NNodes::TMaybeNode<NNodes::TExprBase> FuseMapToMapReduce(NNodes::TExprBase node,
             continue;
         }
         if (!path.Ranges().Maybe<TCoVoid>()) {
-            continue;
-        }
-        if (!path.QLFilter().Maybe<TCoVoid>()) {
             continue;
         }
 

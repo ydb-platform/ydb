@@ -219,10 +219,19 @@ public:
         }
     }
 
+    void Cancel(const TActorContext& ctx) {
+        if constexpr (requires(TSecureRequestActor& self) { self.TBase::Cancel(ctx); }) {
+            TBase::Cancel(ctx); // TMessageBusCancellableRequest case
+        } else {
+            TBase::Die(ctx); // TActorBootstrapped case
+        }
+    }
+
     STFUNC(StateWaitForTicket) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
+            CFunc(TEvents::TSystem::PoisonPill, Cancel);
         }
     }
 };

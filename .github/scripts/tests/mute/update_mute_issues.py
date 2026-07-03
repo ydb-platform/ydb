@@ -61,17 +61,40 @@ def truncate_issue_body(body):
     return truncated_body
 
 def handle_github_errors(response):
-    if 'errors' in response:
-        for error in response['errors']:
-            if error['type'] == 'INSUFFICIENT_SCOPES':
-                print("Error: Insufficient Scopes")
-                print("Message:", error['message'])
-                raise Exception("Insufficient scopes. Please update your token's scopes.")
-            # Handle other types of errors if necessary
-            else:
-                print("Unknown error type:", error.get('type', 'No type'))
-                print("Message:", error.get('message', 'No message available'))
-                raise Exception("GraphQL Error: " + error.get('message', 'Unknown error'))
+    errors = response.get('errors') or []
+    if not errors:
+        return
+
+    formatted_errors = []
+    has_insufficient_scopes = False
+    for raw_error in errors:
+        if isinstance(raw_error, dict):
+            extensions = raw_error.get('extensions') or {}
+            extensions_code = extensions.get('code')
+            error_type = (
+                raw_error.get('type')
+                or extensions_code
+                or 'UNKNOWN'
+            )
+            message = raw_error.get('message') or 'Unknown error'
+        else:
+            extensions_code = None
+            error_type = 'UNKNOWN'
+            message = str(raw_error) if raw_error is not None else 'Unknown error'
+
+        # GitHub returns INSUFFICIENT_SCOPES either as the top-level ``type`` or
+        # alongside ``type: FORBIDDEN`` in ``extensions.code`` — check both.
+        if 'INSUFFICIENT_SCOPES' in (error_type, extensions_code):
+            has_insufficient_scopes = True
+        formatted_errors.append(f"{error_type}: {message}")
+
+    if has_insufficient_scopes:
+        raise Exception(
+            "Insufficient scopes. Please update your token's scopes. "
+            + " | ".join(formatted_errors)
+        )
+
+    raise Exception("GraphQL Error(s): " + " | ".join(formatted_errors))
 
 
 def _retry_backoff_seconds(attempt, response=None):

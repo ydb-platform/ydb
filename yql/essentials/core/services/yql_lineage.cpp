@@ -19,6 +19,7 @@ namespace {
 
 enum class ETransformsType {
     Copy,
+    Math,
     None
 };
 
@@ -336,18 +337,20 @@ private:
             TVector<TPinInfo> inputs;
             auto& formatter = r.second->GetPlanFormatter();
             formatter.GetInputs(*r.first, inputs, false);
-            TVectorLimited<ui32> readIds(Allocator_.get());
             for (const auto& i : inputs) {
                 const TStringBuf& tableName = AppendString(i.DisplayName);
                 readTables.emplace_back(tableName, r.first);
-                const TStructExprType& itemType = *r.first->GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1]->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-                AddSchemaRef(&itemType, tableName);
             }
         }
         SortBy(readTables, [](const auto& x) { return x.first; });
         for (const auto& r : readTables) {
-            TableIds_[r.first] = ++NextReadId_;
-            ReadIds_.try_emplace(r.second, TVectorLimited<ui32>(Allocator_.get())).first->second.push_back(NextReadId_);
+            auto [it, inserted] = TableIds_.try_emplace(r.first, 0);
+            if (inserted) {
+                it->second = ++NextReadId_;
+                const TStructExprType& itemType = *r.second->GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1]->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                AddSchemaRef(&itemType, r.first);
+            }
+            ReadIds_.try_emplace(r.second, TVectorLimited<ui32>(Allocator_.get())).first->second.push_back(it->second);
         }
         THashMapLimited<TStringBuf, TVectorLimited<NodeDataProviderPair>> writeTables(Allocator_.get());
         for (const auto& w : Writes_) {
@@ -594,6 +597,9 @@ private:
                 case ETransformsType::Copy:
                     writer.OnStringScalar("Copy");
                     break;
+                case ETransformsType::Math:
+                    writer.OnStringScalar("Math");
+                    break;
                 default:
                     writer.OnEntity();
             }
@@ -646,8 +652,22 @@ private:
         writer.OnEndMap();
     }
 
+    static bool IsMathCallable(const TExprNode& node) {
+        if (node.IsCallable({"+", "-", "*", "/", "%",
+                             "Add", "Sub", "Mul", "Div", "Mod",
+                             "Plus", "Minus", "Abs", "Increment", "Decrement",
+                             "BitAnd", "BitOr", "BitXor", "BitNot", "ShiftLeft", "ShiftRight", "CountBits"})) {
+            return true;
+        }
+        return node.IsCallable("Apply") && node.Head().IsCallable("Udf") &&
+               node.Head().Head().Content().StartsWith("Math.");
+    }
+
     static TFieldLineage ReplaceTransforms(const TFieldLineage& src, ETransformsType newTransforms) {
-        return {.Field = src.Field, .InputIndex = src.InputIndex, .Transforms = (src.Transforms == ETransformsType::Copy && newTransforms == ETransformsType::Copy) ? newTransforms : ETransformsType::None};
+        const ETransformsType result = (newTransforms == ETransformsType::Copy)
+                                           ? src.Transforms
+                                           : newTransforms;
+        return {.Field = src.Field, .InputIndex = src.InputIndex, .Transforms = result};
     }
 
     static TFieldLineageSet ReplaceTransforms(const TFieldLineageSet& src, ETransformsType newTransforms, IAllocator* allocator) {
@@ -980,6 +1000,8 @@ private:
 
                 if (root->IsCallable("Member") && &root->Head() == &arg) {
                     newTransforms = ETransformsType::Copy;
+                } else if (IsMathCallable(*root)) {
+                    newTransforms = ETransformsType::Math;
                 }
 
                 MergeLineageFromUsedFields(expr, arg, innerLineage, res, true, flattenColumns, newTransforms);
@@ -1247,10 +1269,10 @@ private:
         TExprNode::TListType frameGroups;
         if (node.IsCallable("CalcOverWindowGroup")) {
             for (const auto& g : node.Child(1)->Children()) {
-                frameGroups.push_back(g->Child(2));
+                frameGroups.emplace_back(g->Child(2));
             }
         } else {
-            frameGroups.push_back(node.Child(3));
+            frameGroups.emplace_back(node.Child(3));
         }
 
         lineage.Fields = *innerLineage.Fields;

@@ -77,7 +77,7 @@ Y_UNIT_TEST(DescribeTest) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer"
         });
-    
+
         auto result = GetDescribeResponse(setup->GetRuntime());
 
         if (i < 10 &&

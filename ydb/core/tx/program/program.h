@@ -47,6 +47,30 @@ public:
         return Program ? Program->DebugString() : "NO_PROGRAM";
     }
 
+    bool HasDistinctCommand() const {
+        for (const auto& cmd : ProgramProto.GetCommand()) {
+            if (cmd.GetLineCase() == NKikimrSSA::TProgram::TCommand::kDistinct) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    std::optional<ui32> GetDistinctKeyColumnIdOptional() const {
+        for (const auto& cmd : ProgramProto.GetCommand()) {
+            if (cmd.GetLineCase() != NKikimrSSA::TProgram::TCommand::kDistinct) {
+                continue;
+            }
+            const auto& distinct = cmd.GetDistinct();
+            // Id is optional in proto; 0 is a valid column id when explicitly set (do not treat as "unset").
+            if (distinct.HasKeyColumn() && distinct.GetKeyColumn().HasId()) {
+                return static_cast<ui32>(distinct.GetKeyColumn().GetId());
+            }
+            return std::nullopt;
+        }
+        return std::nullopt;
+    }
+
     bool HasProcessingColumnIds() const {
         return !!Program || !!OverrideProcessingColumnsVector;
     }

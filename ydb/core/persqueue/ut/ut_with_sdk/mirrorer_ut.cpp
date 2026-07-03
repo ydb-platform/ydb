@@ -1,11 +1,16 @@
 #include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
+#include <ydb/core/persqueue/ut/common/sdk_ut_common.h>
 
+#include <ydb/public/sdk/cpp/src/library/kafka/ut/ut_common.h>
+#include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/data_plane_helpers.h>
 
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/generic/size_literals.h>
 
 namespace NKikimr::NPersQueueTests {
 
@@ -266,6 +271,133 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         }
     }
 
+    Y_UNIT_TEST(MirrorKafkaBatchesAsBatches) {
+        auto pqSettings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings();
+        NPQ::NTest::EnableTopicBatching(pqSettings);
+
+        NYdb::NTopic::NTests::TTopicSdkTestSetup setup("MirrorKafkaBatchesAsBatches", pqSettings, false);
+        auto& server = setup.GetServer();
+        const auto& settings = server.CleverServer->GetRuntime()->GetAppData().PQConfig.GetMirrorConfig().GetPQLibSettings();
+
+        auto fabric = std::make_shared<NKikimr::NPQ::TPersQueueMirrorReaderFactory>();
+        fabric->Initialize(server.CleverServer->GetRuntime()->GetAnyNodeActorSystem(), settings);
+        for (ui32 nodeId = 0; nodeId < server.CleverServer->GetRuntime()->GetNodeCount(); ++nodeId) {
+            server.CleverServer->GetRuntime()->GetAppData(nodeId).PersQueueMirrorReaderFactory = fabric.get();
+        }
+
+        const TString srcTopic = "batch_source";
+        const TString dstTopic = "batch_mirror";
+        const TString srcTopicFullName = "rt3.dc1--" + srcTopic;
+        const TString dstTopicFullName = "rt3.dc1--" + dstTopic;
+        const TString srcTopicSdkPath = "PQ/" + srcTopicFullName;
+        const TString dstTopicPath = "/Root/" + dstTopicFullName;
+        const TString mirrorConsumer = "mirror_user";
+        const TString readerConsumer = "reader";
+
+        setup.CreateTopic(srcTopicSdkPath, mirrorConsumer, 1);
+
+        NKikimrPQ::TMirrorPartitionConfig mirrorFrom;
+        mirrorFrom.SetEndpoint("localhost");
+        mirrorFrom.SetEndpointPort(server.GrpcPort);
+        mirrorFrom.SetTopic(setup.GetFullTopicPath(srcTopicSdkPath));
+        mirrorFrom.SetConsumer(mirrorConsumer);
+
+        auto driver = server.AnnoyingClient->GetDriver();
+        NYdb::NTopic::TTopicClient client(*driver);
+
+        TRequestCreatePQ createDstTopic(
+            dstTopicFullName,
+            /*partitionsCount =*/ 1,
+            /*cacheSize =*/ 0,
+            /*lifetimeS =*/ 86400,
+            /*lowWatermark =*/ 8_MB,
+            /*writeSpeed =*/ 20000000,
+            /*user =*/ "",
+            /*readSpeed =*/ 200000000,
+            /*rr =*/ {readerConsumer},
+            /*important =*/ {},
+            mirrorFrom
+        );
+        server.AnnoyingClient->CreateTopic(createDstTopic, false);
+
+        const TInstant createDeadline = TInstant::Now() + TDuration::Seconds(30);
+        bool dstTopicCreated = false;
+        while (TInstant::Now() < createDeadline) {
+            auto describeResult = client.DescribeTopic(dstTopicPath).GetValueSync();
+            if (describeResult.IsSuccess()) {
+                dstTopicCreated = true;
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(500));
+        }
+        UNIT_ASSERT_C(dstTopicCreated, TStringBuilder() << "Timed out waiting for topic " << dstTopicPath);
+
+        constexpr size_t dataSize = 16;
+        constexpr ui64 maxBatchMessageCount = 5;
+        const TVector<std::tuple<ui64, ui32, char>> writes = {
+            {1, 5, 'a'},
+            {6, 3, 'b'},
+        };
+
+        NPQ::NTest::WriteKafkaBatchMessages(
+            client,
+            setup.GetFullTopicPath(srcTopicSdkPath),
+            "batch_producer",
+            dataSize,
+            maxBatchMessageCount,
+            writes
+        );
+
+        auto dstReader = client.CreateReadSession(
+            NYdb::NTopic::TReadSessionSettings()
+                .AppendTopics(NYdb::NTopic::TTopicReadSettings(dstTopicPath).AppendPartitionIds(0))
+                .ConsumerName(readerConsumer)
+                .Decompress(false)
+        );
+
+        TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> mirroredBatches;
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(60);
+        while (mirroredBatches.size() < writes.size() && TInstant::Now() < deadline) {
+            auto event = GetNextMessageSkipAssignment(dstReader, TDuration::Seconds(5));
+            UNIT_ASSERT_C(event, "Timed out waiting for mirrored batch");
+            UNIT_ASSERT(event->HasCompressedMessages());
+            for (auto& message : event->GetCompressedMessages()) {
+                mirroredBatches.push_back(std::move(message));
+            }
+        }
+        dstReader->Close(TDuration::Zero());
+
+        UNIT_ASSERT_VALUES_EQUAL(mirroredBatches.size(), writes.size());
+
+        ui64 expectedOffset = 0;
+        for (size_t i = 0; i < writes.size(); ++i) {
+            const auto& [firstSeqNo, messageCount, fill] = writes[i];
+            const auto& message = mirroredBatches[i];
+
+            UNIT_ASSERT_VALUES_EQUAL(message.GetCodec(), NYdb::NTopic::ECodec::KAFKA_BATCH);
+            UNIT_ASSERT_VALUES_EQUAL(message.GetOffset(), expectedOffset);
+            UNIT_ASSERT_VALUES_EQUAL(message.GetSeqNo(), firstSeqNo);
+
+            auto header = NKafka::ReadKafkaBatchHeader(message.GetData());
+            UNIT_ASSERT(header);
+            UNIT_ASSERT_VALUES_EQUAL(header->RecordsCount, static_cast<i32>(messageCount));
+
+            auto [error, maxSeqNo] = NKafka::GetBatchMaxSeqNo(*header, message.GetSeqNo());
+            UNIT_ASSERT_VALUES_EQUAL(error, NKafka::EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(maxSeqNo, firstSeqNo + messageCount - 1);
+
+            auto batch = NKafka::ReadKafkaRecordBatch(message.GetData());
+            UNIT_ASSERT_VALUES_EQUAL(batch.Records.size(), messageCount);
+            NKafka::NTest::AssertKafkaBatchPayload(message.GetData(), messageCount, fill, dataSize);
+            for (ui32 recordIndex = 0; recordIndex < messageCount; ++recordIndex) {
+                UNIT_ASSERT_VALUES_EQUAL(batch.Records[recordIndex].OffsetDelta, recordIndex);
+                UNIT_ASSERT_VALUES_EQUAL(NKafka::GetRecordSeqNo(batch, recordIndex, batch.Records[recordIndex]), firstSeqNo + recordIndex);
+            }
+
+            expectedOffset += messageCount;
+        }
+    }
+
     Y_UNIT_TEST(ValidStartStream) {
         using namespace NYdb::NTopic;
 
@@ -336,5 +468,222 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
             }
         }
     }
+
+    void SkipMessagesWithObsoleteTimestampImpl(TMaybe<TDuration> retentionPeriod, const ui32 dstTopicPrefillSize) {
+        NKikimrConfig::TFeatureFlags ff;
+        ff.SetEnableSkipMessagesWithObsoleteTimestamp(true);
+
+        auto pqSettings = NKikimr::NPersQueueTests::PQSettings(0);
+        pqSettings.SetFeatureFlags(ff);
+        pqSettings.PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+        pqSettings.PQConfig.MutableCompactionConfig()->SetBlobsSize(8_MB);
+        pqSettings.PQConfig.MutableMirrorConfig()->SetRewindCommitDelaySeconds(3);
+
+        NPersQueue::TTestServer server(pqSettings);
+
+        const auto& mirrorSettings = server.CleverServer->GetRuntime()->GetAppData().PQConfig.GetMirrorConfig().GetPQLibSettings();
+        auto fabric = std::make_shared<NKikimr::NPQ::TPersQueueMirrorReaderFactory>();
+        fabric->Initialize(server.CleverServer->GetRuntime()->GetAnyNodeActorSystem(), mirrorSettings);
+        for (ui32 nodeId = 0; nodeId < server.CleverServer->GetRuntime()->GetNodeCount(); ++nodeId) {
+            server.CleverServer->GetRuntime()->GetAppData(nodeId).PersQueueMirrorReaderFactory = fabric.get();
+        }
+        server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_MIRRORER, NKikimrServices::PERSQUEUE});
+
+        constexpr ui32 nMsg = 1000;
+        constexpr ui32 messageSize = 90_KB;
+        const TString srcTopic = "src_topic";
+        const TString dstTopic = "dst_topic";
+        const TString srcTopicFullName = "rt3.dc1--" + srcTopic;
+        const TString dstTopicFullName = "rt3.dc1--" + dstTopic;
+        const TString mirrorConsumer = "mirror_consumer";
+
+        server.AnnoyingClient->CreateTopic(
+            srcTopicFullName,
+            /*partitionsCount =*/ 1,
+            /*lowWatermark =*/ 8_MB,
+            /*lifetimeS =*/ retentionPeriod.GetOrElse(TDuration::Hours(24)).Seconds(),
+            /*writeSpeed =*/ 20000000,
+            /*user =*/ "",
+            /*readSpeed =*/ 200000000,
+            /*rr =*/ {mirrorConsumer}
+        );
+
+        auto driver = server.AnnoyingClient->GetDriver();
+
+        auto writeMessagesToTopic = [&driver](const TString& topicName, ui32 n) {
+            auto writer = CreateSimpleWriter(*driver, topicName, "src_writer", 1, "raw");
+            ui64 seqNo = writer->GetInitSeqNo();
+            for (ui32 i = 0; i < n; ++i) {
+                UNIT_ASSERT(writer->Write(TString("payload-") + ToString(i) + TString(messageSize, '-'), ++seqNo));
+            }
+            UNIT_ASSERT(writer->Close(TDuration::Seconds(10)));
+        };
+        // Write nMsg messages to the source topic.
+        writeMessagesToTopic(srcTopicFullName, nMsg);
+
+        if (dstTopicPrefillSize) {
+            server.AnnoyingClient->CreateTopic(
+                dstTopicFullName,
+                /*partitionsCount =*/1,
+                /*lowWatermark =*/8_MB,
+                /*lifetimeS =*/86400,
+                /*writeSpeed =*/20000000,
+                /*user =*/"",
+                /*readSpeed =*/200000000,
+                /*rr =*/{"reader"},
+                /*important =*/{},
+                {}
+            );
+            writeMessagesToTopic(dstTopicFullName, dstTopicPrefillSize);
+        }
+
+
+
+        NYdb::NTopic::TTopicClient topicClient(*driver);
+
+        auto waitForStartOffsetChange = [&topicClient](const TString& topicFullName, TDuration waitDuration = TDuration::Seconds(30)) {
+            const TInstant describeDeadline = waitDuration.ToDeadLine();
+            bool shiftedStartOffset = false;
+            while (TInstant::Now() < describeDeadline) {
+                Cerr << "Waiting for blobs cleanup\n";
+                auto descr = topicClient.DescribePartition(
+                                            "/Root/PQ/" + topicFullName,
+                                            0,
+                                            NYdb::NTopic::TDescribePartitionSettings().IncludeStats(true))
+                                 .GetValueSync();
+                if (!descr.IsSuccess()) {
+                    Cerr << "DescribeConsumer failed: " << descr.GetIssues().ToString() << Endl;
+                    Sleep(TDuration::Seconds(1));
+                    continue;
+                }
+
+                const auto& stats = descr.GetPartitionDescription().GetPartition().GetPartitionStats();
+                UNIT_ASSERT(stats.has_value());
+
+                Cerr << "PartitionStats: " << LabeledOutput(stats->GetStartOffset(), stats->GetEndOffset(), stats->GetStoreSizeBytes()) << "\n";
+                if (stats->GetStartOffset() != 0) {
+                    shiftedStartOffset = true;
+                    break;
+                }
+                Sleep(TDuration::MilliSeconds(250));
+            }
+            UNIT_ASSERT_C(shiftedStartOffset, "Start offset not changed in topic " << topicFullName);
+        };
+
+        if (!retentionPeriod.Empty()) {
+            waitForStartOffsetChange(srcTopicFullName);
+        }
+
+        Sleep(TDuration::Seconds(2));
+        const TInstant readFromTs = TInstant::Now() + TDuration::Seconds(1);
+
+        NKikimrPQ::TMirrorPartitionConfig mirrorFrom;
+        mirrorFrom.SetEndpoint("localhost");
+        mirrorFrom.SetEndpointPort(server.GrpcPort);
+        mirrorFrom.SetTopic(srcTopic);
+        mirrorFrom.SetConsumer(mirrorConsumer);
+        mirrorFrom.SetSyncWriteTime(true);
+        mirrorFrom.SetReadFromTimestampsMs(readFromTs.MilliSeconds());
+
+        if (dstTopicPrefillSize) {
+            server.AnnoyingClient->AlterTopic(
+                dstTopicFullName,
+                1,
+                0,
+                86400,
+                true,
+                mirrorFrom
+            );
+        } else {
+            server.AnnoyingClient->CreateTopic(
+                dstTopicFullName,
+                /*partitionsCount =*/ 1,
+                /*lowWatermark =*/ 8_MB,
+                /*lifetimeS =*/ 86400,
+                /*writeSpeed =*/ 20000000,
+                /*user =*/ "",
+                /*readSpeed =*/ 200000000,
+                /*rr =*/ {"reader"},
+                /*important =*/ {},
+                mirrorFrom
+            );
+        }
+        // Repeatedly Describe the source topic until the mirror_consumer commits all messages.
+        const TInstant describeDeadline = TDuration::Seconds(180).ToDeadLine();
+        bool committed = false;
+        while (TInstant::Now() < describeDeadline) {
+            auto descr = topicClient.DescribeConsumer(
+                "/Root/PQ/" + srcTopicFullName,
+                mirrorConsumer,
+                NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)
+            ).GetValueSync();
+            if (!descr.IsSuccess()) {
+                Cerr << "DescribeConsumer failed: " << descr.GetIssues().ToString() << Endl;
+                Sleep(TDuration::Seconds(1));
+                continue;
+            }
+            const auto& partitions = descr.GetConsumerDescription().GetPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+            const auto& stats = partitions[0].GetPartitionConsumerStats();
+            if (stats) {
+                Cerr << "ConsumerStats: reader=" << stats->GetReaderName()
+                     << " committed=" << stats->GetCommittedOffset() << Endl;
+                if (!stats->GetReaderName().empty() && stats->GetCommittedOffset() == nMsg) {
+                    committed = true;
+                    break;
+                }
+            }
+            Sleep(TDuration::MilliSeconds(250));
+        }
+        UNIT_ASSERT_C(committed, "mirror_consumer did not commit all skipped messages within timeout");
+
+        // Read from the destination topic; nothing must be there except the prefill messages
+        auto dstReader = topicClient.CreateReadSession(
+            NYdb::NTopic::TReadSessionSettings()
+                .AppendTopics(NYdb::NTopic::TTopicReadSettings(dstTopic).AppendPartitionIds(0))
+                .ConsumerName("reader")
+        );
+
+        size_t messageCount = 0;
+        TInstant dstDeadline = TInstant::Max();
+        while (TInstant::Now() < dstDeadline) {
+            if (!dstReader->WaitEvent().Wait(dstDeadline)) {
+                break;
+            }
+            auto event = dstReader->GetEvent(false);
+            if (!event) {
+                continue;
+            }
+            if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                messageCount += data->GetMessagesCount();
+            } else if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                start->Confirm();
+                dstDeadline = TDuration::Seconds(10).ToDeadLine();
+            } else if (auto* stop = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                stop->Confirm();
+            } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+                break;
+            }
+        }
+        dstReader->Close(TDuration::Zero());
+        UNIT_ASSERT_VALUES_EQUAL(messageCount, dstTopicPrefillSize);
+    }
+
+    Y_UNIT_TEST(SkipMessagesWithObsoleteTimestamp) {
+        SkipMessagesWithObsoleteTimestampImpl(Nothing(), 0);
+    }
+
+    Y_UNIT_TEST(SkipMessagesWithObsoleteTimestampWithRetention) {
+        SkipMessagesWithObsoleteTimestampImpl(TDuration::Seconds(1), 0);
+    }
+
+    Y_UNIT_TEST(SkipMessagesWithObsoleteTimestampInNonEmptyDestinationTopic) {
+        SkipMessagesWithObsoleteTimestampImpl(Nothing(), 250);
+    }
+
+    Y_UNIT_TEST(SkipMessagesWithObsoleteTimestampWithRetentionInNonEmptyDestinationTopic) {
+        SkipMessagesWithObsoleteTimestampImpl(TDuration::Seconds(1), 250);
+    }
+
 }
 } // NKikimr::NPersQueueTests

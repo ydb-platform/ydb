@@ -11,6 +11,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/snapshot_scheme.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
+#include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
 #include <ydb/core/tx/general_cache/usage/events.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 
@@ -120,57 +121,7 @@ public:
 
 // Helper to create a test portion with minimal required fields
 TPortionInfo::TConstPtr MakeTestPortion(TInternalPathId pathId, ui64 portionId) {
-    // Create a minimal TIndexInfo for testing
-    THashMap<ui32, NTable::TColumn> columns = { { 0, NTable::TColumn("pk", 0, NScheme::TTypeInfo(NScheme::NTypeIds::Uint64), "") } };
-
-    std::vector<ui32> pkIds = { 0 };
-
-    for (ui64 i = 0; i < pkIds.size(); ++i) {
-        TValidator::CheckNotNull(columns.FindPtr(pkIds[i]))->KeyOrder = i;
-    }
-
-    TIndexInfo indexInfo = TIndexInfo::BuildDefault(1, TTestStoragesManager::GetInstance(), columns, pkIds);
-
-    // Create a minimal schema with special columns
-    const auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("pk", arrow::uint64()) }));
-
-    // Create a batch with special columns
-    auto batch = NArrow::MakeEmptyBatch(schema, 1);
-
-    // Serialize the batch to bytes for PrimaryKeyBorders
-    TString serialized = NArrow::SerializeBatchNoCompression(batch);
-
-    // Create the proto meta
-    NKikimrTxColumnShard::TIndexPortionMeta metaProto;
-    metaProto.SetIsCompacted(true);
-    metaProto.SetPrimaryKeyBorders(serialized);
-    metaProto.MutableRecordSnapshotMin()->SetPlanStep(0);
-    metaProto.MutableRecordSnapshotMin()->SetTxId(0);
-    metaProto.MutableRecordSnapshotMax()->SetPlanStep(0);
-    metaProto.MutableRecordSnapshotMax()->SetTxId(0);
-    metaProto.SetDeletionsCount(0);
-    metaProto.SetCompactionLevel(0);
-    metaProto.SetRecordsCount(1);
-    metaProto.SetColumnRawBytes(100);
-    metaProto.SetColumnBlobBytes(100);
-    metaProto.SetIndexRawBytes(0);
-    metaProto.SetIndexBlobBytes(0);
-    metaProto.SetNumSlices(1);
-    metaProto.MutableCompactedPortion()->MutableAppearanceSnapshot()->SetPlanStep(0);
-    metaProto.MutableCompactedPortion()->MutableAppearanceSnapshot()->SetTxId(0);
-
-    // Load metadata from proto
-    TPortionMetaConstructor metaConstructor;
-    TFakeGroupSelector groupSelector;
-    AFL_VERIFY(metaConstructor.LoadMetadata(metaProto, indexInfo, groupSelector));
-
-    // Use the constructor to set the private fields
-    TCompactedPortionInfoConstructor constructor(pathId, portionId);
-    constructor.SetSchemaVersion(1);
-    constructor.SetAppearanceSnapshot(TSnapshot(0, 0));
-    constructor.MutableMeta() = metaConstructor;
-
-    return constructor.Build();
+    return NTest::MakeTestCompactedPortion(pathId, portionId, 0, 0, 1, TSnapshot(0, 0), std::nullopt);
 }
 
 }   // namespace

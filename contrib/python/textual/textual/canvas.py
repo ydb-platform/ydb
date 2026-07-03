@@ -8,6 +8,7 @@ A Canvas class used to render keylines.
 
 from __future__ import annotations
 
+import sys
 from array import array
 from collections import defaultdict
 from dataclasses import dataclass
@@ -157,7 +158,10 @@ class Canvas:
         self._width = width
         self._height = height
         blank_line = " " * width
-        self.lines: list[array[str]] = [array("u", blank_line) for _ in range(height)]
+        array_type_code = "w" if sys.version_info >= (3, 13) else "u"
+        self.lines: list[array[str]] = [
+            array(array_type_code, blank_line) for _ in range(height)
+        ]
         self.box: list[defaultdict[int, Quad]] = [
             defaultdict(lambda: (0, 0, 0, 0)) for _ in range(height)
         ]
@@ -267,7 +271,9 @@ class Canvas:
                                 text[offset:next_offset],
                                 base_style
                                 + Style.from_color(
-                                    colors[max(color_indices)].rich_color
+                                    colors[
+                                        max(color_indices) if color_indices else 0
+                                    ].rich_color
                                 ),
                             )
                         )

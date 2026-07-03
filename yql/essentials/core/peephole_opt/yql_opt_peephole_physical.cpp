@@ -2999,7 +2999,7 @@ TExprNode::TPtr DropDependsOnFromEmptyIterator(const TExprNode::TPtr& input, TEx
     if (input->ChildrenSize() > 1) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Drop DependsOn from " << input->Content();
         TExprNode::TListType newChildren;
-        newChildren.push_back(input->Child(0));
+        newChildren.emplace_back(input->Child(0));
         return ctx.ChangeChildren(*input, std::move(newChildren));
     }
     return input;
@@ -8677,7 +8677,8 @@ TExprNode::TPtr SqlCompareVariants(const TExprNode& node, TExprContext& ctx) {
             for (const auto& item : structType->GetItems()) {
                 variants.emplace_back(ctx.NewAtom(node.Pos(), item->GetName()), std::nullopt);
                 if (const auto idx = oppositeType->FindItem(item->GetName())) {
-                    variants.back().second.emplace(!IsDistinct && ECompareOptions::Optional == CanCompare<true>(item->GetItemType(), items[*idx]->GetItemType()));
+                    auto r = CanCompare<true>(item->GetItemType(), items[*idx]->GetItemType());
+                    variants.back().second.emplace(!IsDistinct && (r == ECompareOptions::Optional || r == ECompareOptions::Null));
                 }
             }
 
@@ -8847,6 +8848,22 @@ TExprNode::TPtr ExpandFulltextBuiltin(const TExprNode::TPtr& node, TExprContext&
     auto nullNode = ctx.NewCallable(node->Pos(), "Nothing", {
         ctx.NewCallable(node->Pos(), "OptionalType", {
             ctx.NewCallable(node->Pos(), "DataType", {ctx.NewAtom(node->Pos(), type, TNodeFlags::Default) }) }) });
+
+    auto message = ctx.Builder(node->Pos()).Callable("String").Atom(0, error).Seal().Build();
+
+    return ctx.Builder(node->Pos())
+        .Callable("Unwrap")
+            .Add(0, nullNode)
+            .Add(1, message)
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr ExpandHybridRankBuiltin(const TExprNode::TPtr& node, TExprContext& ctx) {
+    TString error = "HybridRank could not be rewritten";
+    auto nullNode = ctx.NewCallable(node->Pos(), "Nothing", {
+        ctx.NewCallable(node->Pos(), "OptionalType", {
+            ctx.NewCallable(node->Pos(), "DataType", {ctx.NewAtom(node->Pos(), "Double", TNodeFlags::Default) }) }) });
 
     auto message = ctx.Builder(node->Pos()).Callable("String").Atom(0, error).Seal().Build();
 
@@ -9369,6 +9386,7 @@ struct TPeepHoleRules {
         {"ToFlow", &DropToFlowDeps},
         {"FulltextScore", &ExpandFulltextBuiltin<true>},
         {"FulltextMatch", &ExpandFulltextBuiltin<false>},
+        {"HybridRank", &ExpandHybridRankBuiltin},
         {"CheckedAdd", &ExpandCheckedAdd},
         {"CheckedSub", &ExpandCheckedSub},
         {"CheckedMul", &ExpandCheckedMul},

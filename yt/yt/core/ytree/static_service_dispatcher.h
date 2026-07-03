@@ -29,7 +29,7 @@ protected:
     void RegisterService(TStringBuf key, TCallback<IYPathServicePtr()> serviceFactory);
 
 private:
-    THashMap<TString, TCallback<IYPathServicePtr()>> Services_;
+    THashMap<std::string, TCallback<IYPathServicePtr()>> Services_;
 
     void ListSelf(
         TReqList* /*request*/,

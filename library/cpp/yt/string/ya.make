@@ -9,6 +9,7 @@ SRCS(
     format_string.cpp
     format.cpp
     string_builder.cpp
+    stream.cpp
 )
 
 PEERDIR(
@@ -32,3 +33,9 @@ END()
 RECURSE_FOR_TESTS(
     unittests
 )
+
+IF (NOT OPENSOURCE)
+    RECURSE(
+        benchmark
+    )
+ENDIF()

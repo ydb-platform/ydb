@@ -15,9 +15,9 @@ namespace NStatisticPath {
 ////////////////////////////////////////////////////////////////////////////////
 
 //! A type to store paths and literals as.
-using TStatisticPathType = TString;
+using TStatisticPathType = std::string;
 
-using TChar = TStatisticPathType::TChar;
+using TChar = TStatisticPathType::value_type;
 
 //! Delimiter character to use instead of `/`. We want it to compare "less" than any other character.
 //! See YT-22118 for motivation.

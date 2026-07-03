@@ -1,4 +1,5 @@
 """Tests for grapheme cluster segmentation."""
+
 # std imports
 import os
 

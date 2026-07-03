@@ -150,8 +150,8 @@ private:
     }
 
     void RegisterDependencies() const final {
-        std::for_each(ArgNodes_.cbegin(), ArgNodes_.cend(), std::bind(&TYtInputWrapper::Own, this, std::placeholders::_1));
-        std::for_each(DependentNodes_.cbegin(), DependentNodes_.cend(), std::bind(&TYtInputWrapper::DependsOn, this, std::placeholders::_1));
+        std::for_each(ArgNodes_.cbegin(), ArgNodes_.cend(), std::bind_front(&TYtInputWrapper::Own, this));
+        std::for_each(DependentNodes_.cbegin(), DependentNodes_.cend(), std::bind_front(&TYtInputWrapper::DependsOn, this));
     }
 
     const TMkqlIOSpecs& Spec_;

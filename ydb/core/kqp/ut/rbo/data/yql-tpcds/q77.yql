@@ -123,8 +123,8 @@ FROM (
         'store channel' AS channel,
         ss.s_store_sk AS id,
         sales,
-        Coalesce(returns, 0) AS returns,
-        (profit - Coalesce(profit_loss, 0)) AS profit
+        Coalesce(returns, cast (0 as decimal(35,2))) AS returns,
+        (profit - Coalesce(profit_loss, cast(0 as decimal(35,2)))) AS profit
     FROM
         $ss AS ss
     LEFT JOIN
@@ -147,8 +147,8 @@ FROM (
         'web channel' AS channel,
         ws.wp_web_page_sk AS id,
         sales,
-        Coalesce(returns, 0) AS returns,
-        (profit - Coalesce(profit_loss, 0)) AS profit
+        Coalesce(returns, cast (0 as decimal(35,2))) AS returns,
+        (profit - Coalesce(profit_loss, cast (0 as decimal(35,2)))) AS profit
     FROM
         $ws AS ws
     LEFT JOIN

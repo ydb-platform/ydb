@@ -17,7 +17,15 @@ namespace NYdbWorkload {
 
     class TFulltextFilesDataInitializer: public TFulltextDataInitializerBase {
     private:
-        TString DataFiles;
+        TString DataFiles = "documents.tsv.gz";
+        TString RelevanceFile = "query_relevances.tsv.gz";
+        TString QueryFile = "queries.tsv.gz";
+        TString UpsertQueryFile = "upsert_queries.tsv.gz";
+
+        TString DocumentsTable;
+        TString QueryTableName;
+        TString QueryRelevanceTableName;
+        TString UpsertQueryTableName;
 
     public:
         TFulltextFilesDataInitializer(const TFulltextWorkloadParams& params);

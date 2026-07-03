@@ -22,7 +22,12 @@ class Logger;
 class EventLoggerProvider
 {
 public:
-  virtual ~EventLoggerProvider() = default;
+  EventLoggerProvider()                                           = default;
+  EventLoggerProvider(const EventLoggerProvider &)                = default;
+  EventLoggerProvider(EventLoggerProvider &&) noexcept            = default;
+  EventLoggerProvider &operator=(const EventLoggerProvider &)     = default;
+  EventLoggerProvider &operator=(EventLoggerProvider &&) noexcept = default;
+  virtual ~EventLoggerProvider()                                  = default;
 
   /**
    * Creates a named EventLogger instance.

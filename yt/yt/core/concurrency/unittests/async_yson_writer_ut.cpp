@@ -64,7 +64,7 @@ TEST(TAsyncYsonWriterTest, SyncList)
         writer.OnStringScalar("c");
     writer.OnEndList();
     EXPECT_EQ(
-        ConvertToYsonString(std::vector<TString>{"a", "b", "c"}),
+        ConvertToYsonString(std::vector<std::string>{"a", "b", "c"}),
         WaitForFast(writer.Finish()).ValueOrThrow());
 }
 
@@ -78,7 +78,7 @@ TEST(TAsyncYsonWriterTest, SyncListFragment)
     writer.OnListItem();
     writer.OnStringScalar("c");
     EXPECT_EQ(
-        ConvertToListFragment(std::vector<TString>{"a", "b", "c"}),
+        ConvertToListFragment(std::vector<std::string>{"a", "b", "c"}),
         WaitForFast(writer.Finish()).ValueOrThrow());
 }
 
@@ -92,7 +92,7 @@ TEST(TAsyncYsonWriterTest, SyncMapFragment)
     writer.OnKeyedItem("c");
     writer.OnInt64Scalar(3);
     EXPECT_EQ(
-        ConvertToMapFragment(std::vector<std::pair<TString, int>>{{"a", 1}, {"b", 2}, {"c", 3}}),
+        ConvertToMapFragment(std::vector<std::pair<std::string, int>>{{"a", 1}, {"b", 2}, {"c", 3}}),
         WaitForFast(writer.Finish()).ValueOrThrow());
 }
 
@@ -148,7 +148,7 @@ TEST(TAsyncYsonWriterTest, AsyncMap)
     writer.OnEndMap();
 
     EXPECT_EQ(
-        ConvertToYsonString(THashMap<TString, int>{{"a", 1}, {"b", 2}, {"c", 3}}),
+        ConvertToYsonString(THashMap<std::string, int>{{"a", 1}, {"b", 2}, {"c", 3}}),
         WaitForFast(writer.Finish()).ValueOrThrow());
 }
 

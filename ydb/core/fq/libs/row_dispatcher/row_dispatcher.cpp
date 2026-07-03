@@ -274,10 +274,15 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
         void AddNode(ui32 nodeId) {
             if (Nodes.contains(nodeId)) {
+                auto& state = Nodes[nodeId];
+                if (state.RetryState && state.RetryState->IsTimeout()) {
+                    state.RetryState = Nothing();
+                    HandleNodeDisconnected(nodeId);
+                }
                 return;
             }
             if (nodeId == SelfId.NodeId()) {
-                HandleNodeConnected(nodeId);      // always сconnected
+                HandleNodeConnected(nodeId);      // always connected
             } else {
                 HandleNodeDisconnected(nodeId);
             }
@@ -313,7 +318,6 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
             if (state.RetryScheduled) {
                 return false;
             }
-            state.RetryScheduled = true;
             if (!state.RetryState) {
                 state.RetryState.ConstructInPlace(Timeout);
             }
@@ -321,7 +325,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
             if (state.RetryState->IsTimeout()) {
                 return true;
             }
-
+            state.RetryScheduled = true;
             auto ev = MakeHolder<TEvPrivate::TEvTryConnect>(nodeId);
             auto delay = state.RetryState->GetNextDelay();
             NActors::TActivationContext::Schedule(delay, new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
@@ -437,6 +441,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
     THashMap<NActors::TActorId, TAtomicSharedPtr<TConsumerInfo>> Consumers;      // key - read actor id
     TMap<ui64, TAtomicSharedPtr<TConsumerInfo>> ConsumersByEventQueueId;
+    THashMap<TString, TSet<TActorId>> ConsumersByQueryId;                        // key - query id, value - set of read actor ids
     THashMap<TTopicSessionKey, TTopicSessionInfo, TTopicSessionKeyHash> TopicSessions;
     TMap<TActorId, TReadActorInfo> ReadActorsInternalState;
     bool EnableStreamingQueriesCounters = false;
@@ -555,7 +560,7 @@ TRowDispatcher::TRowDispatcher(
     , PqGateway(pqGateway)
     , Driver(driver)
     , Monitoring(monitoring)
-    , NodesTracker(Config.GetCoordinator().GetRebalancingTimeout() ? Config.GetCoordinator().GetRebalancingTimeout() : TDuration::Seconds(DefaultRebalancingTimeoutSec))
+    , NodesTracker(GetCoordinatorRebalancingTimeout(Config.GetCoordinator()))
     , NodesManagerId(nodesManagerId)
     , EnableStreamingQueriesCounters(enableStreamingQueriesCounters)
 {
@@ -758,6 +763,7 @@ TString TRowDispatcher::GetInternalState() {
     };
     str << "SelfId: " << SelfId().ToString() << "\n";
     str << "Consumers count: " << Consumers.size() << "\n";
+    str << "ConsumersByEventQueueId map size: " << ConsumersByEventQueueId.size() << "\n";
     str << "TopicSessions count: " << TopicSessions.size() << "\n";
     str << "Max session buffer size: " << toHuman(MaxSessionBufferSizeBytes) << "\n";
     str << "CpuMicrosec: " << toHuman(LastCpuTime) << "\n";
@@ -915,6 +921,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
 
     Consumers[ev->Sender] = consumerInfo;
     ConsumersByEventQueueId[consumerInfo->EventQueueId] = consumerInfo;
+    ConsumersByQueryId[consumerInfo->QueryId].insert(ev->Sender);
     if (!CheckSession(consumerInfo, ev)) {
         return;
     }
@@ -1081,8 +1088,20 @@ void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId) {
             }
         }
     }
+    const TString queryId = consumerIt->second->QueryId;
     ConsumersByEventQueueId.erase(consumerIt->second->EventQueueId);
     Consumers.erase(consumerIt);
+    
+    auto queryIt = ConsumersByQueryId.find(queryId);
+    if (queryIt != ConsumersByQueryId.end()) {
+        queryIt->second.erase(readActorId);
+        if (queryIt->second.empty()) {
+            ConsumersByQueryId.erase(queryIt);
+            if (EnableStreamingQueriesCounters) {
+                Metrics.Counters->RemoveSubgroup("query_id", queryId);
+            }
+        }
+    }
     Metrics.ClientsCount->Set(Consumers.size());
 }
 

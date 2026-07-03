@@ -3,6 +3,9 @@
 #include <util/generic/overloaded.h>
 #include <ydb/core/protos/blobstorage_ddisk_internal.pb.h>
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/core/interconnect.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 
 namespace NKikimr::NDDisk {
 
@@ -24,7 +27,10 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(NPDisk::TEvChunkReserveResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD04, "TDDiskActor::Handle(TEvChunkReserveResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
+        YDB_LOG_DEBUG("TDDiskActor::Handle(TEvChunkReserveResult)",
+            {"marker", "BSDD04"},
+            {"DDiskId", DDiskId},
+            {"msg", msg});
 
         Y_ABORT_UNLESS(ReserveInFlight);
         ReserveInFlight = false;
@@ -88,12 +94,12 @@ namespace NKikimr::NDDisk {
             }, chunkAllocate);
         }
         if (ChunkReserve.size() < MinChunksReserved && !ReserveInFlight) { // ask for another reservation
-            STLOG(PRI_DEBUG, BS_DDISK, BSDD28,
-                "TDDiskActor::HandleChunkReserved requesting chunk reserve",
-                (DDiskId, DDiskId),
-                (ChunkReserveSize, ChunkReserve.size()),
-                (MinChunksReserved, MinChunksReserved),
-                (RequestCount, MinChunksReserved - ChunkReserve.size()));
+            YDB_LOG_DEBUG("TDDiskActor::HandleChunkReserved requesting chunk reserve",
+                {"marker", "BSDD28"},
+                {"DDiskId", DDiskId},
+                {"chunkReserveSize", ChunkReserve.size()},
+                {"minChunksReserved", MinChunksReserved},
+                {"requestCount", MinChunksReserved - ChunkReserve.size()});
             Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkReserve(PDiskParams->Owner, PDiskParams->OwnerRound,
                 MinChunksReserved - ChunkReserve.size()));
             ReserveInFlight = true;
@@ -126,7 +132,10 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(NPDisk::TEvCutLog::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD06, "TDDiskActor::Handle(TEvCutLog)", (DDiskId, DDiskId), (Msg, msg));
+        YDB_LOG_DEBUG("TDDiskActor::Handle(TEvCutLog)",
+            {"marker", "BSDD06"},
+            {"DDiskId", DDiskId},
+            {"msg", msg});
 
         if (ChunkMapSnapshotLsn < msg.FreeUpToLsn) { // we have to rewrite snapshot
             IssuePDiskLogRecord(TLogSignature::SignatureDDiskChunkMap, 0, CreateChunkMapSnapshot(), &ChunkMapSnapshotLsn, {});
@@ -142,6 +151,8 @@ namespace NKikimr::NDDisk {
         for (const ui32 chunkIdx : PersistentBufferChunks) {
             record.AddChunkIdxs(chunkIdx);
         }
+        record.SetUniqueId(PersistentBufferUniqueId);
+        Y_ABORT_UNLESS(PersistentBufferUniqueId != 0);
         return record;
     }
 
@@ -184,6 +195,85 @@ namespace NKikimr::NDDisk {
 
         ++*Counters.RecoveryLog.NumChunkMapIncrements;
         return record;
+    }
+
+    void TDDiskActor::Handle(TEvDeleteTabletChunks::TPtr ev) {
+        if (!CheckQuery(*ev, nullptr)) {
+            return;
+        }
+
+        const TQueryCredentials creds(ev->Get()->Record.GetCredentials());
+        const ui64 tabletId = creds.TabletId;
+
+        YDB_LOG_DEBUG("TDDiskActor::Handle(TEvDeleteTabletChunks)",
+            {"marker", "BSDD51"},
+            {"DDiskId", DDiskId},
+            {"tabletId", tabletId});
+
+        // Reject if any chunk allocation for this tablet is in flight (log record pending)
+        {
+            auto it = ChunkMapIncrementsInFlight.lower_bound({tabletId, 0, 0});
+            if (it != ChunkMapIncrementsInFlight.end() && std::get<0>(*it) == tabletId) {
+                SendReply(*ev, std::make_unique<TEvDeleteTabletChunksResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY,
+                    "chunk allocation is in flight for tablet"));
+                return;
+            }
+        }
+
+        const auto tabletIt = ChunkRefs.find(tabletId);
+
+        if (tabletIt == ChunkRefs.end()) {
+            // tablet has no chunks
+            SendReply(*ev, std::make_unique<TEvDeleteTabletChunksResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
+            return;
+        }
+
+        // Reject if any VChunk has a pending event queue (allocation queued but not yet in log)
+        for (const auto& [vChunkIndex, chunkRef] : tabletIt->second) {
+            if (!chunkRef.PendingEventsForChunk.empty()) {
+                SendReply(*ev, std::make_unique<TEvDeleteTabletChunksResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY,
+                    "chunk allocation is queued for tablet"));
+                return;
+            }
+        }
+
+        // Collect physical chunk IDs and erase the tablet from the in-memory chunk map
+        TVector<TChunkIdx> chunksToDelete;
+        for (const auto& [vChunkIndex, chunkRef] : tabletIt->second) {
+            if (chunkRef.ChunkIdx) {
+                chunksToDelete.push_back(chunkRef.ChunkIdx);
+            }
+        }
+        ChunkRefs.erase(tabletIt);
+
+        if (chunksToDelete.empty()) {
+            SendReply(*ev, std::make_unique<TEvDeleteTabletChunksResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
+            return;
+        }
+
+        *Counters.Chunks.ChunksOwned -= chunksToDelete.size();
+
+        // Capture reply info before issuing the async log record
+        const TActorId replyTo = ev->Sender;
+        const ui64 replyCookie = ev->Cookie;
+        const TActorId replySession = ev->InterconnectSession;
+
+        // Write a snapshot (without the freed tablet chunks) to the PDisk log.
+        // The DeleteChunks field in the commit record tells PDisk to release the physical chunks.
+        IssuePDiskLogRecord(TLogSignature::SignatureDDiskChunkMap, 0, CreateChunkMapSnapshot(),
+            &ChunkMapSnapshotLsn,
+            [this, replyTo, replyCookie, replySession]() {
+                auto h = std::make_unique<IEventHandle>(replyTo, SelfId(),
+                    new TEvDeleteTabletChunksResult(NKikimrBlobStorage::NDDisk::TReplyStatus::OK),
+                    0, replyCookie);
+                if (replySession) {
+                    h->Rewrite(TEvInterconnect::EvForward, replySession);
+                }
+                TActivationContext::Send(h.release());
+            },
+            std::move(chunksToDelete));
     }
 
 } // NKikimr::NDDisk

@@ -1116,6 +1116,12 @@ struct TSorterSelector<TCompactSet<T, N, Q>, C, TSortedTag>
     using TSorter = TNoopSorter<TCompactSet<T, N, Q>, C>;
 };
 
+template <class C, class T, size_t N>
+struct TSorterSelector<TCompactFlatSet<T, N>, C, TSortedTag>
+{
+    using TSorter = TNoopSorter<TCompactFlatSet<T, N>, C>;
+};
+
 template <class C, class... T>
 struct TSorterSelector<std::unordered_multiset<T...>, C, TSortedTag>
 {
@@ -1939,6 +1945,12 @@ template <class T, size_t N, class Q, class C>
 struct TSerializerTraits<TCompactSet<T, N, Q>, C, void>
 {
     using TSerializer = TSetSerializer<>;
+};
+
+template <class T, size_t N, class C>
+struct TSerializerTraits<TCompactFlatSet<T, N>, C, void>
+{
+    using TSerializer = TSetSerializer<NYT::TDefaultSerializer, NYT::TSortedTag>;
 };
 
 template <class T, class C>

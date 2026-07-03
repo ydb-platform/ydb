@@ -105,6 +105,20 @@ namespace NKikimr {
         std::unordered_map<TVDiskID, NSyncer::TPeerSyncState> PeerSyncStates;
     };
 
+    ////////////////////////////////////////////////////////////////////////////
+    // TEvSyncerFullSyncCancelled
+    ////////////////////////////////////////////////////////////////////////////
+    struct TEvSyncerFullSyncDiskCancelled :
+            public TEventLocal<TEvSyncerFullSyncDiskCancelled, TEvBlobStorage::EvSyncerFullSyncDiskCancelled>
+    {
+        TVDiskID VDiskId;
+        NSyncer::TPeerSyncState PeerSyncState;
+
+        TEvSyncerFullSyncDiskCancelled(const TVDiskID& vdiskId, const NSyncer::TPeerSyncState& peerSyncState)
+            : VDiskId(vdiskId)
+            , PeerSyncState(peerSyncState)
+        {}
+    };
 
     ////////////////////////////////////////////////////////////////////////////
     // TSyncNeighbors

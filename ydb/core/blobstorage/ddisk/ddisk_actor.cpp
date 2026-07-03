@@ -9,11 +9,16 @@
 
 #if defined(__linux__)
 #include <unistd.h>
+
 #endif
+#define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 
 namespace NKikimr::NDDisk {
 
 namespace {
+    const TVector<double> WriteBatchSizeBounds = {
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 24, 32, 40, 48, 64, 128
+    };
 
     const TVector<double> NvmeLatencyHistBoundsMs = {
         0.01, 0.02, 0.03, 0.04, 0.05,                   // 10th us
@@ -34,9 +39,11 @@ namespace {
     TDDiskActor::TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const std::vector<ui32>& initPersistentBufferChunks,
-            TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat, TFileHandle&& diskFd)
+            ui64 persistentBufferUniqueId, TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat,
+            TFileHandle&& diskFd)
         : TDDiskActor(std::move(baseInfo), std::move(info), std::move(pbFormat), std::move(ddiskConfig), counters, true)
     {
+        PersistentBufferUniqueId = persistentBufferUniqueId;
         PDiskParams = pDiskParams;
         DiskFormat = std::move(diskFormat);
         DiskFd = std::move(diskFd);
@@ -45,7 +52,11 @@ namespace {
             auto [it, inserted] = PersistentBufferSectorsChecksum.insert({idx, {}});
             it->second.resize(SectorInChunk);
             if (!inserted) {
-                STLOG(PRI_ERROR, BS_DDISK, BSDD10, "TDDiskActor::TDDiskActor persistent buffer has duplicated chunk index in log", (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID), (ChunkIdx, idx));
+                YDB_LOG_ERROR("TDDiskActor::TDDiskActor persistent buffer has duplicated chunk index in log",
+                    {"marker", "BSDD10"},
+                    {"DDiskId", DDiskId},
+                    {"PDiskActorId", BaseInfo.PDiskActorID},
+                    {"chunkIdx", idx});
                 continue;
             }
             PersistentBufferSpaceAllocator.AddNewChunk(idx);
@@ -62,11 +73,18 @@ namespace {
         , CountersParent(std::move(counters))
         , CountersBase(GetServiceCounters(CountersParent, "ddisks"))
         , IsPersistentBufferActor(isPersistentBufferActor)
+        , SegmentManager(DDiskInstanceGuid)
         , PersistentBufferFormat(std::move(pbFormat))
     {
+        if (IsPersistentBufferActor) {
+            SetActivityType(NKikimrServices::TActivity::BS_PERSISTENT_BUFFER);
+        } else {
+            SetActivityType(NKikimrServices::TActivity::BS_DDISK);
+        }
+
         StartedAt = TInstant::Now();
         TVector<double> latencyHistBounds;
-        if (BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_NVME) {
+        if (BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_NVME || BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_SSD) {
             latencyHistBounds = NvmeLatencyHistBoundsMs;
         } else {
             latencyHistBounds = GetCommonLatencyHistBounds(BaseInfo.DeviceType);
@@ -97,6 +115,8 @@ namespace {
         auto cDirectIOWrite = cDirectIO->GetSubgroup("operation", "Write");
         auto cDirectIORead = cDirectIO->GetSubgroup("operation", "Read");
 
+        auto cPersistentBuffer = counters->GetSubgroup("subsystem", "persistent_buffer");
+
 #define COUNTER(GROUP, NAME, DERIV) .NAME = c##GROUP->GetCounter(#NAME, DERIV),
 #define HISTOGRAM(GROUP, NAME, BUCKETS) .NAME = c##GROUP->GetHistogram(#NAME, NMonitoring::ExplicitHistogram(BUCKETS)),
 #define COUNTER_VALUE(GROUP, NAME, DERIV) c##GROUP->GetCounter(#NAME, DERIV)
@@ -108,6 +128,7 @@ namespace {
                 .OP = [&] { \
                     TInterfaceOpCounters c; \
                     c.Requests = COUNTER_VALUE(Interface##OP, Requests, true); \
+                    c.RequestsInFlight = COUNTER_VALUE(Interface##OP, RequestsInFlight, false); \
                     c.ReplyOk = COUNTER_VALUE(Interface##OP, ReplyOk, true); \
                     c.ReplyErr = COUNTER_VALUE(Interface##OP, ReplyErr, true); \
                     c.Bytes = COUNTER_VALUE(Interface##OP, Bytes, true); \
@@ -135,6 +156,7 @@ namespace {
 #define XX(OP) \
                 .OP = { \
                     COUNTER(DirectIO##OP, Requests, true) \
+                    COUNTER(DirectIO##OP, RequestsInFlight, false) \
                     COUNTER(DirectIO##OP, Bytes, true) \
                     COUNTER(DirectIO##OP, BytesInFlight, false) \
                     HISTOGRAM(DirectIO##OP, RequestSizeKiB, RequestSizeBoundsKiB) \
@@ -154,6 +176,19 @@ namespace {
                 COUNTER(DirectIO, QueueSize, false)
                 COUNTER(DirectIO, RunningCount, false)
                 HISTOGRAM(DirectIO, QueueTime, latencyHistBounds)
+            },
+#if defined(__linux__)
+            .UringCounters = {
+                COUNTER(DirectIO, CompletionThreadCPU, true)
+                COUNTER(DirectIO, CompletionThreadBusyTimeNs, true)
+            },
+#endif
+            .PersistentBuffer = {
+                COUNTER(PersistentBuffer, AllocatedChunks, false)
+                COUNTER(PersistentBuffer, TotalBytes, false)
+                COUNTER(PersistentBuffer, PendingEventsQueueSize, false)
+                COUNTER(PersistentBuffer, InMemoryCacheSize, false)
+                HISTOGRAM(PersistentBuffer, WriteBatchSize, WriteBatchSizeBounds)
             },
         };
 
@@ -177,14 +212,18 @@ namespace {
         FillPool(PersistentBufferPartIoOpPool);
         FillPool(InternalSyncWriteOpPool);
 
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD09, "TDDiskActor::Bootstrap", (DDiskId, DDiskId));
+        YDB_LOG_DEBUG("TDDiskActor::Bootstrap",
+            {"marker", "BSDD09"},
+            {"DDiskId", DDiskId});
         if (IsPersistentBufferActor) {
             InitUring();
             Become(&TThis::StateFuncPersistentBuffer);
-            WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor(SelfId()));
+            WritePersistentBuffersActor = Register(new TWritePersistentBuffersRequestActor(SelfId()));
+            CollectPbStatsSnapshot();
             StartRestorePersistentBuffer();
         } else {
             Become(&TThis::StateFuncDDisk);
+            RegisterMonPage();
             InitPDiskInterface();
         }
     }
@@ -192,6 +231,7 @@ namespace {
     void TDDiskActor::Handle(TEvents::TEvUndelivered::TPtr ev) {
         auto sourceType = ev->Get()->SourceType;
         if (sourceType == TEv::EvRead || sourceType == TEv::EvReadPersistentBuffer) {
+            SyncReadCookiesInFlight.erase(ev->Cookie);
             std::vector<TSegmentManager::TSegment> segments;
             ui64 syncId = SegmentManager.GetSync(ev->Cookie);
             SegmentManager.PopRequest(ev->Cookie, &segments);
@@ -203,14 +243,14 @@ namespace {
             auto& sync = it->second;
 
             if (ev->Cookie < sync.FirstRequestId || ev->Cookie >= sync.FirstRequestId + sync.Requests.size()) {
-                STLOG(PRI_ERROR, BS_DDISK, BSDD23,
-                    "TDDiskActor::Handle(TEvUndelivered) request cookie out of range",
-                    (DDiskId, DDiskId),
-                    (Cookie, ev->Cookie),
-                    (SyncId, syncId),
-                    (FirstRequestId, sync.FirstRequestId),
-                    (RequestsCount, sync.Requests.size()),
-                    (SourceType, sourceType));
+                YDB_LOG_ERROR("TDDiskActor::Handle(TEvUndelivered) request cookie out of range",
+                    {"marker", "BSDD23"},
+                    {"DDiskId", DDiskId},
+                    {"cookie", ev->Cookie},
+                    {"syncId", syncId},
+                    {"firstRequestId", sync.FirstRequestId},
+                    {"requestsCount", sync.Requests.size()},
+                    {"sourceType", sourceType});
                 return;
             }
             auto& request = sync.Requests[ev->Cookie - sync.FirstRequestId];
@@ -239,8 +279,8 @@ namespace {
             hFunc(TEvDisconnect, handleQuery)
             hFunc(TEvWrite, handleQuery)
             hFunc(TEvRead, handleQuery)
-            hFunc(TEvSyncWithPersistentBuffer, handleQuery)
-            hFunc(TEvSyncWithDDisk, handleQuery)
+            hFunc(TEvSync, handleQuery)
+            hFunc(TEvDeleteTabletChunks, handleQuery)
             hFunc(TEvPrivate::TEvIssuePersistentBufferChunkAllocation, Handle)
 
             hFunc(TEvents::TEvUndelivered, Handle)
@@ -265,6 +305,8 @@ namespace {
             hFunc(NPDisk::TEvCheckSpaceResult, Handle);
 
             IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate)
+
+            hFunc(NMon::TEvHttpInfo, Handle)
 
             hFunc(TEvents::TEvWakeup, HandleWakeup);
             cFunc(TEvents::TSystem::Poison, PassAway)
@@ -333,12 +375,12 @@ namespace {
         case NKikimrProto::INVALID_ROUND:
         case NKikimrProto::CORRUPTED:
         case NKikimrProto::OUT_OF_SPACE:
-            STLOG(PRI_NOTICE, BS_DDISK, BSDD44,
-                "TDDiskActor: PDisk session lost, switching to terminate state",
-                (DDiskId, DDiskId),
-                (Source, source),
-                (Status, NKikimrProto::EReplyStatus_Name(status)),
-                (ErrorReason, errorReason));
+            YDB_LOG_NOTICE("TDDiskActor: PDisk session lost, switching to terminate state",
+                {"marker", "BSDD44"},
+                {"DDiskId", DDiskId},
+                {"source", source},
+                {"status", NKikimrProto::EReplyStatus_Name(status)},
+                {"errorReason", errorReason});
             Become(&TThis::StateFuncTerminate);
             return false;
         default:

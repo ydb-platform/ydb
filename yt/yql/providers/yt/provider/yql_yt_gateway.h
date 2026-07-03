@@ -760,6 +760,30 @@ public:
         TVector<TString> LocalFiles;
     };
 
+    struct TFileWithMd5 {
+        TString Path;
+        TString Md5;
+        TMaybe<TString> RemotePath;
+        TMaybe<TString> RemoteTx;
+    };
+
+    struct TUploadFilesToCacheOptions : public TCommonOptions {
+        using TSelf = TUploadFilesToCacheOptions;
+
+        TUploadFilesToCacheOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        OPTION_FIELD(TString, Cluster)
+        OPTION_FIELD(TVector<TFileWithMd5>, Files)
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+    };
+
+    struct TUploadFilesToCacheResult: public NCommon::TOperationResult {
+        TVector<TFileWithMd5> Files;
+    };
+
 public:
     virtual ~IYtGateway() = default;
 
@@ -832,6 +856,8 @@ public:
     virtual NThreading::TFuture<TDownloadTableResult> DownloadTable(TDownloadTableOptions&& options) = 0;
 
     virtual IYtTokenResolver::TPtr GetYtTokenResolver() const = 0;
+
+    virtual NThreading::TFuture<TUploadFilesToCacheResult> UploadFilesToCache(TUploadFilesToCacheOptions&& options) = 0;
 };
 
 }

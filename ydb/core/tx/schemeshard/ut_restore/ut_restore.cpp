@@ -5,21 +5,23 @@
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/localdb.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/actors/wait_events.h>
 #include <ydb/core/testlib/audit_helpers/audit_helper.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
-#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/events/get_object.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/library/aws_init/aws.h>
 
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
@@ -322,6 +324,12 @@ namespace {
                 result.Data.emplace_back(GenerateTestData(codec, keyPrefix, count));
             }
             break;
+        case EPathTypeColumnTable:
+            result.Scheme = typedScheme.Scheme;
+            for (const auto& [keyPrefix, count] : shardsConfig) {
+                result.Data.emplace_back(GenerateTestData(codec, keyPrefix, count));
+            }
+            break;
         case EPathTypeView:
         case EPathTypeReplication:
         case EPathTypeTransfer:
@@ -365,7 +373,8 @@ namespace {
             }
 
             switch (item.Type) {
-            case EPathTypeTable: {
+            case EPathTypeTable:
+            case EPathTypeColumnTable: {
                 auto schemeKey = prefix + "/scheme.pb";
                 result.emplace(schemeKey, item.Scheme);
                 if (withChecksum) {
@@ -2826,7 +2835,7 @@ value {
             result << hex[i];
             result << hex[i + 1];
         }
-        return std::move(result);
+        return result;
     }
 
     // Test that checks different combinations of:
@@ -3531,7 +3540,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         ShouldSucceedOnIndexedTable(1, "");
     }
 
-    Y_UNIT_TEST(ImportStandaloneColumnTableWithLocalBloomIndexes) {
+    Y_UNIT_TEST_FLAG(ImportStandaloneColumnTableWithLocalBloomIndexes, EnableLocalIndexAsSchemeObject) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -3544,6 +3553,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
         runtime.GetAppData().FeatureFlags.SetEnableLocalBloomFilterIndex(true);
         runtime.GetAppData().FeatureFlags.SetEnableLocalBloomNgramFilterIndex(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(EnableLocalIndexAsSchemeObject);
 
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
@@ -3627,6 +3637,89 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
         assertBloomIndexes("/MyRoot/OlapBloomImported");
+    }
+
+    Y_UNIT_TEST(ImportStandaloneColumnTableWithLocalMinMaxIndexes) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalMinMaxIndex(true);
+
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapMinMaxTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "resource_id" Type: "Utf8" }
+                Columns { Name: "uid" Type: "Utf8" NotNull: true }
+                KeyColumnNames: "timestamp"
+                KeyColumnNames: "uid"
+                Indexes {
+                    Id: 1
+                    Name: "idx_minmax"
+                    ClassName: "MIN_MAX"
+                    MinMaxIndex {
+                        ColumnId: 2
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto assertMinMaxIndexes = [&](const TString& path) {
+            const auto d = DescribePrivatePath(runtime, path, true, true);
+            UNIT_ASSERT_C(d.GetPathDescription().HasColumnTableDescription(), "expected column table at " << path);
+            const auto& schema = d.GetPathDescription().GetColumnTableDescription().GetSchema();
+            THashSet<TString> found;
+            for (const auto& ix : schema.GetIndexes()) {
+                found.insert(ix.GetName());
+            }
+            UNIT_ASSERT_C(found.contains("idx_minmax"), "missing idx_minmax on " << path);
+        };
+
+        assertMinMaxIndexes("/MyRoot/OlapMinMaxTable");
+
+        const ui64 exportTxId = ++txId;
+        TestExport(runtime, exportTxId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/OlapMinMaxTable"
+                destination_prefix: "OlapMinMaxImportPrefix"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, exportTxId);
+        TestGetExport(runtime, exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "OlapMinMaxImportPrefix"
+                destination_path: "/MyRoot/OlapMinMaxImported"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        assertMinMaxIndexes("/MyRoot/OlapMinMaxImported");
     }
 
     Y_UNIT_TEST(ShouldSucceedOnManyTables) {
@@ -5621,7 +5714,64 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestGetImport(runtime, txId, "/MyRoot");
     }
 
-    Y_UNIT_TEST(ViewCreationRetry) {
+    Y_UNIT_TEST(ShouldImportInvalidView) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        ui64 txId = 100;
+
+        THashMap<TString, TTestDataWithScheme> bucketContent(2);
+        bucketContent.emplace("/table", GenerateTestData(R"(
+            columns {
+                name: "key"
+                type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )"));
+        bucketContent.emplace("/view", GenerateTestData(
+            {
+                EPathTypeView,
+                R"(
+                    -- backup root: "/MyRoot"
+                    CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT missing FROM `table`;
+                )"
+            }
+        ));
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "table"
+                destination_path: "/MyRoot/table"
+              }
+              items {
+                source_prefix: "view"
+                destination_path: "/MyRoot/view"
+              }
+            }
+        )", port));
+
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/view"), {
+            NLs::Finished,
+            NLs::IsView
+        });
+    }
+
+    Y_UNIT_TEST(ShouldNotRetryViewCreation) {
         TTestBasicRuntime runtime;
         auto options = TTestEnvOptions()
             .RunFakeConfigDispatcher(true)
@@ -5659,33 +5809,30 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(s3Mock.Start());
 
         ui64 tableCreationTxId = 0;
-        TActorId schemeshardActorId;
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> tableCreationBlocker(runtime,
-            [&](const TEvSchemeShard::TEvModifySchemeTransaction::TPtr& event) {
-                const auto& record = event->Get()->Record;
-                if (record.GetTransaction(0).GetOperationType() == ESchemeOpCreateIndexedTable) {
-                    tableCreationTxId = record.GetTxId();
-                    schemeshardActorId = event->Recipient;
-                    return true;
-                }
+        ui64 viewCreationTxId = 0;
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> tableCreationBlocker(runtime, [&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            switch (record.GetTransaction(0).GetOperationType()) {
+            case ESchemeOpCreateIndexedTable:
+                tableCreationTxId = record.GetTxId();
+                return true;
+            case ESchemeOpCreateView:
+                viewCreationTxId = record.GetTxId();
+                return false;
+            default:
                 return false;
             }
-        );
+        });
 
-        TBlockEvents<TEvPrivate::TEvImportSchemeQueryResult> queryResultBlocker(runtime,
-            [&](const TEvPrivate::TEvImportSchemeQueryResult::TPtr& event) {
-                // The test expects the SchemeShard actor ID to be already initialized when we receive the first query result message.
-                // This expectation is valid because we import items in order of their appearance on the import items list.
-                if (!schemeshardActorId || event->Recipient != schemeshardActorId) {
-                    return false;
-                }
-                UNIT_ASSERT_VALUES_EQUAL(event->Get()->Status, Ydb::StatusIds::SCHEME_ERROR);
-                const auto* error = std::get_if<TString>(&event->Get()->Result);
-                UNIT_ASSERT(error);
-                UNIT_ASSERT_STRING_CONTAINS(*error, "Cannot find table");
-                return true;
+        TWaitForFirstEvent<TEvSchemeShard::TEvModifySchemeTransactionResult> viewCreationAccepter(runtime, [&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (!viewCreationTxId || viewCreationTxId != record.GetTxId()) {
+                return false;
             }
-        );
+
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusAccepted);
+            return true;
+        });
 
         const ui64 importId = ++txId;
         TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
@@ -5704,21 +5851,25 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", port));
 
         runtime.WaitFor("table creation attempt", [&]{ return !tableCreationBlocker.empty(); });
-        runtime.WaitFor("query result", [&]{ return !queryResultBlocker.empty(); });
+        viewCreationAccepter.Wait();
+        env.TestWaitNotification(runtime, viewCreationTxId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/view"), {
+            NLs::Finished,
+            NLs::IsView,
+        });
+
         tableCreationBlocker.Unblock().Stop();
-        queryResultBlocker.Unblock().Stop();
         env.TestWaitNotification(runtime, tableCreationTxId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/table"), {
+            NLs::Finished,
+            NLs::IsTable,
+        });
 
         env.TestWaitNotification(runtime, importId);
         TestGetImport(runtime, importId, "/MyRoot");
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/view"), {
-            NLs::Finished,
-            NLs::IsView
-        });
     }
 
-    Y_UNIT_TEST(MultipleViewCreationRetries) {
+    Y_UNIT_TEST(ShouldImportMultipleViews) {
         TTestBasicRuntime runtime;
         auto options = TTestEnvOptions()
             .RunFakeConfigDispatcher(true)
@@ -5750,40 +5901,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TActorId schemeshardActorId;
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> viewCreationBlocker(runtime,
-            [&](const TEvSchemeShard::TEvModifySchemeTransaction::TPtr& event) {
-                const auto& record = event->Get()->Record;
-                if (record.GetTransaction(0).GetOperationType() == ESchemeOpCreateView) {
-                    schemeshardActorId = event->Recipient;
-                    return true;
-                }
-                return false;
-            }
-        );
-
-        int missingDependencyFails = 0;
-        auto missingDependencyObserver = runtime.AddObserver<TEvPrivate::TEvImportSchemeQueryResult>(
-            [&](const TEvPrivate::TEvImportSchemeQueryResult::TPtr& event) {
-                if (!schemeshardActorId
-                    || event->Recipient != schemeshardActorId
-                    || event->Get()->Status != Ydb::StatusIds::SCHEME_ERROR) {
-                    return;
-                }
-                const auto* error = std::get_if<TString>(&event->Get()->Result);
-                if (error && error->Contains("Cannot find table")) {
-                    ++missingDependencyFails;
-                }
-            }
-        );
-
         auto importSettings = TStringBuilder() << std::format(R"(
                 ImportFromS3Settings {{
                     endpoint: "localhost:{}"
                     scheme: HTTP
             )", port
         );
-        for (int i = 0; i < ViewLayers; ++i) {
+        for (int i = ViewLayers - 1; i >= 0; --i) {
             importSettings << std::format(R"(
                     items {{
                         source_prefix: "view{}"
@@ -5796,23 +5920,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         const ui64 importId = ++txId;
         TestImport(runtime, importId, "/MyRoot", importSettings);
-
-        int expectedFails = 0;
-        for (int iteration = 1; iteration <= ViewLayers; ++iteration) {
-            runtime.WaitFor("blocked view creation", [&]{ return !viewCreationBlocker.empty(); });
-
-            expectedFails += ViewLayers - iteration;
-            if (iteration > 1) {
-                runtime.WaitFor("query results", [&]{ return missingDependencyFails >= expectedFails; });
-            } else {
-                // the first iteration might miss some query results due to the initially unset schemeshardActorId
-                missingDependencyFails = expectedFails;
-            }
-
-            viewCreationBlocker.Unblock(1);
-        }
-        UNIT_ASSERT(viewCreationBlocker.empty());
-        viewCreationBlocker.Stop();
 
         env.TestWaitNotification(runtime, importId);
         TestGetImport(runtime, importId, "/MyRoot");
@@ -6876,6 +6983,444 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(MaterializedIndexAbsentAuto) {
         MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO, false);
+    }
+
+    void ShouldSucceedOnIndexedTableImpl(
+        bool enableIndexMaterialization,
+        const TString& tableColumns,
+        const TString& primaryKey,
+        const TString& indexProto,
+        NKikimrSchemeOp::EIndexType expectedIndexType,
+        const TVector<TString>& indexKeyColumns)
+    {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(enableIndexMaterialization));
+
+        auto scheme = TStringBuilder() << tableColumns << R"(
+            primary_key: ")" << primaryKey << R"("
+        )" << indexProto;
+
+        const auto data = GenerateTestData(scheme, {{"", 0}});
+
+        Run(runtime, env, ConvertTestData(data), R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::PathExist,
+            NLs::IsTable,
+            NLs::IndexesCount(1),
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/index", true, true), {
+            NLs::PathExist,
+            NLs::IndexType(expectedIndexType),
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+            NLs::IndexKeys(indexKeyColumns),
+        });
+
+        for (const auto& implTable : NTableIndex::GetImplTables(expectedIndexType, indexKeyColumns)) {
+            TestDescribeResult(
+                DescribePrivatePath(runtime,
+                    TString::Join("/MyRoot/Table/index/", implTable), true, true),
+                {NLs::PathExist, NLs::IsTable});
+        }
+    }
+
+    static const TString DefaultIndexedTableColumns = R"(
+        columns {
+          name: "key"
+          type { optional_type { item { type_id: UINT64 } } }
+        }
+        columns {
+          name: "value"
+          type { optional_type { item { type_id: UTF8 } } }
+        }
+    )";
+
+    Y_UNIT_TEST_TWIN(ShouldSucceedOnGlobalSyncIndexedTable, Materialized) {
+        ShouldSucceedOnIndexedTableImpl(Materialized, DefaultIndexedTableColumns, "key", R"(
+            indexes {
+              name: "index"
+              index_columns: "value"
+              global_index {}
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobal,
+        {"value"});
+    }
+
+    Y_UNIT_TEST_TWIN(ShouldSucceedOnGlobalAsyncIndexedTable, Materialized) {
+        ShouldSucceedOnIndexedTableImpl(Materialized, DefaultIndexedTableColumns, "key", R"(
+            indexes {
+              name: "index"
+              index_columns: "value"
+              global_async_index {}
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalAsync,
+        {"value"});
+    }
+
+    Y_UNIT_TEST_TWIN(ShouldSucceedOnGlobalUniqueIndexedTable, Materialized) {
+        ShouldSucceedOnIndexedTableImpl(Materialized, DefaultIndexedTableColumns, "key", R"(
+            indexes {
+              name: "index"
+              index_columns: "value"
+              global_unique_index {}
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalUnique,
+        {"value"});
+    }
+
+    Y_UNIT_TEST_TWIN(ShouldSucceedOnGlobalVectorKmeansTreeIndexedTable, Materialized) {
+        ShouldSucceedOnIndexedTableImpl(Materialized, R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UINT64 } } }
+            }
+            columns {
+              name: "embedding"
+              type { optional_type { item { type_id: STRING } } }
+            }
+        )", "key", R"(
+            indexes {
+              name: "index"
+              index_columns: "embedding"
+              global_vector_kmeans_tree_index {
+                vector_settings {
+                  settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                  }
+                  clusters: 4
+                  levels: 5
+                }
+              }
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree,
+        {"embedding"});
+    }
+
+    Y_UNIT_TEST_TWIN(ShouldSucceedOnGlobalVectorKmeansTreePrefixIndexedTable, Materialized) {
+        ShouldSucceedOnIndexedTableImpl(Materialized, R"(
+            columns {
+              name: "prefix"
+              type { optional_type { item { type_id: UINT64 } } }
+            }
+            columns {
+              name: "embedding"
+              type { optional_type { item { type_id: STRING } } }
+            }
+        )", "prefix", R"(
+            indexes {
+              name: "index"
+              index_columns: "prefix"
+              index_columns: "embedding"
+              global_vector_kmeans_tree_index {
+                vector_settings {
+                  settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                  }
+                  clusters: 4
+                  levels: 5
+                }
+              }
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree,
+        {"prefix", "embedding"});
+    }
+
+    Y_UNIT_TEST_TWIN(ShouldSucceedOnGlobalFulltextPlainIndexedTable, Materialized) {
+        ShouldSucceedOnIndexedTableImpl(Materialized, R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UINT64 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+        )", "key", R"(
+            indexes {
+              name: "index"
+              index_columns: "value"
+              global_fulltext_plain_index {
+                fulltext_settings {
+                  columns: {
+                    column: "value"
+                    analyzers: {
+                      tokenizer: STANDARD
+                      use_filter_lowercase: true
+                    }
+                  }
+                }
+              }
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain,
+        {"value"});
+    }
+
+    Y_UNIT_TEST_TWIN(ShouldSucceedOnGlobalFulltextRelevanceIndexedTable, Materialized) {
+        ShouldSucceedOnIndexedTableImpl(Materialized, R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UINT64 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+        )", "key", R"(
+            indexes {
+              name: "index"
+              index_columns: "value"
+              global_fulltext_relevance_index {
+                fulltext_settings {
+                  columns: {
+                    column: "value"
+                    analyzers: {
+                      tokenizer: STANDARD
+                      use_filter_lowercase: true
+                    }
+                  }
+                }
+              }
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance,
+        {"value"});
+    }
+
+    Y_UNIT_TEST_TWIN(ShouldSucceedOnGlobalJsonIndexedTable, Materialized) {
+        ShouldSucceedOnIndexedTableImpl(Materialized, R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UINT64 } } }
+            }
+            columns {
+              name: "json"
+              type { optional_type { item { type_id: JSON } } }
+            }
+        )", "key", R"(
+            indexes {
+              name: "index"
+              index_columns: "json"
+              global_json_index {}
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalJson,
+        {"json"});
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnGlobalJsonRowIdAutoProvisionAfterRestore) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        ui64 txId = 200;
+
+        auto& ff = runtime.GetAppData().FeatureFlags;
+        ff.SetEnableJsonIndex(true);
+        ff.SetEnableFulltextIndex(true);
+        ff.SetEnableAddUniqueIndex(true);
+        ff.SetEnableUniqConstraint(true);
+
+        // Import a table with Utf8 PK and a Json column - no JSON index in the import.
+        auto data = GenerateTestData(R"(
+            columns {
+              name: "pk"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "data"
+              type { optional_type { item { type_id: JSON } } }
+            }
+            primary_key: "pk"
+        )", {{"a", 1}});
+        // The generated CSV puts a bare word in the Json column, which fails JSON
+        // validation on import. Override it with a row containing valid JSON.
+        data.Data.assign(1, TTestData(TString(R"("a1","{"k":"v"}")") + "\n", EmptyYsonStr));
+
+        Run(runtime, env, ConvertTestData(data), R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::PathExist, NLs::IsTable, NLs::IndexesCount(0),
+        });
+
+        // Build a JSON index on the imported table.
+        {
+            Ydb::Table::TableIndex index;
+            index.set_name("json_idx");
+            index.add_index_columns("data");
+            index.mutable_global_json_index();
+            TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", index);
+        }
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                op.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+                op.DebugString());
+        }
+
+        // Auto-provisioned unique index must be Ready on the restored table.
+        TestDescribeResult(DescribePrivatePath(runtime,
+                TStringBuilder() << "/MyRoot/Table/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+
+        // UseRowIdAsDocId must be set on the JSON index built after restore.
+        {
+            const auto d = DescribePrivatePath(runtime, "/MyRoot/Table/json_idx");
+            const auto& ti = d.GetPathDescription().GetTableIndex();
+            UNIT_ASSERT_C(ti.HasFulltextIndexDescription(),
+                "json_idx after restore+build: FulltextIndexDescription must be set");
+            UNIT_ASSERT_C(ti.GetFulltextIndexDescription().GetUseRowIdAsDocId(),
+                "json_idx after restore+build: UseRowIdAsDocId must be true");
+        }
+
+        // Impl-table must be keyed by [__ydb_token, __ydb_row_id].
+        TestDescribeResult(DescribePrivatePath(runtime,
+                "/MyRoot/Table/json_idx/" + TString(NTableIndex::ImplTable)), {
+            NLs::PathExist,
+            NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                /*strictCount=*/ true),
+        });
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnGlobalJsonRowIdManualInfraAfterRestore) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        ui64 txId = 200;
+
+        auto& ff = runtime.GetAppData().FeatureFlags;
+        ff.SetEnableJsonIndex(true);
+        ff.SetEnableFulltextIndex(true);
+        ff.SetEnableAddUniqueIndex(true);
+        ff.SetEnableUniqConstraint(true);
+
+        // Import a table with Utf8 PK + __ydb_row_id column + unique index on __ydb_row_id.
+        // The JSON index is NOT included in the import; it will be built afterward.
+        auto data = GenerateTestData(Sprintf(R"(
+            columns {
+              name: "pk"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "data"
+              type { optional_type { item { type_id: JSON } } }
+            }
+            columns {
+              name: "%s"
+              type { type_id: UINT64 }
+              not_null: true
+            }
+            primary_key: "pk"
+            indexes {
+              name: "uniq_rowid"
+              index_columns: "%s"
+              global_unique_index {}
+            }
+        )", NTableIndex::NFulltext::RowIdColumn, NTableIndex::NFulltext::RowIdColumn), {{"a", 1}});
+        // CSV columns follow scheme order (pk, data, __ydb_row_id). The Json column needs
+        // valid JSON, and the NOT NULL __ydb_row_id column needs an explicit value.
+        data.Data.assign(1, TTestData(TString(R"("a1","{"k":"v"}",1)") + "\n", EmptyYsonStr));
+
+        Run(runtime, env, ConvertTestData(data), R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::PathExist, NLs::IsTable, NLs::IndexesCount(1),
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/uniq_rowid"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+
+        // Build a JSON index; it must detect the existing uniq_rowid infrastructure (Reuse plan).
+        {
+            Ydb::Table::TableIndex index;
+            index.set_name("json_idx");
+            index.add_index_columns("data");
+            index.mutable_global_json_index();
+            TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", index);
+        }
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                op.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+                op.DebugString());
+        }
+
+        // uniq_rowid must still be the only unique index (no auto-provision duplicate).
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::PathExist, NLs::IsTable, NLs::IndexesCount(2),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime,
+                TStringBuilder() << "/MyRoot/Table/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathNotExist,
+        });
+
+        // UseRowIdAsDocId must be set.
+        {
+            const auto d = DescribePrivatePath(runtime, "/MyRoot/Table/json_idx");
+            const auto& ti = d.GetPathDescription().GetTableIndex();
+            UNIT_ASSERT_C(ti.HasFulltextIndexDescription(),
+                "json_idx after restore+build: FulltextIndexDescription must be set");
+            UNIT_ASSERT_C(ti.GetFulltextIndexDescription().GetUseRowIdAsDocId(),
+                "json_idx after restore+build: UseRowIdAsDocId must be true");
+        }
+
+        // Impl-table must be keyed by [__ydb_token, __ydb_row_id].
+        TestDescribeResult(DescribePrivatePath(runtime,
+                "/MyRoot/Table/json_idx/" + TString(NTableIndex::ImplTable)), {
+            NLs::PathExist,
+            NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                /*strictCount=*/ true),
+        });
     }
 
     Y_UNIT_TEST(ReplicationImport) {
@@ -8734,6 +9279,107 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         ShouldSucceed<IsFs>(t, schemes, {
             {"ExternalTable", "/MyRoot/ExternalTable"},
             {"DataSource", "/MyRoot/DataSource"}
+        });
+    }
+
+    // Column Table (OLAP)
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleColumnTable, 2, 1, false, IsFs) {
+        const TTypedScheme columnTableScheme = {
+            EPathTypeColumnTable,
+            R"(
+                columns {
+                    name: "timestamp"
+                    type { type_id: TIMESTAMP }
+                    not_null: true
+                }
+                columns {
+                    name: "value"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                primary_key: "timestamp"
+            )"
+        };
+
+        THashMap<TString, TTestDataWithScheme> bucketContent;
+        bucketContent.emplace("", GenerateTestData(columnTableScheme, {{"", 0}}, "", R"({"version": 1})"));
+
+        TImportEnv<IsFs> env(ConvertTestData(bucketContent), {{"", "/MyRoot/ColumnTable"}});
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+
+                env.SetupRuntime(runtime);
+                runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+            }
+
+            const ui64 importId = ++t.TxId;
+            AsyncImport(runtime, importId, "/MyRoot", env.Request);
+            t.TestEnv->TestWaitNotification(runtime, importId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestGetImport(runtime, importId, "/MyRoot", {
+                    Ydb::StatusIds::SUCCESS,
+                    Ydb::StatusIds::NOT_FOUND
+                });
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSingleColumnTable, 2, 1, false, IsFs) {
+        const TTypedScheme columnTableScheme = {
+            EPathTypeColumnTable,
+            R"(
+                columns {
+                    name: "timestamp"
+                    type { type_id: TIMESTAMP }
+                    not_null: true
+                }
+                columns {
+                    name: "value"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                primary_key: "timestamp"
+            )"
+        };
+
+        THashMap<TString, TTestDataWithScheme> bucketContent;
+        bucketContent.emplace("", GenerateTestData(columnTableScheme, {{"", 0}}, "", R"({"version": 1})"));
+
+        TImportEnv<IsFs> env(ConvertTestData(bucketContent), {{"", "/MyRoot/ColumnTable"}});
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+
+                env.SetupRuntime(runtime);
+                runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+            }
+
+            const ui64 importId = ++t.TxId;
+            AsyncImport(runtime, importId, "/MyRoot", env.Request);
+
+            t.TestEnv->ReliablePropose(runtime, CancelImportRequest(++t.TxId, "/MyRoot", importId), {
+                Ydb::StatusIds::SUCCESS,
+                Ydb::StatusIds::NOT_FOUND
+            });
+            t.TestEnv->TestWaitNotification(runtime, importId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                const auto response = TestGetImport(runtime, importId, "/MyRoot", {
+                    Ydb::StatusIds::SUCCESS,
+                    Ydb::StatusIds::CANCELLED,
+                    Ydb::StatusIds::NOT_FOUND
+                });
+                const auto& entry = response.GetResponse().GetEntry();
+                if (entry.GetStatus() == Ydb::StatusIds::CANCELLED) {
+                    UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(entry.GetIssues()), "Cancelled manually");
+                }
+            }
         });
     }
 }

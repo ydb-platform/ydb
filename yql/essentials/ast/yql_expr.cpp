@@ -951,7 +951,10 @@ TExprNode::TListType Compile(const TAstNode& node, TContext& ctx);
 
 TExprNode::TPtr CompileQuote(const TAstNode& node, TContext& ctx) {
     if (node.IsAtom()) {
-        return ctx.ProcessNode(node, ctx.Expr.NewAtom(node.GetPosition(), node.GetContent(), node.GetFlags()));
+        ui32 flags = node.GetFlags();
+        flags &= ~TAstNodeFlags::UnstableFormat;
+
+        return ctx.ProcessNode(node, ctx.Expr.NewAtom(node.GetPosition(), node.GetContent(), flags));
     } else {
         TExprNode::TListType children;
         children.reserve(node.GetChildrenCount());
@@ -2750,7 +2753,7 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, const TCo
     visitCtx.AllowFreeArgs = settings.AllowFreeArgs;
     visitCtx.NormalizeAtomFlags = settings.NormalizeAtomFlags;
     visitCtx.Pool = std::make_unique<TMemoryPool>(4096, TMemoryPool::TExpGrow::Instance(), settings.Allocator);
-    visitCtx.Frames.push_back(TFrameContext(settings.Allocator));
+    visitCtx.Frames.emplace_back(settings.Allocator);
     visitCtx.CurrentFrame = &visitCtx.Frames.front();
     VisitNode(root, 0ULL, visitCtx, 0);
     ui32 uniqueNum = 0;
@@ -3090,6 +3093,7 @@ TConstraintSet TExprContext::MakeConstraintSet(const NYT::TNode& serializedConst
         {TUniqueConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TUniqueConstraintNode, const NYT::TNode&>)},
         {TDistinctConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TDistinctConstraintNode, const NYT::TNode&>)},
         {TEmptyConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TEmptyConstraintNode, const NYT::TNode&>)},
+        {TStreamingConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TStreamingConstraintNode, const NYT::TNode&>)},
         {TVarIndexConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TVarIndexConstraintNode, const NYT::TNode&>)},
         {TMultiConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TMultiConstraintNode, const NYT::TNode&>)},
     };
@@ -3452,19 +3456,22 @@ TExprCycleDetector::TExprCycleDetector(ui64 maxQueueSize)
 
 void TExprCycleDetector::Reset() {
     Queue_.clear();
-    Set_.clear();
+    Map_.clear();
 }
 
-void TExprCycleDetector::AddNode(const TExprNode& node) {
+void TExprCycleDetector::AddNode(const TExprNode& node, ui64 repeatTransformCount) {
     auto hash = MakeCacheKey(node);
-    if (!Set_.insert(hash).second) {
-        throw yexception() << "Graph cycle detected";
+    auto [it, inserted] = Map_.emplace(hash, repeatTransformCount);
+    if (!inserted) {
+        YQL_CLOG(ERROR, Core) << "Old node at " << it->second << "\n";
+        YQL_CLOG(ERROR, Core) << "New node at " << repeatTransformCount << "\n";
+        throw TErrorException(0) << "Graph cycle detected";
     }
 
     Queue_.push(hash);
     if (Queue_.size() > MaxQueueSize_) {
         auto prevHash = Queue_.front();
-        Set_.erase(prevHash);
+        Map_.erase(prevHash);
         Queue_.pop();
     }
 }

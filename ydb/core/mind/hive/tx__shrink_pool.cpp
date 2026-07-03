@@ -11,16 +11,18 @@ class TTxShrinkPool : public TTransactionBase<THive> {
     const ui64 NewSize;
     const ui64 Cookie;
     const ui64 Version;
+    const TSubDomainKey SubDomain;
     TSideEffects SideEffects;
 
 public:
-    TTxShrinkPool(const TActorId& source, const TString& storagePool, ui64 newSize, ui64 cookie, ui64 version, THive* hive)
+    TTxShrinkPool(TEvHive::TEvShrinkStoragePool::TPtr ev, THive* hive)
         : TBase(hive)
-        , Source(source)
-        , StoragePool(storagePool)
-        , NewSize(newSize)
-        , Cookie(cookie)
-        , Version(version)
+        , Source(ev->Sender)
+        , StoragePool(ev->Get()->Record.GetStoragePool())
+        , NewSize(ev->Get()->Record.GetNewSize())
+        , Cookie(ev->Cookie)
+        , Version(ev->Get()->Record.GetVersion())
+        , SubDomain(ev->Get()->Record.GetSubDomain())
     {
     }
 
@@ -42,6 +44,7 @@ public:
         reply->Record.SetError(error);
         reply->Record.SetStoragePool(StoragePool);
         reply->Record.SetVersion(Version);
+        reply->Record.MutableSubDomain()->CopyFrom(SubDomain);
         SideEffects.Send(Source, reply.release(), 0, Cookie);
     }
 
@@ -50,8 +53,13 @@ public:
         SideEffects.Reset(Self->SelfId());
         NIceDb::TNiceDb db(txc.DB);
         auto* storagePool = Self->FindStoragePool(StoragePool);
+        auto* domainInfo = Self->FindDomain(SubDomain);
         if (storagePool == nullptr) {
             ReplyWithError("unknown storage pool");
+            return true;
+        }
+        if (domainInfo == nullptr) {
+            ReplyWithError("unknown domain");
             return true;
         }
         if (NewSize > storagePool->Groups.size()) {
@@ -68,7 +76,7 @@ public:
         std::ranges::sort(storagePool->InactiveGroups, TGroupCmp(), [storagePool](auto groupId) { return &storagePool->GetStorageGroup(groupId); });
         while (groupsToRemove < std::ssize(storagePool->InactiveGroups)) {
             auto groupId = storagePool->InactiveGroups.back();
-            BLOG_D("THive::TTxShrinkPool::Execute marking group " << groupId << "as active");
+            BLOG_D("THive::TTxShrinkPool::Execute marking group " << groupId << " as active");
             auto& groupInfo = storagePool->GetStorageGroup(groupId);
             groupInfo.Status = EGroupState::Active;
             db.Table<Schema::Group>().Key(groupId).Delete();
@@ -87,7 +95,7 @@ public:
                 | std::views::take(groupsToRemove - std::ssize(storagePool->InactiveGroups));
             storagePool->InactiveGroups.reserve(static_cast<size_t>(groupsToRemove));
             for (auto* group : newGroupsToRemove) {
-                BLOG_D("THive::TTxShrinkPool::Execute marking group " << group->Id << "as inactive");
+                BLOG_D("THive::TTxShrinkPool::Execute marking group " << group->Id << " as inactive");
                 group->Status = EGroupState::Inactive;
                 db.Table<Schema::Group>().Key(group->Id).Update(
                     NIceDb::TUpdate<Schema::Group::StoragePool>(StoragePool),
@@ -96,12 +104,19 @@ public:
                 storagePool->InactiveGroups.push_back(group->Id);
            }
         }
+
+        if (domainInfo->AddShrinkingPool(StoragePool)) {
+            db.Table<Schema::SubDomain>().Key(SubDomain).Update<Schema::SubDomain::ShrinkingStoragePools>(domainInfo->ShrinkingPoolsString());
+        }
+
         auto reply = std::make_unique<TEvHive::TEvShrinkStoragePoolReply>();
         reply->Record.SetStatus(NKikimrProto::OK);
         reply->Record.MutableGroupsToRemove()->Assign(storagePool->InactiveGroups.begin(), storagePool->InactiveGroups.end());
         reply->Record.SetStoragePool(StoragePool);
         reply->Record.SetVersion(Version);
+        reply->Record.MutableSubDomain()->CopyFrom(SubDomain);
         SideEffects.Send(Source, reply.release(), 0, Cookie);
+        Self->StartShrinkPool(*storagePool);
         return true;
     }
 
@@ -110,9 +125,8 @@ public:
     }
 };
 
-ITransaction* THive::CreateShrinkPool(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
-    const auto& record = ev->Get()->Record;
-    return new TTxShrinkPool(ev->Sender, record.GetStoragePool(), record.GetNewSize(), ev->Cookie, record.GetVersion(), this);
+ITransaction* THive::CreateShrinkPool(TEvHive::TEvShrinkStoragePool::TPtr ev) {
+    return new TTxShrinkPool(std::move(ev), this);
 }
 
 class TTxShrinkPoolReply : public TTransactionBase<THive> {
@@ -155,6 +169,13 @@ public:
             }
         }
         storagePool.InactiveGroups.assign(inactiveGroups.begin(), inactiveGroups.end());
+        auto domainKey = TSubDomainKey(Event->Get()->Record.GetSubDomain());
+        auto* domainInfo = Self->FindDomain(domainKey);
+        Y_ENSURE(domainInfo); // we are handling a response from domain's hive - we must know this domain
+        if (domainInfo->AddShrinkingPool(poolName)) {
+            db.Table<Schema::SubDomain>().Key(domainKey).Update<Schema::SubDomain::ShrinkingStoragePools>(domainInfo->ShrinkingPoolsString());
+        }
+        Self->StartShrinkPool(storagePool);
         return true;
     }
 

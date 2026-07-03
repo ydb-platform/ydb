@@ -13,13 +13,8 @@ struct TPartitionInfo {
     {
     }
 
-    TPartitionInfo(const TPartitionInfo& info)
-        : Actor(info.Actor)
-        , KeyRange(info.KeyRange)
-        , InitDone(info.InitDone)
-        , PendingRequests(info.PendingRequests)
-    {
-    }
+    TPartitionInfo(const TPartitionInfo& info) = delete;
+    TPartitionInfo(TPartitionInfo&& info) = default;
 
     TActorId Actor;
     TMaybe<TPartitionKeyRange> KeyRange;

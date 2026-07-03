@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/kafka_proxy/kafka_consumer_protocol.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/kafka_proxy/kafka_topic_partition.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
@@ -82,6 +83,8 @@ class TKafkaTestClient {
 
         TMessagePtr<TProduceResponseData> Produce(const TString& topicName, const std::vector<std::pair<ui32, TKafkaRecordBatch>>& msgs, const std::optional<TString>& transactionalId = {});
 
+        TMessagePtr<TProduceResponseData> Produce(const TString& topicName, ui32 partition, const TKafkaBytes& records);
+
         TMessagePtr<TProduceResponseData> Produce(const TTopicPartition& topicPartition,
                                                   const std::vector<std::pair<TString, TString>>& keyValueMessages,
                                                   ui32 baseSequence = 0,
@@ -97,7 +100,7 @@ class TKafkaTestClient {
 
         TMessagePtr<TListOffsetsResponseData> ListOffsets(std::vector<std::pair<i32,i64>>& partitions, const TString& topic);
 
-        TMessagePtr<TJoinGroupResponseData> JoinGroup(std::vector<TString>& topics, TString& groupId, TString protocolName, i32 heartbeatTimeout = 1000000);
+        TMessagePtr<TJoinGroupResponseData> JoinGroup(std::vector<TString>& topics, TString& groupId, TString protocolName, i32 heartbeatTimeout = 1000000, bool emptyMetadata = false);
 
         TMessagePtr<TSyncGroupResponseData> SyncGroup(TString& memberId, ui64 generationId, TString& groupId, std::vector<NKafka::TSyncGroupRequestData::TSyncGroupRequestAssignment> assignments, TString& protocolName);
 

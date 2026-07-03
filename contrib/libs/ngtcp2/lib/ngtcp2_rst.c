@@ -32,16 +32,11 @@
 #include "ngtcp2_conn_stat.h"
 
 void ngtcp2_rs_init(ngtcp2_rs *rs) {
-  rs->interval = UINT64_MAX;
-  rs->delivered = 0;
-  rs->prior_delivered = 0;
-  rs->prior_ts = UINT64_MAX;
-  rs->tx_in_flight = 0;
-  rs->lost = 0;
-  rs->send_elapsed = 0;
-  rs->ack_elapsed = 0;
-  rs->last_end_seq = -1;
-  rs->is_app_limited = 0;
+  *rs = (ngtcp2_rs){
+    .interval = UINT64_MAX,
+    .prior_ts = UINT64_MAX,
+    .last_end_seq = -1,
+  };
 }
 
 void ngtcp2_rst_init(ngtcp2_rst *rst) {

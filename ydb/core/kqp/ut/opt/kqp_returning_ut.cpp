@@ -9,11 +9,16 @@ namespace NKikimr::NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
+inline NKikimrConfig::TAppConfig GetAppConfig(bool enableIndexStreamWrite) {
+    auto app = NKikimrConfig::TAppConfig();
+    app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(enableIndexStreamWrite);
+    return app;
+}
+
 Y_UNIT_TEST_SUITE(KqpReturning) {
 
-Y_UNIT_TEST(ReturningTwice) {
-    TKikimrSettings serverSettings;
-    TKikimrRunner kikimr(serverSettings);
+Y_UNIT_TEST_TWIN(ReturningTwice, EnableIndexStreamWrite) {
+    TKikimrRunner kikimr(TKikimrSettings(GetAppConfig(EnableIndexStreamWrite)));
 
     auto client = kikimr.GetTableClient();
     auto session = client.CreateSession().GetValueSync().GetSession();
@@ -115,9 +120,8 @@ Y_UNIT_TEST(ReturningTwice) {
     }
 }
 
-Y_UNIT_TEST(ReplaceSerial) {
-    TKikimrSettings serverSettings;
-    TKikimrRunner kikimr(serverSettings);
+Y_UNIT_TEST_TWIN(ReplaceSerial, EnableIndexStreamWrite) {
+    TKikimrRunner kikimr(TKikimrSettings(GetAppConfig(EnableIndexStreamWrite)));
 
     auto client = kikimr.GetTableClient();
     auto session = client.CreateSession().GetValueSync().GetSession();
@@ -170,8 +174,8 @@ Y_UNIT_TEST(ReplaceSerial) {
     }
 }
 
-Y_UNIT_TEST(ReturningSerial) {
-    auto serverSettings = TKikimrSettings().SetWithSampleTables(false);
+Y_UNIT_TEST_TWIN(ReturningSerial, EnableIndexStreamWrite) {
+    auto serverSettings = TKikimrSettings(GetAppConfig(EnableIndexStreamWrite)).SetWithSampleTables(false);
     TKikimrRunner kikimr(serverSettings);
 
     auto client = kikimr.GetTableClient();
@@ -341,12 +345,14 @@ Y_UNIT_TEST(ReturningSerial) {
     {
         const auto query = Q_(R"(
             --!syntax_v1
-            DELETE FROM ReturningTable WHERE key <= 3 RETURNING key, value;
+            DELETE FROM ReturningTable WHERE key <= 3 RETURNING key, value
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        CompareYson(R"([[2;[2]];[3;[2]];[1;[3]]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(
+            EnableIndexStreamWrite ? R"([[1;[3]];[2;[2]];[3;[2]]])" : R"([[2;[2]];[3;[2]];[1;[3]]])",
+            FormatResultSetYson(result.GetResultSet(0)));
     }
 
     {
@@ -396,8 +402,8 @@ TString ExecuteReturningQueryWithParams(TKikimrRunner& kikimr, bool queryService
     return FormatResultSetYson(result.GetResultSet(0));
 }
 
-Y_UNIT_TEST_TWIN(ReturningWorks, QueryService) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_QUAD(ReturningWorks, QueryService, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
     CreateSampleTablesWithIndex(session, true);
@@ -420,8 +426,8 @@ Y_UNIT_TEST_TWIN(ReturningWorks, QueryService) {
     );
 }
 
-Y_UNIT_TEST_TWIN(ReturningWorksIndexedUpsert, QueryService) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_QUAD(ReturningWorksIndexedUpsert, QueryService, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
     CreateSampleTablesWithIndex(session, true);
@@ -446,8 +452,8 @@ Y_UNIT_TEST_TWIN(ReturningWorksIndexedUpsert, QueryService) {
     );
 }
 
-Y_UNIT_TEST_TWIN(ReturningWorksIndexedDelete, QueryService) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_QUAD(ReturningWorksIndexedDelete, QueryService, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
     CreateSampleTablesWithIndex(session, true);
@@ -470,8 +476,8 @@ Y_UNIT_TEST_TWIN(ReturningWorksIndexedDelete, QueryService) {
     );
 }
 
-Y_UNIT_TEST_TWIN(ReturningWorksIndexedDeleteV2, QueryService) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_QUAD(ReturningWorksIndexedDeleteV2, QueryService, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
     CreateSampleTablesWithIndex(session, true);
@@ -492,8 +498,8 @@ Y_UNIT_TEST_TWIN(ReturningWorksIndexedDeleteV2, QueryService) {
 }
 
 
-Y_UNIT_TEST_TWIN(ReturningWorksIndexedInsert, QueryService) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_QUAD(ReturningWorksIndexedInsert, QueryService, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
     CreateSampleTablesWithIndex(session, true);
@@ -520,8 +526,8 @@ Y_UNIT_TEST_TWIN(ReturningWorksIndexedInsert, QueryService) {
     );
 }
 
-Y_UNIT_TEST_TWIN(ReturningWorksIndexedReplace, QueryService) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_QUAD(ReturningWorksIndexedReplace, QueryService, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
     CreateSampleTablesWithIndex(session, true);
@@ -548,8 +554,8 @@ Y_UNIT_TEST_TWIN(ReturningWorksIndexedReplace, QueryService) {
     );
 }
 
-Y_UNIT_TEST_TWIN(ReturningWorksIndexedOperationsWithDefault, QueryService) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_QUAD(ReturningWorksIndexedOperationsWithDefault, QueryService, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
     {
@@ -579,8 +585,8 @@ Y_UNIT_TEST_TWIN(ReturningWorksIndexedOperationsWithDefault, QueryService) {
     );
 }
 
-Y_UNIT_TEST(ReturningColumnsOrder) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_TWIN(ReturningColumnsOrder, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
 
     auto client = kikimr.GetTableClient();
     auto session = client.CreateSession().GetValueSync().GetSession();
@@ -628,8 +634,8 @@ Y_UNIT_TEST(ReturningColumnsOrder) {
 
 }
 
-Y_UNIT_TEST(Random) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_TWIN(Random, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
 
     auto client = kikimr.GetQueryClient();
     auto settings = NYdb::NQuery::TExecuteQuerySettings()
@@ -653,8 +659,8 @@ Y_UNIT_TEST(Random) {
     }
 }
 
-Y_UNIT_TEST(ReturningTypes) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_QUAD(ReturningTypes, QueryService, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
 
     auto client = kikimr.GetTableClient();
     auto session = client.CreateSession().GetValueSync().GetSession();
@@ -682,10 +688,10 @@ Y_UNIT_TEST(ReturningTypes) {
     }
 }
 
-Y_UNIT_TEST_TWIN(ReturningUpsertAsTableListNotNullOnly, QueryService) {
+Y_UNIT_TEST_QUAD(ReturningUpsertAsTableListNotNullOnly, QueryService, EnableIndexStreamWrite) {
     // Test for issue #27021: Query fails when using RETURNING CLAUSE with UPSERT
     // to table with only NOT NULL fields and query parameters of type List
-    auto kikimr = DefaultKikimrRunner();
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
 
     auto client = kikimr.GetTableClient();
     auto session = client.CreateSession().GetValueSync().GetSession();
@@ -846,9 +852,9 @@ Y_UNIT_TEST_TWIN(ReturningUpsertAsTableListNotNullOnly, QueryService) {
     }
 }
 
-Y_UNIT_TEST_TWIN(ReturningUpsertAsTableListWithNullable, QueryService) {
+Y_UNIT_TEST_QUAD(ReturningUpsertAsTableListWithNullable, QueryService, EnableIndexStreamWrite) {
     // Test that nullable columns work correctly (this should work even before the fix)
-    auto kikimr = DefaultKikimrRunner();
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
 
     auto client = kikimr.GetTableClient();
     auto session = client.CreateSession().GetValueSync().GetSession();
@@ -967,8 +973,8 @@ Y_UNIT_TEST_TWIN(ReturningUpsertAsTableListWithNullable, QueryService) {
     }
 }
 
-Y_UNIT_TEST(ReturningDeleteUpdate) {
-    auto settings = TKikimrSettings().SetWithSampleTables(false);
+Y_UNIT_TEST_TWIN(ReturningDeleteUpdate, EnableIndexStreamWrite) {
+    auto settings = TKikimrSettings(GetAppConfig(EnableIndexStreamWrite)).SetWithSampleTables(false);
     TKikimrRunner kikimr(settings);
 
     auto client = kikimr.GetQueryClient();
@@ -1063,6 +1069,469 @@ Y_UNIT_TEST(ReturningDeleteUpdate) {
             NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
+Y_UNIT_TEST(ReturningWithUpsertOnColumnShard) {
+    TKikimrSettings serverSettings;
+    serverSettings.SetWithSampleTables(false);
+    TKikimrRunner kikimr(serverSettings);
+
+    auto client = kikimr.GetTableClient();
+    auto session = client.CreateSession().GetValueSync().GetSession();
+
+    const auto queryCreate = Q_(R"(
+        CREATE TABLE `/Root/ColumnShardTest` (
+            Col1 Uint64 NOT NULL,
+            Col2 String NOT NULL,
+            Col3 Int32 NOT NULL,
+            PRIMARY KEY (Col1)
+        )
+        WITH (STORE = COLUMN);
+    )");
+
+    auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
+    UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+    auto db = kikimr.GetQueryClient();
+
+    {
+        const auto query = Q_(R"(
+            UPSERT INTO `/Root/ColumnShardTest` (Col1, Col2, Col3) VALUES (1u, "test", 10) RETURNING *;
+        )");
+
+        auto resultFuture = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx());
+        resultFuture.Wait();
+        auto result = resultFuture.GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    }
+
+    {
+        const auto query = Q_(R"(
+            UPSERT INTO `/Root/ColumnShardTest` (Col1, Col2, Col3) VALUES (1u, "test", 10) RETURNING Col1, Col2;
+        )");
+
+        auto resultFuture = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx());
+        resultFuture.Wait();
+        auto result = resultFuture.GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    }
+}
+
+Y_UNIT_TEST(ReturningWithInsertOnColumnShard) {
+    TKikimrSettings serverSettings;
+    serverSettings.SetWithSampleTables(false);
+    TKikimrRunner kikimr(serverSettings);
+
+    auto client = kikimr.GetTableClient();
+    auto session = client.CreateSession().GetValueSync().GetSession();
+
+    const auto queryCreate = Q_(R"(
+        CREATE TABLE `/Root/ColumnShardTest` (
+            Col1 Uint64 NOT NULL,
+            Col2 String NOT NULL,
+            Col3 Int32 NOT NULL,
+            PRIMARY KEY (Col1)
+        )
+        WITH (STORE = COLUMN);
+    )");
+
+    auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
+    UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+    auto db = kikimr.GetQueryClient();
+
+    {
+        const auto query = Q_(R"(
+            INSERT INTO `/Root/ColumnShardTest` (Col1, Col2, Col3) VALUES (1u, "test", 10) RETURNING *;
+        )");
+
+        auto resultFuture = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx());
+        resultFuture.Wait();
+        auto result = resultFuture.GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    }
+
+    {
+        const auto query = Q_(R"(
+            INSERT INTO `/Root/ColumnShardTest` (Col1, Col2, Col3) VALUES (1u, "test", 10) RETURNING Col1, Col2;
+        )");
+
+        auto resultFuture = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx());
+        resultFuture.Wait();
+        auto result = resultFuture.GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    }
+}
+
+Y_UNIT_TEST_TWIN(TwoReturningReplace, EnableStreamIndex) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableStreamIndex));
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, false);
+    }
+
+    {
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(
+            R"(
+                REPLACE INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 1, "Payload1") RETURNING Key, Fk, Value;
+                REPLACE INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 2, "Payload2") RETURNING Key, Fk, Value;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1];[1];["Payload1"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([
+            [[1];[2];["Payload2"]]
+        ])", FormatResultSetYson(result.GetResultSet(1)));
+    }
+
+    CompareYson(
+        R"([
+            [[1];[2];["Payload2"]]
+        ])",
+        ExecuteReturningQuery(kikimr, true, "SELECT Key, Fk, Value FROM `/Root/SecondaryKeys` ORDER BY Key, Fk;")
+    );
+}
+
+Y_UNIT_TEST_TWIN(ReturningBeforeReplace, EnableStreamIndex) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableStreamIndex));
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, false);
+    }
+
+    {
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(
+            R"(
+                REPLACE INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 1, "Payload1") RETURNING Key, Fk, Value;
+                REPLACE INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 2, "Payload2");
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1];[1];["Payload1"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    CompareYson(
+        R"([
+            [[1];[2];["Payload2"]]
+        ])",
+        ExecuteReturningQuery(kikimr, true, "SELECT Key, Fk, Value FROM `/Root/SecondaryKeys` ORDER BY Key, Fk;")
+    );
+}
+
+Y_UNIT_TEST_TWIN(ReturningAfterReplace, EnableStreamIndex) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableStreamIndex));
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, false);
+    }
+
+    {
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(
+            R"(
+                REPLACE INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 1, "Payload1");
+                REPLACE INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 2, "Payload2") RETURNING Key, Fk, Value;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1];[2];["Payload2"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    CompareYson(
+        R"([
+            [[1];[2];["Payload2"]]
+        ])",
+        ExecuteReturningQuery(kikimr, true, "SELECT Key, Fk, Value FROM `/Root/SecondaryKeys` ORDER BY Key, Fk;")
+    );
+}
+
+Y_UNIT_TEST_TWIN(TwoReturningUpsert, EnableStreamIndex) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableStreamIndex));
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, false);
+    }
+
+    {
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(
+            R"(
+                UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 1, "Payload1") RETURNING Key, Fk, Value;
+                UPSERT INTO `/Root/SecondaryKeys` (Key, Fk) VALUES (1, 2) RETURNING Key, Fk, Value;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1];[1];["Payload1"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([
+            [[1];[2];["Payload1"]]
+        ])", FormatResultSetYson(result.GetResultSet(1)));
+    }
+
+    CompareYson(
+        R"([
+            [[1];[2];["Payload1"]]
+        ])",
+        ExecuteReturningQuery(kikimr, true, "SELECT Key, Fk, Value FROM `/Root/SecondaryKeys` ORDER BY Key, Fk;")
+    );
+}
+
+Y_UNIT_TEST_TWIN(ReturningBeforeUpsert, EnableStreamIndex) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableStreamIndex));
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, false);
+    }
+
+    {
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(
+            R"(
+                UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 1, "Payload1") RETURNING Key, Fk, Value;
+                UPSERT INTO `/Root/SecondaryKeys` (Key, Fk) VALUES (1, 2);
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1];[1];["Payload1"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    CompareYson(
+        R"([
+            [[1];[2];["Payload1"]]
+        ])",
+        ExecuteReturningQuery(kikimr, true, "SELECT Key, Fk, Value FROM `/Root/SecondaryKeys` ORDER BY Key, Fk;")
+    );
+}
+
+Y_UNIT_TEST_TWIN(ReturningAfterUpsert, EnableStreamIndex) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableStreamIndex));
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, false);
+    }
+
+    {
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(
+            R"(
+                UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 1, "Payload1");
+                UPSERT INTO `/Root/SecondaryKeys` (Key, Fk) VALUES (1, 2) RETURNING Key, Fk, Value;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1];[2];["Payload1"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    CompareYson(
+        R"([
+            [[1];[2];["Payload1"]]
+        ])",
+        ExecuteReturningQuery(kikimr, true, "SELECT Key, Fk, Value FROM `/Root/SecondaryKeys` ORDER BY Key, Fk;")
+    );
+}
+
+Y_UNIT_TEST_TWIN(ReturningUpdateNewVsOldValues, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, false);
+    }
+
+    auto db = kikimr.GetQueryClient();
+    {
+        auto result = db.ExecuteQuery(
+            R"(
+                UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 10, "Old");
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto result = db.ExecuteQuery(
+            R"(
+                UPDATE `/Root/SecondaryKeys` SET Value = "New" WHERE Key = 1
+                RETURNING Key, Fk, Value;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[1];[10];["New"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        auto result = db.ExecuteQuery(
+            R"(
+                UPDATE `/Root/SecondaryKeys` SET Fk = 20 WHERE Key = 1
+                RETURNING Key, Fk, Value;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[1];[20];["New"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    CompareYson(
+        R"([[[20];[1]]])",
+        ExecuteReturningQuery(kikimr, true,
+            "SELECT Fk, Key FROM `/Root/SecondaryKeys/Index/indexImplTable` ORDER BY Key;")
+    );
+}
+
+Y_UNIT_TEST_TWIN(ReturningDeletePkOnlyWithIndex, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, false);
+    }
+
+    auto db = kikimr.GetQueryClient();
+    {
+        auto result = db.ExecuteQuery(
+            R"(
+                UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES
+                    (1, 10, "a"),
+                    (2, 20, "b");
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto result = db.ExecuteQuery(
+            R"(
+                DELETE FROM `/Root/SecondaryKeys` WHERE Key = 1 RETURNING Key;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[1]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    CompareYson(
+        R"([[[20];[2]]])",
+        ExecuteReturningQuery(kikimr, true,
+            "SELECT Fk, Key FROM `/Root/SecondaryKeys/Index/indexImplTable` ORDER BY Key;")
+    );
+
+    {
+        auto result = db.ExecuteQuery(
+            R"(
+                DELETE FROM `/Root/SecondaryKeys` WHERE Key = 1 RETURNING Key;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
+Y_UNIT_TEST_TWIN(ReturningForUpsert, EnableStreamIndex) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableStreamIndex));
+
+    auto db = kikimr.GetQueryClient();
+    auto session = db.GetSession().GetValueSync().GetSession();
+
+    {
+        const std::string query = R"(
+            CREATE TABLE TestTable (
+                Key Int32,
+                Value String DEFAULT "default_value",
+                Value2 String,
+                PRIMARY KEY (Key)
+            );
+        )";
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    const auto validateTable = [&](const TString& expected) {
+        const std::string query = R"(
+            SELECT Key, Value, Value2 FROM TestTable ORDER BY Key;
+        )";
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+    };
+
+    {
+        const std::string query = R"(
+            UPSERT INTO TestTable (Key) VALUES (1) RETURNING Key, Value, Value2;
+        )";
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1];["default_value"];#]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        validateTable(R"([
+            [[1];["default_value"];#]
+        ])");
+    }
+
+    {
+        const std::string query = R"(
+            UPSERT INTO TestTable (Key, Value) VALUES (2, "explicit") RETURNING Key, Value, Value2;
+        )";
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[2];["explicit"];#]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        validateTable(R"([
+            [[1];["default_value"];#];
+            [[2];["explicit"];#]
+        ])");
+    }
+
+    {
+        const std::string query = R"(
+            UPSERT INTO TestTable (Key, Value2) VALUES (2, "explicit2") RETURNING Key, Value, Value2;
+        )";
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[2];["explicit"];["explicit2"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        validateTable(R"([
+            [[1];["default_value"];#];
+            [[2];["explicit"];["explicit2"]]
+        ])");
     }
 }
 

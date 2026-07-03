@@ -15,14 +15,14 @@ class TFixedGrowthStringOutput
     : public IZeroCopyOutput
 {
 public:
-    TFixedGrowthStringOutput(TString* s, size_t growthSize) noexcept;
+    TFixedGrowthStringOutput(std::string* s, size_t growthSize) noexcept;
 
 private:
     size_t DoNext(void** ptr) override;
     void DoUndo(size_t len) override;
 
 private:
-    TString* const String_;
+    std::string* const String_;
     const size_t GrowthSize_;
 };
 

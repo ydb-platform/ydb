@@ -206,6 +206,7 @@ def set_schedule():
     process_type = data.get("type")
     enabled = data.get("enabled")
     interval = data.get("interval")
+    params = data.get("params") or {}
 
     if not process_type:
         return jsonify({"status": "error", "message": "Missing type field"}), 400
@@ -214,8 +215,16 @@ def set_schedule():
 
     if process_type not in NEMESIS_TYPES:
         return jsonify({"status": "error", "message": "Invalid process type"}), 400
+    if not isinstance(params, dict):
+        return jsonify({"status": "error", "message": "params must be an object"}), 400
 
     if enabled:
+        # Rebuild planner with user-supplied params (if any) before starting the schedule.
+        if chaos_store is not None and params:
+            if not chaos_store.rebuild_planner(process_type, params):
+                return jsonify(
+                    {"status": "error", "message": "Failed to apply params to planner"}
+                ), 400
         started = nemesis_schedule.enable_schedule(
             process_type,
             interval

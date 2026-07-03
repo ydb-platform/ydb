@@ -145,7 +145,9 @@ keytool -import -trustcacerts -alias ca -file ca-cert.pem -keystore client.trust
 После этих пунктов у вас должны появиться нужные keystore и truststore, а также файлы с сертификатами и ключами.
 
 #### Конфигурация клиента
+
 ##### Пример для Java SDK
+
 ```java
 props.put("security.protocol", "SSL");
 props.put("ssl.truststore.password", "changeit");
@@ -158,7 +160,7 @@ props.put("ssl.endpoint.identification.algorithm", "");
 
 ##### Пример для Kafka cli
 
-```
+```text
 security.protocol=SSL
 ssl.truststore.password=changeit
 ssl.truststore.location=/full/path/to/client.truststore.jks
@@ -202,6 +204,7 @@ client_certificate_authorization:
 Для корректной работы нужно использовать тот же сертификат, что и в настройках grpc, поэтому нужно указать путь до этого же серверного сертификата в конфигурации grpc.
 
 Сейчас настроить конфигурации Kafka и grpc с разными серверными сертификатами или указать серверный сертификат только в настройках kafka_proxy_config при использовании mtls нельзя.
+
 ```yaml
 grpc_config:
   cert: "/path/to/server-cert.pem"

@@ -8,6 +8,7 @@
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 #include <ydb/core/persqueue/pqtablet/cache/read.h>
 #include <ydb/core/persqueue/pqtablet/readproxy/readproxy.h>
+#include <ydb/core/persqueue/pqtablet/batching/batch_processor.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/pqtablet/common/tracing_support.h>
@@ -56,7 +57,6 @@ static constexpr ui32 MAX_BYTES = 25_MB;
 static constexpr ui32 MAX_SOURCE_ID_LENGTH = 2048;
 static constexpr ui32 MAX_HEARTBEAT_SIZE = 2_KB;
 static constexpr ui32 MAX_TXS = 1000;
-
 struct TChangeNotification {
     TChangeNotification(const TActorId& actor, const ui64 txId)
         : Actor(actor)
@@ -1058,8 +1058,6 @@ void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     case WRITE_TX_COOKIE:
         PQ_LOG_D("Handle TEvKeyValue::TEvResponse (WRITE_TX_COOKIE)");
         EndWriteTxs(resp, ctx);
-        // Завершилась операция с CmdWrite. Можно отправлять отложенные TEvReadSetAck
-        SendDeferredReadSetAcks(ctx);
         break;
     default:
         PQ_LOG_ERROR("Unexpected KV response: " << ev->Get()->ToString() << " " << ctx.SelfID);
@@ -1113,17 +1111,34 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
     Counters->Percentile().Populate(counters.Percentile());
     Counters->Cumulative().Populate(counters.Cumulative());
 
-    partition.ReservedBytes = counters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Get();
+    auto newReservedBytes = counters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Get();
+    auto combinedReservedBytes = ReservedBytes + newReservedBytes;
+    ReservedBytes = combinedReservedBytes > partition.ReservedBytes ? combinedReservedBytes - partition.ReservedBytes : 0;
+    partition.ReservedBytes = newReservedBytes;
 
     // restore cache's simple counters cleaned by partition's counters
     SetCacheCounters(CacheCounters);
-    ui64 reservedSize = std::accumulate(Partitions.begin(), Partitions.end(), 0ul,
-        [](ui64 sum, const auto& p) { return sum + p.second.ReservedBytes; });
-    Counters->Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(reservedSize);
+    Counters->Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedBytes);
 
     // Features of the implementation of SimpleCounters. It is necessary to restore the value of
     // indicators for transactions.
     SetTxCounters();
+}
+
+void TPersQueue::Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const TActorContext&)
+{
+    const auto partitionId = ev->Get()->PartitionId;
+
+    auto it = Partitions.find(TPartitionId{partitionId});
+    if (it == Partitions.end()) {
+        return;
+    }
+
+    auto& partitionInfo = it->second;
+    if (!partitionInfo.InitDone) {
+        return;
+    }
+    Forward(ev, partitionInfo.Actor);
 }
 
 
@@ -1867,6 +1882,28 @@ void TPersQueue::HandleUpdateWriteTimestampRequest(const ui64 responseCookie, NW
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
+void TPersQueue::FillBatchInfo(
+    const NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd,
+    TEvPQ::TEvWrite::TMsg& msg) const
+{
+    if (cmd.HasMaxSeqNo()) {
+        msg.MaxSeqNo = static_cast<ui64>(cmd.GetMaxSeqNo());
+    }
+    msg.LogicalMessageCount = static_cast<ui32>(cmd.GetLogicalMessageCount());
+    msg.IsBatch = cmd.GetIsBatch();
+    if (cmd.GetPartNo() > 0) {
+        return;
+    }
+
+    msg.PartitionKeys.reserve(cmd.PartitionKeysSize());
+    for (ui32 i = 0; i < cmd.PartitionKeysSize(); ++i) {
+        const auto& partitionKey = cmd.GetPartitionKeys(i);
+        msg.PartitionKeys.emplace_back(
+            partitionKey.GetKey(),
+            partitionKey.HasSize() ? static_cast<ui64>(partitionKey.GetSize()) : 0);
+    }
+}
+
 void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
                                     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
@@ -1946,6 +1983,10 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             errorStr = "too long partition key";
         } else if (cmd.GetSeqNo() < 0) {
             errorStr = "SeqNo must be >= 0";
+        } else if (cmd.HasMaxSeqNo() && cmd.GetMaxSeqNo() < 0) {
+            errorStr = "MaxSeqNo must be >= 0";
+        } else if (cmd.GetLogicalMessageCount() < 1 || cmd.GetLogicalMessageCount() > MAX_LOGICAL_MESSAGE_COUNT) {
+            errorStr = TStringBuilder() << "LogicalMessageCount must be >= 1 and <= " << MAX_LOGICAL_MESSAGE_COUNT;
         } else if (cmd.HasPartNo() && (cmd.GetPartNo() < 0 || cmd.GetPartNo() >= Max<ui16>())) {
             errorStr = "PartNo must be >= 0 and < 65535";
         } else if (cmd.HasPartNo() != cmd.HasTotalParts()) {
@@ -2057,8 +2098,9 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                     .HeartbeatVersion = heartbeatVersion,
                     .EnableKafkaDeduplication = cmd.GetEnableKafkaDeduplication(),
                     .ProducerEpoch = (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing()),
-                    .MessageDeduplicationId = deduplicationId
+                    .MessageDeduplicationId = deduplicationId,
                 });
+                FillBatchInfo(cmd, msgs.back());
 
                 partNo++;
                 uncompressedSize = 0;
@@ -2107,8 +2149,9 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                 .HeartbeatVersion = heartbeatVersion,
                 .EnableKafkaDeduplication = cmd.GetEnableKafkaDeduplication(),
                 .ProducerEpoch = (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing()),
-                .MessageDeduplicationId = std::move(deduplicationId)
+                .MessageDeduplicationId = std::move(deduplicationId),
             });
+            FillBatchInfo(cmd, msgs.back());
         }
         PQ_LOG_D("got client message topic: " << (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined") <<
                  " partition: " << req.GetPartition() <<
@@ -2272,6 +2315,7 @@ void TPersQueue::HandleReadRequest(
                                        cmd.GetClientId(),
                                        cmd.HasTimeoutMs() ? cmd.GetTimeoutMs() : 0,
                                        bytes,
+                                       cmd.GetReadToBlobEnd(),
                                        cmd.HasMaxTimeLagMs() ? cmd.GetMaxTimeLagMs() : 0,
                                        cmd.HasReadTimestampMs() ? cmd.GetReadTimestampMs() : 0,
                                        clientDC,
@@ -2728,7 +2772,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
             directKey.SessionId = pipeIter->second.SessionId;
             directKey.PartitionSessionId = pipeIter->second.PartitionSessionId;
         }
-        TActorId rr = ctx.RegisterWithSameMailbox(CreateReadProxy(ev->Sender, TabletID(), ctx.SelfID, GetGeneration(), directKey, request));
+        TActorId rr = ctx.RegisterWithSameMailbox(CreateReadProxy(
+            ev->Sender, TabletID(), ctx.SelfID, GetGeneration(), directKey, request, BatchProcessorActor));
         ans = CreateResponseProxy(rr, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
     } else {
         ans = CreateResponseProxy(ev->Sender, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
@@ -2972,6 +3017,7 @@ void TPersQueue::HandleDie(const TActorContext& ctx)
         ctx.Send(p.second.Actor, new TEvents::TEvPoisonPill());
     }
     ctx.Send(CacheActor, new TEvents::TEvPoisonPill());
+    ctx.Send(BatchProcessorActor, new TEvents::TEvPoisonPill());
 
     for (auto& pipe : PipesInfo) {
         if (!pipe.second.SessionId.empty()) {
@@ -3036,6 +3082,7 @@ void TPersQueue::CreatedHook(const TActorContext& ctx)
 {
     IsServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
     CacheActor = ctx.RegisterWithSameMailbox(new TPQCacheProxy(ctx.SelfID, TabletID()));
+    BatchProcessorActor = ctx.Register(NBatching::CreateBatchProcessor(TabletID(), ctx.SelfID));
 
     SamplingControl = AppData(ctx)->TracingConfigurator->GetControl();
 
@@ -3521,6 +3568,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
 
 void TPersQueue::MovePendingDeferredReadSetAcks()
 {
+    AFL_ENSURE(DeferredReadSetAcks.empty())("DeferredReadSetAcks", DeferredReadSetAcks.size());
     DeferredReadSetAcks = std::move(PendingDeferredReadSetAcks);
     PendingDeferredReadSetAcks.clear();
 }
@@ -3741,6 +3789,7 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
     SendReplies(ctx);
     CheckChangedTxStates(ctx);
     CreateSupportivePartitionActors(ctx);
+    SendDeferredReadSetAcks(ctx);
 
     WriteTxsInProgress = false;
 
@@ -4978,6 +5027,7 @@ IActor* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                           SubDomainOutOfSpace,
                           (ui32)channels,
                           GetPartitionQuoter(partitionId),
+                          BatchProcessorActor,
                           SamplingControl,
                           newPartition);
 }
@@ -5332,6 +5382,8 @@ void TPersQueue::DeletePartition(const TPartitionId& partitionId, const TActorCo
     const TPartitionInfo& partition = p->second;
     ctx.Send(partition.Actor, new TEvents::TEvPoisonPill());
 
+    ReservedBytes = ReservedBytes > partition.ReservedBytes ? ReservedBytes - partition.ReservedBytes : 0;
+
     PQ_LOG_D("DeletePartition " << partitionId);
     Partitions.erase(partitionId);
 }
@@ -5578,6 +5630,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvKeyValue::TEvResponse, Handle);
         HFuncTraced(TEvPQ::TEvInitComplete, Handle);
         HFuncTraced(TEvPQ::TEvPartitionCounters, Handle);
+        HFuncTraced(TEvPQ::TEvConsumerBatchProcessorMetrics, Handle);
         HFuncTraced(TEvPQ::TEvMetering, Handle);
         HFuncTraced(TEvPQ::TEvPartitionLabeledCounters, Handle);
         HFuncTraced(TEvPQ::TEvPartitionLabeledCountersDrop, Handle);

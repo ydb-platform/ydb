@@ -406,7 +406,7 @@ public:
                 }
 
                 if (pragma == "pooltrees" && node.ChildrenSize() >= 5) {
-                    auto pools = NPrivate::GetDefaultParser<TVector<TString>>()(TString{node.Child(4)->Content()});
+                    auto pools = NCommon::NPrivate::GetDefaultParser<TVector<TString>>()(TString{node.Child(4)->Content()});
                     for (const auto& pool : pools) {
                         if (!POOL_TREES_WHITELIST.contains(pool)) {
                             AddInfo(ctx, TStringBuilder() << "unsupported pool tree: " << pool, skipIssues);
@@ -698,8 +698,12 @@ public:
         YQL_ENSURE(ytState);
 
         if (auto maybeYtReadTable = TMaybeNode<TYtReadTable>(read)) {
-            TMaybeNode<TCoSecureParam> secParams;
             const auto cluster = maybeYtReadTable.Cast().DataSource().Cluster().StringValue();
+            if (!ytState->Configuration->_EnableDq.Get(cluster).GetOrElse(true)) {
+                AddErrorWrap(ctx, read->Pos(), TStringBuilder() << "disabled for cluster " << cluster);
+                return nullptr;
+            }
+            TMaybeNode<TCoSecureParam> secParams;
             if (ytState->ResolveClusterToken(cluster)) {
                 secParams = Build<TCoSecureParam>(ctx, read->Pos()).Name().Build(TString("cluster:default_").append(cluster)).Done();
             }
@@ -718,6 +722,11 @@ public:
 
         if (auto maybeWrite = TMaybeNode<TYtWriteTable>(write)) {
             if (ytState->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
+                const auto cluster = maybeWrite.Cast().DataSink().Cluster().StringValue();
+                if (!ytState->Configuration->_EnableDq.Get(cluster).GetOrElse(true)) {
+                    AddErrorWrap(ctx, write->Pos(), TStringBuilder() << "disabled for cluster " << cluster);
+                    return nullptr;
+                }
                 const auto& content = maybeWrite.Cast().Content();
                 if (TYtMaterialize::Match(&SkipCallables(content.Ref(), {TCoSort::CallableName(), TCoTopSort::CallableName(), TCoAssumeSorted::CallableName(), TCoAssumeConstraints::CallableName()}))) {
                     return write;
@@ -927,7 +936,7 @@ public:
         const auto type = GetSequenceItemType(input->Pos(), input->GetTypeAnn(), false, ctx);
 
         YQL_ENSURE(type);
-        TYtOutTableInfo outTableInfo(type->Cast<TStructExprType>(), GetNativeYtTypeCompatibility(cluster, *ytState->Configuration), order);
+        TYtOutTableInfo outTableInfo(type->Cast<TStructExprType>(), ytState->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE, order);
 
         const auto res = ytState->Gateway->PrepareFullResultTable(
             IYtGateway::TFullResultTableOptions(ytState->SessionId)

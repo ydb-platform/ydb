@@ -19,6 +19,15 @@ namespace {
 void WaitForAuditLogLines(const std::vector<std::string>& lines,
     size_t expectedLines, TDuration timeout = TDuration::MilliSeconds(500))
 {
+    /*
+    There is no good thread-safe approach here without either significantly
+    rewriting the audit actor implementation to use a thread-safe vector,
+    or changing the behavior of the audit subsystem itself
+    (which is something we may indeed want to do in the future).
+
+    Therefore, this function is temporarily (hope) excluded from TSAN checks.
+    */
+
     auto deadline = TInstant::Now() + timeout;
     while (lines.size() < expectedLines && TInstant::Now() < deadline) {
         Sleep(TDuration::MilliSeconds(50));

@@ -318,9 +318,9 @@ public:
         std::sort(SortPermutation_.begin(), SortPermutation_.end(), cmp);
     }
 
-    bool FillOutput(const THolderFactory& holderFactory) {
+    bool FillOutput(const THolderFactory& holderFactory, NYql::EDatumValidationMode validationMode) {
         if (WritingOutput_) {
-            FillSortOutputPart(holderFactory);
+            FillSortOutputPart(holderFactory, validationMode);
         } else if constexpr (!HasCount) {
             if (!OutputLength_) {
                 IsFinished_ = true;
@@ -329,7 +329,7 @@ public:
 
             SortAll();
             WritingOutput_ = true;
-            FillSortOutputPart(holderFactory);
+            FillSortOutputPart(holderFactory, validationMode);
         } else {
             IsFinished_ = true;
             if (!BuilderLength_) {
@@ -344,17 +344,17 @@ public:
                 if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
                     Values[i] = ScalarValues_[i];
                 } else {
-                    Values[i] = holderFactory.CreateArrowBlock(arrow::Datum(Builders_[i]->Build(true)));
+                    Values[i] = holderFactory.CreateArrowBlock(arrow::Datum(Builders_[i]->Build(true)), validationMode);
                 }
             }
 
-            Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(BuilderLength_)));
+            Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(BuilderLength_)), validationMode);
         }
         FillArrays();
         return true;
     }
 
-    void FillSortOutputPart(const THolderFactory& holderFactory) {
+    void FillSortOutputPart(const THolderFactory& holderFactory, NYql::EDatumValidationMode validationMode) {
         auto blockLen = Min(BuilderMaxLength_, OutputLength_ - Written_);
         const bool isLast = (Written_ + blockLen == OutputLength_);
 
@@ -363,11 +363,11 @@ public:
                 Values[i] = ScalarValues_[i];
             } else {
                 Builders_[i]->AddMany(SortArrays_[i].data(), SortArrays_[i].size(), SortPermutation_.data() + Written_, blockLen);
-                Values[i] = holderFactory.CreateArrowBlock(arrow::Datum(Builders_[i]->Build(isLast)));
+                Values[i] = holderFactory.CreateArrowBlock(arrow::Datum(Builders_[i]->Build(isLast)), validationMode);
             }
         }
 
-        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
+        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)), validationMode);
         Written_ += blockLen;
         if (Written_ >= OutputLength_) {
             IsFinished_ = true;
@@ -435,7 +435,8 @@ public:
         auto state = MakeState(ctx);
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
                                                       std::move(state),
-                                                      std::move(Stream_->GetValue(ctx)));
+                                                      std::move(Stream_->GetValue(ctx)),
+                                                      ctx.RuntimeSettings.DatumValidation.Get());
     }
 
 private:
@@ -446,11 +447,13 @@ private:
         TStreamValue(TMemoryUsageInfo* memInfo,
                      const THolderFactory& holderFactory,
                      NUdf::TUnboxedValue&& blockState,
-                     NUdf::TUnboxedValue&& stream)
+                     NUdf::TUnboxedValue&& stream,
+                     NYql::EDatumValidationMode validationMode)
             : TBase(memInfo)
             , BlockState_(std::move(blockState))
             , Stream_(std::move(stream))
             , HolderFactory_(holderFactory)
+            , ValidationMode_(validationMode)
         {
         }
 
@@ -481,7 +484,7 @@ private:
                     }
                 }
 
-                if (!blockState.FillOutput(HolderFactory_)) {
+                if (!blockState.FillOutput(HolderFactory_, ValidationMode_)) {
                     return NUdf::EFetchStatus::Finish;
                 }
             }
@@ -496,6 +499,7 @@ private:
         NUdf::TUnboxedValue BlockState_;
         NUdf::TUnboxedValue Stream_;
         const THolderFactory& HolderFactory_;
+        const NYql::EDatumValidationMode ValidationMode_;
     };
 
     void RegisterDependencies() const final {

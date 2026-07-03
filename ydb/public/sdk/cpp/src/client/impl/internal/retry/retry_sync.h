@@ -40,11 +40,10 @@ public:
                 try {
                     std::rethrow_exception(std::current_exception());
                 } catch (const std::exception& e) {
-                    parentSpan->RecordException(TypeName(e).c_str(), e.what());
+                    parentSpan->EndWithException(TypeName(e).c_str(), e.what());
                 } catch (...) {
-                    parentSpan->RecordException("unknown", "unknown exception");
+                    parentSpan->EndWithException("unknown", "unknown exception");
                 }
-                parentSpan->End(EStatus::CLIENT_INTERNAL_ERROR);
             }
             throw;
         }
@@ -131,11 +130,14 @@ protected:
     }
 
     TStatusType RunOperation() override {
-        if constexpr (TFunctionArgs<TOperation>::Length == 1) {
-            return Operation_(this->Client_);
-        } else {
-            return Operation_(this->Client_, this->GetRemainingTimeout());
-        }
+        return InvokeWithRangeErrorCatch<TStatusType>([&]() -> TStatusType {
+            TInRetryOperationContextClientGuard guard(this->Client_);
+            if constexpr (TFunctionArgs<TOperation>::Length == 1) {
+                return Operation_(this->Client_);
+            } else {
+                return Operation_(this->Client_, this->GetRemainingTimeout());
+            }
+        });
     }
 };
 
@@ -170,7 +172,7 @@ protected:
                 Session_ = sessionResult.GetSession();
                 TRetryDeadlineHelper<TClient>::SetDeadline(*Session_, Deadline_);
             }
-            status = TStatusType(TStatus(sessionResult));
+            status = MakeRetryResultFromStatus<TStatusType>(TStatus(sessionResult));
         }
 
         if (Session_) {
@@ -181,11 +183,14 @@ protected:
     }
 
     TStatusType RunOperation() override {
-        if constexpr (TFunctionArgs<TOperation>::Length == 1) {
-            return Operation_(this->Session_.value());
-        } else {
-            return Operation_(this->Session_.value(), this->GetRemainingTimeout());
-        }
+        return InvokeWithRangeErrorCatch<TStatusType>([&]() -> TStatusType {
+            TInRetryOperationContextClientGuard guard(this->Client_);
+            if constexpr (TFunctionArgs<TOperation>::Length == 1) {
+                return Operation_(this->Session_.value());
+            } else {
+                return Operation_(this->Session_.value(), this->GetRemainingTimeout());
+            }
+        });
     }
 
     void Reset() override {

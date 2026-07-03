@@ -40,7 +40,7 @@ public:
                     auto value = f.GetValue();
                     if (self->ParentSpan_) {
                         self->ParentSpan_->SetRetryCount(self->RetryNumber_);
-                        self->ParentSpan_->End(value.GetStatus());
+                        self->ParentSpan_->End(GetRetryStatusCode(value));
                     }
                     return value;
                 } catch (...) {
@@ -49,11 +49,10 @@ public:
                         try {
                             std::rethrow_exception(std::current_exception());
                         } catch (const std::exception& e) {
-                            self->ParentSpan_->RecordException(TypeName(e).c_str(), e.what());
+                            self->ParentSpan_->EndWithException(TypeName(e).c_str(), e.what());
                         } catch (...) {
-                            self->ParentSpan_->RecordException("unknown", "unknown exception");
+                            self->ParentSpan_->EndWithException("unknown", "unknown exception");
                         }
-                        self->ParentSpan_->End(EStatus::CLIENT_INTERNAL_ERROR);
                     }
                     throw;
                 }
@@ -98,12 +97,13 @@ protected:
     }
 
     static void HandleStatusAsync(TPtr self, const TStatusType& status) {
-        self->EndAttemptSpan(status.GetStatus());
-        auto nextStep = self->GetNextStep(status);
+        const TStatus& retryStatus = GetRetryStatus(status);
+        self->EndAttemptSpan(retryStatus.GetStatus());
+        auto nextStep = self->GetNextStep(retryStatus);
         if (nextStep != NextStep::Finish) {
             self->RetryNumber_++;
-            self->Client_.Impl_->CollectRetryStatAsync(status.GetStatus());
-            self->LogRetry(status);
+            self->Client_.Impl_->CollectRetryStatAsync(retryStatus.GetStatus());
+            self->LogRetry(retryStatus);
         }
         switch (nextStep) {
             case NextStep::RetryImmediately:
@@ -119,16 +119,24 @@ protected:
     }
 
     static void DoRunOperation(TPtr self) {
-        self->RunOperation().Subscribe(
-            [self](const TAsyncStatusType& result) {
-                [[maybe_unused]] auto attemptScope = self->ActivateAttemptSpan();
-                try {
-                    HandleStatusAsync(self, result.GetValue());
-                } catch (...) {
-                    HandleExceptionAsync(self, std::current_exception());
+        try {
+            self->RunOperation().Subscribe(
+                [self](const TAsyncStatusType& result) {
+                    [[maybe_unused]] auto attemptScope = self->ActivateAttemptSpan();
+                    try {
+                        HandleStatusAsync(self, result.GetValue());
+                    } catch (const NStatusHelpers::TYdbRangeErrorException& e) {
+                        HandleStatusAsync(self, MakeRetryResultFromStatus<TStatusType>(TStatus(e.GetStatus())));
+                    } catch (...) {
+                        HandleExceptionAsync(self, std::current_exception());
+                    }
                 }
-            }
-        );
+            );
+        } catch (const NStatusHelpers::TYdbRangeErrorException& e) {
+            HandleStatusAsync(self, MakeRetryResultFromStatus<TStatusType>(TStatus(e.GetStatus())));
+        } catch (...) {
+            HandleExceptionAsync(self, std::current_exception());
+        }
     }
 
 protected:
@@ -176,6 +184,7 @@ public:
 
 protected:
     TAsyncStatusType RunOperation() override {
+        TInRetryOperationContextClientGuard guard(this->Client_);
         if constexpr (TFunctionArgs<TOperation>::Length == 1) {
             return Operation_(this->Client_);
         } else {
@@ -218,7 +227,8 @@ public:
                     try {
                         auto& result = resultFuture.GetValue();
                         if (!result.IsSuccess()) {
-                            return TRetryContextAsync::HandleStatusAsync(self, TStatusType(TStatus(result)));
+                            return TRetryContextAsync::HandleStatusAsync(
+                                self, MakeRetryResultFromStatus<TStatusType>(TStatus(result)));
                         }
 
                         self->Session_ = result.GetSession();
@@ -240,6 +250,7 @@ private:
     }
 
     TAsyncStatusType RunOperation() override {
+        TInRetryOperationContextClientGuard guard(this->Client_);
         if constexpr (TFunctionArgs<TOperation>::Length == 1) {
             return Operation_(this->Session_.value());
         } else {

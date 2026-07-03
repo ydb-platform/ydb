@@ -176,12 +176,17 @@ message TProgram {
         repeated TColumn KeyColumns = 2;
     }
 
+    message TDistinct {
+        optional TColumn KeyColumn = 1;
+    }
+
     message TCommand {
         oneof line {
             TAssignment Assign = 1;
             TProjection Projection = 2;
             TFilter Filter = 3;
             TGroupBy GroupBy = 4;
+            TDistinct Distinct = 5;
             // TODO: ORDER BY, LIMIT
         }
     }

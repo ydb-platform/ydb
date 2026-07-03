@@ -66,6 +66,18 @@ class AllureUserHooks:
     def attach_file(self, source, name, attachment_type, extension):
         """ attach file """
 
+    @hookspec
+    def global_attach_data(self, body, name, attachment_type, extension):
+        """ attach global data """
+
+    @hookspec
+    def global_attach_file(self, source, name, attachment_type, extension):
+        """ attach global file """
+
+    @hookspec
+    def global_error(self, message, trace):
+        """ global error """
+
 
 class AllureDeveloperHooks:
 
@@ -99,4 +111,8 @@ class AllureDeveloperHooks:
 
     @hookspec
     def report_attached_data(self, body, file_name):
+        """ reporting """
+
+    @hookspec
+    def report_globals(self, globals_item):
         """ reporting """

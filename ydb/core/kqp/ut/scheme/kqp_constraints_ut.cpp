@@ -80,17 +80,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         {
             TString query = R"(
                 ALTER TABLE `/Root/SerialTable`
-                DROP COLUMN Value;
-            )";
-
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Can't drop serial column: 'Value'");
-        }
-
-        {
-            TString query = R"(
-                ALTER TABLE `/Root/SerialTable`
                 ALTER COLUMN Value DROP NOT NULL;
             )";
 
@@ -112,6 +101,40 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot alter serial column 'Value'");
+        }
+
+        {
+            // Dropping a serial column is allowed: the column and its backing sequence are
+            // removed together.
+            TString query = R"(
+                ALTER TABLE `/Root/SerialTable`
+                DROP COLUMN Value;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            // The dropped column is gone.
+            TString query = R"(
+                SELECT Value FROM `/Root/SerialTable`;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+        }
+
+        {
+            TString query = R"(
+                SELECT * FROM `/Root/SerialTable`;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u]]
+            ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
@@ -355,42 +378,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AddColumnWithDefaultForbidden) {
-        TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableAddColumsWithDefaults(false)
-            .SetWithSampleTables(false));
-
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            auto query = R"(
-                CREATE TABLE `/Root/SerialTableCreateAndAlter` (
-                    Key Int32,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-            )";
-
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            auto query = R"(
-                ALTER TABLE `/Root/SerialTableCreateAndAlter`
-                ADD COLUMN SeqNo Int32 DEFAULT 5;
-            )";
-
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Adding columns with defaults is disabled");
-        }
-    }
-
     Y_UNIT_TEST(AlterTableAddColumnWithDefaultValue) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableAddColumsWithDefaults(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -811,8 +800,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     Y_UNIT_TEST(AddNonColumnDoesnotReturnInternalError) {
         TKikimrRunner kikimr(TKikimrSettings()
             .SetUseRealThreads(false)
-            .SetEnableAddColumsWithDefaults(true)
-            .SetDisableMissingDefaultColumnsInBulkUpsert(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); } );
@@ -1052,7 +1039,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(IndexedTableAndNotNullColumnAddNotNullColumn) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableAddColumsWithDefaults(true)
             .SetEnableParameterizedDecimal(true)
             .SetWithSampleTables(false));
 
@@ -1335,7 +1321,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(Utf8AndDefault) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableAddColumsWithDefaults(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -1414,7 +1399,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableAddNotNullWithDefault) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableAddColumsWithDefaults(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -1513,7 +1497,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableAddColumnWithDefaultRejection) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableAddColumsWithDefaults(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -1556,7 +1539,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableAddColumnWithDefaultCancellation) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableAddColumsWithDefaults(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -1594,7 +1576,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableAddColumnWithDefaultOlap) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableAddColumsWithDefaults(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -1625,10 +1606,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(DefaultColumnAndBulkUpsert, DisableMissingDefaultColumnsInBulkUpsert) {
+    Y_UNIT_TEST(DefaultColumnAndBulkUpsert) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableAddColumsWithDefaults(true)
-            .SetDisableMissingDefaultColumnsInBulkUpsert(DisableMissingDefaultColumnsInBulkUpsert)
             .SetWithSampleTables(false));
 
         auto queryClient = kikimr.GetQueryClient();
@@ -1691,19 +1670,13 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             rowsBuilder.EndList();
 
             auto result = tableClient.BulkUpsert("/Root/DefaultColumnAndBulkUpsert", rowsBuilder.Build()).ExtractValueSync();
-            if (DisableMissingDefaultColumnsInBulkUpsert) {
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: Value3, Value1");
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-            }
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: Value3, Value1");
         }
     }
 
     Y_UNIT_TEST(AlterTableAddColumnDefaultNullIsNotAllowed) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
-
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
 
@@ -1733,137 +1706,131 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    // Y_UNIT_TEST(SetNotNull) {
-    //     struct TValue {
-    //     private:
-    //         int _value = 0;
-    //         bool _isNull = false;
-    //     public:
-    //         TValue(int value) : _value(value) {}
-    //         TValue() : _isNull(true) {}
+    Y_UNIT_TEST(SetNotNull) {
+        struct TValue {
+        private:
+            int _value = 0;
+            bool _isNull = false;
+        public:
+            TValue(int value) : _value(value) {}
+            TValue() : _isNull(true) {}
 
-    //         int GetValue() const {
-    //             assert(!_isNull);
-    //             return _value;
-    //         }
+            int GetValue() const {
+                assert(!_isNull);
+                return _value;
+            }
 
-    //         bool IsNull() const {
-    //             return _isNull;
-    //         }
+            bool IsNull() const {
+                return _isNull;
+            }
 
-    //         std::string ToString() const {
-    //             if (IsNull()) {
-    //                 return "NULL";
-    //             }
+            std::string ToString() const {
+                if (IsNull()) {
+                    return "NULL";
+                }
 
-    //             return std::to_string(GetValue());
-    //         }
-    //     };
+                return std::to_string(GetValue());
+            }
+        };
 
-    //     NKikimrConfig::TAppConfig appConfig;
-    //     appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
-    //     appConfig.MutableFeatureFlags()->SetEnableChangeNotNullConstraint(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
 
-    //     TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false).SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
-    //     auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
-    //     auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
-    //     auto querySession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetUseRealThreads(false)
+            .SetWithSampleTables(false));
 
-    //     auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); } );
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); } );
+        auto querySession = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); } );
 
-    //     {
-    //         auto createTable = R"sql(
-    //             --!syntax_v1
-    //             CREATE TABLE `/Root/SetNotNull` (
-    //                 myKey Int32 NOT NULL,
-    //                 myValue Int32 DEFAULT(0),
-    //                 PRIMARY KEY (myKey)
-    //             );
-    //         )sql";
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
-    //         auto result = kikimr.RunCall([&]{ return session.ExecuteSchemeQuery(createTable).GetValueSync(); });
-    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-    //     }
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/SetNotNull` (
+                    myKey Int32 NOT NULL,
+                    myValue Int32 DEFAULT(0),
+                    PRIMARY KEY (myKey)
+                );
+            )";
 
-    //     auto insertValues = [&](TValue key, TValue val) -> std::pair<EStatus, TString> {
-    //         auto query = TString(std::format(R"sql(
-    //             --!syntax_v1
-    //             UPSERT INTO `/Root/SetNotNull` (myKey, myValue)
-    //             VALUES
-    //             ( {}, {} );
-    //         )sql", key.ToString(), val.ToString()));
+            auto result = kikimr.RunCall([&]{ return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
 
-    //         NYdb::NTable::TExecDataQuerySettings execSettings;
-    //         execSettings.KeepInQueryCache(true);
-    //         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        auto insertValues = [&](TValue key, TValue val) -> std::pair<EStatus, TString> {
+            auto query = TString(std::format(R"(
+                UPSERT INTO `/Root/SetNotNull` (myKey, myValue)
+                VALUES
+                ( {}, {} );
+            )", key.ToString(), val.ToString()));
 
-    //         auto result = kikimr.RunCall([&] {
-    //             return querySession
-    //                 .ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(),
-    //                                   execSettings)
-    //                 .ExtractValueSync(); } );
+            auto result = kikimr.RunCall([&] {
+                return querySession
+                    .ExecuteQuery(query, TTxControl::BeginTx().CommitTx())
+                    .GetValueSync(); } );
 
-    //         return {result.GetStatus(), result.GetIssues().ToString()};
-    //     };
+            return {result.GetStatus(), result.GetIssues().ToString()};
+        };
 
-    //     {
-    //         const int countOfLines = 10;
-    //         for (int i = 1; i <= countOfLines; i++) {
-    //             auto key = TValue(i);
-    //             auto value = (i != countOfLines ? TValue(10 * i) : TValue());
-    //             auto [status, issue] = insertValues(key, value);
-    //             UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::SUCCESS, issue);
-    //         }
-    //     }
+        {
+            const int countOfLines = 10;
+            for (int i = 1; i <= countOfLines; i++) {
+                auto key = TValue(i);
+                auto value = (i != countOfLines ? TValue(10 * i) : TValue());
+                auto [status, issue] = insertValues(key, value);
+                UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::SUCCESS, issue);
+            }
+        }
 
-    //     auto setNotNull = R"sql(
-    //         --!syntax_v1
-    //         ALTER TABLE `/Root/SetNotNull` ALTER COLUMN myValue SET NOT NULL;
-    //     )sql";
+        auto setNotNull = R"(
+            ALTER TABLE `/Root/SetNotNull` ALTER COLUMN myValue SET NOT NULL;
+        )";
 
-    //     bool enabledCapture = true;
-    //     TVector<TAutoPtr<IEventHandle>> delayedCheckingColumns;
-    //     auto grab = [&delayedCheckingColumns, &enabledCapture](TAutoPtr<IEventHandle>& ev) -> auto {
-    //         if (enabledCapture && ev->GetTypeRewrite() == TEvDataShard::TEvCheckConstraintCreateRequest::EventType) {
-    //             delayedCheckingColumns.emplace_back(ev.Release());
-    //             return TTestActorRuntime::EEventAction::DROP;
-    //         }
+        bool enabledCapture = true;
+        TVector<TAutoPtr<IEventHandle>> delayedValidateRequests;
+        auto grab = [&delayedValidateRequests, &enabledCapture](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (enabledCapture && ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
+                delayedValidateRequests.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
 
-    //         return TTestActorRuntime::EEventAction::PROCESS;
-    //     };
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
 
-    //     TDispatchOptions opts;
-    //     opts.FinalEvents.emplace_back([&delayedCheckingColumns](IEventHandle&) {
-    //         return delayedCheckingColumns.size() > 0;
-    //     });
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back([&delayedValidateRequests](IEventHandle&) {
+            return delayedValidateRequests.size() > 0;
+        });
 
-    //     runtime.SetObserverFunc(grab);
+        runtime.SetObserverFunc(grab);
 
-    //     auto setNotNullFuture = kikimr.RunInThreadPool([&] { return session.ExecuteSchemeQuery(setNotNull).GetValueSync(); });
+        auto setNotNullFuture = kikimr.RunInThreadPool([&] { return session.ExecuteQuery(setNotNull, TTxControl::NoTx()).GetValueSync(); });
 
-    //     runtime.DispatchEvents(opts);
-    //     Y_VERIFY_S(delayedCheckingColumns.size() > 0, "no upload rows requests");
+        runtime.DispatchEvents(opts);
+        Y_VERIFY_S(delayedValidateRequests.size() > 0, "no validate row condition requests");
 
-    //     {
-    //         auto key = TValue(201);
-    //         auto value = TValue();
-    //         auto [status, issue] = insertValues(key, value);
-    //         UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::BAD_REQUEST, issue);
-    //         UNIT_ASSERT_STRING_CONTAINS(issue, "All not null columns should be initialized");
-    //     }
+        {
+            auto key = TValue(201);
+            auto value = TValue();
+            auto [status, issue] = insertValues(key, value);
+            UNIT_ASSERT_C(status != EStatus::SUCCESS, issue);
+            UNIT_ASSERT_STRING_CONTAINS(issue, "Can't set NULL or optional value to column: myValue. "
+                                               "`SET NOT NULL` operation is currently in progress for this column");
+        }
 
-    //     enabledCapture = false;
-    //     for (const auto& ev: delayedCheckingColumns) {
-    //         runtime.Send(ev);
-    //     }
+        enabledCapture = false;
+        for (const auto& ev: delayedValidateRequests) {
+            runtime.Send(ev);
+        }
 
-    //     auto result = runtime.WaitFuture(setNotNullFuture);
-    //     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-    // }
+        auto result = runtime.WaitFuture(setNotNullFuture);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+    }
 
     Y_UNIT_TEST(AlterTableSetDefaultLiteral) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -1913,7 +1880,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDefaultInt) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -1963,7 +1929,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableDropDefault) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2022,7 +1987,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDefaultNullIsNotAllowed) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2062,7 +2026,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDefaultNullForNotNullColumn) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2094,7 +2057,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDefaultNonExistentColumn) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2126,7 +2088,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableDropDefaultNoExistingDefault) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2158,7 +2119,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDefaultOnSequenceColumn) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2190,7 +2150,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableDropDefaultOnSequenceColumn) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2222,10 +2181,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetAndDropDefaultOnNotNullColumn) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
-            .SetEnableAddColumsWithDefaults(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -2311,11 +2268,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(ShowCreateTableAfterSetDefault) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
-            .SetEnableAddColumsWithDefaults(true)
-            .SetEnableShowCreate(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -2363,7 +2317,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDropDefaultMultipleColumns) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2427,11 +2380,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(ShowCreateTableAfterDropDefault) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
-            .SetEnableAddColumsWithDefaults(true)
-            .SetEnableShowCreate(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -2479,7 +2429,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDefaultOnColumnTable) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2586,7 +2535,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableDropDefaultOnColumnTable) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2620,7 +2568,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDefaultOnPK) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2674,7 +2621,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableDropDefaultOnPK) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2748,7 +2694,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDefaultUnsupportedValue) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2791,9 +2736,270 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
+    Y_UNIT_TEST(AlterTableSetDropDefaultBulkUpsert) {
+        NKikimrConfig::TAppConfig appConfig;
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/SetDropDefaultBulkUpsert` (
+                    Key Uint32 NOT NULL,
+                    Value String,
+                    DefaultCol Int32,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/SetDropDefaultBulkUpsert`
+                ALTER COLUMN DefaultCol SET DEFAULT 42;
+            )";
+            auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto rowsBuilder = NYdb::TValueBuilder();
+            rowsBuilder.BeginList();
+            for (ui32 i = 1; i <= 3; ++i) {
+                rowsBuilder.AddListItem()
+                    .BeginStruct()
+                    .AddMember("Key").Uint32(i)
+                    .AddMember("Value").OptionalString("val")
+                    .EndStruct();
+            }
+            rowsBuilder.EndList();
+
+            auto result = tableClient.BulkUpsert("/Root/SetDropDefaultBulkUpsert", rowsBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: DefaultCol");
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/SetDropDefaultBulkUpsert`
+                ALTER COLUMN DefaultCol DROP DEFAULT;
+            )";
+            auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto rowsBuilder = NYdb::TValueBuilder();
+            rowsBuilder.BeginList();
+            for (ui32 i = 1; i <= 3; ++i) {
+                rowsBuilder.AddListItem()
+                    .BeginStruct()
+                    .AddMember("Key").Uint32(i)
+                    .AddMember("Value").OptionalString("val")
+                    .EndStruct();
+            }
+            rowsBuilder.EndList();
+
+            auto result = tableClient.BulkUpsert("/Root/SetDropDefaultBulkUpsert", rowsBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableSetDropDefaultAsyncIndexOnColumn) {
+        NKikimrConfig::TAppConfig appConfig;
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            const std::string query = R"(
+                CREATE TABLE `/Root/AsyncIdxOnCol` (
+                    Key Int32,
+                    IndexCol Int32,
+                    CoverCol Int32,
+                    PRIMARY KEY (Key),
+                    INDEX idx GLOBAL ASYNC ON (IndexCol) COVER (CoverCol)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/AsyncIdxOnCol`
+                ALTER COLUMN IndexCol SET DEFAULT 42;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                REPLACE INTO `/Root/AsyncIdxOnCol` (Key, CoverCol) VALUES (1, 100);
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                SELECT Key, IndexCol, CoverCol FROM `/Root/AsyncIdxOnCol` ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[1];[42];[100]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const std::string query = R"(
+                SELECT Key, IndexCol, CoverCol FROM `AsyncIdxOnCol/idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[1];[42];[100]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/AsyncIdxOnCol`
+                ALTER COLUMN IndexCol DROP DEFAULT;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                REPLACE INTO `/Root/AsyncIdxOnCol` (Key, CoverCol) VALUES (2, 200);
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                SELECT Key, IndexCol, CoverCol FROM `/Root/AsyncIdxOnCol` ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[1];[42];[100]];[[2];#;[200]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const std::string query = R"(
+                SELECT Key, IndexCol, CoverCol FROM `AsyncIdxOnCol/idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[1];[42];[100]];[[2];#;[200]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableSetDropDefaultAsyncIndexCoverColumn) {
+        NKikimrConfig::TAppConfig appConfig;
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            const std::string query = R"(
+                CREATE TABLE `/Root/AsyncIdxCoverCol` (
+                    Key Int32,
+                    IndexCol Int32,
+                    CoverCol Int32,
+                    PRIMARY KEY (Key),
+                    INDEX idx GLOBAL ASYNC ON (IndexCol) COVER (CoverCol)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/AsyncIdxCoverCol`
+                ALTER COLUMN CoverCol SET DEFAULT 42;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                REPLACE INTO `/Root/AsyncIdxCoverCol` (Key, IndexCol) VALUES (1, 10);
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                SELECT Key, IndexCol, CoverCol FROM `/Root/AsyncIdxCoverCol` ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[1];[10];[42]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const std::string query = R"(
+                SELECT Key, IndexCol, CoverCol FROM `AsyncIdxCoverCol/idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[1];[10];[42]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/AsyncIdxCoverCol`
+                ALTER COLUMN CoverCol DROP DEFAULT;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                REPLACE INTO `/Root/AsyncIdxCoverCol` (Key, IndexCol) VALUES (2, 20);
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                SELECT Key, IndexCol, CoverCol FROM `/Root/AsyncIdxCoverCol` ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[1];[10];[42]];[[2];[20];#]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const std::string query = R"(
+                SELECT Key, IndexCol, CoverCol FROM `AsyncIdxCoverCol/idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[1];[10];[42]];[[2];[20];#]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST(AlterTableDefaultConstantExpression) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2876,7 +3082,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableDefaultUndeterministicExpression) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2920,8 +3125,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableAddColumnDefaultWithChangefeed) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableAddColumsWithDefaults(true));
+            .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
 
@@ -3039,6 +3243,741 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             } else {
                 UNIT_ASSERT_C(!json["update"].Has("DefaultColumn"), "DefaultColumn should not be present");
             }
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableSetDropDefaultWithChangefeed) {
+        NKikimrConfig::TAppConfig appConfig;
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+
+        {
+            const std::string query = R"(
+                CREATE TABLE `/Root/TestSetDropDefaultCdc` (
+                    Key Int32,
+                    Value String,
+                    DefaultCol Int32,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/TestSetDropDefaultCdc` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES', FORMAT = 'JSON'
+                );
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TOPIC `/Root/TestSetDropDefaultCdc/feed` ADD CONSUMER `test_consumer`;
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/TestSetDropDefaultCdc`
+                ALTER COLUMN DefaultCol SET DEFAULT 42;
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                UPSERT INTO `/Root/TestSetDropDefaultCdc` (Key, Value)
+                VALUES (1, "One");
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                REPLACE INTO `/Root/TestSetDropDefaultCdc` (Key, Value)
+                VALUES (2, "Two");
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/TestSetDropDefaultCdc`
+                ALTER COLUMN DefaultCol DROP DEFAULT;
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const std::string query = R"(
+                UPSERT INTO `/Root/TestSetDropDefaultCdc` (Key, Value)
+                VALUES (3, "Three");
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const std::string query = R"(
+                REPLACE INTO `/Root/TestSetDropDefaultCdc` (Key, Value)
+                VALUES (4, "Four");
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TTopicClient topicClient(kikimr.GetDriver());
+
+        TReadSessionSettings readSettings;
+        readSettings.ConsumerName("test_consumer");
+        TTopicReadSettings topicReadSettings;
+        topicReadSettings.Path("/Root/TestSetDropDefaultCdc/feed");
+        readSettings.AppendTopics(topicReadSettings);
+
+        auto readSession = topicClient.CreateReadSession(readSettings);
+
+        {
+            auto event = readSession->GetEvent(/* block = */ true, /* maxEventsCount = */ 1);
+            UNIT_ASSERT(event);
+            auto* startEvent = std::get_if<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event);
+            UNIT_ASSERT(startEvent);
+            startEvent->Confirm();
+        }
+
+        const size_t expectedMessages = 4;
+
+        std::vector<TString> messages;
+        while (messages.size() < expectedMessages) {
+            TInstant deadline = TInstant::Now() + TDuration::Seconds(2);
+            TDuration remain = TDuration::Seconds(2);
+
+            while (TInstant::Now() < deadline) {
+                if (!readSession->WaitEvent().Wait(remain)) {
+                    break;
+                }
+
+                for (auto& ev : readSession->GetEvents(false)) {
+                    if (auto* e = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&ev)) {
+                        for (auto& m : e->GetMessages()) {
+                            messages.emplace_back(m.GetData());
+                        }
+                        e->Commit();
+                    }
+                }
+
+                remain = deadline - TInstant::Now();
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), expectedMessages);
+
+        for (size_t i = 0; i < messages.size(); ++i) {
+            NJson::TJsonValue json;
+            const bool parsed = NJson::ReadJsonTree(messages[i], &json);
+            UNIT_ASSERT_C(parsed, TStringBuilder() << "Failed to parse changefeed message as JSON: " << messages[i]);
+
+            auto key = json["key"][0].GetInteger();
+            if (key == 1) {
+                UNIT_ASSERT_C(json["update"].Has("DefaultCol"),
+                    TStringBuilder() << "DefaultCol should be present after SET DEFAULT, key=" << key);
+                UNIT_ASSERT_VALUES_EQUAL(json["update"]["DefaultCol"].GetInteger(), 42);
+            } else if (key == 2) {
+                UNIT_ASSERT_C(json["reset"].Has("DefaultCol"),
+                    TStringBuilder() << "DefaultCol should be present after SET DEFAULT, key=" << key);
+                UNIT_ASSERT_VALUES_EQUAL(json["reset"]["DefaultCol"].GetInteger(), 42);
+            } else if (key == 3) {
+                UNIT_ASSERT_C(!json["update"].Has("DefaultCol"),
+                    "DefaultCol should not be present after DROP DEFAULT with UPSERT");
+            } else if (key == 4) {
+                UNIT_ASSERT_C(json["reset"].Has("DefaultCol"),
+                    "DefaultCol should be present after DROP DEFAULT with REPLACE");
+                UNIT_ASSERT_C(json["reset"]["DefaultCol"].IsNull(),
+                    "DefaultCol should be null after DROP DEFAULT with REPLACE");
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(SetDefaultNullableColumn_InsertOrReplace, IsInsert) {
+        NKikimrConfig::TAppConfig appConfig;
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        const std::string operation = IsInsert ? "INSERT" : "REPLACE";
+
+        const auto validateTable = [&](const TString& expected) {
+            const std::string query = R"(
+                SELECT Key, Value FROM `/Root/SetDefaultNullable` ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        };
+
+        {
+            const std::string query = R"(
+                CREATE TABLE `/Root/SetDefaultNullable` (
+                    Key Int32,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNullable` (Key, Value) VALUES (1, "data1");
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["data1"]]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNullable` (Key) VALUES (2);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["data1"]];
+                [[2];#]
+            ])");
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/SetDefaultNullable` ALTER COLUMN Value SET DEFAULT "default_value";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNullable` (Key) VALUES (3);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["data1"]];
+                [[2];#];
+                [[3];["default_value"]]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNullable` (Key, Value) VALUES (4, "data4");
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["data1"]];
+                [[2];#];
+                [[3];["default_value"]];
+                [[4];["data4"]]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNullable` (Key) VALUES (2);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            if (IsInsert) {
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                validateTable(R"([
+                    [[1];["data1"]];
+                    [[2];["default_value"]];
+                    [[3];["default_value"]];
+                    [[4];["data4"]]
+                ])");
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(SetDefaultNotNullColumn_InsertOrReplace, IsInsert) {
+        NKikimrConfig::TAppConfig appConfig;
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        const std::string operation = IsInsert ? "INSERT" : "REPLACE";
+
+        const auto validateTable = [&](const TString& expected) {
+            const std::string query = R"(
+                SELECT Key, Value FROM `/Root/SetDefaultNotNull` ORDER BY Key;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        };
+
+        {
+            const std::string query = R"(
+                CREATE TABLE `/Root/SetDefaultNotNull` (
+                    Key Int32,
+                    Value String NOT NULL,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNotNull` (Key, Value) VALUES (1, "data1");
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];"data1"]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNotNull` (Key) VALUES (2);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing not null column in input");
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/SetDefaultNotNull` ALTER COLUMN Value SET DEFAULT "default_value";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNotNull` (Key) VALUES (3);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];"data1"];
+                [[3];"default_value"]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNotNull` (Key, Value) VALUES (4, "data4");
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];"data1"];
+                [[3];"default_value"];
+                [[4];"data4"]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNotNull` (Key) VALUES (4);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            if (IsInsert) {
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                validateTable(R"([
+                    [[1];"data1"];
+                    [[3];"default_value"];
+                    [[4];"default_value"]
+                ])");
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DropDefaultNullableColumn_InsertOrReplace, IsInsert) {
+        NKikimrConfig::TAppConfig appConfig;
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        const std::string operation = IsInsert ? "INSERT" : "REPLACE";
+
+        const auto validateTable = [&](const TString& expected) {
+            const std::string query = R"(
+                SELECT Key, Value FROM `/Root/DropDefaultNullable` ORDER BY Key;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        };
+
+        {
+            const std::string query = R"(
+                CREATE TABLE `/Root/DropDefaultNullable` (
+                    Key Int32,
+                    Value String DEFAULT "default_value",
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNullable` (Key, Value) VALUES (1, "data1");
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["data1"]]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNullable` (Key) VALUES (2);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["data1"]];
+                [[2];["default_value"]]
+            ])");
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/DropDefaultNullable` ALTER COLUMN Value DROP DEFAULT;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNullable` (Key) VALUES (3);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["data1"]];
+                [[2];["default_value"]];
+                [[3];#]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNullable` (Key, Value) VALUES (4, "data4");
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["data1"]];
+                [[2];["default_value"]];
+                [[3];#];
+                [[4];["data4"]]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNullable` (Key) VALUES (2);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            if (IsInsert) {
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                validateTable(R"([
+                    [[1];["data1"]];
+                    [[2];#];
+                    [[3];#];
+                    [[4];["data4"]]
+                ])");
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DropDefaultNotNullColumn_InsertOrReplace, IsInsert) {
+        NKikimrConfig::TAppConfig appConfig;
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        const std::string operation = IsInsert ? "INSERT" : "REPLACE";
+
+        const auto validateTable = [&](const TString& expected) {
+            const std::string query = R"(
+                SELECT Key, Value FROM `/Root/DropDefaultNotNull` ORDER BY Key;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        };
+
+        {
+            const std::string query = R"(
+                CREATE TABLE `/Root/DropDefaultNotNull` (
+                    Key Int32,
+                    Value String NOT NULL DEFAULT "default_value",
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNotNull` (Key, Value) VALUES (1, "data1");
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];"data1"]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNotNull` (Key) VALUES (2);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];"data1"];
+                [[2];"default_value"]
+            ])");
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/DropDefaultNotNull` ALTER COLUMN Value DROP DEFAULT;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNotNull` (Key) VALUES (3);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing not null column in input");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNotNull` (Key, Value) VALUES (4, "data4");
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];"data1"];
+                [[2];"default_value"];
+                [[4];"data4"]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNotNull` (Key) VALUES (4);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(SetDefaultMultipleTimes) {
+        NKikimrConfig::TAppConfig appConfig;
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        const auto validateTable = [&](const TString& expected) {
+            const std::string query = R"(
+                SELECT Key, Value FROM `/Root/SetDefaultMultiple` ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        };
+
+        {
+            const std::string query = R"(
+                CREATE TABLE `/Root/SetDefaultMultiple` (
+                    Key Int32,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/SetDefaultMultiple` ALTER COLUMN Value SET DEFAULT "first_default";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                UPSERT INTO `/Root/SetDefaultMultiple` (Key) VALUES (1);
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["first_default"]]
+            ])");
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/SetDefaultMultiple` ALTER COLUMN Value SET DEFAULT "second_default";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                UPSERT INTO `/Root/SetDefaultMultiple` (Key) VALUES (2);
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["first_default"]];
+                [[2];["second_default"]]
+            ])");
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/SetDefaultMultiple` ALTER COLUMN Value SET DEFAULT "third_default";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                UPSERT INTO `/Root/SetDefaultMultiple` (Key) VALUES (3);
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["first_default"]];
+                [[2];["second_default"]];
+                [[3];["third_default"]]
+            ])");
         }
     }
 }

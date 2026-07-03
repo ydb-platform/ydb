@@ -10,8 +10,11 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
+////////////////////////////////////////////////////////////////////////////////
+
 TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
     NActors::TActorSystem const* actorSystem,
+    const TLogTitle& logTitle,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     TReadHint readHint,
@@ -19,19 +22,27 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
     std::shared_ptr<TReadBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
     : ActorSystem(actorSystem)
+    , LogTitle(logTitle.GetChildWithTags(
+          GetCycleCount(),
+          {{"t", "MultiRead"}, {"r", request->Headers.Range.Print()}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , CallContext(std::move(callContext))
     , Request(std::move(request))
     , TraceId(std::move(traceId))
-    , Promise(NThreading::NewPromise<TResponse>())
 {
-    SubRequestExecutors.reserve(readHint.RangeHints.size());
-
     Y_ASSERT(Request->Headers.VolumeConfig);
     Y_ASSERT(Request->Headers.VolumeConfig->BlockSize != 0);
-    size_t blockSize = Request->Headers.VolumeConfig->BlockSize;
 
+    const size_t blockSize = Request->Headers.VolumeConfig->BlockSize;
+
+    auto guard = Request->Sglist.Acquire();
+    if (!guard) {
+        Reply(MakeError(E_CANCELLED, "Failed to acquire sglist guard"), 0);
+        return;
+    }
+
+    SubRequestExecutors.reserve(readHint.RangeHints.size());
     for (auto& hint: readHint.RangeHints) {
         // Compute offset for Sglist
         const size_t offsetBlocks = hint.RequestRelativeRange.Start;
@@ -42,37 +53,15 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
             Request->Headers.Clone(hint.VChunkRange));
 
         // Create subbuffer Sglist for current range
-        {
-            auto guard = Request->Sglist.Acquire();
-            if (guard) {
-                const TSgList& fullSgList = guard.Get();
-                TSgList subSgList =
-                    CreateSgListSubRange(fullSgList, offsetBytes, sizeBytes);
-                subRequest->Sglist =
-                    Request->Sglist.CreateDepender(std::move(subSgList));
-            } else {
-                auto error =
-                    MakeError(E_CANCELLED, "Failed to acquire sglist guard");
-                LOG_ERROR(
-                    *ActorSystem,
-                    NKikimrServices::NBS_PARTITION,
-                    "TReadRequestExecutor: SubRequest %s %s failed: %s",
-                    Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-                    Request->Headers.Range.Print().c_str(),
-                    FormatError(error).c_str());
+        subRequest->Sglist = Request->Sglist.CreateDepender(
+            CreateSgListSubRange(guard.Get(), offsetBytes, sizeBytes));
 
-                Promise.TrySetValue(TResponse{.Error = std::move(error)});
-                return;
-            }
-        }
-
-        TReadHint singleHint;
-        singleHint.RangeHints.push_back(std::move(hint));
         auto executor = std::make_shared<TReadSingleLocationRequestExecutor>(
             ActorSystem,
+            logTitle,
             VChunkConfig,
             DirectBlockGroup,
-            std::move(singleHint),
+            std::move(hint),
             CallContext,
             subRequest,
             NWilson::TTraceId(TraceId));
@@ -87,9 +76,8 @@ TReadMultipleLocationRequestExecutor::~TReadMultipleLocationRequestExecutor()
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TReadRequestExecutor. Reply has not been sent %s %s",
-            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-            Request->Headers.Range.Print().c_str());
+            "%s Reply has not been sent.",
+            LogTitle.GetWithTime().c_str());
 
         Y_ABORT_UNLESS(false);
     }
@@ -99,37 +87,24 @@ void TReadMultipleLocationRequestExecutor::Run()
 {
     for (size_t i = 0; i < SubRequestExecutors.size(); ++i) {
         auto future = SubRequestExecutors[i]->GetFuture();
-        future.Subscribe([self = shared_from_this(),
-                          i](const NThreading::TFuture<TResponse>& f)
-                         { self->OnSubRequestComplete(f.GetValue(), i); });
+        future.Subscribe([self = shared_from_this(), i]   //
+                         (const NThreading::TFuture<TResponse>& f)
+                         {   //
+                             self->OnSubRequestComplete(f.GetValue(), i);
+                         });
 
         SubRequestExecutors[i]->Run();
     }
 }
 
-void TReadMultipleLocationRequestExecutor::OnSubRequestComplete(
-    const TResponse& response,
-    size_t index)
+TString TReadMultipleLocationRequestExecutor::Print()
 {
-    if (HasError(response.Error)) {
-        // Complete full request with an error in case of subrequest's error
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TReadRequestExecutor: SubRequest %zu %s %s failed: %s",
-            index,
-            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-            Request->Headers.Range.Print().c_str(),
-            FormatError(response.Error).c_str());
-
-        ++CompletedCount;
-        Promise.TrySetValue(response);
-        return;
-    }
-
-    if (++CompletedCount == SubRequestExecutors.size()) {
-        Promise.TrySetValue(TResponse{.Error = MakeError(S_OK)});
-    }
+    TStringBuilder result;
+    result << LogTitle.GetWithTime();
+    result << " Subrequests: " << CompletedCount << "/"
+           << SubRequestExecutors.size();
+    result << (Promise.IsReady() ? " Replied" : "Not replied");
+    return result;
 }
 
 NThreading::TFuture<IReadRequestExecutor::TResponse>
@@ -137,5 +112,53 @@ TReadMultipleLocationRequestExecutor::GetFuture() const
 {
     return Promise.GetFuture();
 }
+
+void TReadMultipleLocationRequestExecutor::OnSubRequestComplete(
+    const TResponse& response,
+    size_t index)
+{
+    ++CompletedCount;
+
+    if (HasError(response.Error)) {
+        // Complete full request with an error in case of subrequest's error
+        Reply(response.Error, index);
+        return;
+    }
+
+    if (CompletedCount == SubRequestExecutors.size()) {
+        Reply(MakeError(S_OK), index);
+    }
+}
+
+void TReadMultipleLocationRequestExecutor::Reply(
+    NProto::TError error,
+    size_t index)
+{
+    if (Promise.IsReady()) {
+        return;
+    }
+
+    if (HasError(error)) {
+        LOG_ERROR(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s SubRequest: %zu, Error: %s",
+            LogTitle.GetWithTime().c_str(),
+            index,
+            FormatError(error).c_str());
+    } else {
+        LOG_DEBUG(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s OK",
+            LogTitle.GetWithTime().c_str());
+    }
+
+    Request->Sglist.Close();
+
+    Promise.TrySetValue(TResponse{.Error = std::move(error)});
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

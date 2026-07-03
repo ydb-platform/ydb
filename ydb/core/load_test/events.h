@@ -1,15 +1,67 @@
+#pragma once
+
 #include <ydb/core/base/events.h>
 
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/load_test.pb.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <library/cpp/histogram/hdr/histogram.h>
+#include <library/cpp/histogram/hdr/histogram_iter.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
 #include <library/cpp/json/writer/json_value.h>
 
 #include <google/protobuf/text_format.h>
 
+#include <optional>
+#include <variant>
+
 namespace NKikimr {
+
+struct TNbsDbgLikeFinishStats {
+    ui64 BytesAccounted = 0;
+    ui64 LsnsCompleted = 0;
+    ui64 LsnsFailed = 0;
+    ui64 WritesIssued = 0;
+    ui64 WritesOk = 0;
+    ui64 WritesErr = 0;
+    ui64 WriteBytes = 0;
+    ui64 ReadsPbIssued = 0;
+    ui64 ReadsPbOk = 0;
+    ui64 ReadsPbBytes = 0;
+    ui64 ReadsErr = 0; // measurement-window read errors (counterpart of WritesErr)
+    ui64 ReadsDDiskIssued = 0;
+    ui64 ReadsDDiskOk = 0;
+    ui64 ReadsDDiskBytes = 0;
+
+    // Full-run totals (not gated by the measurement window). Used by the
+    // load actor / proxy to render the run summary; the measured fields
+    // above feed the service-actor aggregation.
+    ui64 WritesOkTotal = 0;
+    ui64 WriteBytesTotal = 0;
+    ui64 ReadsIssuedTotal = 0;
+    ui64 ReadsOkTotal = 0;
+    ui64 ReadBytesTotal = 0;
+
+    ui64 RunningMs = 0;
+    ui64 MeasuredMs = 0;
+    ui32 MaxInFlight = 0;
+
+    // Ok/err/byte counters and latency histograms cover the measurement window only
+    // (after DelayBeforeMeasurementsSeconds, before drain). WritesIssued/Reads*Issued
+    // are full-run totals. Monlib load/actor counters are not gated.
+    static constexpr i64 kLatencyHistMaxUs = 134'000'000;
+    static constexpr i32 kLatencyHistPrecision = 2;
+    NHdr::THistogram WriteQuorumUs{kLatencyHistMaxUs, kLatencyHistPrecision};
+    NHdr::THistogram WriteE2eUs{kLatencyHistMaxUs, kLatencyHistPrecision};
+    NHdr::THistogram FlushUs{kLatencyHistMaxUs, kLatencyHistPrecision};
+    NHdr::THistogram EraseUs{kLatencyHistMaxUs, kLatencyHistPrecision};
+    NHdr::THistogram ReadPbUs{kLatencyHistMaxUs, kLatencyHistPrecision};
+    NHdr::THistogram ReadDDiskUs{kLatencyHistMaxUs, kLatencyHistPrecision};
+};
+
+using TLoadWorkerFinishStats = std::variant<TNbsDbgLikeFinishStats>;
+
 struct TEvLoad {
     enum EEv {
         EvLoadTestRequest = EventSpaceBegin(TKikimrEvents::ES_TEST_LOAD),
@@ -17,6 +69,29 @@ struct TEvLoad {
         EvLoadTestResponse,
         EvNodeFinishResponse,
         EvYqlSingleQueryResponse,
+
+        EvNbsLoadTabletCreate,
+        EvNbsLoadTabletCreateResult,
+        EvNbsLoadTabletDelete,
+        EvNbsLoadTabletDeleteResult,
+
+        EvNbsLoadTabletGetSummary,
+        EvNbsLoadTabletGetSummaryResult,
+
+        // TNbsLoadTabletListPageActor -> TLoadActor with rendered HTML.
+        EvNbsTabletListPageReady,
+
+        // In-process (load-actor <-> worker, worker <-> tablet) events.
+        // See spec §12.1.
+        EvNbsWrite,
+        EvNbsWriteResult,
+        EvNbsRead,
+        EvNbsReadResult,
+        EvConfigureTablet,
+
+        // In-process (per-DBG worker actor -> proxy tablet): peer-connectivity
+        // readiness update so the tablet can answer GetSummary.
+        EvNbsDbgActorReady,
     };
 
     struct TEvLoadTestRequest : public TEventPB<TEvLoadTestRequest,
@@ -88,6 +163,9 @@ struct TEvLoad {
         TString LastHtmlPage;
         NJson::TJsonValue JsonResult;
 
+        // Optional load-worker-specific telemetry (e.g. TNbsDbgLikeFinishStats).
+        std::optional<TLoadWorkerFinishStats> WorkerStats;
+
         TEvLoadTestFinished(ui64 tag, TIntrusivePtr<TLoadReport> report, TString errorReason = {})
             : Tag(tag)
             , Report(report)
@@ -117,6 +195,197 @@ struct TEvLoad {
         {}
     };
 
+    struct TEvNbsLoadTabletAllocateGroups : public TEventPB<TEvNbsLoadTabletAllocateGroups,
+        NKikimr::TEvNbsLoadTabletAllocateGroups, EvNbsLoadTabletCreate>
+    {};
+
+    struct TEvNbsLoadTabletAllocateGroupsResult : public TEventPB<TEvNbsLoadTabletAllocateGroupsResult,
+        NKikimr::TEvNbsLoadTabletAllocateGroupsResult, EvNbsLoadTabletCreateResult>
+    {};
+
+    struct TEvNbsLoadTabletDelete : public TEventPB<TEvNbsLoadTabletDelete,
+        NKikimr::TEvNbsLoadTabletDelete, EvNbsLoadTabletDelete>
+    {};
+
+    struct TEvNbsLoadTabletDeleteResult : public TEventPB<TEvNbsLoadTabletDeleteResult,
+        NKikimr::TEvNbsLoadTabletDeleteResult, EvNbsLoadTabletDeleteResult>
+    {};
+
+    struct TEvNbsLoadTabletGetSummary : public TEventPB<TEvNbsLoadTabletGetSummary,
+        NKikimr::TEvNbsLoadTabletGetSummary, EvNbsLoadTabletGetSummary>
+    {};
+
+    struct TEvNbsLoadTabletGetSummaryResult : public TEventPB<TEvNbsLoadTabletGetSummaryResult,
+        NKikimr::TEvNbsLoadTabletGetSummaryResult, EvNbsLoadTabletGetSummaryResult>
+    {};
+
+    struct TEvNbsTabletListPageReady : public TEventLocal<TEvNbsTabletListPageReady, EvNbsTabletListPageReady> {
+        ui32 HttpRequestId = 0;
+        TString HtmlFragment;
+    };
+
+    // ---- In-process load-actor <-> worker contract (spec §12.1) -------
+    //
+    // These messages travel between actors registered on the same node
+    // (the per-Run load actor and the long-lived worker that lives on the
+    // parent tablet's mailbox). The load actor times every request itself
+    // from its own Send/receive timestamps and keys its in-flight map by
+    // the event cookie; the worker's reply carries only Status. The read
+    // payload travels as a TRope attached to TEvNbsReadResult.
+
+    struct TEvNbsWrite : public TEventPB<TEvNbsWrite,
+        NKikimr::TEvLoadTestRequest::TNbsDbgLikeLoad::TNbsWrite, EvNbsWrite>
+    {
+        using TBase = TEventPB<TEvNbsWrite,
+            NKikimr::TEvLoadTestRequest::TNbsDbgLikeLoad::TNbsWrite, EvNbsWrite>;
+
+        // Write data carried as a direct TRope on local (same-node) delivery.
+        // FillRecord() moves it into the protobuf payload before serialization.
+        TRope Payload;
+
+        TEvNbsWrite() = default;
+        TEvNbsWrite(ui64 address, ui32 sizeBytes) {
+            Record.SetAddress(address);
+            Record.SetSizeBytes(sizeBytes);
+        }
+
+        ui32 CalculateSerializedSize() const override {
+            const_cast<TEvNbsWrite*>(this)->FillRecord();
+            return TBase::CalculateSerializedSize();
+        }
+
+        bool SerializeToArcadiaStream(NActors::TChunkSerializer* chunker) const override {
+            const_cast<TEvNbsWrite*>(this)->FillRecord();
+            return TBase::SerializeToArcadiaStream(chunker);
+        }
+
+        static TEvNbsWrite* Load(const NActors::TEventSerializedData* data);
+
+    private:
+        void FillRecord();
+    };
+
+    struct TEvNbsWriteResult : public TEventPB<TEvNbsWriteResult,
+        NKikimr::TEvLoadTestRequest::TNbsDbgLikeLoad::TNbsWriteResult, EvNbsWriteResult>
+    {
+        TEvNbsWriteResult() = default;
+        explicit TEvNbsWriteResult(NKikimr::ENbsIoResultStatus status, TString reason = {}) {
+            Record.SetStatus(status);
+            if (!reason.empty()) {
+                Record.SetReason(std::move(reason));
+            }
+        }
+    };
+
+    struct TEvNbsRead : public TEventPB<TEvNbsRead,
+        NKikimr::TEvLoadTestRequest::TNbsDbgLikeLoad::TNbsRead, EvNbsRead>
+    {
+        TEvNbsRead() = default;
+        TEvNbsRead(ui64 address, ui32 sizeBytes) {
+            Record.SetAddress(address);
+            Record.SetSizeBytes(sizeBytes);
+        }
+    };
+
+    struct TEvNbsReadResult : public TEventPB<TEvNbsReadResult,
+        NKikimr::TEvLoadTestRequest::TNbsDbgLikeLoad::TNbsReadResult, EvNbsReadResult>
+    {
+        // Read payload is attached separately via AddPayload(TRope) and
+        // recovered on the receiver via GetPayload(0).
+        TEvNbsReadResult() = default;
+        explicit TEvNbsReadResult(NKikimr::ENbsIoResultStatus status, TString reason = {}) {
+            Record.SetStatus(status);
+            if (!reason.empty()) {
+                Record.SetReason(std::move(reason));
+            }
+        }
+    };
+
+    struct TEvConfigureTablet : public TEventPB<TEvConfigureTablet,
+        NKikimr::TEvLoadTestRequest::TNbsDbgLikeLoad::TConfigureTablet, EvConfigureTablet>
+    {};
+
+    // Per-DBG worker actor -> proxy tablet. Reports the worker's current
+    // primary persistent-buffer connectivity so the tablet can compute the
+    // ready-DBG prefix for GetSummary. Same node, so a local event.
+    struct TEvNbsDbgActorReady : public TEventLocal<TEvNbsDbgActorReady, EvNbsDbgActorReady> {
+        ui32 DbgIndex = 0;
+        ui32 PbConnectedCount = 0;
+        TEvNbsDbgActorReady() = default;
+        TEvNbsDbgActorReady(ui32 dbgIndex, ui32 pbConnectedCount)
+            : DbgIndex(dbgIndex)
+            , PbConnectedCount(pbConnectedCount)
+        {}
+    };
 };
+
+inline const TNbsDbgLikeFinishStats* GetNbsDbgLikeFinishStats(
+    const TEvLoad::TEvLoadTestFinished& ev)
+{
+    if (!ev.WorkerStats) {
+        return nullptr;
+    }
+    return std::get_if<TNbsDbgLikeFinishStats>(&*ev.WorkerStats);
+}
+
+// Non-const overload: allows std::move of the contained stats without
+// resorting to const_cast (TNbsDbgLikeFinishStats is move-only).
+inline TNbsDbgLikeFinishStats* GetNbsDbgLikeFinishStats(
+    TEvLoad::TEvLoadTestFinished& ev)
+{
+    if (!ev.WorkerStats) {
+        return nullptr;
+    }
+    return std::get_if<TNbsDbgLikeFinishStats>(&*ev.WorkerStats);
+}
+
+inline void SetNbsDbgLikeFinishStats(
+    TEvLoad::TEvLoadTestFinished& ev,
+    TNbsDbgLikeFinishStats stats)
+{
+    ev.WorkerStats = TLoadWorkerFinishStats{std::move(stats)};
+}
+
+// Serialize an HDR histogram into the proto carrier as (value, count) pairs for
+// the recorded buckets, plus the (lowest, highest, significantDigits) needed to
+// reconstruct a compatible histogram. The reconstruction via RecordValues is
+// exact within the histogram's resolution.
+inline void SerializeNbsDbgLikeHistogram(
+    const NHdr::THistogram& src,
+    NKikimr::TEvNodeFinishResponse::TNbsDbgLikeHistogram& dst)
+{
+    dst.SetLowest(src.GetLowestDiscernibleValue());
+    dst.SetHighest(src.GetHighestTrackableValue());
+    dst.SetSignificantDigits(src.GetNumberOfSignificantValueDigits());
+    NHdr::TRecordedValuesIterator it(src);
+    while (it.Next()) {
+        const i64 count = it.GetCount();
+        if (count <= 0) {
+            continue;
+        }
+        dst.AddValues(it.GetValue());
+        dst.AddCounts(count);
+    }
+}
+
+// Reconstruct an HDR histogram from the proto carrier produced by
+// SerializeNbsDbgLikeHistogram.
+inline NHdr::THistogram DeserializeNbsDbgLikeHistogram(
+    const NKikimr::TEvNodeFinishResponse::TNbsDbgLikeHistogram& src)
+{
+    const i64 lowest = src.HasLowest() && src.GetLowest() >= 1 ? src.GetLowest() : 1;
+    const i64 highest = src.HasHighest() && src.GetHighest() > lowest
+        ? src.GetHighest()
+        : TNbsDbgLikeFinishStats::kLatencyHistMaxUs;
+    const i32 digits = src.HasSignificantDigits()
+        ? src.GetSignificantDigits()
+        : TNbsDbgLikeFinishStats::kLatencyHistPrecision;
+    NHdr::THistogram hist(lowest, highest, digits);
+    const int n = Min(src.ValuesSize(), src.CountsSize());
+    for (int i = 0; i < n; ++i) {
+        hist.RecordValues(src.GetValues(i), src.GetCounts(i));
+    }
+    return hist;
+}
 
 }

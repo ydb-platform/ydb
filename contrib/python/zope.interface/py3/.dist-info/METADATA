@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: zope.interface
-Version: 8.3
+Version: 8.5
 Summary: Interfaces for Python
 Author-email: Zope Foundation and contributors <zope-dev@zope.dev>
 Maintainer-email: Plone Foundation and contributors <zope-dev@zope.dev>
@@ -74,6 +74,29 @@ For detailed documentation, please see https://zopeinterface.readthedocs.io/en/l
 
 Change log
 ==========
+
+8.5 (2026-05-26)
+----------------
+
+- Build and upload free-threaded (``cp314t``, ``cp315t``) wheels for all
+  platforms.
+  Expand CI testing for free-threaded Python 3.14t from Linux-only to all
+  platforms (macOS, Windows), and add 3.15t CI.
+  See `issue 374 <https://github.com/zopefoundation/zope.interface/issues/374>`_.
+
+- Replace all remaining ``PyDict_GetItem()`` calls in the C extension with
+  exception-safe alternatives (``PyDict_Contains``, ``PyDict_GetItemWithError``).
+  ``PyDict_GetItem`` silently swallows exceptions from ``__hash__``/``__eq__``,
+  causing ``isOrExtends()`` to return ``False`` instead of raising ``TypeError``
+  for unhashable objects. Also use ``PyType_GetDict()`` on Python 3.13+ for
+  free-threading safety when accessing the type dict.
+  See `issue 357 <https://github.com/zopefoundation/zope.interface/issues/357>`_.
+
+8.4 (2026-04-25)
+----------------
+
+- Add support for automatically building and publishing Windows/ARM64 wheels.
+
 
 8.3 (2026-04-10)
 ----------------

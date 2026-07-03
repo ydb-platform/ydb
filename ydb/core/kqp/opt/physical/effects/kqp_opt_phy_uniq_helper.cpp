@@ -1,11 +1,14 @@
 #include "kqp_opt_phy_uniq_helper.h"
 
-#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+
+namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
 using namespace NYql::NNodes;
-using namespace NKikimr::NKqp::NOpt;
 
 namespace {
 
@@ -17,7 +20,6 @@ struct TLookupNodes {
     TVector<TExprBase> Stages;
     TVector<TCoArgument> Args;
 };
-
 
 NYql::TExprNode::TPtr MakeUniqCheckDict(const TCoLambda& selector,
     const TExprBase& rowsListArg, TPositionHandle pos, TExprContext& ctx)
@@ -244,7 +246,7 @@ private:
     const NYql::TExprNode::TPtr PkDict;
 };
 
-}
+} // anonymous namespace
 
 TVector<TUniqBuildHelper::TUniqCheckNodes> TUniqBuildHelper::Prepare(const TCoArgument& rowsListArg,
     const TKikimrTableDescription& table, const TMaybe<THashSet<TStringBuf>>& inputColumns,
@@ -565,9 +567,6 @@ TDqStage TUniqBuildHelper::CreateLookupExistStage(const TDqStage& computeKeysSta
         .Done();
 }
 
-namespace NKikimr::NKqp::NOpt {
-
-
 TUniqBuildHelper::TPtr CreateInsertUniqBuildHelper(const NYql::TKikimrTableDescription& table,
     const TMaybe<THashSet<TStringBuf>>& inputColumns, NYql::TPositionHandle pos,
     NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
@@ -583,4 +582,4 @@ TUniqBuildHelper::TPtr CreateUpsertUniqBuildHelper(const NYql::TKikimrTableDescr
     return std::make_unique<TUpsertUniqBuildHelper>(table, inputColumns, usedIndexes, pos, ctx, kqpCtx);
 }
 
-}
+} // namespace NKikimr::NKqp::NOpt

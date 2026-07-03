@@ -8,7 +8,7 @@ namespace {
 struct TTestStruct {
     int Value = 42;
 
-    int GetValue() const {
+    [[nodiscard]] int GetValue() const {
         return Value;
     }
 

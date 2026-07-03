@@ -491,6 +491,105 @@ void DeleteHugeBlobsOfTablet(TTetsEnvBase& env, ui32 N, ui32 tabletId) {
     UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
 }
 
+struct TTestEnvFullChunkObsoleteRefs : TTetsEnvBase {
+    static constexpr ui64 CHUNK_SIZE = 32_MB;
+    static constexpr ui64 MIN_HUGE_BLOB_SIZE = 128_KB;
+
+    TTestEnvFullChunkObsoleteRefs()
+        : TTetsEnvBase({
+            .NodeCount = 1,
+            .VDiskReplPausedAtStart = false,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+            .DiskType = NPDisk::EDeviceType::DEVICE_TYPE_ROT,
+            .MinHugeBlobInBytes = MIN_HUGE_BLOB_SIZE,
+            .PDiskSize = 1_GB,
+            .PDiskChunkSize = CHUNK_SIZE,
+        })
+    {
+        Data = FastGenDataForLZ4(4_MB, 0);
+
+        SetIcbControl("VDiskControls.MaxChunksToDefragInflight", 1);
+        SetIcbControl("VDiskControls.DefaultHugeGarbagePerMille", 50);
+        SetIcbControl("VDiskControls.GarbageThresholdToRunFullCompactionPerMille", 10);
+        Env.Sim(TDuration::Minutes(1));
+
+        Env.Runtime->FilterFunction = [this](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            auto eventType = ev->GetTypeRewrite();
+            auto it = Filters.find(eventType);
+            if (it != Filters.end()) {
+                return it->second(nodeId, ev);
+            }
+            return true;
+        };
+    }
+
+    std::unique_ptr<TEvBlobStorage::TEvPut> GetData(ui32 index) const override {
+        auto id = TLogoBlobID(1, 1, index, 0, Data.size(), 0);
+        return std::make_unique<TEvBlobStorage::TEvPut>(id, Data, TInstant::Max());
+    }
+
+    void PutBlob(ui32 index) {
+        TLogoBlobID id(1, 1, index, 0, Data.size(), 0);
+        const TVDiskID& vdiskId = GroupInfo->GetVDiskId(0);
+        Env.WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) {
+            const TActorId& edge = Env.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
+            Env.Runtime->Send(new IEventHandle(queueId, edge, new TEvBlobStorage::TEvVPut(TLogoBlobID(id, 1),
+                TRope(Data), vdiskId, false, nullptr, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog,
+                false)), queueId.NodeId());
+            auto res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.GetStatus(), NKikimrProto::OK);
+        });
+        Env.Sim();
+    }
+
+    std::map<ui32, TVector<TLogoBlobID>> CaptureHugeBlobsByChunk() {
+        std::map<ui32, TVector<TLogoBlobID>> chunkToBlobs;
+        auto res = Env.SyncQuery<TEvBlobStorage::TEvCaptureVDiskLayoutResult,
+            TEvBlobStorage::TEvCaptureVDiskLayout>(VDiskActorId);
+        for (const auto& item : res->Layout) {
+            using T = TEvBlobStorage::TEvCaptureVDiskLayoutResult;
+            if (item.Database == T::EDatabase::LogoBlobs && item.RecordType == T::ERecordType::HugeBlob) {
+                chunkToBlobs[item.Location.ChunkIdx].push_back(item.BlobId);
+            }
+        }
+        return chunkToBlobs;
+    }
+
+    void CollectWithKeep(TVector<TLogoBlobID> keep) {
+        const TActorId sender = Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        Env.Runtime->WrapInActorContext(sender, [&] {
+            SendToBSProxy(
+                sender, GroupInfo->GroupID,
+                new TEvBlobStorage::TEvCollectGarbage(
+                    1, 1, ++CollectGeneration,
+                    0, true, 1, Max<ui32>(),
+                    new TVector<TLogoBlobID>(std::move(keep)), nullptr, TInstant::Max(), true
+                )
+            );
+        });
+        const auto& res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+    }
+
+    void CollectDoNotKeep(TVector<TLogoBlobID> doNotKeep) {
+        const TActorId sender = Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        Env.Runtime->WrapInActorContext(sender, [&] {
+            SendToBSProxy(
+                sender, GroupInfo->GroupID,
+                new TEvBlobStorage::TEvCollectGarbage(
+                    1, 1, ++CollectGeneration,
+                    0, false, 0, 0,
+                    nullptr, new TVector<TLogoBlobID>(std::move(doNotKeep)), TInstant::Max(), true
+                )
+            );
+        });
+        const auto& res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+    }
+
+    TString Data;
+};
+
 struct TEvDefragStartQuantum : TEventLocal<TEvDefragStartQuantum, TEvBlobStorage::EvDefragStartQuantum> {
     NKikimr::TChunksToDefrag ChunksToDefrag;
 };
@@ -756,6 +855,172 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         UNIT_ASSERT_VALUES_EQUAL(metrics.HugeChunksCanBeFreed, 0);
         UNIT_ASSERT_LT(env.GetMetrics().HugeUsedChunks, totalHugeChunks);
 
+    }
+
+    Y_UNIT_TEST(RunsTargetedCompactionForFullChunksWithObsoleteReferences) {
+        TTestEnvFullChunkObsoleteRefs env;
+        const ui32 targetChunks = 12;
+        const ui32 helperChunks = 2;
+
+        THashMap<ui32, ui32> targetedCompactions;
+        ui32 fullCompactions = 0;
+        ui32 emptyLockResults = 0;
+        ui32 lockedChunks = 0;
+        ui32 lockRequests = 0;
+        ui32 lockRequestsForTargetChunks = 0;
+        TVector<ui32> requestedChunks;
+        ui32 noProgressQuantums = 0;
+
+        TVector<ui32> chunkOrder;
+        THashSet<ui32> knownChunks;
+        std::map<ui32, TVector<TLogoBlobID>> chunkToBlobs;
+        ui32 slotsPerChunk = 0;
+        for (ui32 index = 0; index < 1000; ++index) {
+            env.PutBlob(index);
+            chunkToBlobs = env.CaptureHugeBlobsByChunk();
+            for (const auto& [chunkId, _] : chunkToBlobs) {
+                if (knownChunks.insert(chunkId).second) {
+                    chunkOrder.push_back(chunkId);
+                }
+            }
+
+            if (chunkOrder.size() < targetChunks + helperChunks + 1) {
+                continue;
+            }
+
+            slotsPerChunk = 0;
+            for (const auto& [_, blobs] : chunkToBlobs) {
+                slotsPerChunk = Max<ui32>(slotsPerChunk, blobs.size());
+            }
+
+            ui32 fullChunks = 0;
+            for (ui32 chunkId : chunkOrder) {
+                fullChunks += chunkToBlobs[chunkId].size() == slotsPerChunk;
+            }
+            if (fullChunks >= targetChunks + helperChunks) {
+                break;
+            }
+        }
+
+        UNIT_ASSERT_C(slotsPerChunk > 3, "slotsPerChunk# " << slotsPerChunk);
+
+        TVector<ui32> targetChunkIds;
+        TVector<ui32> helperChunkIds;
+        for (ui32 chunkId : chunkOrder) {
+            if (chunkToBlobs[chunkId].size() != slotsPerChunk) {
+                continue;
+            }
+            if (targetChunkIds.size() < targetChunks) {
+                targetChunkIds.push_back(chunkId);
+            } else if (helperChunkIds.size() < helperChunks) {
+                helperChunkIds.push_back(chunkId);
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(targetChunkIds.size(), targetChunks,
+            "chunkOrder# " << FormatList(chunkOrder) << " chunkToBlobs# " << chunkToBlobs.size());
+        UNIT_ASSERT_VALUES_EQUAL_C(helperChunkIds.size(), helperChunks,
+            "chunkOrder# " << FormatList(chunkOrder) << " chunkToBlobs# " << chunkToBlobs.size());
+
+        const ui32 helperUsefulSlots = Max<ui32>(2, slotsPerChunk / 3);
+        UNIT_ASSERT_LT(helperUsefulSlots, slotsPerChunk);
+
+        TVector<TLogoBlobID> keepAfterHelperCleanup;
+        for (ui32 chunkId : targetChunkIds) {
+            keepAfterHelperCleanup.insert(keepAfterHelperCleanup.end(),
+                chunkToBlobs[chunkId].begin(), chunkToBlobs[chunkId].end());
+        }
+        for (ui32 chunkId : helperChunkIds) {
+            const auto& blobs = chunkToBlobs[chunkId];
+            keepAfterHelperCleanup.insert(keepAfterHelperCleanup.end(),
+                blobs.begin(), blobs.begin() + helperUsefulSlots);
+        }
+
+        env.CollectWithKeep(std::move(keepAfterHelperCleanup));
+        env.RunFullCompaction();
+
+        chunkToBlobs = env.CaptureHugeBlobsByChunk();
+        for (ui32 chunkId : targetChunkIds) {
+            UNIT_ASSERT_VALUES_EQUAL_C(chunkToBlobs[chunkId].size(), slotsPerChunk,
+                "chunkId# " << chunkId << " slotsPerChunk# " << slotsPerChunk);
+        }
+        for (ui32 chunkId : helperChunkIds) {
+            UNIT_ASSERT_VALUES_EQUAL_C(chunkToBlobs[chunkId].size(), helperUsefulSlots,
+                "chunkId# " << chunkId << " helperUsefulSlots# " << helperUsefulSlots);
+        }
+
+        THashSet<ui32> targetChunkSet(targetChunkIds.begin(), targetChunkIds.end());
+        env.SetFilterFunction(TEvBlobStorage::EvCompactVDisk, [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            auto *msg = ev->Get<TEvCompactVDisk>();
+            if (msg->Mode == TEvCompactVDisk::EMode::FRESH_ONLY || msg->TablesToCompact) {
+                ++targetedCompactions[ev->Recipient.NodeId()];
+            } else {
+                ++fullCompactions;
+            }
+            return true;
+        });
+        env.SetFilterFunction(NKikimr::TEvHugeLockChunks::EventType, [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            const auto *msg = ev->Get<NKikimr::TEvHugeLockChunks>();
+            ++lockRequests;
+            for (const auto& chunk : msg->Chunks) {
+                requestedChunks.push_back(chunk.ChunkId);
+                lockRequestsForTargetChunks += targetChunkSet.contains(chunk.ChunkId);
+            }
+            return true;
+        });
+        env.SetFilterFunction(NKikimr::TEvHugeLockChunksResult::EventType, [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            const auto *res = ev->Get<NKikimr::TEvHugeLockChunksResult>();
+            if (res->LockedChunks.empty()) {
+                ++emptyLockResults;
+            } else {
+                lockedChunks += res->LockedChunks.size();
+            }
+            return true;
+        });
+        env.SetFilterFunction(NKikimr::TEvDefragQuantumResult::EventType, [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            const auto *res = ev->Get<NKikimr::TEvDefragQuantumResult>();
+            if (res->Stat.FoundChunksToDefrag && !res->Stat.RewrittenRecs && !res->Stat.RewrittenBytes) {
+                ++noProgressQuantums;
+            }
+            return true;
+        });
+
+        TVector<TLogoBlobID> deleteFromTargetChunks;
+        for (ui32 chunkId : targetChunkIds) {
+            const auto& blobs = chunkToBlobs[chunkId];
+            deleteFromTargetChunks.insert(deleteFromTargetChunks.end(), blobs.begin() + 1, blobs.end());
+        }
+
+        env.CollectDoNotKeep(std::move(deleteFromTargetChunks));
+
+        const TActorId sender = env.Env.Runtime->AllocateEdgeActor(env.VDiskActorId.NodeId(), __FILE__, __LINE__);
+        env.Env.Runtime->Send(new IEventHandle(env.VDiskActorId, sender,
+            new TEvBlobStorage::TEvVDefrag(env.GroupInfo->GetVDiskId(0), false)), env.VDiskActorId.NodeId());
+        auto res = env.Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVDefragResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.GetStatus(), NKikimrProto::OK);
+
+        UNIT_ASSERT_C(lockRequestsForTargetChunks > 0,
+            "No target full chunk was requested for locking; lockRequests# " << lockRequests
+            << " requestedChunks# " << FormatList(requestedChunks)
+            << " targetChunks# " << FormatList(targetChunkIds)
+            << " helperChunks# " << FormatList(helperChunkIds)
+            << " slotsPerChunk# " << slotsPerChunk
+            << " helperUsefulSlots# " << helperUsefulSlots
+            << " fullCompactions# " << fullCompactions
+            << " targetedCompactions# " << targetedCompactions.size()
+            << " noProgressQuantums# " << noProgressQuantums);
+        UNIT_ASSERT_C(emptyLockResults > 0,
+            "No empty lock result was observed; lockedChunks# " << lockedChunks
+            << " lockRequests# " << lockRequests
+            << " targetLockRequests# " << lockRequestsForTargetChunks
+            << " fullCompactions# " << fullCompactions
+            << " targetedCompactions# " << targetedCompactions.size()
+            << " noProgressQuantums# " << noProgressQuantums);
+        UNIT_ASSERT_C(!targetedCompactions.empty(),
+            "No targeted compaction was requested; emptyLockResults# " << emptyLockResults
+            << " lockedChunks# " << lockedChunks
+            << " fullCompactions# " << fullCompactions
+            << " noProgressQuantums# " << noProgressQuantums);
     }
 
     Y_UNIT_TEST(ZeroThresholdDefragWithCompaction) {

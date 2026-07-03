@@ -29,8 +29,16 @@ bool TSession::IsStarted() const {
     return Status == EStatus::Started;
 }
 
+bool TSession::IsAborted() const {
+    return Status == EStatus::Aborted;
+}
+
 void TSession::Abort(const TString &errorMessage) {
-    AFL_VERIFY(Status != EStatus::Finished && Status != EStatus::Aborted);
+    if (Status == EStatus::Finished || Status == EStatus::Aborted) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "export_session_abort_ignored")("status", (ui64)Status)(
+            "message", "export session is already in terminal state");
+        return;
+    }
     Status = EStatus::Aborted;
     ErrorMessage = errorMessage;
 }

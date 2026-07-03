@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -294,37 +295,29 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
             )");
             auto explainResult = qp->SyncExplainDataQuery(query, true);
             UNIT_ASSERT_C(explainResult.Success(), explainResult.Issues().ToString());
+            Cerr << "AST: " << explainResult.QueryAst << Endl;
 
             TExprContext exprCtx;
             bool indexUpdated = false;
             bool indexCleaned = false;
             VisitExpr(GetExpr(explainResult.QueryAst, exprCtx, moduleResolver.get()).Ptr(),
                 [&indexName, &indexUpdated, &indexCleaned](const TExprNode::TPtr& exprNode) mutable {
-                    if (TMaybeNode<TKqpUpsertRows>(exprNode)) {
-                        if (TKqpUpsertRows(exprNode).Table().Path().Value().Contains(indexName)) {
-                            indexUpdated = true;
-                        }
-                    }
                     if (TMaybeNode<TKqpTableSinkSettings>(exprNode)) {
                         if (TKqpTableSinkSettings(exprNode).Table().Path().Value().Contains(indexName)) {
-                            if (TKqpTableSinkSettings(exprNode).Mode().Value() == "upsert") {
+                            if (TKqpTableSinkSettings(exprNode).Mode().Value() == "upsert" || TKqpTableSinkSettings(exprNode).Mode().Value().empty()) {
                                 indexUpdated = true;
                             } else if (TKqpTableSinkSettings(exprNode).Mode().Value() == "delete") {
                                 indexCleaned = true;
-                            } else if (TKqpTableSinkSettings(exprNode).Mode().Value().empty()) {
-                                indexUpdated = true;
                             }
-                        }
-                    }
-                    if (TMaybeNode<TKqpDeleteRows>(exprNode)) {
-                        if (TKqpDeleteRows(exprNode).Table().Path().Value().Contains(indexName)) {
-                            indexCleaned = true;
                         }
                     }
                     return true;
                 });
-            UNIT_ASSERT(indexUpdated);
-            UNIT_ASSERT(indexCleaned);
+            if (!server.GetSettings().AppConfig->GetTableServiceConfig().GetEnableIndexStreamWrite()) {
+                // No writes in AST for streaming index.
+                UNIT_ASSERT(indexUpdated);
+                UNIT_ASSERT(indexCleaned);
+            }
         }
 
         {
@@ -1041,7 +1034,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 64);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 23);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 31);
                 UNIT_ASSERT(            !stats.query_phases(0).table_access(0).has_deletes());
@@ -1060,6 +1053,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access().size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).name(), "/Root/TestTable");
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).reads().rows(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).reads().bytes(), 23);
 
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 2).table_access().size(), 0);
 
@@ -1141,9 +1135,6 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
     }
 
     Y_UNIT_TEST_TWIN(UpsertWithoutExtraNullDelete, UseStreamIndex) {
-        if (UseStreamIndex) {
-            return;
-        }
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
@@ -2729,10 +2720,10 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         UNIT_ASSERT(plan.GetMapSafe().contains("tables"));
         const auto& tables = plan.GetMapSafe().at("tables").GetArraySafe();
-        UNIT_ASSERT(tables.size() == (UseStreamIndex ? 1 : 3));
+        UNIT_ASSERT(tables.size() == 3);
         UNIT_ASSERT(tables.at(0).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable");
-        UNIT_ASSERT(UseStreamIndex || tables.at(1).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index1/indexImplTable");
-        UNIT_ASSERT(UseStreamIndex || tables.at(2).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index2/indexImplTable");
+        UNIT_ASSERT(tables.at(1).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index1/indexImplTable");
+        UNIT_ASSERT(tables.at(2).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index2/indexImplTable");
 
         auto result = session.ExecuteDataQuery(
                 query1,
@@ -4213,9 +4204,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
             UNIT_ASSERT(plan.GetMapSafe().contains("tables"));
             const auto& tables = plan.GetMapSafe().at("tables").GetArraySafe();
-            UNIT_ASSERT(tables.size() == (UseStreamIndex ? 1 : 2));
+            UNIT_ASSERT(tables.size() == 2);
             UNIT_ASSERT(tables.at(0).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable");
-            UNIT_ASSERT(UseStreamIndex || tables.at(1).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index/indexImplTable");
+            UNIT_ASSERT(tables.at(1).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index/indexImplTable");
 
             auto qId = session.PrepareDataQuery(query).ExtractValueSync().GetQuery();
 
@@ -4908,7 +4899,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
             UNIT_ASSERT_VALUES_EQUAL(tablePlan["reads"].GetArraySafe().size(), tableReads);
             UNIT_ASSERT_VALUES_EQUAL(tablePlan["writes"].GetArraySafe().size(), tableWrites);
-            if (!UseStreamIndex && indexWrites) {
+            if (indexWrites) {
                 auto indexPlan = FindPlanNodeByKv(tables, "name", "/Root/TestTable/SecondaryIndex/indexImplTable");
                 UNIT_ASSERT_VALUES_EQUAL(indexPlan["writes"].GetArraySafe().size(), *indexWrites);
             }
@@ -5418,14 +5409,10 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             NJson::WriteJson(&Cerr, &plan["tables"], true);
             auto table = plan["tables"][0];
             UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryComplexKeys");
-            if (UseStreamIndex) {
-                UNIT_ASSERT(!table.Has("reads"));
-            } else {
-                auto reads = table["reads"].GetArraySafe();
-                UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
-                UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
-            }
+            auto reads = table["reads"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
         }
         {
             // Check that all keys from involved index are in read columns
@@ -5442,14 +5429,10 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
             auto table = plan["tables"][0];
             UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryComplexKeys");
-            if (UseStreamIndex) {
-                UNIT_ASSERT(!table.Has("reads"));
-            } else {
-                auto reads = table["reads"].GetArraySafe();
-                UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
-                UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
-            }
+            auto reads = table["reads"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
         }
         {
             // Check that data colomns from involved index are in read columns
@@ -5466,14 +5449,10 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
             auto table = plan["tables"][0];
             UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryWithDataColumns");
-            if (UseStreamIndex) {
-                UNIT_ASSERT(!table.Has("reads"));
-            } else {
-                auto reads = table["reads"].GetArraySafe();
-                UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
-                UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
-            }
+            auto reads = table["reads"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
         }
         {
             // Check that data colomns not from involved index aren't in read columns
@@ -5744,14 +5723,18 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST(DirectAccessToIndexImplTable) {
+    Y_UNIT_TEST_QUAD(DirectAccessToIndexImplTable, UserIsClusterAdmin, HasUsePermission) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAccessToIndexImplTables(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         kikimr.GetTestClient().GrantConnect("user@builtin");
-        kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
+        auto& adminSids = kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs;
+        adminSids.emplace_back("root@builtin");
+        if (UserIsClusterAdmin) {
+            adminSids.emplace_back("user@builtin");
+        }
 
         auto adminSession = kikimr.GetTableClient(NYdb::NTable::TClientSettings()
             .AuthToken("root@builtin")).CreateSession().GetValueSync().GetSession();
@@ -5814,133 +5797,79 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             userSession = userClient.CreateSession().GetValueSync().GetSession();
         };
 
-        // try accessing tables without permissions
-        {
-            auto result = selectTableQuery();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                "it does not exist or you do not have access permissions",
-                result.GetIssues().ToString()
-            );
-        }
-        {
-            auto result = selectImplTableQuery();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                "it does not exist or you do not have access permissions",
-                result.GetIssues().ToString()
-            );
-        }
-        {
-            auto result = upsertTableQuery();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                "it does not exist or you do not have access permissions",
-                result.GetIssues().ToString()
-            );
-        }
-        {
-            auto result = upsertImplTableQuery();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                "it does not exist or you do not have access permissions",
-                result.GetIssues().ToString()
-            );
-        }
-        {
-            auto result = updateImplTableQuery();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                "it does not exist or you do not have access permissions",
-                result.GetIssues().ToString()
-            );
-        }
-        {
-            auto result = deleteImplTableQuery();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                "it does not exist or you do not have access permissions",
-                result.GetIssues().ToString()
-            );
-        }
-        {
-            auto result = bulkUpsertImplTable();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                "Access denied for user@builtin with access UpdateRow to table",
-                result.GetIssues().ToString()
-            );
-        }
-        {
-            auto result = copyImplTableQuery();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                "Access denied for user@builtin on path /Root",
-                result.GetIssues().ToString()
-            );
+        if (!HasUsePermission) {
+            // try accessing tables without USE permission
+            // (cluster admin status alone does NOT bypass tenant ACL)
+            {
+                auto result = selectTableQuery();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                    "it does not exist or you do not have access permissions",
+                    result.GetIssues().ToString()
+                );
+            }
+            {
+                auto result = selectImplTableQuery();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                    "it does not exist or you do not have access permissions",
+                    result.GetIssues().ToString()
+                );
+            }
+            {
+                auto result = upsertTableQuery();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                    "it does not exist or you do not have access permissions",
+                    result.GetIssues().ToString()
+                );
+            }
+            {
+                auto result = upsertImplTableQuery();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                    "it does not exist or you do not have access permissions",
+                    result.GetIssues().ToString()
+                );
+            }
+            {
+                auto result = updateImplTableQuery();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                    "it does not exist or you do not have access permissions",
+                    result.GetIssues().ToString()
+                );
+            }
+            {
+                auto result = deleteImplTableQuery();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                    "it does not exist or you do not have access permissions",
+                    result.GetIssues().ToString()
+                );
+            }
+            {
+                auto result = bulkUpsertImplTable();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                    "Access denied for user@builtin with access UpdateRow to table",
+                    result.GetIssues().ToString()
+                );
+            }
+            {
+                auto result = copyImplTableQuery();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                    "Access denied for user@builtin on path /Root",
+                    result.GetIssues().ToString()
+                );
+            }
+            return;
         }
 
-        // grant necessary permission
         Grant(adminSession, "USE", tablePath, "user@builtin");
 
-        // try accessing tables with permissions
-        {
-            auto result = selectTableQuery();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        {
-            auto result = selectImplTableQuery();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        {
-            auto result = upsertTableQuery();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        {
-            auto result = upsertImplTableQuery();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                "Writing to index implementation tables is not allowed",
-                result.GetIssues().ToString()
-            );
-        }
-        {
-            auto result = updateImplTableQuery();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                "Writing to index implementation tables is not allowed",
-                result.GetIssues().ToString()
-            );
-        }
-        {
-            auto result = deleteImplTableQuery();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                "Writing to index implementation tables is not allowed",
-                result.GetIssues().ToString()
-            );
-        }
-        {
-            auto result = bulkUpsertImplTable();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                "Writing to index implementation tables is not allowed",
-                result.GetIssues().ToString()
-            );
-        }
-        {
-            Grant(adminSession, "CREATE TABLE", "/Root", "user@builtin");
-            recreateUserSession();
-            auto result = copyImplTableQuery();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            Revoke(adminSession, "CREATE TABLE", "/Root", "user@builtin");
-            recreateUserSession();
-        }
-
-        // become superuser
-        kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("user@builtin");
-
-        // accessing tables as superuser
+        // try accessing tables with USE permission
         {
             auto result = selectTableQuery();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -6149,6 +6078,160 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+    }
+
+    void DoTestOnlineDuplicates(bool expectInsertOk, int toCapture, std::function<bool(const TAutoPtr<IEventHandle>&)> condition) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAddUniqueIndex(true);
+        featureFlags.SetEnableOnlineAddUniqueIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
+            .SetUseRealThreads(false)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        TVector<TAutoPtr<IEventHandle>> capturedEvents;
+        int captured = 0;
+        runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) -> NActors::TTestActorRuntimeBase::EEventAction {
+            if (captured < toCapture && condition(event)) {
+                captured++;
+                capturedEvents.push_back(event.Release());
+                return NActors::TTestActorRuntimeBase::EEventAction::DROP;
+            }
+            return NActors::TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+
+        NYdb::NQuery::TAsyncExecuteQueryResult addIndexFuture;
+        auto queryClient = kikimr.GetQueryClient();
+
+        kikimr.RunCall([&]
+        {
+            {
+                // Create table
+                auto result = queryClient.ExecuteQuery(R"(
+                    CREATE TABLE `/Root/TestOnlineUniq` (
+                        id Int64 NOT NULL,
+                        uniq Int64 NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            // Fill initial data
+            {
+                auto result = queryClient.ExecuteQuery(R"(
+                    INSERT INTO `/Root/TestOnlineUniq` (id, uniq) VALUES
+                    (1, 101), (2, 102), (3, 103), (4, 104), (5, 105)
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            addIndexFuture = queryClient.ExecuteQuery(R"sql(
+                ALTER TABLE `/Root/TestOnlineUniq`
+                ADD INDEX idx_uniq GLOBAL UNIQUE ON (uniq)
+            )sql", NYdb::NQuery::TTxControl::NoTx());
+        });
+
+        runtime->WaitFor("Paused index build", [&] { return captured >= toCapture; });
+
+        kikimr.RunCall([&]
+        {
+            // Insert a normal row
+            {
+                auto result = queryClient.ExecuteQuery(R"(
+                    INSERT INTO `/Root/TestOnlineUniq` (id, uniq) VALUES (100, 1000)
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            // Insert a duplicate
+            {
+                auto result = queryClient.ExecuteQuery(R"(
+                    INSERT INTO `/Root/TestOnlineUniq` (id, uniq) VALUES (101, 101)
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(),
+                    expectInsertOk ? EStatus::SUCCESS : EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            }
+        });
+
+        // Unblock and let index build fail if insertion succeeds
+        for (auto& ev: capturedEvents) {
+            runtime->Send(ev.Release());
+        }
+        capturedEvents.clear();
+
+        kikimr.RunCall([&]
+        {
+            {
+                auto result = addIndexFuture.GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(),
+                    !expectInsertOk ? EStatus::SUCCESS : EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            }
+        });
+    }
+
+    Y_UNIT_TEST(OnlineDuplicatesStage1) {
+        // Stage 1: after CreateTableIndex (index tables are created), but before DataShard::EvBuildIndexCreate
+        // (main table snapshot is not taken and index filling is not started yet). New duplicates can be inserted
+        // into the 'user' index table because it's not filled yet.
+        DoTestOnlineDuplicates(true, 1, [](const TAutoPtr<IEventHandle>& ev) {
+            return ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvBuildIndexCreateRequest::EventType;
+        });
+    }
+
+    Y_UNIT_TEST(OnlineDuplicatesStage2) {
+        // Stage 2: after DataShard::EvBuildIndexCreate and scans (main table snapshot is taken, index table
+        // shadow is filled with data), but before PrepareValidation (shadow is not published yet and
+        // index is not validated). New duplicates can still be inserted - 'user' index table is still empty.
+        DoTestOnlineDuplicates(true, 1, [](const TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
+                const auto& rec = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                if (rec.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+                    bool ok = schemeTx.ParseFromArray(rec.GetTxBody().data(), rec.GetTxBody().size());
+                    if (ok) {
+                        return schemeTx.HasPrepareIndexValidation();
+                    }
+                }
+            }
+            return false;
+        });
+    }
+
+    Y_UNIT_TEST(OnlineDuplicatesStage3) {
+        // Stage 3: after PrepareValidation (shadow data is published), but before actual validation.
+        // New duplicates can't be inserted - user+shadow are merged, uniqueness check fails.
+        DoTestOnlineDuplicates(false, 1, [](const TAutoPtr<IEventHandle>& ev) {
+            return ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvValidateUniqueIndexRequest::EventType;
+        });
+    }
+
+    Y_UNIT_TEST(OnlineDuplicatesStage4) {
+        // Stage 4: after validation, but before FinalizeBuildIndex (2 requests - one for the main
+        // table shard, one for the index table shard). New duplicates can't be inserted - index build
+        // is almost done.
+        DoTestOnlineDuplicates(false, 2, [](const TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
+                const auto& rec = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                if (rec.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+                    bool ok = schemeTx.ParseFromArray(rec.GetTxBody().data(), rec.GetTxBody().size());
+                    if (ok) {
+                        return schemeTx.HasFinalizeBuildIndex();
+                    }
+                }
+            }
+            return false;
+        });
     }
 
     Y_UNIT_TEST(CoveringIndexFilterBeforeLookup) {
@@ -6749,6 +6832,82 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(R"([[[1u];["Alice"]];[[3u];["Alice"]]])",
                 FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(DisableAutoIndexSelectionPragma) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/TestAutoIndexPragma` (
+                id Uint32,
+                name Utf8,
+                INDEX idx_name GLOBAL ON (name),
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync());
+
+        auto upsertResult = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/TestAutoIndexPragma` (id, name) VALUES
+                (1u, "Alice"),
+                (2u, "Bob");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto explainScan = [&](const TString& query) {
+            TStreamExecScanQuerySettings settings;
+            settings.Explain(true);
+            auto it = db.StreamExecuteScanQuery(query, settings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            return CollectStreamResult(it);
+        };
+
+        auto countIndexAccessInPlan = [](TStringBuf planJson) {
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(planJson, &plan, true);
+            return CountPlanNodesByKv(plan, "Table", "TestAutoIndexPragma/idx_name/indexImplTable");
+        };
+
+        {
+            auto res = explainScan(R"(
+                PRAGMA ydb.OptDisableAutoIndexSelection = "false";
+                SELECT * FROM `/Root/TestAutoIndexPragma` WHERE name = 'Alice';
+            )");
+            UNIT_ASSERT(res.PlanJson);
+            UNIT_ASSERT_VALUES_EQUAL_C(countIndexAccessInPlan(*res.PlanJson), 1,
+                "Expected auto-select index with OptDisableAutoIndexSelection=false, plan: " << *res.PlanJson);
+        }
+
+        {
+            auto res = explainScan(R"(
+                PRAGMA ydb.OptDisableAutoIndexSelection = "true";
+                SELECT * FROM `/Root/TestAutoIndexPragma` WHERE name = 'Alice';
+            )");
+            UNIT_ASSERT(res.PlanJson);
+            UNIT_ASSERT_VALUES_EQUAL_C(countIndexAccessInPlan(*res.PlanJson), 0,
+                "Expected no auto-select index with OptDisableAutoIndexSelection=true, plan: " << *res.PlanJson);
+        }
+
+        {
+            auto explainResult = session.ExplainDataQuery(R"(
+                PRAGMA ydb.OptDisableAutoIndexSelection = "false";
+                SELECT * FROM `/Root/TestAutoIndexPragma` WHERE name = 'Alice';
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(countIndexAccessInPlan(explainResult.GetPlan()), 1,
+                "Expected auto-select index on data query with OptDisableAutoIndexSelection=false, plan: " << explainResult.GetPlan());
+        }
+
+        {
+            auto explainResult = session.ExplainDataQuery(R"(
+                PRAGMA ydb.OptDisableAutoIndexSelection = "true";
+                SELECT * FROM `/Root/TestAutoIndexPragma` WHERE name = 'Alice';
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(countIndexAccessInPlan(explainResult.GetPlan()), 0,
+                "Expected no auto-select index on data query with OptDisableAutoIndexSelection=true, plan: " << explainResult.GetPlan());
         }
     }
 
@@ -7561,6 +7720,46 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 ["d2";["N002"];["ACTIVE"]];
                 ["d3";["N003"];["ACTIVE"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+
+    Y_UNIT_TEST(TruncateTableWithAsyncIndexFails) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableTruncateTable(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetFeatureFlags(featureFlags));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/TestAsyncIndexTable` (
+                    Key Uint32,
+                    Value String,
+                    PRIMARY KEY (Key),
+                    INDEX AsyncIndex GLOBAL ASYNC ON (Value)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                UPSERT INTO `/Root/TestAsyncIndexTable` (Key, Value) VALUES
+                    (1, "one"),
+                    (2, "two"),
+                    (3, "three");
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                TRUNCATE TABLE `/Root/TestAsyncIndexTable`;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("Cannot truncate table with async indexes"),
+                "Unexpected error message: " << result.GetIssues().ToString());
         }
     }
 

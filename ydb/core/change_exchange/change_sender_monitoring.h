@@ -17,17 +17,24 @@ static void Link(IOutputStream& str, const TStringBuf path, const T& title) {
     }
 }
 
-TString TabletPath(ui64 tabletId);
+enum class ETabletAppPath {
+    Plain,
+    Secure,
+};
+
+TString TabletPath(ui64 tabletId, ETabletAppPath tabletAppPath = ETabletAppPath::Plain);
 
 template <typename T>
-void Header(IOutputStream& str, const T& title, ui64 tabletId) {
+void Header(IOutputStream& str, const T& title, ui64 tabletId,
+        ETabletAppPath tabletAppPath = ETabletAppPath::Plain)
+{
     HTML(str) {
         DIV_CLASS("page-header") {
             TAG(TH3) {
                 str << title;
                 SMALL() {
                     str << "&nbsp;";
-                    HREF(TabletPath(tabletId)) {
+                    HREF(TabletPath(tabletId, tabletAppPath)) {
                         str << tabletId;
                     }
                 }
@@ -58,7 +65,9 @@ void CollapsedPanel(IOutputStream& str, const TStringBuf title, const TStringBuf
     std::function<void(IOutputStream&)> body);
 
 TPathId ParsePathId(TStringBuf str);
-void PathLink(IOutputStream& str, const TPathId& pathId);
-void ActorLink(IOutputStream& str, ui64 tabletId, const TPathId& pathId, const TMaybe<ui64>& partitionId = {});
+void PathLink(IOutputStream& str, const TPathId& pathId, ETabletAppPath tabletAppPath = ETabletAppPath::Plain);
+
+void ActorLink(IOutputStream& str, ui64 tabletId, const TPathId& pathId, const TMaybe<ui64>& partitionId,
+    ETabletAppPath tabletAppPath);
 
 }

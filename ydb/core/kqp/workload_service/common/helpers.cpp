@@ -79,8 +79,8 @@ NResourcePool::TPoolSettings PoolSettingsFromConfig(const NKikimrConfig::TWorklo
         poolSettings.QueryCpuLimitPercentPerNode = workloadManagerConfig.GetQueryCpuLimitPercentPerNode();
     }
 
-    if (workloadManagerConfig.HasQueryMemoryLimitPercentPerNode()) {
-        poolSettings.QueryMemoryLimitPercentPerNode = workloadManagerConfig.GetQueryMemoryLimitPercentPerNode();
+    if (workloadManagerConfig.HasTotalMemoryLimitPercentPerNode()) {
+        poolSettings.TotalMemoryLimitPercentPerNode = workloadManagerConfig.GetTotalMemoryLimitPercentPerNode();
     }
 
     if (workloadManagerConfig.HasTotalCpuLimitPercentPerNode()) {

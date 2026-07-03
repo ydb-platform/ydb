@@ -95,6 +95,10 @@ namespace NKikimr {
 
                     STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD11, DCtx->VCtx->VDiskLogPrefix << "locked chunks",
                         (ActorId, SelfActorId), (LockedChunks, lockedChunks));
+
+                    if (lockedChunks.empty()) {
+                        STLOG(PRI_NOTICE, BS_VDISK_DEFRAG, BSVDD17, DCtx->VCtx->VDiskLogPrefix << "could not lock chunks, going to run full compaction instead", (ChunksToDefrag, *ChunksToDefrag));
+                    }
                 } else {
                     auto forbiddenChunks = GetForbiddenChunks();
 
@@ -178,7 +182,7 @@ namespace NKikimr {
                     }
                 }
 
-                if (DCtx->VCfg->GarbageThresholdToRunFullCompactionPerMille == 0) {
+                if (DCtx->VCfg->GarbageThresholdToRunFullCompactionPerMille == 0 || (!isShred && lockedChunks.empty())) {
                     // scan index again to find tables we have to compact
                     for (findRecords.StartFindingTablesToCompact(); findRecords.Scan(NDefrag::WorkQuantum, GetSnapshot()); Yield()) {}
                     if (auto records = findRecords.GetRecordsToRewrite(); !records.empty()) {

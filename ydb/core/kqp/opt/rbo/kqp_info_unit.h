@@ -1,6 +1,10 @@
 #pragma once
 
-#include <ydb/core/kqp/opt/kqp_opt.h>
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
+#include <util/generic/maybe.h>
+#include <util/generic/vector.h>
+#include <util/generic/string.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -60,6 +64,8 @@ private:
     bool SubplanContext{false};
     TVector<TInfoUnit> SubplanDependencies;
 };
+
+using TInfoUnitSet = THashSet<TInfoUnit, TInfoUnit::THashFunction>;
 
 }
 }

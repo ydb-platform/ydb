@@ -24,6 +24,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/persqueue/topic_parser
     ydb/library/grpc/server
     ydb/core/base
     ydb/core/client/server
@@ -43,6 +44,7 @@ PEERDIR(
     ydb/services/ydb
     ydb/core/persqueue/public/describer
     ydb/core/persqueue/public/mlp
+    ydb/core/persqueue/public/schema
     ydb/core/ymq/attributes
     ydb/core/ymq/base
     ydb/core/ymq/error
@@ -54,4 +56,8 @@ END()
 RECURSE(
     protos
     queue_url
+)
+
+RECURSE_FOR_TESTS(
+    ut
 )

@@ -4,25 +4,29 @@ You can use the `{{ ydb-cli }} sql` subcommand to execute an SQL query. The quer
 
 General format of the command:
 
+
 ```bash
 {{ ydb-cli }} [global options...] sql [options...]
 ```
 
+
 * `global options`: [Global parameters](commands/global-options.md).
 * `options`: [Subcommand parameters](#options).
 
-View the description of this command by calling it with `--help` option:
+View the description of the query execution command:
+
 
 ```bash
 {{ ydb-cli }} sql --help
 ```
+
 
 ## Parameters of the subcommand {#options}
 
 #|
 || Name | Description ||
 || `-h`, `--help` | Print general usage help. ||
-|| `-hh` | Print complete usage help, including specific options not shown with `--help`. ||
+|| `-hh` | Print complete usage help, including specific commands not shown with `--help`. ||
 || `-s`, `--script` | Script (query) text to execute. ||
 || `-f`, `--file` | Path to a file with query text to execute. Path `-` means reading query text from `stdin` which disables passing parameters via `stdin`. ||
 || `--stats` | Statistics mode.<br/>Available options:<br/><ul><li>`none` (default): Do not collect statistics.</li><li>`basic`: Collect aggregated statistics for updates and deletes per table.</li><li>`full`: Include execution statistics and plan in addition to `basic`.</li><li>`profile`: Collect detailed execution statistics, including statistics for individual tasks and channels.</li></ul> ||
@@ -46,19 +50,38 @@ For a detailed description with examples on how to use parameterized queries, se
 
 {% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
-A script to create a table, populate it with data, and select data from the table:
+Running DDL and DML together in a single query is not supported.
+
 
 ```bash
+# Creating a table
 {{ ydb-cli }} -p quickstart sql -s '
-    CREATE TABLE series (series_id Uint64, title Utf8, series_info Utf8, release_date Date, PRIMARY KEY (series_id));
-    COMMIT;
-    UPSERT INTO series (series_id, title, series_info, release_date) values (1, "Title1", "Info1", Cast("2023-04-20" as Date));
-    COMMIT;
-    SELECT * from series;
-  '
+  CREATE TABLE series (
+    series_id Uint64,
+    title Utf8,
+    series_info Utf8,
+    release_date Date,
+    PRIMARY KEY (series_id)
+  );
+'
+
+# Populating with data and retrieving a sample
+{{ ydb-cli }} -p quickstart sql -s '
+    UPSERT INTO series (series_id, title, series_info, release_date) 
+    VALUES (1, "Title1", "Info1", Cast("2023-04-20" as Date));
+    SELECT * FROM series;
+'
+
+# Adding an index
+{{ ydb-cli }} -p quickstart sql -s '
+    ALTER TABLE series 
+    ADD INDEX title_idx GLOBAL ON (title);
+'
 ```
 
+
 Command output:
+
 
 ```text
 ┌──────────────┬───────────┬─────────────┬──────────┐
@@ -68,16 +91,21 @@ Command output:
 └──────────────┴───────────┴─────────────┴──────────┘
 ```
 
-Running a script from the example above saved as the `script1.yql` file, with results output in `JSON` format:
+
+To run a query from a file (for example, script1.yql) with JSON output
+
 
 ```bash
-{{ ydb-cli }} -p quickstart sql -f script1.yql --format json
+{{ ydb-cli }} -p quickstart sql -f script1.yql --format json-unicode
 ```
 
+
 Command output:
+
 
 ```text
 {"release_date":"2023-04-20","series_id":1,"series_info":"Info1","title":"Title1"}
 ```
 
-You can find examples of passing parameters to queries in the [article on how to pass parameters to `{{ ydb-cli }} sql`](parameterized-query-execution.md).
+
+Examples of passing parameters to scripts are given in the [article on passing parameters to query execution commands](parameterized-query-execution.md).

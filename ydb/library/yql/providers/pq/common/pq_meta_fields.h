@@ -11,18 +11,30 @@
 
 namespace NYql {
 
+enum class EMetaFieldType {
+    Uint64,
+    Timestamp,
+    String,
+    DictStringString,
+};
+
 struct TMetaFieldDescriptor {
     const TString Key;
     const TString SysColumn;
-    const NUdf::EDataSlot Type;
+    const EMetaFieldType Type;
 };
 
 std::optional<TString> SkipPqSystemPrefix(const TString& sysColumn, bool* isTransparent = nullptr);
 
-std::optional<TMetaFieldDescriptor> FindPqMetaFieldDescriptorByKey(const TString& key, bool allowTransparentColumns);
+std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorByKey(
+    const TString& key,
+    bool addTransparentPrefix,
+    bool includeUserAttributes);
 
-std::optional<TMetaFieldDescriptor> FindPqMetaFieldDescriptorBySysColumn(const TString& sysColumn);
+std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorBySysColumn(
+    const TString& sysColumn,
+    bool includeUserAttributes);
 
-std::vector<TString> AllowedPqMetaSysColumns(bool allowTransparentColumns);
+std::vector<TString> GetAllowedPqMetaSysColumns(bool addTransparentPrefix, bool includeUserAttributes);
 
 } // namespace NYql

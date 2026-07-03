@@ -93,6 +93,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
     void DoBaseCase(TTestWithReboots& t, NKikimrSchemeOp::EIndexType indexType) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
+            runtime.GetAppData().FeatureFlags.SetEnableOnlineAddUniqueIndex(true);
             {
                 TInactiveZone inactive(activeZone);
 

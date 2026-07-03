@@ -295,9 +295,9 @@
     ],
     "test.test[InMem-Fold1MapOverPreservedStream-default.txt-Debug]": [
         {
-            "checksum": "9e54dd10cf86dcc5c6296be219a11190",
-            "size": 1371,
-            "uri": "https://{canondata_backend}/1936842/f5a1ea9d18320a4808b27dd027dc32e6269e8d5b/resource.tar.gz#test.test_InMem-Fold1MapOverPreservedStream-default.txt-Debug_/opt.yql"
+            "checksum": "a94b46d6cb80e113f48090dbbf43a939",
+            "size": 1450,
+            "uri": "https://{canondata_backend}/1942173/6904dcf8e558d74965b12c60c178cdd16fdabd02/resource.tar.gz#test.test_InMem-Fold1MapOverPreservedStream-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[InMem-Fold1MapOverPreservedStream-default.txt-Results]": [
@@ -337,9 +337,9 @@
     ],
     "test.test[InMem-QueueRangeWithPreservedStream-default.txt-Debug]": [
         {
-            "checksum": "297cc38af2fc096207d70cbccf33f5ac",
-            "size": 517,
-            "uri": "https://{canondata_backend}/1936842/f5a1ea9d18320a4808b27dd027dc32e6269e8d5b/resource.tar.gz#test.test_InMem-QueueRangeWithPreservedStream-default.txt-Debug_/opt.yql"
+            "checksum": "313706d147f93b08353763ca979f7167",
+            "size": 593,
+            "uri": "https://{canondata_backend}/1920236/64a02a4c54f969f37575f3cc19ad190d3c5e2370/resource.tar.gz#test.test_InMem-QueueRangeWithPreservedStream-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[InMem-QueueRangeWithPreservedStream-default.txt-Results]": [
@@ -351,9 +351,9 @@
     ],
     "test.test[InMem-Seq-default.txt-Debug]": [
         {
-            "checksum": "1bf2ed8f8206dd7c691aa2629886f850",
-            "size": 626,
-            "uri": "https://{canondata_backend}/1936842/f5a1ea9d18320a4808b27dd027dc32e6269e8d5b/resource.tar.gz#test.test_InMem-Seq-default.txt-Debug_/opt.yql"
+            "checksum": "6f0e034282c544a831154baa05f9ff4d",
+            "size": 702,
+            "uri": "https://{canondata_backend}/1942173/6904dcf8e558d74965b12c60c178cdd16fdabd02/resource.tar.gz#test.test_InMem-Seq-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[InMem-Seq-default.txt-Results]": [

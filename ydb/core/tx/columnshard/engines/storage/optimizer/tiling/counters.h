@@ -14,10 +14,12 @@ private:
 
 public:
     const std::shared_ptr<NColumnShard::TValueAggregationAgent> Height;
+    const NColumnShard::TIncrementalHistogram WidthHistogram;
 
     TPortionCategoryCounterAgents(TCommonCountersOwner& base, const TString& categoryName)
         : TBase(base, categoryName)
         , Height(TBase::GetValueAutoAggregations("ByGranule/Level/Height"))
+        , WidthHistogram(base.GetModuleId(), "ByLevel/Width", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders)
     {
     }
 };
@@ -26,16 +28,26 @@ class TPortionCategoryCounters: public NColumnShard::TPortionCategoryCounters {
 private:
     using TBase = NColumnShard::TPortionCategoryCounters;
     std::shared_ptr<NColumnShard::TValueAggregationClient> Height;
+    std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> WidthHistogram;
 
 public:
     TPortionCategoryCounters(TPortionCategoryCounterAgents& agents)
         : TBase(agents)
+        , Height(agents.Height->GetClient())
+        , WidthHistogram(agents.WidthHistogram.BuildGuard())
     {
-        Height = agents.Height->GetClient();
     }
 
     void SetHeight(const i32 height) {
         Height->SetValue(height);
+    }
+
+    void AddWidth(const ui64 width) {
+        WidthHistogram->Add(width, 1);
+    }
+
+    void RemoveWidth(const ui64 width) {
+        WidthHistogram->Sub(width, 1);
     }
 };
 
@@ -54,6 +66,8 @@ private:
     using TBase = NColumnShard::TCommonCountersOwner;
     std::vector<std::shared_ptr<TLevelAgents>> Levels;
     std::vector<std::shared_ptr<TLevelAgents>> Accumulators;
+    std::shared_ptr<TLevelAgents> LastLevel;
+    std::shared_ptr<TLevelAgents> Tiling;
 
 public:
     TGlobalCounters()
@@ -63,6 +77,8 @@ public:
             Levels.emplace_back(std::make_shared<TLevelAgents>("level=" + ::ToString(i), *this));
             Accumulators.emplace_back(std::make_shared<TLevelAgents>("acc=" + ::ToString(i), *this));
         }
+        LastLevel = std::make_shared<TLevelAgents>("last", *this);
+        Tiling = std::make_shared<TLevelAgents>("tiling", *this);
     }
 
     static std::shared_ptr<TPortionCategoryCounters> BuildClient(
@@ -77,6 +93,14 @@ public:
 
     static std::shared_ptr<TPortionCategoryCounters> BuildAccumulatorClient(const ui32 accId) {
         return BuildClient(Singleton<TGlobalCounters>()->Accumulators, accId, "accumulator");
+    }
+
+    static std::shared_ptr<TPortionCategoryCounters> BuildLastClient() {
+        return std::make_shared<TPortionCategoryCounters>(*Singleton<TGlobalCounters>()->LastLevel->Portions);
+    }
+
+    static std::shared_ptr<TPortionCategoryCounters> BuildTilingClient() {
+        return std::make_shared<TPortionCategoryCounters>(*Singleton<TGlobalCounters>()->Tiling->Portions);
     }
 };
 
@@ -95,8 +119,13 @@ class TCounters {
 public:
     std::vector<TLevelCounters> Levels;
     std::vector<TLevelCounters> Accumulators;
+    TLevelCounters LastLevel;
+    TLevelCounters Tiling;
 
-    TCounters() {
+    TCounters()
+        : LastLevel(TGlobalCounters::BuildLastClient())
+        , Tiling(TGlobalCounters::BuildTilingClient())
+    {
         for (ui32 i = 0; i < TILING_LAYERS_COUNT; ++i) {
             Levels.emplace_back(TGlobalCounters::BuildLevelClient(i));
             Accumulators.emplace_back(TGlobalCounters::BuildAccumulatorClient(i));
@@ -111,6 +140,14 @@ public:
     const TLevelCounters& GetAccumulatorCounters(const ui32 accIdx) const {
         AFL_VERIFY(accIdx < Accumulators.size())("idx", accIdx)("count", Accumulators.size());
         return Accumulators[accIdx];
+    }
+
+    const TLevelCounters& GetLastLevelCounters() const {
+        return LastLevel;
+    }
+
+    const TLevelCounters& GetTilingCounters() const {
+        return Tiling;
     }
 };
 

@@ -90,6 +90,8 @@ protected:
 
     void ReportTxCreated();
     void ReportTxAborted(ui32 abortedCount);
+    void ReportOnlineRO();
+    void ReportOnlineROWithInconsistentReads();
 
     void ReportQueryCacheHit(bool hit);
     void ReportCompileStart();
@@ -194,6 +196,8 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr TxAborted;
     ::NMonitoring::TDynamicCounters::TCounterPtr TxCommited;
     ::NMonitoring::TDynamicCounters::TCounterPtr TxEvicted;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OnlineRORequests;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OnlineROWithInconsistentReadsRequests;
     NMonitoring::THistogramPtr TxActivePerSession;
     NMonitoring::THistogramPtr TxAbortedPerSession;
     THashMap<TKqpTransactionInfo::EKind, TYdbTxByKindCounters> YdbTxByKind;
@@ -328,6 +332,8 @@ public:
 
     void ReportTxCreated(TKqpDbCountersPtr dbCounters);
     void ReportTxAborted(TKqpDbCountersPtr dbCounters, ui32 abortedCount);
+    void ReportOnlineRO(TKqpDbCountersPtr dbCounters);
+    void ReportOnlineROWithInconsistentReads(TKqpDbCountersPtr dbCounters);
 
     void ReportQueryCacheHit(TKqpDbCountersPtr dbCounters, bool hit);
     void ReportCompileStart(TKqpDbCountersPtr dbCounters);
@@ -391,6 +397,14 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesTruncated;
     ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesEmptyQueryType;
 
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileCacheViewPeerScanWarnings;
+
+    // Accumulate only during a short window after first non-warmup client
+    // compile -- attribute warmup impact on cold-start traffic.
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupHitsInWindow;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupMissesInWindow;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupSavedCompileMs;
+
     // Compile computation pattern service
     ::NMonitoring::TDynamicCounters::TCounterPtr CompiledComputationPatterns;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileComputationPatternsQueueSize;
@@ -435,6 +449,13 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupIteratorTotalQuotaBytesInFlight;
     ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupIteratorTotalQuotaBytesExceeded;
     ::NMonitoring::TDynamicCounters::TCounterPtr IteratorDeliveryProblems;
+
+    // Lock counters
+    ::NMonitoring::TDynamicCounters::TCounterPtr SentLocks;
+    NMonitoring::THistogramPtr LockLatencyHistogram;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ModifiedRowsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LockedRowsCount;
+    NMonitoring::THistogramPtr MaxInFlightLockTimeOnExit;
 
     // Sink write counters
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorsShardResolve;

@@ -76,7 +76,7 @@ bool CheckFreeStackSpace(size_t space);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} //namespace NYT::NConcurrency
+} // namespace NYT::NConcurrency
 
 #define SCHEDULER_API_INL_H_
 #include "scheduler_api-inl.h"

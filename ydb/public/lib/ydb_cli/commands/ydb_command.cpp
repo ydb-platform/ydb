@@ -17,11 +17,11 @@ TYdbCommand::TYdbCommand(const TString& name, const std::initializer_list<TStrin
 {}
 
 TDriver TYdbCommand::CreateDriver(TConfig& config) {
-    return TDriver(config.CreateDriverConfig());
+    return TDriver(config.CreateDriverConfigWithBuildInfo());
 }
 
 TDriver TYdbCommand::CreateDriver(TConfig& config, std::unique_ptr<TLogBackend>&& loggingBackend) {
-    auto driverConfig = config.CreateDriverConfig();
+    auto driverConfig = config.CreateDriverConfigWithBuildInfo();
     driverConfig.SetLog(std::move(loggingBackend));
 
     return TDriver(driverConfig);

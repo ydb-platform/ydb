@@ -138,7 +138,10 @@ namespace NKikimr::NDDisk {
 
         TRope payload = ev->Get()->GetPayload(payloadId);
 
-        NDDisk::TQueryCredentials creds{inflight.TabletId, inflight.TabletGeneration, true};
+        NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::ForInternal(
+            inflight.TabletId,
+            inflight.TabletGeneration,
+            std::nullopt);
         const NDDisk::TBlockSelector selector{record.GetVChunkIndex(), record.GetOffsetInBytes(), record.GetSizeInBytes()};
 
         auto msg = std::make_unique<TEvWritePersistentBuffers>(creds, selector, inflight.Lsn, NDDisk::TWriteInstruction(0),
@@ -153,11 +156,11 @@ namespace NKikimr::NDDisk {
     void TWritePersistentBuffersRequestActor::Handle(TEvReadThenWritePersistentBuffers::TPtr ev) {
         auto cookie = NextCookie++;
         const auto& record = ev->Get()->Record;
-        TQueryCredentials creds;
         auto recordCreds = record.GetCredentials();
-        creds.TabletId = recordCreds.GetTabletId();
-        creds.Generation = recordCreds.GetGeneration();
-        creds.FromPersistentBuffer = true;
+        TQueryCredentials creds = TQueryCredentials::ForInternal(
+            recordCreds.GetTabletId(),
+            recordCreds.GetGeneration(),
+            std::nullopt);
         auto requestGeneration = record.GetGeneration();
         auto lsn = record.GetLsn();
         auto timeout = record.GetReplyTimeoutMicroseconds();
@@ -199,11 +202,11 @@ namespace NKikimr::NDDisk {
 
         Y_ABORT_UNLESS(inserted);
         const auto& record = ev->Get()->Record;
-        TQueryCredentials creds;
         auto recordCreds = record.GetCredentials();
-        creds.TabletId = recordCreds.GetTabletId();
-        creds.Generation = recordCreds.GetGeneration();
-        creds.FromPersistentBuffer = true;
+        TQueryCredentials creds = TQueryCredentials::ForInternal(
+            recordCreds.GetTabletId(),
+            recordCreds.GetGeneration(),
+            std::nullopt);
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
         const TWriteInstruction instr(record.GetInstruction());

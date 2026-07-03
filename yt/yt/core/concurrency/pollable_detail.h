@@ -22,7 +22,6 @@ private:
 template <std::invocable<NConcurrency::IPollable&, NConcurrency::EPollControl> T>
 NConcurrency::IPollablePtr MakeSimplePollable(T body, std::string loggingTag);
 
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency

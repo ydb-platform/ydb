@@ -6,6 +6,7 @@
 #include "schema.h"
 #include "mon_main.h"
 
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
 namespace NKikimr::NTesting {
@@ -38,6 +39,8 @@ namespace NKikimr::NBlobDepot {
                 EvDeleteResult,
                 EvScanFound,
                 EvScanContinue,
+                EvDeleteThrottleWakeup,
+                EvPutThrottleWakeup,
             };
         };
 
@@ -57,6 +60,7 @@ namespace NKikimr::NBlobDepot {
         static constexpr TDuration ExpirationTimeout = TDuration::Minutes(1);
 
         std::shared_ptr<TToken> Token = std::make_shared<TToken>();
+        TControlWrapper MaxLoadedTrashRecords = 1'000'000;
 
         struct TAgent {
             struct TConnection {
@@ -166,14 +170,21 @@ namespace NKikimr::NBlobDepot {
         void DefaultSignalTabletActive(const TActorContext&) override {} // signalled explicitly after load is complete
 
         void OnActivateExecutor(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT24, "OnActivateExecutor", (Id, GetLogId()));
+            YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "OnActivateExecutor",
+                {"marker", "BDT24"},
+                {"id", GetLogId()});
+            if (AppData()->Icb) {
+                TControlBoard::RegisterSharedControl(MaxLoadedTrashRecords, AppData()->Icb->BlobDepotControls.MaxLoadedTrashRecords);
+            }
             Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
             TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_STARTING] = 1;
             ExecuteTxInitSchema();
         }
 
         void OnLoadFinished() {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT25, "OnLoadFinished", (Id, GetLogId()));
+            YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "OnLoadFinished",
+                {"marker", "BDT25"},
+                {"id", GetLogId()});
             Become(&TThis::StateWork);
             SignalTabletActive(TActivationContext::AsActorContext());
         }
@@ -195,14 +206,18 @@ namespace NKikimr::NBlobDepot {
         void OnDataLoadComplete();
 
         void OnDetach(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT26, "OnDetach", (Id, GetLogId()));
+            YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "OnDetach",
+                {"marker", "BDT26"},
+                {"id", GetLogId()});
 
             // TODO: what does this callback mean
             PassAway();
         }
 
         void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& /*ev*/, const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT27, "OnTabletDead", (Id, GetLogId()));
+            YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "OnTabletDead",
+                {"marker", "BDT27"},
+                {"id", GetLogId()});
             PassAway();
         }
 
@@ -309,7 +324,7 @@ namespace NKikimr::NBlobDepot {
 
         bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
 
-        void RenderMainPage(IOutputStream& s);
+        void RenderMainPage(IOutputStream& s, const TString& nonce);
         NJson::TJsonValue RenderJson(bool pretty);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

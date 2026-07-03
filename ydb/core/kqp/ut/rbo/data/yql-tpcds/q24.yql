@@ -67,7 +67,7 @@ GROUP BY
 HAVING
     Sum(netpaid) > (
         SELECT
-            0.05 * Avg(netpaid)
+            cast("0.05" as decimal(35,2)) * Avg(netpaid)
         FROM
             $ssales AS ssales
     )

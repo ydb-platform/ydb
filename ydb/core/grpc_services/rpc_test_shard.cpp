@@ -6,7 +6,7 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
-#include <ydb/core/protos/msgbus.pb.h>
+#include <ydb/core/protos/test_shard_control.pb.h>
 #include <ydb/core/test_tablet/test_shard_impl.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>

@@ -3,6 +3,7 @@
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
+#include <ydb/core/http_proxy/sqs_xml/params.h>
 #include <ydb/core/ymq/actor/actor.h>
 #include <ydb/core/ymq/actor/auth_factory.h>
 #include <ydb/core/ymq/actor/events.h>
@@ -33,6 +34,7 @@ namespace NKikimr::NSQS {
 
 using NKikimrClient::TSqsRequest;
 using NKikimrClient::TSqsResponse;
+using namespace NKikimr::NHttpProxy::NSQS;
 
 namespace {
 
@@ -75,11 +77,16 @@ public:
         response.FolderId = resp.GetFolderId();
         response.IsFifo = resp.GetIsFifo();
         response.ResourceId = resp.GetResourceId();
+        response.SkipMetering = IamAuthFailed_;
         for (const auto& tag : resp.GetQueueTags()) {
             response.QueueTags[tag.GetKey()] = tag.GetValue();
         }
 
         Request_->SendResponse(response);
+    }
+
+    void OnIamAuthError() override {
+        IamAuthFailed_ = true;
     }
 
 private:
@@ -100,6 +107,7 @@ private:
 private:
     THttpRequest* const Request_;
     const TSqsRequest RequestParams_;
+    bool IamAuthFailed_ = false;
 };
 
 class TPingHttpCallback : public IPingReplyCallback {
@@ -151,7 +159,7 @@ void THttpRequest::WriteResponse(const TReplyParams& replyParams, const TSqsHttp
         httpResponse.SetContent(response.Body, response.ContentType);
     }
 
-    if (Parent_->Config.GetYandexCloudMode() && !IsPrivateRequest_) {
+    if (Parent_->Config.GetYandexCloudMode() && !IsPrivateRequest_ && !response.SkipMetering) {
         // Send request attributes to the metering actor
         auto reportRequestAttributes = MakeHolder<TSqsEvents::TEvReportProcessedRequestAttributes>();
 
@@ -629,11 +637,15 @@ void THttpRequest::SetupCreateQueue(TCreateQueueRequest* const req) {
     }
 
     for (const auto& attr : QueryParams_.Attributes) {
-        req->AddAttributes()->CopyFrom(attr.second);
+        auto& target = *req->AddAttributes();
+        target.SetName(attr.second.Name.GetOrElse(""));
+        target.SetValue(attr.second.Value.GetOrElse(""));
     }
 
     for (const auto& tag : QueryParams_.Tags) {
-        req->AddTags()->CopyFrom(tag.second);
+        auto& target = *req->AddTags();
+        target.SetKey(tag.second.Key.GetOrElse(""));
+        target.SetValue(tag.second.Value.GetOrElse(""));
     }
 }
 
@@ -842,45 +854,45 @@ void THttpRequest::SetupReceiveMessage(TReceiveMessageRequest* const req) {
         req->AddAttributeName(name.second);
     }
     for (const auto& item : QueryParams_.MessageAttributes) {
-        req->AddMessageAttributeName(item.second.GetName());
+        req->AddMessageAttributeName(item.second.Name);
     }
 }
 
-static void ValidateMessageAttribute(const TMessageAttribute& attr, bool allowYandexPrefix, bool& hasYandexPrefix) {
-    if (!ValidateMessageAttributeName(attr.GetName(), hasYandexPrefix, allowYandexPrefix)) {
+static void ValidateMessageAttribute(const TParameters::TMessageAttribute& attr, bool allowYandexPrefix, bool& hasYandexPrefix) {
+    if (!ValidateMessageAttributeName(attr.Name, hasYandexPrefix, allowYandexPrefix)) {
         throw TSQSException(NErrors::INVALID_PARAMETER_VALUE) << "Invalid message attribute name.";
     }
-    if (attr.GetDataType().empty()) {
+    if (attr.DataType.GetOrElse("").empty()) {
         throw TSQSException(NErrors::INVALID_PARAMETER_COMBINATION) << "No message attribute data type provided.";
     }
-    if (attr.GetDataType().size() > 256) {
+    if (attr.DataType.GetOrElse("").size() > 256) {
         throw TSQSException(NErrors::INVALID_PARAMETER_VALUE) << "Message attribute data type is too long.";
     }
-    if (attr.GetStringValue().empty() && attr.GetBinaryValue().empty()) {
+    if (attr.StringValue.GetOrElse("").empty() && attr.BinaryValue.GetOrElse("").empty()) {
         throw TSQSException(NErrors::INVALID_PARAMETER_COMBINATION) << "No message attribute value provided.";
     }
-    if (!attr.GetStringValue().empty() && !attr.GetBinaryValue().empty()) {
+    if (!attr.StringValue.GetOrElse("").empty() && !attr.BinaryValue.GetOrElse("").empty()) {
         throw TSQSException(NErrors::INVALID_PARAMETER_COMBINATION) << "Message attribute has both value and binary value.";
     }
 }
 
-static void ValidateMessageAttributes(const TMap<int, TMessageAttribute>& messageAttributes, bool allowYandexPrefix, bool& hasYandexPrefix) {
+static void ValidateMessageAttributes(const TMap<int, TParameters::TMessageAttribute>& messageAttributes, bool allowYandexPrefix, bool& hasYandexPrefix) {
     THashSet<TStringBuf> attributeNames;
     for (const auto& item : messageAttributes) {
         ValidateMessageAttribute(item.second, allowYandexPrefix, hasYandexPrefix);
-        if (!attributeNames.insert(item.second.GetName()).second) {
+        if (!attributeNames.insert(item.second.Name).second) {
             throw TSQSException(NErrors::INVALID_PARAMETER_COMBINATION) << "Duplicated message attribute name.";
         }
     }
 }
 
-static TString FormatNames(const TMap<int, TMessageAttribute>& messageAttributes) {
+static TString FormatNames(const TMap<int, TParameters::TMessageAttribute>& messageAttributes) {
     TStringBuilder names;
     for (const auto& item : messageAttributes) {
         if (!names.empty()) {
             names << ", ";
         }
-        names << "\"" << item.second.GetName() << "\"";
+        names << "\"" << item.second.Name << "\"";
     }
     return std::move(names);
 }
@@ -909,7 +921,17 @@ void THttpRequest::SetupSendMessage(TSendMessageRequest* const req) {
     }
 
     for (const auto& item : QueryParams_.MessageAttributes) {
-        req->AddMessageAttributes()->CopyFrom(item.second);
+        auto& target = *req->AddMessageAttributes();
+        target.SetName(item.second.Name);
+        if (item.second.StringValue) {
+            target.SetStringValue(*item.second.StringValue);
+        }
+        if (item.second.BinaryValue) {
+            target.SetBinaryValue(*item.second.BinaryValue);
+        }
+        if (item.second.DataType) {
+            target.SetDataType(*item.second.DataType);
+        }
     }
 }
 
@@ -944,7 +966,17 @@ void THttpRequest::SetupSendMessageBatch(TSendMessageBatchRequest* const req) {
         }
 
         for (const auto& attr : params.MessageAttributes) {
-            entry->AddMessageAttributes()->CopyFrom(attr.second);
+            auto& target = *entry->AddMessageAttributes();
+            target.SetName(attr.second.Name);
+            if (attr.second.StringValue) {
+                target.SetStringValue(*attr.second.StringValue);
+            }
+            if (attr.second.BinaryValue) {
+                target.SetBinaryValue(*attr.second.BinaryValue);
+            }
+            if (attr.second.DataType) {
+                target.SetDataType(*attr.second.DataType);
+            }
         }
     }
 }
@@ -954,7 +986,9 @@ void THttpRequest::SetupSetQueueAttributes(TSetQueueAttributesRequest* const req
     req->MutableAuth()->SetUserName(UserName_);
 
     for (const auto& attr : QueryParams_.Attributes) {
-        req->AddAttributes()->CopyFrom(attr.second);
+        auto& target = *req->AddAttributes();
+        target.SetName(attr.second.Name.GetOrElse(""));
+        target.SetValue(attr.second.Value.GetOrElse(""));
     }
 }
 
@@ -968,7 +1002,9 @@ void THttpRequest::SetupTagQueue(TTagQueueRequest* const req) {
     req->SetSourceAddress(SourceAddress_);
     req->MutableAuth()->SetUserName(UserName_);
     for (const auto& tag : QueryParams_.Tags) {
-        req->AddTags()->CopyFrom(tag.second);
+        auto& target = *req->AddTags();
+        target.SetKey(tag.second.Key.GetOrElse(""));
+        target.SetValue(tag.second.Value.GetOrElse(""));
     }
 }
 

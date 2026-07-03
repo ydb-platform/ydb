@@ -3,7 +3,7 @@
 #include "impl.h"
 #include "summary.h"
 
-#include <yt/yt/core/profiling/tscp.h>
+#include <library/cpp/yt/system/tscp.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
 

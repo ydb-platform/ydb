@@ -123,6 +123,7 @@ message TQueryStats {
     optional uint64 RequestUnits = 17;
     optional uint64 LocksBrokenAsBreaker = 18;
     optional uint64 LocksBrokenAsVictim = 19;
+    optional string TraceId = 20;
 }
 
 message TTopQueryStats {
@@ -239,6 +240,7 @@ message TVSlotInfo {
     optional string State = 17;
     optional bool IsThrottling = 18;
     optional uint32 ThrottlingRate = 19;
+    optional bool PhantomOnly = 20;
 }
 
 message TVSlotEntry {
@@ -364,8 +366,17 @@ message TStorageStatsEntry {
     optional uint32 CurrentGroupsCreated = 4;
     optional uint64 CurrentAllocatedSize = 5;
     optional uint64 CurrentAvailableSize = 6;
+
+    // estimated number of groups BSC is able to create if DriveStatus and MaintenanceStatus are ignored
     optional uint32 AvailableGroupsToCreate = 7;
-    optional uint64 AvailableSizeToCreate = 8; // total space of newly created groups, if they would've been created
+    // estimated total space of groups BSC is able to create if DriveStatus and MaintenanceStatus are ignored
+    optional uint64 AvailableSizeToCreate = 8;
+
+    // estimated number of groups BSC is able to create
+    optional uint32 ImmediateGroupsToCreate = 10;
+    // estimated total space of groups BSC is able to create
+    optional uint64 ImmediateSizeToCreate = 11;
+
     optional bytes PDiskFilterData = 9;
 }
 

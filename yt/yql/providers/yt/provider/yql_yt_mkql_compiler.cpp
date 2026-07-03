@@ -269,7 +269,6 @@ TRuntimeNode BuildTableContentCall(TStringBuf callName,
             case EYtSettingType::Unordered:
             case EYtSettingType::NonUnique:
             case EYtSettingType::SysColumns:
-            case EYtSettingType::QLFilter:
                 break;
             default:
                 YQL_LOG_CTX_THROW yexception() << "Unsupported table content setting " << TString{child->Child(0)->Content()}.Quote();
@@ -309,6 +308,7 @@ TRuntimeNode BuildDqYtInputCall(
     NYT::TNode& registryNode = specNode[YqlIOSpecRegistry];
     THashMap<TString, TString> uniqSpecs;
     NYT::TNode samplingSpec;
+    const ui64 nativeTypeCompat = state->Configuration->NativeYtTypeCompatibility.Get(clusterName).GetOrElse(NTCF_LEGACY);
 
     TVector<TRuntimeNode> groups;
     for (size_t i: xrange(sectionList.Size())) {
@@ -355,6 +355,7 @@ TRuntimeNode BuildDqYtInputCall(
             if (!sysColumns.IsUndefined()) {
                 specNode[YqlSysColumnPrefix] = sysColumns;
             }
+            UpdateNativeYtTypeFlags(specNode, nativeTypeCompat);
             TString refName = TStringBuilder() << "$table" << uniqSpecs.size();
             auto res = uniqSpecs.emplace(NYT::NodeToCanonicalYsonString(specNode), refName);
             if (res.second) {

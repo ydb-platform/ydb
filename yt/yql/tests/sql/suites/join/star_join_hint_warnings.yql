@@ -1,0 +1,41 @@
+use plato;
+pragma yt.JoinEnableStarJoin="true";
+
+-- Star join hint is not expected at this location and will be ignored
+select
+    a.k1,
+    a.v1,
+    b.k2,
+    b.v2,
+    c.key,
+    c.value
+from Input1 as a
+join any Input2 as b on a.k1 = b.k2
+join /*+ star() */ any Input3 as c on a.k1 = c.key;
+
+-- Join side "b" is not suitable for star join - duplicated join keys
+select
+    a.k1,
+    a.v1,
+    b.k2,
+    b.v2,
+    c.key,
+    c.value
+from Input1 as a
+join /*+ star() */ any Input2 as b on a.k1 = b.k2 and a.k1 = b.v2
+join any Input3 as c on a.k1 = c.key;
+
+-- Join side "d" cannot be added to a star join chain - must be effectively unique
+select
+    a.k1,
+    a.v1,
+    b.k2,
+    b.v2,
+    c.key,
+    c.value,
+    d.key,
+    d.value
+from Input1 as a
+join /*+ star() */ any Input2 as b on a.k1 = b.k2
+join any Input3 as c on a.k1 = c.key
+join Input3 as d on a.k1 = d.key;

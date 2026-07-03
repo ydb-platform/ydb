@@ -8,6 +8,8 @@
 
 #include <ydb/core/util/random.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
+
 namespace NKikimr::NStorage {
 
     TIntrusivePtr<TBlobStorageGroupInfo> TNodeWarden::NeedGroupInfo(ui32 groupId) {
@@ -84,7 +86,10 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(encryptedGroupKey.size() == groupKey.GetKeySizeBytes() + sizeof(ui32));
 
         // Send the request
-        STLOG(PRI_DEBUG, BS_NODE, NW68, "ConfigureLocalProxy propose", (GroupId, groupId), (MainKey, mainKey));
+        YDB_LOG_DEBUG("ConfigureLocalProxy propose",
+            {"marker", "NW68"},
+            {"groupId", groupId},
+            {"mainKey", mainKey});
         SendToController(std::make_unique<TEvBlobStorage::TEvControllerProposeGroupKey>(LocalNodeId, groupId,
             TBlobStorageGroupInfo::ELCP_PROPOSE, mainKey.Id, encryptedGroupKey, mainKey.Version, groupKeyNonce));
     }
@@ -107,7 +112,10 @@ namespace NKikimr::NStorage {
 
         // log if from resolver
         if (fromResolver) {
-            STLOG(PRI_NOTICE, BS_NODE, NW73, "ApplyGroupInfo from resolver", (GroupId, groupId), (GroupGeneration, generation));
+            YDB_LOG_NOTICE("ApplyGroupInfo from resolver",
+                {"marker", "NW73"},
+                {"groupId", groupId},
+                {"groupGeneration", generation});
         }
 
         // obtain group record
@@ -135,6 +143,9 @@ namespace NKikimr::NStorage {
         bool groupChanged = false; // did the 'Group' field change somehow?
         if (newGroup) {
             auto& currentGroup = group.Group;
+            const bool hadCurrentGroup = currentGroup.has_value();
+            const ui32 prevCurrentGroupGeneration = hadCurrentGroup ? currentGroup->GetGroupGeneration() : 0;
+            const ui32 prevCurrentGroupEncryptionMode = hadCurrentGroup ? currentGroup->GetEncryptionMode() : 0;
 
             // generate serialized string to compare it to the one after changes
             TString before;
@@ -150,13 +161,47 @@ namespace NKikimr::NStorage {
 
             // apply encryption parameters from new protobuf
             auto& ep = group.EncryptionParams;
-            Y_VERIFY_S(!ep.HasEncryptionMode() || ep.GetEncryptionMode() == newGroup->GetEncryptionMode(),
+            const ui32 incomingEncryptionMode = newGroup->GetEncryptionMode();
+            const bool incomingEncryptionModeIsKnown = incomingEncryptionMode <= static_cast<ui32>(TBlobStorageGroupInfo::EEM_ENC_V1);
+            const bool firstInvalidEncryptionMode = !ep.HasEncryptionMode() && !incomingEncryptionModeIsKnown;
+            const bool encryptionModeChanged = ep.HasEncryptionMode() && ep.GetEncryptionMode() != incomingEncryptionMode;
+            if (firstInvalidEncryptionMode || encryptionModeChanged) {
+                STLOG(PRI_ERROR, BS_NODE, NW113, "ApplyGroupInfo EncryptionMode diagnostics",
+                    (GroupId, groupId),
+                    (GroupGeneration, generation),
+                    (FromController, fromController),
+                    (FromResolver, fromResolver),
+                    (StoredHasEncryptionMode, ep.HasEncryptionMode()),
+                    (StoredEncryptionModeRaw, ep.GetEncryptionMode()),
+                    (IncomingHasEncryptionMode, newGroup->HasEncryptionMode()),
+                    (IncomingEncryptionModeRaw, incomingEncryptionMode),
+                    (StoredLifeCyclePhase, ep.GetLifeCyclePhase()),
+                    (IncomingLifeCyclePhase, newGroup->GetLifeCyclePhase()),
+                    (HadCurrentGroup, hadCurrentGroup),
+                    (PrevCurrentGroupGeneration, prevCurrentGroupGeneration),
+                    (PrevCurrentGroupEncryptionModeRaw, prevCurrentGroupEncryptionMode),
+                    (MaxKnownGeneration, group.MaxKnownGeneration),
+                    (StoredEncryptionParams, ep),
+                    (IncomingGroup, *newGroup));
+            }
+
+            Y_VERIFY_S(!encryptionModeChanged,
                 "sudden EncryptionMode change from# " << static_cast<TBlobStorageGroupInfo::EEncryptionMode>(ep.GetEncryptionMode())
-                << " to# " << static_cast<TBlobStorageGroupInfo::EEncryptionMode>(newGroup->GetEncryptionMode()) << " GroupId# " << groupId);
+                << " to# " << static_cast<TBlobStorageGroupInfo::EEncryptionMode>(incomingEncryptionMode)
+                << " fromRaw# " << ep.GetEncryptionMode()
+                << " toRaw# " << incomingEncryptionMode
+                << " GroupId# " << groupId
+                << " GroupGeneration# " << generation
+                << " FromController# " << fromController
+                << " FromResolver# " << fromResolver
+                << " HadCurrentGroup# " << hadCurrentGroup
+                << " PrevCurrentGroupGeneration# " << prevCurrentGroupGeneration
+                << " PrevCurrentGroupEncryptionModeRaw# " << prevCurrentGroupEncryptionMode
+                << " MaxKnownGeneration# " << group.MaxKnownGeneration);
 
             if (!ep.HasEncryptionMode() || group.EncryptionParams.GetLifeCyclePhase() != TBlobStorageGroupInfo::ELCP_IN_USE) {
                 // copy encryption mode and then copy other parameters if encryption is enabled
-                ep.SetEncryptionMode(newGroup->GetEncryptionMode());
+                ep.SetEncryptionMode(incomingEncryptionMode);
                 if (ep.GetEncryptionMode() != TBlobStorageGroupInfo::EEM_NONE) {
                     ep.SetLifeCyclePhase(newGroup->GetLifeCyclePhase());
                     ep.SetMainKeyId(newGroup->GetMainKeyId());
@@ -218,7 +263,10 @@ namespace NKikimr::NStorage {
             }
             Y_ABORT_UNLESS(group.EncryptionParams.HasEncryptionMode());
             if (const TString& s = err.Str()) {
-                STLOG(PRI_ERROR, BS_NODE, NW19, "error while parsing group", (GroupId, groupId), (Err, s));
+                YDB_LOG_ERROR("Error while parsing group",
+                    {"marker", "NW19"},
+                    {"groupId", groupId},
+                    {"err", s});
             }
 
             if (group.ProxyId) { // update configuration for running proxies
@@ -282,7 +330,9 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::RequestGroupConfig(ui32 groupId, TGroupRecord& group) {
-        STLOG(PRI_DEBUG, BS_NODE, NW98, "RequestGroupConfig", (GroupId, groupId));
+        YDB_LOG_DEBUG("RequestGroupConfig",
+            {"marker", "NW98"},
+            {"groupId", groupId});
         if (TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Static) {
             // do nothing, configs arrive through distributed configuration
         } else if (group.GetGroupRequestPending) {
@@ -302,7 +352,10 @@ namespace NKikimr::NStorage {
             if (group.GetEntityStatus() == NKikimrBlobStorage::DESTROY) {
                 if (EjectedGroups.insert(groupId).second) {
                     TGroupRecord& group = Groups[groupId];
-                    STLOG(PRI_DEBUG, BS_NODE, NW99, "destroying group", (GroupId, groupId), (ProxyId, group.ProxyId));
+                    YDB_LOG_DEBUG("Destroying group",
+                        {"marker", "NW99"},
+                        {"groupId", groupId},
+                        {"proxyId", group.ProxyId});
                     if (group.ProxyId) {
                         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.ProxyId, {}, nullptr, 0));
                     }
@@ -361,13 +414,14 @@ namespace NKikimr::NStorage {
 
         for (const TWorkingSyncer& syncer : toStop) {
             if (syncer.ActorId) {
-                STLOG(PRI_DEBUG, BS_NODE, NW65, "ApplyWorkingSyncers: stopping",
-                    (BridgeProxyGroupId, syncer.BridgeProxyGroupId),
-                    (BridgeProxyGroupGeneration, syncer.BridgeProxyGroupGeneration),
-                    (SourceGroupId, syncer.SourceGroupId),
-                    (TargetGroupId, syncer.TargetGroupId),
-                    (PendingBridgeProxyGroupGeneration, syncer.PendingBridgeProxyGroupGeneration),
-                    (ActorId, syncer.ActorId));
+                YDB_LOG_DEBUG("ApplyWorkingSyncers: stopping",
+                    {"marker", "NW65"},
+                    {"bridgeProxyGroupId", syncer.BridgeProxyGroupId},
+                    {"bridgeProxyGroupGeneration", syncer.BridgeProxyGroupGeneration},
+                    {"sourceGroupId", syncer.SourceGroupId},
+                    {"targetGroupId", syncer.TargetGroupId},
+                    {"pendingBridgeProxyGroupGeneration", syncer.PendingBridgeProxyGroupGeneration},
+                    {"actorId", syncer.ActorId});
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, syncer.ActorId, {}, nullptr, 0));
             }
             WorkingSyncers.erase(syncer);
@@ -410,19 +464,20 @@ namespace NKikimr::NStorage {
             ++syncer.NumStart;
         }
         if (stopCurrent || startNew) {
-            STLOG(PRI_DEBUG, BS_NODE, NW64, "StartSyncerIfNeeded",
-                (BridgeProxyGroupId, syncer.BridgeProxyGroupId),
-                (PrevBridgeProxyGroupGeneration, prevBridgeProxyGroupGeneration),
-                (BridgeProxyGroupGeneration, syncer.BridgeProxyGroupGeneration),
-                (SourceGroupId, syncer.SourceGroupId),
-                (TargetGroupId, syncer.TargetGroupId),
-                (PendingBridgeProxyGroupGeneration, syncer.PendingBridgeProxyGroupGeneration),
-                (PrevActorId, prevActorId),
-                (ActorId, syncer.ActorId),
-                (HasGroupInfo, static_cast<bool>(group.Info)),
-                (GroupInfoGeneration, group.Info ? std::make_optional(group.Info->GroupGeneration) : std::nullopt),
-                (StopCurrent, stopCurrent),
-                (StartNew, startNew));
+            YDB_LOG_DEBUG("StartSyncerIfNeeded",
+                {"marker", "NW64"},
+                {"bridgeProxyGroupId", syncer.BridgeProxyGroupId},
+                {"prevBridgeProxyGroupGeneration", prevBridgeProxyGroupGeneration},
+                {"bridgeProxyGroupGeneration", syncer.BridgeProxyGroupGeneration},
+                {"sourceGroupId", syncer.SourceGroupId},
+                {"targetGroupId", syncer.TargetGroupId},
+                {"pendingBridgeProxyGroupGeneration", syncer.PendingBridgeProxyGroupGeneration},
+                {"prevActorId", prevActorId},
+                {"actorId", syncer.ActorId},
+                {"hasGroupInfo", static_cast<bool>(group.Info)},
+                {"groupInfoGeneration", group.Info ? std::make_optional(group.Info->GroupGeneration) : std::nullopt},
+                {"stopCurrent", stopCurrent},
+                {"startNew", startNew});
         }
     }
 

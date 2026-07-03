@@ -6,6 +6,7 @@
 
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/library/actors/core/callstack.h>
 #include <ydb/library/actors/core/events.h>
@@ -74,7 +75,7 @@
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/protos/data_integrity_trails.pb.h>
 
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
 #endif
 
@@ -155,7 +156,7 @@
 #include <ydb/services/tablet/ydb_tablet.h>
 #include <ydb/services/view/grpc_service.h>
 
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
 #include <ydb/services/nbs/grpc_service.h>
 #endif
 
@@ -194,31 +195,38 @@
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::GLOBAL
+
 namespace NKikimr {
 
 namespace {
 
-    void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool isDisabled = false) {
-        auto wrapper = grpcServersWrapper.lock();
-        if (!wrapper) {
-            return;
-        }
-        if (wrapper->IsDisabled.load(std::memory_order_acquire)) {
-            return;
-        }
-        if (isDisabled) {
-            wrapper->IsDisabled.store(true, std::memory_order_release);
-        }
-        TGuard<TMutex> guard = wrapper->Guard();
-        for (auto& [name, server] : wrapper->Servers) {
-            if (!server) {
-                continue;
-            }
-            server->Stop();
-        }
-        wrapper->Servers.clear();
+void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool isDisabled = false) {
+    auto wrapper = grpcServersWrapper.lock();
+    if (!wrapper) {
+        return;
     }
+
+    if (wrapper->IsDisabled.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (isDisabled) {
+        wrapper->IsDisabled.store(true, std::memory_order_release);
+    }
+
+    TGuard<TMutex> guard = wrapper->Guard();
+    for (auto& [_, server] : wrapper->Servers) {
+        if (!server) {
+            continue;
+        }
+        server->Stop();
+    }
+
+    wrapper->Servers.clear();
 }
+
+} // anonymous namespace
 
 class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
     std::weak_ptr<TGRpcServersWrapper> GRpcServersWrapper;
@@ -759,7 +767,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         GRpcServersWrapper = std::make_shared<TGRpcServersWrapper>();
     }
 
-    if (runConfig.AppConfig.GetTableServiceConfig().HasCompileCacheWarmupConfig()) {
+    const auto& kqpConfig = runConfig.AppConfig.GetKQPConfig();
+    const bool kqpEnabled = runConfig.ServicesMask.EnableKqp
+        && (!kqpConfig.HasEnable() || kqpConfig.GetEnable());
+
+    if (kqpEnabled && runConfig.AppConfig.GetTableServiceConfig().GetEnableCompileCacheWarmup()) {
         auto warmupConfig = NKqp::ImportWarmupConfigFromProto(
             runConfig.AppConfig.GetTableServiceConfig().GetCompileCacheWarmupConfig());
         GRpcWarmupTimeout = warmupConfig.HardDeadline;
@@ -869,7 +881,7 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         names["bridge"] = &hasBridge;
         TServiceCfg hasTestShard = services.empty();
         names["test_shard"] = &hasTestShard;
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
         TServiceCfg hasNbs = services.empty();
         names["nbs"] = &hasNbs;
 #endif
@@ -1186,7 +1198,7 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         if (hasTestShard) {
             server.AddService(new NGRpcService::TTestShardGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
         if (hasNbs) {
             server.AddService(new NGRpcService::TNbsGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
@@ -1644,11 +1656,13 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
-    if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())
+    if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize()) {
         AppData->ResourceProfiles->LoadProfiles(runConfig.AppConfig.GetBootstrapConfig().GetResourceProfiles());
+    }
 
-    if (runConfig.AppConfig.GetBootstrapConfig().HasEnableIntrospection())
+    if (runConfig.AppConfig.GetBootstrapConfig().HasEnableIntrospection()) {
         AppData->EnableIntrospection = runConfig.AppConfig.GetBootstrapConfig().GetEnableIntrospection();
+    }
 
     if (runConfig.AppConfig.HasClusterDiagnosticsConfig()) {
         AppData->ClusterDiagnosticsConfig.CopyFrom(runConfig.AppConfig.GetClusterDiagnosticsConfig());
@@ -1657,6 +1671,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     if (runConfig.AppConfig.HasLongTxServiceConfig()) {
         AppData->LongTxServiceConfig.CopyFrom(runConfig.AppConfig.GetLongTxServiceConfig());
     }
+
+    AppData->KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(Counters, runConfig.AppConfig);
 
     TAppDataInitializersList appDataInitializers;
     // setup domain info
@@ -1947,6 +1963,16 @@ void TKikimrRunner::InitializeActorSystem(
     }
 }
 
+void TKikimrRunner::RecordEmptyDomainSensor() {
+    const auto& labels = AppData->Labels;
+    const auto it = labels.find("empty_domain_during_node_registration");
+    if (it != labels.end() && it->second == "true") {
+        GetServiceCounters(AppData->Counters, "ydb")
+            ->GetSubgroup("subsystem", "nodeRegistration")
+            ->GetCounter("EmptyDomainName")->Inc();
+    }
+}
+
 TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializersList(
     const TKikimrRunConfig& runConfig,
     const TBasicKikimrServicesMask& serviceMask) {
@@ -2228,7 +2254,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TOverloadManagerInitializer(runConfig));
     }
 
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
     if (serviceMask.EnableNBSService) {
         sil->AddServiceInitializer(new TNbsServiceInitializer(runConfig));
     }
@@ -2249,7 +2275,7 @@ void TKikimrRunner::KikimrStart() {
     ThreadSigmask(SIG_BLOCK);
     if (ActorSystem) {
         ActorSystem->Start();
-        LOG_NOTICE_S(*ActorSystem, NActorsServices::GLOBAL, GetProgramSvnVersion());
+        YDB_LOG_NOTICE_CTX(*ActorSystem, GetProgramSvnVersion());
     }
 
     if (!!Monitoring) {
@@ -2267,7 +2293,7 @@ void TKikimrRunner::KikimrStart() {
         SqsHttp->Start();
     }
 
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
     NYdb::NBS::NBlockStore::StartNbsService();
 #endif
 
@@ -2295,7 +2321,9 @@ void TKikimrRunner::KikimrStop(bool graceful) {
             THolder<TEvent> event = MakeHolder<TEvent>();
             event->Record.SetNodeId(nodeId);
 
-            NTabletPipe::SendData({}, nodeBrokerPipe, event.Release());
+            auto pipeEv = new IEventHandle(nodeBrokerPipe, TActorId(), event.Release());
+            pipeEv->Rewrite(TEvTabletPipe::EvSend, nodeBrokerPipe);
+            ActorSystem->Send(pipeEv);
         }
     }
 
@@ -2317,7 +2345,7 @@ void TKikimrRunner::KikimrStop(bool graceful) {
 
     DisableActorCallstack();
 
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
     NYdb::NBS::NBlockStore::StopNbsService();
 #endif
 
@@ -2451,19 +2479,19 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
         if (NFs::Exists(udfsDir) && IsDir(udfsDir)) {
             NMiniKQL::FindUdfsInDir(udfsDir, &udfsPaths);
             if (udfsPaths.empty()) {
-                Cout << "UDF directory " << udfsDir << " contains no dynamic UDFs. " << Endl;
+                Cout << "UDF directory " << udfsDir << " contains no dynamic UDFs." << Endl;
             } else {
-                Cout << "UDF directory " << udfsDir << " contains " << udfsPaths.size() << " dynamic UDFs. " << Endl;
+                Cout << "UDF directory " << udfsDir << " contains " << udfsPaths.size() << " dynamic UDFs." << Endl;
             }
             NMiniKQL::TUdfModuleRemappings remappings;
             for (const auto& udfPath : udfsPaths) {
                 FunctionRegistry->LoadUdfs(udfPath, remappings, 0);
             }
         } else {
-            Cout << "UDF directory " << udfsDir << " doesn't exist, no dynamic UDFs will be loaded. " << Endl;
+            Cout << "UDF directory " << udfsDir << " doesn't exist, no dynamic UDFs will be loaded." << Endl;
         }
     } else {
-        Cout << "UDFsDir is not specified, no dynamic UDFs will be loaded. " << Endl;
+        Cout << "UDFsDir is not specified, no dynamic UDFs will be loaded." << Endl;
     }
 
     NKikimr::NMiniKQL::FillStaticModules(*FunctionRegistry);
@@ -2490,6 +2518,7 @@ TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
     runner->InitializeControlBoard(runConfig);
     runner->InitializeAppData(runConfig);
     runner->InitializeLogSettings(runConfig);
+    runner->RecordEmptyDomainSensor();
     TIntrusivePtr<TServiceInitializersList> sil(runner->CreateServiceInitializersList(runConfig, runConfig.ServicesMask));
     runner->InitializeActorSystem(runConfig, sil, runConfig.ServicesMask);
     runner->InitializeMonitoringLogin(runConfig);
@@ -2508,7 +2537,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
 
     TKikimrRunner::SetSignalHandlers();
     Cout << "Starting YDB server" << Endl;
-    Cout << GetProgramSvnVersion() << Endl;
+    Cout << Strip(GetProgramSvnVersion()) << Endl;
 
     TIntrusivePtr<TKikimrRunner> runner = TKikimrRunner::CreateKikimrRunner(runConfig, std::move(factories));
     if (runner) {
@@ -2522,4 +2551,4 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
     return 0;
 }
 
-} // NKikimr
+} // namespace NKikimr

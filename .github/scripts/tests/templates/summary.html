@@ -1686,6 +1686,7 @@
 {% set timeout_count = tests[status] | selectattr('is_timeout_issue') | list | length %}
 {% set xfailed_count = tests[status] | selectattr('is_xfailed_issue') | list | length %}
 {% set verify_count = tests[status] | selectattr('is_verify_issue') | list | length %}
+{% set oom_count = tests[status] | selectattr('is_possible_oom') | list | length %}
 {% set not_launched_count = tests[status] | selectattr('is_not_launched') | list | length %}
 <h1 id="{{ status.name}}" class="collapsible-header">
     {{ status.name }} ({{ tests[status] | length }})
@@ -1700,6 +1701,9 @@
     {% endif %}
     {% if verify_count > 0 %}
         <span style="color: #b22222; font-weight: bold;">- {{ verify_count }} VERIFY ISSUE{{ 's' if verify_count != 1 else '' }}</span>
+    {% endif %}
+    {% if oom_count > 0 %}
+        <span style="color: #d63384; font-weight: bold;">- {{ oom_count }} POSSIBLE OOM{{ 's' if oom_count != 1 else '' }}</span>
     {% endif %}
     {% if not_launched_count > 0 %}
         <span style="color: #6c757d; font-weight: bold;">- {{ not_launched_count }} NOT LAUNCHED ISSUE{{ 's' if not_launched_count != 1 else '' }}</span>
@@ -1746,6 +1750,9 @@
             {% endif %}
             {% if t.is_verify_issue %}
                 <span style="background-color: #b22222; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px; margin-left: 8px; font-weight: bold;">VERIFY</span>
+            {% endif %}
+            {% if t.is_possible_oom %}
+                <span style="background-color: #d63384; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px; margin-left: 8px; font-weight: bold;">possible OOM</span>
             {% endif %}
             {% if t.is_not_launched %}
                 <span style="background-color: #6c757d; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px; margin-left: 8px; font-weight: bold;">NOT LAUNCHED</span>

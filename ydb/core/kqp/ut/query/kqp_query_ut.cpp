@@ -3777,6 +3777,83 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
         }
 
     }
+
+    Y_UNIT_TEST(DiscardSelectCrossTransactionDependency) {
+        // $data is produced before the DISCARD statement and consumed after it.
+        // The DISCARD of the middle statement must not cause $data's result to be dropped.
+        auto kikimr = CreateKikimrWithDiscardSelect();
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
+            $data = SELECT Key FROM `/Root/EightShard` WHERE Key < 200;
+            DISCARD SELECT COUNT(*) FROM `/Root/TwoShard`;
+            SELECT Key FROM $data ORDER BY Key;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 1,
+            "Expected 1 result set: DISCARD suppresses second statement");
+
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT_C(parser.TryNextRow(), "Result from $data must not be empty");
+        UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(0).GetOptionalUint64(), 101u);
+        UNIT_ASSERT_C(parser.TryNextRow(), "Expected second row");
+        UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(0).GetOptionalUint64(), 102u);
+        UNIT_ASSERT_C(parser.TryNextRow(), "Expected third row");
+        UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(0).GetOptionalUint64(), 103u);
+        UNIT_ASSERT_C(!parser.TryNextRow(), "Expected exactly 3 rows");
+    }
+
+    Y_UNIT_TEST(DiscardSelectWithDml) {
+        auto kikimr = CreateKikimrWithDiscardSelect();
+        auto db = kikimr.GetQueryClient();
+
+        const ui64 upsertKey = 42;
+        const ui64 insertKey = 43;
+        const TString upsertedValue = "Upserted";
+        const TString insertedValue = "Inserted";
+
+        // DML then DISCARD SELECT: UPSERT writes data, DISCARD SELECT returns nothing.
+        {
+            auto result = db.ExecuteQuery(Sprintf(R"(
+                UPSERT INTO `/Root/TwoShard` (Key, Value1) VALUES (%lluu, "%s");
+                DISCARD SELECT * FROM `/Root/TwoShard` WHERE Key = %llu;
+            )", upsertKey, upsertedValue.c_str(), upsertKey),
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            AssertSuccessResult(result);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
+                "Expected 0 result sets: UPSERT and DISCARD SELECT both produce no output");
+        }
+        {
+            auto result = db.ExecuteQuery(Sprintf(R"(
+                SELECT Value1 FROM `/Root/TwoShard` WHERE Key = %llu;
+            )", upsertKey), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            AssertSuccessResult(result);
+            CompareYson(Sprintf(R"([[["%s"]]])", upsertedValue.c_str()),
+                FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = db.ExecuteQuery(Sprintf(R"(
+                DISCARD SELECT Ensure(0, COUNT(*) < 100, "Table too large") FROM `/Root/EightShard`;
+                INSERT INTO `/Root/TwoShard` (Key, Value1) VALUES (%lluu, "%s");
+            )", insertKey, insertedValue.c_str()),
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            AssertSuccessResult(result);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
+                "Expected 0 result sets: DISCARD and INSERT both produce no output");
+        }
+        {
+            auto result = db.ExecuteQuery(Sprintf(R"(
+                SELECT Value1 FROM `/Root/TwoShard` WHERE Key = %llu;
+            )", insertKey), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            AssertSuccessResult(result);
+            CompareYson(Sprintf(R"([[["%s"]]])", insertedValue.c_str()),
+                FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
 }
 
 } // namespace NKqp

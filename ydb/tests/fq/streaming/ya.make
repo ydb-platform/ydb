@@ -3,6 +3,7 @@ PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
 TEST_SRCS(
+    test_scalar_topic_write.py
     test_streaming.py
     test_watermarks.py
 )
@@ -14,7 +15,6 @@ IF (OS_LINUX)
 ENDIF()
 
 PY_SRCS(
-    common.py
     conftest.py
 )
 
@@ -37,6 +37,7 @@ PEERDIR(
     library/recipes/common
     ydb/tests/olap/common
     ydb/tests/tools/datastreams_helpers
+    ydb/tests/fq/streaming_common
 )
 
 DEPENDS(

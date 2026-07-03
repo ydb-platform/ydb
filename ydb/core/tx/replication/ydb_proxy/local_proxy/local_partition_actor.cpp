@@ -3,9 +3,14 @@
 
 namespace NKikimr::NReplication {
 
-TBaseLocalTopicPartitionActor::TBaseLocalTopicPartitionActor(const std::string& database, const std::string&& topicPath, const ui32 partitionId)
+using namespace NSchemeCache;
+
+TBaseLocalTopicPartitionActor::TBaseLocalTopicPartitionActor(
+        const std::string& database,
+        const std::string& topicPath,
+        ui32 partitionId)
     : Database(database)
-    , TopicPath(std::move(topicPath))
+    , TopicPath(topicPath)
     , PartitionId(partitionId)
 {
 }
@@ -30,6 +35,7 @@ TString TBaseLocalTopicPartitionActor::MakeAbsolutePath(TString path) const {
 void TBaseLocalTopicPartitionActor::DoDescribe(const TString& topicPath) {
     auto path = MakeAbsolutePath(topicPath);
     LOG_D("Describe topic '" << path << "'");
+
     auto request = MakeHolder<TNavigate>();
     request->DatabaseName = Database;
 
@@ -38,28 +44,27 @@ void TBaseLocalTopicPartitionActor::DoDescribe(const TString& topicPath) {
     Become(&TThis::StateDescribe);
 }
 
-void TBaseLocalTopicPartitionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    static const TString errorMarket = "LocalYdbProxy";
-
+void TBaseLocalTopicPartitionActor::Handle(TEvNavigateResult::TPtr& ev) {
     LOG_T("Handle " << ev->Get()->ToString());
 
     auto& result = ev->Get()->Request;
+    static const TString errorMarker = "LocalYdbProxy";
 
-    if (!CheckNotEmpty(errorMarket, result, LeaveOnError())) {
+    if (!CheckNotEmpty(errorMarker, result, LeaveOnError())) {
         return;
     }
 
-    if (!CheckEntriesCount(errorMarket, result, 1, LeaveOnError())) {
+    if (!CheckEntriesCount(errorMarker, result, 1, LeaveOnError())) {
         return;
     }
 
     const auto& entry = result->ResultSet.at(0);
-
     if (entry.Status == TNavigate::EStatus::PathErrorUnknown) {
-        return OnFatalError(TStringBuilder() << "Discovery for all topics failed. The last error was: no path '" << Database << TopicPath << "'");
+        return OnFatalError(TStringBuilder() << "Discovery for all topics failed."
+            << " The last error was: no path '" << Database << TopicPath << "'");
     }
 
-    if (!CheckEntrySucceeded(errorMarket, entry, DoRetryDescribe())) {
+    if (!CheckEntrySucceeded(errorMarker, entry, DoRetryDescribe())) {
         return;
     }
 
@@ -67,14 +72,15 @@ void TBaseLocalTopicPartitionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKey
         return DoDescribe(TStringBuilder() << TopicPath << "/streamImpl");
     }
 
-    if (!CheckEntryKind(errorMarket, entry, TNavigate::EKind::KindTopic, LeaveOnError())) {
+    if (!CheckEntryKind(errorMarker, entry, TNavigate::EKind::KindTopic, LeaveOnError())) {
         return;
     }
 
-    auto* node = entry.PQGroupInfo->PartitionGraph->GetPartition(PartitionId);
+    const auto* node = entry.PQGroupInfo->PartitionGraph->GetPartition(PartitionId);
     if (!node) {
         return OnError(TStringBuilder() << "The partition " << PartitionId << " of the topic '" << TopicPath << "' not found");
     }
+
     PartitionTabletId = node->TabletId;
     DoCreatePipe();
 }
@@ -103,7 +109,7 @@ TSchemeCacheHelpers::TCheckFailFunc TBaseLocalTopicPartitionActor::LeaveOnError(
 
 STATEFN(TBaseLocalTopicPartitionActor::StateDescribe) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+        hFunc(TEvNavigateResult, Handle);
         hFunc(TEvents::TEvWakeup, HandleOnDescribe);
 
         sFunc(TEvents::TEvPoison, PassAway);

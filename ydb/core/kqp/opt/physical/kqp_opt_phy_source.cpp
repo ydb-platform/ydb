@@ -3,12 +3,11 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_impl.h>
-
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-
-#include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -16,7 +15,6 @@ namespace NKikimr::NKqp::NOpt {
 using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
-
 
 bool UseSource(const TKqpOptimizeContext& kqpCtx, const NYql::TKikimrTableDescription& tableDesc) {
     bool useSource = kqpCtx.Config->GetEnableKqpScanQuerySourceRead() && kqpCtx.IsScanQuery();

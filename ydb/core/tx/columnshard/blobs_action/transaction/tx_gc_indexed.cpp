@@ -5,7 +5,7 @@
 namespace NKikimr::NColumnShard {
 bool TTxGarbageCollectionFinished::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TMemoryProfileGuard mpg("TTxGarbageCollectionFinished::Execute");
-    YDB_LOG_DEBUG("Dump tx, event",
+    YDB_LOG_DEBUG("",
         {"tx", "TxGarbageCollectionFinished"},
         {"event", "execute"});
     NOlap::TBlobManagerDb blobManagerDb(txc.DB);
@@ -15,7 +15,7 @@ bool TTxGarbageCollectionFinished::Execute(TTransactionContext& txc, const TActo
 
 void TTxGarbageCollectionFinished::Complete(const TActorContext& /*ctx*/) {
     TMemoryProfileGuard mpg("TTxGarbageCollectionFinished::Complete");
-    YDB_LOG_DEBUG("Dump tx, event",
+    YDB_LOG_DEBUG("",
         {"tx", "TxGarbageCollectionFinished"},
         {"event", "complete"});
     Action->OnCompleteTxAfterCleaning(*Self, Action);
@@ -23,7 +23,7 @@ void TTxGarbageCollectionFinished::Complete(const TActorContext& /*ctx*/) {
 
 bool TTxGarbageCollectionStart::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TMemoryProfileGuard mpg("TTxGarbageCollectionStart::Execute");
-    YDB_LOG_DEBUG("Dump tx, event",
+    YDB_LOG_DEBUG("",
         {"tx", "TTxGarbageCollectionStart"},
         {"event", "execute"});
     NOlap::TBlobManagerDb blobManagerDb(txc.DB);
@@ -33,7 +33,7 @@ bool TTxGarbageCollectionStart::Execute(TTransactionContext& txc, const TActorCo
 
 void TTxGarbageCollectionStart::Complete(const TActorContext& /*ctx*/) {
     TMemoryProfileGuard mpg("TTxGarbageCollectionStart::Complete");
-    YDB_LOG_DEBUG("Dump tx, event",
+    YDB_LOG_DEBUG("",
         {"tx", "TTxGarbageCollectionStart"},
         {"event", "complete"});
     Action->OnCompleteTxBeforeCleaning(*Self, Action);

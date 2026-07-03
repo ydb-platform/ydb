@@ -17,14 +17,14 @@ bool TCommonBlobsTracker::DoUseBlob(const TUnifiedBlobId& blobId) {
     auto it = BlobsUseCount.find(blobId);
     if (it == BlobsUseCount.end()) {
         BlobsUseCount.emplace(blobId, 1);
-        YDB_LOG_TRACE("Dump method, blobId, count",
+        YDB_LOG_TRACE("",
             {"method", "DoUseBlob"},
             {"blobId", blobId},
             {"count", 1});
         return true;
     } else {
         ++it->second;
-        YDB_LOG_TRACE("Dump method, blobId, count",
+        YDB_LOG_TRACE("",
             {"method", "DoUseBlob"},
             {"blobId", blobId},
             {"count", it->second});
@@ -37,7 +37,7 @@ bool TCommonBlobsTracker::DoFreeBlob(const TUnifiedBlobId& blobId) {
     AFL_VERIFY(useIt != BlobsUseCount.end())("reason", "Unknown blob")("blob_id", blobId.ToStringNew());
     AFL_VERIFY(useIt->second);
     --useIt->second;
-    YDB_LOG_TRACE("Dump method, blobId, count",
+    YDB_LOG_TRACE("",
         {"method", "DoFreeBlob"},
         {"blobId", blobId},
         {"count", useIt->second});

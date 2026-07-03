@@ -15,7 +15,7 @@ bool TTxWriteDraft::Execute(TTransactionContext& txc, const TActorContext& /*ctx
 
 void TTxWriteDraft::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxWriteDraft::Complete");
-    YDB_LOG_DEBUG("Dump event",
+    YDB_LOG_DEBUG("",
         {"event", "draft_completed"});
     Completed = true;
     for (auto&& action : WriteController->GetBlobActions()) {

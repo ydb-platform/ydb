@@ -74,7 +74,7 @@ std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const T
             {"count", it->second.RequestsCount});
         return nullptr;
     }
-    YDB_LOG_DEBUG("Dump event, address, currentGen, gen, count",
+    YDB_LOG_DEBUG("",
         {"event", "build_gc_request"},
         {"address", address.DebugString()},
         {"currentGen", CurrentGen},

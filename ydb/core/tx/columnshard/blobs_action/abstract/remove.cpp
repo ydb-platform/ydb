@@ -6,7 +6,7 @@ namespace NKikimr::NOlap {
 
 void IBlobsDeclareRemovingAction::DeclareRemove(const TTabletId tabletId, const TUnifiedBlobId& blobId) {
     if (DeclaredBlobs.Add(tabletId, blobId)) {
-        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump event, blobId, tabletId",
+        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
             {"event", "DeclareRemove"},
             {"blobId", blobId},
             {"tabletId", (ui64)tabletId});

@@ -26,7 +26,7 @@ std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(
     } else {
         const auto& error = ev->GetError();
         const bool isRetriable = error.ShouldRetry() || error.GetExceptionName() == "SlowDown" || error.GetExceptionName() == "TooManyRequests";
-        YDB_LOG_DEBUG("Dump event, requestType, exception, message, storageId, blob, retriable",
+        YDB_LOG_DEBUG("",
             {"event", "s3_request_failed"},
             {"requestType", "get_object"},
             {"exception", error.GetExceptionName()},
@@ -52,7 +52,7 @@ std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(
         return std::make_unique<TEvBlobStorage::TEvPutResult>(
             NKikimrProto::EReplyStatus::OK, logoBlobId, 0, TGroupId::FromValue(Max<ui32>()), 0, StorageId);
     } else {
-        YDB_LOG_DEBUG("Dump event, requestType, exception, message, storageId, blob",
+        YDB_LOG_DEBUG("",
             {"event", "s3_request_failed"},
             {"requestType", "put_object"},
             {"exception", ev->GetError().GetExceptionName()},

@@ -7,7 +7,7 @@ namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
 void TGarbageCollectionActor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev) {
     NYDBTest::TControllers::GetColumnShardController()->OnCollectGarbageResult(ev);
-    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump actor",
+    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
         {"actor", "TEvCollectGarbageResult"});
     if (ev->Get()->Status == NKikimrProto::BLOCKED) {
         auto g = PassAwayGuard();
@@ -34,7 +34,7 @@ void TGarbageCollectionActor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TP
 void TGarbageCollectionActor::CheckFinished() {
     if (SharedRemovingFinished && GCTask->IsFinished()) {
         auto g = PassAwayGuard();
-        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump actor, event",
+        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
             {"actor", "TGarbageCollectionActor"},
             {"event", "finished"});
         if (GCTask->HasFailures()) {

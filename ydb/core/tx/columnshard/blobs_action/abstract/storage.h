@@ -156,12 +156,12 @@ public:
             {"storageId", GetStorageId()},
             {"tabletId", GetSelfTabletId()});
         if (CurrentGCAction && CurrentGCAction->IsInProgress()) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS, "Dump event",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS, "",
                 {"event", "gc_in_progress"});
             return nullptr;
         }
         if (Stopped) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS, "Dump event",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS, "",
                 {"event", "stopped_on_gc"});
             return nullptr;
         }

@@ -27,7 +27,7 @@ std::shared_ptr<NKikimr::NOlap::IBlobsReadingAction> TOperator::DoStartReadingAc
 void TOperator::DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& action) const {
     auto gcTask = dynamic_pointer_cast<TGCTask>(action);
     AFL_VERIFY(!!gcTask);
-    YDB_LOG_DEBUG("Dump event, requestsCount",
+    YDB_LOG_DEBUG("",
         {"event", "StartGC"},
         {"requestsCount", gcTask->GetListsByGroupId().size()});
     TActorContext::AsActorContext().Register(new TGarbageCollectionActor(gcTask, TabletActorId, GetSelfTabletId()));
@@ -36,7 +36,7 @@ void TOperator::DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& action) c
 std::shared_ptr<IBlobsGCAction> TOperator::DoCreateGCAction(const std::shared_ptr<TRemoveGCCounters>& counters) const {
     auto gcTask = Manager->BuildGCTask(GetStorageId(), Manager, GetSharedBlobs(), counters);
     if (!gcTask) {
-        YDB_LOG_DEBUG("Dump event",
+        YDB_LOG_DEBUG("",
             {"event", "StartGCSkipped"});
         return nullptr;
     } else {

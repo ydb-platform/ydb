@@ -13,7 +13,7 @@ void IBlobsGCAction::OnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self,
     if (!AbortedFlag) {
         YDB_LOG_CREATE_CONTEXT(
             {"tabletId", self.TabletID()});
-        YDB_LOG_DEBUG("Dump event, actionGuid",
+        YDB_LOG_DEBUG("",
             {"event", "OnCompleteTxAfterCleaning"},
             {"actionGuid", GetActionGuid()});
         auto storage = self.GetStoragesManager()->GetOperatorVerified(GetStorageId());
@@ -44,7 +44,7 @@ void IBlobsGCAction::OnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, 
         for (auto i = BlobsToRemove.GetIterator(); i.IsValid(); ++i) {
             RemoveBlobIdFromDB(i.GetTabletId(), i.GetBlobId(), dbBlobs);
         }
-        YDB_LOG_DEBUG("Dump event, actionGuid",
+        YDB_LOG_DEBUG("",
             {"event", "OnExecuteTxAfterCleaning"},
             {"actionGuid", GetActionGuid()});
         return DoOnExecuteTxAfterCleaning(self, dbBlobs);
@@ -67,7 +67,7 @@ void IBlobsGCAction::OnExecuteTxBeforeCleaning(NColumnShard::TColumnShard& self,
 
 void IBlobsGCAction::Abort() {
     Y_ABORT_UNLESS(IsInProgress());
-    YDB_LOG_DEBUG("Dump event, actionGuid",
+    YDB_LOG_DEBUG("",
         {"event", "gc_aborted"},
         {"actionGuid", GetActionGuid()});
     AbortedFlag = true;

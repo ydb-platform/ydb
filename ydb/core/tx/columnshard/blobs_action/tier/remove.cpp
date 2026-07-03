@@ -12,7 +12,7 @@ void TDeclareRemovingAction::DoOnCompleteTxAfterRemoving(const bool blobsWroteSu
             if (GCInfo->IsBlobInUsage(i.first)) {
                 AFL_VERIFY(GCInfo->MutableBlobsToDeleteInFuture().Add(i.first, i.second));
             } else {
-                YDB_LOG_DEBUG("Dump event, blobId, tabletIds",
+                YDB_LOG_DEBUG("",
                     {"event", "blob_to_delete"},
                     {"blobId", i.first},
                     {"tabletIds", JoinSeq(",", i.second)});

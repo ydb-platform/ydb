@@ -41,7 +41,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS, "Dump actor, event, actionId",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS, "",
             {"actor", "TGarbageCollectionActor"},
             {"event", "starting"},
             {"actionId", GCTask->GetActionGuid()});

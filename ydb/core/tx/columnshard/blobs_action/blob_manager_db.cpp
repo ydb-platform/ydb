@@ -68,7 +68,7 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTablet
             const TString blobIdStr = rowset.GetValue<Schema::BlobsToKeep::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
             AFL_VERIFY(unifiedBlobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
-            YDB_LOG_DEBUG("Dump event, blobId",
+            YDB_LOG_DEBUG("",
                 {"event", "LOAD_KEEP"},
                 {"blobId", unifiedBlobId.ToStringNew()});
             blobsToKeep.push_back(unifiedBlobId);
@@ -90,7 +90,7 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTablet
             const TString blobIdStr = rowset.GetValue<Schema::BlobsToDelete::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
             AFL_VERIFY(unifiedBlobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
-            YDB_LOG_DEBUG("Dump event, blobId",
+            YDB_LOG_DEBUG("",
                 {"event", "LOAD_DELETE"},
                 {"blobId", unifiedBlobId.ToStringNew()});
             blobsToDeleteLocal.Add(selfTabletId, unifiedBlobId);
@@ -129,7 +129,7 @@ void TBlobManagerDb::AddBlobToKeep(const TUnifiedBlobId& blobId) {
 }
 
 void TBlobManagerDb::EraseBlobToKeep(const TUnifiedBlobId& blobId) {
-    YDB_LOG_DEBUG("Dump event, blobId",
+    YDB_LOG_DEBUG("",
         {"event", "ERASE_KEEP"},
         {"blobId", blobId.ToStringNew()});
     NIceDb::TNiceDb db(Database);

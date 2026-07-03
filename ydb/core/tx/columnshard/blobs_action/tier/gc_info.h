@@ -38,7 +38,7 @@ public:
         while (BlobsToDelete.ExtractFrontTo(deleteBlobIdsLocal) && count < blobsCountLimit) {
             ++count;
         }
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER, "Dump event, blobIds",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER, "",
             {"event", "extract_blobs_to_gc"},
             {"blobIds", deleteBlobIdsLocal.DebugString()});
         std::swap(deleteBlobIdsLocal, deleteBlobIds);

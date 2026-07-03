@@ -321,6 +321,7 @@ TServiceBase::TRuntimeMethodInfo::TRuntimeMethodInfo(
     const NProfiling::TProfiler& profiler)
     : ServiceId(std::move(serviceId))
     , Descriptor(std::move(descriptor))
+    , HandlerSpanName(Format("RpcServer:%v.%v", ServiceId.ServiceName, Descriptor.Method))
     , Profiler(profiler.WithTag("method", Descriptor.Method, -1))
     , DefaultRequestQueue(CreateRequestQueue("default"))
     , RequestLoggingAnchor(NLogging::TLogManager::Get()->RegisterDynamicAnchor(
@@ -1865,7 +1866,10 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
     }
 
     if (auto tracingMode = incomingRequest.RuntimeInfo->TracingMode.load(std::memory_order::relaxed); tracingMode != ERequestTracingMode::Disable) {
-        incomingRequest.TraceContext = GetOrCreateHandlerTraceContext(*incomingRequest.Header, tracingMode == ERequestTracingMode::Force);
+        incomingRequest.TraceContext = GetOrCreateHandlerTraceContext(
+            *incomingRequest.Header,
+            incomingRequest.RuntimeInfo->HandlerSpanName,
+            tracingMode == ERequestTracingMode::Force);
     }
 
     if (incomingRequest.TraceContext && incomingRequest.TraceContext->IsRecorded()) {

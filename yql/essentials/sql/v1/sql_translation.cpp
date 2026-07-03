@@ -2726,6 +2726,25 @@ bool TSqlTranslation::CreateTableSettings(const TRule_with_table_settings& setti
 
 namespace {
 
+bool StoreConsumerIntervalSetting(
+    TNodePtr& setting, TSqlExpression& ctx, TStringBuf statement, const TIdentifier& id,
+    const TNodePtr& valueExprNode, bool reset) {
+    if (setting) {
+        ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+        return false;
+    }
+    if (reset) {
+        ctx.Error() << to_upper(id.Name) << " reset is not supported";
+        return false;
+    }
+    if (valueExprNode->GetOpName() != "Interval") {
+        ctx.Error() << "Literal of Interval type is expected for " << to_upper(id.Name) << " setting";
+        return false;
+    }
+    setting = valueExprNode;
+    return true;
+}
+
 bool StoreConsumerSettingsEntry(
     const TIdentifier& id, const TRule_topic_consumer_setting_value* value, TSqlExpression& ctx,
     TTopicConsumerSettings& settings,
@@ -2835,19 +2854,9 @@ bool StoreConsumerSettingsEntry(
         }
         settings.KeepMessagesOrder = valueExprNode;
     } else if (name == "default_processing_timeout") {
-        if (settings.DefaultProcessingTimeout) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+        if (!StoreConsumerIntervalSetting(settings.DefaultProcessingTimeout, ctx, statement, id, valueExprNode, reset)) {
             return false;
         }
-        if (reset) {
-            ctx.Error() << to_upper(id.Name) << " reset is not supported";
-            return false;
-        }
-        if (valueExprNode->GetOpName() != "Interval") {
-            ctx.Error() << "Literal of Interval type is expected for " << to_upper(id.Name) << " setting";
-            return false;
-        }
-        settings.DefaultProcessingTimeout = valueExprNode;
     } else if (name == "max_processing_attempts") {
         if (settings.MaxProcessingAttempts) {
             ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
@@ -2895,6 +2904,14 @@ bool StoreConsumerSettingsEntry(
             return false;
         }
         settings.DeadLetterQueue = valueExprNode;
+    } else if (name == "receive_message_wait_time") {
+        if (!StoreConsumerIntervalSetting(settings.ReceiveMessageWaitTime, ctx, statement, id, valueExprNode, reset)) {
+            return false;
+        }
+    } else if (name == "receive_message_delay") {
+        if (!StoreConsumerIntervalSetting(settings.ReceiveMessageDelay, ctx, statement, id, valueExprNode, reset)) {
+            return false;
+        }
     } else {
         ctx.Error() << to_upper(id.Name) << ": unknown option for consumer";
         return false;

@@ -1266,6 +1266,35 @@ private:
         MergeLineages(lineage, inners);
     }
 
+    bool HandleSessionColumns(TLineage& lineage, const TLineage& innerLineage,
+                              const TExprNode& sessionSpec, const TExprNode& sessionColumns) {
+        if (sessionColumns.ChildrenSize() == 0) {
+            return true;
+        }
+        if (!sessionSpec.IsCallable("SessionWindowTraits")) {
+            lineage.Fields.Clear();
+            return false;
+        }
+        const auto& initHandler = sessionSpec.Child(2);
+        const auto& updateHandler = sessionSpec.Child(3);
+        for (const auto& sessionColumn : sessionColumns.Children()) {
+            auto& res = (*lineage.Fields).try_emplace(sessionColumn->Content(), TFieldsLineage(Allocator_.get())).first->second;
+            MergeLineageFromUsedFields(initHandler->Tail(),
+                                       initHandler->Head().Head(),
+                                       innerLineage,
+                                       res,
+                                       /*produceStruct=*/false,
+                                       TFieldsLineageMap(Allocator_.get()));
+            MergeLineageFromUsedFields(updateHandler->Tail(),
+                                       updateHandler->Head().Head(),
+                                       innerLineage,
+                                       res,
+                                       /*produceStruct=*/false,
+                                       TFieldsLineageMap(Allocator_.get()));
+        }
+        return true;
+    }
+
     void HandleWindow(TLineage& lineage, const TExprNode& node) {
         auto innerLineage = *CollectLineage(node.Head());
         if (!innerLineage.Fields.Defined()) {
@@ -1283,27 +1312,14 @@ private:
 
         lineage.Fields = *innerLineage.Fields;
         if (node.IsCallable("CalcOverSessionWindow")) {
-            if (node.Child(5)->ChildrenSize() && !node.Child(4)->IsCallable("SessionWindowTraits")) {
-                lineage.Fields.Clear();
+            if (!HandleSessionColumns(lineage, innerLineage, *node.Child(4), *node.Child(5))) {
                 return;
             }
-
-            for (const auto& sessionColumn : node.Child(5)->Children()) {
-                auto& res = (*lineage.Fields).try_emplace(sessionColumn->Content(), TFieldsLineage(Allocator_.get())).first->second;
-                const auto& initHandler = node.Child(4)->Child(2);
-                const auto& updateHandler = node.Child(4)->Child(2);
-                MergeLineageFromUsedFields(initHandler->Tail(),
-                                           initHandler->Head().Head(),
-                                           innerLineage,
-                                           res,
-                                           /*produceStruct=*/false,
-                                           TFieldsLineageMap(Allocator_.get()));
-                MergeLineageFromUsedFields(updateHandler->Tail(),
-                                           updateHandler->Head().Head(),
-                                           innerLineage,
-                                           res,
-                                           /*produceStruct=*/false,
-                                           TFieldsLineageMap(Allocator_.get()));
+        } else if (node.IsCallable("CalcOverWindowGroup")) {
+            for (const auto& g : node.Child(1)->Children()) {
+                if (!HandleSessionColumns(lineage, innerLineage, *g->Child(3), *g->Child(4))) {
+                    return;
+                }
             }
         }
 

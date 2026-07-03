@@ -1,6 +1,7 @@
 #pragma once
 
 #include "public.h"
+#include "index_info.h"
 
 #include <yt/yt/client/hive/public.h>
 
@@ -62,26 +63,6 @@ struct TTableReplicaInfo final
 };
 
 DEFINE_REFCOUNTED_TYPE(TTableReplicaInfo)
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TUnfoldedColumns
-{
-    std::string TableColumn;
-    std::string IndexColumn;
-
-    void Persist(const TStreamPersistenceContext& context);
-};
-
-struct TIndexInfo
-{
-    NObjectClient::TObjectId TableId;
-    ESecondaryIndexKind Kind;
-    std::optional<std::string> Predicate;
-    std::optional<TUnfoldedColumns> UnfoldedColumns;
-    ETableToIndexCorrespondence Correspondence;
-    NTableClient::TTableSchemaPtr EvaluatedColumnsSchema;
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -431,6 +431,8 @@ IF (NOT OPENSOURCE AND OS_LINUX)
         actions/benchmarks
         concurrency/benchmarks
         bus/benchmarks
+        logging/benchmark
+        rpc/benchmark
         ypath/benchmarks
         yson/benchmark
         ytree/benchmarks

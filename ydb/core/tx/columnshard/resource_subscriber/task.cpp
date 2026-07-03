@@ -5,11 +5,16 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NResourceBroker::NSubscribe {
 
 void ITask::OnAllocationSuccess(const ui64 taskId, const NActors::TActorId& senderId) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "resource_allocated")("external_task_id", ExternalTaskId)("mem", MemoryAllocation)(
-        "cpu", CPUAllocation);
+    YDB_LOG_DEBUG("Dump event, externalTaskId, mem, cpu",
+        {"event", "resource_allocated"},
+        {"externalTaskId", ExternalTaskId},
+        {"mem", MemoryAllocation},
+        {"cpu", CPUAllocation});
     DoOnAllocationSuccess(std::make_shared<TResourcesGuard>(taskId, ExternalTaskId, *this, senderId, Context));
 }
 
@@ -21,8 +26,12 @@ TResourcesGuard::~TResourcesGuard() {
     if (!NActors::TlsActivationContext) {
         return;
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "free_resources")("task_id", TaskId)("external_task_id", ExternalTaskId)("mem", Memory)(
-        "cpu", Cpu);
+    YDB_LOG_DEBUG("Dump event, taskId, externalTaskId, mem, cpu",
+        {"event", "free_resources"},
+        {"taskId", TaskId},
+        {"externalTaskId", ExternalTaskId},
+        {"mem", Memory},
+        {"cpu", Cpu});
     if (TaskId) {
         auto ev = std::make_unique<IEventHandle>(
             NKikimr::NResourceBroker::MakeResourceBrokerID(), Sender, new NKikimr::NResourceBroker::TEvResourceBroker::TEvFinishTask(TaskId));
@@ -43,8 +52,12 @@ TResourcesGuard::TResourcesGuard(
 {
     AFL_VERIFY(taskId || (!Memory && !Cpu));
     Context.GetCounters()->GetBytesAllocated()->Add(Memory);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "allocate_resources")("external_task_id", ExternalTaskId)("task_id", TaskId)(
-        "mem", Memory)("cpu", Cpu);
+    YDB_LOG_DEBUG("Dump event, externalTaskId, taskId, mem, cpu",
+        {"event", "allocate_resources"},
+        {"externalTaskId", ExternalTaskId},
+        {"taskId", TaskId},
+        {"mem", Memory},
+        {"cpu", Cpu});
 }
 
 void TResourcesGuard::Update(const ui64 memNew) {
@@ -54,8 +67,13 @@ void TResourcesGuard::Update(const ui64 memNew) {
     AFL_VERIFY(Memory);
     Context.GetCounters()->GetBytesAllocated()->Remove(Memory);
     AFL_VERIFY(NActors::TlsActivationContext);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "update_resources")("task_id", TaskId)("external_task_id", ExternalTaskId)(
-        "mem", memNew)("cpu", Cpu)("mem_old", Memory);
+    YDB_LOG_DEBUG("Dump event, taskId, externalTaskId, mem, cpu, memOld",
+        {"event", "update_resources"},
+        {"taskId", TaskId},
+        {"externalTaskId", ExternalTaskId},
+        {"mem", memNew},
+        {"cpu", Cpu},
+        {"memOld", Memory});
     Memory = memNew;
     auto ev = std::make_unique<IEventHandle>(NKikimr::NResourceBroker::MakeResourceBrokerID(), Sender,
         new NKikimr::NResourceBroker::TEvResourceBroker::TEvUpdateTask(TaskId, { { Cpu, Memory } }, Context.GetTypeName(), Priority));

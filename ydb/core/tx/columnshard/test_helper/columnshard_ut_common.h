@@ -544,7 +544,8 @@ public:
                 using T = typename TWrap::T;
                 using TBuilder = typename arrow::TypeTraits<typename TWrap::T>::BuilderType;
 
-                AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("T", typeid(T).name());
+                YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"t", typeid(T).name()});
 
                 auto& typedBuilder = static_cast<TBuilder&>(*builder);
                 if constexpr (std::is_arithmetic<TData>::value) {

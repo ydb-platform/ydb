@@ -45,7 +45,9 @@ private:
 
     virtual bool DoParseImpl(TColumnShard& /*owner*/, const NKikimrTxColumnShard::TCommitWriteTxBody& commitTxBody) override {
         if (!commitTxBody.HasPrimaryTabletData()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("event", "cannot read proto")("proto", commitTxBody.DebugString());
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
+                {"event", "cannot read proto"},
+                {"proto", commitTxBody.DebugString()});
             return false;
         }
         auto& protoData = commitTxBody.GetPrimaryTabletData();
@@ -88,8 +90,9 @@ private:
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, true);
             if (!op) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "repeated shard broken_flag info, operator not found")(
-                    "shard_id", TabletId);
+                YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
+                    {"event", "repeated shard broken_flag info, operator not found"},
+                    {"shardId", TabletId});
                 // send the ack anyway, so that the secondary waits less time to progress
                 TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*Self, Step, TxId, TabletId);
                 return true;
@@ -97,7 +100,9 @@ private:
 
             BrokenFlagAck = TEvWriteCommitSyncTransactionOperator::MakeBrokenFlagAck(op->GetStep(), op->GetTxId(), Self->TabletID(), TabletId);
             if (!op->WaitShardsBrokenFlags.erase(TabletId)) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "repeated shard broken_flag info")("shard_id", TabletId);
+                YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
+                    {"event", "repeated shard broken_flag info"},
+                    {"shardId", TabletId});
                 // we cannot send the ack here, because the previous transaction (that successfully erased TabletId) may be not completed yet
             } else {
                 op->TxBroken = op->TxBroken.value_or(false) || BrokenFlag;
@@ -140,14 +145,20 @@ private:
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, true);
             if (!op) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "ack_tablet_duplication")("receive", TabletId)(
-                    "reason", "operation absent");
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "Dump event, receive, reason",
+                    {"event", "ack_tablet_duplication"},
+                    {"receive", TabletId},
+                    {"reason", "operation absent"});
             } else if (!op->WaitShardsResultAck.erase(TabletId)) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "ack_tablet_duplication")("wait", JoinSeq(",", op->WaitShardsResultAck))(
-                    "receive", TabletId);
+                YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
+                    {"event", "ack_tablet_duplication"},
+                    {"wait", JoinSeq(",", op->WaitShardsResultAck)},
+                    {"receive", TabletId});
             } else {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "ack_tablet")("wait", JoinSeq(",", op->WaitShardsResultAck))(
-                    "receive", TabletId);
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "Dump event, wait, receive",
+                    {"event", "ack_tablet"},
+                    {"wait", JoinSeq(",", op->WaitShardsResultAck)},
+                    {"receive", TabletId});
                 Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
                 op->CheckFinished(*Self);
             }
@@ -183,7 +194,8 @@ private:
 
     void CheckFinished(TColumnShard& owner) {
         if (!IsInProgress()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "finished");
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "Dump event",
+                {"event", "finished"});
             owner.EnqueueProgressTx(NActors::TActivationContext::AsActorContext(), GetTxId());
         }
     }
@@ -223,9 +235,11 @@ private:
                 op->TxBroken = op->TxBroken.value_or(false) || lock.IsBroken();
                 AFL_VERIFY(op->WaitShardsBrokenFlags.erase(Self->TabletID()));
                 AFL_VERIFY(op->WaitShardsResultAck.erase(Self->TabletID()));
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "remove_tablet_id")(
-                    "wait_broken_flags", JoinSeq(",", op->WaitShardsBrokenFlags))("wait_result_ack", JoinSeq(",", op->WaitShardsResultAck))(
-                    "receive", Self->TabletID());
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "Dump event, waitBrokenFlags, waitResultAck, receive",
+                    {"event", "remove_tablet_id"},
+                    {"waitBrokenFlags", JoinSeq(",", op->WaitShardsBrokenFlags)},
+                    {"waitResultAck", JoinSeq(",", op->WaitShardsResultAck)},
+                    {"receive", Self->TabletID()});
                 Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
                 op->InitializeRequests(*Self);
             }
@@ -252,7 +266,9 @@ private:
     }
 
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* owner) const override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "prepare_for_progress_started")("lock_id", LockId);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "Dump event, lockId",
+            {"event", "prepare_for_progress_started"},
+            {"lockId", LockId});
         return std::make_unique<TTxStartPreparation>(owner, GetTxId());
     }
 

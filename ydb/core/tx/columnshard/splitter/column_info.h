@@ -6,6 +6,7 @@
 #include <ydb/library/accessor/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap {
 
@@ -122,8 +123,11 @@ public:
             const ui32 sizeLimit, const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schema,
             const std::shared_ptr<NColumnShard::TSplitterCounters>& counters) {
             const ui32 entityId = bigChunk->GetEntityId();
-            NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("entity_id", entityId)(
-                "size", bigChunk->GetPackedSize())("limit", sizeLimit)("r_count", bigChunk->GetRecordsCountVerified());
+            YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+                {"entityId", entityId},
+                {"size", bigChunk->GetPackedSize()},
+                {"limit", sizeLimit},
+                {"rCount", bigChunk->GetRecordsCountVerified()});
             const auto predSplit = [sizeLimit, entityId, schema, counters](const std::shared_ptr<IPortionDataChunk>& chunkToSplit) {
                 AFL_VERIFY(chunkToSplit->IsSplittable());
                 counters->BySizeSplitter.OnTrashSerialized(chunkToSplit->GetPackedSize());
@@ -138,8 +142,10 @@ public:
                     splittedSizes.emplace_back(i->GetPackedSize());
                     splittedRecords.emplace_back(i->GetRecordsCountVerified());
                 }
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("sizes", JoinSeq(",", sizes))("s_splitted", JoinSeq(",", splittedSizes))(
-                    "r_splitted", JoinSeq(",", splittedRecords));
+                YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"sizes", JoinSeq(",", sizes)},
+                    {"sSplitted", JoinSeq(",", splittedSizes)},
+                    {"rSplitted", JoinSeq(",", splittedRecords)});
                 return result;
             };
             std::deque<std::shared_ptr<IPortionDataChunk>> dqParts;

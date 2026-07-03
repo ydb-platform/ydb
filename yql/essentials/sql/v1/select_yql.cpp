@@ -19,8 +19,8 @@ public:
         Y_UNUSED(src);
 
         const TString ref = ctx.MakeName("yql_read");
-        TNodePtr read = Y("Read!", "world", BuildDataSource(), BuildKey(), Y("Void"), Q(Y()));
 
+        TNodePtr read = Y("Read!", "world", BuildDataSource(), BuildKey(ctx), Y("Void"), Q(Y()));
         TBlocks& blocks = ctx.GetCurrentBlocks();
         blocks.emplace_back(Y("let", ref, std::move(read)));
         blocks.emplace_back(Y("let", "world", Y("Left!", ref)));
@@ -44,12 +44,14 @@ private:
         return Y("DataSource", std::move(service), std::move(cluster));
     }
 
-    TNodePtr BuildKey() const {
-        TNodePtr key = BuildQuotedAtom(Pos_, Key);
-
+    TNodePtr BuildKey(TContext& ctx) const {
         if (IsAnonymous) {
+            TNodePtr key = BuildQuotedAtom(Pos_, Key);
             return Y("TempTable", std::move(key));
         }
+
+        TNodePtr key = ctx.GetPrefixedPath(Service, TDeferredAtom(Pos_, Cluster), TDeferredAtom(Pos_, Key));
+        YQL_ENSURE(key);
 
         return Y("Key", Q(Y(Q("table"), Y("String", std::move(key)))));
     }

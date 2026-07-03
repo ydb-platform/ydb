@@ -13637,6 +13637,69 @@ Y_UNIT_TEST(FromQuotedTableWithImmediateCluster) {
     UNIT_ASSERT_STRING_CONTAINS(program, R"('((Right! yql_read0) '"/Root/Yql/Select" '()))");
 }
 
+Y_UNIT_TEST(FromQuotedTableWithImmediateClusterWithTablePrefixPath) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        PRAGMA YqlSelect = 'force';
+        PRAGMA TablePathPrefix = '/Root/Yql';
+        SELECT a, b FROM Select;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Read!"};
+
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"((Key '('table (String '"/Root/Yql/Select"))) (Void) '()))");
+}
+
+Y_UNIT_TEST(FromNamedNodeWithQuotedTableWithImmediateClusterWithTablePrefixPath) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        PRAGMA YqlSelect = 'force';
+        PRAGMA TablePathPrefix = '/Root/Yql';
+        $x = SELECT a FROM Select;
+        SELECT $x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Read!"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"((Key '('table (String '"/Root/Yql/Select"))) (Void) '()))");
+}
+
+// The test checks that the prefix is not added for temporary tables.
+Y_UNIT_TEST(FromTmpTableWithImmediateClusterWithTablePrefixPath) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        PRAGMA YqlSelect = 'force';
+        PRAGMA TablePathPrefix = '/Root';
+        INSERT INTO @tmp (a) VALUES (1);
+        COMMIT;
+        SELECT a FROM @tmp;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Read!", "TempTable"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["TempTable"], 2);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"(TempTable '"tmp")");
+}
+
 Y_UNIT_TEST(FromTmpTableWithImmediateCluster) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;

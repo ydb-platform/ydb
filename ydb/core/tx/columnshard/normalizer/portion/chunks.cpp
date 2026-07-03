@@ -137,7 +137,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TChunksNormalizer::DoInit(
     }
 
     std::vector<INormalizerTask::TPtr> tasks;
-    ACFL_INFO("normalizer", "TChunksNormalizer")("message", TStringBuilder() << chunks.size() << " chunks found");
+    YDB_LOG_INFO_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        {"normalizer", "TChunksNormalizer"},
+        {"message", TStringBuilder() << chunks.size() << " chunks found"});
     if (chunks.empty()) {
         return tasks;
     }
@@ -145,7 +147,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TChunksNormalizer::DoInit(
     TTablesManager tablesManager(
         controller.GetStoragesManager(), controller.GetDataAccessorsManager(), std::make_shared<TPortionIndexStats>(), 0);
     if (!tablesManager.InitFromDB(db, nullptr)) {
-        ACFL_TRACE("normalizer", "TChunksNormalizer")("error", "can't initialize tables manager");
+        YDB_LOG_TRACE_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump normalizer, error",
+            {"normalizer", "TChunksNormalizer"},
+            {"error", "can't initialize tables manager"});
         return TConclusionStatus::Fail("Can't load index");
     }
 

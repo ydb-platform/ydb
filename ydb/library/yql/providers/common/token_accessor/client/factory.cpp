@@ -2,6 +2,7 @@
 #include "bearer_credentials_provider.h"
 #include "token_accessor_client_factory.h"
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>

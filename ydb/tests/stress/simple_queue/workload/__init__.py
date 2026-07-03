@@ -22,8 +22,8 @@ def random_string(size):
     return ''.join(random.choices(string.ascii_lowercase, k=size))
 
 
-def generate_blobs(count=32):
-    return [random_string(idx * BLOB_MIN_SIZE) for idx in range(1, count + 1)]
+def generate_blobs(count=32, blob_min_size=BLOB_MIN_SIZE):
+    return [random_string(idx * blob_min_size) for idx in range(1, count + 1)]
 
 
 class EventKind(object):
@@ -243,21 +243,21 @@ class WorkloadStats(object):
 
 
 class YdbQueue(object):
-    def __init__(self, idx, database, stats, driver, pool, mode, in_memory):
-        self.working_dir = os.path.join(database, socket.gethostname().split('.')[0].replace('-', '_') + "_" + str(idx))
+    def __init__(self, idx, database, stats, driver, pool, mode, in_memory, blob_min_size=BLOB_MIN_SIZE):
+        self.working_dir = os.path.join(database, socket.gethostname().split('.')[0].replace('-', '_') + f"_{mode}_" + str(idx))
         self.copies_dir = os.path.join(self.working_dir, 'copies')
         self.table_name = self.table_name_with_timestamp()
         self.queries = {}
         self.pool = pool
         self.driver = driver
         self.stats = stats
-        self.blobs = generate_blobs(16)
+        self.blobs = generate_blobs(16, blob_min_size)
         self.blobs_iter = itertools.cycle(self.blobs)
         self.outdated_period = 60 * 2
         self.database = database
         self.ops = ydb.BaseRequestSettings().with_operation_timeout(19).with_timeout(20)
-        self.driver.scheme_client.make_directory(self.working_dir)
-        self.driver.scheme_client.make_directory(self.copies_dir)
+        self._make_directory(self.working_dir)
+        self._make_directory(self.copies_dir)
         self.mode = mode
         self.in_memory = in_memory
         print("Working dir %s" % self.working_dir)
@@ -273,6 +273,21 @@ class YdbQueue(object):
         self.columns_with_default = dict()
         # guards concurrent reads/writes of alter_column_ids and columns_with_default
         self._lock = threading.Lock()
+
+    def _make_directory(self, path):
+        # Several workloads (or standalone instances) on the same host share this
+        # directory and may create it concurrently; schemeshard then reports a
+        # transient "path exists but creating right now" (Overloaded). make_directory
+        # is otherwise idempotent, so retry briefly until the concurrent create settles.
+        deadline = time.time() + 60
+        while True:
+            try:
+                self.driver.scheme_client.make_directory(path)
+                return
+            except ydb.issues.Overloaded:
+                if time.time() > deadline:
+                    raise
+                time.sleep(0.2)
 
     def table_name_with_timestamp(self, working_dir=None):
         if working_dir is not None:
@@ -520,9 +535,13 @@ class YdbQueue(object):
 
 
 class Workload:
-    def __init__(self, endpoint, database, duration, mode):
+    def __init__(self, endpoint, database, duration, mode, blob_min_size=BLOB_MIN_SIZE):
         self.database = database
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
+        # Wait for the driver to connect before issuing any requests; otherwise the
+        # very first scheme call races the connection setup and fails with
+        # ConnectionLost, which is easy to hit when many workloads start at once.
+        self.driver.wait(timeout=30, fail_fast=True)
         self.pool = InstrumentedQuerySessionPool(self.driver, size=10)
         self.round_size = 1000
         self.duration = duration
@@ -530,12 +549,14 @@ class Workload:
         self.workload_stats = WorkloadStats(*EventKind.list())
         # TODO: run both modes in parallel?
         self.mode = mode
+        self.blob_min_size = blob_min_size
         self.ydb_queues = [
-            YdbQueue(idx, database, self.workload_stats, self.driver, self.pool, self.mode, False)
+            YdbQueue(idx, database, self.workload_stats, self.driver, self.pool, self.mode, False, self.blob_min_size)
             for idx in range(2)
         ]
         if self.mode == "row":
-            self.ydb_queues.append(YdbQueue(len(self.ydb_queues), database, self.workload_stats, self.driver, self.pool, self.mode, True))
+            self.ydb_queues.append(
+                YdbQueue(len(self.ydb_queues), database, self.workload_stats, self.driver, self.pool, self.mode, True, self.blob_min_size))
         self.pool_semaphore = threading.BoundedSemaphore(value=1)
         self.worker_exception = []
 

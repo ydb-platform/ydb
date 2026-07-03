@@ -366,7 +366,7 @@ void TDistributedTransaction::OnReadSetAck(const NKikimrTx::TEvReadSetAck& event
 
 void TDistributedTransaction::OnReadSetAck(ui64 tabletId)
 {
-    if (PredicateRecipients.contains(tabletId)) {
+    if (PredicateRecipients.contains(tabletId) && !PredicateRecipients[tabletId]) {
         PredicateRecipients[tabletId] = true;
         ++PredicateAcksCount;
 

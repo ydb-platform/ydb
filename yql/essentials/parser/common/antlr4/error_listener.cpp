@@ -70,7 +70,7 @@ void YqlErrorListener::reportAmbiguity(
                       << " at rule '" << ruleName << "'"
                       << " with conflicted alternatives {" << alternatives << "}";
 
-    NYql::TIssue issue(std::move(startPos), std::move(stopPos), std::move(message));
+    NYql::TIssue issue(std::move(startPos), std::move(stopPos), message);
 
     if (IsAmbiguityError_) {
         *Error_ = true;

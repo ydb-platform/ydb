@@ -108,7 +108,7 @@ public:
         }
 
         for (const auto& testCase : testCases) {
-            const auto binaryJson = std::get<TBinaryJson>(SerializeToBinaryJson(testCase.first, true));
+            const auto binaryJson = std::get<TBinaryJson>(SerializeToBinaryJson(testCase.first, /*allowInf=*/true));
             const auto reader = TBinaryJsonReader::Make(binaryJson);
             const auto container = reader->GetRootCursor();
 

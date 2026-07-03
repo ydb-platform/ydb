@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 $t1 = AsList(
     AsStruct(100 AS itemid, 20 AS duration, 2 AS start_shows, 1 AS day),
     AsStruct(1001 AS itemid, 10 AS duration, 2 AS start_shows, 1 AS day),

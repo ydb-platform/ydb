@@ -57,6 +57,145 @@ private:
     NThreading::TPromise<void> Promise;
 };
 
+class TIndexedTableCreator : public NTableCreator::TMultiTableCreator {
+    using TBase = NTableCreator::TMultiTableCreator;
+
+public:
+    struct TResult {
+        bool Success = false;
+        NYql::TIssues Issues;
+    };
+
+    explicit TIndexedTableCreator(NThreading::TPromise<TResult> promise)
+        : TBase({ GetCreator() })
+        , Promise(std::move(promise))
+    {}
+
+private:
+    static IActor* GetCreator() {
+        NKikimrSchemeOp::TSequenceDescription sequence;
+        sequence.SetName("id_seq");
+
+        NKikimrSchemeOp::TIndexDescription index;
+        index.SetName("ext_id_uniq");
+        index.AddKeyColumnNames("ext_id");
+        index.SetType(NKikimrSchemeOp::EIndexTypeGlobalUnique);
+        index.SetState(NKikimrSchemeOp::EIndexStateReady);
+
+        auto idColumn = Col("id", NScheme::NTypeIds::Uint64);
+        idColumn.SetNotNull(true);
+        idColumn.SetDefaultFromSequence("id_seq");
+
+        auto extIdColumn = Col("ext_id", NScheme::NTypeIds::Text);
+        extIdColumn.SetNotNull(true);
+
+        return CreateTableCreator(
+            { "path", "to", "indexed", "table" },
+            { idColumn, extIdColumn },
+            { "id" },
+            NKikimrServices::STATISTICS,
+            Nothing(),
+            {},
+            false,
+            Nothing(),
+            Nothing(),
+            { index },
+            { sequence }
+        );
+    }
+
+    void OnTablesCreated(bool success, NYql::TIssues issues) override {
+        Promise.SetValue({success, std::move(issues)});
+    }
+
+private:
+    NThreading::TPromise<TResult> Promise;
+};
+
+class TIndexedTableCreatorWithWrongIndexKey : public NTableCreator::TMultiTableCreator {
+    using TBase = NTableCreator::TMultiTableCreator;
+
+public:
+    explicit TIndexedTableCreatorWithWrongIndexKey(NThreading::TPromise<TIndexedTableCreator::TResult> promise)
+        : TBase({ GetCreator() })
+        , Promise(std::move(promise))
+    {}
+
+private:
+    static IActor* GetCreator() {
+        NKikimrSchemeOp::TSequenceDescription sequence;
+        sequence.SetName("id_seq");
+
+        NKikimrSchemeOp::TIndexDescription index;
+        index.SetName("ext_id_uniq");
+        index.AddKeyColumnNames("id");
+        index.SetType(NKikimrSchemeOp::EIndexTypeGlobalUnique);
+        index.SetState(NKikimrSchemeOp::EIndexStateReady);
+
+        auto idColumn = Col("id", NScheme::NTypeIds::Uint64);
+        idColumn.SetNotNull(true);
+        idColumn.SetDefaultFromSequence("id_seq");
+
+        auto extIdColumn = Col("ext_id", NScheme::NTypeIds::Text);
+        extIdColumn.SetNotNull(true);
+
+        return CreateTableCreator(
+            { "path", "to", "indexed", "table" },
+            { idColumn, extIdColumn },
+            { "id" },
+            NKikimrServices::STATISTICS,
+            Nothing(),
+            {},
+            false,
+            Nothing(),
+            Nothing(),
+            { index },
+            { sequence }
+        );
+    }
+
+    void OnTablesCreated(bool success, NYql::TIssues issues) override {
+        Promise.SetValue({success, std::move(issues)});
+    }
+
+private:
+    NThreading::TPromise<TIndexedTableCreator::TResult> Promise;
+};
+
+class TPlainIndexedPathTableCreator : public NTableCreator::TMultiTableCreator {
+    using TBase = NTableCreator::TMultiTableCreator;
+
+public:
+    explicit TPlainIndexedPathTableCreator(NThreading::TPromise<void> promise)
+        : TBase({ GetCreator() })
+        , Promise(std::move(promise))
+    {}
+
+private:
+    static IActor* GetCreator() {
+        auto idColumn = Col("id", NScheme::NTypeIds::Uint64);
+        idColumn.SetNotNull(true);
+
+        auto extIdColumn = Col("ext_id", NScheme::NTypeIds::Text);
+        extIdColumn.SetNotNull(true);
+
+        return CreateTableCreator(
+            { "path", "to", "indexed", "table" },
+            { idColumn, extIdColumn },
+            { "id" },
+            NKikimrServices::STATISTICS
+        );
+    }
+
+    void OnTablesCreated(bool success, NYql::TIssues issues) override {
+        UNIT_ASSERT_C(success, issues.ToString());
+        Promise.SetValue();
+    }
+
+private:
+    NThreading::TPromise<void> Promise;
+};
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TableCreator) {
@@ -109,6 +248,158 @@ Y_UNIT_TEST_SUITE(TableCreator) {
             UNIT_ASSERT_VALUES_EQUAL_C(createdColumns[1].Name, "expire_at", "expected expire_at column");
             UNIT_ASSERT_VALUES_EQUAL_C(createdColumns[1].Type.ToString(), "Timestamp?", "expected type timestamp");
         }
+    }
+
+    Y_UNIT_TEST(CreateIndexedTableWithSequenceAndUniqueIndex) {
+        TPortManager tp;
+        ui16 mbusPort = tp.GetPort();
+        ui16 grpcPort = tp.GetPort();
+        auto settings = Tests::TServerSettings(mbusPort);
+        settings.SetNodeCount(1);
+
+        Tests::TServer server(settings);
+        Tests::TClient client(settings);
+
+        server.EnableGRpc(grpcPort);
+        client.InitRootScheme();
+        auto runtime = server.GetRuntime();
+
+        auto promise = NThreading::NewPromise<TIndexedTableCreator::TResult>();
+        TActorId edgeActor = runtime->AllocateEdgeActor(0);
+        runtime->Register(new TIndexedTableCreator(promise), 0, 0, TMailboxType::Simple, 0, edgeActor);
+        const auto result = promise.GetFuture().GetValueSync();
+        UNIT_ASSERT_C(result.Success, result.Issues.ToString());
+
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort).SetDatabase(Tests::TestDomainName);
+        NYdb::TDriver driver(cfg);
+        NYdb::NTable::TTableClient tableClient(driver);
+        auto createSessionResult = tableClient.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_C(createSessionResult.IsSuccess(), createSessionResult.GetIssues().ToString());
+        NYdb::NTable::TSession session(createSessionResult.GetSession());
+
+        const auto path = TStringBuilder() << "/" << Tests::TestDomainName << "/path/to/indexed/table";
+        auto describeResult = session.DescribeTable(path).ExtractValueSync();
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+
+        const auto& indexes = describeResult.GetTableDescription().GetIndexDescriptions();
+        UNIT_ASSERT_VALUES_EQUAL(indexes.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(indexes[0].GetIndexName(), "ext_id_uniq");
+        UNIT_ASSERT_VALUES_EQUAL(indexes[0].GetIndexType(), NYdb::NTable::EIndexType::GlobalUnique);
+        UNIT_ASSERT_VALUES_EQUAL(indexes[0].GetIndexColumns().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(indexes[0].GetIndexColumns()[0], "ext_id");
+
+        NYdb::TParamsBuilder insertParams;
+        insertParams.AddParam("$ext").Utf8("ext-1").Build();
+        const auto insertResult = session.ExecuteDataQuery(
+            TStringBuilder() << "DECLARE $ext AS Text; INSERT INTO `" << path << "` (ext_id) VALUES ($ext);",
+            NYdb::NTable::TTxControl::BeginTx().CommitTx(),
+            insertParams.Build()).ExtractValueSync();
+        UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
+
+        NYdb::TParamsBuilder selectParams;
+        selectParams.AddParam("$ext").Utf8("ext-1").Build();
+        const auto selectResult = session.ExecuteDataQuery(
+            TStringBuilder() << "DECLARE $ext AS Text; SELECT id FROM `" << path << "` WHERE ext_id = $ext;",
+            NYdb::NTable::TTxControl::BeginTx().CommitTx(),
+            selectParams.Build()).ExtractValueSync();
+        UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
+        UNIT_ASSERT(!selectResult.GetResultSets().empty());
+
+        NYdb::TResultSetParser parser(selectResult.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_GT(parser.ColumnParser("id").GetUint64(), 0u);
+        UNIT_ASSERT(!parser.TryNextRow());
+    }
+
+    Y_UNIT_TEST(IndexedTableCreatorSucceedsOnMatchingExistingTable) {
+        TPortManager tp;
+        ui16 mbusPort = tp.GetPort();
+        ui16 grpcPort = tp.GetPort();
+        auto settings = Tests::TServerSettings(mbusPort);
+        settings.SetNodeCount(1);
+
+        Tests::TServer server(settings);
+        Tests::TClient client(settings);
+
+        server.EnableGRpc(grpcPort);
+        client.InitRootScheme();
+        auto runtime = server.GetRuntime();
+        TActorId edgeActor = runtime->AllocateEdgeActor(0);
+
+        {
+            auto promise = NThreading::NewPromise<TIndexedTableCreator::TResult>();
+            runtime->Register(new TIndexedTableCreator(promise), 0, 0, TMailboxType::Simple, 0, edgeActor);
+            const auto result = promise.GetFuture().GetValueSync();
+            UNIT_ASSERT_C(result.Success, result.Issues.ToString());
+        }
+
+        {
+            auto promise = NThreading::NewPromise<TIndexedTableCreator::TResult>();
+            runtime->Register(new TIndexedTableCreator(promise), 0, 0, TMailboxType::Simple, 0, edgeActor);
+            const auto result = promise.GetFuture().GetValueSync();
+            UNIT_ASSERT_C(result.Success, result.Issues.ToString());
+        }
+    }
+
+    Y_UNIT_TEST(RejectIndexedTableOnPlainExistingTable) {
+        TPortManager tp;
+        ui16 mbusPort = tp.GetPort();
+        ui16 grpcPort = tp.GetPort();
+        auto settings = Tests::TServerSettings(mbusPort);
+        settings.SetNodeCount(1);
+
+        Tests::TServer server(settings);
+        Tests::TClient client(settings);
+
+        server.EnableGRpc(grpcPort);
+        client.InitRootScheme();
+        auto runtime = server.GetRuntime();
+        TActorId edgeActor = runtime->AllocateEdgeActor(0);
+
+        {
+            auto promise = NThreading::NewPromise();
+            runtime->Register(new TPlainIndexedPathTableCreator(promise), 0, 0, TMailboxType::Simple, 0, edgeActor);
+            promise.GetFuture().GetValueSync();
+        }
+
+        {
+            auto promise = NThreading::NewPromise<TIndexedTableCreator::TResult>();
+            runtime->Register(new TIndexedTableCreator(promise), 0, 0, TMailboxType::Simple, 0, edgeActor);
+            const auto result = promise.GetFuture().GetValueSync();
+            UNIT_ASSERT(!result.Success);
+            UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToString(),
+                "Table already exists; index and sequence upgrade is not supported");
+        }
+    }
+
+    Y_UNIT_TEST(RejectMismatchedIndexedSchemaOnCreateRace) {
+        TPortManager tp;
+        ui16 mbusPort = tp.GetPort();
+        ui16 grpcPort = tp.GetPort();
+        auto settings = Tests::TServerSettings(mbusPort);
+        settings.SetNodeCount(1);
+
+        Tests::TServer server(settings);
+        Tests::TClient client(settings);
+
+        server.EnableGRpc(grpcPort);
+        client.InitRootScheme();
+        auto runtime = server.GetRuntime();
+        TActorId edgeActor = runtime->AllocateEdgeActor(0);
+
+        auto correctPromise = NThreading::NewPromise<TIndexedTableCreator::TResult>();
+        auto wrongPromise = NThreading::NewPromise<TIndexedTableCreator::TResult>();
+        runtime->Register(new TIndexedTableCreator(correctPromise), 0, 0, TMailboxType::Simple, 0, edgeActor);
+        runtime->Register(new TIndexedTableCreatorWithWrongIndexKey(wrongPromise), 0, 0, TMailboxType::Simple, 0, edgeActor);
+
+        const auto correctResult = correctPromise.GetFuture().GetValueSync();
+        const auto wrongResult = wrongPromise.GetFuture().GetValueSync();
+
+        UNIT_ASSERT(correctResult.Success != wrongResult.Success);
+        const auto& failedResult = correctResult.Success ? wrongResult : correctResult;
+        UNIT_ASSERT_STRING_CONTAINS(failedResult.Issues.ToString(),
+            "Existing table schema does not match requested indexes or sequences");
     }
 }
 

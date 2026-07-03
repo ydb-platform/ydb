@@ -53,6 +53,7 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
     , QuorumReadyPromise(std::move(other.QuorumReadyPromise))
     , WriteRequested(other.WriteRequested)
     , WriteConfirmed(other.WriteConfirmed)
+    , FlushDesired(other.FlushDesired)
     , FlushRequested(other.FlushRequested)
     , FlushConfirmed(other.FlushConfirmed)
     , EraseRequested(other.EraseRequested)
@@ -92,7 +93,7 @@ void TInflightInfo::RestorePBuffer(THostIndex host)
             QuorumReadyPromise.TrySetValue();
         }
 
-        State = EState::PBufferWritten;
+        SetState(EState::PBufferWritten);
         ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Flush);
     }
 }
@@ -107,7 +108,7 @@ void TInflightInfo::OnWritten(
 
     WriteRequested = writeRequested;
     WriteConfirmed = writeConfirmed;
-    State = EState::PBufferWritten;
+    SetState(EState::PBufferWritten);
 
     ApplyBytes(WriteRequested, IReadyQueue::EPBufferCounter::Total, true);
     ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Flush);
@@ -132,17 +133,17 @@ TReadSource TInflightInfo::ReadMask() const
         case EState::PBufferPendingWrite:
             // The write is not acknowledged yet, so it is invisible to reads:
             // read the pre-write data from DDisk (Lsn=0). Never blocks.
-            return {THostMask::MakeAll(MaxHostCount), /*Lsn=*/0};
+            return {.Mask = THostMask::MakeAll(MaxHostCount), .Lsn = 0};
 
         case EState::PBufferIncompleteWrite:
             // Reading will be possible only after receiving a quorum.
-            return {THostMask::MakeEmpty(), /*Lsn=*/0};
+            return {.Mask = THostMask::MakeEmpty(), .Lsn = 0};
 
         case EState::PBufferWritten:
         case EState::PBufferFlushing:
             // The data is written to PBuffer, but not transferred to DDisk.
             // Will read from confirmed PBuffer at this inflight's Lsn.
-            return {WriteConfirmed, Lsn};
+            return {.Mask = WriteConfirmed, .Lsn = Lsn};
 
         case EState::PBufferFlushed:
         case EState::PBufferErasing:
@@ -150,7 +151,7 @@ TReadSource TInflightInfo::ReadMask() const
             // The data has already been transferred to DDisk.
             // Will read from DDisks. Lsn=0 marks a DDisk read.
             // Filter out non-desired or fresh later.
-            return {THostMask::MakeAll(MaxHostCount), /*Lsn=*/0};
+            return {.Mask = THostMask::MakeAll(MaxHostCount), .Lsn = 0};
     }
 }
 
@@ -168,21 +169,21 @@ THostIndex TInflightInfo::RequestFlush(
     }
 
     if (WriteConfirmed.Get(destination)) {
-        State = EState::PBufferFlushing;
+        SetState(EState::PBufferFlushing);
         FlushRequested.Set(destination);
         return destination;
     }
 
     // Prefer enabled hosts.
     for (auto source: WriteConfirmed.Exclude(disabledHosts)) {
-        State = EState::PBufferFlushing;
+        SetState(EState::PBufferFlushing);
         FlushRequested.Set(destination);
         return source;
     }
 
     // TODO. All hosts are disabled. Need to figure out what to do in this case.
     for (auto source: WriteConfirmed) {
-        State = EState::PBufferFlushing;
+        SetState(EState::PBufferFlushing);
         FlushRequested.Set(destination);
         return source;
     }
@@ -199,7 +200,7 @@ void TInflightInfo::ConfirmFlush(THostRoute route)
     FlushConfirmed.Set(route.DestinationHostIndex);
 
     if (FlushDesired == FlushConfirmed) {
-        State = EState::PBufferFlushed;
+        SetState(EState::PBufferFlushed);
     }
 
     if (State == EState::PBufferFlushed && PBuffersLockCount == 0) {
@@ -222,18 +223,21 @@ THostMask TInflightInfo::GetRequestedFlushes() const
     return FlushRequested;
 }
 
-bool TInflightInfo::RequestErase(THostIndex host)
+void TInflightInfo::RequestErase(THostIndex host)
 {
     Y_ABORT_UNLESS(
         State == EState::PBufferFlushed || State == EState::PBufferErasing);
-    Y_ABORT_UNLESS(FlushConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
 
-    if (WriteRequested.Get(host) && !EraseRequested.Get(host)) {
-        State = EState::PBufferErasing;
-        EraseRequested.Set(host);
-        return true;
-    }
-    return false;
+    Y_ABORT_UNLESS(WriteRequested.Get(host));
+    Y_ABORT_UNLESS(!EraseRequested.Get(host));
+    Y_ABORT_UNLESS(!EraseConfirmed.Get(host));
+
+    // When the DDisk is not fully filled, the flush is made into the filled
+    // area. Thus, the number of completed flushes may be less than the quorum.
+    Y_ABORT_UNLESS(!FlushConfirmed.Empty());
+
+    SetState(EState::PBufferErasing);
+    EraseRequested.Set(host);
 }
 
 bool TInflightInfo::ConfirmErase(THostIndex host)
@@ -244,7 +248,7 @@ bool TInflightInfo::ConfirmErase(THostIndex host)
 
     EraseConfirmed.Set(host);
     if (EraseConfirmed == WriteRequested) {
-        State = EState::PBufferErased;
+        SetState(EState::PBufferErased);
     }
 
     return State == EState::PBufferErased;
@@ -257,6 +261,53 @@ void TInflightInfo::EraseFailed(THostIndex host)
 
     EraseRequested.Reset(host);
     ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
+}
+
+THostMask TInflightInfo::GetEraseNeeded() const
+{
+    return WriteRequested.Exclude(EraseRequested).Exclude(EraseConfirmed);
+}
+
+void TInflightInfo::RemoveHosts(THostMask removed)
+{
+    const THostMask removedFromWrite = WriteRequested.LogicalAnd(removed);
+    if (removedFromWrite.Empty()) {
+        return;
+    }
+
+    // Release byte counters for removed hosts that had writes.
+    ApplyBytes(removedFromWrite, IReadyQueue::EPBufferCounter::Total, false);
+
+    if (PBuffersLockCount > 0) {
+        ApplyBytes(
+            WriteConfirmed.LogicalAnd(removed),
+            IReadyQueue::EPBufferCounter::Locked,
+            false);
+    }
+
+    // Remove hosts from all tracking masks.
+    WriteRequested = WriteRequested.Exclude(removed);
+    WriteConfirmed = WriteConfirmed.Exclude(removed);
+    FlushDesired = FlushDesired.Exclude(removed);
+    FlushRequested = FlushRequested.Exclude(removed);
+    FlushConfirmed = FlushConfirmed.Exclude(removed);
+    EraseRequested = EraseRequested.Exclude(removed);
+    EraseConfirmed = EraseConfirmed.Exclude(removed);
+
+    // Check if flush became complete after removing hosts.
+    if (State == EState::PBufferFlushing && FlushDesired == FlushConfirmed) {
+        SetState(EState::PBufferFlushed);
+    }
+
+    // Register for erase if flush is done and PBuffers are not locked.
+    if (State == EState::PBufferFlushed && PBuffersLockCount == 0) {
+        ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
+    }
+
+    // Check if erase became complete after removing hosts.
+    if (State == EState::PBufferErasing && EraseConfirmed == WriteRequested) {
+        SetState(EState::PBufferErased);
+    }
 }
 
 void TInflightInfo::LockPBuffer()
@@ -291,11 +342,6 @@ void TInflightInfo::UnlockPBuffer()
             ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
         }
     }
-}
-
-THostMask TInflightInfo::GetWriteRequested() const
-{
-    return WriteRequested;
 }
 
 TString TInflightInfo::DebugPrint(TInstant now) const
@@ -338,6 +384,39 @@ void TInflightInfo::ApplyBytes(
     for (auto host: mask) {
         ApplyBytes(host, counter, add);
     }
+}
+
+void TInflightInfo::SetState(EState newState)
+{
+    if (State == newState) {
+        return;
+    }
+
+    switch (newState) {
+        case EState::PBufferPendingWrite:
+        case EState::PBufferIncompleteWrite:
+            Y_ABORT_UNLESS(false, "Cannot transition to initial state");
+            break;
+        case EState::PBufferWritten:
+            Y_ABORT_UNLESS(
+                State == EState::PBufferPendingWrite ||
+                State == EState::PBufferIncompleteWrite);
+            break;
+        case EState::PBufferFlushing:
+            Y_ABORT_UNLESS(State == EState::PBufferWritten);
+            break;
+        case EState::PBufferFlushed:
+            Y_ABORT_UNLESS(State == EState::PBufferFlushing);
+            break;
+        case EState::PBufferErasing:
+            Y_ABORT_UNLESS(State == EState::PBufferFlushed);
+            break;
+        case EState::PBufferErased:
+            Y_ABORT_UNLESS(State == EState::PBufferErasing);
+            break;
+    }
+
+    State = newState;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

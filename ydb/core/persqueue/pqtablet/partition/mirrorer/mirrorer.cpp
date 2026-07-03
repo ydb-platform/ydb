@@ -5,7 +5,7 @@
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/public/lib/base/msgbus.h>
 
@@ -53,6 +53,10 @@ TBatchInfo GetBatchInfo(const TPersQueueReadEvent::TDataReceivedEvent::TCompress
         .LogicalMessageCount = logicalMessageCount,
         .MaxSeqNo = maxSeqNo,
     };
+}
+
+ui64 GetLogicalMessageCount(const TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage& message) {
+    return GetBatchInfo(message).LogicalMessageCount;
 }
 
 ui64 GetWriteRequestEndOffset(const NKikimrClient::TPersQueuePartitionRequest& request) {
@@ -247,7 +251,7 @@ void TMirrorer::ProcessWriteResponse(
         ui64 offset = writtenMessageInfo.GetOffset();
         PQ_ENSURE((ui64)result.GetOffset() == offset);
         PQ_ENSURE(EndOffset <= offset)("EndOffset", EndOffset)("offset", offset);
-        const ui64 logicalMessageCount = GetBatchInfo(writtenMessageInfo).LogicalMessageCount;
+        const ui64 logicalMessageCount = GetLogicalMessageCount(writtenMessageInfo);
         EndOffset = offset + logicalMessageCount;
         BytesInFlight -= writtenMessageInfo.GetData().size();
 
@@ -641,7 +645,7 @@ void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceive
         Counters.Cumulative()[COUNTER_PQ_TABLET_NETWORK_BYTES_USAGE].Increment(messageSize);
         BytesInFlight += messageSize;
 
-        OffsetToRead = offset + 1;
+        OffsetToRead = offset + GetLogicalMessageCount(msg);
         Queue.emplace_back(std::move(msg));
     }
 }
@@ -872,13 +876,12 @@ bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
 }
 
 void TMirrorer::HandleRewindCommit(TEvPQ::TEvRewindCommitResult::TPtr& ev, const TActorContext& ctx) {
-<<<<<<< HEAD
-    YDB_LOG_INFO("Rewind committed offset",
+    YDB_LOG_INFO("Rewind committed",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"result", ev->Get()->Status});
-=======
-    LOG_I("Rewind committed offset result: " << ev->Get()->Status << "; offset: " << ev->Get()->EndOffset);
->>>>>>> main
+        {"status", ev->Get()->Status},
+        {"offset", ev->Get()->EndOffset},
+    );
+
     if (!ev->Get()->Status.IsSuccess()) {
         ProcessError(ctx, TStringBuilder() << "failed to rewind committed offset: " << ev->Get()->Status << "; offset: " << ev->Get()->EndOffset);
         return;

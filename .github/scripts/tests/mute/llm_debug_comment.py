@@ -3,9 +3,8 @@
 After a mute issue is created we post one markdown comment listing the latest
 failing/muted CI run for every test in the issue (job run URL, history
 dashboard, stderr / stdout / log / logsdir) and attach an AI review label so
-a downstream LLM workflow can pick the issue up. The comment carries a hidden
-hint asking the LLM to classify the failure, find a likely root cause and
-propose a fix.
+a downstream LLM workflow can pick the issue up. Compact LLM instructions are
+inlined in a collapsed ``<details>`` block (``<!-- mute-llm-prompt:v2 -->``).
 
 Best-effort: any YDB / GitHub failure is logged but never raised — issue
 creation is the primary action and must not regress because of this module.
@@ -31,6 +30,53 @@ AI_REVIEW_LABEL = 'need_ai_review'
 FAILURE_LOOKBACK_DAYS = 7
 MAX_COMMENT_LENGTH = 60000
 _COMMENT_MARKER = '<!-- mute-llm-debug-links:v1 -->'
+MUTE_LLM_PROMPT_VERSION = 'v2'
+_PROMPT_MARKER = f'<!-- mute-llm-prompt:{MUTE_LLM_PROMPT_VERSION} -->'
+
+# Compact inline prompt (~2k chars) embedded in the mute issue comment for LLM workflows.
+_LLM_INSTRUCTIONS_INLINE = """\
+Classify: TEST_ISSUE | YDB_ISSUE | TEST_INFRA_ISSUE
+- YDB_ISSUE: product bug under ydb/core, ydb/library, etc.
+- TEST_ISSUE: test logic, stale refs in helpers/workloads, missing waits. Fixture/harness PR
+  that exposed a latent test bug → TEST_ISSUE; Responsible = fix path, not PR author.
+- TEST_INFRA_ISSUE: shared harness/runner/CI broken for many unrelated tests. One directory /
+  one test pattern → usually TEST_ISSUE, not TEST_INFRA_ISSUE.
+
+Find root cause and introducing commit/PR; severity HIGH/MEDIUM/LOW; propose a fix.
+In Root Cause list Suspect PR(s) most-likely-first (#12345 + why; tie to code/regression window).
+
+Summary history (success_rate, p-*, f-*, total-*, dates): 50% often = runs before vs after a
+merge, not a timing race. Compare failing tests with sibling tests (same fixture, still pass).
+
+After fixture stop_driver(): "Driver was stopped" / "Topic client closed" → check stale driver
+snapshot in workload/helpers before suggesting retries, sleeps, or graceful-shutdown revert.
+
+VERIFY/SANITIZER — use status_description in exactly 3 lines:
+  VERIFY failed (<ISO_UTC>): / ydb/.../file:line / assertion text (no stack frames, no +0x...)
+
+Responsible (NOT issue-body Owner: — that is mute assignee only):
+Pick team for the root-cause fix (first match):
+  a) Fix path → .github/TESTOWNERS longest prefix (wins if PR exposed latent test bug)
+  b) YDB_ISSUE → TESTOWNERS for broken ydb/... path
+  c) Harness itself wrong → introducing PR author team
+  d) Pure CI/Actions, no product commit → area/engineering
+Map slug → area/... via .github/config/owner_area_mapping.json
+Rules: root cause > Owner; commit from A exposing bug in B → B fixes; use area/queryprocessor not area/@ydb-platform/...
+
+Reply exactly:
+## Analysis
+### Classification:
+#### Error type: <TYPE>
+#### Severity: <LEVEL>
+#### Responsible: area/<team>
+### Root Cause
+<what broke>
+Suspect PR(s), ordered by causality (most likely first):
+1. #<pr> — <why>
+### Suggested Fix
+<fix or investigation>
+### Summary
+<2-4 sentences: failure, root cause, who fixes, next step>"""
 
 # CI jobs whose artifacts are meaningful for debugging mutes. Restricting to
 # this allowlist keeps PR / manual reruns out of the "latest failing run".
@@ -45,19 +91,17 @@ _JOB_NAMES = (
     'Postcommit_asan',
 )
 
-_LLM_HINT = (
-    "<!-- LLM: please classify the failure as one of "
-    "TEST_ISSUE / YDB_ISSUE / TEST_INFRA_ISSUE; try to find the root cause "
-    "and the commit that most likely introduced it; estimate severity "
-    "(HIGH / MEDIUM / LOW); when possible, propose a fix. "
-    "If error_type is VERIFY or SANITIZER, explicitly mention the concrete problem "
-    "being investigated using status_description in this exact 3-line shape: "
-    "'VERIFY failed (<ISO_UTC_TIMESTAMP>):' then "
-    "'<source_file>:<line>' then "
-    "'<assertion/message line>'. "
-    "Prefer lines like 'ydb/.../*.cpp:<line>' and requirement/assert text, and do NOT include "
-    "stacktrace frames or addresses (e.g. '+0x...', function backtrace lines). -->"
-)
+def _format_llm_instructions() -> str:
+    return (
+        f'{_PROMPT_MARKER}\n'
+        '<details>\n'
+        '<summary>LLM instructions</summary>\n'
+        '\n'
+        '```\n'
+        f'{_LLM_INSTRUCTIONS_INLINE}\n'
+        '```\n'
+        '</details>'
+    )
 
 
 def _is_need_ai_review_enabled() -> bool:
@@ -164,9 +208,10 @@ def _load_latest_failures(ydb_wrapper, branch, build_type, full_names) -> Dict[s
 def _build_comment(full_names: Sequence[str], rows: Dict[str, Dict],
                    branch: str, build_type: str) -> str:
     lines = [
-        '### Links to recent failed test runs',
-        _LLM_HINT,
+        _format_llm_instructions(),
         _COMMENT_MARKER,
+        '',
+        '### Links to recent failed test runs',
         '',
         '| test | status | type | last_run | history | run | stderr | stdout | log | logsdir |',
         '|---|---|---|---|---|---|---|---|---|---|',

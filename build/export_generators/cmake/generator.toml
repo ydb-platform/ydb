@@ -84,7 +84,6 @@ conan-requires="sorted_set"
 conan-tool_requires="sorted_set"
 conan-imports="sorted_set"
 conan-options="sorted_set"
-conan-generators="sorted_set"
 
 # OS depends conan attributes
 conan-os_depends="list"
@@ -165,7 +164,6 @@ target_macroses="list"
 target_macroses-ITEM="dict"
 target_macroses-macro="str"
 target_macroses-args="list"
-target_macroses-merge_args="flag"
 
 add_test_requirements="list"
 add_ytest_requirements="list"
@@ -233,7 +231,6 @@ attrs=[
     "conan-tool_requires",
     "conan-imports",
     "conan-options",
-    "conan-generators",
 ]
 copy=["cmake/conan_provider.cmake"]
 

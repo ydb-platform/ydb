@@ -395,7 +395,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 PartitionWriteQuotaWaitCounter->IncFor(PartitionQuotaWaitTimeForCurrentBlob.MilliSeconds());
             }
             if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion) {
-                ++offset;
+                offset += writeResponse.Msg.LogicalMessageCount;
             }
         } else if (response.IsOwnership()) {
             const auto& r = response.GetOwnership();
@@ -806,7 +806,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
             PendingRequests.back().WaitPreviousWriteSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(PendingRequests.back().Span.GetTraceId()), "Topic.Partition.WaitPreviousWrite");
         }
         if (offset && needToChangeOffset) {
-            ++*offset;
+            *offset += msg.LogicalMessageCount;
         }
     }
     if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota()) {

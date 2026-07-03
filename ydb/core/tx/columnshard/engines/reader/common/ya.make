@@ -5,6 +5,7 @@ SRCS(
     queue.cpp
     description.cpp
     result.cpp
+    scan_memory_limiter.cpp
     stats.cpp
     comparable.cpp
 )
@@ -12,6 +13,7 @@ SRCS(
 PEERDIR(
     ydb/core/tx/program
     ydb/core/formats/arrow/reader
+    ydb/core/tx/limiter/grouped_memory/usage
 )
 
 GENERATE_ENUM_SERIALIZATION(description.h)

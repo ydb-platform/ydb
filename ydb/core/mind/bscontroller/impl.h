@@ -306,14 +306,15 @@ public:
             MaximumResourceValues.DataSize = Metrics.GetAvailableSize() + DiskResourceValues.DataSize;
         }
 
-        bool UpdateVDiskMetrics(const NKikimrBlobStorage::TVDiskMetrics& vDiskMetrics, i64 *allocatedSizeIncrementPtr) const {
+        void UpdateVDiskMetrics(const NKikimrBlobStorage::TVDiskMetrics& vDiskMetrics, i64 *allocatedSizeIncrementPtr,
+                bool *statusFlagsChanged) const {
             const ui64 allocatedSizeBefore = Metrics.GetAllocatedSize();
             const ui32 prevStatusFlags = Metrics.GetStatusFlags();
             Metrics.MergeFrom(vDiskMetrics);
             Metrics.DiscardUnknownFields();
             UpdateVDiskMetrics();
             *allocatedSizeIncrementPtr = Metrics.GetAllocatedSize() - allocatedSizeBefore;
-            return prevStatusFlags != Metrics.GetStatusFlags();
+            *statusFlagsChanged = prevStatusFlags != Metrics.GetStatusFlags();
         }
 
         TResourceRawValues GetResourceCurrentValues() const {

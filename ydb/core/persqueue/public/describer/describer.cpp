@@ -1,13 +1,29 @@
 #include "describer.h"
 
+#include <util/generic/algorithm.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_DESCRIBER
 
 #define LOG_PREFIX NActors::TlsActivationContext->AsActorContext().SelfID
 
-
 namespace NKikimr::NPQ::NDescriber {
 
+namespace {
+
 using namespace NSchemeCache;
+
+bool HasAccess(const TDescribeSettings& settings, TIntrusivePtr<TSecurityObject> securityObject) {
+    if (!settings.UserToken) {
+        return true;
+    }
+    if (securityObject->CheckAccess(settings.AccessRights.Access, *settings.UserToken)) {
+        return true;
+    }
+    if (settings.AccessRights.AccessOr) {
+        return securityObject->CheckAccess(*settings.AccessRights.AccessOr, *settings.UserToken);
+    }
+    return false;
+}
 
 class TDescribeActor : public TActorBootstrapped<TDescribeActor> {
 public:
@@ -68,32 +84,61 @@ public:
             Y_ASSERT(PathToOriginalPath.contains(realPath));
             auto originalPath = PathToOriginalPath[realPath];
 
+            bool isCDCStream = false;
+            TString cdcStreamName;
+
             auto it = CDCPaths.find(realPath);
             if (it != CDCPaths.end()) {
-                originalPath = it->second;
+                originalPath = it->second.OriginalPath;
+                isCDCStream = true;
+                cdcStreamName = it->second.CdcStreamName;
             }
 
             switch (entry.Status) {
                 case TSchemeCacheNavigate::EStatus::PathErrorUnknown:
+                    [[fallthrough]];
                 case TSchemeCacheNavigate::EStatus::RootUnknown: {
                     if (RetryWithSyncVersion) {
-                        YDB_LOG_DEBUG("Path not found",
-                            {"logPrefix", LOG_PREFIX},
-                            {"realPath", realPath});
-                        Result[originalPath] = TTopicInfo{
-                            .Status = EStatus::NOT_FOUND
-                        };
+                        if (entry.SecurityObject && !HasAccess(Settings, entry.SecurityObject)) {
+                            YDB_LOG_DEBUG("Path UNAUTHORIZED",
+                                {"logPrefix", LOG_PREFIX},
+                                {"realPath", realPath});
+
+                            Result[originalPath] = TTopicInfo{
+                                .Status = EStatus::UNAUTHORIZED
+                            };
+                        } else {
+                            YDB_LOG_DEBUG("Path not found",
+                                {"logPrefix", LOG_PREFIX},
+                                {"realPath", realPath});
+
+                            Result[originalPath] = TTopicInfo{
+                                .Status = EStatus::NOT_FOUND
+                            };
+                        }
                     } else {
                         unknownPaths.insert(realPath);
                     }
                     break;
                 }
+                case TSchemeCacheNavigate::EStatus::AccessDenied: {
+                    LOG_D("Path '" << realPath << "' ACCESS DENIED");
+                    Result[originalPath] = TTopicInfo{
+                        .Status = EStatus::UNAUTHORIZED
+                    };
+                    break;
+                }
                 case TSchemeCacheNavigate::EStatus::Ok: {
                     if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                        YDB_LOG_DEBUG("Path is a CDC",
+                        YDB_LOG_DEBUG("Path is CDC",
                             {"logPrefix", LOG_PREFIX},
                             {"realPath", realPath});
-                        CDCPaths[TStringBuilder() << realPath << "/streamImpl"] = originalPath;
+
+                        CDCPaths[TStringBuilder() << realPath << "/streamImpl"] = {
+                            .OriginalPath = originalPath,
+                            .CdcStreamName = entry.Self->Info.GetName()
+                        };
+                        break;
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
                         if (!entry.PQGroupInfo || entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) {
                             if (RetryWithSyncVersion) {
@@ -107,10 +152,11 @@ public:
                                 unknownPaths.insert(realPath);
                             }
                         } else {
-                            if (Settings.UserToken && !entry.SecurityObject->CheckAccess(Settings.AccessRights, *Settings.UserToken)) {
+                            if (!HasAccess(Settings, entry.SecurityObject)) {
                                 YDB_LOG_DEBUG("Path UNAUTHORIZED",
                                     {"logPrefix", LOG_PREFIX},
                                     {"realPath", realPath});
+
                                 Result[originalPath] = TTopicInfo{
                                     .Status = entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)
                                             ? EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS : EStatus::UNAUTHORIZED
@@ -122,7 +168,8 @@ public:
                                 Result[originalPath] = TTopicInfo{
                                     .Status = EStatus::SUCCESS,
                                     .RealPath = realPath,
-                                    .CdcStream = CDCPaths.contains(realPath),
+                                    .CdcStream = isCDCStream,
+                                    .CdcStreamName = cdcStreamName,
                                     .CreateStep = entry.CreateStep,
                                     .Info = entry.PQGroupInfo,
                                     .Self = entry.Self,
@@ -140,7 +187,7 @@ public:
                                 {"logPrefix", LOG_PREFIX},
                                 {"realPath", realPath});
                             Result[originalPath] = TTopicInfo{
-                                .Status = EStatus::UNAUTHORIZED
+                                .Status = EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS
                             };
                         } else {
                             Result[originalPath] = TTopicInfo{
@@ -206,10 +253,15 @@ private:
     bool UsedSyncVersion = false;
     bool RetryWithCDC = false;
     // CDC topic path -> original topic path
-    std::unordered_map<TString, TString> CDCPaths;
+    struct TCDCTopicInfo {
+        TString OriginalPath;
+        TString CdcStreamName;
+    };
+    std::unordered_map<TString, TCDCTopicInfo> CDCPaths;
     std::unordered_map<TString, TTopicInfo> Result;
 };
 
+} // namespace
 
 NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TString& databasePath, const std::unordered_set<TString>&& topicPaths, const TDescribeSettings& settings) {
     return new TDescribeActor(parent, databasePath, std::move(topicPaths), settings);

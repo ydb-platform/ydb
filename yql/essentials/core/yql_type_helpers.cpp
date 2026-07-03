@@ -104,7 +104,7 @@ const TTypeAnnotationNode* GetSequenceItemType(TPositionHandle pos, const TTypeA
 }
 
 bool GetSequenceItemType(const TExprNode& list, const TTypeAnnotationNode*& itemType, TExprContext& ctx) {
-    itemType = GetSequenceItemType(list.Pos(), list.GetTypeAnn(), false, ctx);
+    itemType = GetSequenceItemType(list.Pos(), list.GetTypeAnn(), /*allowMultiIO=*/false, ctx);
     return itemType != nullptr;
 }
 

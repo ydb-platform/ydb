@@ -13,3 +13,5 @@ items:
   href: example-php.md
 - name: Python
   href: python/index.md
+- name: Rust
+  href: rust/index.md

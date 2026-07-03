@@ -35,14 +35,25 @@ void TSchemeShard::PersistCreateSetColumnConstraint(NIceDb::TNiceDb& db, const T
         NIceDb::TUpdate<Schema::SetColumnConstraint::TableLocalId>(operationInfo.TablePathId.LocalPathId),
         NIceDb::TUpdate<Schema::SetColumnConstraint::SerializedColumnNames>(serializedColumnNames),
         NIceDb::TUpdate<Schema::SetColumnConstraint::ValidationFailed>(operationInfo.ValidationFailed),
-        NIceDb::TUpdate<Schema::SetColumnConstraint::OperationState>(ui32(operationInfo.OperationState))
+        NIceDb::TUpdate<Schema::SetColumnConstraint::OperationState>(ui32(operationInfo.OperationState)),
+        NIceDb::TUpdate<Schema::SetColumnConstraint::StartTime>(operationInfo.StartTime.Seconds())
     );
+    if (operationInfo.UserSID) {
+        db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+            NIceDb::TUpdate<Schema::SetColumnConstraint::UserSID>(*operationInfo.UserSID)
+        );
+    }
 }
 
 void TSchemeShard::PersistSetColumnConstraintState(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
     db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
         NIceDb::TUpdate<Schema::SetColumnConstraint::OperationState>(ui32(operationInfo.OperationState))
     );
+    if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Done) {
+        db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+            NIceDb::TUpdate<Schema::SetColumnConstraint::EndTime>(operationInfo.EndTime.Seconds())
+        );
+    }
 }
 
 void TSchemeShard::PersistSetColumnConstraintResetSubState(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
@@ -152,6 +163,10 @@ void TSchemeShard::PersistSetColumnConstraintShardDone(
 
 void TSchemeShard::Handle(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxCreateSetColumnConstraint(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvSetColumnConstraint::TEvGetRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxGetSetColumnConstraint(ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev, const TActorContext& ctx) {

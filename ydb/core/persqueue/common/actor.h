@@ -108,7 +108,7 @@ protected:
 };
 
 
-class TConstantLogPrefix: virtual NPrivate::ILogPrefixBase {
+class TConstantLogPrefix: virtual public NPrivate::ILogPrefixBase {
 public:
     const TString& GetLogPrefix() const final;
     virtual TString BuildLogPrefix() const {

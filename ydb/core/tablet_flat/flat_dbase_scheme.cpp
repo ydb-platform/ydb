@@ -88,6 +88,10 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
         // N.B. must be last for compatibility with older versions :(
         delta.SetByKeyFilterPrefixes(table, itTable.second.ByKeyFilterPrefixes);
         delta.SetColdBorrow(table, itTable.second.ColdBorrow);
+
+        if (itTable.second.SpecialTableType != 0) {
+            delta.SetSpecialTableType(table, itTable.second.SpecialTableType);
+        }
     }
 
     delta.SetRedo(Redo.Annex);
@@ -407,6 +411,16 @@ TAlter& TAlter::SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 max
         delta.SetEraseCacheMinRows(minRows);
         delta.SetEraseCacheMaxBytes(maxBytes);
     }
+
+    return ApplyLastRecord();
+}
+
+TAlter& TAlter::SetSpecialTableType(ui32 tableId, ui32 type)
+{
+    TAlterRecord &delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetTable);
+    delta.SetTableId(tableId);
+    delta.SetSpecialTableType(type);
 
     return ApplyLastRecord();
 }

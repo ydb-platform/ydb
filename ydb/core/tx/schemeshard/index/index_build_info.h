@@ -111,6 +111,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         FulltextIndexStats = 200,
         FulltextIndexDictionary = 201,
         FulltextIndexBorders = 202,
+        // Compact rowid-mode prepass: build the transient "row-id source" table (main re-keyed by the
+        // dense seq) that the posting scan then reads so doc ids arrive ascending and densely packed.
+        FulltextRowIdSrc = 203,
     };
 
     struct TColumnBuildInfo {
@@ -820,6 +823,16 @@ public:
             IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact ||
             IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance ||
             IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact);
+    }
+
+    // A compact fulltext build that uses __ydb_row_id as the doc id: it runs a prepass building the
+    // transient row-id source table, then the posting scan reads that (__ydb_row_id-ordered) table.
+    bool IsBuildFulltextCompactRowId() const {
+        if (!IsBuildFulltextCompact()) {
+            return false;
+        }
+        const auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&SpecializedIndexDescription);
+        return desc && desc->GetUseRowIdAsDocId();
     }
 
     bool IsBuildIndex() const {

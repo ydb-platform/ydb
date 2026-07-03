@@ -204,13 +204,6 @@ public:
             const TArrayRef<const TRawTypeValue> key,
             TIntrusivePtr<NACLib::TUserContext> userCtx) override;
 
-    void InsertFulltext(
-            const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops,
-            TIntrusivePtr<NACLib::TUserContext> userCtx,
-            bool withRelevance);
-
     void CommitChanges(
             const TTableId& tableId,
             ui64 lockId) override;

@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     CAST('2000-01-01,GMT' AS tzdate) == tzdate('2000-01-01,GMT')
 ;

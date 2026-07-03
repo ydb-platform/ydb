@@ -403,7 +403,7 @@ class QueryResult(Closable):
             self._block_gen = None
 
 
-comment_re = re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|(--\s)[^\n]*$)", re.MULTILINE | re.DOTALL)
+comment_re = re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|(--)[^\n]*$)", re.MULTILINE | re.DOTALL)
 
 
 def remove_sql_comments(sql: str) -> str:

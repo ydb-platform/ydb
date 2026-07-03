@@ -80,8 +80,10 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 PRAGMA TablePathPrefix='/Root';
                 PRAGMA ydb.OptimizerHints=
                     '
+                        Rows(L # 10e10)
+                        Rows(R # 10e9)
                         Bytes(L # 10e12)
-                        Bytes(R # 10e12)
+                        Bytes(R # 10e11)
                         ';
                 
             )";
@@ -173,8 +175,10 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 PRAGMA TablePathPrefix='/Root';
                 PRAGMA ydb.OptimizerHints=
                     '
+                        Rows(L # 10e10)
+                        Rows(R # 10e9)
                         Bytes(L # 10e12)
-                        Bytes(R # 10e12)
+                        Bytes(R # 10e11)
                     ';
             )";
 	    TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"" + TString(UseBlockHashJoin ? "true" : "false") + "\";";
@@ -267,8 +271,10 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 PRAGMA TablePathPrefix='/Root';
                 PRAGMA ydb.OptimizerHints=
                     '
+                        Rows(L # 10e10)
+                        Rows(R # 10e9)
                         Bytes(L # 10e12)
-                        Bytes(R # 10e12)
+                        Bytes(R # 10e11)
                     ';
             )";
             TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
@@ -382,10 +388,10 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 PRAGMA TablePathPrefix='/Root';
                 PRAGMA ydb.OptimizerHints=
                     '
-                        Bytes(L # 10e9)
-                        Bytes(R # 10e20)
-                        Rows(L # 10e9)
-                        Rows(R # 10e20)
+                        Rows(L # 10e10)
+                        Rows(R # 10e11)
+                        Bytes(L # 10e12)
+                        Bytes(R # 10e13)
                     ';
             )";
             TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
@@ -474,8 +480,10 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 PRAGMA TablePathPrefix='/Root';
                 PRAGMA ydb.OptimizerHints=
                     '
+                        Rows(L # 10e10)
+                        Rows(R # 10e9)
                         Bytes(L # 10e12)
-                        Bytes(R # 10e12)
+                        Bytes(R # 10e11)
                     ';
             )";
             TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
@@ -577,8 +585,10 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 PRAGMA TablePathPrefix='/Root';
                 PRAGMA ydb.OptimizerHints=
                     '
+                        Rows(L # 10e10)
+                        Rows(R # 10e9)
                         Bytes(L # 10e12)
-                        Bytes(R # 10e12)
+                        Bytes(R # 10e11)
                     ';
             )";
             TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
@@ -672,8 +682,10 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 PRAGMA TablePathPrefix='/Root';
                 PRAGMA ydb.OptimizerHints=
                     '
+                        Rows(L # 10e10)
+                        Rows(R # 10e9)
                         Bytes(L # 10e12)
-                        Bytes(R # 10e12)
+                        Bytes(R # 10e11)
                     ';
             )";
             TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
@@ -782,8 +794,10 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 PRAGMA TablePathPrefix='/Root';
                 PRAGMA ydb.OptimizerHints=
                     '
+                        Rows(L # 10e10)
+                        Rows(R # 10e9)
                         Bytes(L # 10e12)
-                        Bytes(R # 10e12)
+                        Bytes(R # 10e11)
                     ';
             )";
             TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
@@ -905,8 +919,10 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 PRAGMA TablePathPrefix='/Root';
                 PRAGMA ydb.OptimizerHints=
                     '
+                        Rows(L # 10e10)
+                        Rows(R # 10e9)
                         Bytes(L # 10e12)
-                        Bytes(R # 10e12)
+                        Bytes(R # 10e11)
                     ';
             )";
             TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
@@ -956,8 +972,10 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 PRAGMA TablePathPrefix='/Root';
                 PRAGMA ydb.OptimizerHints=
                     '
-                        Bytes(L # 10e12)
-                        Bytes(R # 10e12)
+                    Rows(L # 10e10)
+                    Rows(R # 10e9)
+                    Bytes(L # 10e12)
+                    Bytes(R # 10e11)
                     ';
             )";
             TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
@@ -1050,8 +1068,10 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             PRAGMA TablePathPrefix='/Root';
             PRAGMA ydb.OptimizerHints=
                 '
+                    Rows(L # 10e10)
+                    Rows(R # 10e9)
                     Bytes(L # 10e12)
-                    Bytes(R # 10e12)
+                    Bytes(R # 10e11)
                 ';
         )";
         TString select = R"(

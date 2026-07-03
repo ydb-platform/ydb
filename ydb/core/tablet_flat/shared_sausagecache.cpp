@@ -295,7 +295,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void TakePoison(const TActorContext& ctx) {
-        YDB_LOG_NOTICE_CTX(ctx, "Poison cache serviced reqs hit b} miss b} in-memory miss b}",
+        YDB_LOG_NOTICE_CTX(ctx, "Poison: cache serviced",
             {"statBioReqs", StatBioReqs},
             {"cacheHitPages", Counters.CacheHitPages->Val()},
             {"cacheHitBytes", Counters.CacheHitBytes->Val()},
@@ -1107,12 +1107,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     void NotifyInMemOwnerAboutError(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, NKikimrProto::EReplyStatus error, const TActorId& owner) {
         TAutoPtr<NSharedCache::TEvResult> result = new NSharedCache::TEvResult(std::move(pageCollection), error, 0);
 
-        YDB_LOG_DEBUG("Send page collection error owner class error cookie (in-memory preload)",
+        YDB_LOG_DEBUG("Send page collection error (in-memory preload)",
             {"label", result->PageCollection->Label()},
             {"owner", owner},
-            {"bulk", NBlockIO::EPriority::Bulk},
+            {"priority", NBlockIO::EPriority::Bulk},
             {"error", error},
-            {"tryKeepInMemPages", static_cast<ui64>(ERequestTypeCookie::TryKeepInMemPages)});
+            {"cookie", static_cast<ui64>(ERequestTypeCookie::TryKeepInMemPages)});
 
         Send(owner, result.Release(), 0, static_cast<ui64>(ERequestTypeCookie::TryKeepInMemPages));
     }
@@ -1209,7 +1209,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         YDB_LOG_DEBUG("Change mode of page collection",
             {"collectionId", collection.Id},
-            {"regular", ECacheMode::Regular});
+            {"targetMode", ECacheMode::Regular});
         Y_ENSURE(TargetInMemoryBytes >= collection.TotalSize);
         TargetInMemoryBytes -= collection.TotalSize;
         Counters.TargetInMemoryBytes->Set(TargetInMemoryBytes);
@@ -1260,7 +1260,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         YDB_LOG_DEBUG("Change mode of page collection",
             {"collectionId", collection.Id},
-            {"tryKeepInMemory", ECacheMode::TryKeepInMemory});
+            {"targetMode", ECacheMode::TryKeepInMemory});
         TargetInMemoryBytes += collection.TotalSize;
         Counters.TargetInMemoryBytes->Set(TargetInMemoryBytes);
         AliveInMemoryBytes += collection.AliveBytes;

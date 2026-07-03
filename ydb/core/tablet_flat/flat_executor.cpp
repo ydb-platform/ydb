@@ -5298,7 +5298,7 @@ void TExecutor::FailBackup(const TString& error) {
         Y_TABLET_ERROR(error);
     }
 
-    YDB_LOG_ERROR("",
+    YDB_LOG_ERROR("Backup failed",
         {"backupLogPrefix", BackupLogPrefix()},
         {"error", error});
     CommitManager->BackupLogic.Stop();

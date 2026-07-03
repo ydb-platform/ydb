@@ -27,11 +27,11 @@ bool TTabletExecutedFlat::OnUnhandledException(const std::exception& e) {
         // is expected to always succeed.
         if (auto* actor = dynamic_cast<IActor*>(this)) {
             auto ctx = TActivationContext::ActorContextFor(actor->SelfId());
-            YDB_LOG_CRIT("Tablet unhandled exception \n",
+            YDB_LOG_CRIT("Tablet unhandled exception",
                 {"tabletId", TabletID()},
                 {"typeName", TypeName(e)},
                 {"exception", e.what()},
-                {"currentException", TBackTrace::FromCurrentException().PrintToString()});
+                {"backtrace", TBackTrace::FromCurrentException().PrintToString()});
 
             GetServiceCounters(AppData(ctx)->Counters, "tablets")->GetCounter("alerts_exception", true)->Inc();
 
@@ -255,7 +255,7 @@ bool TTabletExecutedFlat::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, 
 
 void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, const TActorContext &ctx) {
     YDB_LOG_NOTICE_CTX(ctx, "RenderHtmlPage for tablet",
-        {"tabletID", TabletID()});
+        {"tabletId", TabletID()});
     auto cgi = ev->Get()->Cgi();
     auto path = ev->Get()->PathInfo();
     TString queryString = cgi.Print();

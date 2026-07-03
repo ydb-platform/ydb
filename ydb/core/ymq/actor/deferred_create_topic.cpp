@@ -206,6 +206,7 @@ private:
         }
         params.AccountName = UserName_;
         params.FolderId = FolderId_;
+        params.QueueName = QueueName_;
 
         auto tx = BuildCreateTopicTx(path.GetQueuePath(), versionName, IsFifo_, params);
         Register(NPQ::NSchema::CreateCreateTopicActor(SelfId(), {

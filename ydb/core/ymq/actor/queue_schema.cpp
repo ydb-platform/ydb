@@ -506,6 +506,7 @@ void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir
     }
     params.AccountName = AccountName_;
     params.FolderId = FolderId_;
+    params.QueueName = dirName;
 
     auto request = BuildCreateTopicTx(workingDir, dirName, IsFifo_, params);
     Register(NPQ::NSchema::CreateCreateTopicActor(SelfId(), {

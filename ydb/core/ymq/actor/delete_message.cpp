@@ -220,18 +220,31 @@ private:
                 : TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::Failed;
         };
 
+        ui32 deletedCount = 0;
         if (IsBatch_) {
             Y_ABORT_UNLESS(messages.size() == MLPRequestToReplyIndexMapping_.size());
             for (size_t i = 0, size = messages.size(); i < size; ++i) {
                 const size_t entryIndex = MLPRequestToReplyIndexMapping_[i];
                 Y_ABORT_UNLESS(entryIndex < Response_.GetDeleteMessageBatch().EntriesSize());
 
-                ProcessAnswer(Response_.MutableDeleteMessageBatch()->MutableEntries(entryIndex), status(messages[i]));
+                const auto messageStatus = status(messages[i]);
+                if (messageStatus == TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK) {
+                    ++deletedCount;
+                }
+                ProcessAnswer(Response_.MutableDeleteMessageBatch()->MutableEntries(entryIndex), messageStatus);
             }
         } else {
             Y_ABORT_UNLESS(RequestsToLeader_ == 1);
             Y_ABORT_UNLESS(ev->Get()->Messages.size() == 1);
-            ProcessAnswer(Response_.MutableDeleteMessage(), status(messages[0]));
+            const auto messageStatus = status(messages[0]);
+            if (messageStatus == TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK) {
+                ++deletedCount;
+            }
+            ProcessAnswer(Response_.MutableDeleteMessage(), messageStatus);
+        }
+
+        if (QueueCounters_ && deletedCount > 0) {
+            ADD_COUNTER_COUPLE(QueueCounters_, DeleteMessage_Count, deleted_count_per_second, deletedCount);
         }
 
         --RequestsToLeader_;

@@ -17,7 +17,9 @@ struct TTopicParams {
     ui64 DefaultReceiveMessageWaitTimeMs = 0;
     ui64 MaxReceiveCount = 0;
     TString RedriveTargetQueueName;
+    TString QueueName;
     TString AccountName;
+    TString CloudId;
     TString FolderId;
 };
 

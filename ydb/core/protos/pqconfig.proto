@@ -503,6 +503,13 @@ message TPQTabletConfig {
     optional string TimestampType = 42;
 
     optional bool ContentBasedDeduplication = 43 [default = false];
+
+    // SQS/YMQ migration: queue metadata for exporting queue metrics from PQRB.
+    optional string SqsQueueName = 44 [default = ""];
+    optional string SqsAccountName = 45 [default = ""];
+    optional string SqsCloudId = 46 [default = ""];
+    optional string SqsFolderId = 47 [default = ""];
+    optional bool SqsExportMetrics = 48 [default = false];
 }
 
 message THeartbeat {

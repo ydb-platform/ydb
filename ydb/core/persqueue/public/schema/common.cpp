@@ -249,6 +249,24 @@ TResult ProcessTopicAttributes(
             } else {
                 return {Ydb::StatusIds::BAD_REQUEST, std::move(m).error()};
             }
+        } else if (attrName == "_sqs_queue_name") {
+            tabletConfig->SetSqsQueueName(attrValue);
+        } else if (attrName == "_sqs_account_name") {
+            tabletConfig->SetSqsAccountName(attrValue);
+        } else if (attrName == "_sqs_cloud_id") {
+            tabletConfig->SetSqsCloudId(attrValue);
+        } else if (attrName == "_sqs_folder_id") {
+            tabletConfig->SetSqsFolderId(attrValue);
+        } else if (attrName == "_sqs_export_metrics") {
+            if (attrValue.empty()) {
+                tabletConfig->SetSqsExportMetrics(true);
+            } else {
+                try {
+                    tabletConfig->SetSqsExportMetrics(FromString<bool>(attrValue));
+                } catch(...) {
+                    return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Attribute " << attrName << " is " << attrValue << ", which is not bool"};
+                }
+            }
         } else {
             return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Attribute " << attrName << " is not supported"};
         }

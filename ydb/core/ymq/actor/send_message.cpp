@@ -246,6 +246,9 @@ private:
                 if (it != BlockedDeduplicationMessageIds_.end()) {
                     const auto& [messageId, sequenceNumber] = it->second;
                     AddResponse(currentRequest, currentResponse, messageId, sequenceNumber);
+                    TopicSendHasSuccess_ = true;
+                    TopicSendBytesWritten_ += currentRequest->GetMessageBody().size();
+                    TopicSendHasDedup_ = true;
                     continue;
                 }
             }
@@ -285,6 +288,7 @@ private:
         if (writerSettings.Messages.size() > 0) {
             Register(NPQ::NMLP::CreateWriter(SelfId(), std::move(writerSettings)));
         } else {
+            ReportTopicSendCounters();
             SendReplyAndDie();
         }
     }
@@ -380,6 +384,20 @@ private:
         }
     }
 
+    void ReportTopicSendCounters() {
+        if (!QueueCounters_ || !TopicSendHasSuccess_) {
+            return;
+        }
+
+        INC_COUNTER_COUPLE(QueueCounters_, SendMessage_Count, sent_count_per_second);
+        if (TopicSendBytesWritten_ > 0) {
+            ADD_COUNTER_COUPLE(QueueCounters_, SendMessage_BytesWritten, sent_bytes_per_second, TopicSendBytesWritten_);
+        }
+        if (TopicSendHasDedup_) {
+            INC_COUNTER_COUPLE(QueueCounters_, SendMessage_DeduplicationCount, deduplicated_count_per_second);
+        }
+    }
+
     void Handle(NPQ::NMLP::TEvWriteResponse::TPtr& ev) {
         const auto* response = ev->Get();
         const auto& messages = response->Messages;
@@ -396,6 +414,11 @@ private:
                 MakeError(currentResponse, NErrors::INTERNAL_FAILURE,
                     NPQ::NDescriber::Description(GetTopicName(), response->DescribeStatus));
             } else if (message.Status == Ydb::StatusIds::SUCCESS || message.Status == Ydb::StatusIds::ALREADY_EXISTS) {
+                TopicSendHasSuccess_ = true;
+                TopicSendBytesWritten_ += currentRequest->GetMessageBody().size();
+                if (message.Status == Ydb::StatusIds::ALREADY_EXISTS) {
+                    TopicSendHasDedup_ = true;
+                }
                 AddResponse(
                     currentRequest,
                     currentResponse,
@@ -407,6 +430,7 @@ private:
             }
         }
 
+        ReportTopicSendCounters();
         SendReplyAndDie();
     }
 
@@ -469,6 +493,9 @@ private:
     const bool IsBatch_;
     // deduplication message id -> sequenceNumber
     std::unordered_map<TString, std::pair<TString, ui64>> BlockedDeduplicationMessageIds_;
+    bool TopicSendHasSuccess_ = false;
+    ui64 TopicSendBytesWritten_ = 0;
+    bool TopicSendHasDedup_ = false;
 };
 
 IActor* CreateSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

@@ -274,8 +274,26 @@ private:
             MakeError(Response_.MutableReceiveMessage(), NErrors::INTERNAL_FAILURE, ev->Get()->ErrorDescription);
         } else {
             auto&& messages = ev->Get()->Messages;
-            for (auto&& message : messages) {
-                auto* item = Response_.MutableReceiveMessage()->AddMessages();
+            if (messages.empty()) {
+                if (QueueCounters_) {
+                    INC_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_EmptyCount, empty_receive_attempts_count_per_second);
+                }
+            } else {
+                ui64 bytesRead = 0;
+                const TInstant now = TActivationContext::Now();
+                for (auto&& message : messages) {
+                    bytesRead += message.Data.size();
+                    if (QueueCounters_) {
+                        const ui32 receiveCount = message.ApproximateReceiveCount ? message.ApproximateReceiveCount.value() : 1;
+                        COLLECT_HISTOGRAM_COUNTER(QueueCounters_, MessageReceiveAttempts, receiveCount);
+                        COLLECT_HISTOGRAM_COUNTER(QueueCounters_, receive_attempts_count_rate, receiveCount);
+
+                        const TDuration messageResideDuration = now - message.SentTimestamp;
+                        COLLECT_HISTOGRAM_COUNTER(QueueCounters_, MessageReside_Duration, messageResideDuration.MilliSeconds());
+                        COLLECT_HISTOGRAM_COUNTER(QueueCounters_, reside_duration_milliseconds, messageResideDuration.MilliSeconds());
+                    }
+
+                    auto* item = Response_.MutableReceiveMessage()->AddMessages();
                 if (message.ApproximateFirstReceiveTimestamp) {
                     item->SetApproximateFirstReceiveTimestamp(message.ApproximateFirstReceiveTimestamp->MilliSeconds());
                 }
@@ -328,6 +346,12 @@ private:
                         item->SetMessageDeduplicationId(message.MessageDeduplicationId);
                     }
                     item->SetSequenceNumber(message.MessageId.Offset);
+                }
+                }
+
+                if (QueueCounters_) {
+                    ADD_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_Count, received_count_per_second, messages.size());
+                    ADD_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_BytesRead, received_bytes_per_second, bytesRead);
                 }
             }
         }

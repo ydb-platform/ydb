@@ -17,6 +17,7 @@ GENERATE_ENUM_SERIALIZATION(read_balancer__balancing.h)
 
 PEERDIR(
     contrib/libs/fmt
+    ydb/core/base
     ydb/core/engine/minikql
     ydb/core/persqueue/events
     ydb/core/persqueue/common

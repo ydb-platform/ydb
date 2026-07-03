@@ -83,5 +83,14 @@ private:
     absl::flat_hash_map<TString, TConsumerCounters> ConsumerCounters;
 
     absl::flat_hash_map<ui32, NKikimrPQ::TStatusResponse_TPartResult> PartitionStatuses;
+
+    bool SqsMetricsEnabled_ = false;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SqsMessagesCount_;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SqsInflyMessagesCount_;
+    ::NMonitoring::TDynamicCounters::TCounterPtr YmqStoredCount_;
+    ::NMonitoring::TDynamicCounters::TCounterPtr YmqInflightCount_;
+
+    void InitializeSqsQueueMetrics(const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx);
+    void UpdateSqsQueueMetrics(ui64 storedCount, ui64 inflightCount);
 };
 }

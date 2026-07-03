@@ -4,6 +4,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/gc_actor.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
@@ -29,8 +30,9 @@ public:
     }
 
     STFUNC(StateWork) {
-        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS) (
-            "action_id", GCTask->GetActionGuid())("tablet_id", GCTask->GetTabletId());
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS,
+            {"actionId", GCTask->GetActionGuid()},
+            {"tabletId", GCTask->GetTabletId()});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
             default:
@@ -39,8 +41,10 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("actor", "TGarbageCollectionActor")("event", "starting")(
-            "action_id", GCTask->GetActionGuid());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS, "Dump actor, event, actionId",
+            {"actor", "TGarbageCollectionActor"},
+            {"event", "starting"},
+            {"actionId", GCTask->GetActionGuid()});
         for (auto&& i : GCTask->GetListsByGroupId()) {
             auto request = GCTask->BuildRequest(i.first);
             AFL_VERIFY(request);   // Cannot fail on the first time

@@ -1,13 +1,15 @@
 #include "tx_remove_blobs.h"
 
 #include <ydb/core/tx/columnshard/blobs_action/events/delete_blobs.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NColumnShard {
 
 bool TTxRemoveSharedBlobs::Execute(TTransactionContext& txc, const TActorContext&) {
     TMemoryProfileGuard mpg("TTxRemoveSharedBlobs::Execute");
-    NActors::TLogContextGuard logGuard =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "execute");
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS,
+        {"tabletId", Self->TabletID()},
+        {"txState", "execute"});
     NOlap::TBlobManagerDb blobManagerDb(txc.DB);
     RemoveAction->OnExecuteTxAfterRemoving(blobManagerDb, true);
 
@@ -17,8 +19,9 @@ bool TTxRemoveSharedBlobs::Execute(TTransactionContext& txc, const TActorContext
 
 void TTxRemoveSharedBlobs::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxRemoveSharedBlobs::Complete");
-    NActors::TLogContextGuard logGuard =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "complete");
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS,
+        {"tabletId", Self->TabletID()},
+        {"txState", "complete"});
     RemoveAction->OnCompleteTxAfterRemoving(true);
     Manager->RemoveSharedBlobs(SharingBlobIds);
 

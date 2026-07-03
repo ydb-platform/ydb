@@ -23,7 +23,9 @@ public:
 
     bool ExtractForGC(std::deque<TUnifiedBlobId>& deleteDraftBlobIds, TTabletsByBlob& deleteBlobIds, const ui32 blobsCountLimit) {
         if (DraftBlobIdsToRemove.empty() && BlobsToDelete.IsEmpty()) {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("event", "extract_for_gc_skip")("reason", "no_data");
+            YDB_LOG_INFO_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER, "",
+                {"event", "extract_for_gc_skip"},
+                {"reason", "no_data"});
             return false;
         }
         ui32 count = 0;
@@ -36,7 +38,9 @@ public:
         while (BlobsToDelete.ExtractFrontTo(deleteBlobIdsLocal) && count < blobsCountLimit) {
             ++count;
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("event", "extract_blobs_to_gc")("blob_ids", deleteBlobIdsLocal.DebugString());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER, "Dump event, blobIds",
+            {"event", "extract_blobs_to_gc"},
+            {"blobIds", deleteBlobIdsLocal.DebugString()});
         std::swap(deleteBlobIdsLocal, deleteBlobIds);
         return true;
     }

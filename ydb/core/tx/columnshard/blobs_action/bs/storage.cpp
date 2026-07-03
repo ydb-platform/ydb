@@ -7,6 +7,8 @@
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS_BS
+
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
 std::shared_ptr<NKikimr::NOlap::IBlobsDeclareRemovingAction> TOperator::DoStartDeclareRemovingAction(
@@ -25,14 +27,17 @@ std::shared_ptr<NKikimr::NOlap::IBlobsReadingAction> TOperator::DoStartReadingAc
 void TOperator::DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& action) const {
     auto gcTask = dynamic_pointer_cast<TGCTask>(action);
     AFL_VERIFY(!!gcTask);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "StartGC")("requests_count", gcTask->GetListsByGroupId().size());
+    YDB_LOG_DEBUG("Dump event, requestsCount",
+        {"event", "StartGC"},
+        {"requestsCount", gcTask->GetListsByGroupId().size()});
     TActorContext::AsActorContext().Register(new TGarbageCollectionActor(gcTask, TabletActorId, GetSelfTabletId()));
 }
 
 std::shared_ptr<IBlobsGCAction> TOperator::DoCreateGCAction(const std::shared_ptr<TRemoveGCCounters>& counters) const {
     auto gcTask = Manager->BuildGCTask(GetStorageId(), Manager, GetSharedBlobs(), counters);
     if (!gcTask) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "StartGCSkipped");
+        YDB_LOG_DEBUG("Dump event",
+            {"event", "StartGCSkipped"});
         return nullptr;
     } else {
         AFL_VERIFY(!gcTask->IsEmpty());

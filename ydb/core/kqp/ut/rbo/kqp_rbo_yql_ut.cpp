@@ -367,6 +367,7 @@ void AddMapAliasRulesForTest(TVector<std::unique_ptr<IRule>>& rules) {
     rules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
     rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
     rules.emplace_back(std::make_unique<TPushMapElementsThroughAggregateRule>());
+    rules.emplace_back(std::make_unique<TPushMapElementsThroughUnionAllRule>());
     rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
     rules.emplace_back(std::make_unique<TPushRenameIntoProducerRule>());
 }
@@ -4961,6 +4962,159 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 1);
         UNIT_ASSERT(pushedMap->MapElements.front().GetElementName() == TInfoUnit("l_a"));
         UNIT_ASSERT(pushedMap->MapElements.front().IsColumnAccess());
+    }
+
+    Y_UNIT_TEST(PushMapElementsPushesRenameThroughUnionAll) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+        auto rightRead = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+        auto unionAll = MakeIntrusive<TOpUnionAll>(
+            leftRead,
+            rightRead,
+            pos,
+            TVector<TInfoUnit>{TInfoUnit("a"), TInfoUnit("payload")}
+        );
+        auto aliasMap = MakeIntrusive<TOpMap>(unionAll, pos, TVector<TMapElement>{
+            MakeTestRename("l_a", "a", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(aliasMap, pos, {"l_a", "payload"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughUnionAllRule>());
+        TRuleBasedStage pushMapElements("Focused push map elements through UnionAll", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushMapElements.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::UnionAll, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenUnion = CastOperator<TOpUnionAll>(root.GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenUnion->Columns.size(), 2);
+        UNIT_ASSERT(rewrittenUnion->Columns[0] == TInfoUnit("payload"));
+        UNIT_ASSERT(rewrittenUnion->Columns[1] == TInfoUnit("l_a"));
+
+        for (const auto& child : rewrittenUnion->Children) {
+            UNIT_ASSERT_C(child->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+            auto pushedMap = CastOperator<TOpMap>(child);
+            UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 1);
+            UNIT_ASSERT(pushedMap->MapElements.front().IsRename());
+            UNIT_ASSERT(pushedMap->MapElements.front().GetElementName() == TInfoUnit("l_a"));
+            UNIT_ASSERT(pushedMap->MapElements.front().GetRename() == TInfoUnit("a"));
+        }
+    }
+
+    Y_UNIT_TEST(PushMapElementsDoesNotPushAppendThroughUnionAll) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+        auto rightRead = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+        auto unionAll = MakeIntrusive<TOpUnionAll>(
+            leftRead,
+            rightRead,
+            pos,
+            TVector<TInfoUnit>{TInfoUnit("a"), TInfoUnit("payload")}
+        );
+        auto aliasMap = MakeIntrusive<TOpMap>(unionAll, pos, TVector<TMapElement>{
+            MakeTestAppend("l_a", "a", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(aliasMap, pos, {"a", "payload", "l_a"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughUnionAllRule>());
+        TRuleBasedStage pushMapElements("Focused push map elements through UnionAll", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushMapElements.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput() == aliasMap, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(aliasMap->GetInput() == unionAll, root.PlanToString(testContext.ExprCtx));
+    }
+
+    Y_UNIT_TEST(PushMapElementsDoesNotSplitMixedMapAboveUnionAll) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+        auto rightRead = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+        auto unionAll = MakeIntrusive<TOpUnionAll>(
+            leftRead,
+            rightRead,
+            pos,
+            TVector<TInfoUnit>{TInfoUnit("a"), TInfoUnit("payload")}
+        );
+        auto aliasMap = MakeIntrusive<TOpMap>(unionAll, pos, TVector<TMapElement>{
+            MakeTestRename("l_a", "a", pos, testContext.ExprCtx, expressionProps),
+            MakeTestConstantAppend("one", pos, testContext.ExprCtx),
+        });
+        TOpRoot root(aliasMap, pos, {"l_a", "payload", "one"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughUnionAllRule>());
+        TRuleBasedStage pushMapElements("Focused push map elements through UnionAll", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushMapElements.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput() == aliasMap, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(aliasMap->GetInput() == unionAll, root.PlanToString(testContext.ExprCtx));
+    }
+
+    Y_UNIT_TEST(PushMapElementsKeepsUnionAllMapWhenOutputWouldDuplicate) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+        auto rightRead = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+        auto unionAll = MakeIntrusive<TOpUnionAll>(
+            leftRead,
+            rightRead,
+            pos,
+            TVector<TInfoUnit>{TInfoUnit("a"), TInfoUnit("payload")}
+        );
+        auto aliasMap = MakeIntrusive<TOpMap>(unionAll, pos, TVector<TMapElement>{
+            MakeTestRename("payload", "a", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(aliasMap, pos, {"payload"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughUnionAllRule>());
+        TRuleBasedStage pushMapElements("Focused push map elements through UnionAll", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushMapElements.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput() == aliasMap, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(aliasMap->GetInput() == unionAll, root.PlanToString(testContext.ExprCtx));
+    }
+
+    Y_UNIT_TEST(PushMapElementsKeepsUnionAllMapWhenBranchOutputWouldDuplicate) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("a"), TInfoUnit("l_a")}, pos);
+        auto rightRead = MakeTestRead({TInfoUnit("a"), TInfoUnit("l_a")}, pos);
+        auto unionAll = MakeIntrusive<TOpUnionAll>(
+            leftRead,
+            rightRead,
+            pos,
+            TVector<TInfoUnit>{TInfoUnit("a")}
+        );
+        auto aliasMap = MakeIntrusive<TOpMap>(unionAll, pos, TVector<TMapElement>{
+            MakeTestRename("l_a", "a", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(aliasMap, pos, {"l_a"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughUnionAllRule>());
+        TRuleBasedStage pushMapElements("Focused push map elements through UnionAll", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushMapElements.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput() == aliasMap, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(aliasMap->GetInput() == unionAll, root.PlanToString(testContext.ExprCtx));
     }
 
     Y_UNIT_TEST(PushAppendAliasCrossesFullJoinSide) {

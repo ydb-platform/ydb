@@ -156,6 +156,14 @@ class TPushMapElementsThroughAggregateRule : public ISimplifiedRule {
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
 
+class TPushMapElementsThroughUnionAllRule : public ISimplifiedRule {
+  public:
+    TPushMapElementsThroughUnionAllRule()
+        : ISimplifiedRule("Push map elements through UnionAll", ERuleProperties::RequireParents) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
 /**
  * Convert semantic renames to append aliases when the original name may stay visible.
  */

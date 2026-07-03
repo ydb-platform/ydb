@@ -23,6 +23,7 @@ SRCS(
     map/push_map_elements_into_map.cpp
     map/push_map_elements_through_aggregate.cpp
     map/push_map_elements_through_input.cpp
+    map/push_map_elements_through_union_all.cpp
     push_filter_into_join.cpp
     push_filter_under_map.cpp
     push_limit_into_sort.cpp

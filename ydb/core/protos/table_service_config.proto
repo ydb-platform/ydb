@@ -437,7 +437,7 @@ message TTableServiceConfig {
     reserved 100; //    optional bool EnableTopSortSelectIndex = 100 [ default = true, (InvalidateCompileCache) = true ];
     reserved 101; //    optional bool EnablePointPredicateSortAutoSelectIndex = 101 [ default = true , (InvalidateCompileCache) = true];
 
-    optional bool EnableDataShardCreateTableAs = 102 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableDataShardCreateTableAs = 102 [default = false, (InvalidateCompileCache) = true];
 
     optional uint64 ExtractPredicateParameterListSizeLimit = 103 [default = 0, (InvalidateCompileCache) = true];
 

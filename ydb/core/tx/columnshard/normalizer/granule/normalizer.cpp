@@ -35,7 +35,9 @@ public:
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
-        ACFL_INFO("normalizer", "TGranulesNormalizer")("message", TStringBuilder() << "apply " << Chunks.size() << " chunks");
+        YDB_LOG_INFO_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+            {"normalizer", "TGranulesNormalizer"},
+            {"message", TStringBuilder() << "apply " << Chunks.size() << " chunks"});
 
         for (auto&& key : Chunks) {
             auto granuleIt = Granule2Path.find(key.GranuleId);
@@ -125,7 +127,9 @@ public:
                 controller.GetCounters().CountObjects(chunksCount);
             }
         }
-        ACFL_INFO("normalizer", "TGranulesNormalizer")("message", TStringBuilder() << fullChunksCount << " chunks found");
+        YDB_LOG_INFO_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+            {"normalizer", "TGranulesNormalizer"},
+            {"message", TStringBuilder() << fullChunksCount << " chunks found"});
         return tasks;
     }
 };

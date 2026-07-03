@@ -3,6 +3,8 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NCleanDeprecatedSnapshot {
 
 std::optional<std::vector<TColumnChunkLoadContext>> GetChunksToRewrite(
@@ -27,7 +29,8 @@ std::optional<std::vector<TColumnChunkLoadContext>> GetChunksToRewrite(
             return std::nullopt;
         }
     }
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("tasks_for_rewrite", chunksToRewrite.size());
+    YDB_LOG_WARN("",
+        {"tasksForRewrite", chunksToRewrite.size()});
     return chunksToRewrite;
 }
 
@@ -59,7 +62,9 @@ public:
                     NIceDb::TUpdate<Schema::IndexColumns::Size>(i.GetBlobRange().Size),
                     NIceDb::TUpdate<Schema::IndexColumns::PathId>(i.GetPathId().GetRawValue()));
         }
-        ACFL_WARN("normalizer", "TCleanDeprecatedSnapshotNormalizer")("message", TStringBuilder() << Chunks.size() << " portions rewrited");
+        YDB_LOG_WARN_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+            {"normalizer", "TCleanDeprecatedSnapshotNormalizer"},
+            {"message", TStringBuilder() << Chunks.size() << " portions rewrited"});
         return true;
     }
 

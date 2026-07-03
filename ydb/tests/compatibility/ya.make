@@ -1,5 +1,5 @@
 RECURSE(
-    core
+    common
     workloads
     indexes
     topics

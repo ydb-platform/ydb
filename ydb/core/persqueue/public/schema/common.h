@@ -132,6 +132,14 @@ TResult ProcessConsumerType(
             consumer->SetDefaultReceiveMessageWaitTimeMs(ConvertDurationToMs32(receiveMessageWaitTime));
         }
 
+        if (type.has_read_request_attempt_id_period()) {
+            auto readRequestAttemptIdPeriod = type.read_request_attempt_id_period();
+            if (auto r = ValidateDuration(readRequestAttemptIdPeriod, "read_request_attempt_id_period"); !r) {
+                return r;
+            }
+            consumer->SetReadRequestAttemptIdPeriodMs(ConvertDurationToMs32(readRequestAttemptIdPeriod));
+        }
+
         if (deadLetterPolicy.has_move_action()) {
             consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
             consumer->SetDeadLetterQueue(deadLetterPolicy.move_action().dead_letter_queue());

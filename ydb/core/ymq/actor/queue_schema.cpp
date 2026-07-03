@@ -498,6 +498,7 @@ void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir
     if (ValidatedAttributes_.ReceiveMessageWaitTimeSeconds) {
         params.DefaultReceiveMessageWaitTimeMs = SecondsToMs(*ValidatedAttributes_.ReceiveMessageWaitTimeSeconds);
     }
+    params.ReadRequestAttemptIdPeriodMs = Cfg().GetGroupsReadAttemptIdsPeriodMs();
     if (ValidatedAttributes_.RedrivePolicy.MaxReceiveCount) {
         params.MaxReceiveCount = *ValidatedAttributes_.RedrivePolicy.MaxReceiveCount;
     }

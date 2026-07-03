@@ -1442,6 +1442,137 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             CompareCommonSendAndReceivedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
         }
 
+        Y_UNIT_TEST_F(TestReceiveMessageWithAttemptId, TFixture) {
+            auto json = CreateQueue({
+                {"QueueName", "ReceiveAttemptQueue.fifo"},
+                {"Attributes", NJson::TJsonMap{
+                    {"FifoQueue", "true"},
+                    {"VisibilityTimeout", "0"}
+                }}
+            });
+            TString queueUrl = GetPathFromQueueUrlMap(json);
+
+            SendMessage({
+                {"QueueUrl", queueUrl},
+                {"MessageBody", "message-body-0"},
+                {"MessageGroupId", "message-group-0"},
+                {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+            });
+
+            auto json1 = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"ReceiveRequestAttemptId", "attempt-0"},
+                {"VisibilityTimeout", 40000}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json1["Messages"].GetArray().size(), 1);
+            auto messageId = json1["Messages"][0]["MessageId"];
+
+            auto json2 = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"ReceiveRequestAttemptId", "attempt-0"},
+                {"VisibilityTimeout", 40000}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json2["Messages"].GetArray().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(messageId.GetStringSafe(), json2["Messages"][0]["MessageId"].GetStringSafe());
+            UNIT_ASSERT_VALUES_EQUAL(
+                json1["Messages"][0]["ReceiptHandle"].GetStringSafe(),
+                json2["Messages"][0]["ReceiptHandle"].GetStringSafe());
+
+            // ReceiveMessage with ReceiveRequestAttemptId should reset VisibilityTimeout.
+            auto json3 = ReceiveMessage({{"QueueUrl", queueUrl}, {"ReceiveRequestAttemptId", "attempt-0"}});
+            UNIT_ASSERT_VALUES_EQUAL(json3["Messages"].GetArray().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(messageId.GetStringSafe(), json3["Messages"][0]["MessageId"].GetStringSafe());
+
+            auto json4 = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 1}});
+            UNIT_ASSERT_VALUES_EQUAL(json4["Messages"].GetArray().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(messageId.GetStringSafe(), json4["Messages"][0]["MessageId"].GetStringSafe());
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageWithDifferentAttemptIds, TFixture) {
+            auto json = CreateQueue({
+                {"QueueName", "ReceiveAttemptDifferentIds.fifo"},
+                {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+            });
+            TString queueUrl = GetPathFromQueueUrlMap(json);
+
+            SendMessage({
+                {"QueueUrl", queueUrl},
+                {"MessageBody", "message-body-0"},
+                {"MessageGroupId", "message-group-0"},
+                {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+            });
+            SendMessage({
+                {"QueueUrl", queueUrl},
+                {"MessageBody", "message-body-1"},
+                {"MessageGroupId", "message-group-1"},
+                {"MessageDeduplicationId", "MessageDeduplicationId-1"}
+            });
+
+            auto json1 = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"ReceiveRequestAttemptId", "attempt-1"},
+                {"VisibilityTimeout", 3600},
+                {"MaxNumberOfMessages", 1}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json1["Messages"].GetArray().size(), 1);
+            TString messageId1 = json1["Messages"][0]["MessageId"].GetStringSafe();
+
+            auto json2 = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"ReceiveRequestAttemptId", "attempt-2"},
+                {"VisibilityTimeout", 3600},
+                {"MaxNumberOfMessages", 10},
+                {"WaitTimeSeconds", 1}
+            });
+            UNIT_ASSERT_VALUES_UNEQUAL(json2["Messages"].GetArray().size(), 0);
+            bool foundDifferentMessage = false;
+            for (const auto& message : json2["Messages"].GetArray()) {
+                if (message["MessageId"].GetStringSafe() != messageId1) {
+                    foundDifferentMessage = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundDifferentMessage, "Different attempt ids must not share replay state");
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageWithAttemptIdChangeVisibilityInvalidatesReplay, TFixture) {
+            auto json = CreateQueue({
+                {"QueueName", "ReceiveAttemptVisibility.fifo"},
+                {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+            });
+            TString queueUrl = GetPathFromQueueUrlMap(json);
+
+            SendMessage({
+                {"QueueUrl", queueUrl},
+                {"MessageBody", "message-body"},
+                {"MessageGroupId", "message-group-0"},
+                {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+            });
+
+            const TString attemptId = "attempt-visibility";
+            auto json1 = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"ReceiveRequestAttemptId", attemptId},
+                {"VisibilityTimeout", 3600}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json1["Messages"].GetArray().size(), 1);
+            TString receiptHandle = json1["Messages"][0]["ReceiptHandle"].GetStringSafe();
+
+            ChangeMessageVisibility({
+                {"QueueUrl", queueUrl},
+                {"ReceiptHandle", receiptHandle},
+                {"VisibilityTimeout", 3600}
+            });
+
+            auto json2 = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"ReceiveRequestAttemptId", attemptId},
+                {"VisibilityTimeout", 3600},
+                {"WaitTimeSeconds", 1}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json2["Messages"].GetArray().size(), 0);
+        }
+
         Y_UNIT_TEST_F(TestReceiveMessageGroup, TFixture) {
             auto driver = MakeDriver(*this);
             const TSqsTopicPaths path;

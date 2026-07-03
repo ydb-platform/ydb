@@ -222,6 +222,7 @@ public:
 
     void SetMaxMessageProcessingCount(ui32 MaxMessageProcessingCount);
     void SetRetentionPeriod(std::optional<TDuration> retentionPeriod);
+    void SetReceiveAttemptIdPeriod(TDuration receiveAttemptIdPeriod);
     void SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy> deadLetterPolicy);
 
     ui64 GetFirstOffset() const;
@@ -255,6 +256,16 @@ public:
     // fromOffset indicates from which offset it is necessary to continue searching for the next free message.
     //            it is an optimization for the case when the method is called several times in a row.
     std::optional<TReadMessage> Next(TInstant deadline, TPosition& position, const absl::flat_hash_set<ui32>& skipMessageGroups = {});
+    // Read up to maxCount messages. When receiveAttemptId is set, repeated reads with the same
+    // attempt id within ReceiveAttemptIdPeriod replay the same message set (SQS FIFO semantics).
+    std::deque<TReadMessage> Read(
+        TInstant now,
+        TInstant visibilityDeadline,
+        TPosition& position,
+        const absl::flat_hash_set<ui32>& skipMessageGroups,
+        size_t maxCount,
+        const TString& receiveAttemptId
+    );
     bool Commit(ui64 message);
     bool Unlock(ui64 message);
     // For SQS compatibility
@@ -336,6 +347,20 @@ private:
 
     TReadMessage ConvertToReadMessage(ui64 offset, const TMessage& message) const;
     bool IsMessageGroupLocked(const TMessage& message, const absl::flat_hash_set<ui32>& skipMessageGroups) const;
+
+    std::optional<TReadMessage> ReadForReplay(ui64 offset, TInstant deadline);
+    void DropExpiredReceiveAttempts(TInstant now);
+    void InvalidateReceiveAttempts(ui64 offset);
+    void ClearReceiveAttempts();
+
+    struct TReceiveAttempt {
+        std::vector<ui64> Offsets;
+        TInstant Expiry;
+    };
+    THashMap<TString, TReceiveAttempt> ReceiveAttempts_;
+    // The window during which a repeated read with the same receive-request-attempt-id replays
+    // the same messages (SQS FIFO semantics). Default 5 minutes; overridden from consumer config.
+    TDuration ReceiveAttemptIdPeriod = TDuration::Minutes(5);
 
     struct TNextMessageResult {
         TMessage* Message; // nullable

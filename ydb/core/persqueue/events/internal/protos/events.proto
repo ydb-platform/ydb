@@ -47,6 +47,9 @@ message TBroadcastPartitionError {
 message TEvMLPGetPartitionRequest {
     optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
     optional string Consumer = 2;
+    // SQS FIFO receive-request-attempt-id. When set, repeated requests with the same
+    // attempt id are routed to the same partition to keep replay semantics stable.
+    optional string ReceiveAttemptId = 3;
 }
 
 // From PQRB
@@ -73,6 +76,9 @@ message TEvMLPReadRequest {
     // The maximum number of messages to return.
     optional uint32 MaxNumberOfMessages = 6;
     repeated string SkipMessageGroup = 7;
+    // SQS FIFO receive-request-attempt-id replay. When set, repeated reads with the
+    // same attempt id within the configured period return the same messages.
+    optional string ReceiveAttemptId = 8;
 }
 
 // From PQTablet

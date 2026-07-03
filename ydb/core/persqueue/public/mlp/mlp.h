@@ -144,6 +144,10 @@ struct TReaderSettings {
     ui32 MaxNumberOfMessage = 1;
     std::vector<TString> SkipMessageGroups; // TODO remove after SQS migration was finished
 
+    // SQS FIFO receive-request-attempt-id replay. When set, repeated reads with the same
+    // attempt id within the configured period return the same messages.
+    TString ReceiveAttemptId;
+
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };
 

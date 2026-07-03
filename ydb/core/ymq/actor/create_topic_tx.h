@@ -15,6 +15,7 @@ struct TTopicParams {
     ui64 DefaultDelayMessageTimeMs = 0;
     ui64 DefaultProcessingTimeoutSeconds = 0;
     ui64 DefaultReceiveMessageWaitTimeMs = 0;
+    ui64 ReadRequestAttemptIdPeriodMs = 0;
     ui64 MaxReceiveCount = 0;
     TString RedriveTargetQueueName;
     TString QueueName;

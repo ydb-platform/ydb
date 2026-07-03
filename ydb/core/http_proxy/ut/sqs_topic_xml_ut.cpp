@@ -605,6 +605,43 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
             CompareCommonSendAndReceivedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
         }
 
+        Y_UNIT_TEST_F(TestReceiveMessageWithAttemptId, TFixture) {
+            auto json = CreateQueueXml({
+                {"QueueName", "ReceiveAttemptQueueXml.fifo"},
+                {"Attributes", NJson::TJsonMap{
+                    {"FifoQueue", "true"},
+                    {"VisibilityTimeout", "0"}
+                }}
+            });
+            TString queueUrl = GetPathFromQueueUrlMap(json);
+
+            SendMessageXml({
+                {"QueueUrl", queueUrl},
+                {"MessageBody", "message-body-0"},
+                {"MessageGroupId", "message-group-0"},
+                {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+            });
+
+            auto json1 = ReceiveMessageXml({
+                {"QueueUrl", queueUrl},
+                {"ReceiveRequestAttemptId", "attempt-0"},
+                {"VisibilityTimeout", 40000}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json1["Messages"].GetArray().size(), 1);
+            auto messageId = json1["Messages"][0]["MessageId"];
+
+            auto json2 = ReceiveMessageXml({
+                {"QueueUrl", queueUrl},
+                {"ReceiveRequestAttemptId", "attempt-0"},
+                {"VisibilityTimeout", 40000}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json2["Messages"].GetArray().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(messageId.GetStringSafe(), json2["Messages"][0]["MessageId"].GetStringSafe());
+            UNIT_ASSERT_VALUES_EQUAL(
+                json1["Messages"][0]["ReceiptHandle"].GetStringSafe(),
+                json2["Messages"][0]["ReceiptHandle"].GetStringSafe());
+        }
+
         Y_UNIT_TEST_F(TestReceiveMessageGroup, TFixture) {
             auto driver = MakeDriver(*this);
             const TSqsTopicPaths path;

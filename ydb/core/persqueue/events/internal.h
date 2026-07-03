@@ -1431,9 +1431,12 @@ struct TEvPQ {
     struct TEvMLPGetPartitionRequest : TEventPB<TEvMLPGetPartitionRequest, NKikimrPQ::TEvMLPGetPartitionRequest, EvMLPGetPartitionRequest> {
         TEvMLPGetPartitionRequest() = default;
 
-        TEvMLPGetPartitionRequest(const TString& topic, const TString& consumer) {
+        TEvMLPGetPartitionRequest(const TString& topic, const TString& consumer, const TString& receiveAttemptId = {}) {
             Record.SetTopic(topic);
             Record.SetConsumer(consumer);
+            if (!receiveAttemptId.empty()) {
+                Record.SetReceiveAttemptId(receiveAttemptId);
+            }
         }
 
         const TString& GetTopic() const {
@@ -1442,6 +1445,10 @@ struct TEvPQ {
 
         const TString& GetConsumer() const {
             return Record.GetConsumer();
+        }
+
+        const TString& GetReceiveAttemptId() const {
+            return Record.GetReceiveAttemptId();
         }
     };
 
@@ -1509,7 +1516,7 @@ struct TEvPQ {
     struct TEvMLPReadRequest : TEventPB<TEvMLPReadRequest, NKikimrPQ::TEvMLPReadRequest, EvMLPReadRequest> {
         TEvMLPReadRequest() = default;
 
-        TEvMLPReadRequest(const TString& topic, const TString& consumer, ui32 partitionId, TInstant waitDeadline, TDuration processingTimeout, ui32 maxNumberOfMessages, const std::vector<TString>& skipMessageGroups) {
+        TEvMLPReadRequest(const TString& topic, const TString& consumer, ui32 partitionId, TInstant waitDeadline, TDuration processingTimeout, ui32 maxNumberOfMessages, const std::vector<TString>& skipMessageGroups, const TString& receiveAttemptId = {}) {
             Record.SetTopic(topic);
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
@@ -1518,6 +1525,9 @@ struct TEvPQ {
             Record.SetMaxNumberOfMessages(maxNumberOfMessages);
             for (auto& messageGroup : skipMessageGroups) {
                 Record.AddSkipMessageGroup(messageGroup);
+            }
+            if (receiveAttemptId) {
+                Record.SetReceiveAttemptId(receiveAttemptId);
             }
         }
 
@@ -1544,6 +1554,10 @@ struct TEvPQ {
         // The maximum number of messages to return.
         ui32 GetMaxNumberOfMessages() const {
             return Record.GetMaxNumberOfMessages();
+        }
+
+        const TString& GetReceiveAttemptId() const {
+            return Record.GetReceiveAttemptId();
         }
     };
 

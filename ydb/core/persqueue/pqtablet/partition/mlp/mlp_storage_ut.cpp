@@ -202,6 +202,28 @@ struct TUtils {
         return Storage.Unlock(offset);
     }
 
+    void AddMessageWithGroup(ui64 offset, ui32 groupHash) {
+        Storage.AddMessage(offset, true, groupHash, BaseWriteTimestamp + TDuration::Seconds(offset));
+        Offset = Max(Offset, offset + 1);
+    }
+
+    std::deque<TReadMessage> ReadMessages(
+        size_t maxCount,
+        const TString& receiveAttemptId = {},
+        TDuration visibilityTimeout = TDuration::Seconds(8)
+    ) {
+        TStorage::TPosition position;
+        absl::flat_hash_set<ui32> skipMessageGroups;
+        return Storage.Read(
+            TimeProvider->Now(),
+            TimeProvider->Now() + visibilityTimeout,
+            position,
+            skipMessageGroups,
+            maxCount,
+            receiveAttemptId
+        );
+    }
+
     void AssertEquals(TUtils& other) {
         auto i = other.Storage.begin();
         auto m = Storage.begin();
@@ -3537,6 +3559,156 @@ Y_UNIT_TEST(FairnessAddMessageDuringReadMixed) {
 
     DrainWithCommit(model);
     UNIT_ASSERT_VALUES_EQUAL(model.Committed.size(), model.Offset);
+}
+
+std::vector<ui64> GetReadOffsets(const std::deque<TReadMessage>& messages) {
+    std::vector<ui64> offsets;
+    offsets.reserve(messages.size());
+    for (const auto& message : messages) {
+        offsets.push_back(message.Offset);
+    }
+    return offsets;
+}
+
+Y_UNIT_TEST(ReadAttemptReplayReturnsSameMessages) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    for (ui32 group = 0; group < 5; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    const TString attemptId = "my_attempt";
+    const auto first = utils.ReadMessages(10, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(first.size(), 5);
+
+    const auto second = utils.ReadMessages(10, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(second.size(), 5);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), GetReadOffsets(second));
+}
+
+Y_UNIT_TEST(ReadAttemptDifferentIdsDoNotShareState) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    for (ui32 group = 0; group < 5; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    const auto first = utils.ReadMessages(1, "attempt_a");
+    UNIT_ASSERT_VALUES_EQUAL(first.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(first.front().Offset, 0u);
+
+    const auto second = utils.ReadMessages(10, "attempt_b");
+    UNIT_ASSERT_VALUES_EQUAL(second.size(), 4);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(second), (std::vector<ui64>{1, 2, 3, 4}));
+}
+
+Y_UNIT_TEST(ReadAttemptExpiresAfterPeriod) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(2));
+    for (ui32 group = 0; group < 5; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    const TString attemptId = "my_attempt";
+    const auto first = utils.ReadMessages(1, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(first.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(first.front().Offset, 0u);
+
+    utils.TimeProvider->Tick(TDuration::Seconds(3));
+
+    const auto second = utils.ReadMessages(10, attemptId);
+    UNIT_ASSERT(second.size() > 0);
+    UNIT_ASSERT_VALUES_UNEQUAL(GetReadOffsets(first), GetReadOffsets(second));
+}
+
+Y_UNIT_TEST(ReadAttemptReplayExtendsExpiry) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(2));
+    utils.AddMessageWithGroup(0, 0);
+    utils.AddMessageWithGroup(1, 1);
+
+    const TString attemptId = "my_attempt";
+    const auto first = utils.ReadMessages(2, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1}));
+
+    utils.TimeProvider->Tick(TDuration::Seconds(1));
+    const auto replay = utils.ReadMessages(2, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(replay), (std::vector<ui64>{0, 1}));
+
+    utils.TimeProvider->Tick(TDuration::Seconds(2));
+    utils.CheckNoNext();
+}
+
+Y_UNIT_TEST(ReadAttemptCommitInvalidatesReplay) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    for (ui32 group = 0; group < 3; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    const TString attemptId = "my_attempt";
+    const auto first = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1, 2}));
+
+    UNIT_ASSERT(utils.Commit(1));
+
+    const auto second = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(second.size(), 0);
+}
+
+Y_UNIT_TEST(ReadAttemptChangeMessageDeadlineInvalidatesReplay) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    for (ui32 group = 0; group < 3; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    const TString attemptId = "my_attempt";
+    const auto first = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1, 2}));
+
+    UNIT_ASSERT(utils.Storage.ChangeMessageDeadline(1, utils.TimeProvider->Now() + TDuration::Seconds(15)));
+
+    const auto second = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(second.size(), 0);
+}
+
+Y_UNIT_TEST(ReadAttemptUnlockInvalidatesReplay) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    for (ui32 group = 0; group < 3; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    const TString attemptId = "my_attempt";
+    const auto first = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1, 2}));
+
+    UNIT_ASSERT(utils.Unlock(1));
+
+    const auto second = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(second.size(), 0);
+}
+
+Y_UNIT_TEST(ReadAttemptPurgeClearsReplayState) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    for (ui32 group = 0; group < 3; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    const TString attemptId = "my_attempt";
+    const auto first = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1, 2}));
+
+    UNIT_ASSERT(utils.Storage.Purge(3));
+
+    for (ui32 group = 0; group < 3; ++group) {
+        utils.AddMessageWithGroup(group + 10, group);
+    }
+
+    const auto second = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(second), (std::vector<ui64>{10, 11, 12}));
 }
 
 }

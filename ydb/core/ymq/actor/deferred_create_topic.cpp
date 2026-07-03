@@ -200,6 +200,7 @@ private:
             params.DefaultProcessingTimeoutSeconds = Max<ui64>(1, LoadedAttrs_.VisibilityMs / 1000);
         }
         params.DefaultReceiveMessageWaitTimeMs = LoadedAttrs_.ReceiveWaitMs;
+        params.ReadRequestAttemptIdPeriodMs = Cfg().GetGroupsReadAttemptIdsPeriodMs();
         params.MaxReceiveCount = LoadedAttrs_.MaxReceiveCount;
         if (LoadedAttrs_.DlqName && LoadedAttrs_.MaxReceiveCount) {
             params.RedriveTargetQueueName = LoadedAttrs_.DlqName;

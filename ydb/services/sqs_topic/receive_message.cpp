@@ -131,6 +131,11 @@ namespace NKikimr::NSqsTopic::V1 {
                 .MaxNumberOfMessage = static_cast<ui32>(maxNumberOfMessages),
                 .UserToken = this->Request_->GetInternalToken(),
             };
+            // Only client-supplied receive-request-attempt-id enables replay semantics; an
+            // auto-generated id would be unique per request and never replayed.
+            if (this->QueueUrl_->Fifo && request.has_receive_request_attempt_id()) {
+                settings.ReceiveAttemptId = request.receive_request_attempt_id();
+            }
             return settings;
         }
 

@@ -17,7 +17,9 @@ public:
 public:
     explicit TMLPConsumer(TMLPBalancer& balancer);
 
-    const TPartitionGraph::Node* NextPartition();
+    // When receiveAttemptId is set, repeated calls with the same id return the same
+    // partition (kept in a runtime map) so that SQS FIFO replay reads hit one partition.
+    const TPartitionGraph::Node* NextPartition(const TString& receiveAttemptId = {});
 
     const NKikimrPQ::TPQTabletConfig& GetConfig() const;
     const TPartitionGraph& GetPartitionGraph() const;
@@ -39,6 +41,10 @@ private:
 
     ui32 PartitionIterator = 0;
     std::vector<ui32> PartitionsForBalancing;
+
+    // Runtime-only mapping of SQS FIFO receive-request-attempt-id to the partition it was
+    // routed to. Not persisted; lives as long as the balancer keeps the consumer in memory.
+    absl::flat_hash_map<TString, ui32> ReceiveAttemptPartitions;
 
     struct TPartitionStatus {
         ui64 Cookie = 0;

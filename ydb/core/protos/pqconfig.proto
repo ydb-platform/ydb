@@ -419,6 +419,9 @@ message TPQTabletConfig {
         optional string DeadLetterQueue = 17; // For MLP consumers
         optional uint32 DefaultDelayMessageTimeMs = 18 [default = 0]; // For MLP consumers
         optional uint32 DefaultReceiveMessageWaitTimeMs = 19 [default = 0]; // For MLP consumers
+        // For MLP (shared/SQS) consumers. The window during which a repeated read with the same
+        // receive-request-attempt-id replays the same messages. Default 5 minutes.
+        optional uint32 ReadRequestAttemptIdPeriodMs = 20 [default = 300000];
 
         optional uint32 MetricsLevel = 21;
         // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.

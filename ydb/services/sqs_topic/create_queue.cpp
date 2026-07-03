@@ -216,6 +216,10 @@ namespace NKikimr::NSqsTopic::V1 {
             if (QueueAttributes.DeadLetterQueue.Defined()) {
                 consumerType->mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue(*QueueAttributes.DeadLetterQueue);
             }
+
+            const ui64 readRequestAttemptIdPeriodMs = Cfg().GetGroupsReadAttemptIdsPeriodMs();
+            consumerType->mutable_read_request_attempt_id_period()->set_seconds(readRequestAttemptIdPeriodMs / 1000);
+            consumerType->mutable_read_request_attempt_id_period()->set_nanos(readRequestAttemptIdPeriodMs % 1000 * 1000000);
         }
 
         void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {

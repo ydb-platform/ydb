@@ -458,6 +458,7 @@ void TConsumerActor::UpdateStorageConfig() {
     AFL_ENSURE(Storage->GetKeepMessageOrder() == Config.GetKeepMessageOrder())("initial", Storage->GetKeepMessageOrder())("new", Config.GetKeepMessageOrder());
     Storage->SetMaxMessageProcessingCount(Config.GetMaxProcessingAttempts());
     Storage->SetRetentionPeriod(RetentionPeriod);
+    Storage->SetReceiveAttemptIdPeriod(TDuration::MilliSeconds(Config.GetReadRequestAttemptIdPeriodMs()));
     if (Config.GetDeadLetterPolicyEnabled() && Config.GetDeadLetterPolicy() != NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED) {
         Storage->SetDeadLetterPolicy(Config.GetDeadLetterPolicy());
     } else {
@@ -720,7 +721,6 @@ void TConsumerActor::ProcessEventQueue() {
     TStorage::TPosition position;
     std::deque<TEvPQ::TEvMLPReadRequest::TPtr> readRequestsQueue;
     for (auto& ev : ReadRequestsQueue) {
-        size_t count = ev->Get()->GetMaxNumberOfMessages();
         auto visibilityDeadline = ev->Get()->GetProcessingTimeout().ToDeadLine();
 
         absl::flat_hash_set<ui32> skipMessageGroups; // TODO: remove after SQS migration finished
@@ -729,15 +729,14 @@ void TConsumerActor::ProcessEventQueue() {
             skipMessageGroups.insert(static_cast<ui32>(Hash(skipMessageGroup)) & 0x7FFFFFFF);
         }
 
-        std::deque<TReadMessage> messages;
-        for (; count; --count) {
-            auto result = Storage->Next(visibilityDeadline, position, skipMessageGroups);
-            if (!result) {
-                break;
-            }
-
-            messages.push_back(std::move(result.value()));
-        }
+        auto messages = Storage->Read(
+            now,
+            visibilityDeadline,
+            position,
+            skipMessageGroups,
+            ev->Get()->GetMaxNumberOfMessages(),
+            ev->Get()->GetReceiveAttemptId()
+        );
 
         if (messages.empty() && ev->Get()->GetWaitDeadline() <= now) {
             // Optimization: do not need to upload the message body.

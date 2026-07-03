@@ -172,6 +172,11 @@ private:
             .MaxNumberOfMessage = static_cast<ui32>(MaxMessagesCount_),
             .SkipMessageGroups = std::move(LockedMessageGroups_),
         };
+        // Only client-supplied receive-request-attempt-id enables replay semantics; an
+        // auto-generated id would be unique per request and never replayed.
+        if (IsFifoQueue() && Request().GetReceiveRequestAttemptId()) {
+            settings.ReceiveAttemptId = Request().GetReceiveRequestAttemptId();
+        }
         Register(NPQ::NMLP::CreateReader(SelfId(), std::move(settings)));
     }
 

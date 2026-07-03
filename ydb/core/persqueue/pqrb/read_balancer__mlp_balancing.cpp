@@ -15,15 +15,32 @@ const TPartitionGraph& TMLPConsumer::GetPartitionGraph() const {
     return Balancer.GetPartitionGraph();
 }
 
-const TPartitionGraph::Node* TMLPConsumer::NextPartition() {
+const TPartitionGraph::Node* TMLPConsumer::NextPartition(const TString& receiveAttemptId) {
+    if (!receiveAttemptId.empty()) {
+        if (auto it = ReceiveAttemptPartitions.find(receiveAttemptId); it != ReceiveAttemptPartitions.end()) {
+            if (const auto* node = GetPartitionGraph().GetPartition(it->second)) {
+                return node;
+            }
+            // The remembered partition no longer exists; fall through and pick a new one.
+            ReceiveAttemptPartitions.erase(it);
+        }
+    }
+
+    const TPartitionGraph::Node* node = nullptr;
     if (PartitionsForBalancing.empty()) {
         const auto& activePartitions = Balancer.GetActivePartitions();
         auto partitionId = PartitionIterator++ % activePartitions.size();
-        return GetPartitionGraph().GetPartition(activePartitions[partitionId]);
+        node = GetPartitionGraph().GetPartition(activePartitions[partitionId]);
+    } else {
+        auto partitionId = PartitionIterator++ % PartitionsForBalancing.size();
+        node = GetPartitionGraph().GetPartition(PartitionsForBalancing[partitionId]);
     }
 
-    auto partitionId = PartitionIterator++ % PartitionsForBalancing.size();
-    return GetPartitionGraph().GetPartition(PartitionsForBalancing[partitionId]);
+    if (node && !receiveAttemptId.empty()) {
+        ReceiveAttemptPartitions[receiveAttemptId] = node->Id;
+    }
+
+    return node;
 }
 
 bool TMLPConsumer::SetUseForReading(
@@ -129,7 +146,7 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) {
         consumer.Rebuild();
     }
 
-    auto* node = consumer.NextPartition();
+    auto* node = consumer.NextPartition(ev->Get()->GetReceiveAttemptId());
     if (!node) {
         TopicActor.Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR,
             TStringBuilder() << "No partitions for balancing"), 0, ev->Cookie);

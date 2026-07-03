@@ -148,20 +148,9 @@ TRenameMap BuildPreferredAliasRenameMap(IOperator& op, const TVector<TInfoUnit>&
     return renameMap;
 }
 
-bool ShouldSkipPreferredAliasRewrite(const IOperator& op) {
-    // Source-adjacent filters are the contract surface for range and OLAP predicate pushdown.
-    return op.Kind == EOperator::Filter &&
-        op.Children.size() == 1 &&
-        op.Children.front()->Kind == EOperator::Source;
-}
-
 } // anonymous namespace
 
 bool TRewriteExpressionsToPreferredAliasesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    if (ShouldSkipPreferredAliasRewrite(*input)) {
-        return false;
-    }
-
     const bool droppedRedundantAppends = DropRedundantAliasAppends(*input);
 
     const auto usedIUs = input->GetUsedIUs(props);

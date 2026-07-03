@@ -1136,7 +1136,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitWithTxInFlightWithReboots, 2, 1, true) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitWithTxInFlightWithReboots, 4, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

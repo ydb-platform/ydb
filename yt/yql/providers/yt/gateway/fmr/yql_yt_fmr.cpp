@@ -41,6 +41,7 @@
 #include <util/generic/guid.h>
 #include <util/stream/buffer.h>
 #include <util/stream/file.h>
+#include <util/system/fs.h>
 #include <util/generic/ptr.h>
 #include <util/string/split.h>
 #include <util/system/condvar.h>
@@ -2918,8 +2919,10 @@ private:
                             // Convert text YSON (file gateway format) to binary YSON
                             // (the format WrapYtTableContent/TYtCodecIo expects).
                             // Apply column projection from the rich path if set.
+                            // In local FMR mode the table may be in splitted layout (.part.N);
+                            // parse all parts in order without mutating the source files.
                             {
-                                TFileInput src(*localFilePath);
+                                const TString& srcPath = *localFilePath;
                                 TFileOutput dst(uniqueId + "_" + ToString(i));
                                 TBinaryYsonWriter writer(&dst, ::NYson::EYsonType::ListFragment);
                                 NYT::NYson::IYsonConsumer* consumer = &writer;
@@ -2932,8 +2935,25 @@ private:
                                     filter.Reset(new TColumnFilteringConsumer(consumer, columns, Nothing()));
                                     consumer = filter.Get();
                                 }
-                                NYson::TYsonParser parser(consumer, &src, ::NYson::EYsonType::ListFragment);
-                                parser.Parse();
+                                i64 numParts = 0;
+                                const TString attrPath = srcPath + ".attr";
+                                if (NFs::Exists(attrPath)) {
+                                    const NYT::TNode attrs = NYT::NodeFromYsonString(TFileInput(attrPath).ReadAll());
+                                    if (attrs.HasKey("splitted")) {
+                                        numParts = attrs["splitted"].AsInt64();
+                                    }
+                                }
+                                if (numParts > 0) {
+                                    for (i64 p = 0; p < numParts; ++p) {
+                                        TFileInput part(srcPath + ".part." + ToString(p));
+                                        NYson::TYsonParser parser(consumer, &part, ::NYson::EYsonType::ListFragment);
+                                        parser.Parse();
+                                    }
+                                } else {
+                                    TFileInput src(srcPath);
+                                    NYson::TYsonParser parser(consumer, &src, ::NYson::EYsonType::ListFragment);
+                                    parser.Parse();
+                                }
                             }
 
                             TString refName = TStringBuilder() << "$table" << i;
@@ -3485,6 +3505,66 @@ private:
             });
     }
 
+    NThreading::TFuture<TYtResourceInfo> UploadFileToYtWithCache(
+        const TString& sessionId,
+        TYtSettings::TConstPtr config,
+        IYtGateway::TFileWithMd5 file)
+    {
+        TString fileMd5Hash = file.Md5;
+
+        NThreading::TPromise<TYtResourceInfo> promise;
+        NThreading::TFuture<TYtResourceInfo> resultFuture;
+        with_lock(Mutex_) {
+            auto sessionIt = Sessions_.find(sessionId);
+            if (sessionIt != Sessions_.end()) {
+                auto& cache = sessionIt->second->UploadedYtFilesMd5ToResource;
+                auto cacheIt = cache.find(fileMd5Hash);
+                if (cacheIt != cache.end()) {
+                    YQL_CLOG(DEBUG, FastMapReduce) << "YT file with md5 " << fileMd5Hash << " already uploaded in session " << sessionId << ", skipping";
+                    return NThreading::MakeFuture(cacheIt->second);
+                }
+            }
+
+            auto inFlightIt = InFlightYtFileUploads_.find(fileMd5Hash);
+            if (inFlightIt != InFlightYtFileUploads_.end()) {
+                YQL_CLOG(DEBUG, FastMapReduce) << "YT file with md5 " << fileMd5Hash << " upload already in progress, reusing future";
+                return inFlightIt->second;
+            }
+
+            // Reserve the slot before releasing the lock so concurrent callers join our future.
+            promise = NewPromise<TYtResourceInfo>();
+            resultFuture = promise.GetFuture();
+            InFlightYtFileUploads_[fileMd5Hash] = resultFuture;
+        }
+
+        // Start the actual upload outside the lock.
+        UploadFilesToYt(sessionId, config, {std::move(file)}).Subscribe(
+            [promise = std::move(promise)](const NThreading::TFuture<std::vector<TYtResourceInfo>>& f) mutable {
+                try {
+                    auto uploaded = f.GetValue();
+                    YQL_ENSURE(uploaded.size() == 1);
+                    promise.SetValue(std::move(uploaded.front()));
+                } catch (...) {
+                    promise.SetException(std::current_exception());
+                }
+            });
+
+        TIntrusivePtr<TFmrYtGateway> self(this);
+        resultFuture.Subscribe([self = std::move(self), sessionId, fileMd5Hash](const NThreading::TFuture<TYtResourceInfo>& f) {
+            with_lock(self->Mutex_) {
+                self->InFlightYtFileUploads_.erase(fileMd5Hash);
+                if (!f.HasException()) {
+                    auto sessionIt = self->Sessions_.find(sessionId);
+                    if (sessionIt != self->Sessions_.end()) {
+                        sessionIt->second->UploadedYtFilesMd5ToResource[fileMd5Hash] = f.GetValue();
+                    }
+                }
+            }
+        });
+
+        return resultFuture;
+    }
+
     NThreading::TFuture<TUploadResourcesResult> GetUploadResourcesFuture(
         const TString& sessionId,
         TYtSettings::TConstPtr config,
@@ -3499,7 +3579,7 @@ private:
         if (!FmrServices_->YtServerForUpload) {
             // No YT vanilla: binary is unused, user files go to the distributed cache.
             NThreading::TFuture<void> userFilesFuture = (FmrServices_->FileUploadService && !filesToUpload.empty())
-                ? UploadFilesToDistributedCache(filesToUpload)
+                ? UploadFilesToDistributedCache(sessionId, filesToUpload)
                 : NThreading::MakeFuture();
             return userFilesFuture.Apply(
                 [files = std::move(filesToUpload), ytRes = std::move(ytResources)](const NThreading::TFuture<void>& f) mutable {
@@ -3512,26 +3592,35 @@ private:
                 });
         }
 
-        // YtServerForUpload set: upload binary and user files in a single call.
-        // The binary is re-checked every operation because YT's cache can evict it.
+        // YtServerForUpload set: upload binary and user files with per-session caching.
         YQL_ENSURE(!FmrServices_->FmrJobBinaryPath.empty(), "YtServerForUpload is set but fmrjob binary path is unknown");
         YQL_ENSURE(!FmrServices_->FmrJobBinaryMd5.empty(), "YtServerForUpload is set but fmrjob binary MD5 is unknown");
 
-        TVector<IYtGateway::TFileWithMd5> ytFiles;
-        ytFiles.reserve(filesToUpload.size() + 1);
-
-        ytFiles.push_back(IYtGateway::TFileWithMd5{.Path = FmrServices_->FmrJobBinaryPath, .Md5 = FmrServices_->FmrJobBinaryMd5});
+        // Binary is at index 0; user files follow.
+        std::vector<NThreading::TFuture<TYtResourceInfo>> uploadFutures;
+        uploadFutures.reserve(filesToUpload.size() + 1);
+        uploadFutures.push_back(UploadFileToYtWithCache(
+            sessionId, config,
+            IYtGateway::TFileWithMd5{.Path = FmrServices_->FmrJobBinaryPath, .Md5 = FmrServices_->FmrJobBinaryMd5}));
         for (const auto& f : filesToUpload) {
-            ytFiles.push_back(IYtGateway::TFileWithMd5{.Path = f.LocalPath, .Md5 = f.Md5Key});
+            uploadFutures.push_back(UploadFileToYtWithCache(
+                sessionId, config,
+                IYtGateway::TFileWithMd5{.Path = f.LocalPath, .Md5 = f.Md5Key}));
         }
 
-        return UploadFilesToYt(sessionId, config, std::move(ytFiles)).Apply(
-            [filesToUpload = std::move(filesToUpload), ytResources = std::move(ytResources)](const NThreading::TFuture<std::vector<TYtResourceInfo>>& f) mutable {
-                auto uploaded = f.GetValue();
-                YQL_ENSURE(uploaded.size() == filesToUpload.size() + 1);
-                TMaybe<TYtResourceInfo> fmrJob = std::move(uploaded.front());
+        std::vector<NThreading::TFuture<void>> voidFutures;
+        voidFutures.reserve(uploadFutures.size());
+        for (const auto& f : uploadFutures) {
+            voidFutures.push_back(f.IgnoreResult());
+        }
+
+        return WaitExceptionOrAll(voidFutures).Apply(
+            [uploadFutures, filesToUpload = std::move(filesToUpload), ytResources = std::move(ytResources)](
+                const NThreading::TFuture<void>& waitFuture) mutable {
+                waitFuture.GetValue();
+                TMaybe<TYtResourceInfo> fmrJob = uploadFutures.front().GetValue();
                 for (size_t i = 0; i < filesToUpload.size(); ++i) {
-                    auto& res = uploaded[i + 1];
+                    auto res = uploadFutures[i + 1].GetValue();
                     res.RichPath.FileName(filesToUpload[i].Alias);
                     ytResources.push_back(std::move(res));
                 }
@@ -3561,28 +3650,75 @@ private:
         return ctx;
     }
 
-    TFuture<void> UploadFileToDistributedCache(const TFileInfo& fileInfo) {
-        auto metadataService = FmrServices_->FileMetadataService;
-        auto uploadService = FmrServices_->FileUploadService;
+    TFuture<void> UploadFileToDistributedCache(const TString& sessionId, const TFileInfo& fileInfo) {
         TString fileMd5Hash = fileInfo.Md5Key;
 
-        return metadataService->GetFileUploadStatus(fileMd5Hash).Apply([uploadService, fileMd5Hash, filePath = fileInfo.LocalPath] (const auto& getStatusFuture) {
-            bool isFileUploaded = getStatusFuture.GetValue();
-            if (isFileUploaded) {
+        TPromise<void> promise;
+        TFuture<void> resultFuture;
+        with_lock(Mutex_) {
+            // Per-session cache: skip if already uploaded in this session.
+            auto sessionIt = Sessions_.find(sessionId);
+            if (sessionIt != Sessions_.end() && sessionIt->second->UploadedFileMd5Hashes.contains(fileMd5Hash)) {
+                YQL_CLOG(DEBUG, FastMapReduce) << "File with md5 " << fileMd5Hash << " already uploaded in session " << sessionId << ", skipping";
                 return MakeFuture();
             }
-            return uploadService->UploadObject(fileMd5Hash, filePath);
+
+            // In-flight deduplication: if the same file is being uploaded concurrently, reuse the future.
+            auto inFlightIt = InFlightFileUploads_.find(fileMd5Hash);
+            if (inFlightIt != InFlightFileUploads_.end()) {
+                YQL_CLOG(DEBUG, FastMapReduce) << "File with md5 " << fileMd5Hash << " upload already in progress, reusing future";
+                return inFlightIt->second;
+            }
+
+            // Reserve the slot before releasing the lock so concurrent callers join our future.
+            promise = NewPromise<void>();
+            resultFuture = promise.GetFuture();
+            InFlightFileUploads_[fileMd5Hash] = resultFuture;
+        }
+
+        // Start the actual upload outside the lock.
+        auto metadataService = FmrServices_->FileMetadataService;
+        auto uploadService = FmrServices_->FileUploadService;
+        metadataService->GetFileUploadStatus(fileMd5Hash).Apply(
+            [uploadService, fileMd5Hash, filePath = fileInfo.LocalPath](const auto& getStatusFuture) {
+                bool isFileUploaded = getStatusFuture.GetValue();
+                if (isFileUploaded) {
+                    return MakeFuture();
+                }
+                return uploadService->UploadObject(fileMd5Hash, filePath);
+            }).Subscribe([promise = std::move(promise)](const TFuture<void>& f) mutable {
+                try {
+                    f.GetValue();
+                    promise.SetValue();
+                } catch (...) {
+                    promise.SetException(std::current_exception());
+                }
+            });
+
+        TIntrusivePtr<TFmrYtGateway> self(this);
+        resultFuture.Subscribe([self = std::move(self), sessionId, fileMd5Hash](const TFuture<void>& f) {
+            with_lock(self->Mutex_) {
+                self->InFlightFileUploads_.erase(fileMd5Hash);
+                if (!f.HasException()) {
+                    auto sessionIt = self->Sessions_.find(sessionId);
+                    if (sessionIt != self->Sessions_.end()) {
+                        sessionIt->second->UploadedFileMd5Hashes.insert(fileMd5Hash);
+                    }
+                }
+            }
         });
+
+        return resultFuture;
     }
 
-    TFuture<void> UploadFilesToDistributedCache(const std::vector<TFileInfo>& filesToUpload) {
+    TFuture<void> UploadFilesToDistributedCache(const TString& sessionId, const std::vector<TFileInfo>& filesToUpload) {
         for (auto& elem: filesToUpload) {
             YQL_CLOG(DEBUG, FastMapReduce) << " Uploading file with md5 key " << elem.Md5Key << " to dist cache";
         }
 
         std::vector<TFuture<void>> uploadFileFutures;
         for (auto& fileInfo: filesToUpload) {
-            uploadFileFutures.emplace_back(UploadFileToDistributedCache(fileInfo));
+            uploadFileFutures.emplace_back(UploadFileToDistributedCache(sessionId, fileInfo));
         }
         return WaitExceptionOrAll(uploadFileFutures);
     }
@@ -3615,12 +3751,15 @@ private:
 
         TFmrGatewayOperationsState OperationStates; // Info about operations
         std::unordered_map<TFmrTableId, TFmrTableInfo> FmrTables; // Info about tables
+        THashSet<TString> UploadedFileMd5Hashes; // MD5 hashes of files successfully uploaded to distributed cache this session
+        THashMap<TString, TYtResourceInfo> UploadedYtFilesMd5ToResource; // MD5 -> YT resource for files uploaded to YT this session
     };
 
     IFmrCoordinator::TPtr Coordinator_;
     std::unordered_map<TString, IWriteDistributedSession::TPtr> DistributedUploadSessions_;
     std::unordered_map<TFmrTableId, TFuture<TFmrOperationResult>> InFlightUploads_;
     THashMap<TString, TFuture<void>> InFlightFileUploads_;
+    THashMap<TString, NThreading::TFuture<TYtResourceInfo>> InFlightYtFileUploads_;
     TMutex Mutex_;
     TCondVar TrackingCondVar_;
     TMutex PingMutex_;

@@ -504,7 +504,7 @@ if (!list->Dict.IsSet()) {
     list->Dict.Set(list->CastCtx->PyCtx, list->CastCtx->ValueBuilder->ToIndexDict(NUdf::TUnboxedValuePod(list->Value.Get().Get())).AsBoxed());
 }
 
-return ToPyLazyDict(list->CastCtx, nullptr, list->ItemType, NUdf::TUnboxedValuePod(list->Dict.Get().Get())).Release();
+return ToPyLazyDict(list->CastCtx, /*keyType=*/nullptr, list->ItemType, NUdf::TUnboxedValuePod(list->Dict.Get().Get())).Release();
 }
 PY_CATCH(nullptr)
 }
@@ -1039,7 +1039,7 @@ PyObject* TPyThinList::ToIndexDict(PyObject* self, PyObject* /* arg */)
         PY_TRY{
             TPyThinList* list = Cast(self);
 const auto dict = list->CastCtx->ValueBuilder->ToIndexDict(NUdf::TUnboxedValuePod(list->Value.Get().Get()));
-return ToPyLazyDict(list->CastCtx, nullptr, list->ItemType, dict).Release();
+return ToPyLazyDict(list->CastCtx, /*keyType=*/nullptr, list->ItemType, dict).Release();
 }
 PY_CATCH(nullptr)
 }

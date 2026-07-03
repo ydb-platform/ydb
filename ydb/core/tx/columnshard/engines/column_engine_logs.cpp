@@ -238,8 +238,7 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
     , LastPortion(0)
     , LastGranule(0)
 {
-    AFL_VERIFY(SchemaObjectsCache);
-    ActualizationController = std::make_shared<NActualizer::TController>();
+    InitDerivedState();
     RegisterSchemaVersion(snapshot, presetId, schema);
 }
 
@@ -257,9 +256,14 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
     , LastPortion(0)
     , LastGranule(0)
 {
+    InitDerivedState();
+    RegisterSchemaVersion(snapshot, std::move(schema));
+}
+
+void TColumnEngineForLogs::InitDerivedState() {
     AFL_VERIFY(SchemaObjectsCache);
     ActualizationController = std::make_shared<NActualizer::TController>();
-    RegisterSchemaVersion(snapshot, std::move(schema));
+    Counters->SetSmallBlobThresholdBytes(StoragesManager->GetDefaultOperator()->GetSmallBlobThresholdBytes());
 }
 
 void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {

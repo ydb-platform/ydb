@@ -1,0 +1,18 @@
+/* sort outputs */
+
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelinePath = "pipelines/test";
+
+pragma Ytflow.YtConsumerPath = "yql_ytflow/consumers/main_consumer";
+pragma Ytflow.YtProducerPath = "yql_ytflow/producers/main_producer";
+
+insert into Output
+select
+    string_field as key,
+    int64_field as kv_value
+from Input
+where int64_field >= 10;

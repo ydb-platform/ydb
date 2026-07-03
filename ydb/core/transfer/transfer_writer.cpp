@@ -568,9 +568,9 @@ private:
     TDuration Delay = MinRetryDelay;
 
     struct TStatsHolder {
-        EWorkerOperation Operation;
+        EWorkerOperation Operation = EWorkerOperation::NONE;
         TInstant StartTime;
-        double StartCpuSec;
+        double StartCpuSec = 0.0;
         ui64 BytesWritten = 0;
         ui64 RowsWritten = 0;
         ui64 WriteErrors = 0;

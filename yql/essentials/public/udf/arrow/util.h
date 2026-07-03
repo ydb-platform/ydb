@@ -59,7 +59,7 @@ ui64 GetSizeOfArrowExecBatchInBytes(const arrow::compute::ExecBatch& batch);
 class TResizeableBuffer: public arrow::ResizableBuffer {
 public:
     explicit TResizeableBuffer(arrow::MemoryPool* pool)
-        : ResizableBuffer(nullptr, 0, arrow::CPUDevice::memory_manager(pool))
+        : ResizableBuffer(/*data=*/nullptr, 0, arrow::CPUDevice::memory_manager(pool))
         , Pool_(pool)
     {
     }
@@ -247,7 +247,7 @@ inline void SetMemoryContext(void* ptr, void* ctx) {
 }
 
 inline void ZeroMemoryContext(void* ptr) {
-    SetMemoryContext(ptr, nullptr);
+    SetMemoryContext(ptr, /*ctx=*/nullptr);
 }
 
 inline bool IsSingularType(const ITypeInfoHelper& typeInfoHelper, const TType* type) {

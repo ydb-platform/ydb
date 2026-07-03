@@ -74,6 +74,7 @@ namespace NScheduler {
     constexpr int OperationFailedWithInconsistentLocking = 211;
     constexpr int OperationControllerCrashed             = 212;
     constexpr int TestingError                           = 213;
+    constexpr int MasterDisconnected                     = 218;
 
 ////////////////////////////////////////////////////////////////////////////////
 

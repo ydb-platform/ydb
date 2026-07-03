@@ -227,17 +227,17 @@ TComputationPatternLRUCache::TComputationPatternLRUCache(
     : Cache_(std::make_unique<TLRUPatternCacheImpl>(
           CacheMaxElementsSize, configuration.MaxSizeBytes, CacheMaxElementsSize, configuration.MaxCompiledSizeBytes))
     , Configuration_(configuration)
-    , Hits_(counters->GetCounter("PatternCache/Hits", true))
-    , HitsCompiled_(counters->GetCounter("PatternCache/HitsCompiled", true))
-    , Waits_(counters->GetCounter("PatternCache/Waits", true))
-    , Misses_(counters->GetCounter("PatternCache/Misses", true))
-    , NotSuitablePattern_(counters->GetCounter("PatternCache/NotSuitablePattern", true))
-    , SizeItems_(counters->GetCounter("PatternCache/SizeItems", false))
-    , SizeCompiledItems_(counters->GetCounter("PatternCache/SizeCompiledItems", false))
-    , SizeBytes_(counters->GetCounter("PatternCache/SizeBytes", false))
-    , SizeCompiledBytes_(counters->GetCounter("PatternCache/SizeCompiledBytes", false))
-    , MaxSizeBytesCounter_(counters->GetCounter("PatternCache/MaxSizeBytes", false))
-    , MaxCompiledSizeBytesCounter_(counters->GetCounter("PatternCache/MaxCompiledSizeBytes", false))
+    , Hits_(counters->GetCounter("PatternCache/Hits", /*derivative=*/true))
+    , HitsCompiled_(counters->GetCounter("PatternCache/HitsCompiled", /*derivative=*/true))
+    , Waits_(counters->GetCounter("PatternCache/Waits", /*derivative=*/true))
+    , Misses_(counters->GetCounter("PatternCache/Misses", /*derivative=*/true))
+    , NotSuitablePattern_(counters->GetCounter("PatternCache/NotSuitablePattern", /*derivative=*/true))
+    , SizeItems_(counters->GetCounter("PatternCache/SizeItems", /*derivative=*/false))
+    , SizeCompiledItems_(counters->GetCounter("PatternCache/SizeCompiledItems", /*derivative=*/false))
+    , SizeBytes_(counters->GetCounter("PatternCache/SizeBytes", /*derivative=*/false))
+    , SizeCompiledBytes_(counters->GetCounter("PatternCache/SizeCompiledBytes", /*derivative=*/false))
+    , MaxSizeBytesCounter_(counters->GetCounter("PatternCache/MaxSizeBytes", /*derivative=*/false))
+    , MaxCompiledSizeBytesCounter_(counters->GetCounter("PatternCache/MaxCompiledSizeBytes", /*derivative=*/false))
 {
     *MaxSizeBytesCounter_ = Configuration_.MaxSizeBytes;
     *MaxCompiledSizeBytesCounter_ = Configuration_.MaxCompiledSizeBytes;

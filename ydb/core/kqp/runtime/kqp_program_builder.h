@@ -57,13 +57,6 @@ public:
     TRuntimeNode KqpBlockReadTableRanges(const TTableId& tableId, const TKqpKeyRanges& range,
         const TArrayRef<TKqpTableColumn>& columns, TType* returnType);
 
-    TRuntimeNode KqpUpsertRows(const TTableId& tableId, const TRuntimeNode& rows,
-        const TArrayRef<TKqpTableColumn>& upsertColumns, bool isUpdate);
-
-    TRuntimeNode KqpDeleteRows(const TTableId& tableId, const TRuntimeNode& rows);
-
-    TRuntimeNode KqpEffects(const TArrayRef<const TRuntimeNode>& effects);
-
     TRuntimeNode KqpEnsure(TRuntimeNode value, TRuntimeNode predicate, TRuntimeNode issueCode, TRuntimeNode message);
 
     TRuntimeNode KqpIndexLookupJoin(const TRuntimeNode& input, const TString& joinType, const TString& leftLabel, const TString& rightLabel, ui32 cookieFormatVersion = 0);

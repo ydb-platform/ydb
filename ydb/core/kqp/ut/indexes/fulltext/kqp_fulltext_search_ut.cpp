@@ -3172,6 +3172,8 @@ TKikimrRunner KikimrRowIdOptIn() {
     // EnableAddUniqueIndex gates `ALTER TABLE ADD INDEX ... GLOBAL UNIQUE`. The unique index over
     // __ydb_row_id is added after the table exists, so this flag must be on.
     featureFlags.SetEnableAddUniqueIndex(true);
+    // Gates using __ydb_row_id as doc_id for fulltext indexes over a non-integer PK.
+    featureFlags.SetEnableFulltextIndexRowId(true);
     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
     settings.AppConfig.MutableTableServiceConfig()
         ->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
@@ -3184,6 +3186,7 @@ TKikimrRunner KikimrRowIdOptInCompact() {
     featureFlags.SetEnableCompactFulltextIndex(true);
     featureFlags.SetEnableUniqConstraint(true);
     featureFlags.SetEnableAddUniqueIndex(true);
+    featureFlags.SetEnableFulltextIndexRowId(true);
     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
     settings.AppConfig.MutableTableServiceConfig()
         ->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);

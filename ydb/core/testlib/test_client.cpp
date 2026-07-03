@@ -122,6 +122,7 @@
 #include <ydb/core/statistics/aggregator/aggregator.h>
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/keyvalue/keyvalue.h>
+#include <ydb/core/test_tablet/test_tablet.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/deferred_publish/registry_actor.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
@@ -565,6 +566,7 @@ namespace Tests {
             MERGE_CFG_FROM_APP_CFG(HiveConfig);
             MERGE_CFG_FROM_APP_CFG(DataShardConfig);
             MERGE_CFG_FROM_APP_CFG(ColumnShardConfig);
+            MERGE_CFG_FROM_APP_CFG(SmallBlobsQuotaConfig);
             MERGE_CFG_FROM_APP_CFG(SchemeShardConfig);
             MERGE_CFG_FROM_APP_CFG(MeteringConfig);
             MERGE_CFG_FROM_APP_CFG(CompactionConfig);
@@ -1153,6 +1155,10 @@ namespace Tests {
         localConfig.TabletClassInfo[TTabletTypes::KeyValue] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateKeyValueFlat, TMailboxType::Revolving, appData.UserPoolId,
+                TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[TTabletTypes::TestShard] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NKikimr::NTestShard::CreateTestShard, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
         localConfig.TabletClassInfo[TTabletTypes::ColumnShard] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(

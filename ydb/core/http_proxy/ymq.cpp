@@ -415,6 +415,7 @@ namespace NKikimr::NHttpProxy {
                         .AWSSignature = std::move(HttpContext.GetSignature()),
                         .IAMToken = HttpContext.IamToken,
                         .FolderID = HttpContext.FolderId,
+                        .SourceAddress = HttpContext.SourceAddress,
                         .RequestFormat = NKikimr::NSQS::TAuthActorData::Json,
                         .Requester = ctx.SelfID
                     };
@@ -537,4 +538,3 @@ namespace NKikimr::NHttpProxy {
     }
 
 } // namespace NKikimr::NHttpProxy
-

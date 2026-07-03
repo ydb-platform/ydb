@@ -1,4 +1,5 @@
 #include "ypath_client.h"
+
 #include "helpers.h"
 #include "exception_helpers.h"
 #include "ypath_detail.h"
@@ -197,6 +198,26 @@ const NRpc::TStreamingParameters& TYPathRequest::ServerAttachmentsStreamingParam
 }
 
 NRpc::TStreamingParameters& TYPathRequest::ServerAttachmentsStreamingParameters()
+{
+    YT_ABORT();
+}
+
+const NRpc::TDirectPlacementTransferParameters& TYPathRequest::RequestAttachmentsDptParameters() const
+{
+    YT_ABORT();
+}
+
+NRpc::TDirectPlacementTransferParameters& TYPathRequest::RequestAttachmentsDptParameters()
+{
+    YT_ABORT();
+}
+
+const NRpc::TDirectPlacementTransferParameters& TYPathRequest::ResponseAttachmentsDptParameters() const
+{
+    YT_ABORT();
+}
+
+NRpc::TDirectPlacementTransferParameters& TYPathRequest::ResponseAttachmentsDptParameters()
 {
     YT_ABORT();
 }

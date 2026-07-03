@@ -78,7 +78,7 @@ ui64 RunScenario(
     UNIT_ASSERT(spiller != nullptr);
 
     auto multiType = CreateTestMultiType(typeEnv);
-    TWideUnboxedValuesSpillerAdapter adapter(spiller, multiType, flushThreshold, reportMemoryThreshold);
+    TWideUnboxedValuesSpillerAdapter adapter(spiller, multiType, flushThreshold, NYql::DefaultDatumTestValidationMode, reportMemoryThreshold);
 
     for (ui64 i = 0; i < numItems; ++i) {
         auto future = adapter.WriteWideItem(CreateTestWideItem(static_cast<ui32>(i), 100 * i, i * 100));

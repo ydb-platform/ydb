@@ -65,7 +65,7 @@ concept CInvocationTimePolicy = CCallbackResultProcessor<T> &&
 //! DefaultInvocationTimePolicy wants to be able to change only the period
 //! So it defines SetOptions(Period) and ShouldKickstart(Period).
 //! After this is done, Period is a partial option for DefaultInvocationTimePolicy.
-//! Concept below accounts for desire to change several options (e.g. Peiod and Splay)
+//! Concept below accounts for desire to change several options (e.g. Period and Splay)
 //! at the same time.
 template <class TPolicy, class... TOptions>
 concept CPartialOptions = requires (TOptions... partialOptions, TPolicy policy)

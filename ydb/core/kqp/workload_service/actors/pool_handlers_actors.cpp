@@ -106,7 +106,7 @@ protected:
             Canceling   // after TEvCancelRequest
         };
 
-        TRequest(const TActorId& workerActorId, const TString& sessionId, const TString& requestText = "", std::shared_ptr<IWmSessionUpdater> wmSessionUpdater = nullptr)
+        TRequest(const TActorId& workerActorId, const TString& sessionId, const TString& requestText = "", std::shared_ptr<ISessionUpdater> wmSessionUpdater = nullptr)
             : WorkerActorId(workerActorId)
             , SessionId(sessionId)
             , RequestText(requestText)
@@ -118,7 +118,7 @@ protected:
         const TString RequestText;
         const TInstant StartTime = TInstant::Now();
         TInstant ContinueTime;
-        std::shared_ptr<IWmSessionUpdater> WmSessionUpdater;
+        std::shared_ptr<ISessionUpdater> WmSessionUpdater;
 
         EState State = EState::Pending;
         bool Started = false;  // after TEvContinueRequest success
@@ -313,7 +313,7 @@ public:
         this->Send(request->WorkerActorId, new TEvContinueRequest(status, PoolId, PoolConfig, issues));
         
         if (request->WmSessionUpdater) {
-            request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::EXITED, TActivationContext::Now());
+            request->WmSessionUpdater->SetRequestState(ISessionUpdater::EState::EXITED, TActivationContext::Now());
         }
 
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -660,7 +660,7 @@ protected:
 
         // Notify proxy that request entered WM pending queue via shared interface
         if (request->WmSessionUpdater) {
-            request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::PENDING, TActivationContext::Now());
+            request->WmSessionUpdater->SetRequestState(ISessionUpdater::EState::PENDING, TActivationContext::Now());
         }
 
         if (!PreparingFinished) {
@@ -814,7 +814,7 @@ private:
         if (request) {
             // Notify proxy that request moved to Delayed state via shared interface
             if (request->WmSessionUpdater) {
-                request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::DELAYED, TActivationContext::Now());
+                request->WmSessionUpdater->SetRequestState(ISessionUpdater::EState::DELAYED, TActivationContext::Now());
             }
         } else {
             LOG_D("successfully delayed request, session id: " << sessionId);

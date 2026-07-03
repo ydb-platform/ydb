@@ -1,5 +1,4 @@
 import sys
-
 import traceback
 
 from cffi import api as _api

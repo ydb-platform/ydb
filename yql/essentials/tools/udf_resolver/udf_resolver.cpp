@@ -180,8 +180,8 @@ void ResolveUDFs() {
 
             TFunctionTypeInfo funcInfo;
             auto runtimeSettings = NYql::DeserializeRuntimeSettingsFromProto(udf.GetRuntimeSettings());
-            auto status = newRegistry->FindFunctionTypeInfo(udf.GetLangVer(), *runtimeSettings, env, typeInfoHelper, nullptr,
-                                                            udf.GetName(), mkqlUserType, udf.GetTypeConfig(), NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), nullptr, logProvider.Get(), &funcInfo);
+            auto status = newRegistry->FindFunctionTypeInfo(udf.GetLangVer(), *runtimeSettings, env, typeInfoHelper, /*countersProvider=*/nullptr,
+                                                            udf.GetName(), mkqlUserType, udf.GetTypeConfig(), NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), /*secureParamsProvider=*/nullptr, logProvider.Get(), &funcInfo);
             if (!status.IsOk()) {
                 udfRes->SetError(TStringBuilder() << "Failed to find UDF function: " << udf.GetName()
                                                   << ", reason: " << status.GetError());
@@ -215,7 +215,7 @@ void ResolveUDFs() {
 void ListModules(const TString& dir) {
     TVector<TString> udfPaths;
     NMiniKQL::FindUdfsInDir(dir, &udfPaths);
-    auto funcRegistry = CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, IBuiltinFunctionRegistry::TPtr(), false, udfPaths,
+    auto funcRegistry = CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, IBuiltinFunctionRegistry::TPtr(), /*allowUdfPatch=*/false, udfPaths,
                                                NUdf::IRegistrator::TFlags::TypesOnly);
 
     for (auto& m : funcRegistry->GetAllModuleNames()) {

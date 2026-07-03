@@ -21,7 +21,7 @@ message TSetColumnConstraintSettings {
 
 message TSetColumnConstraint {
     optional uint64 Id = 1;
-    optional Ydb.Table.SetColumnConstraintState.State State = 2;
+    optional Ydb.Table.SetNotNullState.State State = 2;
     optional TSetColumnConstraintSettings Settings = 3;
     optional float Progress = 4 [default = 0];
     optional google.protobuf.Timestamp StartTime = 5;

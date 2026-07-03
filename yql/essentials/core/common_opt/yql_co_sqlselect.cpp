@@ -221,7 +221,7 @@ void RewriteAggsPartial(TExprNode::TPtr& root, const TExprNode::TPtr& arg, const
         if (subIt != subLinks.end()) {
             if (!node->Child(3)->IsCallable("Void")) {
                 auto lambda = node->ChildPtr(3);
-                RewriteAggs(lambda, aggId, ctx, optCtx, true);
+                RewriteAggs(lambda, aggId, ctx, optCtx, /*testExpr=*/true);
                 return ctx.ChangeChild(*node, 3, std::move(lambda));
             }
         }
@@ -525,7 +525,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(
 
                     const auto ex = exports.find(name);
                     YQL_ENSURE(exports.cend() != ex);
-                    auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
+                    auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, /*internStrings=*/true, /*copyTypes=*/false);
                     auto arg = ctx.NewArgument(node->Pos(), "row");
                     auto arguments = ctx.NewArguments(node->Pos(), { arg });
                     TExprNode::TPtr root;
@@ -1884,7 +1884,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(
                 current = BuildUsingMap(
                     pos,
                     std::move(current),
-                    std::move(secondStruct),
+                    secondStruct,
                     std::move(toRemove),
                     ctx);
 
@@ -1914,7 +1914,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(
                     return std::make_tuple(name, lhs, rhs);
                 }, ctx);
 
-                return BuildUsingMap(pos, std::move(source), std::move(secondStruct), /*toRemove=*/{}, ctx);
+                return BuildUsingMap(pos, std::move(source), secondStruct, /*toRemove=*/{}, ctx);
             };
 
             auto predicate = join->Child(1)->TailPtr();
@@ -2322,7 +2322,7 @@ void GatherAggregationsFromLambda(const TExprNode::TPtr& lambda, TAggs& aggs, TA
         if (node->IsCallable({"PgSubLink", "YqlSubLink"})) {
             if (!node->Child(3)->IsCallable("Void")) {
                 YQL_ENSURE(node->Child(3)->IsLambda());
-                GatherAggregationsFromLambda(node->ChildPtr(3), aggs, aggId, true);
+                GatherAggregationsFromLambda(node->ChildPtr(3), aggs, aggId, /*testExpr=*/true);
             }
 
             return false;
@@ -2378,7 +2378,7 @@ TExprNode::TPtr BuildAggregationTraits(
         for (ui32 j = 2 + onWindow + isYqlAgg; j < agg.first->ChildrenSize(); ++j) {
             auto root = agg.first->ChildPtr(j);
             if (aggId && onWindow) {
-                RewriteAggsPartial(root, arg, *aggId, ctx, optCtx, false);
+                RewriteAggsPartial(root, arg, *aggId, ctx, optCtx, /*testExpr=*/false);
             }
 
             aggFuncArgs.push_back(ctx.ReplaceNode(std::move(root), *agg.second, arg));
@@ -2520,7 +2520,7 @@ TExprNode::TPtr BuildGroup(
         }
 
         const bool distinct = GetSetting(*aggs[i].first->Child(1), "distinct") != nullptr;
-        auto traits = BuildAggregationTraits(pos, false, distinct ? "_yql_distinct_" + ToString(i) : "", aggs[i], listTypeNode, nullptr, ctx, optCtx);
+        auto traits = BuildAggregationTraits(pos, /*onWindow=*/false, distinct ? "_yql_distinct_" + ToString(i) : "", aggs[i], listTypeNode, /*aggId=*/nullptr, ctx, optCtx);
         if (distinct) {
             payloadItems.push_back(ctx.Builder(pos)
                 .List()
@@ -2768,7 +2768,7 @@ TExprNode::TPtr BuildHaving(
     auto havingLambda = having->TailPtr();
     auto havingLambdaRoot = havingLambda->TailPtr();
     auto originalHavingLambdaRoot = havingLambdaRoot;
-    RewriteAggsPartial(havingLambdaRoot, havingLambda->Head().HeadPtr(), aggId, ctx, optCtx, false);
+    RewriteAggsPartial(havingLambdaRoot, havingLambda->Head().HeadPtr(), aggId, ctx, optCtx, /*testExpr=*/false);
     auto [havingSubLinks, originalHavingSubLinks] =
         GatherSubLinksWithOriginal(havingLambdaRoot, originalHavingLambdaRoot);
     if (!havingSubLinks.empty()) {
@@ -3022,7 +3022,7 @@ TExprNode::TPtr BuildSortTraits(
                         for (ui32 i = 0; i < sortColumns.ChildrenSize(); ++i) {
                             auto lambda = sortColumns.Child(i)->ChildPtr(1);
                             if (aggId) {
-                                RewriteAggs(lambda, *aggId, ctx, optCtx, false);
+                                RewriteAggs(lambda, *aggId, ctx, optCtx, /*testExpr=*/false);
                             }
 
                             if (sortColumns.Child(i)->ChildPtr(3)->Content() == "last") {
@@ -3155,7 +3155,7 @@ TExprNode::TPtr BuildWindows(
             for (ui32 i = 0; i < winDef->Child(2)->ChildrenSize(); ++i) {
                 const auto& group = winDef->Child(2)->Child(i);
                 auto lambda = group->TailPtr();
-                RewriteAggs(lambda, aggId, ctx, optCtx, false);
+                RewriteAggs(lambda, aggId, ctx, optCtx, /*testExpr=*/false);
                 auto name = "_yql_partition_key_" + ToString(windowId) + "_" + ToString(i);
                 keysItems.push_back(ctx.NewAtom(pos, name));
                 newColumns.push_back(ctx.Builder(pos)
@@ -3476,7 +3476,7 @@ TExprNode::TPtr BuildDistinctOn(TPositionHandle pos,
 
     auto sortNode = ctx.NewCallable(pos, "Void", {});
     if (sort && sort->Tail().ChildrenSize() > 0) {
-        sortNode = BuildSortTraits(pos, sort->Tail(), list, nullptr, isYql, ctx, optCtx);
+        sortNode = BuildSortTraits(pos, sort->Tail(), list, /*aggId=*/nullptr, isYql, ctx, optCtx);
     }
 
     const auto begin = ctx.NewCallable(pos, "Void", {});
@@ -4180,7 +4180,7 @@ TExprNode::TPtr ExpandSqlSelectImpl(
     TMaybe<TColumnOrderInfo> columnOrder;
     if (auto order = optCtx.Types->LookupColumnOrder(*originalNode)) {
         columnOrder.ConstructInPlace();
-        columnOrder->Node = std::move(*order);
+        columnOrder->Node = *order;
         columnOrder->Target = columnOrder->Node;
 
         for (const auto& [x, gen_x] : columnOrder->Node) {
@@ -4333,9 +4333,9 @@ TExprNode::TPtr ExpandSqlSelectImpl(
             TAggs aggs;
             TAggregationMap aggId;
 
-            GatherAggregationsFromLambda(projectionLambda, aggs, aggId, false);
+            GatherAggregationsFromLambda(projectionLambda, aggs, aggId, /*testExpr=*/false);
             if (having) {
-                GatherAggregationsFromLambda(having->Tail().TailPtr(), aggs, aggId, false);
+                GatherAggregationsFromLambda(having->Tail().TailPtr(), aggs, aggId, /*testExpr=*/false);
             }
 
             if (!winCtx.FuncIdsByWindowId.empty()) {
@@ -4344,12 +4344,12 @@ TExprNode::TPtr ExpandSqlSelectImpl(
                     auto winDef = window->Tail().Child(windowId);
                     for (ui32 i = 0; i < winDef->Child(2)->ChildrenSize(); ++i) {
                         const auto& group = winDef->Child(2)->Child(i);
-                        GatherAggregationsFromLambda(group->TailPtr(), aggs, aggId, false);
+                        GatherAggregationsFromLambda(group->TailPtr(), aggs, aggId, /*testExpr=*/false);
                     }
 
                     for (ui32 i = 0; i < winDef->Child(3)->ChildrenSize(); ++i) {
                         const auto& sort = winDef->Child(3)->Child(i);
-                        GatherAggregationsFromLambda(sort->ChildPtr(1), aggs, aggId, false);
+                        GatherAggregationsFromLambda(sort->ChildPtr(1), aggs, aggId, /*testExpr=*/false);
                     }
                 }
             }
@@ -4358,7 +4358,7 @@ TExprNode::TPtr ExpandSqlSelectImpl(
             auto aggsSizeBeforeSort = aggs.size();
             if (sort) {
                 sortLambda = BuildSortLambda(node->Pos(), sort, ctx);
-                GatherAggregationsFromLambda(sortLambda, aggs, aggId, false);
+                GatherAggregationsFromLambda(sortLambda, aggs, aggId, /*testExpr=*/false);
             }
 
             if (groupExprs) {
@@ -4373,7 +4373,7 @@ TExprNode::TPtr ExpandSqlSelectImpl(
                 list = BuildWindows(node->Pos(), list, window, winCtx, projectionRoot, projectionArg, aggId, isYql, ctx, optCtx);
             }
 
-            RewriteAggsPartial(projectionRoot, projectionArg, aggId, ctx, optCtx, false);
+            RewriteAggsPartial(projectionRoot, projectionArg, aggId, ctx, optCtx, /*testExpr=*/false);
 
             auto [projectionSubLinks, originalProjectionSubLinks] =
                 GatherSubLinksWithOriginal(projectionRoot, originalProjectionRoot);
@@ -4426,7 +4426,7 @@ TExprNode::TPtr ExpandSqlSelectImpl(
                 auto sortLambdaRoot = sortLambda->TailPtr();
                 auto originalSortLambdaRoot = sortLambdaRoot;
 
-                RewriteAggsPartial(sortLambdaRoot, sortLambda->Head().HeadPtr(), aggId, ctx, optCtx, false);
+                RewriteAggsPartial(sortLambdaRoot, sortLambda->Head().HeadPtr(), aggId, ctx, optCtx, /*testExpr=*/false);
 
                 auto [sortSubLinks, originalSortSubLinks] =
                     GatherSubLinksWithOriginal(sortLambdaRoot, originalSortLambdaRoot);
@@ -4479,7 +4479,7 @@ TExprNode::TPtr ExpandSqlSelectImpl(
                     TExprNode::TPtr expr = setItemNodes[inputIndex];
                     if (!isYql && columnOrder) {
                         expr = NormalizeColumnOrder(
-                            std::move(expr),
+                            expr,
                             columnOrder->BySetItems[inputIndex],
                             columnOrder->Target,
                             ctx);

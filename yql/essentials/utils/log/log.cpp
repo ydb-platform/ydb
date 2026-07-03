@@ -336,7 +336,7 @@ TAutoPtr<TLogElement> TYqlLog::CreateLogElement(
 
 void TYqlLog::Contextify(TLogElement& element, EComponent component, ELevel level, TStringBuf file, int line) const {
     const auto action = [&](std::pair<TString, TString> pair) {
-        element.With(std::move(pair.first), std::move(pair.second));
+        element.With(pair.first, std::move(pair.second));
     };
     Contextify(action, component, level, file, line);
 }
@@ -395,7 +395,7 @@ void InitLogger(const NProto::TLoggingConfig& config, bool startAsDaemon) {
 
         // Set stderr log destination if none was described in config
         if (config.LogDestSize() == 0) {
-            backends.emplace_back(CreateLogBackend("cerr", LOG_MAX_PRIORITY, false));
+            backends.emplace_back(CreateLogBackend("cerr", LOG_MAX_PRIORITY, /*threaded=*/false));
         }
 
         for (const auto& logDest : config.GetLogDest()) {
@@ -405,12 +405,12 @@ void InitLogger(const NProto::TLoggingConfig& config, bool startAsDaemon) {
                 case NProto::TLoggingConfig::STDOUT:
                 case NProto::TLoggingConfig::CONSOLE: {
                     if (!startAsDaemon) {
-                        backends.emplace_back(CreateLogBackend(ConvertDestinationType(logDest.GetType()), LOG_MAX_PRIORITY, false));
+                        backends.emplace_back(CreateLogBackend(ConvertDestinationType(logDest.GetType()), LOG_MAX_PRIORITY, /*threaded=*/false));
                     }
                     break;
                 }
                 case NProto::TLoggingConfig::FILE: {
-                    backends.emplace_back(CreateLogBackend(logDest.GetTarget(), LOG_MAX_PRIORITY, false));
+                    backends.emplace_back(CreateLogBackend(logDest.GetTarget(), LOG_MAX_PRIORITY, /*threaded=*/false));
                     break;
                 }
                 case NProto::TLoggingConfig::SYSLOG: {
@@ -455,7 +455,7 @@ void InitLogger(TAutoPtr<TLogBackend> backend, TFormatter formatter, bool isStri
             return;
         }
 
-        backend = MakeFormattingLogBackend(std::move(formatter), isStrictFormatting, std::move(backend));
+        backend = MakeFormattingLogBackend(std::move(formatter), isStrictFormatting, backend);
 
         TComponentLevels levels;
         levels.fill(ELevel::INFO);

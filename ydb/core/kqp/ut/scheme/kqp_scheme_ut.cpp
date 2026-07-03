@@ -12166,7 +12166,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 CONCURRENT_QUERY_LIMIT=20
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Resource pool id should not contain '/' symbol", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Resource pool name should not contain '/' symbol", result.GetIssues().ToString());
 
         result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL MyResourcePool WITH (

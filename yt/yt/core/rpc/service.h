@@ -2,11 +2,7 @@
 
 #include "public.h"
 
-#include "protocol_version.h"
-
 #include <yt/yt/core/actions/signal.h>
-
-#include <yt/yt/core/bus/public.h>
 
 #include <yt/yt/core/net/public.h>
 
@@ -180,6 +176,11 @@ struct IServiceContext
 
     //! Returns the stream of asynchronous request attachments.
     virtual NConcurrency::IAsyncZeroCopyInputStreamPtr GetRequestAttachmentsStream() = 0;
+    //! When the request attachments are delivered via direct placement transfer,
+    //! returns a non-null transfer; the service must drive it to completion, after
+    //! which #RequestAttachments become available (until then they abort). Returns
+    //! null when the attachments are delivered inline.
+    virtual IDirectPlacementTransferPtr TryGetRequestAttachmentsTransfer() = 0;
 
     //! Returns a vector of response attachments.
     virtual std::vector<TSharedRef>& ResponseAttachments() = 0;
@@ -322,10 +323,15 @@ struct IService
     virtual const TServiceId& GetServiceId() const = 0;
 
     //! Handles incoming request.
+    /*!
+     *  #requestAttachmentsTransfer is non-null when the request's attachments are
+     *  delivered via direct placement transfer (see #TDirectPlacementTransferParameters).
+     */
     virtual void HandleRequest(
         std::unique_ptr<NProto::TRequestHeader> header,
         TSharedRefArray message,
-        NYT::NBus::IBusPtr replyBus) = 0;
+        NYT::NBus::IBusPtr replyBus,
+        NYT::NBus::IDirectPlacementTransferPtr requestAttachmentsTransfer = {}) = 0;
 
     //! Handles request cancelation.
     virtual void HandleRequestCancellation(

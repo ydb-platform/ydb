@@ -44,6 +44,8 @@ void TPeriodicExecutorOptionsSerializer::Register(TRegistrar registrar)
         .Default(TDuration::Zero());
     registrar.ExternalClassParameter("jitter", &TThat::Jitter)
         .Default(TThat::DefaultJitter);
+    registrar.ExternalClassParameter("delay_mode", &TThat::DelayMode)
+        .Default(EPeriodicExecutorDelayMode::FromPreviousEnd);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

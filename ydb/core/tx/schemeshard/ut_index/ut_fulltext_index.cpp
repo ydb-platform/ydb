@@ -485,6 +485,49 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         }
     }
 
+    // With EnableFulltextIndexRowId off, __ydb_row_id auto-provisioning is disabled: a fulltext index
+    // over a non-integer PK falls back to requiring a single integer PK and is rejected server-side.
+    Y_UNIT_TEST(CreateTableRowIdDisabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableFulltextIndexRowId(false));
+        auto& appData = runtime.GetAppData();
+        appData.FeatureFlags.SetEnableUniqConstraint(true);
+        ui64 txId = 100;
+
+        TString fulltextSettings = R"(
+            columns: {
+                column: "text"
+                analyzers: {
+                    tokenizer: STANDARD
+                    use_filter_lowercase: true
+                }
+            }
+        )";
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+                Name: "texts"
+                Columns { Name: "pk" Type: "Utf8" }
+                Columns { Name: "text" Type: "String" }
+                KeyColumnNames: ["pk"]
+            }
+            IndexDescription {
+                Name: "idx_fulltext"
+                KeyColumnNames: ["text"]
+                Type: EIndexTypeGlobalFulltextPlain
+                FulltextIndexDescription: {
+                    Settings: {
+                        %s
+                    }
+                }
+            }
+        )", fulltextSettings.c_str()),
+            {{NKikimrScheme::StatusInvalidParameter, "requires the __ydb_row_id doc_id feature, which is disabled (feature flag EnableFulltextIndexRowId)"}});
+        env.TestWaitNotification(runtime, txId);
+
+        // No __ydb_row_id infrastructure must have been provisioned.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts"), {NLs::PathNotExist});
+    }
+
     // A single-integer PK keeps the legacy doc_id=PK behaviour: no __ydb_row_id infrastructure is
     // provisioned even though the table has a fulltext index.
     Y_UNIT_TEST(CreateTableSingleIntegerPkKeepsLegacyDocId) {

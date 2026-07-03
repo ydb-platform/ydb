@@ -24,6 +24,8 @@
 
 #include <library/cpp/yt/memory/range.h>
 
+#include <util/stream/mem.h>
+
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h>
 
 #include <contrib/libs/apache/arrow_next/cpp/src/generated/Message.fbs.h>
@@ -2231,11 +2233,11 @@ void SerializeComplexTypeColumn(
         int currentBufferIndex = initialBufferIndex;
 
         if (offsets[rowOffset] != offsets[rowOffset + 1]) {
-            TString ysonString(
+            std::string ysonString(
                 currentStringData + offsets[rowOffset],
                 currentStringData + offsets[rowOffset + 1]);
 
-            TStringInput input(ysonString);
+            TMemoryInput input(ysonString);
             TYsonPullParser parser(&input, EYsonType::Node);
             TYsonPullParserCursor cursor = &parser;
 

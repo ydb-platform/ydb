@@ -3173,36 +3173,26 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         Y_UNUSED(SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 2, ydbSchemaV2, ydbPk, {}), ++txId));
 
-        TDeque<TAutoPtr<IEventHandle>> capturedScanErrors;
-        const auto captureScanError = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        // The restore scan was captured before the schema change and carries the write's schema
+        // version (1). Observe (but don't drop) any scan error so we can assert the scan does not fail.
+        bool scanFailed = false;
+        runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (TryGetPrivateEvent<NKqp::TEvKqpCompute::TEvScanError>(ev)) {
-                capturedScanErrors.push_back(ev.Release());
-                return true;
+                scanFailed = true;
             }
-
             return false;
-        };
-
-        runtime.SetEventFilter(captureScanError);
+        });
 
         while (!capturedInternalScans.empty()) {
             runtime.Send(capturedInternalScans.front().Release());
             capturedInternalScans.pop_front();
         }
 
-        const TInstant scanWaitStart = TInstant::Now();
-        while (capturedScanErrors.empty() && TInstant::Now() - scanWaitStart < TDuration::Seconds(30)) {
-            runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
-        }
-
-        UNIT_ASSERT_C(!capturedScanErrors.empty(), "Internal scan must fail gracefully on schema version mismatch");
-        const auto* scanError = TryGetPrivateEvent<NKqp::TEvKqpCompute::TEvScanError>(capturedScanErrors.front());
-        UNIT_ASSERT(scanError);
-        UNIT_ASSERT_VALUES_EQUAL(scanError->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
-        const TString issuesText = NYql::IssuesFromMessageAsString(scanError->Record.GetIssues());
-        UNIT_ASSERT_C(issuesText.Contains("schema version mismatch"), issuesText);
-        UNIT_ASSERT_C(issuesText.Contains("request_schema_version=1"), issuesText);
-        UNIT_ASSERT_C(issuesText.Contains("snapshot_schema_version=2"), issuesText);
+        // The write's read is pinned to its own schema epoch (version 1), so even though a newer schema
+        // (version 2, with the column dropped) is already committed, the scan resolves schema 1 and the
+        // write completes normally instead of failing with a schema-version mismatch.
+        UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT_C(!scanFailed, "internal scan must not fail: read is pinned to the write's schema version");
     }
 }
 

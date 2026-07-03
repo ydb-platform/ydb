@@ -70,7 +70,7 @@ Y_UNIT_TEST(InitiallyAcquired) {
         UNIT_ASSERT_VALUES_EQUAL(true, alloc.IsAttached());
     }
     {
-        TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), false, false);
+        TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), /*supportsSizedAllocators=*/false, /*initiallyAcquired=*/false);
         UNIT_ASSERT_VALUES_EQUAL(false, alloc.IsAttached());
         {
             auto guard = Guard(alloc);

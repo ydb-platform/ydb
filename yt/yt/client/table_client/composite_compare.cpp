@@ -15,6 +15,8 @@
 
 #include <library/cpp/yt/misc/compare.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/stream/mem.h>
 
 #include <cmath>
@@ -322,8 +324,8 @@ std::optional<TYsonString> TruncateYsonValue(TYsonStringBuf originalYson, i64 si
     TMemoryInput valueIn(originalYson.AsStringBuf());
     TYsonPullParser valueParser(&valueIn, EYsonType::Node);
 
-    TString truncatedYson;
-    TStringOutput output(truncatedYson);
+    std::string truncatedYson;
+    TStdStringOutput output(truncatedYson);
     output.Reserve(std::min(size, std::ssize(originalYson.AsStringBuf())));
     TCheckedInDebugYsonTokenWriter writer(&output);
 

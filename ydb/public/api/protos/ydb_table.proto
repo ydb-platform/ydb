@@ -449,8 +449,8 @@ message IndexBuildState {
     }
 }
 
-// State of set column constraint operation
-message SetColumnConstraintState {
+// State of set not null operation
+message SetNotNullState {
     enum State {
         STATE_UNSPECIFIED = 0;
         STATE_PREPARING = 1;

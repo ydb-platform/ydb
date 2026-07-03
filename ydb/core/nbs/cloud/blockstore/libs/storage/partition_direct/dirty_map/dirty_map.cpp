@@ -480,22 +480,20 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
 
         auto& val = item->Value;
 
-        for (THostIndex host: val.GetWriteRequested()) {
-            bool rangeRemoved = false;
-            if (val.RequestErase(host)) {
-                if (DisabledHosts.Get(host)) {
-                    // We can't handle this situation properly. Barrier cleanup
-                    // will help us.
-                    if (val.ConfirmErase(host)) {
-                        const bool removed = Inflight.RemoveRange(item->Key);
-                        Y_ABORT_UNLESS(removed);
-                        rangeRemoved = true;
-                    }
-                } else {
-                    result.AddHint(host, item->Key);
+        for (THostIndex host: val.GetEraseNeeded()) {
+            val.RequestErase(host);
+
+            if (DisabledHosts.Get(host)) {
+                // We can't handle this situation properly. Barrier cleanup
+                // will help us.
+                if (val.ConfirmErase(host)) {
+                    const bool removed = Inflight.RemoveRange(item->Key);
+                    Y_ABORT_UNLESS(removed);
+                    break;
                 }
+            } else {
+                result.AddHint(host, item->Key);
             }
-            Y_ABORT_IF(rangeRemoved && !result.Empty());
         }
     }
 

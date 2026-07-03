@@ -539,4 +539,7 @@ message TTableServiceConfig {
     optional bool EnableHybridSearch = 135 [default = true, (InvalidateCompileCache) = true];
 
     optional bool EnableStrictSerializableIsolation = 136 [default = false, (InvalidateCompileCache) = true];
+
+    // Remove KqpSequencer from query plan for tables with DEFAULT columns during write operations.
+    optional bool EnableCompileTimeDefaults = 137 [default = false, (InvalidateCompileCache) = true];
 };

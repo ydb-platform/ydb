@@ -7,6 +7,7 @@ TEST_SRCS(
     test_concurrency.py
     test_patch.py
     test_pilot.py
+    test_bench.py
 )
 
 PEERDIR(

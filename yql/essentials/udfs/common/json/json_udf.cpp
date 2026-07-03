@@ -30,7 +30,7 @@ public:
         }
 
         NJson::TJsonParser parser;
-        parser.AddField(field, false);
+        parser.AddField(field, /*mustExist=*/false);
 
         TVector<TString> result;
         parser.Parse(json, &result);

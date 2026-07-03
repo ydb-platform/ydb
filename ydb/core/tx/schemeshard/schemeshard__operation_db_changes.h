@@ -63,6 +63,8 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
     TDeque<TPathId> ExternalTables;
     TDeque<TPathId> ResourcePools;
 
+    TDeque<TPathId> TestShardSets;
+
     //PQ part
     TDeque<std::tuple<TPathId, TShardIdx, TTopicTabletInfo::TTopicPartitionInfo>> PersQueue;
     TDeque<std::pair<TPathId, TTopicInfo::TPtr>> PersQueueGroup;
@@ -201,6 +203,10 @@ public:
 
     void PersistResourcePool(const TPathId& pathId) {
         ResourcePools.emplace_back(pathId);
+    }
+
+    void PersistTestShardSet(const TPathId& pathId) {
+        TestShardSets.emplace_back(pathId);
     }
 
     void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);

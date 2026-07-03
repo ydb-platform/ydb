@@ -565,7 +565,7 @@ TNodePtr ISource::BuildPreaggregatedMap(TContext& ctx) {
 TNodePtr ISource::BuildPreFlattenMap(TContext& ctx) {
     Y_UNUSED(ctx);
     YQL_ENSURE(IsFlattenByExprs());
-    return BuildLambdaBodyForExprAliases(Pos_, Expressions(EExprSeat::FlattenByExpr), true, ctx.FlattenAndAggrExprsPersistence);
+    return BuildLambdaBodyForExprAliases(Pos_, Expressions(EExprSeat::FlattenByExpr), /*override=*/true, ctx.FlattenAndAggrExprsPersistence);
 }
 
 TNodePtr ISource::BuildPrewindowMap(TContext& ctx) {
@@ -865,7 +865,7 @@ TNodePtr ISource::BuildCalcOverWindow(TContext& ctx, const TString& label) {
                 break;
         }
         YQL_ENSURE(frameType);
-        auto sortSpec = spec->OrderBy.empty() ? Y("Void") : BuildSortSpec(spec->OrderBy, useLabel, true, false);
+        auto sortSpec = spec->OrderBy.empty() ? Y("Void") : BuildSortSpec(spec->OrderBy, useLabel, /*traits=*/true, /*assume=*/false);
 
         auto callOnFrame = Y(frameType, BuildWindowFrame(ctx, *spec->Frame, spec->IsCompact, sortSpec));
         for (auto& agg : aggs) {

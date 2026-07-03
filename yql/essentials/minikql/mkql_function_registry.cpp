@@ -225,7 +225,7 @@ public:
 
         TUdfModuleRemappings remappings;
         TUdfModuleLoader loader(
-            UdfModules_, nullptr, libraryPathStr,
+            UdfModules_, /*newModules=*/nullptr, libraryPathStr,
             remappings, NUdf::CurrentAbiVersion());
         loader.AddModule(moduleName, std::move(module));
 

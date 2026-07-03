@@ -1,22 +1,21 @@
 name: compare_index_performance
 
 on:
-  schedule:
-    - cron: "0 23 * * *"  # At 23:00 every day
   workflow_dispatch:
     inputs:
       duration:
         description: 'Duration of each workload run in seconds'
         required: false
-        default: '600'
+        default: '100'
       build_preset:
         description: 'Build preset (must match S3 prebuilt binary)'
         required: false
         type: choice
         options:
-          - relwithdebinfo
           - release
-        default: relwithdebinfo
+          - relwithdebinfo
+          - profile
+        default: release
       ref:
         description: 'S3 ref to compare against (e.g. main, stable-26-1-1)'
         required: false
@@ -66,20 +65,58 @@ on:
         description: 'Comma-separated table_service_config options for current branch (e.g. enable_vector_index_read=true)'
         required: false
         default: ''
+      pull_number:
+        description: 'Pull request number to test the current side against, ex: 12345 (empty = current branch)'
+        required: false
+        default: ''
 
 jobs:
   compare:
-    name: Compare performance (${{ inputs.ref || 'main' }} vs current)
-    runs-on: [ self-hosted, auto-provisioned, "build-preset-${{ inputs.build_preset || 'relwithdebinfo' }}" ]
+    name: Compare performance (${{ inputs.ref || 'main' }} vs ${{ inputs.pull_number && format('PR {0}', inputs.pull_number) || 'current' }})
+    runs-on: [ self-hosted, auto-provisioned, "build-preset-${{ inputs.build_preset || 'release' }}" ]
     timeout-minutes: 1200
     steps:
+      - name: Resolve checkout ref
+        id: resolve-ref
+        env:
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_number || '' }}
+          INPUT_REF: ${{ inputs.ref || 'main' }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # Resolve the baseline SHA (HEAD of the S3 ref branch).
+          BASELINE_SHA=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${INPUT_REF}" \
+            | jq -r '.sha')
+          echo "baseline_sha=$BASELINE_SHA" >> "$GITHUB_OUTPUT"
+
+          # When a pull_number is given, run the current side against the PR's
+          # merge commit (mirrors run_tests.yml); otherwise use the triggering ref.
+          if [[ -n "$PULL_REQUEST_NUMBER" ]] && [[ "$PULL_REQUEST_NUMBER" =~ ^[0-9]+$ ]]; then
+            PR_DATA=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/$PULL_REQUEST_NUMBER")
+            MERGE_SHA=$(echo "$PR_DATA" | jq -r '.merge_commit_sha')
+            if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
+              echo "Testing PR #$PULL_REQUEST_NUMBER at merge commit $MERGE_SHA"
+              echo "checkout_ref=$MERGE_SHA" >> "$GITHUB_OUTPUT"
+            else
+              echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER"
+              exit 1
+            fi
+          else
+            echo "checkout_ref=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.resolve-ref.outputs.checkout_ref }}
 
       - name: Run performance comparison
         env:
-          INPUT_DURATION: ${{ inputs.duration || '600' }}
-          INPUT_BUILD_PRESET: ${{ inputs.build_preset || 'relwithdebinfo' }}
+          INPUT_DURATION: ${{ inputs.duration || '100' }}
+          INPUT_BUILD_PRESET: ${{ inputs.build_preset || 'release' }}
           INPUT_REF: ${{ inputs.ref || 'main' }}
           INPUT_WORKLOAD: ${{ inputs.workload || 'all' }}
           INPUT_ROWS: ${{ inputs.rows || '10000' }}
@@ -91,63 +128,74 @@ jobs:
           INPUT_CURRENT_FEATURE_FLAGS: ${{ inputs.current_feature_flags || '' }}
           INPUT_MAIN_TABLE_SERVICE_CONFIG: ${{ inputs.main_table_service_config || '' }}
           INPUT_CURRENT_TABLE_SERVICE_CONFIG: ${{ inputs.current_table_service_config || '' }}
+          INPUT_BASELINE_SHA: ${{ steps.resolve-ref.outputs.baseline_sha }}
+          INPUT_CURRENT_SHA: ${{ steps.resolve-ref.outputs.checkout_ref }}
         run: |
-          MAIN_FLAG_ARGS=""
-          IFS=',' read -ra FLAGS <<< "$INPUT_MAIN_FEATURE_FLAGS"
-          for flag in "${FLAGS[@]}"; do
-            if [[ -n "$flag" ]]; then
-              MAIN_FLAG_ARGS="$MAIN_FLAG_ARGS --main-feature-flag $flag"
-            fi
-          done
-          CURRENT_FLAG_ARGS=""
-          IFS=',' read -ra FLAGS <<< "$INPUT_CURRENT_FEATURE_FLAGS"
-          for flag in "${FLAGS[@]}"; do
-            if [[ -n "$flag" ]]; then
-              CURRENT_FLAG_ARGS="$CURRENT_FLAG_ARGS --current-feature-flag $flag"
-            fi
-          done
-          MAIN_TSC_ARGS=""
-          IFS=',' read -ra OPTS <<< "$INPUT_MAIN_TABLE_SERVICE_CONFIG"
-          for opt in "${OPTS[@]}"; do
-            if [[ -n "$opt" ]]; then
-              MAIN_TSC_ARGS="$MAIN_TSC_ARGS --main-table-service-config $opt"
-            fi
-          done
-          CURRENT_TSC_ARGS=""
-          IFS=',' read -ra OPTS <<< "$INPUT_CURRENT_TABLE_SERVICE_CONFIG"
-          for opt in "${OPTS[@]}"; do
-            if [[ -n "$opt" ]]; then
-              CURRENT_TSC_ARGS="$CURRENT_TSC_ARGS --current-table-service-config $opt"
-            fi
-          done
-          ./ydb/tests/stress/compare_index_performance.sh \
-            --duration "$INPUT_DURATION" \
-            --build-preset "$INPUT_BUILD_PRESET" \
-            --ref "$INPUT_REF" \
-            --targets "$INPUT_TARGETS" \
-            --workload "$INPUT_WORKLOAD" \
-            --rows "$INPUT_ROWS" \
-            --iterations "$INPUT_ITERATIONS" \
-            --warmup "$INPUT_WARMUP" \
-            --threads "$INPUT_THREADS" \
-            $MAIN_FLAG_ARGS \
-            $CURRENT_FLAG_ARGS \
-            $MAIN_TSC_ARGS \
-            $CURRENT_TSC_ARGS
+          # The feature-flag / table_service_config inputs are comma-separated
+          # strings; the test splits them itself, so they are passed through as-is.
+          ./ya make --build "$INPUT_BUILD_PRESET" -tA \
+            ydb/tests/stress/compare_index_performance/tests \
+            --test-param compare_duration="$INPUT_DURATION" \
+            --test-param compare_build_preset="$INPUT_BUILD_PRESET" \
+            --test-param compare_ref="$INPUT_REF" \
+            --test-param compare_targets="$INPUT_TARGETS" \
+            --test-param compare_workload="$INPUT_WORKLOAD" \
+            --test-param compare_rows="$INPUT_ROWS" \
+            --test-param compare_iterations="$INPUT_ITERATIONS" \
+            --test-param compare_warmup="$INPUT_WARMUP" \
+            --test-param compare_threads="$INPUT_THREADS" \
+            --test-param compare_baseline_feature_flags="$INPUT_MAIN_FEATURE_FLAGS" \
+            --test-param compare_current_feature_flags="$INPUT_CURRENT_FEATURE_FLAGS" \
+            --test-param compare_baseline_table_service_config="$INPUT_MAIN_TABLE_SERVICE_CONFIG" \
+            --test-param compare_current_table_service_config="$INPUT_CURRENT_TABLE_SERVICE_CONFIG" \
+            --test-param compare_baseline_sha="$INPUT_BASELINE_SHA" \
+            --test-param compare_current_sha="$INPUT_CURRENT_SHA"
 
       - name: Post results to job summary
         if: always()
         run: |
-          if [[ -f benchmark_results/report.md ]]; then
-            cat benchmark_results/report.md >> "$GITHUB_STEP_SUMMARY"
+          RESULTS_DIR=ydb/tests/stress/compare_index_performance/tests/test-results
+          # `test-results` and the files under it are ya-build symlinks, so find
+          # must follow symlinks (-L) — otherwise it never descends into them.
+          REPORTS=$(find -L "$RESULTS_DIR" -name 'report_*.md' -path "*/testing_out_stuff/*" 2>/dev/null | sort)
+          if [[ -n "$REPORTS" ]]; then
+            for r in $REPORTS; do
+              cat "$r" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+            done
           else
             echo "No report generated." >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Post results to pull request
+        if: always() && inputs.pull_number != ''
+        env:
+          PR_NUMBER: ${{ inputs.pull_number }}
+          BUILD_PRESET: ${{ inputs.build_preset || 'release' }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          pip install PyGithub
+          RESULTS_DIR=ydb/tests/stress/compare_index_performance/tests/test-results
+          REPORTS=$(find -L "$RESULTS_DIR" -name 'report_*.md' -path "*/testing_out_stuff/*" 2>/dev/null | sort)
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          {
+            echo "### Index performance comparison"
+            echo ""
+            if [[ -n "$REPORTS" ]]; then
+              for r in $REPORTS; do
+                cat "$r"
+                echo ""
+              done
+            else
+              echo "No report generated."
+            fi
+            echo "[Workflow run](${run_url})"
+          } | .github/scripts/tests/comment-pr.py --rewrite --no-timestamp
 
       - name: Upload benchmark logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results
-          path: benchmark_results/
+          path: ydb/tests/stress/compare_index_performance/tests/test-results/**/testing_out_stuff/
           retention-days: 30

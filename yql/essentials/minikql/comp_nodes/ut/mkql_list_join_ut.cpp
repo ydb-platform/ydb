@@ -411,10 +411,10 @@ Y_UNIT_TEST_LLVM(MultiColumnKey) {
     const auto int32Type = pb.NewDataType(NUdf::TDataType<i32>::Id);
     const auto [inputRowType, leftArgType, rightArgType] = BuildDefaultStructTypes(pb, list, int32Type);
     // Two-column key maps to a tuple (key1, key2).
-    const auto keyType = AS_TYPE(TStructType, pb.NewStructType({{"key1", int32Type}, {"key2", int32Type}}));
+    const auto keyType = AS_TYPE(TTupleType, pb.NewTupleType({int32Type, int32Type}));
     const TColumnsVec keyColumns = {
-        {inputRowType->GetMemberIndex("key1"), keyType->GetMemberIndex("key1")},
-        {inputRowType->GetMemberIndex("key2"), keyType->GetMemberIndex("key2")},
+        {inputRowType->GetMemberIndex("key1"), 0},
+        {inputRowType->GetMemberIndex("key2"), 1},
     };
     const TColumnsVec leftColumns = {{inputRowType->GetMemberIndex("left.a"), leftArgType->GetMemberIndex("a")}};
     const TColumnsVec rightColumns = {{inputRowType->GetMemberIndex("right.b"), rightArgType->GetMemberIndex("b")}};
@@ -429,7 +429,7 @@ Y_UNIT_TEST_LLVM(MultiColumnKey) {
                                           listJoinType,
                                           [&pb](const TRuntimeNode key, const TRuntimeNode leftList, const TRuntimeNode rightList) {
                                               const auto root = pb.Map(pb.Zip({leftList, rightList}), [&pb, key](const auto pair) {
-                                                  return pb.NewTuple({pb.Member(key, "key1"), pb.Member(key, "key2"), pb.Nth(pair, 0), pb.Nth(pair, 1)});
+                                                  return pb.NewTuple({pb.Nth(key, 0), pb.Nth(key, 1), pb.Nth(pair, 0), pb.Nth(pair, 1)});
                                               });
                                               return pb.Iterator(root, {}); });
 

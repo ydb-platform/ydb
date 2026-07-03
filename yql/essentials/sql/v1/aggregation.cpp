@@ -1712,7 +1712,7 @@ TAggregationPtr BuildCountAggregation(TPosition pos, const TString& name, const 
 class TPGFactoryAggregation final: public TAggregationFactory {
 public:
     TPGFactoryAggregation(TPosition pos, const TString& name, EAggregateMode aggMode)
-        : TAggregationFactory(pos, name, "", aggMode, false, false)
+        : TAggregationFactory(pos, name, "", aggMode, /*multi=*/false, /*validateArgs=*/false)
         , PgFunc_(Name_)
     {
     }
@@ -1876,9 +1876,9 @@ TAggregationPtr BuildAggregationByType(
         case NTH_VALUE:
             return BuildNthFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
         case RANDOM_SAMPLE:
-            return BuildReservoirSamplingFactoryAggregation(pos, realFunctionName, factoryName, aggMode, false);
+            return BuildReservoirSamplingFactoryAggregation(pos, realFunctionName, factoryName, aggMode, /*isValue=*/false);
         case RANDOM_VALUE:
-            return BuildReservoirSamplingFactoryAggregation(pos, realFunctionName, factoryName, aggMode, true);
+            return BuildReservoirSamplingFactoryAggregation(pos, realFunctionName, factoryName, aggMode, /*isValue=*/true);
     }
 }
 

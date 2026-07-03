@@ -70,6 +70,24 @@ void TAlterReplicationCardCommand::Register(TRegistrar registrar)
             return command->Options.CollocationOptions;
         })
         .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<TCreateSecondaryIndexPtr>(
+        "create_secondary_index",
+        [] (TThis* command) -> auto& {
+            return command->Options.CreateSecondaryIndex;
+        })
+        .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<TReplicationCardId>(
+        "destroy_secondary_index",
+        [] (TThis* command) -> auto& {
+            return command->Options.DestroySecondaryIndex;
+        })
+        .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<TProgressSecondaryIndexCorrespondencePtr>(
+        "progress_secondary_index_correspondence",
+        [] (TThis* command) -> auto& {
+            return command->Options.ProgressSecondaryIndexCorrespondence;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TAlterReplicationCardCommand::DoExecute(ICommandContextPtr context)

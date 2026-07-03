@@ -75,7 +75,8 @@ template <class TBaseService>
 void TOverloadControllingServiceBase<TBaseService>::HandleRequest(
     std::unique_ptr<NRpc::NProto::TRequestHeader> header,
     TSharedRefArray message,
-    NBus::IBusPtr replyBus)
+    NBus::IBusPtr replyBus,
+    NYT::NBus::IDirectPlacementTransferPtr requestAttachmentsTransfer)
 {
     auto congestionState = Controller_->GetCongestionState(
         header->service(),
@@ -86,7 +87,11 @@ void TOverloadControllingServiceBase<TBaseService>::HandleRequest(
         NConcurrency::Yield();
     }
 
-    TBaseService::HandleRequest(std::move(header), std::move(message), std::move(replyBus));
+    TBaseService::HandleRequest(
+        std::move(header),
+        std::move(message),
+        std::move(replyBus),
+        std::move(requestAttachmentsTransfer));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

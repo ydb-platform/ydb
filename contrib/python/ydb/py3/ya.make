@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.28.4)
+VERSION(3.29.6)
 
 LICENSE(Apache-2.0)
 
@@ -16,6 +16,7 @@ PEERDIR(
 NO_LINT()
 
 NO_CHECK_IMPORTS(
+    ydb.opentelemetry.plugin
     ydb.public.api.grpc
     ydb.public.api.grpc.*
 )
@@ -104,6 +105,9 @@ PY_SRCS(
     ydb/oauth2_token_exchange/__init__.py
     ydb/oauth2_token_exchange/token_exchange.py
     ydb/oauth2_token_exchange/token_source.py
+    ydb/opentelemetry/__init__.py
+    ydb/opentelemetry/plugin.py
+    ydb/opentelemetry/tracing.py
     ydb/operation.py
     ydb/pool.py
     ydb/query/__init__.py

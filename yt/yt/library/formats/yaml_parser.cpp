@@ -10,6 +10,8 @@
 
 #include <yt/yt/core/misc/coro_pipe.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <contrib/libs/yaml/include/yaml.h>
 
 namespace NYT::NFormats {
@@ -182,7 +184,7 @@ private:
     //! record the YSON representation of the outermost anchor. We call the representation
     //! of such an outermost anchor a run. Conveniently, we represent runs as elements of
     //! a fictional YSON list, making each anchor a substring of that YSON list.
-    TStringStream RunListStream_;
+    TStdStringStream RunListStream_;
     TBufferedBinaryYsonWriter RunListWriter_;
 
     struct TAnchor

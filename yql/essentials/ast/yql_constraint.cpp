@@ -131,7 +131,7 @@ NYT::TNode TPartOfConstraintBase::SetOfSetsToNode(const TPartOfConstraintBase::T
     return std::accumulate(sets.cbegin(), sets.cend(),
                            NYT::TNode::CreateList(),
                            [](NYT::TNode node, const TSetType& s) {
-                               return std::move(node).Add(TPartOfConstraintBase::SetToNode(s, true));
+                               return std::move(node).Add(TPartOfConstraintBase::SetToNode(s, /*withShortcut=*/true));
                            });
 }
 
@@ -409,7 +409,7 @@ NYT::TNode TSortedConstraintNode::ToYson() const {
     return std::accumulate(Content_.cbegin(), Content_.cend(),
                            NYT::TNode::CreateList(),
                            [](NYT::TNode node, const std::pair<TSetType, bool>& pair) {
-                               return std::move(node).Add(NYT::TNode::CreateList().Add(TPartOfConstraintBase::SetToNode(pair.first, false)).Add(pair.second));
+                               return std::move(node).Add(NYT::TNode::CreateList().Add(TPartOfConstraintBase::SetToNode(pair.first, /*withShortcut=*/false)).Add(pair.second));
                            });
 }
 

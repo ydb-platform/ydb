@@ -84,7 +84,7 @@ private:
 
         // clang-format off
         return PartialAnnonateTypes(astRoot, mode == EMode::Library, langver, udfMeta, issues,
-            [](TTypeAnnotationContext& newTypeCtx) { return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true); },
+            [](TTypeAnnotationContext& newTypeCtx) { return CreateConfigProvider(newTypeCtx, /*config=*/nullptr, "", {}, /*forPartialTypeCheck=*/true); },
             [](TStringBuf str, TExprContext& ctx) { return NCommon::ParseTypeFromYson(str, ctx); },
             [](const TTypeAnnotationNode* type) { return NCommon::WriteTypeToYson(type); }
         );

@@ -17,6 +17,7 @@ from .. import (
     _apis,
     issues,
 )
+from ..opentelemetry.tracing import SpanName, create_ydb_span, span_finish_callback
 from .._grpc.grpcwrapper import ydb_topic as _ydb_topic
 from .._grpc.grpcwrapper import ydb_query as _ydb_query
 from ..connection import _RpcState as RpcState
@@ -243,6 +244,10 @@ class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
         self._prev_stream = None
         self._external_error = None
         self._last_query_stats = None
+
+    @property
+    def _driver_config(self):
+        return getattr(self._driver, "_driver_config", None)
 
     @property
     def session_id(self) -> Optional[str]:
@@ -523,7 +528,13 @@ class QueryTxContext(BaseQueryTxContext["SyncDriver"]):
 
         :return: Transaction object or exception if begin is failed
         """
-        self._begin_call(settings)
+        with create_ydb_span(
+            SpanName.BEGIN_TRANSACTION,
+            self._driver_config,
+            node_id=self.session.node_id,
+            peer=getattr(self.session, "_peer", None),
+        ).attach_context():
+            self._begin_call(settings)
 
         return self
 
@@ -545,13 +556,19 @@ class QueryTxContext(BaseQueryTxContext["SyncDriver"]):
 
         self._ensure_prev_stream_finished()
 
-        try:
-            self._execute_callbacks_sync(base.TxEvent.BEFORE_COMMIT)
-            self._commit_call(settings)
-            self._execute_callbacks_sync(base.TxEvent.AFTER_COMMIT, exc=None)
-        except BaseException as e:  # TODO: probably should be less wide
-            self._execute_callbacks_sync(base.TxEvent.AFTER_COMMIT, exc=e)
-            raise e
+        with create_ydb_span(
+            SpanName.COMMIT,
+            self._driver_config,
+            node_id=self.session.node_id,
+            peer=getattr(self.session, "_peer", None),
+        ).attach_context():
+            try:
+                self._execute_callbacks_sync(base.TxEvent.BEFORE_COMMIT)
+                self._commit_call(settings)
+                self._execute_callbacks_sync(base.TxEvent.AFTER_COMMIT, exc=None)
+            except BaseException as e:  # TODO: probably should be less wide
+                self._execute_callbacks_sync(base.TxEvent.AFTER_COMMIT, exc=e)
+                raise e
 
     def rollback(self, settings: Optional[BaseRequestSettings] = None) -> None:
         """Calls rollback on a transaction if it is open otherwise is no-op. If transaction execution
@@ -571,13 +588,19 @@ class QueryTxContext(BaseQueryTxContext["SyncDriver"]):
 
         self._ensure_prev_stream_finished()
 
-        try:
-            self._execute_callbacks_sync(base.TxEvent.BEFORE_ROLLBACK)
-            self._rollback_call(settings)
-            self._execute_callbacks_sync(base.TxEvent.AFTER_ROLLBACK, exc=None)
-        except BaseException as e:  # TODO: probably should be less wide
-            self._execute_callbacks_sync(base.TxEvent.AFTER_ROLLBACK, exc=e)
-            raise e
+        with create_ydb_span(
+            SpanName.ROLLBACK,
+            self._driver_config,
+            node_id=self.session.node_id,
+            peer=getattr(self.session, "_peer", None),
+        ).attach_context():
+            try:
+                self._execute_callbacks_sync(base.TxEvent.BEFORE_ROLLBACK)
+                self._rollback_call(settings)
+                self._execute_callbacks_sync(base.TxEvent.AFTER_ROLLBACK, exc=None)
+            except BaseException as e:  # TODO: probably should be less wide
+                self._execute_callbacks_sync(base.TxEvent.AFTER_ROLLBACK, exc=e)
+                raise e
 
     def execute(
         self,
@@ -626,20 +649,27 @@ class QueryTxContext(BaseQueryTxContext["SyncDriver"]):
         """
         self._ensure_prev_stream_finished()
 
-        stream_it = self._execute_call(
-            query=query,
-            commit_tx=commit_tx,
-            syntax=syntax,
-            exec_mode=exec_mode,
-            stats_mode=stats_mode,
-            schema_inclusion_mode=schema_inclusion_mode,
-            result_set_format=result_set_format,
-            arrow_format_settings=arrow_format_settings,
-            parameters=parameters,
-            concurrent_result_sets=concurrent_result_sets,
-            settings=settings,
+        span = create_ydb_span(
+            SpanName.EXECUTE_QUERY,
+            self._driver_config,
+            node_id=self.session.node_id,
+            peer=getattr(self.session, "_peer", None),
         )
 
+        with span.attach_context(end_on_exit=False):
+            stream_it = self._execute_call(
+                query=query,
+                commit_tx=commit_tx,
+                syntax=syntax,
+                exec_mode=exec_mode,
+                stats_mode=stats_mode,
+                schema_inclusion_mode=schema_inclusion_mode,
+                result_set_format=result_set_format,
+                arrow_format_settings=arrow_format_settings,
+                parameters=parameters,
+                concurrent_result_sets=concurrent_result_sets,
+                settings=settings,
+            )
         self._prev_stream = base.SyncResponseContextIterator(
             stream_it,
             lambda resp: base.wrap_execute_query_response(
@@ -651,5 +681,6 @@ class QueryTxContext(BaseQueryTxContext["SyncDriver"]):
                 settings=self.session._settings,
             ),
             on_error=self.session._on_execute_stream_error,
+            on_finish=span_finish_callback(span),
         )
         return self._prev_stream

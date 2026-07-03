@@ -8,6 +8,7 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 
@@ -27,7 +28,8 @@ public:
     void Bootstrap();
 
     STFUNC(StateWait) {
-        TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("event_type", ev->GetTypeName());
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"eventType", ev->GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             hFunc(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleRetryTimer);

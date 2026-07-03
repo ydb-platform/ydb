@@ -28,7 +28,7 @@ The build process using the source code is described in the source code reposito
 
   If the command fails, make sure your environment has [Python](https://www.python.org/downloads/) 3.8 or newer installed with the [pip](https://pypi.org/project/pip/) package manager enabled.
 
-- C# (.NET)
+- C#
 
   {% include [install/cmd_dotnet.md](install/cmd_dotnet.md) %}
 

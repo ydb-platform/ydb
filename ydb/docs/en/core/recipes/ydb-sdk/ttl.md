@@ -209,8 +209,8 @@ For a newly created table, you can pass TTL settings along with the table descri
 
   ```python
   session.create_table(
-    'mytable',
-    ydb.TableDescription()
+      'mytable',
+      ydb.TableDescription()
       .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64)))
       .with_column(ydb.Column('expire_at', ydb.OptionalType(ydb.DataType.Timestamp)))
       .with_primary_key('id')

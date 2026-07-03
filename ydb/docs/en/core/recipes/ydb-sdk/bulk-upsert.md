@@ -307,6 +307,7 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
         fmt.Printf("unexpected error: %v", err)
       }
     }
+
     ```
 
     {% endcut %}
@@ -329,50 +330,50 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
     private static final int BATCH_SIZE = 1000;
 
     public static void main(String[] args) {
-        String connectionString = args[0];
+      String connectionString = args[0];
 
-        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-                .withAuthProvider(NopAuthProvider.INSTANCE) // use anonymous credentials
-                .build()) {
+      try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+              .withAuthProvider(NopAuthProvider.INSTANCE) // use anonymous credentials
+              .build()) {
 
-            // For bulk upsert, the full table path needs to be specified
-            String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
-            try (TableClient tableClient = TableClient.newClient(transport).build()) {
-                SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
-                execute(retryCtx, tablePath);
-            }
-        }
+          // For bulk upsert, the full table path needs to be specified
+          String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
+          try (TableClient tableClient = TableClient.newClient(transport).build()) {
+              SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
+              execute(retryCtx, tablePath);
+          }
+      }
     }
 
     public static void execute(SessionRetryContext retryCtx, String tablePath) {
-        // table description
-        StructType structType = StructType.of(
-            "app", PrimitiveType.Text,
-            "timestamp", PrimitiveType.Timestamp,
-            "host", PrimitiveType.Text,
-            "http_code", PrimitiveType.Uint32,
-            "message", PrimitiveType.Text
-        );
+      // table description
+      StructType structType = StructType.of(
+          "app", PrimitiveType.Text,
+          "timestamp", PrimitiveType.Timestamp,
+          "host", PrimitiveType.Text,
+          "http_code", PrimitiveType.Uint32,
+          "message", PrimitiveType.Text
+      );
 
-        // generate batch of records
-        List<Value<?>> list = new ArrayList<>(50);
-        for (int i = 0; i < BATCH_SIZE; i += 1) {
-            // add a new row as a struct value
-            list.add(structType.newValue(
-                "app", PrimitiveValue.newText("App_" + String.valueOf(i / 256)),
-                "timestamp", PrimitiveValue.newTimestamp(Instant.now().plusSeconds(i)),
-                "host", PrimitiveValue.newText("192.168.0." + i % 256),
-                "http_code", PrimitiveValue.newUint32(i % 113 == 0 ? 404 : 200),
-                "message", PrimitiveValue.newText(i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
-            ));
-        }
+      // generate batch of records
+      List<Value<?>> list = new ArrayList<>(50);
+      for (int i = 0; i < BATCH_SIZE; i += 1) {
+          // add a new row as a struct value
+          list.add(structType.newValue(
+              "app", PrimitiveValue.newText("App_" + i / 256),
+              "timestamp", PrimitiveValue.newTimestamp(Instant.now().plusSeconds(i)),
+              "host", PrimitiveValue.newText("192.168.0." + i % 256),
+              "http_code", PrimitiveValue.newUint32(i % 113 == 0 ? 404 : 200),
+              "message", PrimitiveValue.newText(i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
+          ));
+      }
 
-        // Create list of structs
-        ListValue rows = ListType.of(structType).newValue(list);
-        // Do retry operation on errors with best effort
-        retryCtx.supplyStatus(
-            session -> session.executeBulkUpsert(tablePath, rows, new BulkUpsertSettings())
-        ).join().expectSuccess("bulk upsert problem");
+      // Create list of structs
+      ListValue rows = ListType.of(structType).newValue(list);
+      // Do retry operation on errors with best effort
+      retryCtx.supplyStatus(
+          session -> session.executeBulkUpsert(tablePath, rows, new BulkUpsertSettings())
+      ).join().expectSuccess("bulk upsert problem");
     }
     ```
 

@@ -835,7 +835,7 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
 
 - JavaScript
 
-  To release a semaphore acquired within a session, call `release()` on the `Lease` object. If you use `await using`, the lease is released automatically when leaving the scope.
+  To release a semaphore acquired within a session, call the `Release` method on the `Lease` object. If the semaphore was acquired using the `using` construct, it will be released automatically when leaving the scope.
 
   ```javascript
   await lease.release();

@@ -87,7 +87,7 @@ Below are examples of setting the session pool limit in different {{ ydb-short-n
 
   - database/sql
 
-    The `database/sql` library has its own connection pool. Each `database/sql` connection maps to one {{ ydb-short-name }} session. Tune the pool with `sql.DB.SetMaxOpenConns` and `sql.DB.SetMaxIdleConns`. See the [`database/sql` documentation](https://pkg.go.dev/database/sql#DB.SetMaxOpenConns).
+    The `database/sql` library has its own connection pool. Each `database/sql` connection maps to one {{ ydb-short-name }} session. The connection pool in `database/sql` is managed using the `sql.DB.SetMaxOpenConns` and `sql.DB.SetMaxIdleConns` functions. See the [documentation](https://pkg.go.dev/database/sql#DB.SetMaxOpenConns) for `database/sql`.
 
     Example using a `database/sql` connection pool:
 

@@ -194,10 +194,7 @@ bool TBlobStorageController::TGroupInfo::FillInResources(
             occupancy = Max(occupancy.value_or(0), vm.GetNormalizedOccupancy());
         }
 
-        const bool hasAllMetrics = metrics.HasMaxIOPS()
-            && metrics.HasMaxReadThroughput()
-            && metrics.HasMaxWriteThroughput()
-            && vslot->Metrics.HasNormalizedOccupancy();
+        const bool hasAllMetrics = pdisk->HasFullMetrics() && vslot->Metrics.HasNormalizedOccupancy();
         if (hasAllMetrics) {
             vdisksWithAllMetrics |= {Topology.get(), vslot->GetShortVDiskId()};
         }
@@ -216,7 +213,7 @@ bool TBlobStorageController::TGroupInfo::FillInResources(
         pb->SetReadThroughput(Min<ui64>(pb->HasReadThroughput() ? pb->GetReadThroughput() : Max<ui64>(), *readThroughput * factor));
     }
     if (writeThroughput) {
-        pb->SetWriteThroughput(Min<ui64>(pb->HasWriteThroughput() ? pb->GetReadThroughput() : Max<ui64>(), *writeThroughput * factor));
+        pb->SetWriteThroughput(Min<ui64>(pb->HasWriteThroughput() ? pb->GetWriteThroughput() : Max<ui64>(), *writeThroughput * factor));
     }
     if (occupancy) {
         pb->SetOccupancy(Max<double>(pb->HasOccupancy() ? pb->GetOccupancy() : Min<double>(), *occupancy));

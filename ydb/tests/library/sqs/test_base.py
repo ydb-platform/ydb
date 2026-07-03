@@ -320,6 +320,10 @@ class KikimrSqsTestBase(object):
         return SQS_MIGRATION_STAGES[stage]
 
     @classmethod
+    def _is_topic_migration_stage(cls):
+        return os.environ.get('YDB_SQS_MIGRATION_STAGE') in ('compatibility', 'finished')
+
+    @classmethod
     def _setup_config_generator(cls):
         config_generator = KikimrConfigGenerator(
             erasure=cls.erasure,

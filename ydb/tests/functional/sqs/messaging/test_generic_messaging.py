@@ -26,6 +26,8 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
 
         if tables_format != 0:
             return
+        if self._is_topic_migration_stage():
+            return
         # break a queue and check failure
         self._break_queue(self._username, self.queue_name, is_fifo)
 
@@ -95,6 +97,8 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         assert_that(len([] if msgs is None else msgs), equal_to(0))
 
         if tables_format != 0:
+            return
+        if self._is_topic_migration_stage():
             return
         # break a queue and check failure
         self._break_queue(self._username, self.queue_name, is_fifo)
@@ -690,6 +694,9 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         assert_that(self._get_counter_value(counters, delete_counter_labels, 0), equal_to(1))
 
         if tables_format != 0:
+            return
+
+        if self._is_topic_migration_stage():
             return
 
         # break a queue and check failure

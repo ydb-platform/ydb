@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import os
 import time
 import logging
 
@@ -114,7 +113,7 @@ class QueuesManagingTest(KikimrSqsTestBase):
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_delete_queue(self, is_fifo, tables_format):
-        if os.environ.get('YDB_SQS_MIGRATION_STAGE') in ('compatibility', 'finished'):
+        if self._is_topic_migration_stage():
             pytest.skip('Legacy table checks are not applicable after topic migration')
         self._init_with_params(is_fifo, tables_format)
 

@@ -233,6 +233,9 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
         }
         assert_that(self._get_counter_value(counters, delete_counter_labels, 0), equal_to(1))
 
+        if self._is_topic_migration_stage():
+            return
+
         # break a queue and check failure
         self._break_queue(self._username, self.queue_name, True)
 

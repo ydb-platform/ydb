@@ -2,7 +2,6 @@
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/core/testlib/tenant_helpers.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/draft/ydb_maintenance_v1.grpc.pb.h>
@@ -11,6 +10,9 @@
 #include <library/cpp/threading/future/async.h>
 
 #include "ut_common.h"
+
+#include <random>
+#include <vector>
 
 using namespace NKikimr;
 
@@ -286,9 +288,12 @@ Y_UNIT_TEST_SUITE(THiveTestWithTenants) {
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvAlterTenantResponse>(handle);
             Cerr << "Alter response: " << reply->Record.ShortDebugString() << Endl;
+            UNIT_ASSERT(reply->Record.GetResponse().operation().status() == Ydb::StatusIds::SUCCESS);
         }
 
-        for (int i = 0; true; ++i) {
+        static constexpr int MAX_ITERS = 20;
+        for (int i = 0; i <= MAX_ITERS; ++i) {
+            UNIT_ASSERT(i < MAX_ITERS);
             Cerr << "--Waiting for groups to be added, iteration " << i << Endl;
             auto *req = new NConsole::TEvConsole::TEvGetTenantStatusRequest;
             req->Record.MutableRequest()->set_path("/Root/db1");
@@ -324,6 +329,7 @@ Y_UNIT_TEST_SUITE(THiveTestWithTenants) {
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvAlterTenantResponse>(handle);
             Cerr << "Alter response: " << reply->Record.ShortDebugString() << Endl;
+            UNIT_ASSERT(reply->Record.GetResponse().operation().status() == Ydb::StatusIds::SUCCESS);
         }
 
         // RunTestWithReboots does not work with real threads, so we'll do a pale imitation
@@ -331,7 +337,8 @@ Y_UNIT_TEST_SUITE(THiveTestWithTenants) {
         std::mt19937 engine(1337);
         std::uniform_int_distribution<size_t> pickTablet(0, tablets.size() - 1);
 
-        for (int i = 0; true; ++i) {
+        for (int i = 0; i <= MAX_ITERS; ++i) {
+            UNIT_ASSERT(i < MAX_ITERS);
             Cerr << "--Iteration " << i << Endl;
             runtime.Register(CreateTabletKiller(tablets[pickTablet(engine)]));
 

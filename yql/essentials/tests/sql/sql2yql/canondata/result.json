@@ -1623,6 +1623,13 @@
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_aggregate-group_by_expr_persist_resource_fail_/sql.yql"
         }
     ],
+    "test_sql2yql.test[aggregate-group_by_rollup_nullif_count_distinct]": [
+        {
+            "checksum": "308ca6b9520ec9f7ec2ab7564f88d1c3",
+            "size": 2732,
+            "uri": "https://{canondata_backend}/1937424/d152d3c0fc329f74409e2d8f230357dc30c4cd0e/resource.tar.gz#test_sql2yql.test_aggregate-group_by_rollup_nullif_count_distinct_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[aggregate-group_by_rollup_rename]": [
         {
             "checksum": "59e3479707b1f38f0dfa9818dc66a48f",
@@ -13638,6 +13645,11 @@
     "test_sql_format.test[aggregate-group_by_expr_persist_resource_fail]": [
         {
             "uri": "file://test_sql_format.test_aggregate-group_by_expr_persist_resource_fail_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[aggregate-group_by_rollup_nullif_count_distinct]": [
+        {
+            "uri": "file://test_sql_format.test_aggregate-group_by_rollup_nullif_count_distinct_/formatted.sql"
         }
     ],
     "test_sql_format.test[aggregate-group_by_rollup_rename]": [

@@ -706,7 +706,7 @@ TAstNode* TLangVerProxyNode::Translate(TContext& ctx) const {
 }
 
 TNodePtr TLangVerProxyNode::DoClone() const {
-    return new TLangVerProxyNode(GetPos(), Inner_, Feature_, MinLangVer_, MaxLangVer_);
+    return new TLangVerProxyNode(GetPos(), SafeClone(Inner_), Feature_, MinLangVer_, MaxLangVer_);
 }
 
 void IProxyNode::DoAdd(TPtr node) {

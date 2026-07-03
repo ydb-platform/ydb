@@ -411,8 +411,15 @@ private:
             auto* currentRequest = IsBatch_ ? &BatchRequest().GetEntries(RequestToReplyIndexMapping_[i]) : &Request();
 
             if (response->DescribeStatus != NPQ::NDescriber::EStatus::SUCCESS) {
-                MakeError(currentResponse, NErrors::INTERNAL_FAILURE,
-                    NPQ::NDescriber::Description(GetTopicName(), response->DescribeStatus));
+                if (response->DescribeStatus == NPQ::NDescriber::EStatus::NOT_FOUND) {
+                    // The topic is temporarily missing (the queue is being deleted or
+                    // recreated). Report a generic retryable internal failure instead of
+                    // leaking the internal topic path.
+                    MakeError(currentResponse, NErrors::INTERNAL_FAILURE);
+                } else {
+                    MakeError(currentResponse, NErrors::INTERNAL_FAILURE,
+                        NPQ::NDescriber::Description(GetTopicName(), response->DescribeStatus));
+                }
             } else if (message.Status == Ydb::StatusIds::SUCCESS || message.Status == Ydb::StatusIds::ALREADY_EXISTS) {
                 TopicSendHasSuccess_ = true;
                 TopicSendBytesWritten_ += currentRequest->GetMessageBody().size();

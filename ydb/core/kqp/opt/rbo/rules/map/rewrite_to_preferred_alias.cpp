@@ -8,6 +8,12 @@ namespace {
 using TCandidates = TPlanAliases::TCandidates;
 using TRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>;
 
+// Prefer the oldest alias in the class: it is defined lowest in the plan, so its
+// scope dominates every use site and all uses can converge to it, letting the
+// newer aliases lose their uses and get pruned. It is also stable under rewrites
+// (appending new aliases never changes which candidate is oldest), which makes
+// the rewrite terminate. Newer aliases have the smallest visibility region and
+// keep their defining chain alive, so preferring them leaves Maps stuck.
 std::optional<TInfoUnit> ChoosePreferredAlias(const TCandidates& candidates) {
     const TAliasCandidate* best = nullptr;
     for (const auto& candidate : candidates) {
@@ -15,7 +21,7 @@ std::optional<TInfoUnit> ChoosePreferredAlias(const TCandidates& candidates) {
             continue;
         }
 
-        if (!best || candidate.Priority > best->Priority ||
+        if (!best || candidate.Priority < best->Priority ||
             (candidate.Priority == best->Priority && candidate.IU.GetFullName() < best->IU.GetFullName())) {
             best = &candidate;
         }

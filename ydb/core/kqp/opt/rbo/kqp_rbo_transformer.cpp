@@ -420,6 +420,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
         rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
         rules.emplace_back(std::make_unique<TPushRenameIntoProducerRule>());
         rules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>(false));
+        rules.emplace_back(std::make_unique<TPruneDeadUnionAllColumnsRule>());
         rules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
     };
 
@@ -482,6 +483,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     TVector<std::unique_ptr<IRule>> finalPruningStageRules;
     finalPruningStageRules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
     finalPruningStageRules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
+    finalPruningStageRules.emplace_back(std::make_unique<TPruneDeadUnionAllColumnsRule>());
     finalPruningStageRules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Final pruning", std::move(finalPruningStageRules)));
 

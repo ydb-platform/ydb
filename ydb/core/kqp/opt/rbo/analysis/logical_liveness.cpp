@@ -219,6 +219,14 @@ void TOpUnionAll::PropagateLiveness(ILivenessContext& ctx) {
         AddInfoUnit(leftLive, column);
         AddInfoUnit(rightLive, column);
     }
+
+    // The union must keep at least one column; TPruneDeadUnionAllColumnsRule
+    // retains the first declared column in the same case.
+    if (leftLive.empty() && !Columns.empty()) {
+        AddInfoUnit(leftLive, Columns.front());
+        AddInfoUnit(rightLive, Columns.front());
+    }
+
     ctx.AddLiveColumns(GetLeftInput(), leftLive);
     ctx.AddLiveColumns(GetRightInput(), rightLive);
 }

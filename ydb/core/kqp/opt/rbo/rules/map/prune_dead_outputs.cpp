@@ -205,6 +205,42 @@ bool TPruneDeadReadColumnsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
     return NarrowReadColumns(read, liveOut, keepKeyColumns);
 }
 
+bool TPruneDeadUnionAllColumnsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(props);
+
+    if (input->Kind != EOperator::UnionAll) {
+        return false;
+    }
+
+    auto unionAll = CastOperator<TOpUnionAll>(input);
+    const auto& liveOut = GetLiveOut(unionAll.get());
+
+    TVector<TInfoUnit> newColumns;
+    newColumns.reserve(unionAll->Columns.size());
+    for (const auto& column : unionAll->Columns) {
+        if (liveOut.contains(column)) {
+            newColumns.push_back(column);
+        }
+    }
+
+    if (newColumns.size() == unionAll->Columns.size()) {
+        return false;
+    }
+
+    // Keep at least one column; TOpUnionAll::PropagateLiveness keeps the same
+    // column alive in the branches.
+    if (newColumns.empty() && !unionAll->Columns.empty()) {
+        newColumns.push_back(unionAll->Columns.front());
+        if (newColumns.size() == unionAll->Columns.size()) {
+            return false;
+        }
+    }
+
+    unionAll->Columns = std::move(newColumns);
+    return true;
+}
+
 bool TPruneDeadAggregateTraitsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);

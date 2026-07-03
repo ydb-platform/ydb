@@ -4121,7 +4121,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto subplanRead = MakeTestRead({TInfoUnit("rhs")}, pos);
         TSubplanEntry subplanEntry;
         subplanEntry.Plan = subplanRead;
-        subplanEntry.Tuple = {TInfoUnit("b")};
+        subplanEntry.Tuple = {TInfoUnit("a")};
         subplanEntry.Type = ESubplanType::IN_SUBPLAN;
         subplanEntry.IU = subplanIU;
         root.PlanProps.Subplans.Add(subplanIU, subplanEntry);
@@ -4135,7 +4135,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         const auto& rewrittenEntry = root.PlanProps.Subplans.PlanMap.at(subplanIU);
         UNIT_ASSERT_VALUES_EQUAL(rewrittenEntry.Tuple.size(), 1);
-        UNIT_ASSERT(rewrittenEntry.Tuple.front() == TInfoUnit("a"));
+        UNIT_ASSERT(rewrittenEntry.Tuple.front() == TInfoUnit("b"));
     }
 
     Y_UNIT_TEST(PushRenamePushesSemanticRenameThroughFilterIntoRead) {
@@ -4403,7 +4403,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(std::find(joinOutput.begin(), joinOutput.end(), TInfoUnit("a")) == joinOutput.end());
     }
 
-    Y_UNIT_TEST(RewriteFilterToPreferredAliasEnablesRenamePush) {
+    Y_UNIT_TEST(RewritePreferredAliasCollapsesDuplicateAliases) {
         TMapRuleTestContext testContext;
         TPlanProps expressionProps;
         const auto pos = NYql::TPositionHandle();
@@ -4411,31 +4411,35 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto read = MakeTestRead({TInfoUnit("b"), TInfoUnit("payload")}, pos);
         auto aliasMap = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
             MakeTestAppend("a", "b", pos, testContext.ExprCtx, expressionProps),
+            MakeTestAppend("c", "b", pos, testContext.ExprCtx, expressionProps),
         });
         auto filter = MakeIntrusive<TOpFilter>(
             aliasMap,
             pos,
-            MakeColumnAccess(TInfoUnit("b"), pos, &testContext.ExprCtx, &expressionProps)
+            MakeBinaryPredicate(
+                "==",
+                MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps),
+                MakeColumnAccess(TInfoUnit("c"), pos, &testContext.ExprCtx, &expressionProps)
+            )
         );
-        TOpRoot root(filter, pos, {"a"});
+        TOpRoot root(filter, pos, {"b"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
-        AddPushRenameRulesForTest(rules);
+        AddMapAliasRulesForTest(rules);
         TRuleBasedStage aliasRules("Focused alias rewrite", std::move(rules));
         ComputeLogicalTestProps(root);
         aliasRules.RunStage(root, testContext.RboCtx);
 
+        // Both duplicate aliases converge to the source name; the alias appends
+        // lose their uses and are pruned together with the map.
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Filter, root.PlanToString(testContext.ExprCtx));
         auto rewrittenFilter = CastOperator<TOpFilter>(root.GetInput());
         UNIT_ASSERT_C(rewrittenFilter->GetInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
-        auto rewrittenRead = CastOperator<TOpRead>(rewrittenFilter->GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(rewrittenRead->Columns.front(), "b");
-        UNIT_ASSERT(rewrittenRead->OutputIUs.front() == TInfoUnit("a"));
 
         const auto filterInputs = rewrittenFilter->FilterExpr.GetInputIUs(false, true);
-        UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("a")) != filterInputs.end());
-        UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("b")) == filterInputs.end());
+        UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("b")) != filterInputs.end());
+        UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("a")) == filterInputs.end());
+        UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("c")) == filterInputs.end());
     }
 
     Y_UNIT_TEST(RewritePreferredAliasUpdatesMapExpression) {
@@ -4448,7 +4452,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             MakeTestAppend("a", "b", pos, testContext.ExprCtx, expressionProps),
         });
         auto topMap = MakeIntrusive<TOpMap>(aliasMap, pos, TVector<TMapElement>{
-            MakeTestAppend("out", "b", pos, testContext.ExprCtx, expressionProps),
+            MakeTestAppend("out", "a", pos, testContext.ExprCtx, expressionProps),
         });
         TOpRoot root(topMap, pos, {"a", "out"});
 
@@ -4460,7 +4464,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_VALUES_EQUAL(topMap->MapElements.size(), 1);
         UNIT_ASSERT(topMap->MapElements.front().IsColumnAccess());
-        UNIT_ASSERT(topMap->MapElements.front().GetColumnAccess() == TInfoUnit("a"));
+        UNIT_ASSERT(topMap->MapElements.front().GetColumnAccess() == TInfoUnit("b"));
     }
 
     Y_UNIT_TEST(RewritePreferredAliasDoesNotUpdateMapRenameSource) {
@@ -4473,9 +4477,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             MakeTestAppend("a", "b", pos, testContext.ExprCtx, expressionProps),
         });
         auto topMap = MakeIntrusive<TOpMap>(aliasMap, pos, TVector<TMapElement>{
-            MakeTestRename("x", "b", pos, testContext.ExprCtx, expressionProps),
+            MakeTestRename("x", "a", pos, testContext.ExprCtx, expressionProps),
         });
-        TOpRoot root(topMap, pos, {"a", "x"});
+        TOpRoot root(topMap, pos, {"b", "x"});
 
         TVector<std::unique_ptr<IRule>> rules;
         rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
@@ -4485,7 +4489,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_VALUES_EQUAL(topMap->MapElements.size(), 1);
         UNIT_ASSERT(topMap->MapElements.front().IsRename());
-        UNIT_ASSERT(topMap->MapElements.front().GetRename() == TInfoUnit("b"));
+        UNIT_ASSERT(topMap->MapElements.front().GetRename() == TInfoUnit("a"));
     }
 
     Y_UNIT_TEST(RewritePreferredAliasDoesNotCreateMapSelfAppend) {
@@ -4517,15 +4521,17 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto pos = NYql::TPositionHandle();
         const auto ignore = TInfoUnit("__kqp_rbo_ignore_arg_0");
 
-        auto read = MakeTestRead({TInfoUnit("b")}, pos);
+        // The oldest name in the class is generated, so the rewrite must
+        // converge on the oldest non-generated alias instead.
+        auto read = MakeTestRead({ignore}, pos);
         auto aliasMap = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
-            MakeTestAppend("a", "b", pos, testContext.ExprCtx, expressionProps),
-            MakeTestAppend(ignore.GetFullName(), "b", pos, testContext.ExprCtx, expressionProps),
+            MakeTestAppend("a", ignore.GetFullName(), pos, testContext.ExprCtx, expressionProps),
+            MakeTestAppend("c", ignore.GetFullName(), pos, testContext.ExprCtx, expressionProps),
         });
         auto topMap = MakeIntrusive<TOpMap>(aliasMap, pos, TVector<TMapElement>{
-            MakeTestAppend("out", "b", pos, testContext.ExprCtx, expressionProps),
+            MakeTestAppend("out", "c", pos, testContext.ExprCtx, expressionProps),
         });
-        TOpRoot root(topMap, pos, {ignore.GetFullName(), "out"});
+        TOpRoot root(topMap, pos, {"c", "out"});
 
         TVector<std::unique_ptr<IRule>> rules;
         rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
@@ -4745,7 +4751,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto rightRead = MakeTestRead({TInfoUnit("r")}, pos);
         auto joinFilter = MakeBinaryPredicate(
             "==",
-            MakeColumnAccess(TInfoUnit("b"), pos, &testContext.ExprCtx, &expressionProps),
+            MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps),
             MakeColumnAccess(TInfoUnit("r"), pos, &testContext.ExprCtx, &expressionProps)
         );
         auto join = MakeIntrusive<TOpJoin>(
@@ -4753,7 +4759,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Inner",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("b"), TInfoUnit("r")}},
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("r")}},
             TVector<TExpression>{joinFilter}
         );
         TOpRoot root(join, pos, {"a", "r"});
@@ -4765,13 +4771,13 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         rewriteAliases.RunStage(root, testContext.RboCtx);
 
         UNIT_ASSERT_VALUES_EQUAL(join->JoinKeys.size(), 1);
-        UNIT_ASSERT(join->JoinKeys.front().first == TInfoUnit("a"));
+        UNIT_ASSERT(join->JoinKeys.front().first == TInfoUnit("b"));
         UNIT_ASSERT(join->JoinKeys.front().second == TInfoUnit("r"));
 
         UNIT_ASSERT_VALUES_EQUAL(join->JoinFilters.size(), 1);
         const auto joinFilterInputs = join->JoinFilters.front().GetInputIUs(false, true);
-        UNIT_ASSERT(std::find(joinFilterInputs.begin(), joinFilterInputs.end(), TInfoUnit("a")) != joinFilterInputs.end());
-        UNIT_ASSERT(std::find(joinFilterInputs.begin(), joinFilterInputs.end(), TInfoUnit("b")) == joinFilterInputs.end());
+        UNIT_ASSERT(std::find(joinFilterInputs.begin(), joinFilterInputs.end(), TInfoUnit("b")) != joinFilterInputs.end());
+        UNIT_ASSERT(std::find(joinFilterInputs.begin(), joinFilterInputs.end(), TInfoUnit("a")) == joinFilterInputs.end());
     }
 
     Y_UNIT_TEST(RewritePreferredAliasUpdatesAggregateInputs) {
@@ -4786,7 +4792,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         });
         auto aggregate = MakeIntrusive<TOpAggregate>(
             aliasMap,
-            TVector<TOpAggregationTraits>{TOpAggregationTraits(TInfoUnit("value"), "sum", TInfoUnit("sum_value"))},
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(TInfoUnit("v"), "sum", TInfoUnit("sum_value"))},
             TVector<TInfoUnit>{TInfoUnit("b"), TInfoUnit("v")},
             EOpPhase::Final,
             false,
@@ -4804,7 +4810,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(aggregate->KeyColumns[0] == TInfoUnit("b"));
         UNIT_ASSERT(aggregate->KeyColumns[1] == TInfoUnit("v"));
         UNIT_ASSERT_VALUES_EQUAL(aggregate->AggregationTraitsList.size(), 1);
-        UNIT_ASSERT(aggregate->AggregationTraitsList.front().OriginalColName == TInfoUnit("v"));
+        UNIT_ASSERT(aggregate->AggregationTraitsList.front().OriginalColName == TInfoUnit("value"));
         UNIT_ASSERT(aggregate->AggregationTraitsList.front().ResultColName == TInfoUnit("sum_value"));
     }
 
@@ -4850,14 +4856,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto limit = MakeIntrusive<TOpLimit>(
             aliasMap,
             pos,
-            MakeColumnAccess(TInfoUnit("b"), pos, &testContext.ExprCtx, &expressionProps),
+            MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps),
             EOpPhase::Final
         );
         auto sort = MakeIntrusive<TOpSort>(
             limit,
             pos,
-            TVector<TSortElement>{TSortElement(TInfoUnit("b"), true, true)},
-            MakeColumnAccess(TInfoUnit("b"), pos, &testContext.ExprCtx, &expressionProps)
+            TVector<TSortElement>{TSortElement(TInfoUnit("a"), true, true)},
+            MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps)
         );
         TOpRoot root(sort, pos, {"a"});
 
@@ -4868,15 +4874,15 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         rewriteAliases.RunStage(root, testContext.RboCtx);
 
         const auto limitInputs = limit->LimitCond.GetInputIUs(false, true);
-        UNIT_ASSERT(std::find(limitInputs.begin(), limitInputs.end(), TInfoUnit("a")) != limitInputs.end());
-        UNIT_ASSERT(std::find(limitInputs.begin(), limitInputs.end(), TInfoUnit("b")) == limitInputs.end());
+        UNIT_ASSERT(std::find(limitInputs.begin(), limitInputs.end(), TInfoUnit("b")) != limitInputs.end());
+        UNIT_ASSERT(std::find(limitInputs.begin(), limitInputs.end(), TInfoUnit("a")) == limitInputs.end());
 
         UNIT_ASSERT_VALUES_EQUAL(sort->SortElements.size(), 1);
-        UNIT_ASSERT(sort->SortElements.front().SortColumn == TInfoUnit("a"));
+        UNIT_ASSERT(sort->SortElements.front().SortColumn == TInfoUnit("b"));
         UNIT_ASSERT(sort->LimitCond);
         const auto sortLimitInputs = sort->LimitCond->GetInputIUs(false, true);
-        UNIT_ASSERT(std::find(sortLimitInputs.begin(), sortLimitInputs.end(), TInfoUnit("a")) != sortLimitInputs.end());
-        UNIT_ASSERT(std::find(sortLimitInputs.begin(), sortLimitInputs.end(), TInfoUnit("b")) == sortLimitInputs.end());
+        UNIT_ASSERT(std::find(sortLimitInputs.begin(), sortLimitInputs.end(), TInfoUnit("b")) != sortLimitInputs.end());
+        UNIT_ASSERT(std::find(sortLimitInputs.begin(), sortLimitInputs.end(), TInfoUnit("a")) == sortLimitInputs.end());
     }
 
     Y_UNIT_TEST(PushAppendAliasCrossesTransparentUnaryChain) {

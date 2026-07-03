@@ -176,7 +176,8 @@ class TPushRenameIntoProducerRule : public IRule {
 };
 
 /**
- * Rewrites local expressions to the best non-generated alias.
+ * Rewrites local expressions to the oldest visible non-generated alias, so uses
+ * converge on one name per equivalence class and newer aliases die out.
  */
 class TRewriteExpressionsToPreferredAliasesRule : public IRule {
   public:
@@ -371,6 +372,19 @@ class TPruneDeadAggregateTraitsRule : public IRule {
   public:
     TPruneDeadAggregateTraitsRule()
         : IRule("Prune dead aggregate traits", ERuleProperties::RequireLiveness) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
+ * Drop UnionAll columns that are not live above the union. Liveness propagates
+ * deadness into the branches (their producing elements get pruned), so the
+ * declared columns must shrink in step or type annotation fails.
+ */
+class TPruneDeadUnionAllColumnsRule : public IRule {
+  public:
+    TPruneDeadUnionAllColumnsRule()
+        : IRule("Prune dead UnionAll columns", ERuleProperties::RequireLiveness) {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };

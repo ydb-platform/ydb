@@ -41,7 +41,10 @@ TInfoUnit GetCanonicalAlias(const TCandidates& candidates) {
 void AddCandidate(TCandidates& candidates, const TAliasCandidate& candidate) {
     for (auto& existing : candidates) {
         if (existing.IU == candidate.IU) {
-            existing.Priority = std::max(existing.Priority, candidate.Priority);
+            // An alias reachable through several derivation paths keeps its
+            // shallowest depth, so a candidate's rank never drifts upward as
+            // classes merge and the oldest-alias choice stays stable.
+            existing.Priority = std::min(existing.Priority, candidate.Priority);
             return;
         }
     }

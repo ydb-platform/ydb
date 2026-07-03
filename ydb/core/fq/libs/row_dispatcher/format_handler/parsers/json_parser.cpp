@@ -354,6 +354,7 @@ public:
         } else {
             success = ParseJsonType(std::move(jsonValue), resultValue, Status);
         }
+        Y_DEBUG_ABORT_UNLESS(ValidateObjectRefs(resultValue));
         resultValue = LockObject(std::move(resultValue));
 
         if (Y_UNLIKELY(!SkipErrors && Status.IsFail())) {
@@ -385,7 +386,132 @@ public:
         return false;
     }
 
+    bool ValidateObjectRefs(const NYql::NUdf::TUnboxedValue& value) {
+        return TypeMkql ? ValidateObjectRefs(TypeMkql, value) : true;
+    }
 private:
+
+    bool ValidateObjectRefs(const NKikimr::NMiniKQL::TType* type, const NYql::NUdf::TUnboxedValue& value, i32 expectedRefs = 1) {
+        if (value.RefCount() == -1) { // POD/Embedded String
+            return true;
+        }
+        if (type->IsOptional()) {
+            type = AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType();
+        }
+        switch (type->GetKind()) {
+            case NKikimr::NMiniKQL::TTypeBase::EKind::Data:
+                if (value.RefCount() != expectedRefs) {
+                    Y_DEBUG_ABORT("%s", (TStringBuilder() << value.RefCount() << "!=" << expectedRefs).c_str());
+                    return false;
+                }
+                return true;
+
+            case NKikimr::NMiniKQL::TTypeBase::EKind::Struct: {
+                if (!value.IsBoxed()) {
+                    Y_DEBUG_ABORT();
+                    return false;
+                }
+
+                auto structType = AS_TYPE(NKikimr::NMiniKQL::TStructType, type);
+                auto membersCount = structType->GetMembersCount();
+                if (membersCount == 0) {
+                    return true;
+                }
+                if (value.RefCount() != expectedRefs) {
+                    Y_DEBUG_ABORT("%s", (TStringBuilder() << value.RefCount() << "!=" << expectedRefs).c_str());
+                    return false;
+                }
+                auto elements = value.GetElements();
+                for (ui32 i = 0; i < membersCount; ++i) {
+                    if (!ValidateObjectRefs(structType->GetMemberType(i), elements[i])) {
+                        Y_DEBUG_ABORT();
+                        return false;
+                    }
+                }
+                break;
+            }
+            case NKikimr::NMiniKQL::TTypeBase::EKind::Tuple: {
+                if (!value.IsBoxed()) {
+                    Y_DEBUG_ABORT();
+                    return false;
+                }
+                auto tupleType = AS_TYPE(NKikimr::NMiniKQL::TTupleType, type);
+                auto elementsCount = tupleType->GetElementsCount();
+                if (elementsCount == 0) { // special case: shared empty list
+                    return true;
+                }
+                if (value.RefCount() != expectedRefs) {
+                    Y_DEBUG_ABORT("%s", (TStringBuilder() << value.RefCount() << "!=" << expectedRefs).c_str());
+                    return false;
+                }
+                auto elements = value.GetElements();
+                for (ui32 i = 0; i < elementsCount; ++i) {
+                    if (!ValidateObjectRefs(tupleType->GetElementType(i), elements[i])) {
+                        Y_DEBUG_ABORT("%d", i);
+                        return false;
+                    }
+                }
+                break;
+            }
+            case NKikimr::NMiniKQL::TTypeBase::EKind::List: {
+                if (!value.IsBoxed()) {
+                    Y_DEBUG_ABORT();
+                    return false;
+                }
+                if (value.GetListLength() == 0) { // special case: shared empty list
+                    return true;
+                }
+                if (value.RefCount() != expectedRefs) {
+                    Y_DEBUG_ABORT("%s", (TStringBuilder() << value.RefCount() << "!=" << expectedRefs).c_str());
+                    return false;
+                }
+                auto listType = AS_TYPE(NKikimr::NMiniKQL::TListType, type);
+                auto itemType = listType->GetItemType();
+                auto listIterator = value.GetListIterator();
+                NYql::NUdf::TUnboxedValue itemValue;
+                while(listIterator.Next(itemValue)) {
+                    if (!ValidateObjectRefs(itemType, itemValue, 2)) {
+                        Y_DEBUG_ABORT();
+                        return false;
+                    }
+                }
+                break;
+            }
+
+            case NKikimr::NMiniKQL::TTypeBase::EKind::Dict: {
+                if (!value.IsBoxed()) {
+                    return false;
+                }
+                if (value.GetDictLength() == 0) { // special case: shared empty dict
+                    return true;
+                }
+                if (value.RefCount() != expectedRefs) {
+                    Y_DEBUG_ABORT("%s", (TStringBuilder() << value.RefCount() << "!=" << expectedRefs).c_str());
+                    return false;
+                }
+                auto dictType = AS_TYPE(NKikimr::NMiniKQL::TDictType, type);
+                auto keyType = dictType->GetKeyType();
+                auto valueType = dictType->GetPayloadType();
+                auto dictIterator = value.GetDictIterator();
+                NYql::NUdf::TUnboxedValue keyValue, payload;
+                while(dictIterator.NextPair(keyValue, payload)) {
+                    if (!ValidateObjectRefs(keyType, keyValue, 2)) {
+                        Y_DEBUG_ABORT();
+                        return false;
+                    }
+                    if (!ValidateObjectRefs(valueType, payload, 2)) {
+                        Y_DEBUG_ABORT();
+                        return false;
+                    }
+                }
+                break;
+            }
+            default:
+                Y_ABORT();
+        }
+        return true;
+    }
+
     TStatus ParseNestedType(const NKikimr::NMiniKQL::TType* type, bool isOptional = false) {
         if (!HolderFactory) {
             return TStatus::Fail(EStatusId::UNSUPPORTED, "Structured Json Parsing is disabled. Please contact your system administrator to enable it");
@@ -852,6 +978,7 @@ protected:
             const auto parsedRows = column.GetParsedRows();
             const auto parsedRowsCount = column.GetParsedRowsCount();
             for (ui16 rowId = 0; rowId < parsedRowsCount; ++rowId) {
+                Y_DEBUG_ABORT_UNLESS(column.ValidateObjectRefs(parsedColumn[parsedRows[rowId]]));
                 ClearObject(parsedColumn[parsedRows[rowId]]);
             }
 
@@ -1034,6 +1161,7 @@ private:
     void ClearRowBuffer(ui16 outputRowId) {
         for (size_t columnId = 0; columnId < Columns.size(); ++columnId) {
             if (Columns[columnId].ClearParsedRow(outputRowId)) {
+                Y_DEBUG_ABORT_UNLESS(Columns[columnId].ValidateObjectRefs(ParsedValues[columnId][outputRowId]));
                 ClearObject(ParsedValues[columnId][outputRowId]);
             }
         }

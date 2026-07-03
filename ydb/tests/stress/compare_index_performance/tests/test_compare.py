@@ -201,6 +201,11 @@ class TestCompareIndexPerformance:
         self.rows = yatest.common.get_param('compare_rows', default='10000')
         self.threads = yatest.common.get_param('compare_threads', default='10')
         self.targets = yatest.common.get_param('compare_targets', default='1000')
+        # Vector index structure params; None → server auto-detects
+        _clusters = yatest.common.get_param('compare_vector_clusters', default='')
+        _levels = yatest.common.get_param('compare_vector_levels', default='')
+        self.vector_clusters = _clusters if _clusters else None
+        self.vector_levels = _levels if _levels else None
 
         # Per-cluster config
         self.baseline_flags = _parse_feature_flags(
@@ -548,19 +553,25 @@ class TestCompareIndexPerformance:
 
             baseline_mode = "generate" if i == 1 else "load"
 
+            vector_index_args = []
+            if self.vector_clusters is not None:
+                vector_index_args += ["--clusters", self.vector_clusters]
+            if self.vector_levels is not None:
+                vector_index_args += ["--levels", self.vector_levels]
+
             def baseline_workload(endpoint, out, err, mode=baseline_mode):
                 self._exec_workload("YDB_VECTOR_WORKLOAD_PATH", endpoint, out, err, [
                     "--mode", mode, "--data-dir", data_dir,
                     "--targets", self.targets, "--warmup", self.warmup,
                     "--rows", self.rows, "--threads", self.threads,
-                ])
+                ] + vector_index_args)
 
             def current_workload(endpoint, out, err):
                 self._exec_workload("YDB_VECTOR_WORKLOAD_PATH", endpoint, out, err, [
                     "--mode", "load", "--data-dir", data_dir,
                     "--targets", self.targets, "--warmup", self.warmup,
                     "--rows", self.rows, "--threads", self.threads,
-                ])
+                ] + vector_index_args)
 
             collect_value(main_values, self._run_one(
                 self.ref, baseline_ydbd, self.baseline_flags, self.baseline_tsc,

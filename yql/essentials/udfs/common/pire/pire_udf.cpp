@@ -308,14 +308,14 @@ public:
                 }
             ]]
         )";
-        auto multiGrep = sink.Add(TPireMatch::Name(true, true));
+        auto multiGrep = sink.Add(TPireMatch::Name(/*surroundMode=*/true, /*multiMode=*/true));
         multiGrep->SetTypeAwareness();
         multiGrep->SetPolyArgs(MultiPolyArgs);
-        auto multiMatch = sink.Add(TPireMatch::Name(false, true));
+        auto multiMatch = sink.Add(TPireMatch::Name(/*surroundMode=*/false, /*multiMode=*/true));
         multiMatch->SetTypeAwareness();
         multiMatch->SetPolyArgs(MultiPolyArgs);
-        sink.Add(TPireMatch::Name(true, false));
-        sink.Add(TPireMatch::Name(false, false));
+        sink.Add(TPireMatch::Name(/*surroundMode=*/true, /*multiMode=*/false));
+        sink.Add(TPireMatch::Name(/*surroundMode=*/false, /*multiMode=*/false));
         sink.Add(TPireCapture::Name());
         sink.Add(TPireReplace::Name());
     }
@@ -327,17 +327,17 @@ public:
         ui32 flags,
         IFunctionTypeInfoBuilder& builder) const final try {
         const bool typesOnly = (flags & TFlags::TypesOnly);
-        const bool isMatch = (TPireMatch::Name(false, false) == name);
-        const bool isGrep = (TPireMatch::Name(true, false) == name);
-        const bool isMultiMatch = (TPireMatch::Name(false, true) == name);
-        const bool isMultiGrep = (TPireMatch::Name(true, true) == name);
+        const bool isMatch = (TPireMatch::Name(/*surroundMode=*/false, /*multiMode=*/false) == name);
+        const bool isGrep = (TPireMatch::Name(/*surroundMode=*/true, /*multiMode=*/false) == name);
+        const bool isMultiMatch = (TPireMatch::Name(/*surroundMode=*/false, /*multiMode=*/true) == name);
+        const bool isMultiGrep = (TPireMatch::Name(/*surroundMode=*/true, /*multiMode=*/true) == name);
 
         if (isMatch || isGrep) {
             builder.SimpleSignature<bool(TOptional<char*>)>()
                 .RunConfig<const char*>();
 
             if (!typesOnly) {
-                builder.Implementation(new TPireMatch::TFactory(isGrep, false, builder.GetSourcePosition()));
+                builder.Implementation(new TPireMatch::TFactory(isGrep, /*multiMode=*/false, builder.GetSourcePosition()));
             }
         } else if (isMultiMatch || isMultiGrep) {
             const auto boolType = builder.SimpleType<bool>();
@@ -352,7 +352,7 @@ public:
             builder.Args(1)->Add(optionalStringType).Done().Returns(tupleType).RunConfig<char*>();
 
             if (!typesOnly) {
-                builder.Implementation(new TPireMatch::TFactory(isMultiGrep, true, builder.GetSourcePosition(), regexpCount));
+                builder.Implementation(new TPireMatch::TFactory(isMultiGrep, /*multiMode=*/true, builder.GetSourcePosition(), regexpCount));
             }
         } else if (TPireCapture::Name() == name) {
             builder.SimpleSignature<TOptional<char*>(TOptional<char*>)>()

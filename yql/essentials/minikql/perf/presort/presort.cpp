@@ -229,8 +229,8 @@ std::pair<ui64, ui64> MeasureNew() {
 
     for (size_t i = 0; i < count; ++i) {
         values.push_back(RandomValue<T>());
-        encoder.AddType(Slot, false, Desc);
-        decoder.AddType(Slot, false, Desc);
+        encoder.AddType(Slot, /*isOptional=*/false, Desc);
+        decoder.AddType(Slot, /*isOptional=*/false, Desc);
     }
 
     TSimpleTimer timer;

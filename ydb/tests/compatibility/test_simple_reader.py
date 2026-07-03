@@ -7,11 +7,18 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 
 class SimpleReaderWorkload:
-    def __init__(self, driver, endpoint):
-        self.driver = driver
-        self.endpoint = endpoint
+    def __init__(self, fixture):
+        self.fixture = fixture
         self.table_name = "/Root/simple_reader_table"
         self.batch_size = 1000
+
+    @property
+    def driver(self):
+        return self.fixture.driver
+
+    @property
+    def endpoint(self):
+        return self.fixture.endpoint
 
     def create_table(self):
         query = f"""
@@ -160,7 +167,7 @@ class TestSimpleReaderMixedCluster(MixedClusterFixture):
         )
 
     def test_simple_reader_mixed_cluster(self):
-        workload = SimpleReaderWorkload(self.driver, self.endpoint)
+        workload = SimpleReaderWorkload(self)
         workload.create_table()
         total_written = workload.write_data_with_overlaps()
         assert total_written > 0
@@ -186,7 +193,7 @@ class TestSimpleReaderRestartToAnotherVersion(RestartToAnotherVersionFixture):
         if min(self.versions) < (25, 1):
             pytest.skip("Test is not supported for this cluster version")
 
-        workload = SimpleReaderWorkload(self.driver, self.endpoint)
+        workload = SimpleReaderWorkload(self)
         workload.create_table()
         workload.write_data_with_overlaps()
         initial_consistency = workload.verify_data_consistency(1)
@@ -220,7 +227,7 @@ class TestSimpleReaderTabletTransfer(RollingUpgradeAndDowngradeFixture):
         if min(self.versions) < (25, 1):
             pytest.skip("Test is not supported for this cluster version")
 
-        workload = SimpleReaderWorkload(self.driver, self.endpoint)
+        workload = SimpleReaderWorkload(self)
         workload.create_table()
         total_written = 0
         for _ in range(8):

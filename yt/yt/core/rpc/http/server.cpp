@@ -1,4 +1,5 @@
 #include "server.h"
+#include "config.h"
 #include "helpers.h"
 
 #include <yt/yt/core/net/address.h>
@@ -7,6 +8,8 @@
 #include <yt/yt/core/http/private.h>
 #include <yt/yt/core/http/helpers.h>
 #include <yt/yt/core/http/server.h>
+
+#include <yt/yt/core/https/server.h>
 
 #include <yt/yt/core/rpc/message.h>
 #include <yt/yt/core/rpc/service.h>
@@ -426,6 +429,14 @@ private:
 
 NRpc::IServerPtr CreateServer(NYT::NHttp::IServerPtr httpServer)
 {
+    return New<TServer>(std::move(httpServer));
+}
+
+NRpc::IServerPtr CreateServer(TServerConfigPtr config)
+{
+    auto httpServer = config->Credentials
+        ? NYT::NHttps::CreateServer(config, config->PollerThreadCount)
+        : NYT::NHttp::CreateServer(config, config->PollerThreadCount);
     return New<TServer>(std::move(httpServer));
 }
 

@@ -192,6 +192,14 @@ namespace NKikimr::NHttpProxy {
             }
 
             void DoMetering(const THttpResponseData& data, THolder<THashMap<TString, TString>>&& queueTags, const TActorContext& ctx) {
+                if (IamAuthFailed_) {
+                    LOG_SP_DEBUG_S(
+                        ctx,
+                        NKikimrServices::HTTP_PROXY,
+                        TStringBuilder() << "Skip metering event due to IAM auth failure."
+                    );
+                    return;
+                }
                 if (HttpContext.ServiceConfig.GetHttpConfig().GetYandexCloudMode()) {
                     // Send request attributes to the metering actor
                     auto reportRequestAttributes = MakeHolder<::NKikimr::NSQS::TSqsEvents::TEvReportProcessedRequestAttributes>();
@@ -332,6 +340,7 @@ namespace NKikimr::NHttpProxy {
                         << " ErrorCode: " << ev->Get()->Error->ErrorCode
                         << " Message: " << ev->Get()->Error->Message
                     );
+                    IamAuthFailed_ = true;
                     ReplyWithError(
                         ctx,
                         ev->Get()->Error->HttpStatusCode,
@@ -406,6 +415,7 @@ namespace NKikimr::NHttpProxy {
                         .AWSSignature = std::move(HttpContext.GetSignature()),
                         .IAMToken = HttpContext.IamToken,
                         .FolderID = HttpContext.FolderId,
+                        .SourceAddress = HttpContext.SourceAddress,
                         .RequestFormat = NKikimr::NSQS::TAuthActorData::Json,
                         .Requester = ctx.SelfID
                     };
@@ -434,6 +444,7 @@ namespace NKikimr::NHttpProxy {
             TRetryCounter RetryCounter;
             TActorId AuthActor;
             bool InputCountersReported = false;
+            bool IamAuthFailed_ = false;
             TString FolderId;
             TString CloudId;
             TString ResourceId;
@@ -527,4 +538,3 @@ namespace NKikimr::NHttpProxy {
     }
 
 } // namespace NKikimr::NHttpProxy
-

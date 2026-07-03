@@ -88,7 +88,7 @@ public:
     void DoAction() {
         Become(&TAlterTopicActor::StateWork);
 
-        auto database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
+        auto database = GetDatabase();
 
         Register(NPQ::NSchema::CreateAlterTopicOperationActor(SelfId(), {
             .Database = database,

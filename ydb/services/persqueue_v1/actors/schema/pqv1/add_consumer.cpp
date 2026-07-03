@@ -56,7 +56,7 @@ public:
         Become(&TAddConsumerActor::StateWork);
 
         Register(NPQ::NSchema::CreateAlterTopicOperationActor(SelfId(), {
-            .Database = this->Request_->GetDatabaseName().GetOrElse(""),
+            .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),
             .UserToken = GetUserToken(),
             .Strategy = std::make_unique<TAddConsumerStrategy>(GetProtoRequest()->read_rule(), GetProtoRequest()->path()),

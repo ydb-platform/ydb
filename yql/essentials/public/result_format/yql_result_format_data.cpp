@@ -84,9 +84,9 @@ public:
         CHECK(dataNode.IsString() ||
               dataNode.IsList() && dataNode.AsList().size() == 1 && dataNode.AsList()[0].IsString());
         if (dataNode.IsString()) {
-            (visitor.*Func)(dataNode.AsString(), true);
+            (visitor.*Func)(dataNode.AsString(), /*isUtf8=*/true);
         } else {
-            (visitor.*Func)(Base64Decode(dataNode.AsList()[0].AsString()), false);
+            (visitor.*Func)(Base64Decode(dataNode.AsList()[0].AsString()), /*isUtf8=*/false);
         }
     }
 };
@@ -262,11 +262,11 @@ public:
         CHECK(dataNode.IsEntity() || dataNode.IsString() ||
               dataNode.IsList() && dataNode.AsList().size() == 1 && dataNode.AsList()[0].IsString());
         if (dataNode.IsEntity()) {
-            visitor.OnPg(Nothing(), true);
+            visitor.OnPg(Nothing(), /*isUtf8=*/true);
         } else if (dataNode.IsString()) {
-            visitor.OnPg(dataNode.AsString(), true);
+            visitor.OnPg(dataNode.AsString(), /*isUtf8=*/true);
         } else {
-            visitor.OnPg(Base64Decode(dataNode.AsList()[0].AsString()), false);
+            visitor.OnPg(Base64Decode(dataNode.AsList()[0].AsString()), /*isUtf8=*/false);
         }
     }
 };

@@ -157,7 +157,7 @@ void WriteYsonValueImpl(NResult::TYsonResultWriter& writer, const NUdf::TUnboxed
                 const ui32 pos = structPositions ? (*structPositions)[i] : i;
                 if (pos < e) {
                     writer.OnListItem();
-                    WriteYsonValueImpl(writer, value.GetElement(pos), structType->GetMemberType(pos), nullptr);
+                    WriteYsonValueImpl(writer, value.GetElement(pos), structType->GetMemberType(pos), /*structPositions=*/nullptr);
                 }
             }
 
@@ -170,7 +170,7 @@ void WriteYsonValueImpl(NResult::TYsonResultWriter& writer, const NUdf::TUnboxed
             const auto it = value.GetListIterator();
             for (NUdf::TUnboxedValue item; it.Next(item);) {
                 writer.OnListItem();
-                WriteYsonValueImpl(writer, item, listType->GetItemType(), nullptr);
+                WriteYsonValueImpl(writer, item, listType->GetItemType(), /*structPositions=*/nullptr);
             }
 
             writer.OnEndList();
@@ -183,7 +183,7 @@ void WriteYsonValueImpl(NResult::TYsonResultWriter& writer, const NUdf::TUnboxed
                 writer.OnBeginList();
                 auto optionalType = AS_TYPE(TOptionalType, type);
                 writer.OnListItem();
-                WriteYsonValueImpl(writer, value.GetOptionalValue(), optionalType->GetItemType(), nullptr);
+                WriteYsonValueImpl(writer, value.GetOptionalValue(), optionalType->GetItemType(), /*structPositions=*/nullptr);
                 writer.OnEndList();
             }
             return;
@@ -197,9 +197,9 @@ void WriteYsonValueImpl(NResult::TYsonResultWriter& writer, const NUdf::TUnboxed
                 writer.OnBeginList();
                 {
                     writer.OnListItem();
-                    WriteYsonValueImpl(writer, key, dictType->GetKeyType(), nullptr);
+                    WriteYsonValueImpl(writer, key, dictType->GetKeyType(), /*structPositions=*/nullptr);
                     writer.OnListItem();
-                    WriteYsonValueImpl(writer, payload, dictType->GetPayloadType(), nullptr);
+                    WriteYsonValueImpl(writer, payload, dictType->GetPayloadType(), /*structPositions=*/nullptr);
                 }
                 writer.OnEndList();
             }
@@ -212,7 +212,7 @@ void WriteYsonValueImpl(NResult::TYsonResultWriter& writer, const NUdf::TUnboxed
             auto tupleType = AS_TYPE(TTupleType, type);
             for (ui32 i = 0, e = tupleType->GetElementsCount(); i < e; ++i) {
                 writer.OnListItem();
-                WriteYsonValueImpl(writer, value.GetElement(i), tupleType->GetElementType(i), nullptr);
+                WriteYsonValueImpl(writer, value.GetElement(i), tupleType->GetElementType(i), /*structPositions=*/nullptr);
             }
 
             writer.OnEndList();
@@ -226,9 +226,9 @@ void WriteYsonValueImpl(NResult::TYsonResultWriter& writer, const NUdf::TUnboxed
             writer.OnUint64Scalar(index);
             writer.OnListItem();
             if (underlyingType->IsTuple()) {
-                WriteYsonValueImpl(writer, value.GetVariantItem(), AS_TYPE(TTupleType, underlyingType)->GetElementType(index), nullptr);
+                WriteYsonValueImpl(writer, value.GetVariantItem(), AS_TYPE(TTupleType, underlyingType)->GetElementType(index), /*structPositions=*/nullptr);
             } else {
-                WriteYsonValueImpl(writer, value.GetVariantItem(), AS_TYPE(TStructType, underlyingType)->GetMemberType(index), nullptr);
+                WriteYsonValueImpl(writer, value.GetVariantItem(), AS_TYPE(TStructType, underlyingType)->GetMemberType(index), /*structPositions=*/nullptr);
             }
 
             writer.OnEndList();
@@ -1127,7 +1127,7 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
 
                 const NUdf::IHash* hash = holderFactory.GetHash(*keyType, useIHash);
                 const NUdf::IEquate* equate = holderFactory.GetEquate(*keyType, useIHash);
-                return holderFactory.CreateDirectHashedDictHolder(filler, types, isTuple, true, nullptr, hash, equate);
+                return holderFactory.CreateDirectHashedDictHolder(filler, types, isTuple, /*eagerFill=*/true, /*encodedType=*/nullptr, hash, equate);
             } else {
                 auto filler = [&](TValuesDictHashMap& map) {
                     cmd = buf.Read();
@@ -1164,7 +1164,7 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
 
                 const NUdf::IHash* hash = holderFactory.GetHash(*keyType, useIHash);
                 const NUdf::IEquate* equate = holderFactory.GetEquate(*keyType, useIHash);
-                return holderFactory.CreateDirectHashedDictHolder(filler, types, isTuple, true, encoded ? keyType : nullptr,
+                return holderFactory.CreateDirectHashedDictHolder(filler, types, isTuple, /*eagerFill=*/true, encoded ? keyType : nullptr,
                                                                   hash, equate);
             }
         }
@@ -1278,7 +1278,7 @@ TMaybe<NUdf::TUnboxedValue> ParseYsonValue(const THolderFactory& holderFactory,
         };
 
         TReader reader(yson);
-        TInputBuf buf(reader, nullptr);
+        TInputBuf buf(reader, /*readTimer=*/nullptr);
         char cmd = buf.Read();
         return ReadYsonValue(type, holderFactory, cmd, buf);
     } catch (const yexception& e) {

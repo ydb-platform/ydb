@@ -34,10 +34,10 @@ using namespace NKikimr::NFulltext;
  * - Source columns: __ydb_token, <PK columns>, __ydb_freq
  * For compact index formats:
  * - This scan takes the indexImplTable0build and writes output to indexImplTable and indexImplDictTable.
- * - Source columns: __ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment
- * - Destination columns: __ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment
- * - All source segments are expected to be unique, but with random __ydb_generation
- * - Output __ydb_generation is always UINT32_MAX
+ * - Source columns: __ydb_token, __ydb_generation, __ydb_max_id, __ydb_added, __ydb_segment
+ * - Destination columns: __ydb_token, __ydb_generation, __ydb_max_id, __ydb_added, __ydb_segment
+ * - All source segments are expected to be unique with __ydb_generation = MAX
+ * - Output __ydb_generation is always MAX
  * For both:
  * - indexImplDictTable destination columns: __ydb_token, __ydb_freq
  *
@@ -135,13 +135,6 @@ public:
 
         NumPrefixColumns = request.PrefixColumnsSize();
 
-        // For compact formats the key is [prefix..., token, __ydb_max_id, __ydb_generation];
-        // __ydb_max_id (the doc-id) determines the integer key encoding. For non-prefixed indexes
-        // this is at(1) (token at 0), preserving the previous behavior.
-        auto keyTypeId = table.KeyColumnTypes.at(NumPrefixColumns + 1).GetTypeId();
-        KeyIs32 = (keyTypeId == NScheme::NTypeIds::Uint32 || keyTypeId == NScheme::NTypeIds::Int32);
-        Signed = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Int32);
-
         auto types = GetAllTypes(table);
         auto addType = [&](auto& uploadTypes, const auto& column) {
             auto typeInfo = types.at(column);
@@ -167,18 +160,25 @@ public:
             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact ||
             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance)
         {
+            // For compact formats the key is [prefix..., token, __ydb_generation, __ydb_max_id];
+            // __ydb_max_id (the doc-id) determines the integer key encoding. For non-prefixed indexes
+            // this is at(2) (token at 0), preserving the previous behavior.
+            auto keyTypeId = table.KeyColumnTypes.at(NumPrefixColumns + 2).GetTypeId();
+            KeyIs32 = (keyTypeId == NScheme::NTypeIds::Uint32 || keyTypeId == NScheme::NTypeIds::Int32);
+            Signed = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Int32);
+
             auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
             // Posting key is [prefix..., token, max_id, gen]; the prefix columns lead the key.
             for (const auto& prefixColumn : request.GetPrefixColumns()) {
                 addType(uploadTypes, prefixColumn);
             }
             addType(uploadTypes, TokenColumn);
-            addType(uploadTypes, MaxIdColumn);
             {
                 Ydb::Type type;
                 type.set_type_id(NTableIndex::NFulltext::GenType);
                 uploadTypes->emplace_back(GenColumn, type);
             }
+            addType(uploadTypes, MaxIdColumn);
             addType(uploadTypes, AddedColumn);
             addType(uploadTypes, SegmentColumn);
             PostingBuf = Uploader.AddDestination(request.GetPostingTableName(), std::move(uploadTypes));
@@ -400,8 +400,8 @@ protected:
             for (const auto& cell : LastGroupKey) {
                 uploadKey.push_back(cell);
             }
-            uploadKey.push_back(KeyIs32 ? TCell::Make((ui32)maxId) : TCell::Make(maxId));
             uploadKey.push_back(TCell::Make(std::numeric_limits<NTableIndex::NFulltext::TGen>::max()));
+            uploadKey.push_back(KeyIs32 ? TCell::Make((ui32)maxId) : TCell::Make(maxId));
             TVector<TCell> uploadValue = {
                 TCell::Make(true),
                 TCell((const char*)buf.data(), buf.size()),

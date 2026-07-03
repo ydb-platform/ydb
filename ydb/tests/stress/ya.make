@@ -2,8 +2,10 @@ RECURSE(
     backup
     cdc
     common
+    compare_index_performance
     ctas
     federated_queries
+    fulltext_workload
     kafka
     kafka_serverless
     kv
@@ -30,6 +32,7 @@ RECURSE(
     topic_kafka
     topic_sqs
     transfer
+    vector_workload
     viewer
     streaming
 )

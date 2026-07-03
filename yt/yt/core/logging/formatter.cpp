@@ -62,7 +62,8 @@ TStructuredLogFormatter::TStructuredLogFormatter(
     bool enableSourceLocation,
     bool enableSystemFields,
     bool enableHostField,
-    NJson::TJsonFormatConfigPtr jsonFormat)
+    NJson::TJsonFormatConfigPtr jsonFormat,
+    EYsonFormat ysonFormat)
     : TLogFormatterBase(enableSourceLocation)
     , Format_(format)
     , CommonFields_(std::move(commonFields))
@@ -71,6 +72,7 @@ TStructuredLogFormatter::TStructuredLogFormatter(
     , JsonFormat_(!jsonFormat && (Format_ == ELogFormat::Json)
         ? New<NJson::TJsonFormatConfig>()
         : std::move(jsonFormat))
+    , YsonFormat_(ysonFormat)
 { }
 
 i64 TStructuredLogFormatter::WriteFormatted(IOutputStream* stream, const TLogEvent& event)
@@ -88,7 +90,11 @@ i64 TStructuredLogFormatter::WriteFormatted(IOutputStream* stream, const TLogEve
             consumer = NJson::CreateJsonConsumer(&countingStream, EYsonType::Node, JsonFormat_);
             break;
         case ELogFormat::Yson:
-            consumer = std::make_unique<TYsonWriter>(&countingStream, EYsonFormat::Text);
+            consumer = std::make_unique<TYsonWriter>(
+                &countingStream,
+                YsonFormat_,
+                EYsonType::Node,
+                /*enableRaw*/ YsonFormat_ == EYsonFormat::Binary);
             break;
         default:
             YT_ABORT();

@@ -40,22 +40,19 @@ std::shared_ptr<TResultHolder<TResponse>> DoRequest(
     TString database = "/Root/test_db"
 ) {
     auto result = std::make_shared<TResultHolder<TResponse>>();
+    auto edgeActor = runtime.AllocateEdgeActor();
 
     auto ctx = new TRequestCtx<TRequest, TResponse>(
         request,
         path,
         database,
-        result
+        result,
+        nullptr,
+        edgeActor
     );
     runtime.Register(createActor(ctx));
 
-    for (int i = 0; i < 50; ++i) {
-        if (result->ResultStatus) {
-            break;
-        }
-
-        Sleep(TDuration::MilliSeconds(50));
-    }
+    runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(edgeActor, TDuration::Seconds(10));
 
     UNIT_ASSERT_C(result->ResultStatus, "The operation is still in progress");
     return result;

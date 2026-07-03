@@ -370,7 +370,7 @@ TEST(TYsonPullParserTest, String)
 {
     EXPECT_EQ(GetYsonPullSignature(" nan "), "'nan'");
     EXPECT_EQ(GetYsonPullSignature("\x01\x06" "bar"), "'bar'");
-    EXPECT_EQ(GetYsonPullSignature("\x01\x80\x01" + TString(64, 'a')), TString("'") + TString(64, 'a') + "'");
+    EXPECT_EQ(GetYsonPullSignature("\x01\x80\x01" + std::string(64, 'a')), std::string("'") + std::string(64, 'a') + "'");
     EXPECT_EQ(GetYsonPullSignature(TStringBuf("\x01\x00"sv)), "''");
     EXPECT_EQ(GetYsonPullSignature(" Hello_789_World_123 "), "'Hello_789_World_123'");
     EXPECT_EQ(GetYsonPullSignature(" Hello_789_World_123 "), "'Hello_789_World_123'");
@@ -381,7 +381,7 @@ TEST(TYsonPullParserTest, String)
 
 TEST(TYsonPullParserTest, StringEscaping)
 {
-    TString expected;
+    std::string expected;
     for (int i = 0; i < 256; ++i) {
         expected.push_back(char(i));
     }
@@ -528,8 +528,8 @@ TEST(TYsonPullParserTest, Capture)
 TEST(TYsonPullParserTest, DepthLimitExceeded)
 {
     constexpr auto DepthLimit = DefaultYsonParserNestingLevelLimit;
-    EXPECT_NO_THROW(GetYsonPullSignature(TString(DepthLimit - 1, '[') + TString(DepthLimit - 1, ']')));
-    EXPECT_ANY_THROW(GetYsonPullSignature(TString(DepthLimit, '[') + TString(DepthLimit, ']')));
+    EXPECT_NO_THROW(GetYsonPullSignature(std::string(DepthLimit - 1, '[') + std::string(DepthLimit - 1, ']')));
+    EXPECT_ANY_THROW(GetYsonPullSignature(std::string(DepthLimit, '[') + std::string(DepthLimit, ']')));
 }
 
 TEST(TYsonPullParserTest, DepthLimitInTransfer)
@@ -543,8 +543,8 @@ TEST(TYsonPullParserTest, DepthLimitInTransfer)
         cursor.TransferComplexValue(GetNullYsonConsumer());
     };
 
-    EXPECT_NO_THROW(transfer(TString(DepthLimit - 1, '[') + TString(DepthLimit - 1, ']')));
-    EXPECT_ANY_THROW(transfer(TString(DepthLimit, '[') + TString(DepthLimit, ']')));
+    EXPECT_NO_THROW(transfer(std::string(DepthLimit - 1, '[') + std::string(DepthLimit - 1, ']')));
+    EXPECT_ANY_THROW(transfer(std::string(DepthLimit, '[') + std::string(DepthLimit, ']')));
 }
 
 TEST(TYsonPullParserTest, ContextInExceptions)
@@ -561,7 +561,7 @@ TEST(TYsonPullParserTest, ContextInExceptions)
 TEST(TYsonPullParserTest, ContextInExceptions_ManyBlocks)
 {
     try {
-        auto manyO = TString(100, 'o');
+        auto manyO = std::string(100, 'o');
         TStringBufVectorReader input(
             {
                 "{fo",
@@ -591,7 +591,7 @@ TEST(TYsonPullParserTest, ContextInExceptions_ContextAtTheVeryBeginning)
 TEST(TYsonPullParserTest, ContextInExceptions_Margin)
 {
     try {
-        auto manyO = TString(100, 'o');
+        auto manyO = std::string(100, 'o');
         TStringBufVectorReader input(
             {
                 "{fo",
@@ -902,7 +902,7 @@ TEST(TYsonPullParserTest, TestSkipValueBasicCases)
         i64 x;
         EXPECT_NO_THROW(x = parser.ParseInt64());
         EXPECT_EQ(x, 13);
-        TString s;
+        std::string s;
         EXPECT_NO_THROW(s = parser.ParseString());
         EXPECT_EQ(s, "qux");
         EXPECT_EQ(parser.Next(), TYsonItem::Simple(EYsonItemType::EndList));
@@ -922,7 +922,7 @@ TEST(TYsonPullParserTest, TestSkipValueBasicCases)
         EXPECT_EQ(item, TYsonItem::Int64(12));
         EXPECT_NO_THROW(parser.SkipComplexValue(item));
         EXPECT_NO_THROW(parser.SkipComplexValue());
-        TString s;
+        std::string s;
         EXPECT_NO_THROW(s = parser.ParseString());
         EXPECT_EQ(s, "qux");
         EXPECT_EQ(parser.Next(), TYsonItem::Simple(EYsonItemType::EndList));
@@ -1334,7 +1334,7 @@ TEST(TYsonPullParserCursorTest, MapFragment)
         auto cursor = TStringBufCursor(input, EYsonType::MapFragment);
         EXPECT_TRUE(cursor.TryConsumeFragmentStart());
 
-        std::vector<std::pair<TString, int>> expected = {{"a", 1}, {"b", 2}, {"c", 3}};
+        std::vector<std::pair<std::string, int>> expected = {{"a", 1}, {"b", 2}, {"c", 3}};
         for (const auto& [key, value] : expected) {
             EXPECT_EQ(cursor->UncheckedAsString(), key);
             cursor.Next();

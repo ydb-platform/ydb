@@ -293,6 +293,48 @@
             "uri": "https://{canondata_backend}/1903280/44f4f1690f38bce1fadfbce889480224fbb8b527/resource.tar.gz#test.test_blocks-extend-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[blocks-guess_struct-default.txt-Debug]": [
+        {
+            "checksum": "dc695ef63c0f88a81910b94520d24e95",
+            "size": 672,
+            "uri": "https://{canondata_backend}/1814674/af6048e526ca90118fc48e8a1171c55d8d01599c/resource.tar.gz#test.test_blocks-guess_struct-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-guess_struct-default.txt-Peephole]": [
+        {
+            "checksum": "503506e157eefe241ea710f344a9a4d3",
+            "size": 857,
+            "uri": "https://{canondata_backend}/1814674/af6048e526ca90118fc48e8a1171c55d8d01599c/resource.tar.gz#test.test_blocks-guess_struct-default.txt-Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-guess_struct-default.txt-Results]": [
+        {
+            "checksum": "28718b5e1be812f03ffc37b36f5a484f",
+            "size": 2907,
+            "uri": "https://{canondata_backend}/1814674/af6048e526ca90118fc48e8a1171c55d8d01599c/resource.tar.gz#test.test_blocks-guess_struct-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[blocks-guess_struct_optional-default.txt-Debug]": [
+        {
+            "checksum": "a39f5af6d371ab3cd348088dfc555581",
+            "size": 682,
+            "uri": "https://{canondata_backend}/1814674/af6048e526ca90118fc48e8a1171c55d8d01599c/resource.tar.gz#test.test_blocks-guess_struct_optional-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-guess_struct_optional-default.txt-Peephole]": [
+        {
+            "checksum": "04b061f56cff50b6e5e047373ea6d77d",
+            "size": 807,
+            "uri": "https://{canondata_backend}/1814674/af6048e526ca90118fc48e8a1171c55d8d01599c/resource.tar.gz#test.test_blocks-guess_struct_optional-default.txt-Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-guess_struct_optional-default.txt-Results]": [
+        {
+            "checksum": "ab943064d130561ae2d2eff39b483c0f",
+            "size": 1583,
+            "uri": "https://{canondata_backend}/1814674/af6048e526ca90118fc48e8a1171c55d8d01599c/resource.tar.gz#test.test_blocks-guess_struct_optional-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[blocks-if_scalar-default.txt-Debug]": [
         {
             "checksum": "b1316cc011f1941633e8e78e1297ac0b",

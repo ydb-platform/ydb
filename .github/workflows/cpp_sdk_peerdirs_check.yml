@@ -1,0 +1,68 @@
+name: Check CPP SDK PEERDIRs
+
+on:
+  pull_request_target:
+    branches: [main, stable-*]
+    paths: ['ydb/public/sdk/cpp/**', '.github/workflows/cpp_sdk_peerdirs_check.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).cpp_sdk_peerdirs_check == true)
+    runs-on: [self-hosted, tiny-worker]
+    steps:
+      - uses: actions/github-script@v8
+        if: github.event_name == 'pull_request_target'
+        id: gate
+        with:
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            if (pr.labels.some(l => l.name === 'ok-to-test')) return true;
+            if (pr.user.login === context.repo.owner) return true;
+            try {
+              await github.rest.repos.checkCollaborator({
+                owner: context.repo.owner, repo: context.repo.repo, username: pr.user.login,
+              });
+              return true;
+            } catch (e) {
+              if (e.status === 404) return false;
+              throw e;
+            }
+
+      - name: Comment if waiting on ok-to-test
+        if: steps.gate.outputs.result == 'false' && github.event.action == 'opened'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: 'Hi! The C++ SDK PEERDIRs check will run after a maintainer adds an `ok-to-test` label to this PR. Thank you for your patience!'
+            });
+
+      - uses: actions/checkout@v5
+        if: github.event_name != 'pull_request_target' || steps.gate.outputs.result == 'true'
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 0
+
+      - if: github.event_name != 'pull_request_target' || steps.gate.outputs.result == 'true'
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = pull_request_target ]; then
+            git fetch --no-tags origin "$BASE_REF"
+            git diff --name-only --diff-filter=ACMRT "origin/$BASE_REF...HEAD" > changed.txt
+            python3 ydb/public/sdk/cpp/scripts/check_peerdirs.py changed.txt
+          else
+            python3 ydb/public/sdk/cpp/scripts/check_peerdirs.py
+          fi

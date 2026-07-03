@@ -218,7 +218,7 @@ message TFeatureFlags {
     optional bool EnableRealSystemViewPaths = 191 [default = true];
     optional bool EnableCSSchemasCollapsing = 192 [default = false];
     optional bool EnableMoveColumnTable = 193 [default = true];
-    optional bool EnableArrowResultSetFormat = 194 [default = true];
+    optional bool EnableArrowResultSetFormat = 194 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableCsOverloadsSubscriptionRetries = 195 [default = true];
     optional bool EnableTopicCompactificationByKey = 196 [default = true];
     optional bool EnableCompactionOverloadDetection = 197 [default = true];
@@ -258,7 +258,7 @@ message TFeatureFlags {
     optional bool EnableForcedCompactions = 231 [default = true];
     optional bool EnableLocalBloomFilterIndex = 232 [default = true];
     optional bool EnableLocalBloomNgramFilterIndex = 233 [default = true];
-    optional bool EnableSetDropDefaultValue = 234 [default = true];
+    optional bool EnableSetDropDefaultValue = 234 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
     optional bool EnableBlobIdInSectorChecksum = 236 [default = false];
     optional bool TransferInternalDataDecompression = 237 [default = false];
@@ -294,7 +294,7 @@ message TFeatureFlags {
     optional bool UseRealUserIpForBlackbox = 256 [default = false];
     optional bool EnableNodeShutdownHints = 257 [default = false];
     optional bool EnableTopicPartitionSplitBasedOnMessages = 258 [default = false];
-    optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
+    reserved 259; // ForbidDiscoveryInnerDbPaths
     optional bool EnableStreamingQueryDisposition = 260 [default = true];
     // Skip persisting partition rows that are not affected by a split/merge operation.
     optional bool EnableSplitMergePartialPersistence = 261 [default = true];
@@ -325,4 +325,11 @@ message TFeatureFlags {
     optional bool EnableAccessServiceV2Interface = 283 [default = true, (RequireRestart) = true];
     optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
     optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
+    optional bool EnableTopicDeferredPublish = 286 [default = false];
+    optional bool EnableConfiguredBootstrapper = 287 [default = false, (RequireRestart) = true];
+    optional bool EnableSmallBlobsQuotaEnforcement = 288 [default = false];
+    // Guards using the synthetic __ydb_row_id column as doc_id for fulltext/JSON indexes over tables
+    // whose primary key is not a single integer. When OFF, no __ydb_row_id column or its unique index
+    // is used or auto-provisioned, and such indexes fall back to requiring a single integer primary key.
+    optional bool EnableFulltextIndexRowId = 289 [default = true];
 }

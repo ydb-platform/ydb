@@ -149,7 +149,7 @@ private:
         if (status.HasRestart) {
             // ignore Async status in this case
             Index_ = 0;
-            status = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+            status = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
         } else if (status.Level == IGraphTransformer::TStatus::Ok) {
             status = IGraphTransformer::TStatus::Repeat;
             ++Index_;
@@ -236,7 +236,7 @@ private:
         if (status.HasRestart) {
             // ignore Async status in this case
             Index_ = 0;
-            status = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+            status = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
         } else if (status.Level == IGraphTransformer::TStatus::Ok) {
             status = IGraphTransformer::TStatus::Repeat;
             YQL_ENSURE(!Condition_.Empty(), "Condition must be set");
@@ -361,7 +361,7 @@ IGraphTransformer::TStatus AsyncTransformStepImpl(IGraphTransformer& transformer
                 if (breakOnRestart && status.HasRestart) {
                     return status;
                 }
-                return AsyncTransformStepImpl(transformer, root, ctx, false /* no async changes */, breakOnRestart, name);
+                return AsyncTransformStepImpl(transformer, root, ctx, /*applyAsyncChanges=*/false /* no async changes */, breakOnRestart, name);
             case IGraphTransformer::TStatus::Async:
                 YQL_ENSURE(false, "Async status is forbidden for ApplyAsyncChanges");
                 break;
@@ -418,7 +418,7 @@ IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExp
         ctx.ResetCycleDetector();
     };
 
-    IGraphTransformer::TStatus status = AsyncTransformStepImpl(transformer, root, ctx, false, breakOnRestart, "InstantTransform");
+    IGraphTransformer::TStatus status = AsyncTransformStepImpl(transformer, root, ctx, /*applyAsyncChanges=*/false, breakOnRestart, "InstantTransform");
     if (status.Level == IGraphTransformer::TStatus::Async) {
         ctx.AddError(TIssue(ctx.GetPosition(root->Pos()), "Instant transform can not be delayed"));
         return IGraphTransformer::TStatus::Error;
@@ -429,13 +429,13 @@ IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExp
 IGraphTransformer::TStatus AsyncTransformStep(IGraphTransformer& transformer, TExprNode::TPtr& root,
                                             TExprContext& ctx, bool applyAsyncChanges)
 {
-    return AsyncTransformStepImpl(transformer, root, ctx, applyAsyncChanges, false, "AsyncTransformStep");
+    return AsyncTransformStepImpl(transformer, root, ctx, applyAsyncChanges, /*breakOnRestart=*/false, "AsyncTransformStep");
 }
 
 NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx,
                                                                 bool applyAsyncChanges) {
     ctx.ResetCycleDetector();
-    IGraphTransformer::TStatus status = AsyncTransformStepImpl(transformer, root, ctx, applyAsyncChanges, false, "AsyncTransform");
+    IGraphTransformer::TStatus status = AsyncTransformStepImpl(transformer, root, ctx, applyAsyncChanges, /*breakOnRestart=*/false, "AsyncTransform");
     if (status.Level != IGraphTransformer::TStatus::Async) {
         return NThreading::MakeFuture(status);
     }

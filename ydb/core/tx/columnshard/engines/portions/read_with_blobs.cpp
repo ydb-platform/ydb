@@ -149,7 +149,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
     TGeneralSerializedSlice slice(secondaryData.GetExternalData(), schemaTo, counters);
 
     return TWritePortionInfoWithBlobsConstructor::BuildByBlobs(
-        slice.GroupChunksByBlobs(groups), secondaryData.GetSecondaryInplaceData(), std::move(constructor), storages);
+        slice.GroupChunksByBlobs(groups), secondaryData.GetSecondaryInplaceData(), std::move(constructor), storages, to->GetIndexInfo());
 }
 
 const TString& TReadPortionInfoWithBlobs::GetBlobByAddressVerified(const ui32 columnId, const ui32 chunkId) const {

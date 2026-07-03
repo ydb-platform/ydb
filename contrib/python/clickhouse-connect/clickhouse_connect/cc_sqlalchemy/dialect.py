@@ -5,7 +5,7 @@ from sqlalchemy.exc import NoResultFound, NoSuchTableError
 
 from clickhouse_connect import dbapi
 from clickhouse_connect.cc_sqlalchemy import dialect_name, ischema_names
-from clickhouse_connect.cc_sqlalchemy.inspector import ChInspector, get_table_metadata
+from clickhouse_connect.cc_sqlalchemy.inspector import ChInspector, get_columns, get_table_metadata
 from clickhouse_connect.cc_sqlalchemy.sql import full_table
 from clickhouse_connect.cc_sqlalchemy.sql.compiler import ChStatementCompiler
 from clickhouse_connect.cc_sqlalchemy.sql.ddlcompiler import ChDDLCompiler
@@ -61,6 +61,11 @@ class ClickHouseDialect(DefaultDialect):
         ),
     ]
 
+    def __init__(self, server_side_params: bool = False, **kwargs):
+        # Set before super().__init__() so ChIdentifierPreparer can read it when built.
+        self.server_side_params = server_side_params
+        super().__init__(**kwargs)
+
     # SQA 1 compatibility
 
     @classmethod
@@ -88,6 +93,9 @@ class ClickHouseDialect(DefaultDialect):
         if schema:
             cmd += " FROM " + quote_identifier(schema)
         return [row.name for row in connection.execute(text(cmd))]
+
+    def get_columns(self, connection, table_name, schema=None, **kw):
+        return get_columns(connection, table_name, schema)
 
     def get_primary_keys(self, connection, table_name, schema=None, **kw):
         return []

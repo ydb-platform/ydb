@@ -152,18 +152,21 @@ public:
     void FlushFailed(THostRoute route);
     [[nodiscard]] THostMask GetRequestedFlushes() const;
 
-    // Returns true when erase request needed.
-    [[nodiscard]] bool RequestErase(THostIndex host);
+    void RequestErase(THostIndex host);
     // Returns true when all erases confirmed.
     [[nodiscard]] bool ConfirmErase(THostIndex host);
     void EraseFailed(THostIndex host);
+    // Hosts where a write was requested but erase is not yet
+    // requested/confirmed.
+    [[nodiscard]] THostMask GetEraseNeeded() const;
+
+    // Skip removed hosts flushing and erase. Update state.
+    void RemoveHosts(THostMask removed);
 
     // Sets a lock that prohibits erasing the PBuffer.
     void LockPBuffer();
     // Removes the lock that prohibits erasing the PBuffer.
     void UnlockPBuffer();
-
-    [[nodiscard]] THostMask GetWriteRequested() const;
 
     TString DebugPrint(TInstant now) const;
 
@@ -176,6 +179,8 @@ private:
         THostMask mask,
         IReadyQueue::EPBufferCounter counter,
         bool add) const;
+
+    void SetState(EState newState);
 
     EState State;
 

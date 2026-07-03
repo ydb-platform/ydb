@@ -2,9 +2,11 @@
 #include "pg_proxy_types.h"
 #include "pg_proxy_events.h"
 #include "pg_stream.h"
-#include "pg_log_impl.h"
+#include "pg_log.h"
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/raw_socket/sock_config.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PGWIRE
 
 namespace NPG {
 
@@ -58,7 +60,9 @@ public:
     void Bootstrap() {
         Become(&TPGConnection::StateAccepting);
         Schedule(InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
-        BLOG_D("incoming connection opened");
+        YDB_LOG_DEBUG("Incoming connection opened",
+            {"socket", GetRawSocket()},
+            {"address", Address} );
         OnAccept();
     }
 
@@ -98,10 +102,6 @@ protected:
 
     SOCKET GetRawSocket() const {
         return Socket->GetRawSocket();
-    }
-
-    TString LogPrefix() const {
-        return TStringBuilder() << "(#" << GetRawSocket() << "," << Address << ") ";
     }
 
     void OnAccept() {
@@ -238,7 +238,10 @@ protected:
                 prefix << "<- [" << OutgoingSequenceNumber << "] ";
                 break;
         }
-        BLOG_D(prefix << "'" << message.Message << "' \"" << GetMessageName(direction, message) << "\" Size(" << message.GetDataSize() << ") " << GetMessageDump(direction, message));
+        YDB_LOG_DEBUG(prefix << GetMessageName(direction, message),
+            {"name", GetMessageName(direction, message)},
+            {"size", message.GetDataSize()},
+            {"dump", GetMessageDump(direction, message)});
     }
 
     template<typename TMessage>
@@ -342,7 +345,7 @@ protected:
                 }
                 RequestPoller();
             } else {
-                BLOG_D("<- 'N' \"Decline SSL\"");
+                YDB_LOG_DEBUG("<- 'N' \"Decline SSL");
                 BufferOutput.Append('N');
                 if (!FlushOutput()) {
                     return;
@@ -353,7 +356,7 @@ protected:
             return;
         }
         if (protocol == 0x2e16d204) { // 80877102 cancellation message
-            BLOG_D("cancellation message");
+            YDB_LOG_DEBUG("Cancellation message");
             TPGInitial::TPGBackendData backendData = message->GetBackendData();
             if (IsValidBackendData(backendData)) {
                 Send(DatabaseProxy, new TEvPGEvents::TEvCancelRequest(backendData.Pid ^ BACKEND_DATA_MASK, backendData.Key ^ BACKEND_DATA_MASK));
@@ -362,7 +365,8 @@ protected:
             return;
         }
         if (protocol != 0x300) {
-            BLOG_W("invalid protocol version (" << Hex(protocol) << ")");
+            YDB_LOG_WARN("Invalid protocol version",
+                {"protocol", Hex(protocol)});
             CloseConnection = true;
             return;
         }
@@ -501,7 +505,8 @@ protected:
 
     template<typename TEvent>
     void PostponeEvent(TAutoPtr<TEvent>& ev) {
-        BLOG_D("Postpone event " << ev->Cookie);
+        YDB_LOG_DEBUG("Postpone event",
+            {"cookie", ev->Cookie});
         TAutoPtr<IEventHandle> evb(ev.Release());
         auto it = std::upper_bound(PostponedEvents.begin(), PostponedEvents.end(), evb, TEventsComparator());
         PostponedEvents.insert(it, evb);
@@ -567,7 +572,7 @@ protected:
                 BecomeReadyForQuery();
             } else {
                 SendErrorResponse(ev->Get()->ErrorFields);
-                BLOG_ERROR("unable to create connection");
+                YDB_LOG_ERROR("Unable to create connection");
                 CloseConnection = true;
                 FlushAndPoll();
             }
@@ -779,7 +784,9 @@ protected:
                 if (need == 0) {
                     size_t capacity = BufferInput.Capacity() * 2;
                     if (capacity > MAX_BUFFER_SIZE) {
-                        BLOG_ERROR("connection closed - not enough buffer size (" << capacity << " > " << MAX_BUFFER_SIZE << ")");
+                        YDB_LOG_ERROR("Connection closed - not enough buffer size",
+                            {"capacity", capacity},
+                            {"maxBufferSize", MAX_BUFFER_SIZE});
                         return PassAway();
                     }
                     BufferInput.Reserve(capacity);
@@ -827,7 +834,8 @@ protected:
                                 HandleMessage(static_cast<const TPGFlush*>(message));
                                 break;
                             default:
-                                BLOG_ERROR("invalid message (" << message->Message << ")");
+                                YDB_LOG_ERROR("Invalid message",
+                                    {"message", message->Message});
                                 CloseConnection = true;
                                 break;
                         }
@@ -842,17 +850,21 @@ protected:
                     continue;
                 } else if (res == 0) {
                     // connection closed
-                    BLOG_ERROR("connection was gracefully closed iSQ: " << IncomingSequenceNumber << " oSQ: " << OutgoingSequenceNumber << " sSQ: " << SyncSequenceNumber);
+                    YDB_LOG_ERROR("Connection was gracefully closed",
+                        {"iSQ", IncomingSequenceNumber},
+                        {"oSQ", OutgoingSequenceNumber},
+                        {"sSQ", SyncSequenceNumber});
                     return PassAway();
                 } else {
-                    BLOG_ERROR("connection closed - error in recv: " << strerror(-res));
+                    YDB_LOG_ERROR("Connection closed - error",
+                        {"error", strerror(-res)});
                     return PassAway();
                 }
             }
             if (event->Get() == InactivityEvent) {
                 const TDuration passed = TDuration::Seconds(std::abs(InactivityTimer.Passed()));
                 if (passed >= InactivityTimeout) {
-                    BLOG_ERROR("connection closed by inactivity timeout");
+                    YDB_LOG_ERROR("Connection closed by inactivity timeout");
                     return PassAway(); // timeout
                 } else {
                     Schedule(InactivityTimeout - passed, InactivityEvent = new TEvPollerReady(nullptr, false, false));
@@ -882,13 +894,14 @@ protected:
             } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
                 break;
             } else {
-                BLOG_ERROR("connection closed - error in FlushOutput: " << strerror(-res));
+                YDB_LOG_ERROR("Connection closed - error",
+                    {"error", strerror(-res)});
                 PassAway();
                 return false;
             }
         }
         if (CloseConnection && BufferOutput.Empty()) {
-            BLOG_D("connection closed");
+            YDB_LOG_DEBUG("Connection closed");
             PassAway();
             return false;
         }
@@ -898,7 +911,8 @@ protected:
     bool UpgradeToSecure() {
         int res = Socket->TryUpgradeToSecure(NKikimrServices::PGYDB);
         if (res < 0) {
-            BLOG_ERROR("connection closed - error in UpgradeToSecure: " << strerror(-res));
+            YDB_LOG_ERROR("Connection closed - error",
+                {"error", strerror(-res)});
             PassAway();
             return false;
         }
@@ -906,6 +920,8 @@ protected:
     }
 
     STATEFN(StateAccepting) {
+        YDB_LOG_CREATE_CONTEXT({"socket", GetRawSocket()},
+            {"address", Address} );
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPollerReady, HandleAccepting);
             hFunc(TEvPollerRegisterResult, HandleAccepting);
@@ -913,6 +929,8 @@ protected:
     }
 
     STATEFN(StateConnected) {
+        YDB_LOG_CREATE_CONTEXT({"socket", GetRawSocket()},
+            {"address", Address} );
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPollerReady, HandleConnected);
             hFunc(TEvPollerRegisterResult, HandleConnected);

@@ -246,7 +246,7 @@ SIMPLE_STRICT_UDF(TSubnetFromString, TOptionalString(TAutoMapString)) {
 }
 
 SIMPLE_UDF(TToString, char*(TAutoMapString)) {
-    return valueBuilder->NewString(DeserializeAddress(args[0].AsStringRef()).ToString(false));
+    return valueBuilder->NewString(DeserializeAddress(args[0].AsStringRef()).ToString(/*PrintScopeId=*/false));
 }
 
 SIMPLE_UDF_OPTIONS(TIpv4ToUint32, TOptionalUint32(TAutoMapString), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 3))) {
@@ -265,7 +265,7 @@ SIMPLE_UDF_OPTIONS(TIpv4ToUint32, TOptionalUint32(TAutoMapString), builder.SetMi
 SIMPLE_UDF(TSubnetToString, char*(TAutoMapString)) {
     TStringBuilder result;
     auto range = DeserializeSubnet(args[0].AsStringRef());
-    result << (*range.Begin()).ToString(false);
+    result << (*range.Begin()).ToString(/*PrintScopeId=*/false);
     result << '/';
     result << ToString(GetAddressRangePrefix(range));
     return valueBuilder->NewString(result);

@@ -7,7 +7,7 @@
 Use {{ydb-short-name}} as an engine for feature engineering:
 
 * SQL and [dbt](../../../integrations/migration/dbt.md): execute complex analytical queries to aggregate raw data and create new features. Materialize feature sets into row-based tables for fast access;
-* Apache Spark: for more complex transformations that require Python or Scala logic, use the [Apache Spark connector](../../../integrations/ingestion/spark.md) to read data, process it, and save the results back to {{ydb-short-name}}.
+* Apache Spark: for more complex transformations that require Python or Scala logic, use the [Apache Spark connector](../../../integrations/query-engines/spark.md) to read data, process it, and save the results back to {{ydb-short-name}}.
 
 ## Model Training
 

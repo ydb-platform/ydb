@@ -1,6 +1,9 @@
 #include "storage.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+
+#include <util/generic/size_literals.h>
 
 namespace NKikimr::NOlap {
 
@@ -46,6 +49,12 @@ void IBlobsStorageOperator::Stop() {
 
 const NSplitter::TSplitSettings& IBlobsStorageOperator::GetBlobSplitSettings() const {
     return NYDBTest::TControllers::GetColumnShardController()->GetBlobSplitSettings(DoGetBlobSplitSettings());
+}
+
+ui64 IBlobsStorageOperator::GetSmallBlobThresholdBytes() const {
+    const ui64 base = HasAppData() ? AppData()->SmallBlobsQuotaConfig.GetSmallBlobSizeThresholdBytes() : (ui64)64_KB;
+    const auto layout = GetBlobStorageLayout();
+    return base * (layout ? std::max<ui32>(1, layout->DataParts()) : 1);
 }
 
 }   // namespace NKikimr::NOlap

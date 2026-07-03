@@ -748,7 +748,10 @@ struct TCommonAppOptions {
             appConfig.MutableLocalPgWireConfig()->SetAddress(PGWireAddress);
         }
         if (PGWirePort) {
-            appConfig.MutableLocalPgWireConfig()->SetListeningPort(PGWirePort);
+            auto& conf = *appConfig.MutableLocalPgWireConfig();
+            conf.SetEnableLocalPgWire(true);
+            conf.SetListeningPort(PGWirePort);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::LocalPgWireConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         for (const auto& addr : GRpcPublicAddressesV4) {
             appConfig.MutableGRpcConfig()->AddPublicAddressesV4(addr);

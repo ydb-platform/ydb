@@ -196,7 +196,9 @@ private:
                             && emptyDatabaseMode == EEmptyDatabaseMode::EmptyDatabaseForbidden)
                         )
                     ) {
-                        requestBaseCtx->ReplyUnauthenticated("Requests without specified database are not allowed");
+                        const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, "Requests without specified database are not allowed");
+                        requestBaseCtx->RaiseIssue(issue);
+                        requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
                         return;
                     }
                 }
@@ -207,7 +209,9 @@ private:
             }
             if (databaseName.empty()) {
                 Counters->IncDatabaseUnavailableCounter();
-                requestBaseCtx->ReplyUnauthenticated("Empty database name");
+                const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, "Empty database name");
+                requestBaseCtx->RaiseIssue(issue);
+                requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
                 return;
             }
             auto it = Databases.find(databaseName);

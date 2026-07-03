@@ -357,6 +357,8 @@ bool IsFlowOrStream(const TExprNode& node);
 bool IsBoolLike(const TTypeAnnotationNode& type);
 bool IsBoolLike(const TExprNode& node);
 
+bool IsUniversalLiteral(const TExprNode::TPtr& node);
+
 TString GetTypeDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);
 TString GetTypePrettyDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);
 TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);

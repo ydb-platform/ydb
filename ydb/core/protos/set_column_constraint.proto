@@ -21,12 +21,25 @@ message TSetColumnConstraintSettings {
 
 message TSetColumnConstraint {
     optional uint64 Id = 1;
-    optional Ydb.Table.IndexBuildState.State State = 2;
+    optional Ydb.Table.SetNotNullState.State State = 2;
     optional TSetColumnConstraintSettings Settings = 3;
     optional float Progress = 4 [default = 0];
     optional google.protobuf.Timestamp StartTime = 5;
     optional google.protobuf.Timestamp EndTime = 6;
     optional string UserSID = 7;
+}
+
+// schemeshard public api:
+
+message TEvGetRequest {
+    optional string DatabaseName = 1;
+    optional uint64 OperationId = 2;
+}
+
+message TEvGetResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional TSetColumnConstraint SetColumnConstraint = 3;
 }
 
 message TEvCreateRequest {

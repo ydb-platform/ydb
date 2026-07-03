@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         {
             const auto& describe = pqGroup2.GetPQTabletConfig();
             Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup2.DebugString();
-            UNIT_ASSERT_VALUES_EQUAL(pqGroup2.GetTotalGroupCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(pqGroup2.GetTotalGroupCount(), 4);
             UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionConfig().GetLifetimeSeconds(), 7200);
             UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionConfig().GetBurstSize(), 100501);
             UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(), 9001);

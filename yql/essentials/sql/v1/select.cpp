@@ -41,7 +41,7 @@ public:
         if (PreserveSort_) {
             Source_->PreserveSort();
         }
-        if (!Source_->Init(ctx, nullptr)) {
+        if (!Source_->Init(ctx, /*src=*/nullptr)) {
             return false;
         }
 
@@ -67,7 +67,7 @@ public:
     }
 
     void DoUpdateState() const override {
-        State_.Set(ENodeState::Const, true);
+        State_.Set(ENodeState::Const, /*val=*/true);
     }
 
     bool UsedSubquery() const override {
@@ -711,7 +711,7 @@ public:
         if (PreserveSort_) {
             Subquery_->PreserveSort();
         }
-        if (!Subquery_->Init(ctx, nullptr)) {
+        if (!Subquery_->Init(ctx, /*src=*/nullptr)) {
             return false;
         }
         Columns_ = *Subquery_->GetSource()->GetColumns();
@@ -772,7 +772,7 @@ public:
     }
 
     void DoUpdateState() const override {
-        State_.Set(ENodeState::Const, true);
+        State_.Set(ENodeState::Const, /*val=*/true);
     }
 
     TAstNode* Translate(TContext& ctx) const override {
@@ -792,7 +792,7 @@ protected:
 };
 
 TNodePtr BuildSubqueryRef(TNodePtr subquery, const TString& alias, int tupleIndex) {
-    return new TSubqueryRefNode(std::move(subquery), alias, tupleIndex);
+    return new TSubqueryRefNode(subquery, alias, tupleIndex);
 }
 
 bool IsSubqueryRef(const TSourcePtr& source) {
@@ -809,7 +809,7 @@ public:
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
-        if (!Subquery_->Init(ctx, nullptr)) {
+        if (!Subquery_->Init(ctx, /*src=*/nullptr)) {
             return false;
         }
 
@@ -877,14 +877,14 @@ public:
         Source_->UseAsInner();
         Source_->PreserveSort();
 
-        if (!Source_->Init(ctx, nullptr)) {
+        if (!Source_->Init(ctx, /*src=*/nullptr)) {
             return false;
         }
 
         TTableList tableList;
         Source_->GetInputTables(tableList);
 
-        auto tables = BuildInputTables(Pos_, tableList, false, Scoped_);
+        auto tables = BuildInputTables(Pos_, tableList, /*inSubquery=*/false, Scoped_);
         if (!tables->Init(ctx, Source_.Get())) {
             return false;
         }
@@ -894,7 +894,7 @@ public:
             return false;
         }
 
-        if (!ClusterNode_->Init(ctx, nullptr)) {
+        if (!ClusterNode_->Init(ctx, /*src=*/nullptr)) {
             return false;
         }
 
@@ -1059,7 +1059,7 @@ public:
     }
 
     TNodePtr Build(TContext& ctx) override {
-        if (!Table_.Keys->Init(ctx, nullptr)) {
+        if (!Table_.Keys->Init(ctx, /*src=*/nullptr)) {
             return nullptr;
         }
         return AstNode(Table_.RefName);
@@ -1091,7 +1091,7 @@ TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, const TString
 class TInnerSource: public IProxySource {
 public:
     TInnerSource(TPosition pos, TNodePtr node, TString service, TDeferredAtom cluster, const TString& label)
-        : IProxySource(pos, nullptr)
+        : IProxySource(pos, /*src=*/nullptr)
         , Node_(std::move(node))
         , Service_(std::move(service))
         , Cluster_(std::move(cluster))
@@ -1174,13 +1174,13 @@ public:
             if (PreserveSort_) {
                 Node_->PreserveSort();
             }
-            if (!Node_->Init(ctx, nullptr)) {
+            if (!Node_->Init(ctx, /*src=*/nullptr)) {
                 return false;
             }
         }
 
         SetSource(source);
-        if (NewSource_ && !NewSource_->Init(ctx, nullptr)) {
+        if (NewSource_ && !NewSource_->Init(ctx, /*src=*/nullptr)) {
             return false;
         }
 
@@ -1318,7 +1318,7 @@ public:
                 return false;
             }
         }
-        if (Having_ && !Having_->Init(ctx, nullptr)) {
+        if (Having_ && !Having_->Init(ctx, /*src=*/nullptr)) {
             return false;
         }
 
@@ -1344,7 +1344,7 @@ public:
         if (Udf_->GetLabel().empty()) {
             Columns_.SetAll();
         } else {
-            Columns_.Add(&Udf_->GetLabel(), false);
+            Columns_.Add(&Udf_->GetLabel(), /*countHint=*/false);
         }
 
         const auto label = GetLabel();
@@ -1354,7 +1354,7 @@ public:
             if (!expr->Init(ctx, this)) {
                 return false;
             }
-            if (!IsComparableExpression(ctx, expr, true, "ASSUME ORDER BY")) {
+            if (!IsComparableExpression(ctx, expr, /*assume=*/true, "ASSUME ORDER BY")) {
                 return false;
             }
         }
@@ -1448,7 +1448,7 @@ public:
             return nullptr;
         }
 
-        return Y("let", label, BuildSortSpec(AssumeOrderBy_, label, false, true));
+        return Y("let", label, BuildSortSpec(AssumeOrderBy_, label, /*traits=*/false, /*assume=*/true));
     }
 
     EOrderKind GetOrderKind() const override {
@@ -1663,7 +1663,7 @@ public:
 
         block = L(block, Y("let", "core", compositeNode));
         YQL_ENSURE(!Subselects_.empty());
-        dynamic_cast<IComposableSource*>(Subselects_.front().Get())->BuildProjectWindowDistinct(block, ctx, false);
+        dynamic_cast<IComposableSource*>(Subselects_.front().Get())->BuildProjectWindowDistinct(block, ctx, /*ordered=*/false);
         return Y("block", Q(L(block, Y("return", "core"))));
     }
 
@@ -1715,7 +1715,7 @@ private:
 
         bool hasError = false;
         for (auto& expr : GroupByExpr_) {
-            if (!expr->Init(ctx, origSrc.Get()) || !IsComparableExpression(ctx, expr, false, "GROUP BY")) {
+            if (!expr->Init(ctx, origSrc.Get()) || !IsComparableExpression(ctx, expr, /*assume=*/false, "GROUP BY")) {
                 hasError = true;
             }
         }
@@ -1887,7 +1887,7 @@ public:
             }
             DistinctAggrExpr_.insert(DistinctAggrExpr_.end(), distinctAggrsInGroupBy.begin(), distinctAggrsInGroupBy.end());
 
-            if (!expr->Init(ctx, src) || !IsComparableExpression(ctx, expr, false, "GROUP BY")) {
+            if (!expr->Init(ctx, src) || !IsComparableExpression(ctx, expr, /*assume=*/false, "GROUP BY")) {
                 hasError = true;
             }
         }
@@ -2098,7 +2098,7 @@ public:
             return nullptr;
         }
 
-        auto sorted = BuildSortSpec(OrderBy_, label, false, AssumeSorted_);
+        auto sorted = BuildSortSpec(OrderBy_, label, /*traits=*/false, AssumeSorted_);
         if (ExtraSortColumns_.empty()) {
             return Y("let", label, sorted);
         }
@@ -2113,15 +2113,7 @@ public:
     TNodePtr BuildCleanupColumns(TContext& ctx, const TString& label) override {
         TNodePtr cleanup;
         auto removeSystemMembers = [&ctx, this](const TString& src) -> TNodePtr {
-            TNodePtr expr = Y("RemoveSystemMembers", src);
-            if (!ctx.Settings.ExtraSystemColumnPrefixes.empty()) {
-                TNodePtr prefixes = Y();
-                for (const auto& prefix : ctx.Settings.ExtraSystemColumnPrefixes) {
-                    prefixes = L(prefixes, Q(prefix));
-                }
-                expr = Y("RemovePrefixMembers", expr, Q(prefixes));
-            }
-            return expr;
+            return RemoveSystemColumns(AstNode(src), ctx.Settings.ExtraSystemColumnPrefixes);
         };
         if (ctx.EnableSystemColumns && ctx.Settings.Mode != NSQLTranslation::ESqlMode::LIMITED_VIEW) {
             if (Columns_.All) {
@@ -2339,7 +2331,7 @@ private:
                     }
                 }
             }
-            if (hasName && !Columns_.Add(&label, false, false, true)) {
+            if (hasName && !Columns_.Add(&label, /*countHint=*/false, /*isArtificial=*/false, /*isReliable=*/true)) {
                 ctx.Error(Pos_) << "Duplicate column: " << label;
                 hasError = true;
             }
@@ -2454,7 +2446,7 @@ private:
             auto terms = PrepareWithout(Y());
             auto options = Y();
             if (isJoin && ctx.SimpleColumns) {
-                terms = PrepareJoinCoalesce(ctx, terms, false, Source_->GetJoin()->GetJoinLabels());
+                terms = PrepareJoinCoalesce(ctx, terms, /*multipleQualifiedAll=*/false, Source_->GetJoin()->GetJoinLabels());
 
                 auto members = Y();
                 for (auto& source : Source_->GetJoin()->GetJoinLabels()) {
@@ -2711,7 +2703,7 @@ public:
                 ctx.Error(With_->GetPos()) << "Label is not allowed to use with TableRows()";
                 return false;
             }
-            Columns_.Add(&With_->GetLabel(), false);
+            Columns_.Add(&With_->GetLabel(), /*countHint=*/false);
         }
 
         bool hasError = false;
@@ -2774,7 +2766,7 @@ public:
                 hasError = true;
                 continue;
             }
-            if (!IsComparableExpression(ctx, expr, true, "ASSUME ORDER BY")) {
+            if (!IsComparableExpression(ctx, expr, /*assume=*/true, "ASSUME ORDER BY")) {
                 hasError = true;
                 continue;
             }
@@ -2832,7 +2824,7 @@ public:
             return nullptr;
         }
 
-        return Y("let", label, BuildSortSpec(AssumeOrderBy_, label, false, true));
+        return Y("let", label, BuildSortSpec(AssumeOrderBy_, label, /*traits=*/false, /*assume=*/true));
     }
 
     EOrderKind GetOrderKind() const override {
@@ -3641,7 +3633,7 @@ public:
             if (!expr->Init(ctx, Source_.Get())) {
                 return false;
             }
-            if (!IsComparableExpression(ctx, expr, true, "PRESORT")) {
+            if (!IsComparableExpression(ctx, expr, /*assume=*/true, "PRESORT")) {
                 return false;
             }
         }
@@ -3910,7 +3902,7 @@ TSourcePtr BuildCombine(TPosition pos, TSourcePtr leftSource, TVector<TSortSpeci
 {
     const auto leftInput = BuildCombineInput(pos, std::move(leftSource), std::move(leftPresort));
     const auto rightInput = BuildCombineInput(pos, std::move(rightSource), std::move(rightPresort));
-    return new TCombineSource(pos, std::move(leftInput), std::move(rightInput),
+    return new TCombineSource(pos, leftInput, rightInput,
                               std::move(combineKeyExpr), udf, std::move(args), settings);
 }
 

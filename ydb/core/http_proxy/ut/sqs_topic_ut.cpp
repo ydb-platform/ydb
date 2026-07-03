@@ -5,7 +5,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/ymq/actor/metering.h>
 #include <ydb/core/ymq/base/limits.h>
-#include <ydb/library/kafka/ut/ut_common.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/ut/ut_common.h>
 #include <ydb/services/sqs_topic/receipt.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
@@ -62,6 +62,18 @@ namespace {
             InitAll(TInitParameters{
                 .EnableSqsTopic = true,
                 .EnableTopicMessagesBatching = true,
+            });
+        }
+    };
+
+    class TNonFirstClassCitizenFixture: public THttpProxyTestMock {
+    public:
+        static constexpr TStringBuf FederationDatabase = "/Root/federation";
+
+        void SetUp(NUnitTest::TTestContext&) override {
+            InitAll(TInitParameters{
+                .EnableSqsTopic = true,
+                .TopicsAreFirstClassCitizen = false,
             });
         }
     };
@@ -262,6 +274,614 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             }, 400);
             TString resultType = GetByPath<TString>(json, "__type");
             UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        }
+
+        void TestGetQueueUrlWithAtSignInConsumerNameInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            auto driver = MakeDriver(fixture);
+
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            const TString topicName = "my_topic";
+            const TString topicPath = TStringBuilder() << "federation/" << topicName;
+            const TString consumerName = "my@consumer";
+            const TString consumerInQueueName = "my/consumer";
+            UNIT_ASSERT(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
+                .AddAttribute("_federation_account", "account1")
+                .BeginAddSharedConsumer(consumerName)
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(20))
+                .EndAddConsumer()));
+
+            const TString expectedQueueUrl = std::format(
+                "/v1/{}/{}/{}/{}/{}/{}",
+                database.size(),
+                database.c_str(),
+                topicName.size(),
+                topicName.c_str(),
+                consumerInQueueName.size(),
+                consumerInQueueName.c_str());
+            auto res = fixture.SendHttpRequest(
+                database,
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", requestQueueName}},
+                fixture.FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+            UNIT_ASSERT_VALUES_EQUAL(expectedQueueUrl, GetPathFromQueueUrlMap(json));
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueUrlWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestGetQueueUrlWithAtSignInConsumerNameInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueUrlWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestGetQueueUrlWithAtSignInConsumerNameInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestDeleteQueueInFederation, TNonFirstClassCitizenFixture) {
+            auto driver = MakeDriver(*this);
+
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            const TString topicPath = "federation/my_topic";
+            UNIT_ASSERT(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
+                .AddAttribute("_federation_account", "account1")
+                .BeginAddSharedConsumer("my@consumer")
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(20))
+                .EndAddConsumer()));
+
+            auto getUrlRes = SendHttpRequest(
+                database,
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", "my_topic@my/consumer"}},
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(getUrlRes.HttpCode, 200, getUrlRes.Body);
+            NJson::TJsonMap getUrlJson;
+            UNIT_ASSERT(NJson::ReadJsonTree(getUrlRes.Body, &getUrlJson, true));
+            const TString queueUrl = GetByPath<TString>(getUrlJson, "QueueUrl");
+
+            auto deleteRes = SendHttpRequest(
+                database,
+                "AmazonSQS.DeleteQueue",
+                NJson::TJsonMap{{"QueueUrl", queueUrl}},
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(deleteRes.HttpCode, 400, deleteRes.Body);
+            NJson::TJsonMap deleteJson;
+            UNIT_ASSERT(NJson::ReadJsonTree(deleteRes.Body, &deleteJson, true));
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(deleteJson, "__type"), "AWS.SimpleQueueService.UnsupportedOperation");
+
+            auto verifyRes = SendHttpRequest(
+                database,
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", "my_topic@my/consumer"}},
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(verifyRes.HttpCode, 200, verifyRes.Body);
+        }
+
+        Y_UNIT_TEST_F(TestCreateQueueInFederation, TNonFirstClassCitizenFixture) {
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+
+            auto assertUnsupported = [&](const TString& queueName) {
+                auto res = SendHttpRequest(
+                    database,
+                    "AmazonSQS.CreateQueue",
+                    NJson::TJsonMap{{"QueueName", queueName}},
+                    FormAuthorizationStr("ru-central1"));
+                UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 400, res.Body);
+                NJson::TJsonMap json;
+                UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+                UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.UnsupportedOperation");
+            };
+
+            assertUnsupported("my_topic");
+            assertUnsupported("my_topic@my/consumer");
+            assertUnsupported("my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestSetQueueAttributesInFederation, TNonFirstClassCitizenFixture) {
+            auto driver = MakeDriver(*this);
+
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            const TString topicPath = "federation/my_topic";
+            UNIT_ASSERT(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
+                .AddAttribute("_federation_account", "account1")
+                .BeginAddSharedConsumer("my@consumer")
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(20))
+                .EndAddConsumer()));
+
+            auto getUrlRes = SendHttpRequest(
+                database,
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", "my_topic@my/consumer"}},
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(getUrlRes.HttpCode, 200, getUrlRes.Body);
+            NJson::TJsonMap getUrlJson;
+            UNIT_ASSERT(NJson::ReadJsonTree(getUrlRes.Body, &getUrlJson, true));
+            const TString queueUrl = GetByPath<TString>(getUrlJson, "QueueUrl");
+
+            auto setAttrsRes = SendHttpRequest(
+                database,
+                "AmazonSQS.SetQueueAttributes",
+                NJson::TJsonMap{
+                    {"QueueUrl", queueUrl},
+                    {"Attributes", NJson::TJsonMap{{"VisibilityTimeout", "30"}}},
+                },
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(setAttrsRes.HttpCode, 400, setAttrsRes.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(setAttrsRes.Body, &json, true));
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.UnsupportedOperation");
+        }
+
+        struct TFederationQueueContext {
+            TString Database;
+            TString QueueUrl;
+        };
+
+        TFederationQueueContext SetupFederationQueue(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            auto driver = MakeDriver(fixture);
+
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            const TString topicPath = TStringBuilder() << "federation/my_topic";
+            UNIT_ASSERT(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
+                .AddAttribute("_federation_account", "account1")
+                .BeginAddSharedConsumer("my@consumer")
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(20))
+                .EndAddConsumer()));
+
+            auto getUrlRes = fixture.SendHttpRequest(
+                database,
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", requestQueueName}},
+                fixture.FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(getUrlRes.HttpCode, 200, getUrlRes.Body);
+            NJson::TJsonMap getUrlJson;
+            UNIT_ASSERT(NJson::ReadJsonTree(getUrlRes.Body, &getUrlJson, true));
+
+            return {
+                .Database = database,
+                .QueueUrl = GetByPath<TString>(getUrlJson, "QueueUrl"),
+            };
+        }
+
+        NJson::TJsonMap FederationSqsRequest(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& database,
+            const TString& method,
+            const NJson::TJsonMap& request,
+            ui32 expectedHttpCode = 200)
+        {
+            auto res = fixture.SendHttpRequest(
+                database,
+                TStringBuilder() << "AmazonSQS." << method,
+                request,
+                fixture.FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, expectedHttpCode, res.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+            return json;
+        }
+
+        void CreateFederationTopicWithConsumer(TNonFirstClassCitizenFixture& fixture) {
+            auto driver = MakeDriver(fixture);
+            const TString topicPath = TStringBuilder() << "federation/my_topic";
+            UNIT_ASSERT(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
+                .AddAttribute("_federation_account", "account1")
+                .BeginAddSharedConsumer("my@consumer")
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(20))
+                .EndAddConsumer()));
+        }
+
+        TString MakeFederationWrongQueueUrl() {
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            const TString topicName = "my_topic";
+            const TString wrongConsumer = "wrong/consumer";
+            return std::format(
+                "/v1/{}/{}/{}/{}/{}/{}",
+                database.size(),
+                database.c_str(),
+                topicName.size(),
+                topicName.c_str(),
+                wrongConsumer.size(),
+                wrongConsumer.c_str());
+        }
+
+        void TestSendMessageInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            const auto queue = SetupFederationQueue(fixture, requestQueueName);
+            constexpr TStringBuf messageBody = "MessageBody-federation";
+
+            auto sendJson = FederationSqsRequest(fixture, queue.Database, "SendMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"MessageBody", messageBody},
+            });
+            UNIT_ASSERT(!GetByPath<TString>(sendJson, "MessageId").empty());
+            UNIT_ASSERT(!GetByPath<TString>(sendJson, "MD5OfMessageBody").empty());
+        }
+
+        Y_UNIT_TEST_F(TestSendMessageWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestSendMessageInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestSendMessageWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestSendMessageInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        void TestReceiveMessageInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            const auto queue = SetupFederationQueue(fixture, requestQueueName);
+            constexpr TStringBuf messageBody = "MessageBody-federation-receive";
+
+            FederationSqsRequest(fixture, queue.Database, "SendMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"MessageBody", messageBody},
+            });
+
+            auto receiveJson = FederationSqsRequest(fixture, queue.Database, "ReceiveMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"WaitTimeSeconds", 20},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(receiveJson["Messages"].GetArraySafe().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(receiveJson["Messages"][0]["Body"], messageBody);
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestReceiveMessageInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestReceiveMessageInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageNonExistentConsumerInFederation, TNonFirstClassCitizenFixture) {
+            CreateFederationTopicWithConsumer(*this);
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+
+            auto receiveJson = FederationSqsRequest(*this, database, "ReceiveMessage", {
+                {"QueueUrl", MakeFederationWrongQueueUrl()},
+                {"WaitTimeSeconds", 1},
+            }, 400);
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(receiveJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+        }
+
+        void TestDeleteMessageInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            const auto queue = SetupFederationQueue(fixture, requestQueueName);
+            constexpr TStringBuf messageBody = "MessageBody-federation-delete";
+
+            FederationSqsRequest(fixture, queue.Database, "SendMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"MessageBody", messageBody},
+            });
+
+            auto receiveJson = FederationSqsRequest(fixture, queue.Database, "ReceiveMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"WaitTimeSeconds", 20},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(receiveJson["Messages"].GetArraySafe().size(), 1);
+            const TString receiptHandle = receiveJson["Messages"][0]["ReceiptHandle"].GetString();
+            UNIT_ASSERT(!receiptHandle.empty());
+
+            FederationSqsRequest(fixture, queue.Database, "DeleteMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"ReceiptHandle", receiptHandle},
+            });
+
+            auto emptyReceiveJson = FederationSqsRequest(fixture, queue.Database, "ReceiveMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"WaitTimeSeconds", 1},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(emptyReceiveJson["Messages"].GetArray().size(), 0);
+        }
+
+        Y_UNIT_TEST_F(TestDeleteMessageWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestDeleteMessageInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestDeleteMessageWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestDeleteMessageInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestDeleteMessageNonExistentConsumerInFederation, TNonFirstClassCitizenFixture) {
+            const auto queue = SetupFederationQueue(*this, "my_topic@my/consumer");
+            constexpr TStringBuf messageBody = "MessageBody-federation-delete-wrong-consumer";
+
+            FederationSqsRequest(*this, queue.Database, "SendMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"MessageBody", messageBody},
+            });
+
+            auto receiveJson = FederationSqsRequest(*this, queue.Database, "ReceiveMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"WaitTimeSeconds", 20},
+            });
+            const TString receiptHandle = receiveJson["Messages"][0]["ReceiptHandle"].GetString();
+
+            auto deleteJson = FederationSqsRequest(*this, queue.Database, "DeleteMessage", {
+                {"QueueUrl", MakeFederationWrongQueueUrl()},
+                {"ReceiptHandle", receiptHandle},
+            }, 400);
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(deleteJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+        }
+
+        void TestPurgeQueueInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            const auto queue = SetupFederationQueue(fixture, requestQueueName);
+            constexpr int nMessages = 3;
+
+            for (int i = 0; i < nMessages; ++i) {
+                FederationSqsRequest(fixture, queue.Database, "SendMessage", {
+                    {"QueueUrl", queue.QueueUrl},
+                    {"MessageBody", TStringBuilder() << "MessageBody-federation-purge-" << i},
+                });
+            }
+
+            FederationSqsRequest(fixture, queue.Database, "ReceiveMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"WaitTimeSeconds", 1},
+                {"MaxNumberOfMessages", 1},
+                {"VisibilityTimeout", 43000},
+            });
+
+            FederationSqsRequest(fixture, queue.Database, "PurgeQueue", {
+                {"QueueUrl", queue.QueueUrl},
+            });
+
+            auto receiveJson = FederationSqsRequest(fixture, queue.Database, "ReceiveMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"WaitTimeSeconds", 1},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(receiveJson["Messages"].GetArray().size(), 0);
+        }
+
+        Y_UNIT_TEST_F(TestPurgeQueueWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestPurgeQueueInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestPurgeQueueWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestPurgeQueueInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestPurgeQueueNonExistentConsumerInFederation, TNonFirstClassCitizenFixture) {
+            CreateFederationTopicWithConsumer(*this);
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+
+            auto purgeJson = FederationSqsRequest(*this, database, "PurgeQueue", {
+                {"QueueUrl", MakeFederationWrongQueueUrl()},
+            }, 400);
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(purgeJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+        }
+
+        void TestChangeMessageVisibilityInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            const auto queue = SetupFederationQueue(fixture, requestQueueName);
+            constexpr TStringBuf messageBody = "MessageBody-federation-change-visibility";
+
+            FederationSqsRequest(fixture, queue.Database, "SendMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"MessageBody", messageBody},
+            });
+
+            auto receiveJson = FederationSqsRequest(fixture, queue.Database, "ReceiveMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"WaitTimeSeconds", 20},
+                {"VisibilityTimeout", 60},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(receiveJson["Messages"].GetArraySafe().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(receiveJson["Messages"][0]["Body"], messageBody);
+
+            const TString receiptHandle = receiveJson["Messages"][0]["ReceiptHandle"].GetString();
+            UNIT_ASSERT(!receiptHandle.empty());
+
+            auto changeJson = FederationSqsRequest(fixture, queue.Database, "ChangeMessageVisibility", {
+                {"QueueUrl", queue.QueueUrl},
+                {"ReceiptHandle", receiptHandle},
+                {"VisibilityTimeout", 120},
+            });
+            UNIT_ASSERT(!changeJson.Has("__type"));
+        }
+
+        Y_UNIT_TEST_F(TestChangeMessageVisibilityWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestChangeMessageVisibilityInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestChangeMessageVisibilityWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestChangeMessageVisibilityInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestChangeMessageVisibilityNonExistentConsumerInFederation, TNonFirstClassCitizenFixture) {
+            const auto queue = SetupFederationQueue(*this, "my_topic@my/consumer");
+            constexpr TStringBuf messageBody = "MessageBody-federation-change-visibility-wrong-consumer";
+
+            FederationSqsRequest(*this, queue.Database, "SendMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"MessageBody", messageBody},
+            });
+
+            auto receiveJson = FederationSqsRequest(*this, queue.Database, "ReceiveMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"WaitTimeSeconds", 20},
+            });
+            const TString receiptHandle = receiveJson["Messages"][0]["ReceiptHandle"].GetString();
+
+            auto changeJson = FederationSqsRequest(*this, queue.Database, "ChangeMessageVisibility", {
+                {"QueueUrl", MakeFederationWrongQueueUrl()},
+                {"ReceiptHandle", receiptHandle},
+                {"VisibilityTimeout", 120},
+            }, 400);
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(changeJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+        }
+
+        void TestSendMessageBatchInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            const auto queue = SetupFederationQueue(fixture, requestQueueName);
+
+            auto batchJson = FederationSqsRequest(fixture, queue.Database, "SendMessageBatch", {
+                {"QueueUrl", queue.QueueUrl},
+                {"Entries", NJson::TJsonArray{
+                    NJson::TJsonMap{{"Id", "Id-0"}, {"MessageBody", "MessageBody-federation-batch-0"}},
+                    NJson::TJsonMap{{"Id", "Id-1"}, {"MessageBody", "MessageBody-federation-batch-1"}},
+                }},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(batchJson["Successful"].GetArray().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(batchJson["Failed"].GetArray().size(), 0);
+            UNIT_ASSERT(!GetByPath<TString>(batchJson["Successful"][0], "MessageId").empty());
+            UNIT_ASSERT(!GetByPath<TString>(batchJson["Successful"][1], "MessageId").empty());
+        }
+
+        Y_UNIT_TEST_F(TestSendMessageBatchWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestSendMessageBatchInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestSendMessageBatchWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestSendMessageBatchInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        void TestChangeMessageVisibilityBatchInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            const auto queue = SetupFederationQueue(fixture, requestQueueName);
+            constexpr size_t nMessages = 2;
+
+            FederationSqsRequest(fixture, queue.Database, "SendMessageBatch", {
+                {"QueueUrl", queue.QueueUrl},
+                {"Entries", NJson::TJsonArray{
+                    NJson::TJsonMap{{"Id", "Id-1"}, {"MessageBody", "MessageBody-federation-batch-1"}},
+                    NJson::TJsonMap{{"Id", "Id-2"}, {"MessageBody", "MessageBody-federation-batch-2"}},
+                }},
+            });
+
+            THashMap<TString, TString> receiptHandles;
+            while (receiptHandles.size() < nMessages) {
+                auto receiveJson = FederationSqsRequest(fixture, queue.Database, "ReceiveMessage", {
+                    {"QueueUrl", queue.QueueUrl},
+                    {"WaitTimeSeconds", 5},
+                    {"MaxNumberOfMessages", 10},
+                    {"VisibilityTimeout", 60},
+                });
+                for (const auto& message : receiveJson["Messages"].GetArray()) {
+                    receiptHandles.try_emplace(message["Body"].GetString(), message["ReceiptHandle"].GetString());
+                }
+            }
+
+            NJson::TJsonArray entries;
+            for (const auto& [body, receiptHandle] : receiptHandles) {
+                entries.AppendValue(NJson::TJsonMap{
+                    {"Id", body},
+                    {"ReceiptHandle", receiptHandle},
+                    {"VisibilityTimeout", 120},
+                });
+            }
+
+            auto changeJson = FederationSqsRequest(fixture, queue.Database, "ChangeMessageVisibilityBatch", {
+                {"QueueUrl", queue.QueueUrl},
+                {"Entries", entries},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(changeJson["Successful"].GetArray().size(), nMessages);
+            UNIT_ASSERT_VALUES_EQUAL(changeJson["Failed"].GetArray().size(), 0);
+        }
+
+        Y_UNIT_TEST_F(TestChangeMessageVisibilityBatchWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestChangeMessageVisibilityBatchInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestChangeMessageVisibilityBatchWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestChangeMessageVisibilityBatchInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestChangeMessageVisibilityBatchNonExistentConsumerInFederation, TNonFirstClassCitizenFixture) {
+            const auto queue = SetupFederationQueue(*this, "my_topic@my/consumer");
+
+            FederationSqsRequest(*this, queue.Database, "SendMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"MessageBody", "MessageBody-federation-change-visibility-batch-wrong-consumer"},
+            });
+
+            auto receiveJson = FederationSqsRequest(*this, queue.Database, "ReceiveMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"WaitTimeSeconds", 20},
+            });
+            const TString receiptHandle = receiveJson["Messages"][0]["ReceiptHandle"].GetString();
+
+            auto changeJson = FederationSqsRequest(*this, queue.Database, "ChangeMessageVisibilityBatch", {
+                {"QueueUrl", MakeFederationWrongQueueUrl()},
+                {"Entries", NJson::TJsonArray{
+                    NJson::TJsonMap{
+                        {"Id", "change-id-0"},
+                        {"ReceiptHandle", receiptHandle},
+                        {"VisibilityTimeout", 120},
+                    },
+                }},
+            }, 400);
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(changeJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+        }
+
+        void TestGetQueueAttributesInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            const auto queue = SetupFederationQueue(fixture, requestQueueName);
+            const TString expectedQueueArnSuffix = std::format(
+                "/v1/{}/{}/{}/{}/{}/{}",
+                queue.Database.size(),
+                queue.Database.c_str(),
+                8,
+                "my_topic",
+                11,
+                "my/consumer");
+
+            auto attrsJson = FederationSqsRequest(fixture, queue.Database, "GetQueueAttributes", {
+                {"QueueUrl", queue.QueueUrl},
+                {"AttributeNames", NJson::TJsonArray{"All"}},
+            });
+            UNIT_ASSERT(attrsJson["Attributes"].IsDefined());
+            UNIT_ASSERT_VALUES_EQUAL(attrsJson["Attributes"]["VisibilityTimeout"], "20");
+            UNIT_ASSERT_VALUES_EQUAL(attrsJson["Attributes"]["FifoQueue"], "false");
+            UNIT_ASSERT_C(
+                GetByPath<TString>(attrsJson["Attributes"], "QueueArn").EndsWith(expectedQueueArnSuffix),
+                attrsJson["Attributes"]["QueueArn"].GetString());
+            UNIT_ASSERT_GT(attrsJson["Attributes"].GetMapSafe().size(), 3);
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueAttributesWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestGetQueueAttributesInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueAttributesWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestGetQueueAttributesInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueAttributesNonExistentConsumerInFederation, TNonFirstClassCitizenFixture) {
+            CreateFederationTopicWithConsumer(*this);
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+
+            auto attrsJson = FederationSqsRequest(*this, database, "GetQueueAttributes", {
+                {"QueueUrl", MakeFederationWrongQueueUrl()},
+                {"AttributeNames", NJson::TJsonArray{"All"}},
+            }, 400);
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(attrsJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
         }
 
         Y_UNIT_TEST_F(TestListQueues, TFixture) {
@@ -1724,7 +2344,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
     Y_UNIT_TEST_F(TestCreateQueueWithBadQueueName, TFixture) {
         auto json = CreateQueue({
-            {"QueueName", "B/d_queue_name"},
+            {"QueueName", "B?d_queue_name"},
             {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
         }, 400);
         TString resultType = GetByPath<TString>(json, "__type");

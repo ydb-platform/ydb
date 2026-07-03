@@ -42,16 +42,6 @@ using namespace NSchemeCache;
 #undef PQ_LOG_PREFIX
 #endif
 
-/* namespace {
-    TString GetPrefix(ui64 Cookie, const TString& InternalClientId, const TString& InternalClientId) {
-        TStringBuilder builder;
-
-        return builder;
-    }
-}
-#define PQ_LOG_PREFIX GetPrefix(Cookie)
-*/
-
 #define PQ_LOG_PREFIX (TStringBuilder() << "session cookie " << Cookie << " client " << InternalClientId << " session " << Session)
 
 //11 tries = 10,23 seconds, then each try for 5 seconds , so 21 retries will take near 1 min

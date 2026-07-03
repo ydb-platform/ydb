@@ -179,7 +179,6 @@ using NTableClient::ESimpleLogicalValueType;
 namespace NAst {
 
 DECLARE_REFCOUNTED_STRUCT(TTableHint);
-DECLARE_REFCOUNTED_STRUCT(TQueryAstHead);
 
 } // namespace NAst
 

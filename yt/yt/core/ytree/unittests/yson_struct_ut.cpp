@@ -3475,6 +3475,59 @@ TEST(TYsonStructTest, PolymorphicYsonStruct)
     EXPECT_EQ(drv2Ptr->Field2, 144);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+constexpr const char PolymorphicYsonStructCustomDiscriminatorFieldName[] = "test_type";
+
+DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_CUSTOM_DISCRIMINATOR(MyPolyCustomDiscriminator, PolymorphicYsonStructCustomDiscriminatorFieldName, TPolyBase,
+    ((Base) (TPolyBase))
+    ((Drv1) (TPolyDerived1))
+    ((Drv2) (TPolyDerived2))
+);
+
+TEST(TYsonStructTest, PolymorphicYsonStructCustomDiscriminator)
+{
+    EXPECT_EQ(TMyPolyCustomDiscriminator::TypeFieldName, "test_type");
+
+    TMyPolyCustomDiscriminator poly;
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("test_type").Value("drv1")
+            .Item("base_field").Value(14)
+            .Item("field1").Value(111)
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyCustomDiscriminatorType::Drv1);
+
+    auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
+    EXPECT_TRUE(drv1Ptr.operator bool());
+    EXPECT_EQ(drv1Ptr->BaseField, 14);
+    EXPECT_EQ(drv1Ptr->Field1, 111);
+
+    // Check serialization.
+    auto serialized = ConvertToYsonString(poly);
+    auto deserialized = ConvertTo<TMyPolyCustomDiscriminator>(serialized);
+    EXPECT_EQ(deserialized.GetCurrentType(), EMyPolyCustomDiscriminatorType::Drv1);
+
+    auto deserializedDrv1Ptr = deserialized.TryGetConcrete<TPolyDerived1>();
+    EXPECT_TRUE(deserializedDrv1Ptr.operator bool());
+    EXPECT_EQ(deserializedDrv1Ptr->BaseField, 14);
+    EXPECT_EQ(deserializedDrv1Ptr->Field1, 111);
+
+    // The default "type" field is no longer special and is treated as unrecognized.
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv2")
+            .Item("base_field").Value(17)
+        .EndMap();
+
+    EXPECT_THROW_WITH_SUBSTRING(
+        Deserialize(poly, node->AsMap()),
+        "Concrete type must be specified");
+}
+
 TEST(TYsonStructTest, PolymorphicYsonStructSaveLoad)
 {
     auto drv = New<TPolyDerived2>();

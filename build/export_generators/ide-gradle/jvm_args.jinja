@@ -100,7 +100,7 @@ tasks.named<Test>("{{ testname }}") {
 {%-     if extra_jvm_args|length and test_jvm_args|join('|') != extra_jvm_args|join('|') %}
 {%-         set test_jvm_args = test_jvm_args + extra_jvm_args -%}
 {%-     endif -%}
-{%-     set test_cwds = extra_targets|selectattr('test_cwd')|map(attribute='test_cwd')|sum|unique -%}
+{%-     set test_cwds = extra_targets|selectattr('test_cwd')|map(attribute='test_cwd')|unique -%}
 {%-     set test_envs = extra_targets|selectattr('test_env')|map(attribute='test_env')|sum|unique -%}
 {%-     set test_system_properties = extra_targets|selectattr('system_properties')|map(attribute='system_properties')|sum -%}
 {%-     if test_jvm_args|length or test_cwds|length or test_envs|length or test_system_properties|length %}

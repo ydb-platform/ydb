@@ -764,6 +764,8 @@ protected:
 
         const TServiceId ServiceId;
         const TMethodDescriptor Descriptor;
+        //! Precomputed handler trace span name (|RpcServer:{Service}.{Method}|).
+        const std::string HandlerSpanName;
         const NProfiling::TProfiler Profiler;
 
         const TRequestQueuePtr DefaultRequestQueue;

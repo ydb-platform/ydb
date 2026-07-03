@@ -298,6 +298,18 @@ private:
         LaunchMainReadFor(std::move(batch));
     }
 
+    // Dispatch buffered posting PKs into a pipelined main read (see PollActiveReads).
+    // Non-covered posting rows stream in across many drain cycles; each cycle that
+    // leaves keys buffered dispatches them straight into a main read that overlaps the
+    // still-running posting read. Every posting drain cycle's keys go out immediately,
+    // so nothing is ever left stranded and no explicit final-tail flush is needed.
+    void MaybeFlushPendingMainKeys() {
+        if (PostingCovers || PendingMainKeys.empty()) {
+            return;
+        }
+        FlushPendingMainKeys();
+    }
+
     // Fetches the target-vector input rows. The input is a stream of single- or
     // two-field structs: element 0 is the target vector; for a prefixed index
     // element 1 is the prefix group's root __ydb_parent id. The whole input is
@@ -805,7 +817,6 @@ private:
             return;
         }
         TVector<TActiveRead> finishedReads;
-        bool postingFinished = false;
         {
             auto guard = BindAllocator();
             for (auto& ar : ActiveReads) {
@@ -820,7 +831,6 @@ private:
                 rows.clear();
                 if (finished) {
                     CollectLocks(ar.Read);
-                    postingFinished |= (ar.Kind == EReadKind::Posting);
                     finishedReads.push_back(ar);
                 }
                 if (Failed) {
@@ -847,18 +857,12 @@ private:
         if (Failed) {
             return;
         }
-        // Pipeline posting -> main, mirroring the legacy StreamLookup chain: dispatch
-        // the buffered PKs to a main read that overlaps the still-running posting read
-        // as soon as we have a full batch (MainReadFlushThreshold), instead of waiting
-        // for the whole posting scan to drain. The posting read finishing also flushes
-        // (its below-threshold tail must not be left stranded), carrying the final PKs.
-        // Covered searches build candidates straight from the posting rows and never
-        // read the main table.
-        if (!PostingCovers && !PendingMainKeys.empty()
-            && (postingFinished || PendingMainKeys.size() >= MainReadFlushThreshold))
-        {
-            FlushPendingMainKeys();
-        }
+        // Pipeline posting -> main like the legacy StreamLookup fetch-then-dispatch
+        // loop: dispatch buffered candidate PKs to a main read that overlaps the still
+        // -running posting read, so cross-node latency is hidden instead of serialized
+        // behind a posting->main barrier. A dispatch fires as the posting stream yields
+        // batches. See MaybeFlushPendingMainKeys.
+        MaybeFlushPendingMainKeys();
 
         if (finishedReads.empty() || Phase == EPhase::Done) {
             return;
@@ -922,8 +926,8 @@ private:
                 if (PostingCovers) {
                     AddCandidate(value);
                 } else {
-                    // Buffer the PK for the next pipelined main read (dispatched when
-                    // a posting shard finishes; see HandleRead).
+                    // Buffer the PK for a pipelined main read (dispatched as the
+                    // posting scan streams rows in; see MaybeFlushPendingMainKeys).
                     PendingMainKeys.push_back(std::move(serialized));
                 }
                 break;
@@ -1146,13 +1150,10 @@ private:
     // are gathered here and inserted into the shared cache when the read finishes.
     THashMap<TClusterId, TOwnedCellVecBatch> CachingLevelBatches;
 
-    // Non-covered posting rows produce candidate PKs (serialized cell vecs) that are
-    // buffered here and flushed into a pipelined main read once they reach
-    // MainReadFlushThreshold or the posting shard producing them finishes (see
-    // HandleRead). The threshold mirrors the legacy StreamLookup chain's per-pump key
-    // batch (MaxRowsProcessingStreamLookup). SeenKeys dedups PKs that recur across
-    // overlapping clusters, across all posting shards of the query.
-    static constexpr size_t MainReadFlushThreshold = 65536;
+    // Non-covered posting rows produce candidate PKs (serialized cell vecs) buffered
+    // here and streamed into pipelined main reads as the posting scan delivers them
+    // (see MaybeFlushPendingMainKeys). SeenKeys dedups PKs that recur across overlapping
+    // clusters, across all posting shards of the query.
     TVector<TString> PendingMainKeys;
     THashSet<TString> SeenKeys;
 

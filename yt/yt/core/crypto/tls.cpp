@@ -544,13 +544,12 @@ private:
     void HandleUnderlyingIOResult(TFuture<T> future, TCallback<void(const TErrorOr<T>&)> handler)
     {
         future.Subscribe(BIND([handler = std::move(handler), invoker = Invoker_] (const TErrorOr<T>& result) {
-            GuardedInvoke(
-                std::move(invoker),
+            invoker->Invoke(MakeGuardedCallback(
                 BIND(handler, result),
                 BIND([=] {
                     TError error("Poller terminated");
                     handler(error);
-                }));
+                })));
         }));
     }
 

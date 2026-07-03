@@ -59,8 +59,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
     TVector<TExprBase> effects;
     effects.emplace_back(tableDelete);
 
-    const bool isSink = NeedSinks(table, kqpCtx);
-    const bool useStreamIndex = isSink && kqpCtx.Config->GetEnableIndexStreamWrite();
+    const bool useStreamIndex = kqpCtx.Config->GetEnableIndexStreamWrite();
 
     for (const auto& [tableNode, indexDesc] : indexes) {
         if (useStreamIndex
@@ -213,9 +212,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
     };
     const bool needsKqpEffect = std::any_of(indexes.begin(), indexes.end(), idxNeedsKqpEffect);
 
-    const bool isSink = NeedSinks(table, kqpCtx);
-
-    const bool useStreamIndex = isSink && kqpCtx.Config->GetEnableIndexStreamWrite();
+    const bool useStreamIndex = kqpCtx.Config->GetEnableIndexStreamWrite();
 
     // Skip lookup means that the input already has all required columns and we only need to project them
     auto settings = TKqpDeleteRowsIndexSettings::Parse(del);

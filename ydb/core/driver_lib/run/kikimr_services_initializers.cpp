@@ -2048,8 +2048,9 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             && (!kqpConfig.HasEnable() || kqpConfig.GetEnable());
 
         TDuration publishWarmupTimeout = TDuration::Zero();
-        if (kqpEnabled && Config.GetTableServiceConfig().GetEnableCompileCacheWarmup()
-                && !appData->TenantName.empty()) {
+        const TString publisherDomainName = appData->DomainsInfo->Domain ? appData->DomainsInfo->Domain->Name : TString();
+        if (kqpEnabled && NKqp::IsCompileCacheWarmupEnabled(
+                Config.GetTableServiceConfig(), appData->TenantName, publisherDomainName)) {
             publishWarmupTimeout = NKqp::ImportWarmupConfigFromProto(
                 Config.GetTableServiceConfig().GetCompileCacheWarmupConfig()).HardDeadline;
         }
@@ -2432,8 +2433,9 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
 
         auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
+        const TString warmupDomainName = appData->DomainsInfo->Domain ? appData->DomainsInfo->Domain->Name : TString();
         TDuration warmupDeadline;
-        if (Config.GetTableServiceConfig().GetEnableCompileCacheWarmup() && !appData->TenantName.empty()) {
+        if (NKqp::IsCompileCacheWarmupEnabled(Config.GetTableServiceConfig(), appData->TenantName, warmupDomainName)) {
             auto warmupProto = Config.GetTableServiceConfig().GetCompileCacheWarmupConfig();
             warmupDeadline = TDuration::Seconds(std::max(
                 warmupProto.GetHardDeadlineSeconds(), warmupProto.GetSoftDeadlineSeconds()));
@@ -2463,7 +2465,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             NSecret::MakeDescribeSchemaSecretServiceId(NodeId),
             TActorSetupCmd(describeSchemaSecretsService, TMailboxType::HTSwap, appData->UserPoolId)));
 
-        if (Config.GetTableServiceConfig().GetEnableCompileCacheWarmup() && !appData->TenantName.empty()) {
+        if (NKqp::IsCompileCacheWarmupEnabled(Config.GetTableServiceConfig(), appData->TenantName, warmupDomainName)) {
             auto warmupConfig = NKqp::ImportWarmupConfigFromProto(Config.GetTableServiceConfig().GetCompileCacheWarmupConfig());
 
             const ui32 cacheSize = Config.GetTableServiceConfig().GetCompileQueryCacheSize();
@@ -2472,7 +2474,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             }
 
             TString database = appData->TenantName;
-            TString cluster = appData->DomainsInfo->Domain ? appData->DomainsInfo->Domain->Name : TString();
+            const TString& cluster = warmupDomainName;
 
             TVector<NActors::TActorId> notifyActorIds = {
                 NKqp::MakeKqpRmServiceID(NodeId),

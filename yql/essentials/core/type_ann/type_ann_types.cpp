@@ -1265,7 +1265,7 @@ namespace NYql::NTypeAnnImpl {
             TAstNode::NewList(inputPos, pool,
                 TAstNode::NewLiteralAtom(inputPos, TStringBuf("return"), pool), parsedType));
         TExprNode::TPtr exprRoot;
-        if (!CompileExpr(*astRoot, exprRoot, ctx.Expr, nullptr, nullptr)) {
+        if (!CompileExpr(*astRoot, exprRoot, ctx.Expr, /*resolver=*/nullptr, /*urlListerManager=*/nullptr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1564,12 +1564,12 @@ namespace NYql::NTypeAnnImpl {
 
     template <>
     IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::RemoveMember>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        return RemoveMemberImpl(input, output, ctx, false);
+        return RemoveMemberImpl(input, output, ctx, /*force=*/false);
     }
 
     template <>
     IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::ForceRemoveMember>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        return RemoveMemberImpl(input, output, ctx, true);
+        return RemoveMemberImpl(input, output, ctx, /*force=*/true);
     }
 
     template <>
@@ -2402,7 +2402,7 @@ namespace NYql::NTypeAnnImpl {
         Y_UNUSED(input);
         Y_UNUSED(output);
         ctx.Expr.Step.Repeat(TExprStep::ExprEval);
-        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
     }
 
     IGraphTransformer::TStatus EvaluateExprIfPureWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {

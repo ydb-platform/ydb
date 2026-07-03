@@ -364,13 +364,13 @@ public:
             auto datasource = Types_.DataSourceMap.FindPtr(dataSourceName);
             YQL_ENSURE(datasource);
             info.Provider = (*datasource).Get();
-            info.IsVisible = (*datasource)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
+            info.IsVisible = (*datasource)->GetPlanFormatter().GetDependencies(*node, dependencies, /*compact=*/true);
         } else if (node->ChildrenSize() >= 2 && node->Child(1)->IsCallable("DataSink")) {
             auto dataSinkName = node->Child(1)->Child(0)->Content();
             auto datasink = Types_.DataSinkMap.FindPtr(dataSinkName);
             YQL_ENSURE(datasink);
             info.Provider = (*datasink).Get();
-            info.IsVisible = (*datasink)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
+            info.IsVisible = (*datasink)->GetPlanFormatter().GetDependencies(*node, dependencies, /*compact=*/true);
         } else if (node->IsCallable("DqStage") ||
                    node->IsCallable("DqPhyStage") ||
                    node->IsCallable("DqQuery!") ||
@@ -378,12 +378,12 @@ public:
             auto provider = Types_.DataSinkMap.FindPtr(DqProviderName);
             YQL_ENSURE(provider);
             info.Provider = (*provider).Get();
-            info.IsVisible = (*provider)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
+            info.IsVisible = (*provider)->GetPlanFormatter().GetDependencies(*node, dependencies, /*compact=*/true);
         } else {
             for (auto dataSource : Types_.DataSources) {
                 if (dataSource->GetPlanFormatter().HasCustomPlan(*node)) {
                     info.Provider = dataSource.Get();
-                    info.IsVisible = dataSource->GetPlanFormatter().GetDependencies(*node, dependencies, true);
+                    info.IsVisible = dataSource->GetPlanFormatter().GetDependencies(*node, dependencies, /*compact=*/true);
                     break;
                 }
             }
@@ -392,7 +392,7 @@ public:
                 for (auto dataSink : Types_.DataSinks) {
                     if (dataSink->GetPlanFormatter().HasCustomPlan(*node)) {
                         info.Provider = dataSink.Get();
-                        info.IsVisible = dataSink->GetPlanFormatter().GetDependencies(*node, dependencies, true);
+                        info.IsVisible = dataSink->GetPlanFormatter().GetDependencies(*node, dependencies, /*compact=*/true);
                         break;
                     }
                 }

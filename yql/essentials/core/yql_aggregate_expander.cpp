@@ -132,7 +132,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggApply(const TExprNode::TPtr& node)
             aggDescPtr = &NPg::LookupAggregation(TString(func), argTypes);
         }
 
-        return ExpandPgAggregationTraits(node->Pos(), *aggDescPtr, false, node->ChildPtr(2), argTypes, itemType, Ctx_);
+        return ExpandPgAggregationTraits(node->Pos(), *aggDescPtr, /*onWindow=*/false, node->ChildPtr(2), argTypes, itemType, Ctx_);
     }
 
     const TString modulePath = "/lib/yql/aggregate.yqls";
@@ -142,7 +142,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggApply(const TExprNode::TPtr& node)
     const auto ex = exports.find(TString(name) + "_traits_factory");
     YQL_ENSURE(exports.cend() != ex);
     TNodeOnNodeOwnedMap deepClones;
-    auto lambda = Ctx_.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
+    auto lambda = Ctx_.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, /*internStrings=*/true, /*copyTypes=*/false);
 
     auto listTypeNode = Ctx_.NewCallable(node->Pos(), "ListType", { node->ChildPtr(node->ChildrenSize() == 4 && !node->Child(3)->IsCallable("Void") ? 3 : 1) });
     auto extractor = node->ChildPtr(2);
@@ -712,7 +712,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
         stream = AggList_;
     }
 
-    TExprNode::TPtr blocks = MakeInputBlocks(stream, keyIdxs, outputColumns, aggs, false, false);
+    TExprNode::TPtr blocks = MakeInputBlocks(stream, keyIdxs, outputColumns, aggs, /*overState=*/false, /*many=*/false);
     if (!blocks) {
         return nullptr;
     }
@@ -792,7 +792,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregateForNonDistinct(const
                                 .Add(0, columnNames[i])
                                 .Apply(1, *initLambda)
                                     .With(0)
-                                        .Do(GetPartialAggArgExtractor(i, false))
+                                        .Do(GetPartialAggArgExtractor(i, /*deserialize=*/false))
                                     .Done()
                                 .Seal()
                             .Seal();
@@ -801,7 +801,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregateForNonDistinct(const
                                 .Add(0, columnNames[i])
                                 .Apply(1, *initLambda)
                                     .With(0)
-                                        .Do(GetPartialAggArgExtractor(i, false))
+                                        .Do(GetPartialAggArgExtractor(i, /*deserialize=*/false))
                                     .Done()
                                     .With(1)
                                         .Callable("Uint32")
@@ -834,7 +834,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregateForNonDistinct(const
                                 .Add(0, columnNames[i])
                                 .Apply(1, *updateLambda)
                                     .With(0)
-                                        .Do(GetPartialAggArgExtractor(i, true))
+                                        .Do(GetPartialAggArgExtractor(i, /*deserialize=*/true))
                                     .Done()
                                     .With(1)
                                         .Callable("Member")
@@ -849,7 +849,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregateForNonDistinct(const
                                 .Add(0, columnNames[i])
                                 .Apply(1, *updateLambda)
                                     .With(0)
-                                        .Do(GetPartialAggArgExtractor(i, true))
+                                        .Do(GetPartialAggArgExtractor(i, /*deserialize=*/true))
                                     .Done()
                                     .With(1)
                                         .Callable("Member")
@@ -1755,7 +1755,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregate(const TExprNode::TPtr&
     if (!UsePartitionsByKeys_ && UseFinalizeByKeys_ && !HaveSessionSetting_) {
         postAgg = Ctx_.Builder(Node_->Pos())
             .Callable("ShuffleByKeys")
-                .Add(0, std::move(preAgg))
+                .Add(0, preAgg)
                 .Add(1, keyExtractor)
                 .Lambda(2)
                     .Param("stream")
@@ -1772,7 +1772,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregate(const TExprNode::TPtr&
         auto condenseSwitch = GenerateCondenseSwitch(keyExtractor);
         postAgg = Ctx_.Builder(Node_->Pos())
             .Callable("PartitionsByKeys")
-                .Add(0, std::move(preAgg))
+                .Add(0, preAgg)
                 .Add(1, keyExtractor)
                 .Add(2, SortParams_.Order)
                 .Add(3, SortParams_.Key)
@@ -2906,7 +2906,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
     TVector<TString> outputColumns;
     TExprNode::TListType aggs;
     ui32 streamIdxColumn;
-    auto blocks = MakeInputBlocks(streamArg, keyIdxs, outputColumns, aggs, true, isMany, &streamIdxColumn);
+    auto blocks = MakeInputBlocks(streamArg, keyIdxs, outputColumns, aggs, /*overState=*/true, isMany, &streamIdxColumn);
     if (!blocks) {
         return nullptr;
     }
@@ -2974,7 +2974,7 @@ TExprNode::TPtr ExpandAggregatePeephole(const TExprNode::TPtr& node, TExprContex
             return ret;
         }
     }
-    return ExpandAggregatePeepholeImpl(node, ctx, typesCtx, false, typesCtx.IsBlockEngineEnabled(), false);
+    return ExpandAggregatePeepholeImpl(node, ctx, typesCtx, /*useFinalizeByKey=*/false, typesCtx.IsBlockEngineEnabled(), /*allowSpilling=*/false);
 }
 
 } // namespace NYql

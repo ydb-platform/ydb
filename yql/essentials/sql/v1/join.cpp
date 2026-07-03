@@ -480,8 +480,8 @@ public:
                 leftAny = AnyFlags_[descr.Keys[0].first.Source];
             }
             bool rightAny = AnyFlags_[descr.Keys[0].second.Source];
-            auto leftKeys = GetColumnNames(ctx, extraColumns, descr.Keys, true);
-            auto rightKeys = GetColumnNames(ctx, extraColumns, descr.Keys, false);
+            auto leftKeys = GetColumnNames(ctx, extraColumns, descr.Keys, /*left=*/true);
+            auto rightKeys = GetColumnNames(ctx, extraColumns, descr.Keys, /*left=*/false);
             if (!leftKeys || !rightKeys) {
                 return nullptr;
             }

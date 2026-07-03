@@ -1,6 +1,5 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
-#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/library/testlib/helpers.h>
@@ -273,13 +272,12 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         ui64 txId = 100;
 
-        auto response = TestSetColumnConstraint(
+        auto response = TestSetColumnConstraintWithoutSettings(
             runtime, ++txId,
             TTestTxConfig::SchemeShard,
             "/MyRoot",
             "skip",
-            {"skip"},
-            true);
+            {"skip"});
 
         Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
 
@@ -1082,15 +1080,15 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         ui64 setConstraintTxId = ++txId;
 
-        using TConstraintState = Ydb::Table::SetColumnConstraintState_State;
+        using TConstraintState = Ydb::Table::SetNotNullState_State;
         std::vector<TConstraintState> answers;
         std::vector<TConstraintState> expectedAnswers = {
-            Ydb::Table::SetColumnConstraintState::STATE_PREPARING,
-            Ydb::Table::SetColumnConstraintState::STATE_PREPARING,
-            Ydb::Table::SetColumnConstraintState::STATE_VALIDATING,
-            Ydb::Table::SetColumnConstraintState::STATE_APPLYING,
-            Ydb::Table::SetColumnConstraintState::STATE_APPLYING,
-            (isShouldBeFailed ? Ydb::Table::SetColumnConstraintState::STATE_CANCELLED : Ydb::Table::SetColumnConstraintState::STATE_DONE)
+            Ydb::Table::SetNotNullState::STATE_PREPARING,
+            Ydb::Table::SetNotNullState::STATE_PREPARING,
+            Ydb::Table::SetNotNullState::STATE_VALIDATING,
+            Ydb::Table::SetNotNullState::STATE_APPLYING,
+            Ydb::Table::SetNotNullState::STATE_APPLYING,
+            (isShouldBeFailed ? Ydb::Table::SetNotNullState::STATE_CANCELLED : Ydb::Table::SetNotNullState::STATE_DONE)
         };
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -1139,9 +1137,9 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
                 static_cast<int>(expectedAnswers[i]),
                 TStringBuilder() << "State mismatch at index " << i
                     << ": got " << static_cast<int>(answers[i])
-                    << " (" << Ydb::Table::SetColumnConstraintState_State_Name(answers[i]) << ")"
+                    << " (" << Ydb::Table::SetNotNullState_State_Name(answers[i]) << ")"
                     << ", expected " << static_cast<int>(expectedAnswers[i])
-                    << " (" << Ydb::Table::SetColumnConstraintState_State_Name(expectedAnswers[i]) << ")"
+                    << " (" << Ydb::Table::SetNotNullState_State_Name(expectedAnswers[i]) << ")"
             );
         }
     }
@@ -1248,5 +1246,51 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         ui64 setConstraintTxId = ++txId;
 
         DoGetRequest(setConstraintTxId, runtime, wrongRoot, Ydb::StatusIds::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(GetRequestUserSidBeginEndTime) {
+        TTestBasicRuntime runtime;
+
+        TTestEnv env(runtime);
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>&) {
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        ui64 txId = 100;
+
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 setConstraintTxId = ++txId;
+
+        auto createResponse = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"},
+            "someuser@some_suffix");
+        UNIT_ASSERT_VALUES_EQUAL(createResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        auto getResponse = DoGetRequest(setConstraintTxId, runtime, root);
+
+        UNIT_ASSERT(getResponse.HasUserSID() && getResponse.GetUserSID() == "someuser@some_suffix");
+        UNIT_ASSERT(getResponse.HasStartTime());
+        UNIT_ASSERT(getResponse.HasEndTime());
+        UNIT_ASSERT(getResponse.GetStartTime().seconds() > 0);
+        UNIT_ASSERT(getResponse.GetEndTime().seconds() > getResponse.GetStartTime().seconds());
     }
 } // Y_UNIT_TEST_SUITE(SetNotNullTest)

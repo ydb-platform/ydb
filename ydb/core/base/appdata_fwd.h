@@ -63,6 +63,7 @@ namespace NKikimrConfig {
     class THiveConfig;
     class TDataShardConfig;
     class TColumnShardConfig;
+    class TSmallBlobsQuotaConfig;
     class TSchemeShardConfig;
     class TMeteringConfig;
     class TAuditConfig;
@@ -258,6 +259,7 @@ struct TAppData {
     NKikimrConfig::THiveConfig& HiveConfig;
     NKikimrConfig::TDataShardConfig& DataShardConfig;
     NKikimrConfig::TColumnShardConfig& ColumnShardConfig;
+    NKikimrConfig::TSmallBlobsQuotaConfig& SmallBlobsQuotaConfig;
     NKikimrConfig::TSchemeShardConfig& SchemeShardConfig;
     NKikimrConfig::TMeteringConfig& MeteringConfig;
     NKikimr::NAudit::TAuditConfig& AuditConfig;

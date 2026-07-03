@@ -1060,12 +1060,15 @@ private:
             }
 
             value = GetField(calendar, ECronField::CF_DAY_OF_MONTH);
+            // FindDay may cross a month/year boundary keeping the same day number (e.g. 'L-1'), check them too
+            const auto prevMonth = calendar.month();
+            const auto prevYear = calendar.year();
             updateValue = FindDay(calendar, Target_.GetDayInMonth(), value, GetWeekday(calendar), Target_.GetFlags(), resets, offset);
             if (updateValue.Empty()) {
                 ythrow yexception() << ErrorDateNotExists;
             }
 
-            if (value == updateValue) {
+            if (value == updateValue && prevMonth == calendar.month() && prevYear == calendar.year()) {
                 resets.Set(static_cast<uint32_t>(ECronField::CF_DAY_OF_MONTH));
             } else {
                 continue;

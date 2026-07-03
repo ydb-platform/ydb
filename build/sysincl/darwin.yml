@@ -227,6 +227,7 @@
   - CoreText/CTFontManager.h
   - CoreText/CoreText.h
   - CoreVideo/CoreVideo.h
+  - CoreVideo/CVOpenGLESTextureCache.h
   - CoreWLAN/CoreWLAN.h
   - DeviceCheck/DCAppAttestService.h
   - FSKit/FSKit.h

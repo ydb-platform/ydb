@@ -412,7 +412,7 @@ template <class TValidateErrorPolicy, class TValidateMode>
 NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const IValueBuilder* valueBuilder, const TType* type, NUdf::TUnboxedValue&& value, const TString& message, bool* wrapped) {
     if (!value && !(type->IsOptional() || type->IsNull())) {
         TValidateErrorPolicy::Generate(
-            TStringBuilder() << "Expected value '" << PrintNode(type, true)
+            TStringBuilder() << "Expected value '" << PrintNode(type, /*singleLine=*/true)
                              << "', but got Empty" << VERIFY_DELIMITER << message);
     }
 
@@ -433,7 +433,7 @@ NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const 
             }
             if (!IsValidValue(*slot, value)) {
                 TValidateErrorPolicy::Generate(
-                    TStringBuilder() << "Expected value '" << PrintNode(type, true)
+                    TStringBuilder() << "Expected value '" << PrintNode(type, /*singleLine=*/true)
                                      << "' does not conform" << VERIFY_DELIMITER << message);
             }
             break;
@@ -462,7 +462,7 @@ NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const 
         case TType::EKind::List: {
             if (!value.IsBoxed()) {
                 TValidateErrorPolicy::Generate(
-                    TStringBuilder() << "expected value '" << PrintNode(type, true)
+                    TStringBuilder() << "expected value '" << PrintNode(type, /*singleLine=*/true)
                                      << "' not conform" << VERIFY_DELIMITER << message);
             }
             auto listType = static_cast<const TListType*>(type);
@@ -472,7 +472,7 @@ NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const 
         case TType::EKind::Struct: {
             if (!value.IsBoxed()) {
                 TValidateErrorPolicy::Generate(
-                    TStringBuilder() << "expected value '" << PrintNode(type, true)
+                    TStringBuilder() << "expected value '" << PrintNode(type, /*singleLine=*/true)
                                      << "' not conform" << VERIFY_DELIMITER << message);
             }
             auto structType = static_cast<const TStructType*>(type);
@@ -505,7 +505,7 @@ NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const 
         case TType::EKind::Tuple: {
             if (!value.IsBoxed()) {
                 TValidateErrorPolicy::Generate(
-                    TStringBuilder() << "expected value '" << PrintNode(type, true)
+                    TStringBuilder() << "expected value '" << PrintNode(type, /*singleLine=*/true)
                                      << "' not conform" << VERIFY_DELIMITER << message);
             }
             auto tupleType = static_cast<const TTupleType*>(type);
@@ -536,7 +536,7 @@ NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const 
         case TType::EKind::Dict: {
             if (!value.IsBoxed()) {
                 TValidateErrorPolicy::Generate(
-                    TStringBuilder() << "expected value '" << PrintNode(type, true)
+                    TStringBuilder() << "expected value '" << PrintNode(type, /*singleLine=*/true)
                                      << "' not conform" << VERIFY_DELIMITER << message);
             }
             auto dictType = static_cast<const TDictType*>(type);
@@ -546,7 +546,7 @@ NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const 
         case TType::EKind::Callable: {
             if (!value.IsBoxed()) {
                 TValidateErrorPolicy::Generate(
-                    TStringBuilder() << "expected value '" << PrintNode(type, true)
+                    TStringBuilder() << "expected value '" << PrintNode(type, /*singleLine=*/true)
                                      << "' not conform" << VERIFY_DELIMITER << message);
             }
             auto callableType = static_cast<const TCallableType*>(type);

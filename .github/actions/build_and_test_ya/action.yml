@@ -16,7 +16,7 @@ inputs:
     description: "run tests"
   test_threads:
     type: string
-    default: 28
+    default: 52
     description: "Test threads count"
   link_threads:
     type: string
@@ -24,7 +24,7 @@ inputs:
     description: "link threads count"
   test_size:
     type: string
-    default: "small,medium,large"
+    default: "small,medium"
   test_type:
     type: string
     default: ""
@@ -67,12 +67,29 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
+  ci_ydb_service_account_key_file_credentials:
+    type: string
+    required: false
+    default: ""
+    description: "YDB SA JSON for upload_tests_results / binary_size; runs setup when set"
+  ydb_qa_config:
+    type: string
+    required: false
+    default: ""
+    description: "YDB QA table paths JSON (vars.YDB_QA_CONFIG); runs setup when set"
 defaults:
   run:
     shell: bash
 runs:
   using: "composite"
   steps:
+    - name: Setup ydb access
+      if: inputs.ci_ydb_service_account_key_file_credentials != '' || inputs.ydb_qa_config != ''
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ inputs.ci_ydb_service_account_key_file_credentials }}
+        ydb_qa_config: ${{ inputs.ydb_qa_config }}
+
     - name: Prepare folder prefix
       id: prepare_prefix
       shell: bash

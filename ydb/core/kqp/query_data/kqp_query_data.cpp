@@ -11,6 +11,7 @@
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -478,7 +479,7 @@ NDqProto::TData TQueryData::GetShardParam(ui64 shardId, const TString& name) {
     }
 
     auto guard = TypeEnv().BindAllocator();
-    NDq::TDqDataSerializer dataSerializer{AllocState->TypeEnv, AllocState->HolderFactory, NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0, EValuePackerVersion::V0};
+    NDq::TDqDataSerializer dataSerializer{AllocState->TypeEnv, AllocState->HolderFactory, NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0, EValuePackerVersion::V0, DefaultDatumValidationMode};
     NDq::TDqSerializedBatch batch = dataSerializer.Serialize(it->second.Values.begin(), it->second.Values.end(), it->second.ItemType);
     YQL_ENSURE(!batch.IsOOB());
     return batch.Proto;

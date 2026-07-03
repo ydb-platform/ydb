@@ -189,6 +189,22 @@ NOlap::TSnapshot TColumnShard::GetMaxReadVersion() const {
     }
 }
 
+NOlap::TSnapshot TColumnShard::GetMaxReadVersionForSchema(const ui64 schemaVersion) const {
+    const NOlap::TSnapshot maxReadVersion = GetMaxReadVersion();
+    const auto* index = GetIndexOptional();
+    if (!index) {
+        return maxReadVersion;
+    }
+    const auto nextSchemaChange = index->GetVersionedIndex().GetNextSchemaSnapshot(schemaVersion);
+    if (!nextSchemaChange) {
+        // The write's schema is the latest known one, so reading at the freshest snapshot is correct.
+        return maxReadVersion;
+    }
+    // A newer schema already exists. The scan must resolve exactly the schema the
+    // write was built against, so pin the read to the last snapshot where that schema is still active.
+    return std::min(maxReadVersion, nextSchemaChange->GetPreviousSnapshot());
+}
+
 ui64 TColumnShard::GetOutdatedStep() const {
     ui64 step = LastPlannedStep;
     if (MediatorTimeCastEntry) {
@@ -931,7 +947,7 @@ void TColumnShard::SetupCleanupTables() {
         pathIdsEmptyInInsertTable.insert(pathIds.begin(), pathIds.end());
     }
 
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsEmptyInInsertTable);
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsEmptyInInsertTable, DataLocksManager);
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;

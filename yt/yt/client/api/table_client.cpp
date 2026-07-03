@@ -9,6 +9,7 @@
 namespace NYT::NApi {
 
 using namespace NYTree;
+using namespace NTabletClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -17,7 +18,7 @@ void TTableBackupManifest::Register(TRegistrar registrar)
     registrar.Parameter("source_path", &TThis::SourcePath);
     registrar.Parameter("destination_path", &TThis::DestinationPath);
     registrar.Parameter("ordered_mode", &TThis::OrderedMode)
-        .Default(NTabletClient::EOrderedTableBackupMode::Exact);
+        .Default(EOrderedTableBackupMode::Exact);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -25,6 +26,50 @@ void TTableBackupManifest::Register(TRegistrar registrar)
 void TBackupManifest::Register(TRegistrar registrar)
 {
     registrar.Parameter("clusters", &TThis::Clusters);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TCreateSecondaryIndex::Register(TRegistrar registrar)
+{
+    registrar.Parameter("kind", &TThis::Kind);
+    registrar.Parameter("index_replication_card_id", &TThis::IndexReplicationCardId);
+    registrar.Parameter("correspondence", &TThis::Correspondence)
+        .Default(ETableToIndexCorrespondence::Invalid);
+    registrar.Parameter("predicate", &TThis::Predicate)
+        .Optional();
+    registrar.Parameter("unfolded_columns", &TThis::UnfoldedColumns)
+        .Optional();
+    registrar.Parameter("evaluated_columns_schema", &TThis::EvaluatedColumnsSchema)
+        .Optional();
+
+    registrar.Postprocessor([] (TCreateSecondaryIndex* alteration) {
+        THROW_ERROR_EXCEPTION_IF(
+            alteration->UnfoldedColumns.has_value() != (alteration->Kind == ESecondaryIndexKind::Unfolding),
+            "\"unfolded_columns\" option is mutually dependent with %Qlv index kind",
+            ESecondaryIndexKind::Unfolding);
+
+        THROW_ERROR_EXCEPTION_IF(alteration->Correspondence == ETableToIndexCorrespondence::Unknown,
+            "Cannot create index with correspondence %Qlv",
+            ETableToIndexCorrespondence::Unknown);
+    });
+}
+
+void TProgressSecondaryIndexCorrespondence::Register(TRegistrar registrar)
+{
+    registrar.Parameter("index_replication_card_id", &TThis::IndexReplicationCardId);
+    registrar.Parameter("new_correspondence", &TThis::NewCorrespondence)
+        .Default(ETableToIndexCorrespondence::Invalid);
+
+    registrar.Postprocessor([] (TProgressSecondaryIndexCorrespondence* alteration) {
+        THROW_ERROR_EXCEPTION_UNLESS(
+            alteration->NewCorrespondence == ETableToIndexCorrespondence::Injective ||
+            alteration->NewCorrespondence == ETableToIndexCorrespondence::Bijective,
+            "Cannot progress to %Qlv correspondence, expected %Qlv or %Qlv",
+            alteration->NewCorrespondence,
+            ETableToIndexCorrespondence::Injective,
+            ETableToIndexCorrespondence::Bijective);
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

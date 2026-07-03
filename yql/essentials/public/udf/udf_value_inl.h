@@ -324,7 +324,7 @@ Y_FORCE_INLINE TUnboxedValue::TUnboxedValue(const TUnboxedValuePod& value) noexc
 }
 
 Y_FORCE_INLINE TUnboxedValue::TUnboxedValue(TUnboxedValuePod&& value) noexcept
-    : TUnboxedValuePod(std::move(value))
+    : TUnboxedValuePod(value)
 {
     value.Raw = TRaw(); // NOLINT(bugprone-use-after-move)
     Ref();
@@ -361,7 +361,7 @@ Y_FORCE_INLINE TUnboxedValue& TUnboxedValue::operator=(TUnboxedValue&& value) no
 }
 
 Y_FORCE_INLINE TUnboxedValuePod TUnboxedValue::Release() noexcept {
-    const TUnboxedValuePod value(std::move(*static_cast<TUnboxedValuePod*>(this)));
+    const TUnboxedValuePod value(*static_cast<TUnboxedValuePod*>(this));
     Raw = TRaw();
     value.ReleaseRef();
     return value;
@@ -565,7 +565,7 @@ inline TUnboxedValue TUnboxedValuePod::GetVariantItem() const {
     if (Raw.GetIndex()) {
         TUnboxedValuePod item(*this);
         item.Raw.Simple.Meta &= 0x3;
-        return std::move(item);
+        return item;
     }
     UDF_VERIFY(IsBoxed(), "Value is not a variant");
     return TBoxedValueAccessor::GetVariantItem(*Raw.Boxed.Value);

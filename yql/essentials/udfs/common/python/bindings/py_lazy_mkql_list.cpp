@@ -338,7 +338,7 @@ public:
     }
 
     TPyObjectPtr GetIteratorImpl() const {
-        TPyObjectPtr generator = PyObject_CallObject(PyObject_.Get(), nullptr);
+        TPyObjectPtr generator = PyObject_CallObject(PyObject_.Get(), /*args=*/nullptr);
         if (!generator || !PyGen_Check(generator.Get())) {
             UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << "Expected generator as a result of function call").c_str());
         }

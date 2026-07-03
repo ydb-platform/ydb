@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(6.0.3)
+VERSION(6.0.5)
 
 LICENSE(MIT)
 
@@ -25,6 +25,7 @@ RESOURCE_FILES(
     PREFIX contrib/python/Flask-Cors/py3/
     .dist-info/METADATA
     .dist-info/top_level.txt
+    flask_cors/py.typed
 )
 
 END()

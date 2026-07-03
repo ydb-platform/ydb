@@ -29,6 +29,7 @@
 #include "tablet/ext_tx_base.h"
 #include "transactions/tx_controller.h"
 
+#include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet/tablet_counters.h>
@@ -595,6 +596,7 @@ private:
     void SendWaitPlanStep(ui64 step);
     void RescheduleWaitingReads();
     NOlap::TSnapshot GetMaxReadVersion() const;
+    NOlap::TSnapshot GetMaxReadVersionForSchema(const ui64 schemaVersion) const;
     void PublishMinSnapshotForNewScans(const IScanSnapshotGuard& guard) const;
     NOlap::TSnapshot GetMinSnapshotForNewReads() const;
     bool MayStartScanAt(const NOlap::TSnapshot& snapshot, const NColumnShard::TSchemeShardLocalPathId& schemeShardLocalPathId) const;
@@ -652,6 +654,12 @@ private:
 
     void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev, IExecutor* executor);
     void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev, IExecutor* executor);
+
+    // We assume that all the blob storage groups for a database have the same layout (erasure, etc.)
+    std::optional<NKikimr::TBlobStorageGroupType> BlobStorageLayout;
+    const std::optional<NKikimr::TBlobStorageGroupType>& GetBlobStorageLayout();
+
+    ui64 NormalizeSmallBlobsCount(const ui64 rawCount);
 
 public:
     ui64 TabletTxCounter = 0;

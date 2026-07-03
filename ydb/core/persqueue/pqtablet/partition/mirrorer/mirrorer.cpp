@@ -577,16 +577,20 @@ void TMirrorer::RequestSourcePartitionStatus() {
 }
 
 void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
-    if (Config.GetSyncWriteTime() && !WriteRequestInFlight && StreamStatus && EndOffset == StreamStatus->GetEndOffset()) {
-        LOG_I("update write timestamp from original topic: " << StreamStatus->DebugString());
-        THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
-        auto req = request->Record.MutablePartitionRequest();
-        req->SetTopic(TopicConverter->GetClientsideName());
-        req->SetPartition(Partition);
-        req->SetCookie(UPDATE_WRITE_TIMESTAMP);
-        req->MutableCmdUpdateWriteTimestamp()->SetWriteTimeMS(StreamStatus->GetWriteTimeHighWatermark().MilliSeconds());
-        ctx.Send(TabletActorId, request.Release());
+    if (!Config.GetSyncWriteTime() || WriteRequestInFlight || !StreamStatus) {
+        return;
     }
+    if (EndOffset != StreamStatus->GetEndOffset()) {
+        return;
+    }
+    LOG_I("update write timestamp from original topic: " << StreamStatus->DebugString());
+    THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto req = request->Record.MutablePartitionRequest();
+    req->SetTopic(TopicConverter->GetClientsideName());
+    req->SetPartition(Partition);
+    req->SetCookie(UPDATE_WRITE_TIMESTAMP);
+    req->MutableCmdUpdateWriteTimestamp()->SetWriteTimeMS(StreamStatus->GetWriteTimeHighWatermark().MilliSeconds());
+    ctx.Send(TabletActorId, request.Release());
 }
 
 void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {

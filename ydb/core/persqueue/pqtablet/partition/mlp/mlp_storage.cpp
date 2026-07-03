@@ -352,35 +352,41 @@ std::optional<TReadMessage> TStorage::ReadForReplay(ui64 offset, TInstant deadli
     }
 }
 
-void TStorage::DropExpiredReceiveAttempts(TInstant now) {
-    std::vector<TString> expired;
-    for (const auto& [attemptId, attempt] : ReceiveAttempts_) {
-        if (attempt.Expiry <= now) {
-            expired.push_back(attemptId);
-        }
-    }
-    for (const auto& attemptId : expired) {
-        ReceiveAttempts_.erase(attemptId);
-    }
+void TStorage::MarkReceiveAttemptOffsetInvalid(ui64 offset) {
+    InvalidatedReceiveAttemptOffsets_.insert(offset);
 }
 
-void TStorage::InvalidateReceiveAttempts(ui64 offset) {
+void TStorage::CleanupReceiveAttempts(TInstant now) {
+    if (ReceiveAttempts_.empty() && InvalidatedReceiveAttemptOffsets_.empty()) {
+        return;
+    }
+
     std::vector<TString> toErase;
+    toErase.reserve(ReceiveAttempts_.size());
+
     for (const auto& [attemptId, attempt] : ReceiveAttempts_) {
+        if (attempt.Expiry <= now) {
+            toErase.push_back(attemptId);
+            continue;
+        }
         for (ui64 attemptOffset : attempt.Offsets) {
-            if (attemptOffset == offset) {
+            if (InvalidatedReceiveAttemptOffsets_.contains(attemptOffset)) {
                 toErase.push_back(attemptId);
                 break;
             }
         }
     }
+
     for (const auto& attemptId : toErase) {
         ReceiveAttempts_.erase(attemptId);
     }
+
+    InvalidatedReceiveAttemptOffsets_.clear();
 }
 
 void TStorage::ClearReceiveAttempts() {
     ReceiveAttempts_.clear();
+    InvalidatedReceiveAttemptOffsets_.clear();
 }
 
 std::deque<TReadMessage> TStorage::Read(
@@ -391,8 +397,6 @@ std::deque<TReadMessage> TStorage::Read(
     size_t maxCount,
     const TString& receiveAttemptId
 ) {
-    DropExpiredReceiveAttempts(now);
-
     std::deque<TReadMessage> messages;
 
     if (receiveAttemptId) {
@@ -433,7 +437,7 @@ bool TStorage::Commit(ui64 messageId) {
     if (!DoCommit(messageId, Metrics.TotalCommittedMessageCount)) {
         return false;
     }
-    InvalidateReceiveAttempts(messageId);
+    MarkReceiveAttemptOffsetInvalid(messageId);
     return true;
 }
 
@@ -441,7 +445,7 @@ bool TStorage::Unlock(ui64 messageId) {
     if (!DoUnlock(messageId)) {
         return false;
     }
-    InvalidateReceiveAttempts(messageId);
+    MarkReceiveAttemptOffsetInvalid(messageId);
     return true;
 }
 
@@ -459,7 +463,7 @@ bool TStorage::ChangeMessageDeadline(ui64 messageId, TInstant deadline) {
             auto newDeadlineDelta = NormalizeDeadline(deadline);
             message->DeadlineDelta = newDeadlineDelta;
 
-            InvalidateReceiveAttempts(messageId);
+            MarkReceiveAttemptOffsetInvalid(messageId);
             return true;
         }
         default:
@@ -597,6 +601,8 @@ TInstant TStorage::GetMessageDeadline(ui64 messageId) {
 
 size_t TStorage::ProccessDeadlines() {
     auto now = TimeProvider->Now();
+
+    CleanupReceiveAttempts(now);
 
     if (now < NextVacuumRun) {
         return 0;

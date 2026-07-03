@@ -3615,6 +3615,7 @@ Y_UNIT_TEST(ReadAttemptExpiresAfterPeriod) {
     UNIT_ASSERT_VALUES_EQUAL(first.front().Offset, 0u);
 
     utils.TimeProvider->Tick(TDuration::Seconds(3));
+    utils.Storage.ProccessDeadlines();
 
     const auto second = utils.ReadMessages(10, attemptId);
     UNIT_ASSERT(second.size() > 0);
@@ -3651,6 +3652,7 @@ Y_UNIT_TEST(ReadAttemptCommitInvalidatesReplay) {
     UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1, 2}));
 
     UNIT_ASSERT(utils.Commit(1));
+    utils.Storage.ProccessDeadlines();
 
     const auto second = utils.ReadMessages(3, attemptId);
     UNIT_ASSERT_VALUES_EQUAL(second.size(), 0);
@@ -3668,6 +3670,7 @@ Y_UNIT_TEST(ReadAttemptChangeMessageDeadlineInvalidatesReplay) {
     UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1, 2}));
 
     UNIT_ASSERT(utils.Storage.ChangeMessageDeadline(1, utils.TimeProvider->Now() + TDuration::Seconds(15)));
+    utils.Storage.ProccessDeadlines();
 
     const auto second = utils.ReadMessages(3, attemptId);
     UNIT_ASSERT_VALUES_EQUAL(second.size(), 0);
@@ -3685,6 +3688,7 @@ Y_UNIT_TEST(ReadAttemptUnlockInvalidatesReplay) {
     UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1, 2}));
 
     UNIT_ASSERT(utils.Unlock(1));
+    utils.Storage.ProccessDeadlines();
 
     const auto second = utils.ReadMessages(3, attemptId);
     UNIT_ASSERT_VALUES_EQUAL(second.size(), 0);

@@ -12,6 +12,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NIndexes::NCategoriesBloom {
 
 class TCategoryBuilder {
@@ -210,7 +212,8 @@ bool TIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescrip
     {
         auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);
         if (conclusion.IsFail()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", conclusion.GetErrorMessage());
+            YDB_LOG_ERROR("",
+                {"indexParsing", conclusion.GetErrorMessage()});
             return false;
         }
     }

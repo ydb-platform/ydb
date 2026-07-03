@@ -16,6 +16,8 @@
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/hash_set.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
 namespace {
@@ -166,7 +168,9 @@ struct TPlannerSettings {
                 }
                 TilingSettings.EnableCompatibilityMode = value.GetBoolean();
             } else {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "tiling_core_unknown_setting_ignored")("setting", name);
+                YDB_LOG_ERROR("",
+                    {"event", "tiling_core_unknown_setting_ignored"},
+                    {"setting", name});
             }
         }
         return TConclusionStatus::Success();
@@ -271,14 +275,16 @@ private:
 
     bool DoDeserializeFromProto(const TProto& proto) override {
         if (!proto.HasTiling()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling++ compaction optimizer from proto")(
-                "proto", proto.DebugString());
+            YDB_LOG_ERROR("",
+                {"error", "cannot parse tiling++ compaction optimizer from proto"},
+                {"proto", proto.DebugString()});
             return false;
         }
         auto status = Settings.DeserializeFromProto(proto.GetTiling());
         if (!status.IsSuccess()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling++ compaction optimizer from proto")(
-                "description", status.GetErrorDescription());
+            YDB_LOG_ERROR("",
+                {"error", "cannot parse tiling++ compaction optimizer from proto"},
+                {"description", status.GetErrorDescription()});
             return false;
         }
         return true;
@@ -294,7 +300,8 @@ private:
     }
 
     TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "creating tiling++ compaction optimizer");
+        YDB_LOG_DEBUG("Dump message",
+            {"message", "creating tiling++ compaction optimizer"});
         return std::make_shared<TOptimizerPlannerAdapter>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), Settings);
     }
 

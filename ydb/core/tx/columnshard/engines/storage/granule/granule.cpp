@@ -11,10 +11,15 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap {
 
 void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info->DebugString())("path_id", GetPathId());
+    YDB_LOG_TRACE("Dump event, portion, pathId",
+        {"event", "upsert_portion"},
+        {"portion", info->DebugString()},
+        {"pathId", GetPathId()});
     AFL_VERIFY(!Portions.contains(info->GetPortionId()));
     AFL_VERIFY(info->GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info->DebugString())("path_id", GetPathId());
 
@@ -39,10 +44,16 @@ void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionDataAccessor>& in
 bool TGranuleMeta::ErasePortion(const ui64 portion) {
     auto it = Portions.find(portion);
     if (it == Portions.end()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased_already")("portion_id", portion)("pathId", PathId);
+        YDB_LOG_WARN("",
+            {"event", "portion_erased_already"},
+            {"portionId", portion},
+            {"pathId", PathId});
         return false;
     } else {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased")("portion_info", it->second->DebugString())("pathId", PathId);
+        YDB_LOG_TRACE("Dump event, portionInfo, pathId",
+            {"event", "portion_erased"},
+            {"portionInfo", it->second->DebugString()},
+            {"pathId", PathId});
     }
     if (IntervalTree) {
         IntervalTree->RemoveRanges(it->second);
@@ -103,13 +114,18 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
 
 void TGranuleMeta::OnCompactionFinished() {
     AllowInsertionFlag = false;
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionFinished")("info", DebugString());
+    YDB_LOG_DEBUG("Dump event, info",
+        {"event", "OnCompactionFinished"},
+        {"info", DebugString()});
     Stats->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnCompactionFailed(const TString& reason) {
     AllowInsertionFlag = false;
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionFailed")("reason", reason)("info", DebugString());
+    YDB_LOG_WARN("",
+        {"event", "OnCompactionFailed"},
+        {"reason", reason},
+        {"info", DebugString()});
     Stats->UpdateGranuleInfo(*this);
 }
 
@@ -187,7 +203,9 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
 
 void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const {
     if (context.GetActualInstant() < NextActualizations) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_actualization")("waiting", NextActualizations - context.GetActualInstant());
+        YDB_LOG_DEBUG("Dump event, waiting",
+            {"event", "skip_actualization"},
+            {"waiting", NextActualizations - context.GetActualInstant()});
         return;
     }
     NActualizer::TExternalTasksContext extTasks(Portions);
@@ -203,10 +221,14 @@ void TGranuleMeta::ResetAccessorsManager(const std::shared_ptr<NDataAccessorCont
 void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,
     std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema) {
     if (constructor->ApplyToCurrentObject(OptimizerPlanner)) {
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "applied_optimizer")("constructor", constructor->GetClassName());
+        YDB_LOG_NOTICE("",
+            {"event", "applied_optimizer"},
+            {"constructor", constructor->GetClassName()});
         return;
     }
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "reset_optimizer")("constructor", constructor->GetClassName());
+    YDB_LOG_NOTICE("",
+        {"event", "reset_optimizer"},
+        {"constructor", constructor->GetClassName()});
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(PathId, storages, pkSchema);
     OptimizerPlanner = constructor->BuildPlanner(context).DetachResult();
     AFL_VERIFY(!!OptimizerPlanner);

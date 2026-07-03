@@ -10,6 +10,7 @@
 
 #include <util/digest/numeric.h>
 #include <util/generic/string_hash.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NWritingPortions {
 
@@ -90,8 +91,9 @@ public:
     void Bootstrap();
 
     STFUNC(StateWait) {
-        TLogContextGuard gLogging(
-            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent", ParentActorId));
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"tabletId", TabletId},
+            {"parent", ParentActorId});
         switch (ev->GetTypeRewrite()) {
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
             hFunc(TEvAddInsertedDataToBuffer, Handle);

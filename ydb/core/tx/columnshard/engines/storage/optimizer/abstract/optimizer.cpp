@@ -3,18 +3,21 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer {
 
 std::vector<std::shared_ptr<TColumnEngineChanges>> IOptimizerPlanner::GetOptimizationTasks(
     std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
-    NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"pathId", PathId});
     return DoGetOptimizationTasks(granule, dataLocksManager);
 }
 
 std::shared_ptr<TColumnEngineChanges> IOptimizerPlanner::GetNextOptimizationTask(
     std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
-    NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"pathId", PathId});
     return DoGetNextOptimizationTask(granule, dataLocksManager);
 }
 

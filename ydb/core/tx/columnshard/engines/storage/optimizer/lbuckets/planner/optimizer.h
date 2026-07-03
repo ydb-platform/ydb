@@ -866,13 +866,22 @@ public:
         for (auto&& i : portions) {
             size += i->GetTotalBlobBytes();
             if (locksManager->IsLocked(*i, NDataLocks::ELockCategory::Compaction)) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("info", Others.DebugString())("event", "skip_optimization")("reason", "busy");
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump info, event, reason",
+                    {"info", Others.DebugString()},
+                    {"event", "skip_optimization"},
+                    {"reason", "busy"});
                 return {};
             }
         }
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("stop_instant", stopInstant)("size", size)("next",
-            NextBorder ? NextBorder->DebugString() : "")("count", portions.size())("info", Others.DebugString())("event", "start_optimization")(
-            "stop_point", stopPoint ? stopPoint->DebugString() : "")("main_portion", MainPortion ? MainPortion->GetPortionId() : 0);
+        YDB_LOG_INFO_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"stopInstant", stopInstant},
+            {"size", size},
+            {"next", NextBorder ? NextBorder->DebugString() : ""},
+            {"count", portions.size()},
+            {"info", Others.DebugString()},
+            {"event", "start_optimization"},
+            {"stopPoint", stopPoint ? stopPoint->DebugString() : ""},
+            {"mainPortion", MainPortion ? MainPortion->GetPortionId() : 0});
         TSaverContext saverContext(storagesManager);
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portions, saverContext);
         if (MainPortion) {
@@ -898,12 +907,15 @@ public:
             auto oldPortionInfo = GetOldestPortion(true);
             auto youngPortionInfo = GetYoungestPortion(true);
             AFL_VERIFY(oldPortionInfo && youngPortionInfo);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
-            ("event", "other_not_final")(
-                "delta", youngPortionInfo->RecordSnapshotMax().GetPlanStep() - oldPortionInfo->RecordSnapshotMax().GetPlanStep())(
-                "main", MainPortion->DebugString(true))("current", portion->DebugString(true))("oldest", oldPortionInfo->DebugString(true))(
-                "young", youngPortionInfo->DebugString(true))("bucket_from", MainPortion->IndexKeyStart().DebugString())(
-                "bucket_to", NextBorder->DebugString());
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump event, delta, main, current, oldest, young, bucketFrom, bucketTo",
+                {"event", "other_not_final"},
+                {"delta", youngPortionInfo->RecordSnapshotMax().GetPlanStep() - oldPortionInfo->RecordSnapshotMax().GetPlanStep()},
+                {"main", MainPortion->DebugString(true)},
+                {"current", portion->DebugString(true)},
+                {"oldest", oldPortionInfo->DebugString(true)},
+                {"young", youngPortionInfo->DebugString(true)},
+                {"bucketFrom", MainPortion->IndexKeyStart().DebugString()},
+                {"bucketTo", NextBorder->DebugString()});
 #endif
         }
         Others.Add(portion, now);

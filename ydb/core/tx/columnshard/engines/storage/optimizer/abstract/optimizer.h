@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <utility>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
@@ -217,14 +218,18 @@ public:
         }
 
         if (std::cmp_less_equal(GetBadPortionsLimit(), badPortions->Val())) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
-            ("error", "overload: bad portions")("value", badPortions->Val())("limit", GetBadPortionsLimit());
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                {"error", "overload: bad portions"},
+                {"value", badPortions->Val()},
+                {"limit", GetBadPortionsLimit()});
             return true;
         }
 
         if (std::cmp_less_equal(GetNodePortionsCountLimit(), NodePortionsCounter.Val())) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
-            ("error", "overload: node portions count limit")("value", NodePortionsCounter.Val())("limit", GetNodePortionsCountLimit());
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                {"error", "overload: node portions count limit"},
+                {"value", NodePortionsCounter.Val()},
+                {"limit", GetNodePortionsCountLimit()});
             return true;
         }
 
@@ -300,7 +305,8 @@ public:
     }
 
     void ModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) {
-        NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"pathId", PathId});
         LocalPortionsCount.Add(add.size());
         LocalPortionsCount.Sub(remove.size());
         NodePortionsCounter.Add(add.size());

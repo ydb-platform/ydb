@@ -17,6 +17,8 @@
 
 #include <util/string/join.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap {
 
 std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByIndex(const int index) const {
@@ -82,11 +84,13 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
 TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::PrepareForModification(
     const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const {
     if (!incomingBatch) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "DeserializeBatch() failed");
+        YDB_LOG_WARN("",
+            {"error", "DeserializeBatch() failed"});
         return TConclusionStatus::Fail("incorrect incoming batch");
     }
     if (incomingBatch->num_rows() == 0) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "empty batch");
+        YDB_LOG_WARN("",
+            {"error", "empty batch"});
         return TConclusionStatus::Fail("empty incoming batch");
     }
 
@@ -345,7 +349,9 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
             TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrToWrite =
                 loader->GetAccessorConstructor()->Construct(accessor, loader->BuildAccessorContext(accessor->GetRecordsCount()));
             if (arrToWrite.IsFail()) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build accessor")("reason", arrToWrite.GetErrorMessage());
+                YDB_LOG_ERROR("",
+                    {"event", "cannot build accessor"},
+                    {"reason", arrToWrite.GetErrorMessage()});
                 return arrToWrite;
             }
 

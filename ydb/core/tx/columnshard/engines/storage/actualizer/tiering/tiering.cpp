@@ -34,11 +34,14 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         {
             auto it = MaxByPortionId.find(portion.GetPortionId());
             if (it == MaxByPortionId.end()) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "skip_add_portion")("reason", "data not ready");
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "Dump event, reason",
+                    {"event", "skip_add_portion"},
+                    {"reason", "data not ready"});
                 return {};
             } else if (!it->second) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "skip_add_portion")(
-                    "reason", "no data for ttl usage (need to create index or use first pk column)");
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "Dump event, reason",
+                    {"event", "skip_add_portion"},
+                    {"reason", "no data for ttl usage (need to create index or use first pk column)"});
                 return {};
             } else {
                 max = it->second;
@@ -46,7 +49,8 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         }
         const bool skipEviction = !NYDBTest::TControllers::GetColumnShardController()->CheckPortionForEvict(portion);
         auto tieringInfo = Tiering->GetTierToMove(max, now, skipEviction);
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("tiering_info", tieringInfo.DebugString());
+        YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump tieringInfo",
+            {"tieringInfo", tieringInfo.DebugString()});
         std::optional<i64> d;
         std::set<TString> storagesWrite;
         TString targetTierName;
@@ -59,21 +63,32 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         }
         if (d) {
             //            if (currentTierName == "deploy_logs_s3" && targetTierName == IStoragesManager::DefaultStorageId) {
-            //                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("tiering_info", tieringInfo.DebugString())("max", max->ToString())("now", now.ToString())("d", *d)("tiering", Tiering->GetDebugString())("pathId", PathId);
+            //                YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                                  {"tieringInfo", tieringInfo.DebugString()},
+                                  {"max", max->ToString()},
+                                  {"now", now},
+                                  {"d", *d},
+                                  {"tiering", Tiering->GetDebugString()},
+                                  {"pathId", PathId});
             //                AFL_VERIFY(false)("tiering_info", tieringInfo.DebugString())("max", max->ToString())("now", now.ToString())("d", *d)("tiering", Tiering->GetDebugString())("pathId", PathId);
             //            }
             auto storagesWrite = targetSchema->GetIndexInfo().GetUsedStorageIds(targetTierName);
             auto storagesRead = portionSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
             return TFullActualizationInfo(TRWAddress(std::move(storagesRead), std::move(storagesWrite)), targetTierName, *d, targetSchema);
         } else {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "skip_add_portion")("reason", "no_eviction")(
-                "portion", portion.GetPortionId())("skip_eviction", skipEviction)("optimized",
-                portion.HasRuntimeFeature(NOlap::TPortionInfo::ERuntimeFeature::Optimized))("has_insert_write_id", portion.GetPortionType());
+            YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "Dump event, reason, portion, skipEviction, optimized, hasInsertWriteId",
+                {"event", "skip_add_portion"},
+                {"reason", "no_eviction"},
+                {"portion", portion.GetPortionId()},
+                {"skipEviction", skipEviction},
+                {"optimized", portion.HasRuntimeFeature(NOlap::TPortionInfo::ERuntimeFeature::Optimized)},
+                {"hasInsertWriteId", portion.GetPortionType()});
             return {};
         }
     } else if (currentTierName != IStoragesManager::DefaultStorageId) {
         //        if (currentTierName == "deploy_logs_s3") {
-        //            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("pathId", PathId);
+        //            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                          {"pathId", PathId});
         //            AFL_VERIFY(false)("pathId", PathId);
         //        }
         auto storagesWrite = targetSchema->GetIndexInfo().GetUsedStorageIds(IStoragesManager::DefaultStorageId);
@@ -81,7 +96,9 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         TRWAddress address(std::move(storagesRead), std::move(storagesWrite));
         return TFullActualizationInfo(std::move(address), IStoragesManager::DefaultStorageId, 0, targetSchema);
     }
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "skip_add_portion")("reason", "no_tiering");
+    YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "Dump event, reason",
+        {"event", "skip_add_portion"},
+        {"reason", "no_tiering"});
     return {};
 }
 
@@ -211,8 +228,10 @@ void TTieringActualizer::DoExtractTasks(
             }
         }
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "ExtractTtlTasks")("total_portions", PortionsInfo.size())(
-        "tasks", portionIds.size());
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "Dump event, totalPortions, tasks",
+        {"event", "ExtractTtlTasks"},
+        {"totalPortions", PortionsInfo.size()},
+        {"tasks", portionIds.size()});
     if (portionIds.size()) {
         ui64 waitDurationEvict = 0;
         ui64 waitQueueEvict = 0;
@@ -241,8 +260,11 @@ void TTieringActualizer::DoExtractTasks(
 }
 
 void TTieringActualizer::Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext) {
-    AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "refresh_tiering")("has_tiering", !!info)(
-        "tiers", info ? info->GetOrderedTiers().size() : 0)("had_tiering_before", !!Tiering);
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_TIERING, "Dump event, hasTiering, tiers, hadTieringBefore",
+        {"event", "refresh_tiering"},
+        {"hasTiering", !!info},
+        {"tiers", info ? info->GetOrderedTiers().size() : 0},
+        {"hadTieringBefore", !!Tiering});
     Tiering = info;
     std::optional<ui32> newTieringColumnId;
     if (Tiering) {
@@ -275,12 +297,13 @@ private:
         }
 
         if (result.GetValue().HasErrors()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "Data accessor result with errors " + result.GetValue().GetErrorMessage());
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"error", "Data accessor result with errors " + result.GetValue().GetErrorMessage()});
         }
 
         if (result.GetValue().HasRemovedData()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
-                "error", TStringBuilder{} << "Data accessor result with removed data, " << result.GetValue().GetRemovedData().size());
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump error",
+                {"error", TStringBuilder{} << "Data accessor result with removed data, " << result.GetValue().GetRemovedData().size()});
         }
 
         TActualizationContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now());

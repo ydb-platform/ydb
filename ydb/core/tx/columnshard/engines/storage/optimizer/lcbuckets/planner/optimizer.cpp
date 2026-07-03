@@ -6,6 +6,8 @@
 
 #include <util/string/join.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
@@ -52,8 +54,12 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
             result->SetTargetCompactionLevel(data.GetTargetCompactionLevel());
             result->SetPortionExpectedSize(Levels[data.GetTargetCompactionLevel()]->GetExpectedPortionSize());
             auto positions = data.GetCheckPositions(PrimaryKeysSchema, level->GetLevelId() > 1);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("task_id", result->GetTaskIdentifier())("positions", positions.DebugString())(
-                "level", level->GetLevelId())("target", data.GetTargetCompactionLevel())("data", data.DebugString());
+            YDB_LOG_DEBUG("Dump taskId, positions, level, target, data",
+                {"taskId", result->GetTaskIdentifier()},
+                {"positions", positions.DebugString()},
+                {"level", level->GetLevelId()},
+                {"target", data.GetTargetCompactionLevel()},
+                {"data", data.DebugString()});
             result->SetCheckPoints(std::move(positions));
             results.push_back(result);
             if (!AppDataVerified().ColumnShardConfig.GetEnableParallelCompaction()) {

@@ -17,6 +17,9 @@
 #include <ydb/core/tx/columnshard/operations/write.h>
 #include <ydb/core/tx/columnshard/transactions/locks_db.h>
 #include <ydb/core/tx/tiering/manager.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
 
@@ -72,8 +75,9 @@ std::shared_ptr<ITxReader> TTxInit::BuildReader() {
 }
 
 bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    NActors::TLogContextGuard gLogging =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", Self->TabletID()},
+        {"event", "initialize_shard"});
     LOG_S_DEBUG("TTxInit.Execute at tablet " << Self->TabletID());
 
     try {
@@ -88,7 +92,8 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
         Self->UpdateIndexCounters();
         Self->UpdateResourceMetrics(ctx, {});
     } catch (const TNotReadyTabletException&) {
-        ACFL_ERROR("event", "tablet not ready");
+        YDB_LOG_ERROR_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+            {"event", "tablet not ready"});
         return false;
     } catch (const TSchemeErrorTabletException& ex) {
         Y_UNUSED(ex);
@@ -131,9 +136,12 @@ public:
 };
 
 bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
-    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())(
-        "process", "TTxUpdateSchema::Execute");
-    ACFL_INFO("step", "TTxUpdateSchema.Execute_Start")("details", Self->NormalizerController.DebugString());
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", Self->TabletID()},
+        {"process", "TTxUpdateSchema::Execute"});
+    YDB_LOG_INFO_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        {"step", "TTxUpdateSchema.Execute_Start"},
+        {"details", Self->NormalizerController.DebugString()});
 
     while (!Self->NormalizerController.IsNormalizationFinished()) {
         auto normalizer = Self->NormalizerController.GetNormalizer();
@@ -141,7 +149,9 @@ bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
         if (result.IsSuccess()) {
             NormalizerTasks = result.DetachResult();
             if (!NormalizerTasks.empty()) {
-                ACFL_WARN("normalizer_controller", Self->NormalizerController.DebugString())("tasks_count", NormalizerTasks.size());
+                YDB_LOG_WARN_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+                    {"normalizerController", Self->NormalizerController.DebugString()},
+                    {"tasksCount", NormalizerTasks.size()});
                 break;
             }
             NIceDb::TNiceDb db(txc.DB);
@@ -149,18 +159,23 @@ bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
             Self->NormalizerController.SwitchNormalizer();
         } else {
             Self->NormalizerController.GetCounters().OnNormalizerFails();
-            ACFL_INFO("step", "TTxUpdateSchema.Execute_Failed")("details", Self->NormalizerController.DebugString());
+            YDB_LOG_INFO_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+                {"step", "TTxUpdateSchema.Execute_Failed"},
+                {"details", Self->NormalizerController.DebugString()});
             return false;
         }
     }
-    ACFL_INFO("step", "TTxUpdateSchema.Execute_Finish");
+    YDB_LOG_INFO_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        {"step", "TTxUpdateSchema.Execute_Finish"});
     return true;
 }
 
 void TTxUpdateSchema::Complete(const TActorContext& ctx) {
-    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())(
-        "process", "TTxUpdateSchema::Complete");
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxUpdateSchema.Complete");
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", Self->TabletID()},
+        {"process", "TTxUpdateSchema::Complete"});
+    YDB_LOG_INFO("",
+        {"step", "TTxUpdateSchema.Complete"});
     Self->Counters.GetCSCounters().Initialization.OnTxUpdateSchemaFinished(TMonotonic::Now() - StartInstant);
     if (NormalizerTasks.empty()) {
         AFL_VERIFY(Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
@@ -201,10 +216,13 @@ private:
 };
 
 bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&) {
-    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())(
-        "event", "TTxApplyNormalizer::Execute");
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Execute")("details", Self->NormalizerController.DebugString())(
-        "dry_run", IsDryRun);
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", Self->TabletID()},
+        {"event", "TTxApplyNormalizer::Execute"});
+    YDB_LOG_INFO("",
+        {"step", "TTxApplyNormalizer.Execute"},
+        {"details", Self->NormalizerController.DebugString()},
+        {"dryRun", IsDryRun});
     if (!IsDryRun) {
         if (!Changes->ApplyOnExecute(txc, Self->NormalizerController)) {
             return false;
@@ -220,14 +238,20 @@ bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&)
 }
 
 void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
-    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())(
-        "event", "TTxApplyNormalizer::Complete");
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", Self->TabletID()},
+        {"event", "TTxApplyNormalizer::Complete"});
     AFL_VERIFY(!Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "apply_normalizer_changes")("details", Self->NormalizerController.DebugString())(
-        "size", Changes->GetSize())("dry_run", IsDryRun);
+    YDB_LOG_WARN("",
+        {"event", "apply_normalizer_changes"},
+        {"details", Self->NormalizerController.DebugString()},
+        {"size", Changes->GetSize()},
+        {"dryRun", IsDryRun});
     if (IsDryRun) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "normalizer_changes_dry_run")(
-            "normalizer", Self->NormalizerController.GetNormalizer()->GetClassName())("changes", Changes->DebugString());
+        YDB_LOG_WARN("",
+            {"event", "normalizer_changes_dry_run"},
+            {"normalizer", Self->NormalizerController.GetNormalizer()->GetClassName()},
+            {"changes", Changes->DebugString()});
     } else {
         Changes->ApplyOnComplete(Self->NormalizerController);
     }
@@ -263,8 +287,9 @@ public:
 };
 
 bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
-    NActors::TLogContextGuard gLogging =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("process", "TTxInitSchema::Execute");
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", Self->TabletID()},
+        {"process", "TTxInitSchema::Execute"});
     LOG_S_DEBUG("TxInitSchema.Execute at tablet " << Self->TabletID());
 
     const bool isFirstRun = txc.DB.GetScheme().IsEmpty();
@@ -311,8 +336,9 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxInitSchema::Complete(const TActorContext& ctx) {
-    NActors::TLogContextGuard gLogging =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("process", "TTxInitSchema::Complete");
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", Self->TabletID()},
+        {"process", "TTxInitSchema::Complete"});
     Self->Counters.GetCSCounters().Initialization.OnTxInitSchemaFinished(TMonotonic::Now() - StartInstant);
     LOG_S_DEBUG("TxInitSchema.Complete at tablet " << Self->TabletID(););
     Self->Execute(new TTxUpdateSchema(Self), ctx);

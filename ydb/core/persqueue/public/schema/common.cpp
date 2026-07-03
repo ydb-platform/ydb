@@ -369,6 +369,15 @@ TResult AddConsumer(
             passwordHash = MD5::Data(attrValue);
             passwordHash.to_lower();
             hasPassword = true;
+        } else if (attrName == "_sqs_read_request_attempt_id_period_ms") {
+            if (!attrValue.empty()) {
+                try {
+                    consumer->SetReadRequestAttemptIdPeriodMs(FromString<ui32>(attrValue));
+                } catch(...) {
+                    return {Ydb::StatusIds::BAD_REQUEST,
+                        TStringBuilder() << "Attribute for consumer '" << consumerConfig.name() << "' " << attrName << " is " << attrValue << ", which is not ui32"};
+                }
+            }
         }
     }
     if (serviceType.empty()) {

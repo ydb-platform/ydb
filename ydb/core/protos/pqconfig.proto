@@ -421,6 +421,7 @@ message TPQTabletConfig {
         optional uint32 DefaultReceiveMessageWaitTimeMs = 19 [default = 0]; // For MLP consumers
         // For MLP (shared/SQS) consumers. The window during which a repeated read with the same
         // receive-request-attempt-id replays the same messages. Default 5 minutes.
+        // Passed via the _sqs_read_request_attempt_id_period_ms consumer attribute.
         optional uint32 ReadRequestAttemptIdPeriodMs = 20 [default = 300000];
 
         optional uint32 MetricsLevel = 21;
@@ -513,6 +514,8 @@ message TPQTabletConfig {
     optional string SqsCloudId = 46 [default = ""];
     optional string SqsFolderId = 47 [default = ""];
     optional bool SqsExportMetrics = 48 [default = false];
+
+    reserved 49; // ReadRequestAttemptIdPeriodMs; moved back to TConsumer
 }
 
 message THeartbeat {

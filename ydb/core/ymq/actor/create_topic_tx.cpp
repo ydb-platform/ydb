@@ -57,10 +57,6 @@ Ydb::Topic::CreateTopicRequest BuildCreateTopicTx(
         consumerType->mutable_receive_message_wait_time()->set_seconds(params.DefaultReceiveMessageWaitTimeMs / 1000);
         consumerType->mutable_receive_message_wait_time()->set_nanos(params.DefaultReceiveMessageWaitTimeMs % 1000 * 1000000);
     }
-    if (params.ReadRequestAttemptIdPeriodMs) {
-        consumerType->mutable_read_request_attempt_id_period()->set_seconds(params.ReadRequestAttemptIdPeriodMs / 1000);
-        consumerType->mutable_read_request_attempt_id_period()->set_nanos(params.ReadRequestAttemptIdPeriodMs % 1000 * 1000000);
-    }
     if (params.MaxReceiveCount || params.RedriveTargetQueueName) {
         consumerType->mutable_dead_letter_policy()->set_enabled(true);
         if (params.MaxReceiveCount) {
@@ -85,6 +81,9 @@ Ydb::Topic::CreateTopicRequest BuildCreateTopicTx(
     }
     if (!params.FolderId.empty()) {
         (*request.mutable_attributes())["_sqs_folder_id"] = params.FolderId;
+    }
+    if (params.ReadRequestAttemptIdPeriodMs) {
+        (*consumer->mutable_attributes())["_sqs_read_request_attempt_id_period_ms"] = ToString(params.ReadRequestAttemptIdPeriodMs);
     }
     (*request.mutable_attributes())["_sqs_export_metrics"] = "true";
 

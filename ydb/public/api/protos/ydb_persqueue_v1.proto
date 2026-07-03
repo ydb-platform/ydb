@@ -1178,9 +1178,8 @@ message TopicSettings {
         // Default delay before messages become visible to ReceiveMessage after write (Amazon SQS DelaySeconds).
         // Only used for shared (SQS-compatible) consumers. If unset or zero, there is no delivery delay.
         google.protobuf.Duration receive_message_delay = 14;
-        // The window during which a repeated read with the same receive-request-attempt-id replays the
-        // same messages (Amazon SQS ReceiveRequestAttemptId semantics). Shared consumer only.
-        google.protobuf.Duration read_request_attempt_id_period = 15;
+
+        reserved 15; // read_request_attempt_id_period; now passed via the _sqs_read_request_attempt_id_period_ms consumer attribute
     }
 
     // Message for read rules description.

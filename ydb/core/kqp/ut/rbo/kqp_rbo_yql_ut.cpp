@@ -1931,11 +1931,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 select avg(distinct t1.a) as r0, avg(distinct t1.c) as r1 from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
-            /*
             R"(
-                select distinct t1.b from `/Root/t1` as t1 group by t1.a, t1.b;
+                PRAGMA YqlSelect = 'force';
+                select distinct coalesce(t1.a, 0) as a, coalesce(t1.b, 1) as b, unwrap(t1.c) as c from `/Root/t1` as t1 order by a, b, c;
             )",
-            */
         };
 
         std::vector<std::string> results = {
@@ -1991,6 +1990,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                                             R"([[2u;1u];[3u;1u]])",
                                             R"([[0;[2]];[1;[2]]])",
                                             R"([[2.;[2.]];[2.;[2.]]])",
+                                            R"([[0;2;2];[1;1;2];[2;2;2];[3;1;2];[4;2;2]])",
                                         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -2681,6 +2681,45 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                                 .ExtractValueSync();
             Y_ENSURE(result.IsSuccess());
         }
+    }
+
+    void AnalyzeTPC_YqlTest(const EBenchType type, ui32 queryId, const bool columnStore, const bool newRbo) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        auto kikimrSettings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+
+        kikimrSettings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::EPriority::PRI_TRACE);
+        kikimrSettings.LogSettings->DefaultLogPriority = NActors::NLog::EPriority::PRI_CRIT;
+
+        TKikimrRunner kikimr(kikimrSettings);
+        
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
+
+        {
+            TString q = GetFullPath(BenchmarkQueryPath[type], ToString(queryId) + ".yql");
+            const TString toDecimal =  R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
+            const TString toDecimalMax =  R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+            const TString round = R"($round = ($x,$y) -> {return $x;};)";
+
+            q = round + "\n" + toDecimal + "\n" + toDecimalMax + "\n" + q;
+
+            TScopedRboTraceTitleOverride traceTitle(
+                FormatBenchmarkTraceTitle(BenchmarkTraceSuiteName, BenchmarkTraceName[type], queryId),
+                q);
+            auto queryClient = kikimr.GetQueryClient();
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result = ExecuteExplainAnalyze(session, q); 
+        }
+    }
+
+    Y_UNIT_TEST(ANALYZE_TPCН_11) {
+        AnalyzeTPC_YqlTest(EBenchType::TPCH, 11, true, true);
     }
 
     NKikimrKqp::TKqpSetting MakeTPCHStatsSetting() {
@@ -6363,6 +6402,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         query = toDecimal + "\n" + toDecimalMax + "\n" +
             R"(PRAGMA ydb.CostBasedOptimizationLevel = "4";
 PRAGMA ydb.OptShuffleElimination = "true";
+PRAGMA ydb.OptimizerHints = '
+    JoinType(region nation Shuffle)
+    JoinType(region nation supplier Shuffle)
+    JoinType(region nation supplier customer Shuffle)
+    JoinType(region nation supplier customer orders Shuffle)
+    JoinType(region nation supplier customer orders lineitem Shuffle)
+    JoinOrder(((((region nation) supplier) customer) orders) lineitem)
+';
 )" + query;
 
         auto queryClient = kikimr.GetQueryClient();

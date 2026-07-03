@@ -9,6 +9,8 @@
 
 #include <yt/yt/core/misc/lazy_ptr.h>
 
+#include <atomic>
+
 namespace NYT::NConcurrency {
 namespace {
 
@@ -73,8 +75,8 @@ TEST_F(TBoundedConcurrencyInvokerTest, WaitFor3)
     auto promise = NewPromise<void>();
     auto future = promise.ToFuture();
 
-    bool a1called = false;
-    bool a1finished = false;
+    std::atomic<bool> a1called = false;
+    std::atomic<bool> a1finished = false;
     auto a1 = BIND([&] {
         a1called = true;
         WaitFor(future)
@@ -82,7 +84,7 @@ TEST_F(TBoundedConcurrencyInvokerTest, WaitFor3)
         a1finished = true;
     });
 
-    bool a2called = false;
+    std::atomic<bool> a2called = false;
     auto a2 = BIND([&] {
         a2called = true;
     });

@@ -265,7 +265,7 @@ bool ValidateLinearTypes(const TExprNode& root, TExprContext& ctx) {
     }
 
     TUsageVisitor visitor(ctx);
-    visitor.Visit(root, nullptr);
+    visitor.Visit(root, /*parent=*/nullptr);
     visitor.Finish();
     return !visitor.HasErrors();
 }

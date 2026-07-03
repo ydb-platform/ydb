@@ -20,6 +20,29 @@
 
 namespace NKikimr::NPQ::NMLP {
 
+    class TOrderedMessageGroupIdHash: public TIntrusiveListItem<TOrderedMessageGroupIdHash> {
+        ui32 GroupIdHash;
+
+    public:
+
+        /* implicit */ TOrderedMessageGroupIdHash(ui32 groupIdHash);
+
+        explicit operator ui32() const;
+
+        TOrderedMessageGroupIdHash(const TOrderedMessageGroupIdHash& other) = delete;
+        TOrderedMessageGroupIdHash(TOrderedMessageGroupIdHash&& other);
+        TOrderedMessageGroupIdHash& operator=(const TOrderedMessageGroupIdHash& other) = delete;
+        TOrderedMessageGroupIdHash& operator=(TOrderedMessageGroupIdHash&& other) = delete;
+
+        bool operator==(const TOrderedMessageGroupIdHash& other) const;
+
+        template <typename H>
+        friend H AbslHashValue(H h, const TOrderedMessageGroupIdHash& c) {
+            return H::combine(std::move(h), c.GroupIdHash);
+        }
+    };
+
+
 class TStorage {
     static constexpr size_t MAX_MESSAGES = 120000;
     static constexpr size_t MIN_MESSAGES = 100;
@@ -238,7 +261,7 @@ public:
     // https://docs.amazonaws.cn/en_us/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
     bool ChangeMessageDeadline(ui64 message, TInstant deadline);
     bool Purge(ui64 endOffset);
-    bool AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay = TDuration::Zero());
+    bool AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay = TDuration::Zero(), ui64 logicalMessageCount = 1);
     bool MarkDLQMoved(TDLQMessage message);
     bool WakeUpDLQ();
     struct TUpdateExternalLockedMessageGroupsResult {
@@ -311,6 +334,24 @@ private:
     template <class Fn>
     void IterateAllMessagesInOrder(Fn&& fn);
 
+    TReadMessage ConvertToReadMessage(ui64 offset, const TMessage& message) const;
+    bool IsMessageGroupLocked(const TMessage& message, const absl::flat_hash_set<ui32>& skipMessageGroups) const;
+
+    struct TNextMessageResult {
+        TMessage* Message; // nullable
+        ui64 Offset;
+        TIntrusiveList<TOrderedMessageGroupIdHash>::iterator OrderIterator;
+    };
+
+    struct TTryGetMessageResult {
+        TMessage* Message; // not null
+        bool TryNextInGroup;
+        bool Usable;
+    };
+
+    TTryGetMessageResult TryGetMessage(ui64 offset, const std::optional<ui32> retentionDeadlineDelta, const absl::flat_hash_set<ui32>& skipMessageGroups, const char* caseDescription);
+    TNextMessageResult SearchForEligibleMessage(const std::optional<ui32> retentionDeadlineDelta, const absl::flat_hash_set<ui32>& skipMessageGroups);
+
 private:
     const TIntrusivePtr<ITimeProvider> TimeProvider;
 
@@ -359,14 +400,27 @@ private:
         ui64 LastOffset;
     };
 
-    struct TMessageGroups {
+    class TMessageGroups {
+    public:
+        bool UnlockedMessageGroupsIdContains(const ui32 messageGroupIdHash) const;
+        size_t UnlockedMessageGroupsIdSize() const;
+        bool UnlockedMessageGroupsIdErase(const ui32 messageGroupIdHash);
+        void UpdateLockedMaps(const TLockedGroup& locked, ui32 messageGroupIdHash);
+        const TIntrusiveList<TOrderedMessageGroupIdHash>& GetUnlockedMessageGroupsIdViewOrder() const;
+        TIntrusiveList<TOrderedMessageGroupIdHash>& GetUnlockedMessageGroupsIdViewOrder();
+        void Clear();
+        ~TMessageGroups();
+
+    public:
         absl::flat_hash_map<ui32, TSingleMessageGroupIdInfo> Groups;
-        absl::flat_hash_set<ui32> UnlockedMessageGroupsId; // without parents
         absl::flat_hash_set<ui32> LockedMessageGroupsId; // without parents
         absl::flat_hash_set<ui64> UnorderedOffsets; // Groupless
 
-        void Clear();
+    private:
+        absl::flat_hash_set<TOrderedMessageGroupIdHash> UnlockedMessageGroupsId; // without parents
+        TIntrusiveList<TOrderedMessageGroupIdHash> UnlockedMessageGroupsIdViewOrder;
     };
+
     TMessageGroups MessageGroups;
 
     std::deque<TDLQMessage> DLQQueue;

@@ -44,6 +44,7 @@ Given the above feature, it is useless to try to index all possible combinations
 
 To access a row-oriented table by a secondary index, its name must be explicitly specified in the `VIEW` section after the table name, as described in the article about the [YQL `SELECT` command](../yql/reference/syntax/select#secondary_index). For example, to retrieve from the Orders row-oriented table (`orders`) a selection of orders for a customer with a given ID (`id_customer`), the query would look like this:
 
+
 ```yql
 DECLARE $customer_id AS Uint64;
 SELECT *
@@ -150,6 +151,7 @@ YQL commands for modifying records ( [`UPDATE`](../yql/reference/syntax/update.m
 
 To update data in the `table1` row-oriented table, execute the query:
 
+
 ```yql
 $to_update = (
     SELECT pk_field, $f1 AS field1, $f2 AS field2, ...
@@ -171,6 +173,7 @@ Currently, data updates are only possible when using a synchronous secondary ind
 To delete data by a secondary index, use `SELECT` with a predicate on the secondary index, and then call the `DELETE ON` statement.
 
 To delete all data about series with zero views in the `series` row-oriented table, execute the query:
+
 
 ```yql
 DELETE FROM series ON

@@ -9,6 +9,7 @@
 #include <yql/essentials/core/yql_opt_range.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_opt_window.h>
+#include <yql/essentials/core/yql_sql_combine_expander.h>
 #include <yql/essentials/core/yql_opt_match_recognize.h>
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
@@ -700,10 +701,10 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
                                     ui32 pos = 0;
                                     for (auto& item : renames) {
                                         parent.List(pos++)
-                                            .Add(0, std::move(std::get<2>(item)))
+                                            .Add(0, std::get<2>(item))
                                             .Callable(1, "Member")
                                                 .Arg(0, std::get<bool>(item) ? "left" : "right")
-                                                .Add(1, std::move(std::get<0>(item)))
+                                                .Add(1, std::get<0>(item))
                                             .Seal()
                                         .Seal();
                                     }
@@ -809,23 +810,23 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
                         if (payload1 && payload2)
                             for (auto& item : renames) {
                                 parent.List(pos++)
-                                    .Add(0, std::move(std::get<2>(item)))
+                                    .Add(0, std::get<2>(item))
                                     .Callable(1, "Member")
                                         .Callable(0, "Nth")
                                             .Arg(0, "row")
                                             .Atom(1, std::get<bool>(item) ? 0 : 1)
                                         .Seal()
-                                        .Add(1, std::move(std::get<0>(item)))
+                                        .Add(1, std::get<0>(item))
                                     .Seal()
                                 .Seal();
                             }
                         else
                             for (auto& item : renames) {
                                 parent.List(pos++)
-                                    .Add(0, std::move(std::get<2>(item)))
+                                    .Add(0, std::get<2>(item))
                                     .Callable(1, "Member")
                                         .Arg(0, "row")
-                                        .Add(1, std::move(std::get<0>(item)))
+                                        .Add(1, std::get<0>(item))
                                     .Seal()
                                 .Seal();
                             }
@@ -2199,7 +2200,7 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
     if (ansiIn && (nullableCollectionItems || lookupType->HasOptionalOrNull())) {
         YQL_CLOG(DEBUG, CorePeepHole) << "ANSI IN: with nullable items in collection or lookup";
         YQL_ENSURE(dict);
-        const auto trueNode = MakeBool(input->Pos(), true, ctx);
+        const auto trueNode = MakeBool(input->Pos(), /*value=*/true, ctx);
         const auto nullNode = MakeNull(input->Pos(), ctx);
 
         const auto nakedLookupType = RemoveAllOptionals(lookupType);
@@ -2479,7 +2480,7 @@ void AddStandardTransformers(TTransformationPipeline& pipelene, IGraphTransforme
         pipelene.AddTypeAnnotationTransformerWithMode(issueCode, ETypeCheckMode::Repeat);
     }
 
-    pipelene.AddPostTypeAnnotation(true, FinalStage, issueCode);
+    pipelene.AddPostTypeAnnotation(/*forSubGraph=*/true, FinalStage, issueCode);
     pipelene.Add(TExprLogTransformer::Sync("PeepHoleOpt", NLog::EComponent::CorePeepHole, NLog::ELevel::TRACE),
         "PeepHoleOptTrace", issueCode, "PeepHoleOptTrace");
 }
@@ -3419,7 +3420,7 @@ TExprNode::TPtr ExpandMinMax(const TExprNode::TPtr& node, TExprContext& ctx) {
     const auto& children = node->ChildrenList();
     if (!node->GetTypeAnn()->IsOptionalOrNull()) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " with complex non-nullable types";
-        return DoExpandMinMax(node->Content(), true, node->Pos(), children.begin(), children.end(), ctx);
+        return DoExpandMinMax(node->Content(), /*usePlainCompare=*/true, node->Pos(), children.begin(), children.end(), ctx);
     }
 
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " with complex nullable types";
@@ -3436,7 +3437,7 @@ TExprNode::TPtr ExpandMinMax(const TExprNode::TPtr& node, TExprContext& ctx) {
             .Build()
         );
     }
-    auto candidateTuple = DoExpandMinMax(node->Content(), false, node->Pos(), childrenWithPositions.begin(), childrenWithPositions.end(), ctx);
+    auto candidateTuple = DoExpandMinMax(node->Content(), /*usePlainCompare=*/false, node->Pos(), childrenWithPositions.begin(), childrenWithPositions.end(), ctx);
 
     TExprNodeList compareWithCandidate;
     for (ui32 i = 0; i < children.size(); ++i) {
@@ -5065,7 +5066,7 @@ TExprNode::TPtr OptimizeTopOrSort(const TExprNode::TPtr& node, TExprContext& ctx
                 .template Input<TCoWideSort>()
                     .Input(input.HeadPtr())
                     .template Keys<TCoSortKeys>()
-                        .Add(std::move(directions))
+                        .Add(directions)
                         .Build()
                     .Build()
                 .Lambda(input.TailPtr())
@@ -6051,7 +6052,7 @@ void DoMarkLazy(const TExprNode::TPtr& node, TNodeSet& lazyNodes, const TExprNod
 
 void MarkLazy(const TExprNode::TPtr& node, TNodeSet& lazyNodes, const TExprNodePtrPred& needStop) {
     TNodeSet visited;
-    DoMarkLazy(node, lazyNodes, needStop, visited, false);
+    DoMarkLazy(node, lazyNodes, needStop, visited, /*markAll=*/false);
 }
 
 void DoMarkNonLazy(const TExprNode::TPtr& node, TNodeSet& lazyNodes, const TExprNodePtrPred& needStop, TNodeSet& visited) {
@@ -6306,7 +6307,7 @@ private:
     // Rewrite if present via BlockIf + BlockExists + BlockValidUnwrap.
     TExprNode::TPtr RewriteIfPresent(TIfPresentCallableView ifPresentView, TRewritesMap& rewrites, const TNodeSet& nonStrictNodes) {
         // Check that lambda return type is valid.
-        if (!IsSupportedAsBlockType(ifPresentView.Lambda()->Pos(), *ifPresentView.Lambda()->GetTypeAnn(), Ctx_, Types_, true)) {
+        if (!IsSupportedAsBlockType(ifPresentView.Lambda()->Pos(), *ifPresentView.Lambda()->GetTypeAnn(), Ctx_, Types_, /*reportUnspported=*/true)) {
             YQL_CLOG(TRACE, CorePeepHole) << Log(ifPresentView.Lambda().Get()) << "Lambda return type is not supported";
             return nullptr;
         }
@@ -6396,7 +6397,7 @@ private:
     TExprNode::TPtr GetBlockFuncArg(TExprNode::TPtr node, const TRewritesMap& rewrites) {
         if (!node->GetTypeAnn()->IsComputable()) {
             return node;
-        } else if (node->IsComplete() && IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), Ctx_, Types_, true)) {
+        } else if (node->IsComplete() && IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), Ctx_, Types_, /*reportUnspported=*/true)) {
             return Ctx_.NewCallable(node->Pos(), "AsScalar", {node});
         } else if (auto rewrited = rewrites.find(node.Get()); rewrited != rewrites.end()) {
             return rewrited->second;
@@ -6450,9 +6451,10 @@ private:
         TExprNode::TListType funcArgs;
         std::string_view arrowFunctionName;
         const bool rewriteAsIs = node->IsCallable({"AssumeStrict", "AssumeNonStrict", "NoPush", "Likely"});
-        if (node->IsList() || rewriteAsIs ||
+        bool isSuitableGuess = NKikimr::NMiniKQL::RuntimeVersion >= 79 && node->IsCallable("Guess");
+        if (node->IsList() || rewriteAsIs || isSuitableGuess ||
             node->IsCallable({"DecimalMul", "DecimalDiv", "DecimalMod", "And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "AsStruct", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"})) {
-            if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), Ctx_, Types_, true)) {
+            if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), Ctx_, Types_, /*reportUnspported=*/true)) {
                 YQL_CLOG(TRACE, CorePeepHole) << Log(node) << "Type are not supported";
                 return;
             }
@@ -6498,7 +6500,7 @@ private:
                     auto member = funcArgs[index];
                     auto child = member->TailPtr();
                     TExprNodePtr rewrite;
-                    if (child->IsComplete() && IsSupportedAsBlockType(child->Pos(), *child->GetTypeAnn(), Ctx_, Types_, true)) {
+                    if (child->IsComplete() && IsSupportedAsBlockType(child->Pos(), *child->GetTypeAnn(), Ctx_, Types_, /*reportUnspported=*/true)) {
                         rewrite = Ctx_.NewCallable(child->Pos(), "AsScalar", {child});
                     } else if (auto rit = rewrites.find(child.Get()); rit != rewrites.end()) {
                         rewrite = rit->second;
@@ -7508,7 +7510,7 @@ TExprNode::TPtr ExpandConstraintsOf(const TExprNode::TPtr& node, TExprContext& c
 
     TString json;
     TStringOutput out(json);
-    NJson::TJsonWriter jsonWriter(&out, true);
+    NJson::TJsonWriter jsonWriter(&out, /*formatOutput=*/true);
     node->Head().GetConstraintSet().ToJson(jsonWriter);
     jsonWriter.Flush();
 
@@ -7540,7 +7542,7 @@ TExprNode::TPtr ExpandCostsOf(const TExprNode::TPtr& node, TExprContext& ctx, TT
         auto stat = typesCtx.GetStats(node.Get());
         if (!chInfo.empty() || stat) {
             TStringOutput out(it->second);
-            NJson::TJsonWriter jsonWriter(&out, false);
+            NJson::TJsonWriter jsonWriter(&out, /*formatOutput=*/false);
             jsonWriter.OpenMap();
             if (node->Content()) {
                 jsonWriter.Write("Name", node->Content());
@@ -9423,6 +9425,7 @@ struct TPeepHoleRules {
         {"LMap", &ExpandLMapOrShuffleByKeysAtCommonStage},
         {"OrderedLMap", &ExpandLMapOrShuffleByKeysAtCommonStage},
         {"ShuffleByKeys", &ExpandLMapOrShuffleByKeysAtCommonStage},
+        {"SqlCombine", &ExpandSqlCombine},
     };
 
     const TPeepHoleOptimizerMap SimplifyStageRules = {
@@ -9575,7 +9578,7 @@ THolder<IGraphTransformer> CreatePeepHoleCommonStageTransformer(TTypeAnnotationC
 
     auto issueCode = TIssuesIds::CORE_EXEC;
 
-    pipeline.AddCommonOptimization(true, issueCode);
+    pipeline.AddCommonOptimization(/*forPeephole=*/true, issueCode);
     pipeline.Add(CreateFunctorTransformer(
             [&types](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 return PeepHoleCommonStage(input, output, ctx, types,
@@ -9706,8 +9709,8 @@ IGraphTransformer::TStatus PeepHoleOptimizeNode(const TExprNode::TPtr& input, TE
 THolder<IGraphTransformer> MakePeepholeOptimization(TTypeAnnotationContextPtr typeAnnotationContext, const IPipelineConfigurator* config) {
     TPeepholeSettings peepholeSettings;
     peepholeSettings.CommonConfig = peepholeSettings.FinalConfig = config;
-    auto commonTransformer = CreatePeepHoleCommonStageTransformer(*typeAnnotationContext, nullptr, peepholeSettings);
-    auto finalTransformer = CreatePeepHoleFinalStageTransformer(*typeAnnotationContext, nullptr, nullptr, peepholeSettings);
+    auto commonTransformer = CreatePeepHoleCommonStageTransformer(*typeAnnotationContext, /*typeAnnotator=*/nullptr, peepholeSettings);
+    auto finalTransformer = CreatePeepHoleFinalStageTransformer(*typeAnnotationContext, /*typeAnnotator=*/nullptr, /*hasNonDeterministicFunctions=*/nullptr, peepholeSettings);
     return CreateFunctorTransformer(
             [common = std::move(commonTransformer), final = std::move(finalTransformer)](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
                 return DoPeepHoleOptimizeNode(input, output, ctx, *common, *final);

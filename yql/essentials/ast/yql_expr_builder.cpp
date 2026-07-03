@@ -27,7 +27,7 @@ TExprNodeBuilder::TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx, ExtAr
 {
 }
 
-TExprNodeBuilder::TExprNodeBuilder(TPositionHandle pos, TExprNodeBuilder* parent, const TExprNode::TPtr& container)
+TExprNodeBuilder::TExprNodeBuilder(TPositionHandle pos, TExprNodeBuilder* parent, TExprNode::TPtr container)
     : Ctx_(parent->Ctx_)
     , Parent_(parent)
     , ParentReplacer_(nullptr)

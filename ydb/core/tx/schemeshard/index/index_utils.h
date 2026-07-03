@@ -110,7 +110,8 @@ NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
     const NKikimrSchemeOp::EIndexType indexType,
-    const TVector<TString>& prefixColumns = {});
+    const TVector<TString>& prefixColumns,
+    bool isBuild);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
@@ -118,7 +119,22 @@ NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
     const NKikimrSchemeOp::EIndexType indexType,
-    const TVector<TString>& prefixColumns = {});
+    const TVector<TString>& prefixColumns,
+    bool isBuild);
+
+NKikimrSchemeOp::TTableDescription CalcFulltextRowIdSrcImplTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
+
+NKikimrSchemeOp::TTableDescription CalcFulltextRowIdSrcImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
@@ -224,6 +240,19 @@ bool MaybeEnableFulltextRowIdMode(
     const TMap<TString, TPathId>& tableChildren,
     const THashMap<TPathId, NSchemeShard::TTableIndexInfo::TPtr>& indexes,
     NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
+    TString& error);
+
+// Create-table-time twin of ClassifyFulltextRowId. It classifies how a fulltext/JSON index requested
+// inline in a CREATE TABLE obtains its doc_id, reading the not-yet-created schema from the request
+// protos (the base table description and the planned indexes) instead of the live TTableInfo. The
+// decision rules mirror ClassifyFulltextRowId and must be kept in sync with it; because every object
+// of an indexed-table create is produced atomically there is no "half-built unique index" state, so
+// the Reuse case requires the user to supply both the __ydb_row_id column and a single-column
+// GlobalUnique index over it within the same request. For a non-fulltext index the plan is
+// NotApplicable.
+TFulltextRowIdClassification ClassifyFulltextRowIdForCreate(
+    const NKikimrSchemeOp::TIndexedTableCreationConfig& createConfig,
+    const NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
     TString& error);
 
 template <typename TTableDesc>

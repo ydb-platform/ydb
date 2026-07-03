@@ -5,11 +5,13 @@
     "endpointPrefix":"storagegateway",
     "jsonVersion":"1.1",
     "protocol":"json",
+    "protocols":["json"],
     "serviceFullName":"AWS Storage Gateway",
     "serviceId":"Storage Gateway",
     "signatureVersion":"v4",
     "targetPrefix":"StorageGateway_20130630",
-    "uid":"storagegateway-2013-06-30"
+    "uid":"storagegateway-2013-06-30",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "ActivateGateway":{
@@ -544,7 +546,7 @@
         {"shape":"InvalidGatewayRequestException"},
         {"shape":"InternalServerError"}
       ],
-      "documentation":"<p>Returns your gateway's weekly maintenance start time including the day and time of the week. Note that values are in terms of the gateway's time zone.</p>"
+      "documentation":"<p>Returns your gateway's maintenance window schedule information, with values for monthly or weekly cadence, specific day and time to begin maintenance, and which types of updates to apply. Time values returned are for the gateway's time zone.</p>"
     },
     "DescribeNFSFileShares":{
       "name":"DescribeNFSFileShares",
@@ -1146,7 +1148,7 @@
         {"shape":"InvalidGatewayRequestException"},
         {"shape":"InternalServerError"}
       ],
-      "documentation":"<p>Updates a gateway's metadata, which includes the gateway's name and time zone. To specify which gateway to update, use the Amazon Resource Name (ARN) of the gateway in your request.</p> <note> <p>For gateways activated after September 2, 2015, the gateway's ARN contains the gateway ID rather than the gateway name. However, changing the name of the gateway has no effect on the gateway's ARN.</p> </note>"
+      "documentation":"<p>Updates a gateway's metadata, which includes the gateway's name, time zone, and metadata cache size. To specify which gateway to update, use the Amazon Resource Name (ARN) of the gateway in your request.</p> <note> <p>For gateways activated after September 2, 2015, the gateway's ARN contains the gateway ID rather than the gateway name. However, changing the name of the gateway has no effect on the gateway's ARN.</p> </note>"
     },
     "UpdateGatewaySoftwareNow":{
       "name":"UpdateGatewaySoftwareNow",
@@ -1174,7 +1176,7 @@
         {"shape":"InvalidGatewayRequestException"},
         {"shape":"InternalServerError"}
       ],
-      "documentation":"<p>Updates a gateway's weekly maintenance start time information, including day and time of the week. The maintenance time is the time in your gateway's time zone.</p>"
+      "documentation":"<p>Updates a gateway's maintenance window schedule, with settings for monthly or weekly cadence, specific day and time to begin maintenance, and which types of updates to apply. Time configuration uses the gateway's time zone. You can pass values for a complete maintenance schedule, or update policy, or both. Previous values will persist for whichever setting you choose not to modify. If an incomplete or invalid maintenance schedule is passed, the entire request will be rejected with an error and no changes will occur.</p> <p>A complete maintenance schedule must include values for <i>both</i> <code>MinuteOfHour</code> and <code>HourOfDay</code>, and <i>either</i> <code>DayOfMonth</code> <i>or</i> <code>DayOfWeek</code>.</p> <note> <p>We recommend keeping maintenance updates turned on, except in specific use cases where the brief disruptions caused by updating the gateway could critically impact your deployment.</p> </note>"
     },
     "UpdateNFSFileShare":{
       "name":"UpdateNFSFileShare",
@@ -1244,7 +1246,7 @@
         {"shape":"InvalidGatewayRequestException"},
         {"shape":"InternalServerError"}
       ],
-      "documentation":"<p>Updates the SMB security strategy on a file gateway. This action is only supported in file gateways.</p> <note> <p>This API is called Security level in the User Guide.</p> <p>A higher security level can affect performance of the gateway.</p> </note>"
+      "documentation":"<p>Updates the SMB security strategy level for an Amazon S3 file gateway. This action is only supported for Amazon S3 file gateways.</p> <note> <p>For information about configuring this setting using the Amazon Web Services console, see <a href=\"https://docs.aws.amazon.com/filegateway/latest/files3/security-strategy.html\">Setting a security level for your gateway</a> in the <i>Amazon S3 File Gateway User Guide</i>.</p> <p>A higher security strategy level can affect performance of the gateway.</p> </note>"
     },
     "UpdateSnapshotSchedule":{
       "name":"UpdateSnapshotSchedule",
@@ -1295,7 +1297,7 @@
         },
         "GatewayTimezone":{
           "shape":"GatewayTimezone",
-          "documentation":"<p>A value that indicates the time zone you want to set for the gateway. The time zone is of the format \"GMT-hr:mm\" or \"GMT+hr:mm\". For example, GMT-4:00 indicates the time is 4 hours behind GMT. GMT+2:00 indicates the time is 2 hours ahead of GMT. The time zone is used, for example, for scheduling snapshots and your gateway's maintenance schedule.</p>"
+          "documentation":"<p>A value that indicates the time zone you want to set for the gateway. The time zone is of the format \"GMT\", \"GMT-hr:mm\", or \"GMT+hr:mm\". For example, GMT indicates Greenwich Mean Time without any offset. GMT-4:00 indicates the time is 4 hours behind GMT. GMT+2:00 indicates the time is 2 hours ahead of GMT. The time zone is used, for example, for scheduling snapshots and your gateway's maintenance schedule.</p>"
         },
         "GatewayRegion":{
           "shape":"RegionId",
@@ -1303,7 +1305,7 @@
         },
         "GatewayType":{
           "shape":"GatewayType",
-          "documentation":"<p>A value that defines the type of gateway to activate. The type specified is critical to all later functions of the gateway and cannot be changed after activation. The default value is <code>CACHED</code>.</p> <p>Valid Values: <code>STORED</code> | <code>CACHED</code> | <code>VTL</code> | <code>VTL_SNOW</code> | <code>FILE_S3</code> | <code>FILE_FSX_SMB</code> </p>"
+          "documentation":"<p>A value that defines the type of gateway to activate. The type specified is critical to all later functions of the gateway and cannot be changed after activation. The default value is <code>CACHED</code>.</p> <important> <p>Amazon FSx File Gateway is no longer available to new customers. Existing customers of FSx File Gateway can continue to use the service normally. For capabilities similar to FSx File Gateway, visit <a href=\"https://aws.amazon.com/blogs/storage/switch-your-file-share-access-from-amazon-fsx-file-gateway-to-amazon-fsx-for-windows-file-server/\">this blog post</a>.</p> </important> <p>Valid Values: <code>STORED</code> | <code>CACHED</code> | <code>VTL</code> | <code>FILE_S3</code> | <code>FILE_FSX_SMB</code> </p>"
         },
         "TapeDriveType":{
           "shape":"TapeDriveType",
@@ -1623,6 +1625,13 @@
       "max":10,
       "min":1
     },
+    "AutomaticUpdatePolicy":{
+      "type":"string",
+      "enum":[
+        "ALL_VERSIONS",
+        "EMERGENCY_VERSIONS_ONLY"
+      ]
+    },
     "AvailabilityMonitorTestStatus":{
       "type":"string",
       "enum":[
@@ -1667,14 +1676,14 @@
         },
         "AverageUploadRateLimitInBitsPerSec":{
           "shape":"BandwidthUploadRateLimit",
-          "documentation":"<p> The average upload rate limit component of the bandwidth rate limit interval, in bits per second. This field does not appear in the response if the upload rate limit is not set. </p> <note> <p>For Tape Gateway and Volume Gateway, the minimum value is <code>51200</code>.</p> <p>For S3 File Gateway and FSx File Gateway, the minimum value is <code>104857600</code>.</p> </note>"
+          "documentation":"<p> The average upload rate limit component of the bandwidth rate limit interval, in bits per second. This field does not appear in the response if the upload rate limit is not set. </p> <note> <p>For Tape Gateway and Volume Gateway, the minimum value is <code>51200</code>.</p> <p>This field is required for S3 File Gateway, and the minimum value is <code>104857600</code>.</p> </note>"
         },
         "AverageDownloadRateLimitInBitsPerSec":{
           "shape":"BandwidthDownloadRateLimit",
-          "documentation":"<p> The average download rate limit component of the bandwidth rate limit interval, in bits per second. This field does not appear in the response if the download rate limit is not set. </p>"
+          "documentation":"<p> The average download rate limit component of the bandwidth rate limit interval, in bits per second. This field does not appear in the response if the download rate limit is not set. </p> <note> <p>S3 File Gateway does not support this feature.</p> </note>"
         }
       },
-      "documentation":"<p> Describes a bandwidth rate limit interval for a gateway. A bandwidth rate limit schedule consists of one or more bandwidth rate limit intervals. A bandwidth rate limit interval defines a period of time on one or more days of the week, during which bandwidth rate limits are specified for uploading, downloading, or both. </p>"
+      "documentation":"<p>Describes a bandwidth rate limit interval for a gateway. A bandwidth rate limit schedule consists of one or more bandwidth rate limit intervals. A bandwidth rate limit interval defines a period of time on one or more days of the week, during which bandwidth rate limits are specified for uploading, downloading, or both.</p> <note> <p>FSx File Gateway does not support this feature.</p> </note>"
     },
     "BandwidthRateLimitIntervals":{
       "type":"list",
@@ -1943,13 +1952,19 @@
           "shape":"GatewayARN",
           "documentation":"<p>The Amazon Resource Name (ARN) of the S3 File Gateway on which you want to create a file share.</p>"
         },
+        "EncryptionType":{
+          "shape":"EncryptionType",
+          "documentation":"<p>A value that specifies the type of server-side encryption that the file share will use for the data that it stores in Amazon S3.</p> <note> <p>We recommend using <code>EncryptionType</code> instead of <code>KMSEncrypted</code> to set the file share encryption method. You do not need to provide values for both parameters.</p> <p>If values for both parameters exist in the same request, then the specified encryption methods must not conflict. For example, if <code>EncryptionType</code> is <code>SseS3</code>, then <code>KMSEncrypted</code> must be <code>false</code>. If <code>EncryptionType</code> is <code>SseKms</code> or <code>DsseKms</code>, then <code>KMSEncrypted</code> must be <code>true</code>.</p> </note>"
+        },
         "KMSEncrypted":{
           "shape":"Boolean",
-          "documentation":"<p>Set to <code>true</code> to use Amazon S3 server-side encryption with your own KMS key, or <code>false</code> to use a key managed by Amazon S3. Optional.</p> <p>Valid Values: <code>true</code> | <code>false</code> </p>"
+          "documentation":"<p>Optional. Set to <code>true</code> to use Amazon S3 server-side encryption with your own KMS key (SSE-KMS), or <code>false</code> to use a key managed by Amazon S3 (SSE-S3). To use dual-layer encryption (DSSE-KMS), set the <code>EncryptionType</code> parameter instead.</p> <note> <p>We recommend using <code>EncryptionType</code> instead of <code>KMSEncrypted</code> to set the file share encryption method. You do not need to provide values for both parameters.</p> <p>If values for both parameters exist in the same request, then the specified encryption methods must not conflict. For example, if <code>EncryptionType</code> is <code>SseS3</code>, then <code>KMSEncrypted</code> must be <code>false</code>. If <code>EncryptionType</code> is <code>SseKms</code> or <code>DsseKms</code>, then <code>KMSEncrypted</code> must be <code>true</code>.</p> </note> <p>Valid Values: <code>true</code> | <code>false</code> </p>",
+          "deprecated":true,
+          "deprecatedMessage":"KMSEncrypted is deprecated, use EncryptionType instead."
         },
         "KMSKey":{
           "shape":"KMSKey",
-          "documentation":"<p>The Amazon Resource Name (ARN) of a symmetric customer master key (CMK) used for Amazon S3 server-side encryption. Storage Gateway does not support asymmetric CMKs. This value can only be set when <code>KMSEncrypted</code> is <code>true</code>. Optional.</p>"
+          "documentation":"<p>Optional. The Amazon Resource Name (ARN) of a symmetric customer master key (CMK) used for Amazon S3 server-side encryption. Storage Gateway does not support asymmetric CMKs. This value must be set if <code>KMSEncrypted</code> is <code>true</code>, or if <code>EncryptionType</code> is <code>SseKms</code> or <code>DsseKms</code>.</p>"
         },
         "Role":{
           "shape":"Role",
@@ -1957,7 +1972,7 @@
         },
         "LocationARN":{
           "shape":"LocationARN",
-          "documentation":"<p>A custom ARN for the backend storage used for storing data for file shares. It includes a resource ARN with an optional prefix concatenation. The prefix must end with a forward slash (/).</p> <note> <p>You can specify LocationARN as a bucket ARN, access point ARN or access point alias, as shown in the following examples.</p> <p>Bucket ARN:</p> <p> <code>arn:aws:s3:::my-bucket/prefix/</code> </p> <p>Access point ARN:</p> <p> <code>arn:aws:s3:region:account-id:accesspoint/access-point-name/prefix/</code> </p> <p>If you specify an access point, the bucket policy must be configured to delegate access control to the access point. For information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points-policies.html#access-points-delegating-control\">Delegating access control to access points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>Access point alias:</p> <p> <code>test-ap-ab123cdef4gehijklmn5opqrstuvuse1a-s3alias</code> </p> </note>"
+          "documentation":"<p>A custom ARN for the backend storage used for storing data for file shares. It includes a resource ARN with an optional prefix concatenation. The prefix must end with a forward slash (/).</p> <note> <p>You can specify LocationARN as a bucket ARN, access point ARN or access point alias, as shown in the following examples.</p> <p>Bucket ARN:</p> <p> <code>arn:aws:s3:::amzn-s3-demo-bucket/prefix/</code> </p> <p>Access point ARN:</p> <p> <code>arn:aws:s3:region:account-id:accesspoint/access-point-name/prefix/</code> </p> <p>If you specify an access point, the bucket policy must be configured to delegate access control to the access point. For information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points-policies.html#access-points-delegating-control\">Delegating access control to access points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>Access point alias:</p> <p> <code>test-ap-ab123cdef4gehijklmn5opqrstuvuse1a-s3alias</code> </p> </note>"
         },
         "DefaultStorageClass":{
           "shape":"StorageClass",
@@ -1993,7 +2008,7 @@
         },
         "FileShareName":{
           "shape":"FileShareName",
-          "documentation":"<p>The name of the file share. Optional.</p> <note> <p> <code>FileShareName</code> must be set if an S3 prefix name is set in <code>LocationARN</code>, or if an access point or access point alias is used.</p> </note>"
+          "documentation":"<p>The name of the file share. Optional.</p> <note> <p> <code>FileShareName</code> must be set if an S3 prefix name is set in <code>LocationARN</code>, or if an access point or access point alias is used.</p> <p>A valid NFS file share name can only contain the following characters: <code>a</code>-<code>z</code>, <code>A</code>-<code>Z</code>, <code>0</code>-<code>9</code>, <code>-</code>, <code>.</code>, and <code>_</code>.</p> </note>"
         },
         "CacheAttributes":{
           "shape":"CacheAttributes",
@@ -2001,7 +2016,7 @@
         },
         "NotificationPolicy":{
           "shape":"NotificationPolicy",
-          "documentation":"<p>The notification policy of the file share. <code>SettlingTimeInSeconds</code> controls the number of seconds to wait after the last point in time a client wrote to a file before generating an <code>ObjectUploaded</code> notification. Because clients can make many small writes to files, it's best to set this parameter for as long as possible to avoid generating multiple notifications for the same file in a small time period.</p> <note> <p> <code>SettlingTimeInSeconds</code> has no effect on the timing of the object uploading to Amazon S3, only the timing of the notification.</p> </note> <p>The following example sets <code>NotificationPolicy</code> on with <code>SettlingTimeInSeconds</code> set to 60.</p> <p> <code>{\\\"Upload\\\": {\\\"SettlingTimeInSeconds\\\": 60}}</code> </p> <p>The following example sets <code>NotificationPolicy</code> off.</p> <p> <code>{}</code> </p>"
+          "documentation":"<p>The notification policy of the file share. <code>SettlingTimeInSeconds</code> controls the number of seconds to wait after the last point in time a client wrote to a file before generating an <code>ObjectUploaded</code> notification. Because clients can make many small writes to files, it's best to set this parameter for as long as possible to avoid generating multiple notifications for the same file in a small time period.</p> <note> <p> <code>SettlingTimeInSeconds</code> has no effect on the timing of the object uploading to Amazon S3, only the timing of the notification.</p> <p>This setting is not meant to specify an exact time at which the notification will be sent. In some cases, the gateway might require more than the specified delay time to generate and send notifications.</p> </note> <p>The following example sets <code>NotificationPolicy</code> on with <code>SettlingTimeInSeconds</code> set to 60.</p> <p> <code>{\\\"Upload\\\": {\\\"SettlingTimeInSeconds\\\": 60}}</code> </p> <p>The following example sets <code>NotificationPolicy</code> off.</p> <p> <code>{}</code> </p>"
         },
         "VPCEndpointDNSName":{
           "shape":"DNSHostName",
@@ -2045,13 +2060,19 @@
           "shape":"GatewayARN",
           "documentation":"<p>The ARN of the S3 File Gateway on which you want to create a file share.</p>"
         },
+        "EncryptionType":{
+          "shape":"EncryptionType",
+          "documentation":"<p>A value that specifies the type of server-side encryption that the file share will use for the data that it stores in Amazon S3.</p> <note> <p>We recommend using <code>EncryptionType</code> instead of <code>KMSEncrypted</code> to set the file share encryption method. You do not need to provide values for both parameters.</p> <p>If values for both parameters exist in the same request, then the specified encryption methods must not conflict. For example, if <code>EncryptionType</code> is <code>SseS3</code>, then <code>KMSEncrypted</code> must be <code>false</code>. If <code>EncryptionType</code> is <code>SseKms</code> or <code>DsseKms</code>, then <code>KMSEncrypted</code> must be <code>true</code>.</p> </note>"
+        },
         "KMSEncrypted":{
           "shape":"Boolean",
-          "documentation":"<p>Set to <code>true</code> to use Amazon S3 server-side encryption with your own KMS key, or <code>false</code> to use a key managed by Amazon S3. Optional.</p> <p>Valid Values: <code>true</code> | <code>false</code> </p>"
+          "documentation":"<p>Optional. Set to <code>true</code> to use Amazon S3 server-side encryption with your own KMS key (SSE-KMS), or <code>false</code> to use a key managed by Amazon S3 (SSE-S3). To use dual-layer encryption (DSSE-KMS), set the <code>EncryptionType</code> parameter instead.</p> <note> <p>We recommend using <code>EncryptionType</code> instead of <code>KMSEncrypted</code> to set the file share encryption method. You do not need to provide values for both parameters.</p> <p>If values for both parameters exist in the same request, then the specified encryption methods must not conflict. For example, if <code>EncryptionType</code> is <code>SseS3</code>, then <code>KMSEncrypted</code> must be <code>false</code>. If <code>EncryptionType</code> is <code>SseKms</code> or <code>DsseKms</code>, then <code>KMSEncrypted</code> must be <code>true</code>.</p> </note> <p>Valid Values: <code>true</code> | <code>false</code> </p>",
+          "deprecated":true,
+          "deprecatedMessage":"KMSEncrypted is deprecated, use EncryptionType instead."
         },
         "KMSKey":{
           "shape":"KMSKey",
-          "documentation":"<p>The Amazon Resource Name (ARN) of a symmetric customer master key (CMK) used for Amazon S3 server-side encryption. Storage Gateway does not support asymmetric CMKs. This value can only be set when <code>KMSEncrypted</code> is <code>true</code>. Optional.</p>"
+          "documentation":"<p>Optional. The Amazon Resource Name (ARN) of a symmetric customer master key (CMK) used for Amazon S3 server-side encryption. Storage Gateway does not support asymmetric CMKs. This value must be set if <code>KMSEncrypted</code> is <code>true</code>, or if <code>EncryptionType</code> is <code>SseKms</code> or <code>DsseKms</code>.</p>"
         },
         "Role":{
           "shape":"Role",
@@ -2059,7 +2080,7 @@
         },
         "LocationARN":{
           "shape":"LocationARN",
-          "documentation":"<p>A custom ARN for the backend storage used for storing data for file shares. It includes a resource ARN with an optional prefix concatenation. The prefix must end with a forward slash (/).</p> <note> <p>You can specify LocationARN as a bucket ARN, access point ARN or access point alias, as shown in the following examples.</p> <p>Bucket ARN:</p> <p> <code>arn:aws:s3:::my-bucket/prefix/</code> </p> <p>Access point ARN:</p> <p> <code>arn:aws:s3:region:account-id:accesspoint/access-point-name/prefix/</code> </p> <p>If you specify an access point, the bucket policy must be configured to delegate access control to the access point. For information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points-policies.html#access-points-delegating-control\">Delegating access control to access points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>Access point alias:</p> <p> <code>test-ap-ab123cdef4gehijklmn5opqrstuvuse1a-s3alias</code> </p> </note>"
+          "documentation":"<p>A custom ARN for the backend storage used for storing data for file shares. It includes a resource ARN with an optional prefix concatenation. The prefix must end with a forward slash (/).</p> <note> <p>You can specify LocationARN as a bucket ARN, access point ARN or access point alias, as shown in the following examples.</p> <p>Bucket ARN:</p> <p> <code>arn:aws:s3:::amzn-s3-demo-bucket/prefix/</code> </p> <p>Access point ARN:</p> <p> <code>arn:aws:s3:region:account-id:accesspoint/access-point-name/prefix/</code> </p> <p>If you specify an access point, the bucket policy must be configured to delegate access control to the access point. For information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points-policies.html#access-points-delegating-control\">Delegating access control to access points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>Access point alias:</p> <p> <code>test-ap-ab123cdef4gehijklmn5opqrstuvuse1a-s3alias</code> </p> </note>"
         },
         "DefaultStorageClass":{
           "shape":"StorageClass",
@@ -2083,7 +2104,7 @@
         },
         "SMBACLEnabled":{
           "shape":"Boolean",
-          "documentation":"<p>Set this value to <code>true</code> to enable access control list (ACL) on the SMB file share. Set it to <code>false</code> to map file and directory permissions to the POSIX permissions.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/storagegateway/latest/userguide/smb-acl.html\">Using Microsoft Windows ACLs to control access to an SMB file share</a> in the <i>Storage Gateway User Guide</i>.</p> <p>Valid Values: <code>true</code> | <code>false</code> </p>"
+          "documentation":"<p>Set this value to <code>true</code> to enable access control list (ACL) on the SMB file share. Set it to <code>false</code> to map file and directory permissions to the POSIX permissions.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/filegateway/latest/files3/smb-acl.html\">Using Windows ACLs to limit SMB file share access</a> in the <i>Amazon S3 File Gateway User Guide</i>.</p> <p>Valid Values: <code>true</code> | <code>false</code> </p>"
         },
         "AccessBasedEnumeration":{
           "shape":"Boolean",
@@ -2119,7 +2140,7 @@
         },
         "FileShareName":{
           "shape":"FileShareName",
-          "documentation":"<p>The name of the file share. Optional.</p> <note> <p> <code>FileShareName</code> must be set if an S3 prefix name is set in <code>LocationARN</code>, or if an access point or access point alias is used.</p> </note>"
+          "documentation":"<p>The name of the file share. Optional.</p> <note> <p> <code>FileShareName</code> must be set if an S3 prefix name is set in <code>LocationARN</code>, or if an access point or access point alias is used.</p> <p>A valid SMB file share name cannot contain the following characters: <code>[</code>,<code>]</code>,<code>#</code>,<code>;</code>,<code>&lt;</code>,<code>&gt;</code>,<code>:</code>,<code>\"</code>,<code>\\</code>,<code>/</code>,<code>|</code>,<code>?</code>,<code>*</code>,<code>+</code>, or ASCII control characters <code>1-31</code>.</p> </note>"
         },
         "CacheAttributes":{
           "shape":"CacheAttributes",
@@ -2127,7 +2148,7 @@
         },
         "NotificationPolicy":{
           "shape":"NotificationPolicy",
-          "documentation":"<p>The notification policy of the file share. <code>SettlingTimeInSeconds</code> controls the number of seconds to wait after the last point in time a client wrote to a file before generating an <code>ObjectUploaded</code> notification. Because clients can make many small writes to files, it's best to set this parameter for as long as possible to avoid generating multiple notifications for the same file in a small time period.</p> <note> <p> <code>SettlingTimeInSeconds</code> has no effect on the timing of the object uploading to Amazon S3, only the timing of the notification.</p> </note> <p>The following example sets <code>NotificationPolicy</code> on with <code>SettlingTimeInSeconds</code> set to 60.</p> <p> <code>{\\\"Upload\\\": {\\\"SettlingTimeInSeconds\\\": 60}}</code> </p> <p>The following example sets <code>NotificationPolicy</code> off.</p> <p> <code>{}</code> </p>"
+          "documentation":"<p>The notification policy of the file share. <code>SettlingTimeInSeconds</code> controls the number of seconds to wait after the last point in time a client wrote to a file before generating an <code>ObjectUploaded</code> notification. Because clients can make many small writes to files, it's best to set this parameter for as long as possible to avoid generating multiple notifications for the same file in a small time period.</p> <note> <p> <code>SettlingTimeInSeconds</code> has no effect on the timing of the object uploading to Amazon S3, only the timing of the notification.</p> <p>This setting is not meant to specify an exact time at which the notification will be sent. In some cases, the gateway might require more than the specified delay time to generate and send notifications.</p> </note> <p>The following example sets <code>NotificationPolicy</code> on with <code>SettlingTimeInSeconds</code> set to 60.</p> <p> <code>{\\\"Upload\\\": {\\\"SettlingTimeInSeconds\\\": 60}}</code> </p> <p>The following example sets <code>NotificationPolicy</code> off.</p> <p> <code>{}</code> </p>"
         },
         "VPCEndpointDNSName":{
           "shape":"DNSHostName",
@@ -2889,7 +2910,7 @@
         },
         "GatewayType":{
           "shape":"GatewayType",
-          "documentation":"<p>The type of the gateway.</p>"
+          "documentation":"<p>The type of the gateway.</p> <important> <p>Amazon FSx File Gateway is no longer available to new customers. Existing customers of FSx File Gateway can continue to use the service normally. For capabilities similar to FSx File Gateway, visit <a href=\"https://aws.amazon.com/blogs/storage/switch-your-file-share-access-from-amazon-fsx-file-gateway-to-amazon-fsx-for-windows-file-server/\">this blog post</a>.</p> </important>"
         },
         "NextUpdateAvailabilityDate":{
           "shape":"NextUpdateAvailabilityDate",
@@ -2921,7 +2942,7 @@
         },
         "HostEnvironment":{
           "shape":"HostEnvironment",
-          "documentation":"<p>The type of hardware or software platform on which the gateway is running.</p>"
+          "documentation":"<p>The type of hardware or software platform on which the gateway is running.</p> <note> <p>Tape Gateway is no longer available on Snow Family devices.</p> </note>"
         },
         "EndpointType":{
           "shape":"EndpointType",
@@ -2980,14 +3001,18 @@
         },
         "DayOfMonth":{
           "shape":"DayOfMonth",
-          "documentation":"<p>The day of the month component of the maintenance start time represented as an ordinal number from 1 to 28, where 1 represents the first day of the month and 28 represents the last day of the month.</p>"
+          "documentation":"<p>The day of the month component of the maintenance start time represented as an ordinal number from 1 to 28, where 1 represents the first day of the month. It is not possible to set the maintenance schedule to start on days 29 through 31.</p>"
         },
         "Timezone":{
           "shape":"GatewayTimezone",
           "documentation":"<p>A value that indicates the time zone that is set for the gateway. The start time and day of week specified should be in the time zone of the gateway.</p>"
+        },
+        "SoftwareUpdatePreferences":{
+          "shape":"SoftwareUpdatePreferences",
+          "documentation":"<p>A set of variables indicating the software update preferences for the gateway.</p> <p>Includes <code>AutomaticUpdatePolicy</code> parameter with the following inputs:</p> <p> <code>ALL_VERSIONS</code> - Enables regular gateway maintenance updates.</p> <p> <code>EMERGENCY_VERSIONS_ONLY</code> - Disables regular gateway maintenance updates. The gateway will still receive emergency version updates on rare occasions if necessary to remedy highly critical security or durability issues. You will be notified before an emergency version update is applied. These updates are applied during your gateway's scheduled maintenance window.</p>"
         }
       },
-      "documentation":"<p>A JSON object containing the following fields:</p> <ul> <li> <p> <a>DescribeMaintenanceStartTimeOutput$DayOfMonth</a> </p> </li> <li> <p> <a>DescribeMaintenanceStartTimeOutput$DayOfWeek</a> </p> </li> <li> <p> <a>DescribeMaintenanceStartTimeOutput$HourOfDay</a> </p> </li> <li> <p> <a>DescribeMaintenanceStartTimeOutput$MinuteOfHour</a> </p> </li> <li> <p> <a>DescribeMaintenanceStartTimeOutput$Timezone</a> </p> </li> </ul>"
+      "documentation":"<p>A JSON object containing the following fields:</p> <ul> <li> <p> <a>DescribeMaintenanceStartTimeOutput$SoftwareUpdatePreferences</a> </p> </li> <li> <p> <a>DescribeMaintenanceStartTimeOutput$DayOfMonth</a> </p> </li> <li> <p> <a>DescribeMaintenanceStartTimeOutput$DayOfWeek</a> </p> </li> <li> <p> <a>DescribeMaintenanceStartTimeOutput$HourOfDay</a> </p> </li> <li> <p> <a>DescribeMaintenanceStartTimeOutput$MinuteOfHour</a> </p> </li> <li> <p> <a>DescribeMaintenanceStartTimeOutput$Timezone</a> </p> </li> </ul>"
     },
     "DescribeNFSFileSharesInput":{
       "type":"structure",
@@ -3056,7 +3081,7 @@
         },
         "SMBSecurityStrategy":{
           "shape":"SMBSecurityStrategy",
-          "documentation":"<p>The type of security strategy that was specified for file gateway.</p> <ul> <li> <p> <code>ClientSpecified</code>: If you use this option, requests are established based on what is negotiated by the client. This option is recommended when you want to maximize compatibility across different clients in your environment. Only supported for S3 File Gateways.</p> </li> <li> <p> <code>MandatorySigning</code>: If you use this option, file gateway only allows connections from SMBv2 or SMBv3 clients that have signing enabled. This option works with SMB clients on Microsoft Windows Vista, Windows Server 2008 or newer.</p> </li> <li> <p> <code>MandatoryEncryption</code>: If you use this option, file gateway only allows connections from SMBv3 clients that have encryption enabled. This option is highly recommended for environments that handle sensitive data. This option works with SMB clients on Microsoft Windows 8, Windows Server 2012 or newer.</p> </li> </ul>"
+          "documentation":"<p>The type of security strategy that was specified for file gateway.</p> <ul> <li> <p> <code>ClientSpecified</code>: If you choose this option, requests are established based on what is negotiated by the client. This option is recommended when you want to maximize compatibility across different clients in your environment. Supported only for S3 File Gateway.</p> </li> <li> <p> <code>MandatorySigning</code>: If you choose this option, File Gateway only allows connections from SMBv2 or SMBv3 clients that have signing turned on. This option works with SMB clients on Microsoft Windows Vista, Windows Server 2008, or later. </p> </li> <li> <p> <code>MandatoryEncryption</code>: If you choose this option, File Gateway only allows connections from SMBv3 clients that have encryption turned on. Both 256-bit and 128-bit algorithms are allowed. This option is recommended for environments that handle sensitive data. It works with SMB clients on Microsoft Windows 8, Windows Server 2012, or later.</p> </li> <li> <p> <code>MandatoryEncryptionNoAes128</code>: If you choose this option, File Gateway only allows connections from SMBv3 clients that use 256-bit AES encryption algorithms. 128-bit algorithms are not allowed. This option is recommended for environments that handle sensitive data. It works with SMB clients on Microsoft Windows 8, Windows Server 2012, or later.</p> </li> </ul>"
         },
         "FileSharesVisible":{
           "shape":"Boolean",
@@ -3495,6 +3520,14 @@
     "DoubleObject":{"type":"double"},
     "Ec2InstanceId":{"type":"string"},
     "Ec2InstanceRegion":{"type":"string"},
+    "EncryptionType":{
+      "type":"string",
+      "enum":[
+        "SseS3",
+        "SseKms",
+        "DsseKms"
+      ]
+    },
     "EndpointNetworkConfiguration":{
       "type":"structure",
       "members":{
@@ -3783,7 +3816,7 @@
         },
         "GatewayType":{
           "shape":"GatewayType",
-          "documentation":"<p>The type of the gateway.</p>"
+          "documentation":"<p>The type of the gateway.</p> <important> <p>Amazon FSx File Gateway is no longer available to new customers. Existing customers of FSx File Gateway can continue to use the service normally. For capabilities similar to FSx File Gateway, visit <a href=\"https://aws.amazon.com/blogs/storage/switch-your-file-share-access-from-amazon-fsx-file-gateway-to-amazon-fsx-for-windows-file-server/\">this blog post</a>.</p> </important>"
         },
         "GatewayOperationalState":{
           "shape":"GatewayOperationalState",
@@ -3803,7 +3836,7 @@
         },
         "HostEnvironment":{
           "shape":"HostEnvironment",
-          "documentation":"<p>The type of hardware or software platform on which the gateway is running.</p>"
+          "documentation":"<p>The type of hardware or software platform on which the gateway is running.</p> <note> <p>Tape Gateway is no longer available on Snow Family devices.</p> </note>"
         },
         "HostEnvironmentId":{
           "shape":"HostEnvironmentId",
@@ -4003,7 +4036,7 @@
     },
     "KMSKey":{
       "type":"string",
-      "documentation":"<p>The Amazon Resource Name (ARN) of a symmetric customer master key (CMK) used for Amazon S3 server-side encryption. Storage Gateway does not support asymmetric CMKs. This value can only be set when <code>KMSEncrypted</code> is <code>true</code>. Optional.</p>",
+      "documentation":"<p>Optional. The Amazon Resource Name (ARN) of a symmetric customer master key (CMK) used for Amazon S3 server-side encryption. Storage Gateway does not support asymmetric CMKs. This value must be set if <code>KMSEncrypted</code> is <code>true</code>, or if <code>EncryptionType</code> is <code>SseKms</code> or <code>DsseKms</code>.</p>",
       "max":2048,
       "min":7,
       "pattern":"(^arn:(aws(|-cn|-us-gov|-iso[A-Za-z0-9_-]*)):kms:([a-zA-Z0-9-]+):([0-9]+):(key|alias)/(\\S+)$)|(^alias/(\\S+)$)"
@@ -4310,7 +4343,7 @@
     },
     "LocationARN":{
       "type":"string",
-      "documentation":"<p>A custom ARN for the backend storage used for storing data for file shares. It includes a resource ARN with an optional prefix concatenation. The prefix must end with a forward slash (/).</p> <note> <p>You can specify LocationARN as a bucket ARN, access point ARN or access point alias, as shown in the following examples.</p> <p>Bucket ARN:</p> <p> <code>arn:aws:s3:::my-bucket/prefix/</code> </p> <p>Access point ARN:</p> <p> <code>arn:aws:s3:region:account-id:accesspoint/access-point-name/prefix/</code> </p> <p>If you specify an access point, the bucket policy must be configured to delegate access control to the access point. For information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points-policies.html#access-points-delegating-control\">Delegating access control to access points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>Access point alias:</p> <p> <code>test-ap-ab123cdef4gehijklmn5opqrstuvuse1a-s3alias</code> </p> </note>",
+      "documentation":"<p>A custom ARN for the backend storage used for storing data for file shares. It includes a resource ARN with an optional prefix concatenation. The prefix must end with a forward slash (/).</p> <note> <p>You can specify LocationARN as a bucket ARN, access point ARN or access point alias, as shown in the following examples.</p> <p>Bucket ARN:</p> <p> <code>arn:aws:s3:::amzn-s3-demo-bucket/prefix/</code> </p> <p>Access point ARN:</p> <p> <code>arn:aws:s3:region:account-id:accesspoint/access-point-name/prefix/</code> </p> <p>If you specify an access point, the bucket policy must be configured to delegate access control to the access point. For information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points-policies.html#access-points-delegating-control\">Delegating access control to access points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>Access point alias:</p> <p> <code>test-ap-ab123cdef4gehijklmn5opqrstuvuse1a-s3alias</code> </p> </note>",
       "max":1400,
       "min":16
     },
@@ -4364,9 +4397,15 @@
         "FileShareId":{"shape":"FileShareId"},
         "FileShareStatus":{"shape":"FileShareStatus"},
         "GatewayARN":{"shape":"GatewayARN"},
+        "EncryptionType":{
+          "shape":"EncryptionType",
+          "documentation":"<p>A value that specifies the type of server-side encryption that the file share will use for the data that it stores in Amazon S3.</p> <note> <p>We recommend using <code>EncryptionType</code> instead of <code>KMSEncrypted</code> to set the file share encryption method. You do not need to provide values for both parameters.</p> <p>If values for both parameters exist in the same request, then the specified encryption methods must not conflict. For example, if <code>EncryptionType</code> is <code>SseS3</code>, then <code>KMSEncrypted</code> must be <code>false</code>. If <code>EncryptionType</code> is <code>SseKms</code> or <code>DsseKms</code>, then <code>KMSEncrypted</code> must be <code>true</code>.</p> </note>"
+        },
         "KMSEncrypted":{
           "shape":"boolean",
-          "documentation":"<p>Set to <code>true</code> to use Amazon S3 server-side encryption with your own KMS key, or <code>false</code> to use a key managed by Amazon S3. Optional.</p> <p>Valid Values: <code>true</code> | <code>false</code> </p>"
+          "documentation":"<p>Optional. Set to <code>true</code> to use Amazon S3 server-side encryption with your own KMS key (SSE-KMS), or <code>false</code> to use a key managed by Amazon S3 (SSE-S3). To use dual-layer encryption (DSSE-KMS), set the <code>EncryptionType</code> parameter instead.</p> <note> <p>We recommend using <code>EncryptionType</code> instead of <code>KMSEncrypted</code> to set the file share encryption method. You do not need to provide values for both parameters.</p> <p>If values for both parameters exist in the same request, then the specified encryption methods must not conflict. For example, if <code>EncryptionType</code> is <code>SseS3</code>, then <code>KMSEncrypted</code> must be <code>false</code>. If <code>EncryptionType</code> is <code>SseKms</code> or <code>DsseKms</code>, then <code>KMSEncrypted</code> must be <code>true</code>.</p> </note> <p>Valid Values: <code>true</code> | <code>false</code> </p>",
+          "deprecated":true,
+          "deprecatedMessage":"KMSEncrypted is deprecated, use EncryptionType instead."
         },
         "KMSKey":{"shape":"KMSKey"},
         "Path":{"shape":"Path"},
@@ -4405,7 +4444,7 @@
         },
         "NotificationPolicy":{
           "shape":"NotificationPolicy",
-          "documentation":"<p>The notification policy of the file share. <code>SettlingTimeInSeconds</code> controls the number of seconds to wait after the last point in time a client wrote to a file before generating an <code>ObjectUploaded</code> notification. Because clients can make many small writes to files, it's best to set this parameter for as long as possible to avoid generating multiple notifications for the same file in a small time period.</p> <note> <p> <code>SettlingTimeInSeconds</code> has no effect on the timing of the object uploading to Amazon S3, only the timing of the notification.</p> </note> <p>The following example sets <code>NotificationPolicy</code> on with <code>SettlingTimeInSeconds</code> set to 60.</p> <p> <code>{\\\"Upload\\\": {\\\"SettlingTimeInSeconds\\\": 60}}</code> </p> <p>The following example sets <code>NotificationPolicy</code> off.</p> <p> <code>{}</code> </p>"
+          "documentation":"<p>The notification policy of the file share. <code>SettlingTimeInSeconds</code> controls the number of seconds to wait after the last point in time a client wrote to a file before generating an <code>ObjectUploaded</code> notification. Because clients can make many small writes to files, it's best to set this parameter for as long as possible to avoid generating multiple notifications for the same file in a small time period.</p> <note> <p> <code>SettlingTimeInSeconds</code> has no effect on the timing of the object uploading to Amazon S3, only the timing of the notification.</p> <p>This setting is not meant to specify an exact time at which the notification will be sent. In some cases, the gateway might require more than the specified delay time to generate and send notifications.</p> </note> <p>The following example sets <code>NotificationPolicy</code> on with <code>SettlingTimeInSeconds</code> set to 60.</p> <p> <code>{\\\"Upload\\\": {\\\"SettlingTimeInSeconds\\\": 60}}</code> </p> <p>The following example sets <code>NotificationPolicy</code> off.</p> <p> <code>{}</code> </p>"
         },
         "VPCEndpointDNSName":{
           "shape":"DNSHostName",
@@ -4598,7 +4637,7 @@
         },
         "FolderList":{
           "shape":"FolderList",
-          "documentation":"<p>A comma-separated list of the paths of folders to refresh in the cache. The default is [<code>\"/\"</code>]. The default refreshes objects and folders at the root of the Amazon S3 bucket. If <code>Recursive</code> is set to <code>true</code>, the entire S3 bucket that the file share has access to is refreshed.</p>"
+          "documentation":"<p>A comma-separated list of the paths of folders to refresh in the cache. The default is [<code>\"/\"</code>]. The default refreshes objects and folders at the root of the Amazon S3 bucket. If <code>Recursive</code> is set to <code>true</code>, the entire S3 bucket that the file share has access to is refreshed.</p> <p>Do not include <code>/</code> when specifying folder names. For example, you would specify <code>samplefolder</code> rather than <code>samplefolder/</code>.</p>"
         },
         "Recursive":{
           "shape":"Boolean",
@@ -4746,9 +4785,15 @@
         "FileShareId":{"shape":"FileShareId"},
         "FileShareStatus":{"shape":"FileShareStatus"},
         "GatewayARN":{"shape":"GatewayARN"},
+        "EncryptionType":{
+          "shape":"EncryptionType",
+          "documentation":"<p>A value that specifies the type of server-side encryption that the file share will use for the data that it stores in Amazon S3.</p> <note> <p>We recommend using <code>EncryptionType</code> instead of <code>KMSEncrypted</code> to set the file share encryption method. You do not need to provide values for both parameters.</p> <p>If values for both parameters exist in the same request, then the specified encryption methods must not conflict. For example, if <code>EncryptionType</code> is <code>SseS3</code>, then <code>KMSEncrypted</code> must be <code>false</code>. If <code>EncryptionType</code> is <code>SseKms</code> or <code>DsseKms</code>, then <code>KMSEncrypted</code> must be <code>true</code>.</p> </note>"
+        },
         "KMSEncrypted":{
           "shape":"boolean",
-          "documentation":"<p>Set to <code>true</code> to use Amazon S3 server-side encryption with your own KMS key, or <code>false</code> to use a key managed by Amazon S3. Optional.</p> <p>Valid Values: <code>true</code> | <code>false</code> </p>"
+          "documentation":"<p>Optional. Set to <code>true</code> to use Amazon S3 server-side encryption with your own KMS key (SSE-KMS), or <code>false</code> to use a key managed by Amazon S3 (SSE-S3). To use dual-layer encryption (DSSE-KMS), set the <code>EncryptionType</code> parameter instead.</p> <note> <p>We recommend using <code>EncryptionType</code> instead of <code>KMSEncrypted</code> to set the file share encryption method. You do not need to provide values for both parameters.</p> <p>If values for both parameters exist in the same request, then the specified encryption methods must not conflict. For example, if <code>EncryptionType</code> is <code>SseS3</code>, then <code>KMSEncrypted</code> must be <code>false</code>. If <code>EncryptionType</code> is <code>SseKms</code> or <code>DsseKms</code>, then <code>KMSEncrypted</code> must be <code>true</code>.</p> </note> <p>Valid Values: <code>true</code> | <code>false</code> </p>",
+          "deprecated":true,
+          "deprecatedMessage":"KMSEncrypted is deprecated, use EncryptionType instead."
         },
         "KMSKey":{"shape":"KMSKey"},
         "Path":{
@@ -4776,7 +4821,7 @@
         },
         "SMBACLEnabled":{
           "shape":"Boolean",
-          "documentation":"<p>If this value is set to <code>true</code>, it indicates that access control list (ACL) is enabled on the SMB file share. If it is set to <code>false</code>, it indicates that file and directory permissions are mapped to the POSIX permission.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/storagegateway/latest/userguide/smb-acl.html\">Using Microsoft Windows ACLs to control access to an SMB file share</a> in the <i>Storage Gateway User Guide</i>.</p>"
+          "documentation":"<p>If this value is set to <code>true</code>, it indicates that access control list (ACL) is enabled on the SMB file share. If it is set to <code>false</code>, it indicates that file and directory permissions are mapped to the POSIX permission.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/filegateway/latest/files3/smb-acl.html\">Using Windows ACLs to limit SMB file share access</a> in the <i>Amazon S3 File Gateway User Guide</i>.</p>"
         },
         "AccessBasedEnumeration":{
           "shape":"Boolean",
@@ -4817,7 +4862,7 @@
         },
         "NotificationPolicy":{
           "shape":"NotificationPolicy",
-          "documentation":"<p>The notification policy of the file share. <code>SettlingTimeInSeconds</code> controls the number of seconds to wait after the last point in time a client wrote to a file before generating an <code>ObjectUploaded</code> notification. Because clients can make many small writes to files, it's best to set this parameter for as long as possible to avoid generating multiple notifications for the same file in a small time period.</p> <note> <p> <code>SettlingTimeInSeconds</code> has no effect on the timing of the object uploading to Amazon S3, only the timing of the notification.</p> </note> <p>The following example sets <code>NotificationPolicy</code> on with <code>SettlingTimeInSeconds</code> set to 60.</p> <p> <code>{\\\"Upload\\\": {\\\"SettlingTimeInSeconds\\\": 60}}</code> </p> <p>The following example sets <code>NotificationPolicy</code> off.</p> <p> <code>{}</code> </p>"
+          "documentation":"<p>The notification policy of the file share. <code>SettlingTimeInSeconds</code> controls the number of seconds to wait after the last point in time a client wrote to a file before generating an <code>ObjectUploaded</code> notification. Because clients can make many small writes to files, it's best to set this parameter for as long as possible to avoid generating multiple notifications for the same file in a small time period.</p> <note> <p> <code>SettlingTimeInSeconds</code> has no effect on the timing of the object uploading to Amazon S3, only the timing of the notification.</p> <p>This setting is not meant to specify an exact time at which the notification will be sent. In some cases, the gateway might require more than the specified delay time to generate and send notifications.</p> </note> <p>The following example sets <code>NotificationPolicy</code> on with <code>SettlingTimeInSeconds</code> set to 60.</p> <p> <code>{\\\"Upload\\\": {\\\"SettlingTimeInSeconds\\\": 60}}</code> </p> <p>The following example sets <code>NotificationPolicy</code> off.</p> <p> <code>{}</code> </p>"
         },
         "VPCEndpointDNSName":{
           "shape":"DNSHostName",
@@ -4860,7 +4905,8 @@
       "enum":[
         "ClientSpecified",
         "MandatorySigning",
-        "MandatoryEncryption"
+        "MandatoryEncryption",
+        "MandatoryEncryptionNoAes128"
       ]
     },
     "ServiceUnavailableError":{
@@ -4946,6 +4992,16 @@
     "SnapshotId":{
       "type":"string",
       "pattern":"\\Asnap-([0-9A-Fa-f]{8}|[0-9A-Fa-f]{17})\\z"
+    },
+    "SoftwareUpdatePreferences":{
+      "type":"structure",
+      "members":{
+        "AutomaticUpdatePolicy":{
+          "shape":"AutomaticUpdatePolicy",
+          "documentation":"<p>Indicates the automatic update policy for a gateway.</p> <p> <code>ALL_VERSIONS</code> - Enables regular gateway maintenance updates.</p> <p> <code>EMERGENCY_VERSIONS_ONLY</code> - Disables regular gateway maintenance updates. The gateway will still receive emergency version updates on rare occasions if necessary to remedy highly critical security or durability issues. You will be notified before an emergency version update is applied. These updates are applied during your gateway's scheduled maintenance window.</p>"
+        }
+      },
+      "documentation":"<p>A set of variables indicating the software update preferences for the gateway.</p>"
     },
     "SoftwareUpdatesEndDate":{
       "type":"string",
@@ -5510,7 +5566,7 @@
         },
         "GatewayCapacity":{
           "shape":"GatewayCapacity",
-          "documentation":"<p>Specifies the size of the gateway's metadata cache.</p>"
+          "documentation":"<p>Specifies the size of the gateway's metadata cache. This setting impacts gateway performance and hardware recommendations. For more information, see <a href=\"https://docs.aws.amazon.com/filegateway/latest/files3/performance-multiple-file-shares.html\">Performance guidance for gateways with multiple file shares</a> in the <i>Amazon S3 File Gateway User Guide</i>.</p>"
         }
       }
     },
@@ -5542,11 +5598,7 @@
     },
     "UpdateMaintenanceStartTimeInput":{
       "type":"structure",
-      "required":[
-        "GatewayARN",
-        "HourOfDay",
-        "MinuteOfHour"
-      ],
+      "required":["GatewayARN"],
       "members":{
         "GatewayARN":{"shape":"GatewayARN"},
         "HourOfDay":{
@@ -5559,14 +5611,18 @@
         },
         "DayOfWeek":{
           "shape":"DayOfWeek",
-          "documentation":"<p>The day of the week component of the maintenance start time week represented as an ordinal number from 0 to 6, where 0 represents Sunday and 6 Saturday.</p>"
+          "documentation":"<p>The day of the week component of the maintenance start time week represented as an ordinal number from 0 to 6, where 0 represents Sunday and 6 represents Saturday.</p>"
         },
         "DayOfMonth":{
           "shape":"DayOfMonth",
-          "documentation":"<p>The day of the month component of the maintenance start time represented as an ordinal number from 1 to 28, where 1 represents the first day of the month and 28 represents the last day of the month.</p>"
+          "documentation":"<p>The day of the month component of the maintenance start time represented as an ordinal number from 1 to 28, where 1 represents the first day of the month. It is not possible to set the maintenance schedule to start on days 29 through 31.</p>"
+        },
+        "SoftwareUpdatePreferences":{
+          "shape":"SoftwareUpdatePreferences",
+          "documentation":"<p>A set of variables indicating the software update preferences for the gateway.</p> <p>Includes <code>AutomaticUpdatePolicy</code> field with the following inputs:</p> <p> <code>ALL_VERSIONS</code> - Enables regular gateway maintenance updates.</p> <p> <code>EMERGENCY_VERSIONS_ONLY</code> - Disables regular gateway maintenance updates. The gateway will still receive emergency version updates on rare occasions if necessary to remedy highly critical security or durability issues. You will be notified before an emergency version update is applied. These updates are applied during your gateway's scheduled maintenance window.</p>"
         }
       },
-      "documentation":"<p>A JSON object containing the following fields:</p> <ul> <li> <p> <a>UpdateMaintenanceStartTimeInput$DayOfMonth</a> </p> </li> <li> <p> <a>UpdateMaintenanceStartTimeInput$DayOfWeek</a> </p> </li> <li> <p> <a>UpdateMaintenanceStartTimeInput$HourOfDay</a> </p> </li> <li> <p> <a>UpdateMaintenanceStartTimeInput$MinuteOfHour</a> </p> </li> </ul>"
+      "documentation":"<p>A JSON object containing the following fields:</p> <ul> <li> <p> <a>UpdateMaintenanceStartTimeInput$SoftwareUpdatePreferences</a> </p> </li> <li> <p> <a>UpdateMaintenanceStartTimeInput$DayOfMonth</a> </p> </li> <li> <p> <a>UpdateMaintenanceStartTimeInput$DayOfWeek</a> </p> </li> <li> <p> <a>UpdateMaintenanceStartTimeInput$HourOfDay</a> </p> </li> <li> <p> <a>UpdateMaintenanceStartTimeInput$MinuteOfHour</a> </p> </li> </ul>"
     },
     "UpdateMaintenanceStartTimeOutput":{
       "type":"structure",
@@ -5583,13 +5639,19 @@
           "shape":"FileShareARN",
           "documentation":"<p>The Amazon Resource Name (ARN) of the file share to be updated.</p>"
         },
+        "EncryptionType":{
+          "shape":"EncryptionType",
+          "documentation":"<p>A value that specifies the type of server-side encryption that the file share will use for the data that it stores in Amazon S3.</p> <note> <p>We recommend using <code>EncryptionType</code> instead of <code>KMSEncrypted</code> to set the file share encryption method. You do not need to provide values for both parameters.</p> <p>If values for both parameters exist in the same request, then the specified encryption methods must not conflict. For example, if <code>EncryptionType</code> is <code>SseS3</code>, then <code>KMSEncrypted</code> must be <code>false</code>. If <code>EncryptionType</code> is <code>SseKms</code> or <code>DsseKms</code>, then <code>KMSEncrypted</code> must be <code>true</code>.</p> </note>"
+        },
         "KMSEncrypted":{
           "shape":"Boolean",
-          "documentation":"<p>Set to <code>true</code> to use Amazon S3 server-side encryption with your own KMS key, or <code>false</code> to use a key managed by Amazon S3. Optional.</p> <p>Valid Values: <code>true</code> | <code>false</code> </p>"
+          "documentation":"<p>Optional. Set to <code>true</code> to use Amazon S3 server-side encryption with your own KMS key (SSE-KMS), or <code>false</code> to use a key managed by Amazon S3 (SSE-S3). To use dual-layer encryption (DSSE-KMS), set the <code>EncryptionType</code> parameter instead.</p> <note> <p>We recommend using <code>EncryptionType</code> instead of <code>KMSEncrypted</code> to set the file share encryption method. You do not need to provide values for both parameters.</p> <p>If values for both parameters exist in the same request, then the specified encryption methods must not conflict. For example, if <code>EncryptionType</code> is <code>SseS3</code>, then <code>KMSEncrypted</code> must be <code>false</code>. If <code>EncryptionType</code> is <code>SseKms</code> or <code>DsseKms</code>, then <code>KMSEncrypted</code> must be <code>true</code>.</p> </note> <p>Valid Values: <code>true</code> | <code>false</code> </p>",
+          "deprecated":true,
+          "deprecatedMessage":"KMSEncrypted is deprecated, use EncryptionType instead."
         },
         "KMSKey":{
           "shape":"KMSKey",
-          "documentation":"<p>The Amazon Resource Name (ARN) of a symmetric customer master key (CMK) used for Amazon S3 server-side encryption. Storage Gateway does not support asymmetric CMKs. This value can only be set when <code>KMSEncrypted</code> is <code>true</code>. Optional.</p>"
+          "documentation":"<p>Optional. The Amazon Resource Name (ARN) of a symmetric customer master key (CMK) used for Amazon S3 server-side encryption. Storage Gateway does not support asymmetric CMKs. This value must be set if <code>KMSEncrypted</code> is <code>true</code>, or if <code>EncryptionType</code> is <code>SseKms</code> or <code>DsseKms</code>.</p>"
         },
         "NFSFileShareDefaults":{
           "shape":"NFSFileShareDefaults",
@@ -5625,7 +5687,7 @@
         },
         "FileShareName":{
           "shape":"FileShareName",
-          "documentation":"<p>The name of the file share. Optional.</p> <note> <p> <code>FileShareName</code> must be set if an S3 prefix name is set in <code>LocationARN</code>, or if an access point or access point alias is used.</p> </note>"
+          "documentation":"<p>The name of the file share. Optional.</p> <note> <p> <code>FileShareName</code> must be set if an S3 prefix name is set in <code>LocationARN</code>, or if an access point or access point alias is used.</p> <p>A valid NFS file share name can only contain the following characters: <code>a</code>-<code>z</code>, <code>A</code>-<code>Z</code>, <code>0</code>-<code>9</code>, <code>-</code>, <code>.</code>, and <code>_</code>.</p> </note>"
         },
         "CacheAttributes":{
           "shape":"CacheAttributes",
@@ -5633,7 +5695,7 @@
         },
         "NotificationPolicy":{
           "shape":"NotificationPolicy",
-          "documentation":"<p>The notification policy of the file share. <code>SettlingTimeInSeconds</code> controls the number of seconds to wait after the last point in time a client wrote to a file before generating an <code>ObjectUploaded</code> notification. Because clients can make many small writes to files, it's best to set this parameter for as long as possible to avoid generating multiple notifications for the same file in a small time period.</p> <note> <p> <code>SettlingTimeInSeconds</code> has no effect on the timing of the object uploading to Amazon S3, only the timing of the notification.</p> </note> <p>The following example sets <code>NotificationPolicy</code> on with <code>SettlingTimeInSeconds</code> set to 60.</p> <p> <code>{\\\"Upload\\\": {\\\"SettlingTimeInSeconds\\\": 60}}</code> </p> <p>The following example sets <code>NotificationPolicy</code> off.</p> <p> <code>{}</code> </p>"
+          "documentation":"<p>The notification policy of the file share. <code>SettlingTimeInSeconds</code> controls the number of seconds to wait after the last point in time a client wrote to a file before generating an <code>ObjectUploaded</code> notification. Because clients can make many small writes to files, it's best to set this parameter for as long as possible to avoid generating multiple notifications for the same file in a small time period.</p> <note> <p> <code>SettlingTimeInSeconds</code> has no effect on the timing of the object uploading to Amazon S3, only the timing of the notification.</p> <p>This setting is not meant to specify an exact time at which the notification will be sent. In some cases, the gateway might require more than the specified delay time to generate and send notifications.</p> </note> <p>The following example sets <code>NotificationPolicy</code> on with <code>SettlingTimeInSeconds</code> set to 60.</p> <p> <code>{\\\"Upload\\\": {\\\"SettlingTimeInSeconds\\\": 60}}</code> </p> <p>The following example sets <code>NotificationPolicy</code> off.</p> <p> <code>{}</code> </p>"
         },
         "AuditDestinationARN":{
           "shape":"AuditDestinationARN",
@@ -5660,13 +5722,19 @@
           "shape":"FileShareARN",
           "documentation":"<p>The Amazon Resource Name (ARN) of the SMB file share that you want to update.</p>"
         },
+        "EncryptionType":{
+          "shape":"EncryptionType",
+          "documentation":"<p>A value that specifies the type of server-side encryption that the file share will use for the data that it stores in Amazon S3.</p> <note> <p>We recommend using <code>EncryptionType</code> instead of <code>KMSEncrypted</code> to set the file share encryption method. You do not need to provide values for both parameters.</p> <p>If values for both parameters exist in the same request, then the specified encryption methods must not conflict. For example, if <code>EncryptionType</code> is <code>SseS3</code>, then <code>KMSEncrypted</code> must be <code>false</code>. If <code>EncryptionType</code> is <code>SseKms</code> or <code>DsseKms</code>, then <code>KMSEncrypted</code> must be <code>true</code>.</p> </note>"
+        },
         "KMSEncrypted":{
           "shape":"Boolean",
-          "documentation":"<p>Set to <code>true</code> to use Amazon S3 server-side encryption with your own KMS key, or <code>false</code> to use a key managed by Amazon S3. Optional.</p> <p>Valid Values: <code>true</code> | <code>false</code> </p>"
+          "documentation":"<p>Optional. Set to <code>true</code> to use Amazon S3 server-side encryption with your own KMS key (SSE-KMS), or <code>false</code> to use a key managed by Amazon S3 (SSE-S3). To use dual-layer encryption (DSSE-KMS), set the <code>EncryptionType</code> parameter instead.</p> <note> <p>We recommend using <code>EncryptionType</code> instead of <code>KMSEncrypted</code> to set the file share encryption method. You do not need to provide values for both parameters.</p> <p>If values for both parameters exist in the same request, then the specified encryption methods must not conflict. For example, if <code>EncryptionType</code> is <code>SseS3</code>, then <code>KMSEncrypted</code> must be <code>false</code>. If <code>EncryptionType</code> is <code>SseKms</code> or <code>DsseKms</code>, then <code>KMSEncrypted</code> must be <code>true</code>.</p> </note> <p>Valid Values: <code>true</code> | <code>false</code> </p>",
+          "deprecated":true,
+          "deprecatedMessage":"KMSEncrypted is deprecated, use EncryptionType instead."
         },
         "KMSKey":{
           "shape":"KMSKey",
-          "documentation":"<p>The Amazon Resource Name (ARN) of a symmetric customer master key (CMK) used for Amazon S3 server-side encryption. Storage Gateway does not support asymmetric CMKs. This value can only be set when <code>KMSEncrypted</code> is <code>true</code>. Optional.</p>"
+          "documentation":"<p>Optional. The Amazon Resource Name (ARN) of a symmetric customer master key (CMK) used for Amazon S3 server-side encryption. Storage Gateway does not support asymmetric CMKs. This value must be set if <code>KMSEncrypted</code> is <code>true</code>, or if <code>EncryptionType</code> is <code>SseKms</code> or <code>DsseKms</code>.</p>"
         },
         "DefaultStorageClass":{
           "shape":"StorageClass",
@@ -5690,7 +5758,7 @@
         },
         "SMBACLEnabled":{
           "shape":"Boolean",
-          "documentation":"<p>Set this value to <code>true</code> to enable access control list (ACL) on the SMB file share. Set it to <code>false</code> to map file and directory permissions to the POSIX permissions.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/storagegateway/latest/userguide/smb-acl.html\">Using Microsoft Windows ACLs to control access to an SMB file share</a> in the <i>Storage Gateway User Guide</i>.</p> <p>Valid Values: <code>true</code> | <code>false</code> </p>"
+          "documentation":"<p>Set this value to <code>true</code> to enable access control list (ACL) on the SMB file share. Set it to <code>false</code> to map file and directory permissions to the POSIX permissions.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/filegateway/latest/files3/smb-acl.html\">Using Windows ACLs to limit SMB file share access</a> in the <i>Amazon S3 File Gateway User Guide</i>.</p> <p>Valid Values: <code>true</code> | <code>false</code> </p>"
         },
         "AccessBasedEnumeration":{
           "shape":"Boolean",
@@ -5718,7 +5786,7 @@
         },
         "FileShareName":{
           "shape":"FileShareName",
-          "documentation":"<p>The name of the file share. Optional.</p> <note> <p> <code>FileShareName</code> must be set if an S3 prefix name is set in <code>LocationARN</code>, or if an access point or access point alias is used.</p> </note>"
+          "documentation":"<p>The name of the file share. Optional.</p> <note> <p> <code>FileShareName</code> must be set if an S3 prefix name is set in <code>LocationARN</code>, or if an access point or access point alias is used.</p> <p>A valid SMB file share name cannot contain the following characters: <code>[</code>,<code>]</code>,<code>#</code>,<code>;</code>,<code>&lt;</code>,<code>&gt;</code>,<code>:</code>,<code>\"</code>,<code>\\</code>,<code>/</code>,<code>|</code>,<code>?</code>,<code>*</code>,<code>+</code>, or ASCII control characters <code>1-31</code>.</p> </note>"
         },
         "CacheAttributes":{
           "shape":"CacheAttributes",
@@ -5726,7 +5794,7 @@
         },
         "NotificationPolicy":{
           "shape":"NotificationPolicy",
-          "documentation":"<p>The notification policy of the file share. <code>SettlingTimeInSeconds</code> controls the number of seconds to wait after the last point in time a client wrote to a file before generating an <code>ObjectUploaded</code> notification. Because clients can make many small writes to files, it's best to set this parameter for as long as possible to avoid generating multiple notifications for the same file in a small time period.</p> <note> <p> <code>SettlingTimeInSeconds</code> has no effect on the timing of the object uploading to Amazon S3, only the timing of the notification.</p> </note> <p>The following example sets <code>NotificationPolicy</code> on with <code>SettlingTimeInSeconds</code> set to 60.</p> <p> <code>{\\\"Upload\\\": {\\\"SettlingTimeInSeconds\\\": 60}}</code> </p> <p>The following example sets <code>NotificationPolicy</code> off.</p> <p> <code>{}</code> </p>"
+          "documentation":"<p>The notification policy of the file share. <code>SettlingTimeInSeconds</code> controls the number of seconds to wait after the last point in time a client wrote to a file before generating an <code>ObjectUploaded</code> notification. Because clients can make many small writes to files, it's best to set this parameter for as long as possible to avoid generating multiple notifications for the same file in a small time period.</p> <note> <p> <code>SettlingTimeInSeconds</code> has no effect on the timing of the object uploading to Amazon S3, only the timing of the notification.</p> <p>This setting is not meant to specify an exact time at which the notification will be sent. In some cases, the gateway might require more than the specified delay time to generate and send notifications.</p> </note> <p>The following example sets <code>NotificationPolicy</code> on with <code>SettlingTimeInSeconds</code> set to 60.</p> <p> <code>{\\\"Upload\\\": {\\\"SettlingTimeInSeconds\\\": 60}}</code> </p> <p>The following example sets <code>NotificationPolicy</code> off.</p> <p> <code>{}</code> </p>"
         },
         "OplocksEnabled":{
           "shape":"Boolean",
@@ -5795,7 +5863,7 @@
         "GatewayARN":{"shape":"GatewayARN"},
         "SMBSecurityStrategy":{
           "shape":"SMBSecurityStrategy",
-          "documentation":"<p>Specifies the type of security strategy.</p> <p>ClientSpecified: if you use this option, requests are established based on what is negotiated by the client. This option is recommended when you want to maximize compatibility across different clients in your environment. Supported only in S3 File Gateway.</p> <p>MandatorySigning: if you use this option, file gateway only allows connections from SMBv2 or SMBv3 clients that have signing enabled. This option works with SMB clients on Microsoft Windows Vista, Windows Server 2008 or newer.</p> <p>MandatoryEncryption: if you use this option, file gateway only allows connections from SMBv3 clients that have encryption enabled. This option is highly recommended for environments that handle sensitive data. This option works with SMB clients on Microsoft Windows 8, Windows Server 2012 or newer.</p>"
+          "documentation":"<p>Specifies the type of security strategy.</p> <p> <code>ClientSpecified</code>: If you choose this option, requests are established based on what is negotiated by the client. This option is recommended when you want to maximize compatibility across different clients in your environment. Supported only for S3 File Gateway.</p> <p> <code>MandatorySigning</code>: If you choose this option, File Gateway only allows connections from SMBv2 or SMBv3 clients that have signing enabled. This option works with SMB clients on Microsoft Windows Vista, Windows Server 2008 or newer.</p> <p> <code>MandatoryEncryption</code>: If you choose this option, File Gateway only allows connections from SMBv3 clients that have encryption enabled. This option is recommended for environments that handle sensitive data. This option works with SMB clients on Microsoft Windows 8, Windows Server 2012 or newer.</p> <p> <code>MandatoryEncryptionNoAes128</code>: If you choose this option, File Gateway only allows connections from SMBv3 clients that use 256-bit AES encryption algorithms. 128-bit algorithms are not allowed. This option is recommended for environments that handle sensitive data. It works with SMB clients on Microsoft Windows 8, Windows Server 2012, or later.</p>"
         }
       }
     },
@@ -5929,7 +5997,8 @@
     "VolumeARN":{
       "type":"string",
       "max":500,
-      "min":50
+      "min":50,
+      "pattern":"arn:(aws(|-cn|-us-gov|-iso[A-Za-z0-9_-]*)):storagegateway:[a-z\\-0-9]+:[0-9]+:gateway\\/(.+)\\/volume\\/vol-(\\S+)"
     },
     "VolumeARNs":{
       "type":"list",
@@ -6054,5 +6123,5 @@
     "long":{"type":"long"},
     "string":{"type":"string"}
   },
-  "documentation":"<fullname>Storage Gateway Service</fullname> <p>Storage Gateway is the service that connects an on-premises software appliance with cloud-based storage to provide seamless and secure integration between an organization's on-premises IT environment and the Amazon Web Services storage infrastructure. The service enables you to securely upload data to the Amazon Web Services Cloud for cost effective backup and rapid disaster recovery.</p> <p>Use the following links to get started using the <i>Storage Gateway Service API Reference</i>:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/storagegateway/latest/userguide/AWSStorageGatewayAPI.html#AWSStorageGatewayHTTPRequestsHeaders\">Storage Gateway required request headers</a>: Describes the required headers that you must send with every POST request to Storage Gateway.</p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/storagegateway/latest/userguide/AWSStorageGatewayAPI.html#AWSStorageGatewaySigningRequests\">Signing requests</a>: Storage Gateway requires that you authenticate every request you send; this topic describes how sign such a request.</p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/storagegateway/latest/userguide/AWSStorageGatewayAPI.html#APIErrorResponses\">Error responses</a>: Provides reference information about Storage Gateway errors.</p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/storagegateway/latest/APIReference/API_Operations.html\">Operations in Storage Gateway</a>: Contains detailed descriptions of all Storage Gateway operations, their request parameters, response elements, possible errors, and examples of requests and responses.</p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/general/latest/gr/sg.html\">Storage Gateway endpoints and quotas</a>: Provides a list of each Amazon Web Services Region and the endpoints available for use with Storage Gateway.</p> </li> </ul> <note> <p>Storage Gateway resource IDs are in uppercase. When you use these resource IDs with the Amazon EC2 API, EC2 expects resource IDs in lowercase. You must change your resource ID to lowercase to use it with the EC2 API. For example, in Storage Gateway the ID for a volume might be <code>vol-AA22BB012345DAF670</code>. When you use this ID with the EC2 API, you must change it to <code>vol-aa22bb012345daf670</code>. Otherwise, the EC2 API might not behave as expected.</p> </note> <important> <p>IDs for Storage Gateway volumes and Amazon EBS snapshots created from gateway volumes are changing to a longer format. Starting in December 2016, all new volumes and snapshots will be created with a 17-character string. Starting in April 2016, you will be able to use these longer IDs so you can test your systems with the new format. For more information, see <a href=\"http://aws.amazon.com/ec2/faqs/#longer-ids\">Longer EC2 and EBS resource IDs</a>.</p> <p>For example, a volume Amazon Resource Name (ARN) with the longer volume ID format looks like the following:</p> <p> <code>arn:aws:storagegateway:us-west-2:111122223333:gateway/sgw-12A3456B/volume/vol-1122AABBCCDDEEFFG</code>.</p> <p>A snapshot ID with the longer ID format looks like the following: <code>snap-78e226633445566ee</code>.</p> <p>For more information, see <a href=\"http://forums.aws.amazon.com/ann.jspa?annID=3557\">Announcement: Heads-up – Longer Storage Gateway volume and snapshot IDs coming in 2016</a>.</p> </important>"
+  "documentation":"<fullname>Storage Gateway Service</fullname> <important> <p>Amazon FSx File Gateway is no longer available to new customers. Existing customers of FSx File Gateway can continue to use the service normally. For capabilities similar to FSx File Gateway, visit <a href=\"https://aws.amazon.com/blogs/storage/switch-your-file-share-access-from-amazon-fsx-file-gateway-to-amazon-fsx-for-windows-file-server/\">this blog post</a>.</p> </important> <p>Storage Gateway is the service that connects an on-premises software appliance with cloud-based storage to provide seamless and secure integration between an organization's on-premises IT environment and the Amazon Web Services storage infrastructure. The service enables you to securely upload data to the Amazon Web Services Cloud for cost effective backup and rapid disaster recovery.</p> <p>Use the following links to get started using the <i>Storage Gateway Service API Reference</i>:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/storagegateway/latest/userguide/AWSStorageGatewayAPI.html#AWSStorageGatewayHTTPRequestsHeaders\">Storage Gateway required request headers</a>: Describes the required headers that you must send with every POST request to Storage Gateway.</p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/storagegateway/latest/userguide/AWSStorageGatewayAPI.html#AWSStorageGatewaySigningRequests\">Signing requests</a>: Storage Gateway requires that you authenticate every request you send; this topic describes how sign such a request.</p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/storagegateway/latest/userguide/AWSStorageGatewayAPI.html#APIErrorResponses\">Error responses</a>: Provides reference information about Storage Gateway errors.</p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/storagegateway/latest/APIReference/API_Operations.html\">Operations in Storage Gateway</a>: Contains detailed descriptions of all Storage Gateway operations, their request parameters, response elements, possible errors, and examples of requests and responses.</p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/general/latest/gr/sg.html\">Storage Gateway endpoints and quotas</a>: Provides a list of each Amazon Web Services Region and the endpoints available for use with Storage Gateway.</p> </li> </ul> <note> <p>Storage Gateway resource IDs are in uppercase. When you use these resource IDs with the Amazon EC2 API, EC2 expects resource IDs in lowercase. You must change your resource ID to lowercase to use it with the EC2 API. For example, in Storage Gateway the ID for a volume might be <code>vol-AA22BB012345DAF670</code>. When you use this ID with the EC2 API, you must change it to <code>vol-aa22bb012345daf670</code>. Otherwise, the EC2 API might not behave as expected.</p> </note> <important> <p>IDs for Storage Gateway volumes and Amazon EBS snapshots created from gateway volumes are changing to a longer format. Starting in December 2016, all new volumes and snapshots will be created with a 17-character string. Starting in April 2016, you will be able to use these longer IDs so you can test your systems with the new format. For more information, see <a href=\"http://aws.amazon.com/ec2/faqs/#longer-ids\">Longer EC2 and EBS resource IDs</a>.</p> <p>For example, a volume Amazon Resource Name (ARN) with the longer volume ID format looks like the following:</p> <p> <code>arn:aws:storagegateway:us-west-2:111122223333:gateway/sgw-12A3456B/volume/vol-1122AABBCCDDEEFFG</code>.</p> <p>A snapshot ID with the longer ID format looks like the following: <code>snap-78e226633445566ee</code>.</p> <p>For more information, see <a href=\"http://forums.aws.amazon.com/ann.jspa?annID=3557\">Announcement: Heads-up – Longer Storage Gateway volume and snapshot IDs coming in 2016</a>.</p> </important>"
 }

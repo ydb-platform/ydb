@@ -32,22 +32,18 @@ std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
 template<typename TRequest, typename TResponse>
 std::shared_ptr<TResultHolder<TResponse>> DoRequest(NActors::TTestActorRuntime& runtime, const TRequest& request, TString path = "/Root/test_db/topic1", TString database = "/Root/test_db") {
     auto result = std::make_shared<TResultHolder<TResponse>>();
+    auto edgeActor = runtime.AllocateEdgeActor();
 
     auto ctx = new TRequestCtx<TRequest, TResponse>(
         request,
         path,
         database,
-        result
+        result,
+        edgeActor
     );
     runtime.Register(CreateCreateTopicActor(ctx));
 
-    for (int i = 0; i < 50; ++i) {
-        if (result->ResultStatus) {
-            break;
-        }
-
-        Sleep(TDuration::MilliSeconds(50));
-    }
+    runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(edgeActor, TDuration::Seconds(10));
 
     UNIT_ASSERT_C(result->ResultStatus, "The operation is still in progress");
     return result;

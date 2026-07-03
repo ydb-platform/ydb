@@ -546,6 +546,20 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
                 && path->GetNativeYtTypeFlags() == outTable.RowSpec->GetNativeYtTypeFlags()
                 && firstNativeType == path->GetNativeYtType();
         });
+
+        if (sorted && equalSort && useNativeDescSort) {
+            TYtOutTableInfo outTableForDescJoinCheck(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+            outTableForDescJoinCheck.RowSpec->CopySortness(ctx, *inputPaths.front()->Table->RowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
+            outTableForDescJoinCheck.RowSpec->ClearSortness(ctx, sorted->GetContent().size());
+
+            TKeySelectorBuilder builderForDescJoinCheck(assume.Pos(), ctx, useNativeDescSort, outItemType);
+            builderForDescJoinCheck.ProcessRowSpec(*outTableForDescJoinCheck.RowSpec);
+
+            if (builderForDescJoinCheck.NeedMap()) {
+                canMerge = false;
+            }
+        }
+
         if (canMerge) {
             if (sorted) {
                 outTable.RowSpec->CopySortness(ctx, *inputPaths.front()->Table->RowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);

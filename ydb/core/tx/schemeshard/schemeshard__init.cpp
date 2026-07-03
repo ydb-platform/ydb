@@ -1670,7 +1670,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     domainInfo->SetSecurityStateVersion(rowset.GetValueOrDefault<Schema::SubDomains::SecurityStateVersion>());
                     domainInfo->SetDiskQuotaExceeded(rowset.GetValueOrDefault<Schema::SubDomains::DiskQuotaExceeded>(false));
                     if (domainInfo->GetDiskQuotaExceeded()) {
-                        Self->ChangeDiskSpaceQuotaExceeded(+1);
+                        Self->ChangeSimpleCounter(COUNTER_DISK_SPACE_QUOTA_EXCEEDED, +1);
+                    }
+                    domainInfo->SetSmallBlobsQuotaExceeded(rowset.GetValueOrDefault<Schema::SubDomains::SmallBlobsQuotaExceeded>(false));
+                    if (domainInfo->GetSmallBlobsQuotaExceeded()) {
+                        Self->ChangeSimpleCounter(COUNTER_SMALL_BLOBS_QUOTA_EXCEEDED, +1);
                     }
 
                     if (rowset.HaveValue<Schema::SubDomains::AuditSettings>()) {
@@ -2992,7 +2996,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto it = Self->Topics.find(pathId);
                 Y_ABORT_UNLESS(it != Self->Topics.end());
 
-                alterData->TotalPartitionCount = it->second->GetTotalPartitionCountWithAlter();
+                alterData->TotalPartitionCount = 0;
+                alterData->ActivePartitionCount = 0;
+                for (const auto& [_, partition] : it->second->Partitions) {
+                    if (partition->AlterVersion <= alterData->AlterVersion) {
+                        ++alterData->TotalPartitionCount;
+                        if (partition->Status == NKikimrPQ::ETopicPartitionStatus::Active) {
+                            ++alterData->ActivePartitionCount;
+                        }
+                    }
+                }
                 alterData->BalancerTabletID = it->second->BalancerTabletID;
                 alterData->BalancerShardIdx = it->second->BalancerShardIdx;
                 it->second->AlterData = alterData;
@@ -4799,6 +4812,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             case ETabletType::BackupController:
                 Self->TabletCounters->Simple()[COUNTER_BACKUP_CONTROLLER_TABLET_COUNT].Add(1);
                 break;
+            case ETabletType::TestShard:
+                Self->TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Add(1);
+                break;
             default:
                 LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "dont know how to interpret tablet type"
@@ -5481,6 +5497,153 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Read SetColumnConstraint operations
+        {
+            THashMap<TIndexBuildId, std::shared_ptr<TSetColumnConstraintOperationInfo>> loadedOperations;
+
+            {
+                auto rowset = db.Table<Schema::SetColumnConstraint>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    auto operationInfo = std::make_shared<TSetColumnConstraintOperationInfo>();
+
+                    TIndexBuildId operationId = TIndexBuildId(rowset.GetValue<Schema::SetColumnConstraint::OperationId>());
+                    operationInfo->Id = operationId;
+
+                    operationInfo->TablePathId = TPathId(
+                        rowset.GetValue<Schema::SetColumnConstraint::TableOwnerId>(),
+                        rowset.GetValue<Schema::SetColumnConstraint::TableLocalId>()
+                    );
+
+                    {
+                        TPath tablePath = TPath::Init(operationInfo->TablePathId, Self);
+                        operationInfo->DomainPathId = tablePath.GetPathIdForDomain();
+                    }
+
+                    TString serializedColumns = rowset.GetValue<Schema::SetColumnConstraint::SerializedColumnNames>();
+                    operationInfo->SetNotNullColumns = DeserializeSetColumnConstraintColumnNames(serializedColumns);
+
+                    operationInfo->ValidationFailed = rowset.GetValueOrDefault<Schema::SetColumnConstraint::ValidationFailed>(false);
+                    operationInfo->OperationState = TSetColumnConstraintOperationInfo::EOperationState(
+                        rowset.GetValue<Schema::SetColumnConstraint::OperationState>()
+                    );
+
+                    operationInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::SetColumnConstraint::StartTime>(0));
+                    operationInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::SetColumnConstraint::EndTime>(0));
+                    if (rowset.HaveValue<Schema::SetColumnConstraint::UserSID>()) {
+                        operationInfo->UserSID = rowset.GetValue<Schema::SetColumnConstraint::UserSID>();
+                    }
+
+                    TTxId subStateTxId = rowset.GetValueOrDefault<Schema::SetColumnConstraint::SubStateTxId>(TTxId());
+                    NKikimrScheme::EStatus subStateTxStatus = rowset.GetValueOrDefault<Schema::SetColumnConstraint::SubStateTxStatus>(NKikimrScheme::StatusSuccess);
+                    bool subStateTxDone = rowset.GetValueOrDefault<Schema::SetColumnConstraint::SubStateTxDone>(false);
+
+                    // LockTxId is stored separately so it survives SubStateTxId overwrites in later phases
+                    operationInfo->LockTxId = rowset.GetValueOrDefault<Schema::SetColumnConstraint::LockTxId>(TTxId());
+
+                    switch (operationInfo->OperationState) {
+                        case TSetColumnConstraintOperationInfo::EOperationState::Locking:
+                            // We set the operationInfo->LockTxId value above in the code
+                            operationInfo->LockTxStatus = subStateTxStatus;
+                            operationInfo->LockTxDone = subStateTxDone;
+                            if (subStateTxId && !subStateTxDone) {
+                                Self->TxIdToSetColumnConstraintOperations[subStateTxId] = operationId;
+                            }
+                            break;
+                        case TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites:
+                            operationInfo->LockNullWritesTxId = subStateTxId;
+                            operationInfo->LockNullWritesTxStatus = subStateTxStatus;
+                            operationInfo->LockNullWritesTxDone = subStateTxDone;
+                            if (subStateTxId && !subStateTxDone) {
+                                Self->TxIdToSetColumnConstraintOperations[subStateTxId] = operationId;
+                            }
+                            break;
+                        case TSetColumnConstraintOperationInfo::EOperationState::Validating:
+                            // No active sub-state tx; shards handle validation
+                            break;
+                        case TSetColumnConstraintOperationInfo::EOperationState::Finishing:
+                            operationInfo->UnlockNullWritesTxId = subStateTxId;
+                            operationInfo->UnlockNullWritesTxStatus = subStateTxStatus;
+                            operationInfo->UnlockNullWritesTxDone = subStateTxDone;
+                            if (subStateTxId && !subStateTxDone) {
+                                Self->TxIdToSetColumnConstraintOperations[subStateTxId] = operationId;
+                            }
+                            break;
+                        case TSetColumnConstraintOperationInfo::EOperationState::Unlocking:
+                            operationInfo->UnlockTxId = subStateTxId;
+                            operationInfo->UnlockTxStatus = subStateTxStatus;
+                            operationInfo->UnlockTxDone = subStateTxDone;
+                            if (subStateTxId && !subStateTxDone) {
+                                Self->TxIdToSetColumnConstraintOperations[subStateTxId] = operationId;
+                            }
+                            break;
+                        case TSetColumnConstraintOperationInfo::EOperationState::Done:
+                        case TSetColumnConstraintOperationInfo::EOperationState::Invalid:
+                            break;
+                    }
+
+                    loadedOperations[operationId] = operationInfo;
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+
+            // Read per-shard validation statuses in SetColumnConstraint
+            {
+                auto rowset = db.Table<Schema::SetColumnConstraintShardStatus>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    TIndexBuildId operationId = TIndexBuildId(rowset.GetValue<Schema::SetColumnConstraintShardStatus::OperationId>());
+                    TShardIdx shardIdx(
+                        rowset.GetValue<Schema::SetColumnConstraintShardStatus::OwnerShardIdx>(),
+                        rowset.GetValue<Schema::SetColumnConstraintShardStatus::LocalShardIdx>()
+                    );
+                    auto validateStatus = rowset.GetValue<Schema::SetColumnConstraintShardStatus::Status>();
+                    TString issue = rowset.GetValueOrDefault<Schema::SetColumnConstraintShardStatus::Issue>(TString{});
+
+                    auto* opPtr = loadedOperations.FindPtr(operationId);
+                    if (!opPtr) {
+                        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "SetColumnConstraint shard status: operation not found, id# " << operationId);
+                        if (!rowset.Next()) {
+                            return false;
+                        }
+                        continue;
+                    }
+                    auto& operationInfo = **opPtr;
+
+                    TValidateColumnConstraintShardStatus shardStatus(TSerializedTableRange{}, "");
+                    shardStatus.ValidateStatus = validateStatus;
+                    shardStatus.DebugMessage = issue;
+
+                    operationInfo.ValidationShards.emplace(shardIdx, std::move(shardStatus));
+                    operationInfo.DoneValidationShards.insert(shardIdx);
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+
+            for (auto& [id, operationInfo] : loadedOperations) {
+                Self->AddSetColumnConstraintOperation(operationInfo);
+                OnComplete.ToProgress(id);
+            }
+
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "SetColumnConstraint"
+                    << ", records: " << Self->SetColumnConstraintOperations.size()
+                    << ", at schemeshard: " << Self->TabletID());
+        }
+
         // Read snapshot tables
         {
             ui64 records = 0;
@@ -5707,6 +5870,49 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         {
             if (!Self->BackgroundSessionsManager->LoadIdempotency(txc)) {
                 return false;
+            }
+        }
+
+        // Read test shard sets
+        {
+            auto rowset = db.Table<Schema::TestShardSet>().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::TestShardSet::PathId>());
+                ui64 alterVersion = rowset.GetValue<Schema::TestShardSet::AlterVersion>();
+                TString serializedTestShards = rowset.GetValue<Schema::TestShardSet::TestShards>();
+                TString serializedCmdInitialize = rowset.GetValue<Schema::TestShardSet::CmdInitialize>();
+
+                TTestShardSetInfo::TPtr testShardSetInfo = new TTestShardSetInfo(alterVersion);
+
+                if (!serializedTestShards.empty()) {
+                    NKikimrSchemeOp::TTestShardSetDescription description;
+                    Y_PROTOBUF_SUPPRESS_NODISCARD description.ParseFromString(serializedTestShards);
+                    for (const auto& shardDesc : description.GetShards()) {
+                        TLocalShardIdx localShardIdx(ui64(shardDesc.GetShardIdx()));
+                        TShardIdx shardIdx(Self->TabletID(), localShardIdx);
+                        TTabletId tabletId(ui64(shardDesc.GetTabletId()));
+                        if (auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx)) {
+                            tabletId = shardInfo->TabletID;
+                        }
+                        testShardSetInfo->TestShards[shardIdx] = tabletId;
+                    }
+                }
+
+                if (!serializedCmdInitialize.empty()) {
+                    Y_PROTOBUF_SUPPRESS_NODISCARD testShardSetInfo->CmdInitialize.ParseFromString(serializedCmdInitialize);
+                }
+
+                Self->TestShardSets[pathId] = testShardSetInfo;
+                Self->IncrementPathDbRefCount(pathId);
+                Self->TabletCounters->Simple()[COUNTER_TEST_SHARD_SET_COUNT].Add(1);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
             }
         }
 

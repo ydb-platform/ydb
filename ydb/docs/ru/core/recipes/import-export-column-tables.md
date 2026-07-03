@@ -123,7 +123,7 @@ SELECT * FROM `external/backup/lineitem_sql`;
 
 ## Экспорт и импорт с помощью Apache Spark™ {#spark}
 
-Использование [коннектора](../integrations/ingestion/spark.md) {{ ydb-short-name }} для Apache Spark™ является гибким и масштабируемым решением для экспорта и импорта больших объемов данных.
+Использование [коннектора](../integrations/query-engines/spark.md) {{ ydb-short-name }} для Apache Spark™ является гибким и масштабируемым решением для экспорта и импорта больших объемов данных.
 
 ### Предварительные требования
 

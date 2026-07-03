@@ -82,12 +82,16 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
 
             // update in-memory metrics
             i64 allocatedSizeIncrement;
-            if (slot->UpdateVDiskMetrics(m, &allocatedSizeIncrement) && slot->Group) {
+            bool statusFlagsChanged;
+            slot->UpdateVDiskMetrics(m, &allocatedSizeIncrement, &statusFlagsChanged);
+            if (statusFlagsChanged && slot->Group) {
                 dirtyGroups.insert(slot->Group);
+            }
+            if (slot->Group) {
                 groupsToCheck.insert(slot->Group->ID);
             }
             if (allocatedSizeIncrement && !slot->IsBeingDeleted()) {
-                const TGroupInfo *group = FindGroup(slot->GroupId);
+                const TGroupInfo *group = FindGroup(slot->GroupId); // we don't refer to slot->Group because we account donors too
                 Y_ABORT_UNLESS(group);
                 StoragePoolStat->UpdateAllocatedSize(TStoragePoolStat::ConvertId(group->StoragePoolId), allocatedSizeIncrement);
             }
@@ -140,6 +144,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
             }
 
             if (pdisk->UpdatePDiskMetrics(m, now)) {
+                // this PDisk just did obtain full metrics set, we can unblock any pending SelectGroups operations
                 for (auto& [id, slot] : pdisk->VSlotsOnPDisk) {
                     if (slot->Group) {
                         groupsToCheck.insert(slot->Group->ID);

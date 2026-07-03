@@ -17,6 +17,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
+#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
 #include <ydb/library/login/login.h>
 
@@ -343,6 +344,11 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropStreamingQuery);
     DROP_BY_PATH_ID_HELPERS(DropStreamingQuery);
     void TestCreateStreamingQueryOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults);
+
+    // test shard set
+    GENERIC_HELPERS(CreateTestShardSet);
+    GENERIC_HELPERS(DropTestShardSet);
+    TString CreateTestShardSetConfig(const TString& name, ui64 count = 1);
 
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
@@ -799,4 +805,10 @@ namespace NSchemeShardUT_Private {
 
     void MeteringDataEqual(const TString& leftMsg, const TString& rightMsg);
 
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(TTestActorRuntime& runtime, ui64 txId, ui64 schemeShard, const TString& dbName, const TString& tablePath, const TVector<TString>& notNullColumns);
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraintWithoutSettings(TTestActorRuntime& runtime, ui64 txId, ui64 schemeShard, const TString& dbName, const TString& tablePath, const TVector<TString>& notNullColumns);
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(TTestActorRuntime& runtime, ui64 txId, ui64 schemeShard, const TString& dbName, const TString& tablePath, const TVector<TString>& notNullColumns, const TString& userSID);
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(TTestActorRuntime& runtime, ui64 txId, ui64 schemeShard, const TString& dbName, const TString& tablePath, const TVector<TString>& notNullColumns, const TString& userSID, bool skipSettings);
+    void AsyncSetColumnConstraint(TTestActorRuntime& runtime, ui64 txId, ui64 schemeShard, const TString& dbName, const TString& tablePath, const TVector<TString>& notNullColumns);
+    void TestCheckColumnsNotNull(TTestActorRuntime& runtime, const TString& tablePath, const std::map<TString, bool>& expectedColumnNotNullStates);
 } //NSchemeShardUT_Private

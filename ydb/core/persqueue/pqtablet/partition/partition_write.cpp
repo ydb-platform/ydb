@@ -374,7 +374,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 PartitionWriteQuotaWaitCounter->IncFor(PartitionQuotaWaitTimeForCurrentBlob.MilliSeconds());
             }
             if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion) {
-                ++offset;
+                offset += writeResponse.Msg.LogicalMessageCount;
             }
         } else if (response.IsOwnership()) {
             const auto& r = response.GetOwnership();
@@ -776,7 +776,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
             PendingRequests.back().WaitPreviousWriteSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(PendingRequests.back().Span.GetTraceId()), "Topic.Partition.WaitPreviousWrite");
         }
         if (offset && needToChangeOffset) {
-            ++*offset;
+            *offset += msg.LogicalMessageCount;
         }
     }
     if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota()) {
@@ -1194,7 +1194,7 @@ void TPartition::SendInfoToAutopartitioningManager(const TWriteMsg& p) {
 }
 
 bool TPartition::ValidateBatchMessage(const TActorContext& ctx, const TWriteMsg& p) {
-    if (p.Msg.MessageCount <= 1) {
+    if (p.Msg.LogicalMessageCount <= 1) {
         return true;
     }
 
@@ -1471,7 +1471,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     TClientBlob blob(TString{p.Msg.SourceId}, p.Msg.SeqNo, std::move(p.Msg.Data), partData, WriteTimestampEstimate,
                      TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
                      p.Msg.UncompressedSize, std::move(p.Msg.PartitionKey), std::move(p.Msg.ExplicitHashKey),
-                     p.Msg.MessageCount, p.Msg.IsBatch); //remove curOffset when LB will report CTime
+                     p.Msg.LogicalMessageCount, p.Msg.IsBatch); //remove curOffset when LB will report CTime
 
     const ui64 writeLagMs =
         (WriteTimestamp - TInstant::MilliSeconds(p.Msg.CreateTimestamp)).MilliSeconds();
@@ -1550,7 +1550,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             CurrentTimestamp,
             p.Msg.ProducerEpoch);
 
-        curOffset += p.Msg.MessageCount;
+        curOffset += p.Msg.LogicalMessageCount;
         BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
     }
     return true;

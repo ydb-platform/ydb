@@ -109,7 +109,7 @@ private:
 DEFINE_REFCOUNTED_TYPE(TLogicalType)
 
 TLogicalTypePtr ParseType(TStringBuf typeString);
-TString ToString(const TLogicalType& logicalType);
+std::string ToString(const TLogicalType& logicalType);
 void FormatValue(TStringBuilderBase* builder, const TLogicalType& logicalType, TStringBuf spec);
 
 //! Debug printers for Gtest unittests.

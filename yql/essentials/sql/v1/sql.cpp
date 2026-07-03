@@ -21,9 +21,9 @@ TAstNode* SqlASTToYql(const google::protobuf::Message& protoAst, TContext& ctx) 
     }
 
     try {
-        TSqlQuery query(ctx, ctx.Settings.Mode, true);
+        TSqlQuery query(ctx, ctx.Settings.Mode, /*topLevel=*/true);
         TNodePtr node(query.Build(static_cast<const TSQLv1ParserAST&>(protoAst)));
-        if (node && node->Init(ctx, nullptr)) {
+        if (node && node->Init(ctx, /*src=*/nullptr)) {
             return node->Translate(ctx);
         }
     } catch (const NAST::TTooManyErrors&) {
@@ -35,9 +35,9 @@ TAstNode* SqlASTToYql(const google::protobuf::Message& protoAst, TContext& ctx) 
 
 TAstNode* SqlASTsToYqls(const std::vector<::NSQLv1Generated::TRule_sql_stmt_core>& ast, TContext& ctx) {
     try {
-        TSqlQuery query(ctx, ctx.Settings.Mode, true);
+        TSqlQuery query(ctx, ctx.Settings.Mode, /*topLevel=*/true);
         TNodePtr node(query.Build(ast));
-        if (node && node->Init(ctx, nullptr)) {
+        if (node && node->Init(ctx, /*src=*/nullptr)) {
             return node->Translate(ctx);
         }
     } catch (const NAST::TTooManyErrors&) {

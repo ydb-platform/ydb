@@ -22,13 +22,13 @@ void ExecuteQuery(NQuery::TQueryClient& db, const TString& query) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
-TString FulltextSearch(NQuery::TQueryClient& db, const TString& searchQuery) {
+TString FulltextSearch(NQuery::TQueryClient& db, const char* searchQuery, const char* field = "Text", const char* idxName = "fulltext_idx") {
     TString query = Sprintf(R"sql(
         SELECT `Key`, `Text`, `Data`
-        FROM `/Root/Texts` VIEW `fulltext_idx`
-        WHERE FulltextMatch(`Text`, "%s")
+        FROM `/Root/Texts` VIEW `%s`
+        WHERE FulltextMatch(`%s`, "%s")
         ORDER BY `Key`;
-    )sql", searchQuery.c_str());
+    )sql", idxName, field, searchQuery);
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     return NYdb::FormatResultSetYson(result.GetResultSet(0));
@@ -58,14 +58,16 @@ Y_UNIT_TEST(AddIndexCompact) {
     AddIndex(db, "fulltext_plain");
 
     auto index = ReadIndex(db);
+    Cerr << "index: " << NYdb::FormatResultSetYson(index) << "\n";
+
     CompareYson(R"([
-        [%true;4294967295u;100u;"d";"animals"];
-        [%true;4294967295u;300u;"ddd";"cats"];
-        [%true;4294967295u;200u;"dd";"chase"];
-        [%true;4294967295u;400u;"\xC8\1\xC8\1";"dogs"];
-        [%true;4294967295u;400u;"\x90\3";"foxes"];
-        [%true;4294967295u;400u;"\xAC\2d";"love"];
-        [%true;4294967295u;200u;"dd";"small"]
+        [%true;18446744073709551615u;100u;"d";"animals"];
+        [%true;18446744073709551615u;300u;"ddd";"cats"];
+        [%true;18446744073709551615u;200u;"dd";"chase"];
+        [%true;18446744073709551615u;400u;"\xC8\1\xC8\1";"dogs"];
+        [%true;18446744073709551615u;400u;"\x90\3";"foxes"];
+        [%true;18446744073709551615u;400u;"\xAC\2d";"love"];
+        [%true;18446744073709551615u;200u;"dd";"small"]
     ])", NYdb::FormatResultSetYson(index));
 }
 
@@ -84,14 +86,15 @@ Y_UNIT_TEST_TWIN(AddIndexCompactRelevance, Covered) {
     }
 
     auto index = ReadIndex(db);
+    Cerr << "index: " << NYdb::FormatResultSetYson(index) << "\n";
     CompareYson(R"([
-        [%true;4294967295u;100u;"\xA4\1";"animals"];
-        [%true;4294967295u;300u;"\xA4\1\xA4\1\xE4\1\2";"cats"];
-        [%true;4294967295u;200u;"\xA4\1\xA4\1";"chase"];
-        [%true;4294967295u;400u;"\x88\3\x88\3";"dogs"];
-        [%true;4294967295u;400u;"\x90\6";"foxes"];
-        [%true;4294967295u;400u;"\xAC\4\xA4\1";"love"];
-        [%true;4294967295u;200u;"\xA4\1\xA4\1";"small"]
+        [%true;18446744073709551615u;100u;"\xA4\1";"animals"];
+        [%true;18446744073709551615u;300u;"\xA4\1\xA4\1\xE4\1\2";"cats"];
+        [%true;18446744073709551615u;200u;"\xA4\1\xA4\1";"chase"];
+        [%true;18446744073709551615u;400u;"\x88\3\x88\3";"dogs"];
+        [%true;18446744073709551615u;400u;"\x90\6";"foxes"];
+        [%true;18446744073709551615u;400u;"\xAC\4\xA4\1";"love"];
+        [%true;18446744073709551615u;200u;"\xA4\1\xA4\1";"small"]
     ])", NYdb::FormatResultSetYson(index));
 
     index = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
@@ -146,10 +149,10 @@ Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
         Cerr << "indexImplDictTable: " << dict << Endl;
         Cerr << "indexImplStatsTable: " << stats << Endl;
         CompareYson(R"([
-            [%true;4294967295u;100u;"\xE4\1\2";"cats"];
-            [%true;4294967295u;200u;"\x88\3";"dogs"];
-            [%true;4294967295u;200u;"\x88\3";"foxes"];
-            [%true;4294967295u;200u;"\xA4\1\xA4\1";"love"]
+            [%true;18446744073709551615u;100u;"\xE4\1\2";"cats"];
+            [%true;18446744073709551615u;200u;"\x88\3";"dogs"];
+            [%true;18446744073709551615u;200u;"\x88\3";"foxes"];
+            [%true;18446744073709551615u;200u;"\xA4\1\xA4\1";"love"]
         ])", index);
         CompareYson(R"([
             [[100u];3u];
@@ -166,10 +169,10 @@ Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
         ])", stats);
     } else {
         CompareYson(R"([
-            [%true;4294967295u;100u;"d";"cats"];
-            [%true;4294967295u;200u;"\xC8\1";"dogs"];
-            [%true;4294967295u;200u;"\xC8\1";"foxes"];
-            [%true;4294967295u;200u;"dd";"love"]
+            [%true;18446744073709551615u;100u;"d";"cats"];
+            [%true;18446744073709551615u;200u;"\xC8\1";"dogs"];
+            [%true;18446744073709551615u;200u;"\xC8\1";"foxes"];
+            [%true;18446744073709551615u;200u;"dd";"love"]
         ])", index);
     }
 
@@ -192,13 +195,13 @@ Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
         Cerr << "indexImplDictTable: " << dict << Endl;
         Cerr << "indexImplStatsTable: " << stats << Endl;
         CompareYson(R"([
-            [%true;4294967295u;100u;"\xE4\1\2";"cats"];
-            [%true;4294967295u;18446744073709551615u;"\x96\2";"cats"];
-            [%true;4294967295u;200u;"\x88\3";"dogs"];
-            [%true;4294967290u;200u;"\x96\2";"foxes"];
-            [%true;4294967295u;200u;"\x88\3";"foxes"];
-            [%true;4294967290u;200u;"\x96\2";"love"];
-            [%true;4294967295u;200u;"\xA4\1\xA4\1";"love"]
+            [%true;18446744073709551614u;150u;"\x96\2";"cats"];
+            [%true;18446744073709551615u;100u;"\xE4\1\2";"cats"];
+            [%true;18446744073709551615u;200u;"\x88\3";"dogs"];
+            [%true;18446744073709551614u;150u;"\x96\2";"foxes"];
+            [%true;18446744073709551615u;200u;"\x88\3";"foxes"];
+            [%true;18446744073709551614u;150u;"\x96\2";"love"];
+            [%true;18446744073709551615u;200u;"\xA4\1\xA4\1";"love"]
         ])", index);
         CompareYson(R"([
             [[100u];3u];
@@ -216,13 +219,13 @@ Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
         ])", stats);
     } else {
         CompareYson(R"([
-            [%true;4294967295u;100u;"d";"cats"];
-            [%true;4294967295u;18446744073709551615u;"\x96\1";"cats"];
-            [%true;4294967295u;200u;"\xC8\1";"dogs"];
-            [%true;4294967290u;200u;"\x96\1";"foxes"];
-            [%true;4294967295u;200u;"\xC8\1";"foxes"];
-            [%true;4294967290u;200u;"\x96\1";"love"];
-            [%true;4294967295u;200u;"dd";"love"]
+            [%true;18446744073709551614u;150u;"\x96\1";"cats"];
+            [%true;18446744073709551615u;100u;"d";"cats"];
+            [%true;18446744073709551615u;200u;"\xC8\1";"dogs"];
+            [%true;18446744073709551614u;150u;"\x96\1";"foxes"];
+            [%true;18446744073709551615u;200u;"\xC8\1";"foxes"];
+            [%true;18446744073709551614u;150u;"\x96\1";"love"];
+            [%true;18446744073709551615u;200u;"dd";"love"]
         ])", index);
     }
 
@@ -246,7 +249,7 @@ Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
 Y_UNIT_TEST_TWIN(InsertMultipleTimes, WithRelevance) {
     auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -351,7 +354,7 @@ Y_UNIT_TEST(UpsertNewRowRelevance) {
 Y_UNIT_TEST_TWIN(UpsertModifyExisting, WithRelevance) {
     auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -381,7 +384,7 @@ Y_UNIT_TEST_TWIN(UpsertModifyExisting, WithRelevance) {
 Y_UNIT_TEST_TWIN(UpsertMixNewAndExisting, WithRelevance) {
     auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -412,7 +415,7 @@ Y_UNIT_TEST_TWIN(UpsertMixNewAndExisting, WithRelevance) {
 Y_UNIT_TEST_TWIN(DeleteRow, WithRelevance) {
     auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertTexts(db);
@@ -447,7 +450,7 @@ Y_UNIT_TEST_TWIN(DeleteRow, WithRelevance) {
 Y_UNIT_TEST_TWIN(DeleteMultipleRows, WithRelevance) {
     auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertTexts(db);
@@ -482,7 +485,7 @@ Y_UNIT_TEST_TWIN(DeleteMultipleRows, WithRelevance) {
 Y_UNIT_TEST_TWIN(UpdateRow, WithRelevance) {
     auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -510,7 +513,7 @@ Y_UNIT_TEST_TWIN(UpdateRow, WithRelevance) {
 Y_UNIT_TEST_TWIN(ReplaceRow, WithRelevance) {
     auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -569,7 +572,7 @@ Y_UNIT_TEST(AddIndexCoveredCompact) {
 Y_UNIT_TEST_TWIN(Compaction, WithRelevance) {
     auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -626,7 +629,7 @@ Y_UNIT_TEST_TWIN(Compaction, WithRelevance) {
 Y_UNIT_TEST_TWIN(CompactionWithDelete, WithRelevance) {
     auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -668,6 +671,298 @@ Y_UNIT_TEST_TWIN(CompactionWithDelete, WithRelevance) {
         [[150u];["Foxes love cats."];["foxes data"]];
         [[151u];["Birds love rabbits."];["birds data"]]
     ])", FulltextSearch(db, "love"));
+}
+
+TKikimrRunner KikimrWithZeroSnapshotTimeout() {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(true);
+    featureFlags.SetEnableJsonIndex(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+    // Set KeepSnapshotTimeout to 0 and CleanupSnapshotPeriod to 100ms so that
+    // MVCC watermark can advance quickly. This allows compaction to merge old
+    // row versions without waiting for the default 5-minute / 15-second timeouts.
+    settings.AppConfig.MutableDataShardConfig()->SetKeepSnapshotTimeout(0);
+    settings.AppConfig.MutableDataShardConfig()->SetCleanupSnapshotPeriod(100);
+    return TKikimrRunner(settings);
+}
+
+Y_UNIT_TEST_TWIN(LsmCompaction, WithRelevance) {
+    auto kikimr = KikimrWithZeroSnapshotTimeout();
+    auto db = kikimr.GetQueryClient();
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, indexType);
+
+    // Insert more data to create multiple SST files
+    NDataShard::gFulltextMaxDelta = 10000;
+    NDataShard::gFulltextMaxSegment = 10000;
+
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (150, "Foxes love cats.", "foxes data")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (151, "Wolves love foxes.", "wolves data")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (152, "Rabbits love foxes.", "rabbit data")
+    )sql");
+
+    auto indexBefore = NYdb::FormatResultSetYson(ReadIndex(db));
+    Cerr << "index before LSM compaction: " << indexBefore << Endl;
+
+    // Wait for the MVCC cleanup timer to fire and advance the watermark,
+    // so that RemovedRowVersions covers all written versions.
+    // CleanupSnapshotPeriod is set to 100ms in KikimrWithCompact().
+    Sleep(TDuration::Seconds(1));
+
+    // Force LSM compaction on the index impl table
+    auto* server = &kikimr.GetTestServer();
+    WaitForCompaction(server, "/Root/Texts/fulltext_idx/indexImplTable");
+
+    auto indexAfter = NYdb::FormatResultSetYson(ReadIndex(db));
+    Cerr << "index after LSM compaction: " << indexAfter << Endl;
+
+    // Verify that compaction actually merged segments (fewer rows in the index)
+    UNIT_ASSERT_C(indexBefore != indexAfter,
+        "Index content should change after LSM compaction (segments should merge)");
+
+    // Verify search still returns correct results after LSM compaction
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]]
+    ])", FulltextSearch(db, "cats"));
+
+    CompareYson(R"([
+        [[150u];["Foxes love cats."];["foxes data"]];
+        [[151u];["Wolves love foxes."];["wolves data"]];
+        [[152u];["Rabbits love foxes."];["rabbit data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]]
+    ])", FulltextSearch(db, "foxes"));
+
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]];
+        [[151u];["Wolves love foxes."];["wolves data"]];
+        [[152u];["Rabbits love foxes."];["rabbit data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]]
+    ])", FulltextSearch(db, "love"));
+}
+
+Y_UNIT_TEST_TWIN(LsmCompactionWithConcurrentWrites, WithRelevance) {
+    auto kikimr = KikimrWithZeroSnapshotTimeout();
+    auto db = kikimr.GetQueryClient();
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, indexType);
+
+    // Insert rows one by one to create multiple SST files in the index table
+    NDataShard::gFulltextMaxDelta = 10000;
+    NDataShard::gFulltextMaxSegment = 10000;
+
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (150, "Foxes love cats.", "foxes data")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (151, "Wolves love foxes.", "wolves data")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (152, "Rabbits love foxes.", "rabbit data")
+    )sql");
+
+    // Open a snapshot transaction on the main table to pin row versions
+    // (prevents the tablet from advancing MinRowVersion past this point)
+    auto session = db.GetSession().GetValueSync().GetSession();
+    auto snapshotResult = session.ExecuteQuery(R"sql(
+        SELECT `Key`, `Text`, `Data`
+        FROM `/Root/Texts`
+        ORDER BY `Key`;
+    )sql", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRO())).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(snapshotResult.GetStatus(), EStatus::SUCCESS, snapshotResult.GetIssues().ToString());
+
+    auto tx = snapshotResult.GetTransaction();
+    UNIT_ASSERT(tx);
+    UNIT_ASSERT(tx->IsActive());
+    Cerr << "snapshot pinned with " << NYdb::FormatResultSetYson(snapshotResult.GetResultSet(0)) << Endl;
+
+    // Insert more data while snapshot is held — creates new SST files
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (300, "Bears love honey.", "bears data")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (301, "Eagles love fish.", "eagles data")
+    )sql");
+
+    // Verify search results before compaction
+    auto loveBeforeCompaction = FulltextSearch(db, "love");
+    Cerr << "love before compaction: " << loveBeforeCompaction << Endl;
+
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]];
+        [[151u];["Wolves love foxes."];["wolves data"]];
+        [[152u];["Rabbits love foxes."];["rabbit data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]];
+        [[300u];["Bears love honey."];["bears data"]];
+        [[301u];["Eagles love fish."];["eagles data"]]
+    ])", loveBeforeCompaction);
+
+    // Wait for the MVCC cleanup timer to fire and advance the watermark,
+    // so that RemovedRowVersions covers all written versions.
+    // CleanupSnapshotPeriod is set to 100ms in KikimrWithCompact().
+    Sleep(TDuration::Seconds(1));
+
+    // Force LSM compaction while the snapshot is held
+    // The snapshot pins MinRowVersion, so compaction must not merge away
+    // row versions that the snapshot might need
+    auto* server = &kikimr.GetTestServer();
+    WaitForCompaction(server, "/Root/Texts/fulltext_idx/indexImplTable");
+
+    // Verify search results are identical after compaction
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]];
+        [[151u];["Wolves love foxes."];["wolves data"]];
+        [[152u];["Rabbits love foxes."];["rabbit data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]];
+        [[300u];["Bears love honey."];["bears data"]];
+        [[301u];["Eagles love fish."];["eagles data"]]
+    ])", FulltextSearch(db, "love"));
+
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]]
+    ])", FulltextSearch(db, "cats"));
+
+    CompareYson(R"([
+        [[150u];["Foxes love cats."];["foxes data"]];
+        [[151u];["Wolves love foxes."];["wolves data"]];
+        [[152u];["Rabbits love foxes."];["rabbit data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]]
+    ])", FulltextSearch(db, "foxes"));
+
+    CompareYson(R"([
+        [[300u];["Bears love honey."];["bears data"]]
+    ])", FulltextSearch(db, "honey"));
+
+    CompareYson(R"([
+        [[301u];["Eagles love fish."];["eagles data"]]
+    ])", FulltextSearch(db, "fish"));
+
+    // Close the snapshot
+    auto commitResult = tx->Commit().ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+
+    // Run compaction again now that the snapshot is released
+    // This time MinRowVersion can advance and compaction can merge more aggressively
+    WaitForCompaction(server, "/Root/Texts/fulltext_idx/indexImplTable");
+
+    // Verify all data is still correct after second compaction
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]];
+        [[151u];["Wolves love foxes."];["wolves data"]];
+        [[152u];["Rabbits love foxes."];["rabbit data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]];
+        [[300u];["Bears love honey."];["bears data"]];
+        [[301u];["Eagles love fish."];["eagles data"]]
+    ])", FulltextSearch(db, "love"));
+
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]]
+    ])", FulltextSearch(db, "cats"));
+
+    CompareYson(R"([
+        [[300u];["Bears love honey."];["bears data"]]
+    ])", FulltextSearch(db, "honey"));
+}
+
+Y_UNIT_TEST(UpsertTwoIndexes) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+
+    {
+        TString query = R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX idx_text
+                GLOBAL USING fulltext_plain
+                ON (Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        TString query = R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX idx_data
+                GLOBAL USING fulltext_plain
+                ON (Data)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    // Update only data, then update both fields - each index should use its own sequence
+    ExecuteQuery(db, "UPDATE `/Root/Texts` SET Data=\"birds data\" WHERE Key=100");
+    ExecuteQuery(db, "UPDATE `/Root/Texts` SET Data=\"wolves data\", Text=\"Wolves love rabbits.\" WHERE Key=200");
+
+    // Check index tables
+    {
+        auto result = db.ExecuteQuery("SELECT * FROM `/Root/Texts/idx_data/indexImplTable`", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto idx = NYdb::FormatResultSetYson(result.GetResultSet(0));
+        Cerr << "idx_data: " << idx << "\n";
+        CompareYson(R"([
+            [%true;18446744073709551614u;100u;"d";"birds"];
+            [%false;18446744073709551613u;100u;"d";"cats"];
+            [%true;18446744073709551615u;100u;"d";"cats"];
+            [%false;18446744073709551611u;200u;"\xC8\1";"data"];
+            [%true;18446744073709551612u;200u;"\xC8\1";"data"];
+            [%false;18446744073709551613u;100u;"d";"data"];
+            [%true;18446744073709551614u;100u;"d";"data"];
+            [%true;18446744073709551615u;200u;"dd";"data"];
+            [%false;18446744073709551611u;200u;"\xC8\1";"dogs"];
+            [%true;18446744073709551615u;200u;"\xC8\1";"dogs"];
+            [%true;18446744073709551612u;200u;"\xC8\1";"wolves"]
+        ])", idx);
+    }
+    {
+        auto result = db.ExecuteQuery("SELECT * FROM `/Root/Texts/idx_text/indexImplTable`", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto idx = NYdb::FormatResultSetYson(result.GetResultSet(0));
+        Cerr << "idx_text: " << idx << "\n";
+        CompareYson(R"([
+            [%true;18446744073709551615u;100u;"d";"cats"];
+            [%false;18446744073709551613u;200u;"\xC8\1";"dogs"];
+            [%true;18446744073709551615u;200u;"\xC8\1";"dogs"];
+            [%false;18446744073709551613u;200u;"\xC8\1";"foxes"];
+            [%true;18446744073709551615u;200u;"\xC8\1";"foxes"];
+            [%false;18446744073709551613u;200u;"\xC8\1";"love"];
+            [%true;18446744073709551614u;200u;"\xC8\1";"love"];
+            [%true;18446744073709551615u;200u;"dd";"love"];
+            [%true;18446744073709551614u;200u;"\xC8\1";"rabbits"];
+            [%true;18446744073709551614u;200u;"\xC8\1";"wolves"]
+        ])", idx);
+    }
 }
 
 } // Y_UNIT_TEST_SUITE(KqpFulltextCompact)

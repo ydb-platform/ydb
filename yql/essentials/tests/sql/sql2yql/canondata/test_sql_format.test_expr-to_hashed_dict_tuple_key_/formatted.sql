@@ -1,4 +1,3 @@
-/* postgres can not */
 $first = ($x) -> {
     RETURN $x.0;
 };

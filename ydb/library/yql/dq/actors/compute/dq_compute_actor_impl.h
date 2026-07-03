@@ -12,6 +12,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <ydb/library/yql/dq/runtime/streaming/dq_watermark_generator_tracker.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
@@ -19,6 +20,7 @@
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/dq/actors/dq.h>
@@ -211,6 +213,7 @@ protected:
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(task, std::move(arena))
+        , CoreRuntimeSettings(DeserializeRuntimeSettingsFromProto(Task.GetProgram().GetRuntimeSettings()))
         , RuntimeSettings(settings)
         , MemoryLimits(memoryLimits)
         , AsyncIoFactory(std::move(asyncIoFactory))
@@ -218,6 +221,7 @@ protected:
         , CheckpointingMode(GetTaskCheckpointingMode(Task))
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
         , WatermarksTracker(LogPrefix, taskCounters)
+        , WatermarkGeneratorTracker(LogPrefix, taskCounters)
         , TaskCounters(taskCounters)
         , MetricsReporter(taskCounters)
         , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, std::move(traceId), "ComputeActor")
@@ -282,6 +286,7 @@ protected:
         LogPrefix = std::move(prefixBuilder);
 
         WatermarksTracker.SetLogPrefix(LogPrefix);
+        WatermarkGeneratorTracker.SetLogPrefix(LogPrefix);
         for (auto& [_, info]: InputTransformsMap) {
             info.SetLogPrefix(LogPrefix);
         }
@@ -1980,7 +1985,8 @@ protected:
                         .MemoryQuotaManager = MemoryLimits.MemoryQuotaManager,
                         .SourceSettings = (!settings.empty() ? settings.at(inputIndex) : nullptr),
                         .Arena = Task.GetArena(),
-                        .TraceId = ComputeActorSpan.GetTraceId()
+                        .TraceId = ComputeActorSpan.GetTraceId(),
+                        .DatumValidationMode = CoreRuntimeSettings->DatumValidation.Get()
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create source " << inputDesc.GetSource().GetType() << ": " << ex.what();
@@ -2200,6 +2206,9 @@ protected:
                 ResumeExecution(EResumeSource::CAWatermarkIdleness);
             }
         }
+        if (WatermarkGeneratorTracker.ProcessIdlenessCheck(checkTime)) {
+            ResumeExecution(EResumeSource::CAWatermarkIdleness);
+        }
         ScheduleIdlenessCheck();
     }
 
@@ -2224,6 +2233,11 @@ protected:
             CA_LOG_T("Schedule next idleness check at " << checkTime);
             this->Schedule(*checkTime, new TEvPrivate::TEvCheckIdleness(*checkTime));
         }
+    }
+
+    void ScheduleSourceIdlenessCheck(TInstant checkTime) {
+        CA_LOG_T("Schedule next source idleness check at " << checkTime);
+        this->Schedule(checkTime, new TEvPrivate::TEvCheckIdleness(checkTime));
     }
 
     bool AllAsyncOutputsFinished() const {
@@ -2709,6 +2723,8 @@ protected:
     const NActors::TActorId ExecuterId;
     const TTxId TxId;
     TDqTaskSettings Task;
+    // TODO(atarasov5): Resolve naming similarity between RuntimeSettings and CoreRuntimeSettings.
+    TRuntimeSettings::TConstPtr CoreRuntimeSettings;
     TString LogPrefix;
     const TComputeRuntimeSettings RuntimeSettings;
     TComputeMemoryLimits MemoryLimits;
@@ -2744,6 +2760,7 @@ protected:
 
     THolder<TDqMemoryQuota> MemoryQuota;
     TDqComputeActorWatermarks WatermarksTracker;
+    TDqWatermarkGeneratorTracker WatermarkGeneratorTracker;
     ::NMonitoring::TDynamicCounterPtr TaskCounters;
     TDqComputeActorMetrics MetricsReporter;
     NWilson::TSpan ComputeActorSpan;

@@ -173,6 +173,7 @@ void TestDropObjectCommon(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGatew
 void TestCreateExternalDataSource(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& path) {
     TCreateObjectSettings settings("EXTERNAL_DATA_SOURCE", path, {
         {"source_type", "ObjectStorage"},
+        {"location", "my-bucket"},
         {"auth_method", "NONE"},
         {"installation", "cloud"}
     });
@@ -182,7 +183,7 @@ void TestCreateExternalDataSource(TTestActorRuntime& runtime, TIntrusivePtr<IKik
     UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
     UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetSourceType(), "ObjectStorage");
     UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetInstallation(), "cloud");
-    UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetLocation(), "");
+    UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetLocation(), "my-bucket");
     UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetName(), SplitPath(path).back());
     UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo->Description.GetAuth().HasNone());
 }

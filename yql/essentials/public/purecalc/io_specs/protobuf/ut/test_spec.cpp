@@ -923,13 +923,13 @@ Y_UNIT_TEST(TestFieldRenames) {
     inputProtoOptions.SetFieldRenames({{"X", "InputAlias"}});
 
     auto inputSpec = TProtobufInputSpec<NPureCalcProto::TSimpleMessage>(
-        Nothing(), std::move(inputProtoOptions));
+        Nothing(), inputProtoOptions);
 
     auto outputProtoOptions = TProtoSchemaOptions();
     outputProtoOptions.SetFieldRenames({{"X", "OutputAlias"}});
 
     auto outputSpec = TProtobufOutputSpec<NPureCalcProto::TSimpleMessage>(
-        std::move(outputProtoOptions));
+        outputProtoOptions);
 
     {
         auto program = factory->MakePullStreamProgram(
@@ -998,7 +998,7 @@ Y_UNIT_TEST(TestNestedFieldRenames) {
     inputProtoOptions.SetEnableRecursiveRenaming(true);
 
     auto inputSpec = TProtobufInputSpec<NPureCalcProto::TSimpleNested>(
-        Nothing(), std::move(inputProtoOptions));
+        Nothing(), inputProtoOptions);
 
     auto outputProtoOptions = TProtoSchemaOptions();
     outputProtoOptions.SetEnableRecursiveRenaming(true);
@@ -1009,7 +1009,7 @@ Y_UNIT_TEST(TestNestedFieldRenames) {
 
     outputProtoOptions.SetFieldRenames({{"Y", "OutputAlias"}});
     auto outputSpecWithoutNestedRename = TProtobufOutputSpec<NPureCalcProto::TSimpleNested>(
-        std::move(outputProtoOptions));
+        outputProtoOptions);
 
     {
         auto program = factory->MakePullStreamProgram(

@@ -1,4 +1,3 @@
-/* postgres can not */
 PRAGMA warning('disable', '4510');
 
 $id = ($x) -> {

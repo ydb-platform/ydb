@@ -66,6 +66,15 @@
 {%-     endif -%}
 {%- endmacro -%}
 
+{%- macro PreventAutoSearch(in_comment, kotlin = false) %}
+        // Preventing automatic search for {{ in_comment }}
+        java.setSrcDirs(emptyList<Any>())
+        resources.setSrcDirs(emptyList<Any>())
+{%      if kotlin and with_kotlin -%}
+        kotlin.setSrcDirs(emptyList<Any>())
+{%-     endif -%}
+{%- endmacro -%}
+
 {%- macro TargetSets(current_target, reldir = "") -%}
 {{ SomeSets(current_target.source_sets, "java", reldir, current_target) }}
 {#- glue -#}
@@ -77,91 +86,63 @@ sourceSets {
 {%-     set varprefix = MAIN_VARPREFIX %}
     main {
 {#- glue -#}
+{{ PreventAutoSearch("mains in src/main/java") }}
+{#- glue -#}
 {{ TargetSets(target) }}
     }
 {%  elif not(target is defined) %}
     main {
-        // Preventing automatic search for main
-        java.setSrcDirs(emptyList<Any>())
-        resources.setSrcDirs(emptyList<Any>())
-{%-         if with_kotlin %}
-        kotlin.setSrcDirs(emptyList<Any>())
-{%-         endif %}
+{#- glue -#}
+{{ PreventAutoSearch("mains in src/main/java", true) }}
     }
 {%  endif -%}
 
 {%- if not proto_template -%}
-{%-     if extra_targets|length %}
-    test {
-{%-     for extra_target in extra_targets -%}
-{%-         set reldir = "" -%}
-{%-         if extra_target.test_reldir -%}
-{%-             set reldir = extra_target.test_reldir + "/" -%}
-{%-         endif -%}
-{#-         TestN target codegen -#}
-{%-         set varprefix = "test" + loop.index0|tojson + "Codegen" -%}
+{%-     if named_tests -%}
+{%-         for extra_target in ordered_extra_targets -%}
+{%-             if extra_target.source_sets|length or extra_target.resource_sets|length -%}
+{%-                 set testname = SourceSetName(extra_target) %}
+    {% if testname == NS_TEST %}{{ testname }}{% else %}named("{{ testname }}"){% endif %} {
+{%-                 set reldir = "" -%}
+{%-                 if extra_target.test_reldir -%}
+{%-                     set reldir = extra_target.test_reldir + "/" -%}
+{%-                 endif -%}
+{#-             TestN target codegen -#}
+{%-                 set varprefix = "test" + loop.index0|tojson + "Codegen" -%}
+{%-                 if testname == NS_TEST -%}
+{{ PreventAutoSearch("tests in src/test/java") }}
+{%-                 endif -%}
 {{ TargetSets(extra_target, reldir) }}
-{%-     endfor %}
     }
-{%      else %}
+{%              endif -%}
+{%-         endfor -%}
+{%-         if not(test_extra_targets|length) %}
     test {
-        // Preventing automatic search for tests
-        java.setSrcDirs(emptyList<Any>())
-        resources.setSrcDirs(emptyList<Any>())
-{%-         if with_kotlin %}
-        kotlin.setSrcDirs(emptyList<Any>())
-{%-         endif %}
+{#- glue -#}
+{{ PreventAutoSearch("tests in src/test/java", true) }}
     }
-{%      endif -%}
+{%          endif -%}
+{%-     else -%}
+{%-         if extra_targets|length %}
+    test {
+{#- glue -#}
+{{ PreventAutoSearch("tests in src/test/java") }}
+{%-         for extra_target in extra_targets -%}
+{%-             set reldir = "" -%}
+{%-             if extra_target.test_reldir -%}
+{%-                 set reldir = extra_target.test_reldir + "/" -%}
+{%-             endif -%}
+{#-         TestN target codegen -#}
+{%-             set varprefix = "test" + loop.index0|tojson + "Codegen" -%}
+{{ TargetSets(extra_target, reldir) }}
+{%-         endfor %}
+    }
+{%          else %}
+    test {
+{#- glue -#}
+{{ PreventAutoSearch("tests in src/test/java", true) }}
+    }
+{%          endif -%}
+{%-     endif -%}
 {%- endif -%}
 }
-
-tasks.withType<Jar>() {
-    duplicatesStrategy = DuplicatesStrategy.INCLUDE
-}
-
-tasks.withType<Copy>() {
-    duplicatesStrategy = DuplicatesStrategy.INCLUDE
-}
-
-tasks.withType<Sync>() {
-    duplicatesStrategy = DuplicatesStrategy.INCLUDE
-}
-
-{%- if hasResources %}
-
-tasks.processResources.configure {
-    dependsOn("compileJava")
-}
-
-tasks.processTestResources.configure {
-    dependsOn("compileTestJava")
-}
-{%- endif %}
-
-tasks.named("sourcesJar").configure {
-    dependsOn(tasks.compileJava)
-    dependsOn(tasks.compileTestJava)
-{%- if with_kotlin %}
-    dependsOn(tasks.compileKotlin)
-    dependsOn(tasks.compileTestKotlin)
-{%- endif %}
-    mustRunAfter(tasks.named<Jar>("jar"))
-    mustRunAfter(tasks.named("javadocJar"))
-{%- if with_lombok_plugin %}
-    mustRunAfter(tasks.named("delombok"))
-{%- endif %}
-}
-
-{%- if with_lombok_plugin %}
-
-tasks.named("delombok").configure {
-    mustRunAfter(tasks.compileJava)
-    mustRunAfter(tasks.compileTestJava)
-{%- if with_kotlin %}
-    mustRunAfter(tasks.compileKotlin)
-    mustRunAfter(tasks.compileTestKotlin)
-{%- endif %}
-    mustRunAfter(tasks.named<Jar>("jar"))
-}
-{%- endif -%}

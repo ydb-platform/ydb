@@ -1,4 +1,3 @@
-/* postgres can not */
 USE plato;
 
 $config = Yson::ConvertTo(

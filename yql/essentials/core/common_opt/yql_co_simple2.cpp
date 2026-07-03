@@ -622,7 +622,7 @@ TExprNode::TPtr ApplyAndAbsorption(const TExprNode::TPtr& node, TExprContext& ct
 
     // AND Absorption law
     // (A OR B) AND A -> A
-    const TVector<TVector<size_t>> groups = SplitToNonIntersectingGroups(children, true);
+    const TVector<TVector<size_t>> groups = SplitToNonIntersectingGroups(children, /*visitOr=*/true);
 
     THashSet<size_t> toDrop;
     for (auto& group : groups) {
@@ -737,7 +737,7 @@ TExprNode::TPtr OptimizeAnd(const TExprNode::TPtr& node, TExprContext& ctx, TOpt
         return opt;
     }
 
-    if (auto opt = OptimizeXNotXPairs(node, false, ctx); opt != node) {
+    if (auto opt = OptimizeXNotXPairs(node, /*replaceWith=*/false, ctx); opt != node) {
         return KeepWorld(opt, *node, ctx, *optCtx.Types);
     }
 
@@ -805,7 +805,7 @@ TExprNode::TPtr ApplyOrDistributive(const TExprNode::TPtr& node, TExprContext& c
         if (!IsStrict(node)) {
             return node;
         }
-        const TVector<TVector<size_t>> groups = SplitToNonIntersectingGroups(children, false);
+        const TVector<TVector<size_t>> groups = SplitToNonIntersectingGroups(children, /*visitOr=*/false);
         auto ptrComparator = [](const TExprNode::TPtr& l, const TExprNode::TPtr& r) {
             return l.Get() < r.Get();
         };
@@ -895,7 +895,7 @@ TExprNode::TPtr OptimizeOr(const TExprNode::TPtr& node, TExprContext& ctx, TOpti
         return opt;
     }
 
-    if (auto opt = OptimizeXNotXPairs(node, true, ctx); opt != node) {
+    if (auto opt = OptimizeXNotXPairs(node, /*replaceWith=*/true, ctx); opt != node) {
         return KeepWorld(opt, *node, ctx, *optCtx.Types);
     }
 
@@ -996,7 +996,7 @@ TExprNode::TPtr IfPresentSubsetFields(const TExprNode::TPtr& node, TExprContext&
         TSet<TStringBuf> usedFields;
         if (HaveFieldsSubset(lambda.TailPtr(), lambda.Head().Head(), usedFields, *optCtx.ParentsMap)) {
             YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
-            children[TCoIfPresent::idx_Optional] = FilterByFields(children[TCoIfPresent::idx_Optional]->Pos(), children[TCoIfPresent::idx_Optional], usedFields, ctx, false);
+            children[TCoIfPresent::idx_Optional] = FilterByFields(children[TCoIfPresent::idx_Optional]->Pos(), children[TCoIfPresent::idx_Optional], usedFields, ctx, /*singleValue=*/false);
             children[TCoIfPresent::idx_PresentHandler] = ctx.DeepCopyLambda(*children[TCoIfPresent::idx_PresentHandler]);
             return ctx.ChangeChildren(*node, std::move(children));
         }

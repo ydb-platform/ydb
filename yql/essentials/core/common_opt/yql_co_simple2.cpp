@@ -611,6 +611,33 @@ TVector<TVector<size_t>> SplitToNonIntersectingGroups(const TExprNodeList& child
     return groups;
 }
 
+bool CanDropSideEffect(
+    const TExprNodeList& children,
+    const TNodeMap<size_t>& restMap,
+    size_t idx,
+    const std::function<const TExprNode*(const TExprNode::TPtr&)>& getAbsorbNode)
+{
+    size_t absorbPos = children.size();
+    const TExprNode* absorbNode = nullptr;
+    for (size_t pos = 0; pos < children.size(); ++pos) {
+        if (const TExprNode* n = getAbsorbNode(children[pos])) {
+            absorbPos = pos;
+            absorbNode = n;
+            break;
+        }
+    }
+    if (!absorbNode) {
+        return false;
+    }
+    for (size_t pos = 0; pos < absorbPos; ++pos) {
+        if (children[pos]->HasSideEffects()) {
+            return false;
+        }
+    }
+    const auto it = restMap.find(absorbNode);
+    return it != restMap.end() && it->second < idx;
+}
+
 TExprNode::TPtr ApplyAndAbsorption(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_ENSURE(node->IsCallable("And"));
     TExprNodeList children = node->ChildrenList();
@@ -627,16 +654,26 @@ TExprNode::TPtr ApplyAndAbsorption(const TExprNode::TPtr& node, TExprContext& ct
     THashSet<size_t> toDrop;
     for (auto& group : groups) {
         TVector<size_t> orIndexes;
-        TNodeSet restSet;
+        TNodeMap<size_t> restMap;
         for (auto& index : group) {
             if (children[index]->IsCallable("Or")) {
                 orIndexes.push_back(index);
             } else {
-                restSet.insert(children[index].Get());
+                restMap.emplace(children[index].Get(), index);
             }
         }
+
         for (auto& idx : orIndexes) {
-            if (AnyOf(children[idx]->ChildrenList(), [&](const auto& n) { return restSet.contains(n.Get()); })) {
+            const TExprNodeList& orChildren = children[idx]->ChildrenList();
+            if (!children[idx]->HasSideEffects()) {
+                if (AnyOf(orChildren, [&](const auto& n) { return restMap.contains(n.Get()); })) {
+                    toDrop.insert(idx);
+                }
+                continue;
+            }
+            if (CanDropSideEffect(orChildren, restMap, idx, [&](const TExprNode::TPtr& child) -> const TExprNode* {
+                return restMap.contains(child.Get()) ? child.Get() : nullptr;
+            })) {
                 toDrop.insert(idx);
             }
         }
@@ -734,7 +771,7 @@ TExprNode::TPtr OptimizeAnd(const TExprNode::TPtr& node, TExprContext& ctx, TOpt
     }
 
     if (auto opt = ApplyAndAbsorption(node, ctx); opt != node) {
-        return opt;
+        return KeepWorld(opt, *node, ctx, *optCtx.Types);
     }
 
     if (auto opt = OptimizeXNotXPairs(node, /*replaceWith=*/false, ctx); opt != node) {
@@ -753,26 +790,38 @@ TExprNode::TPtr ApplyOrAbsorption(const TExprNode::TPtr& node, TExprContext& ctx
         // X AND A OR A -> A
         // (X AND (B OR A)) OR A OR B -> A OR B
         TVector<size_t> andIndexes;
-        TNodeSet restSet;
+        TNodeMap<size_t> restMap;
         for (size_t i = 0; i < children.size(); ++i) {
             if (children[i]->IsCallable("And")) {
                 andIndexes.push_back(i);
             } else {
-                restSet.insert(children[i].Get());
+                restMap.emplace(children[i].Get(), i);
             }
         }
 
         THashSet<size_t> toDrop;
         for (auto& idx : andIndexes) {
             TExprNodeList andChildren = children[idx]->ChildrenList();
-            bool haveCommonFactor = AnyOf(andChildren, [&](TExprNode::TPtr child) {
+            if (!children[idx]->HasSideEffects()) {
+                bool haveCommonFactor = AnyOf(andChildren, [&](TExprNode::TPtr child) {
+                    if (IsNoPush(*child)) {
+                        child = child->HeadPtr();
+                    }
+                    TExprNodeList orList = GetOrChildren(child);
+                    return AllOf(orList, [&](const auto& n) { return restMap.contains(n.Get()); });
+                });
+                if (haveCommonFactor) {
+                    toDrop.insert(idx);
+                }
+                continue;
+            }
+            if (CanDropSideEffect(andChildren, restMap, idx, [&](const TExprNode::TPtr& child_) -> const TExprNode* {
+                TExprNode::TPtr child = child_;
                 if (IsNoPush(*child)) {
                     child = child->HeadPtr();
                 }
-                TExprNodeList orList = GetOrChildren(child);
-                return AllOf(orList, [&](const auto& n) { return restSet.contains(n.Get()); });
-            });
-            if (haveCommonFactor) {
+                return AllOf(GetOrChildren(child), [&](const auto& n) { return restMap.contains(n.Get()); }) ? child.Get() : nullptr;
+            })) {
                 toDrop.insert(idx);
             }
         }
@@ -888,7 +937,7 @@ TExprNode::TPtr OptimizeOr(const TExprNode::TPtr& node, TExprContext& ctx, TOpti
     }
 
     if (auto opt = ApplyOrAbsorption(node, ctx); opt != node) {
-        return opt;
+        return KeepWorld(opt, *node, ctx, *optCtx.Types);
     }
 
     if (auto opt = ApplyOrDistributive(node, ctx); opt != node) {

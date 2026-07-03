@@ -921,7 +921,7 @@ TVector<TKiDataQueryBlock> MakeKiDataQueryBlocks(TExprBase node, const TKiExplor
     return queryBlocks;
 }
 
-TString GetShowCreateType(const TExprNode& settings) {
+TStringBuf GetShowCreateType(const TExprNode& settings) {
     return GetShowCreateSetting(settings);
 }
 

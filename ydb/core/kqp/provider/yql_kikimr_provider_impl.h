@@ -384,8 +384,9 @@ bool IsShowCreateSettingName(TStringBuf name);
 // of the known SHOW CREATE settings.
 TStringBuf ShowCreateSettingToPathType(TStringBuf name);
 // Returns the first SHOW CREATE setting name found in `settings`, or an
-// empty string if none is present.
-TString GetShowCreateSetting(const TExprNode& settings);
+// empty string-buf if none is present. The returned view is backed by static
+// storage and outlives any TExprNode.
+TStringBuf GetShowCreateSetting(const TExprNode& settings);
 
 TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(NNodes::TExprList node, TExprContext& ctx);
 

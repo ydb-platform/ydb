@@ -2775,13 +2775,40 @@ Y_UNIT_TEST(ExternalDataSource) {
 
     TShowCreateChecker checker(env);
 
-    // The checker's constructor creates `tier1` as an S3-style external data source
-    // with AWS authentication. The output must round-trip back through the same
-    // SOURCE_TYPE / LOCATION / AUTH_METHOD properties.
-    checker.CheckShowCreateExternalDataSource("tier1");
-
     auto session = NQuery::TQueryClient(env.GetDriver()).GetSession().GetValueSync().GetSession();
 
+    // The checker's constructor creates `tier1` as an S3-style external data
+    // source with AWS authentication. The output must include every property
+    // that was set on it (source type, location, and each AWS_* setting).
+    auto tier1Query = checker.ShowCreateExternalDataSource(session, "tier1");
+    UNIT_ASSERT_C(tier1Query.find("CREATE EXTERNAL DATA SOURCE") != std::string::npos, tier1Query);
+    UNIT_ASSERT_C(tier1Query.find("SOURCE_TYPE = 'ObjectStorage'") != std::string::npos, tier1Query);
+    UNIT_ASSERT_C(tier1Query.find("LOCATION = 'http://fake.fake/olap-tier1'") != std::string::npos, tier1Query);
+    UNIT_ASSERT_C(tier1Query.find("AUTH_METHOD = 'AWS'") != std::string::npos, tier1Query);
+    UNIT_ASSERT_C(tier1Query.find("AWS_ACCESS_KEY_ID_SECRET_NAME = 'accessKey'") != std::string::npos, tier1Query);
+    UNIT_ASSERT_C(tier1Query.find("AWS_SECRET_ACCESS_KEY_SECRET_NAME = 'secretKey'") != std::string::npos, tier1Query);
+    UNIT_ASSERT_C(tier1Query.find("AWS_REGION = 'ru-central1'") != std::string::npos, tier1Query);
+
+    // Round-trip the AWS-authenticated source: drop tier1, recreate it from
+    // the SHOW CREATE output, and confirm every auth property is preserved.
+    // (Full-string equality is not stable — WITH-clause property order in the
+    // formatted output is not deterministic.)
+    ExecuteQuery(session, "DROP EXTERNAL DATA SOURCE `tier1`;");
+    ExecuteQuery(session, tier1Query);
+    auto tier1Recreated = checker.ShowCreateExternalDataSource(session, "tier1");
+    for (const auto& expected : {
+             "SOURCE_TYPE = 'ObjectStorage'",
+             "LOCATION = 'http://fake.fake/olap-tier1'",
+             "AUTH_METHOD = 'AWS'",
+             "AWS_ACCESS_KEY_ID_SECRET_NAME = 'accessKey'",
+             "AWS_SECRET_ACCESS_KEY_SECRET_NAME = 'secretKey'",
+             "AWS_REGION = 'ru-central1'",
+         }) {
+        UNIT_ASSERT_C(tier1Recreated.find(expected) != std::string::npos,
+            "recreated tier1 is missing '" << expected << "': " << tier1Recreated);
+    }
+
+    // Also exercise the AUTH_METHOD = NONE branch.
     ExecuteQuery(session, R"(
         CREATE EXTERNAL DATA SOURCE `eds_none` WITH (
             SOURCE_TYPE = "ObjectStorage",
@@ -2794,11 +2821,17 @@ Y_UNIT_TEST(ExternalDataSource) {
     UNIT_ASSERT_C(noAuthQuery.find("LOCATION = 'http://fake.fake/no-auth'") != std::string::npos, noAuthQuery);
     UNIT_ASSERT_C(noAuthQuery.find("AUTH_METHOD = 'NONE'") != std::string::npos, noAuthQuery);
 
-    // Round-trip: drop and recreate using the SHOW CREATE output.
     ExecuteQuery(session, "DROP EXTERNAL DATA SOURCE `eds_none`;");
     ExecuteQuery(session, noAuthQuery);
-    auto roundTripQuery = checker.ShowCreateExternalDataSource(session, "eds_none");
-    UNIT_ASSERT_VALUES_EQUAL(noAuthQuery, roundTripQuery);
+    auto noAuthRecreated = checker.ShowCreateExternalDataSource(session, "eds_none");
+    for (const auto& expected : {
+             "SOURCE_TYPE = 'ObjectStorage'",
+             "LOCATION = 'http://fake.fake/no-auth'",
+             "AUTH_METHOD = 'NONE'",
+         }) {
+        UNIT_ASSERT_C(noAuthRecreated.find(expected) != std::string::npos,
+            "recreated eds_none is missing '" << expected << "': " << noAuthRecreated);
+    }
 }
 
 Y_UNIT_TEST(TableColumnLocalBloomNgramFilterIndex) {

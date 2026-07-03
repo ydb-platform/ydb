@@ -982,11 +982,11 @@ struct TShowCreateSettingMapping {
     TStringBuf PathType;
 };
 
-constexpr std::array<TShowCreateSettingMapping, 3> ShowCreateSettingsMap = {{
+constexpr auto ShowCreateSettingsMap = std::to_array<TShowCreateSettingMapping>({
     {"showCreateTable", "Table"},
     {"showCreateView", "View"},
     {"showCreateExternalDataSource", "ExternalDataSource"},
-}};
+});
 
 } // anonymous namespace
 
@@ -1008,10 +1008,10 @@ TStringBuf ShowCreateSettingToPathType(TStringBuf name) {
     return {};
 }
 
-TString GetShowCreateSetting(const TExprNode& settings) {
+TStringBuf GetShowCreateSetting(const TExprNode& settings) {
     for (const auto& entry : ShowCreateSettingsMap) {
         if (HasSetting(settings, entry.SettingName)) {
-            return TString(entry.SettingName);
+            return entry.SettingName;
         }
     }
     return {};

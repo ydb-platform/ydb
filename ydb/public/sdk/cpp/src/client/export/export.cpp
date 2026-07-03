@@ -15,8 +15,6 @@
 
 #include <util/stream/str.h>
 
-#include <variant>
-
 namespace NYdb::inline Dev {
 namespace NExport {
 

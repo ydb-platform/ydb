@@ -400,7 +400,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
-        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
         runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -458,7 +457,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
-        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
         runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -518,7 +516,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
-        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
         runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -560,7 +557,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
-        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
         runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(

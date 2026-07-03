@@ -23,7 +23,6 @@ public:
     void SetUp(NUnitTest::TTestContext& /* context */) override {
         using namespace fmt::literals;
         const bool isOlap = TStringBuf{Name_}.EndsWith("+IsOlap");
-        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableExportFiltering(encryptionEnabled);
         Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(encryptionEnabled);
 
         auto res = YdbQueryClient().ExecuteQuery(fmt::format(R"sql(

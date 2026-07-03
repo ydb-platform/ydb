@@ -117,7 +117,6 @@ protected:
             runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_TRACE);
             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
-            runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
             runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
         }

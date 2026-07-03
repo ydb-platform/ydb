@@ -2,6 +2,7 @@
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/tenant_helpers.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/draft/ydb_maintenance_v1.grpc.pb.h>
@@ -213,5 +214,144 @@ Y_UNIT_TEST_SUITE(THiveTestWithTenants) {
         }
 
         checkCounter(0);
+    }
+
+    Y_UNIT_TEST(TestShrinkStoragePool) {
+        TPortManager pm;
+        Tests::TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetNodeCount(8)
+            .SetDynamicNodeCount(1)
+            .SetUseRealThreads(true)
+            .AddStoragePoolType("ssd");
+
+        Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        if (ENABLE_DETAILED_HIVE_LOG) {
+            runtime.SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_TRACE);
+            runtime.SetLogPriority(NKikimrServices::CMS_TENANTS, NActors::NLog::PRI_TRACE);
+        }
+        const auto sender = runtime.AllocateEdgeActor();
+        const ui64 hiveTablet = Tests::ChangeStateStorage(Tests::Hive, serverSettings.Domain);
+
+        Tests::TTenants tenants(server);
+
+        Cerr << "--Create tenant" << Endl;
+        {
+            Ydb::Cms::CreateDatabaseRequest request;
+            request.set_path("/Root/db1");
+            auto* resources = request.mutable_resources();
+            auto* storage = resources->add_storage_units();
+            storage->set_unit_kind("ssd");
+            storage->set_count(1);
+            tenants.CreateTenant(request, 1, TDuration::Minutes(1));
+        }
+
+        ui64 tenantHiveTablet;
+        {
+            auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+            auto& entry = request->ResultSet.emplace_back();
+            entry.Path = SplitPath("/Root/db1");
+            entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
+            runtime.Send(new IEventHandle(
+                MakeSchemeCacheID(),
+                sender,
+                new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release())),
+                0);
+
+            TAutoPtr<IEventHandle> handle;
+            auto reply = runtime.GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(handle);
+            auto& resultEntry = reply->Request->ResultSet.front();
+            UNIT_ASSERT_C(resultEntry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok,
+                    "SchemeCache navigate for /Root/db1 failed with status " << static_cast<int>(resultEntry.Status));
+            UNIT_ASSERT(resultEntry.DomainInfo);
+            tenantHiveTablet = resultEntry.DomainInfo->Params.GetHive();
+            UNIT_ASSERT(tenantHiveTablet != 0);
+
+        }
+
+        Cerr << "--Add Groups" << Endl;
+        {
+            Ydb::Cms::AlterDatabaseRequest request;
+            request.set_path("/Root/db1");
+            auto* storage = request.add_storage_units_to_add();
+            storage->set_unit_kind("ssd");
+            storage->set_count(3);
+
+            auto ev = std::make_unique<NConsole::TEvConsole::TEvAlterTenantRequest>();
+            *ev->Record.MutableRequest() = std::move(request);
+            runtime.SendToPipe(MakeConsoleID(), sender, ev.release(), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvAlterTenantResponse>(handle);
+            Cerr << "Alter response: " << reply->Record.ShortDebugString() << Endl;
+        }
+
+        for (int i = 0; true; ++i) {
+            Cerr << "--Waiting for groups to be added, iteration " << i << Endl;
+            auto *req = new NConsole::TEvConsole::TEvGetTenantStatusRequest;
+            req->Record.MutableRequest()->set_path("/Root/db1");
+            runtime.SendToPipe(MakeConsoleID(), sender, req, 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto ev = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetTenantStatusResponse>(handle);
+            auto &operation = ev->Record.GetResponse().operation();
+            UNIT_ASSERT(operation.status() == Ydb::StatusIds::SUCCESS);
+
+            Ydb::Cms::GetDatabaseStatusResult result;
+            UNIT_ASSERT(operation.result().UnpackTo(&result));
+
+            if (result.allocated_resources().storage_units(0).count() == 4) {
+                break;
+            }
+
+            Sleep(TDuration::MilliSeconds(100));
+        }
+
+        Cerr << "--Remove Groups" << Endl;
+        {
+            Ydb::Cms::AlterDatabaseRequest request;
+            request.set_path("/Root/db1");
+            auto* storage = request.add_storage_units_to_remove();
+            storage->set_unit_kind("ssd");
+            storage->set_count(2);
+
+            auto ev = std::make_unique<NConsole::TEvConsole::TEvAlterTenantRequest>();
+            *ev->Record.MutableRequest() = std::move(request);
+            runtime.SendToPipe(MakeConsoleID(), sender, ev.release(), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvAlterTenantResponse>(handle);
+            Cerr << "Alter response: " << reply->Record.ShortDebugString() << Endl;
+        }
+
+        // RunTestWithReboots does not work with real threads, so we'll do a pale imitation
+        const std::vector tablets = {hiveTablet, tenantHiveTablet, MakeConsoleID()};
+        std::mt19937 engine(1337);
+        std::uniform_int_distribution<size_t> pickTablet(0, tablets.size() - 1);
+
+        for (int i = 0; true; ++i) {
+            Cerr << "--Iteration " << i << Endl;
+            runtime.Register(CreateTabletKiller(tablets[pickTablet(engine)]));
+
+            auto *req = new NConsole::TEvConsole::TEvGetTenantStatusRequest;
+            req->Record.MutableRequest()->set_path("/Root/db1");
+            runtime.SendToPipe(MakeConsoleID(), sender, req, 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto ev = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetTenantStatusResponse>(handle);
+            auto &operation = ev->Record.GetResponse().operation();
+            UNIT_ASSERT(operation.status() == Ydb::StatusIds::SUCCESS);
+
+            Ydb::Cms::GetDatabaseStatusResult result;
+            UNIT_ASSERT(operation.result().UnpackTo(&result));
+
+            if (result.state() == Ydb::Cms::GetDatabaseStatusResult::RUNNING) {
+                break;
+            }
+
+            Sleep(TDuration::MilliSeconds(30));
+        }
     }
 }

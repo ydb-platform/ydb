@@ -23,6 +23,15 @@ def _initialize():
 _initialize()
 
 
+class _MissingItemError(AttributeError, KeyError):
+    # Dotted access to a missing row/struct field used to leak KeyError; since
+    # 3.29.5 it raises AttributeError (the correct protocol, e.g. for hasattr
+    # and copy). This combined type is both, so callers that still catch
+    # KeyError — as they had to before 3.29.5 — keep working alongside the new
+    # AttributeError. Prefer catching AttributeError in new code.
+    __slots__ = ()
+
+
 class _DotDict(dict):
     # A lazy __dict__ is declared on purpose: it is not materialized until a row
     # is written to (or its __dict__ is introspected), so untouched read-only
@@ -38,7 +47,7 @@ class _DotDict(dict):
         try:
             return self[item]
         except KeyError:
-            raise AttributeError(item) from None
+            raise _MissingItemError(item) from None
 
 
 def _is_decimal_signed(hi_value):

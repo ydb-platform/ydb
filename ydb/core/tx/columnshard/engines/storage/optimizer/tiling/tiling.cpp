@@ -437,7 +437,7 @@ struct TLevel {
                 }
                 const auto& p = it->second;
                 if (locksManager->IsLocked(*p, NDataLocks::ELockCategory::Compaction)) {
-                    YDB_LOG_DEBUG("Dump message, level",
+                    YDB_LOG_DEBUG("",
                         {"message", "tiling compaction: skipping level (portions locked)"},
                         {"level", Level});
                     CheckCompactions = false;
@@ -694,7 +694,7 @@ private:
             return nullptr;
         }
 
-        YDB_LOG_DEBUG("Dump message, level, count",
+        YDB_LOG_DEBUG("",
             {"message", "tiling compaction: compacting level"},
             {"level", level},
             {"count", portions.size()});
@@ -734,7 +734,7 @@ private:
             return nullptr;
         }
 
-        YDB_LOG_DEBUG("Dump message, level, count",
+        YDB_LOG_DEBUG("",
             {"message", "tiling compaction: compacting accumulator"},
             {"level", level},
             {"count", portions.size()});
@@ -852,7 +852,7 @@ private:
     }
 
     void DoActualize(const TInstant currentInstant) override {
-        YDB_LOG_DEBUG("Dump message",
+        YDB_LOG_DEBUG("",
             {"message", "tiling compaction: actualize called"});
         for (size_t level = 0; level < Accumulator.size(); ++level) {
             Accumulator[level].Actualize(*this, currentInstant);
@@ -974,7 +974,7 @@ private:
     }
 
     TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const override {
-        YDB_LOG_DEBUG("Dump message",
+        YDB_LOG_DEBUG("",
             {"message", "creating tiling compaction optimizer"});
         return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), Settings);
     }

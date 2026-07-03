@@ -16,7 +16,7 @@
 namespace NKikimr::NOlap {
 
 void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
-    YDB_LOG_TRACE("Dump event, portion, pathId",
+    YDB_LOG_TRACE("",
         {"event", "upsert_portion"},
         {"portion", info->DebugString()},
         {"pathId", GetPathId()});
@@ -50,7 +50,7 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
             {"pathId", PathId});
         return false;
     } else {
-        YDB_LOG_TRACE("Dump event, portionInfo, pathId",
+        YDB_LOG_TRACE("",
             {"event", "portion_erased"},
             {"portionInfo", it->second->DebugString()},
             {"pathId", PathId});
@@ -114,7 +114,7 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
 
 void TGranuleMeta::OnCompactionFinished() {
     AllowInsertionFlag = false;
-    YDB_LOG_DEBUG("Dump event, info",
+    YDB_LOG_DEBUG("",
         {"event", "OnCompactionFinished"},
         {"info", DebugString()});
     Stats->UpdateGranuleInfo(*this);
@@ -203,7 +203,7 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
 
 void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const {
     if (context.GetActualInstant() < NextActualizations) {
-        YDB_LOG_DEBUG("Dump event, waiting",
+        YDB_LOG_DEBUG("",
             {"event", "skip_actualization"},
             {"waiting", NextActualizations - context.GetActualInstant()});
         return;

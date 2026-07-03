@@ -34,12 +34,12 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         {
             auto it = MaxByPortionId.find(portion.GetPortionId());
             if (it == MaxByPortionId.end()) {
-                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "Dump event, reason",
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",
                     {"event", "skip_add_portion"},
                     {"reason", "data not ready"});
                 return {};
             } else if (!it->second) {
-                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "Dump event, reason",
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",
                     {"event", "skip_add_portion"},
                     {"reason", "no data for ttl usage (need to create index or use first pk column)"});
                 return {};
@@ -49,7 +49,7 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         }
         const bool skipEviction = !NYDBTest::TControllers::GetColumnShardController()->CheckPortionForEvict(portion);
         auto tieringInfo = Tiering->GetTierToMove(max, now, skipEviction);
-        YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump tieringInfo",
+        YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"tieringInfo", tieringInfo.DebugString()});
         std::optional<i64> d;
         std::set<TString> storagesWrite;
@@ -76,7 +76,7 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
             auto storagesRead = portionSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
             return TFullActualizationInfo(TRWAddress(std::move(storagesRead), std::move(storagesWrite)), targetTierName, *d, targetSchema);
         } else {
-            YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "Dump event, reason, portion, skipEviction, optimized, hasInsertWriteId",
+            YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",
                 {"event", "skip_add_portion"},
                 {"reason", "no_eviction"},
                 {"portion", portion.GetPortionId()},
@@ -96,7 +96,7 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         TRWAddress address(std::move(storagesRead), std::move(storagesWrite));
         return TFullActualizationInfo(std::move(address), IStoragesManager::DefaultStorageId, 0, targetSchema);
     }
-    YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "Dump event, reason",
+    YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",
         {"event", "skip_add_portion"},
         {"reason", "no_tiering"});
     return {};
@@ -228,7 +228,7 @@ void TTieringActualizer::DoExtractTasks(
             }
         }
     }
-    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "Dump event, totalPortions, tasks",
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",
         {"event", "ExtractTtlTasks"},
         {"totalPortions", PortionsInfo.size()},
         {"tasks", portionIds.size()});
@@ -260,7 +260,7 @@ void TTieringActualizer::DoExtractTasks(
 }
 
 void TTieringActualizer::Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext) {
-    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_TIERING, "Dump event, hasTiering, tiers, hadTieringBefore",
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_TIERING, "",
         {"event", "refresh_tiering"},
         {"hasTiering", !!info},
         {"tiers", info ? info->GetOrderedTiers().size() : 0},
@@ -302,7 +302,7 @@ private:
         }
 
         if (result.GetValue().HasRemovedData()) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump error",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                 {"error", TStringBuilder{} << "Data accessor result with removed data, " << result.GetValue().GetRemovedData().size()});
         }
 

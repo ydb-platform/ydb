@@ -69,11 +69,11 @@ void TSchemeActualizer::DoExtractTasks(
     TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& /*internalContext*/) {
     THashSet<ui64> portionsToRemove;
     TSchemeGlobalCounters::OnExtract();
-    YDB_LOG_DEBUG("Dump rwCount",
+    YDB_LOG_DEBUG("",
         {"rwCount", PortionsToActualizeScheme.size()});
     for (auto&& [address, portions] : PortionsToActualizeScheme) {
         if (!tasksContext.IsRWAddressAvailable(address)) {
-            YDB_LOG_DEBUG("Dump event",
+            YDB_LOG_DEBUG("",
                 {"event", "skip_not_ready_for_write"});
             TSchemeGlobalCounters::OnSkipNotReadyWrite();
             continue;
@@ -99,7 +99,7 @@ void TSchemeActualizer::DoExtractTasks(
             bool limitExceeded = false;
             switch (tasksContext.AddPortion(portion, std::move(features), {})) {
                 case TTieringProcessContext::EAddPortionResult::TASK_LIMIT_EXCEEDED:
-                    YDB_LOG_DEBUG("Dump event, reason, context",
+                    YDB_LOG_DEBUG("",
                         {"event", "cannot_add_portion"},
                         {"reason", "limit_exceeded"},
                         {"context", tasksContext.DebugString()});
@@ -131,7 +131,7 @@ void TSchemeActualizer::DoExtractTasks(
     }
     Counters.QueueSizeInternalWrite->SetValue(waitQueueInternal);
     Counters.QueueSizeExternalWrite->SetValue(waitQueueExternal);
-    YDB_LOG_DEBUG("Dump internalQueue, externalQueue",
+    YDB_LOG_DEBUG("",
         {"internalQueue", waitQueueInternal},
         {"externalQueue", waitQueueExternal});
 }

@@ -866,7 +866,7 @@ public:
         for (auto&& i : portions) {
             size += i->GetTotalBlobBytes();
             if (locksManager->IsLocked(*i, NDataLocks::ELockCategory::Compaction)) {
-                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump info, event, reason",
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                     {"info", Others.DebugString()},
                     {"event", "skip_optimization"},
                     {"reason", "busy"});
@@ -907,7 +907,7 @@ public:
             auto oldPortionInfo = GetOldestPortion(true);
             auto youngPortionInfo = GetYoungestPortion(true);
             AFL_VERIFY(oldPortionInfo && youngPortionInfo);
-            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump event, delta, main, current, oldest, young, bucketFrom, bucketTo",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                 {"event", "other_not_final"},
                 {"delta", youngPortionInfo->RecordSnapshotMax().GetPlanStep() - oldPortionInfo->RecordSnapshotMax().GetPlanStep()},
                 {"main", MainPortion->DebugString(true)},

@@ -300,7 +300,7 @@ private:
     }
 
     TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const override {
-        YDB_LOG_DEBUG("Dump message",
+        YDB_LOG_DEBUG("",
             {"message", "creating tiling++ compaction optimizer"});
         return std::make_shared<TOptimizerPlannerAdapter>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), Settings);
     }

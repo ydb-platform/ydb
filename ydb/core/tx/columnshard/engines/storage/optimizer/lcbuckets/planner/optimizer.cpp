@@ -54,7 +54,7 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
             result->SetTargetCompactionLevel(data.GetTargetCompactionLevel());
             result->SetPortionExpectedSize(Levels[data.GetTargetCompactionLevel()]->GetExpectedPortionSize());
             auto positions = data.GetCheckPositions(PrimaryKeysSchema, level->GetLevelId() > 1);
-            YDB_LOG_DEBUG("Dump taskId, positions, level, target, data",
+            YDB_LOG_DEBUG("",
                 {"taskId", result->GetTaskIdentifier()},
                 {"positions", positions.DebugString()},
                 {"level", level->GetLevelId()},

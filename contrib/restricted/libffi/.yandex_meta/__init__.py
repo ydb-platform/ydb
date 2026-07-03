@@ -1,6 +1,5 @@
 import os
 import shutil
-from collections import OrderedDict
 from glob import glob
 from os.path import basename, dirname
 
@@ -61,246 +60,169 @@ def libffi_post_install(self):
         # See configure.host script in libffi distribution for original host->srcs mapping
         m.after(
             "SRCS",
-            Switch(
-                OrderedDict(
-                    sorted(
-                        [
-                            (
-                                "ARCH_I386 AND OS_WINDOWS",
-                                Linkable(
-                                    ADDINCL=[
-                                        configs_dir + "/i386-microsoft-windows",
-                                        GLOBAL(configs_dir + "/i386-microsoft-windows/include"),
-                                    ],
-                                    SRCS=[
-                                        "src/x86/ffi.c",
-                                        "configs/i386-microsoft-windows/sysv_intel.masm",
-                                    ],
-                                    LDFLAGS=[
-                                        "/safeseh:no",
-                                    ],
-                                ),
-                            ),
-                            (
-                                "ARCH_I386 AND OS_ANDROID",
-                                Linkable(
-                                    ADDINCL=[
-                                        configs_dir + "/i686-pc-linux-android16",
-                                        GLOBAL(configs_dir + "/i686-pc-linux-android16/include"),
-                                    ],
-                                    SRCS=[
-                                        "src/x86/ffi.c",
-                                        "src/x86/sysv.S",
-                                    ],
-                                ),
-                            ),
-                            (
-                                "ARCH_X86_64 AND OS_LINUX",
-                                Linkable(
-                                    ADDINCL=[
-                                        configs_dir + "/x86_64-unknown-linux-gnu",
-                                        GLOBAL(configs_dir + "/x86_64-unknown-linux-gnu/include"),
-                                    ],
-                                    SRCS=[
-                                        "src/x86/ffi64.c",
-                                        "src/x86/ffiw64.c",
-                                        "src/x86/unix64.S",
-                                        "src/x86/win64.S",
-                                    ],
-                                ),
-                            ),
-                            (
-                                "ARCH_X86_64 AND OS_ANDROID",
-                                Linkable(
-                                    ADDINCL=[
-                                        configs_dir + "/x86_64-pc-linux-android21",
-                                        GLOBAL(configs_dir + "/x86_64-pc-linux-android21/include"),
-                                    ],
-                                    SRCS=[
-                                        "src/x86/ffi64.c",
-                                        "src/x86/ffiw64.c",
-                                        "src/x86/unix64.S",
-                                        "src/x86/win64.S",
-                                    ],
-                                ),
-                            ),
-                            (
-                                "ARCH_X86_64 AND OS_DARWIN",
-                                Linkable(
-                                    ADDINCL=[
-                                        configs_dir + "/x86_64-apple-macosx",
-                                        GLOBAL(configs_dir + "/x86_64-apple-macosx/include"),
-                                    ],
-                                    SRCS=[
-                                        "src/x86/ffi64.c",
-                                        "src/x86/ffiw64.c",
-                                        "src/x86/unix64.S",
-                                        "src/x86/win64.S",
-                                    ],
-                                ),
-                            ),
-                            (
-                                "ARCH_ARM64 AND OS_DARWIN",
-                                Linkable(
-                                    ADDINCL=[
-                                        configs_dir + "/aarch64-apple-macos",
-                                        GLOBAL(configs_dir + "/aarch64-apple-macos/include"),
-                                    ],
-                                    SRCS=[
-                                        "src/aarch64/ffi.c",
-                                        "src/aarch64/sysv.S",
-                                    ],
-                                ),
-                            ),
-                            (
-                                "ARCH_X86_64 AND OS_IOS",
-                                Linkable(
-                                    ADDINCL=[
-                                        configs_dir + "/x86_64-apple-iphonesimulator",
-                                        GLOBAL(configs_dir + "/x86_64-apple-iphonesimulator/include"),
-                                    ],
-                                    SRCS=[
-                                        "src/x86/ffi64.c",
-                                        "src/x86/ffiw64.c",
-                                        "src/x86/unix64.S",
-                                        "src/x86/win64.S",
-                                    ],
-                                ),
-                            ),
-                            (
-                                "ARCH_X86_64 AND OS_WINDOWS",
-                                Linkable(
-                                    ADDINCL=[
-                                        configs_dir + "/x86_64-microsoft-windows",
-                                        GLOBAL(configs_dir + "/x86_64-microsoft-windows/include"),
-                                    ],
-                                    SRCS=[
-                                        "src/x86/ffiw64.c",
-                                        "configs/x86_64-microsoft-windows/win64_intel.masm",
-                                    ],
-                                ),
-                            ),
-                            (
-                                "ARCH_ARM7 AND OS_LINUX",
-                                Linkable(
-                                    ADDINCL=[
-                                        configs_dir + "/armv7a-unknown-linux-gnueabihf",
-                                        GLOBAL(configs_dir + "/armv7a-unknown-linux-gnueabihf/include"),
-                                    ],
-                                    SRCS=[
-                                        "src/arm/ffi.c",
-                                        "src/arm/sysv.S",
-                                    ],
-                                ),
-                            ),
-                            (
-                                "ARCH_ARM7 AND OS_ANDROID",
-                                Linkable(
-                                    ADDINCL=[
-                                        configs_dir + "/armv7a-unknown-linux-androideabi16",
-                                        GLOBAL(configs_dir + "/armv7a-unknown-linux-androideabi16/include"),
-                                    ],
-                                    SRCS=[
-                                        "src/arm/ffi.c",
-                                        "src/arm/sysv.S",
-                                    ],
-                                ),
-                            ),
-                            (
-                                "ARCH_ARM64 AND OS_LINUX",
-                                Linkable(
-                                    ADDINCL=[
-                                        configs_dir + "/aarch64-unknown-linux-gnu",
-                                        GLOBAL(configs_dir + "/aarch64-unknown-linux-gnu/include"),
-                                    ],
-                                    SRCS=[
-                                        "src/aarch64/ffi.c",
-                                        "src/aarch64/sysv.S",
-                                    ],
-                                ),
-                            ),
-                            (
-                                "ARCH_ARM64 AND OS_ANDROID",
-                                Linkable(
-                                    ADDINCL=[
-                                        configs_dir + "/aarch64-unknown-linux-android21",
-                                        GLOBAL(configs_dir + "/aarch64-unknown-linux-android21/include"),
-                                    ],
-                                    SRCS=[
-                                        "src/aarch64/ffi.c",
-                                        "src/aarch64/sysv.S",
-                                    ],
-                                ),
-                            ),
-                            (
-                                "ARCH_ARM64 AND OS_IOS",
-                                Linkable(
-                                    ADDINCL=[
-                                        configs_dir + "/aarch64-apple-iphoneos",
-                                        GLOBAL(configs_dir + "/aarch64-apple-iphoneos/include"),
-                                    ],
-                                    SRCS=[
-                                        "src/aarch64/ffi.c",
-                                        "src/aarch64/sysv.S",
-                                    ],
-                                ),
-                            ),
-                            (
-                                "ARCH_PPC64LE AND OS_LINUX",
-                                Linkable(
-                                    ADDINCL=[
-                                        configs_dir + "/powerpc64le-unknown-linux-gnu",
-                                        GLOBAL(configs_dir + "/powerpc64le-unknown-linux-gnu/include"),
-                                    ],
-                                    SRCS=[
-                                        "src/powerpc/ffi.c",
-                                        "src/powerpc/ffi_linux64.c",
-                                        "src/powerpc/ffi_sysv.c",
-                                        "src/powerpc/linux64.S",
-                                        "src/powerpc/linux64_closure.S",
-                                        "src/powerpc/ppc_closure.S",
-                                        "src/powerpc/sysv.S",
-                                    ],
-                                ),
-                            ),
-                            (
-                                "ARCH_WASM32 AND OS_EMSCRIPTEN",
-                                Linkable(
-                                    ADDINCL=[
-                                        configs_dir + "/wasm32-emscripten",
-                                        GLOBAL(configs_dir + "/wasm32-emscripten/include"),
-                                    ],
-                                ),
-                            ),
-                            (
-                                "ARCH_WASM64 AND OS_EMSCRIPTEN",
-                                Linkable(
-                                    ADDINCL=[
-                                        configs_dir + "/wasm64-emscripten",
-                                        GLOBAL(configs_dir + "/wasm64-emscripten/include"),
-                                    ],
-                                ),
-                            ),
-                            # fix only configure-stage for OS_NONE, see YMAKE-218, DEVTOOLSSUPPORT-46190
-                            (
-                                "OS_NONE OR OS_FREERTOS OR OS_ZEPHYR",
-                                Linkable(
-                                    ADDINCL=[
-                                        configs_dir + "/x86_64-unknown-linux-gnu",
-                                        GLOBAL(configs_dir + "/x86_64-unknown-linux-gnu/include"),
-                                    ],
-                                ),
-                            ),
-                        ]
-                        + [
-                            (
-                                "default",
-                                "MESSAGE(FATAL_ERROR Unsupported libffi platform: ${TARGET_PLATFORM} / ${HARDWARE_TYPE})",
-                            ),
-                        ]
-                    )
-                )
-            ),
+            Switch({
+                "ARCH_I386 AND OS_WINDOWS": Linkable(
+                    ADDINCL=[
+                        configs_dir + "/i386-microsoft-windows",
+                        GLOBAL(configs_dir + "/i386-microsoft-windows/include"),
+                    ],
+                ),
+                "ARCH_I386 AND OS_ANDROID": Linkable(
+                    ADDINCL=[
+                        configs_dir + "/i686-pc-linux-android16",
+                        GLOBAL(configs_dir + "/i686-pc-linux-android16/include"),
+                    ],
+                ),
+                "ARCH_X86_64 AND OS_LINUX": Linkable(
+                    ADDINCL=[
+                        configs_dir + "/x86_64-unknown-linux-gnu",
+                        GLOBAL(configs_dir + "/x86_64-unknown-linux-gnu/include"),
+                    ],
+                ),
+                "ARCH_X86_64 AND OS_ANDROID": Linkable(
+                    ADDINCL=[
+                        configs_dir + "/x86_64-pc-linux-android21",
+                        GLOBAL(configs_dir + "/x86_64-pc-linux-android21/include"),
+                    ],
+                ),
+                "ARCH_X86_64 AND OS_DARWIN": Linkable(
+                    ADDINCL=[
+                        configs_dir + "/x86_64-apple-macosx",
+                        GLOBAL(configs_dir + "/x86_64-apple-macosx/include"),
+                    ],
+                ),
+                "ARCH_ARM64 AND OS_DARWIN": Linkable(
+                    ADDINCL=[
+                        configs_dir + "/aarch64-apple-macos",
+                        GLOBAL(configs_dir + "/aarch64-apple-macos/include"),
+                    ],
+                ),
+                "ARCH_X86_64 AND OS_IOS": Linkable(
+                    ADDINCL=[
+                        configs_dir + "/x86_64-apple-iphonesimulator",
+                        GLOBAL(configs_dir + "/x86_64-apple-iphonesimulator/include"),
+                    ],
+                ),
+                "ARCH_X86_64 AND OS_WINDOWS": Linkable(
+                    ADDINCL=[
+                        configs_dir + "/x86_64-microsoft-windows",
+                        GLOBAL(configs_dir + "/x86_64-microsoft-windows/include"),
+                    ],
+                ),
+                "ARCH_ARM7 AND OS_LINUX": Linkable(
+                    ADDINCL=[
+                        configs_dir + "/armv7a-unknown-linux-gnueabihf",
+                        GLOBAL(configs_dir + "/armv7a-unknown-linux-gnueabihf/include"),
+                    ],
+                ),
+                "ARCH_ARM7 AND OS_ANDROID": Linkable(
+                    ADDINCL=[
+                        configs_dir + "/armv7a-unknown-linux-androideabi16",
+                        GLOBAL(configs_dir + "/armv7a-unknown-linux-androideabi16/include"),
+                    ],
+                ),
+                "ARCH_ARM64 AND OS_LINUX": Linkable(
+                    ADDINCL=[
+                        configs_dir + "/aarch64-unknown-linux-gnu",
+                        GLOBAL(configs_dir + "/aarch64-unknown-linux-gnu/include"),
+                    ],
+                ),
+                "ARCH_ARM64 AND OS_ANDROID": Linkable(
+                    ADDINCL=[
+                        configs_dir + "/aarch64-unknown-linux-android21",
+                        GLOBAL(configs_dir + "/aarch64-unknown-linux-android21/include"),
+                    ],
+                ),
+                "ARCH_ARM64 AND OS_IOS": Linkable(
+                    ADDINCL=[
+                        configs_dir + "/aarch64-apple-iphoneos",
+                        GLOBAL(configs_dir + "/aarch64-apple-iphoneos/include"),
+                    ],
+                ),
+                "ARCH_PPC64LE AND OS_LINUX": Linkable(
+                    ADDINCL=[
+                        configs_dir + "/powerpc64le-unknown-linux-gnu",
+                        GLOBAL(configs_dir + "/powerpc64le-unknown-linux-gnu/include"),
+                    ],
+                ),
+                "ARCH_WASM32 AND OS_EMSCRIPTEN": Linkable(
+                    ADDINCL=[
+                        configs_dir + "/wasm32-emscripten",
+                        GLOBAL(configs_dir + "/wasm32-emscripten/include"),
+                    ],
+                ),
+                "ARCH_WASM64 AND OS_EMSCRIPTEN": Linkable(
+                    ADDINCL=[
+                        configs_dir + "/wasm64-emscripten",
+                        GLOBAL(configs_dir + "/wasm64-emscripten/include"),
+                    ],
+                ),
+                # fix only configure-stage for OS_NONE, see YMAKE-218, DEVTOOLSSUPPORT-46190
+                "OS_NONE OR OS_FREERTOS OR OS_ZEPHYR": Linkable(
+                    ADDINCL=[
+                        configs_dir + "/x86_64-unknown-linux-gnu",
+                        GLOBAL(configs_dir + "/x86_64-unknown-linux-gnu/include"),
+                    ],
+                ),
+                "default": "MESSAGE(FATAL_ERROR Unsupported libffi platform: ${TARGET_PLATFORM} / ${HARDWARE_TYPE})",
+            }),
+        )
+        m.after(
+            "SRCS",
+            Switch({
+                "ARCH_I386 AND NOT OS_WINDOWS": Linkable(
+                    SRCS=[
+                        "src/x86/ffi.c",
+                        "src/x86/sysv.S",
+                    ],
+                ),
+                "ARCH_I386 AND OS_WINDOWS": Linkable(
+                    SRCS=[
+                        "src/x86/ffi.c",
+                        "configs/i386-microsoft-windows/sysv_intel.masm",
+                    ],
+                    LDFLAGS=[
+                        "/safeseh:no",
+                    ],
+                ),
+                "ARCH_X86_64 AND NOT OS_WINDOWS": Linkable(
+                    SRCS=[
+                        "src/x86/ffi64.c",
+                        "src/x86/ffiw64.c",
+                        "src/x86/unix64.S",
+                        "src/x86/win64.S",
+                    ],
+                ),
+                "ARCH_X86_64 AND OS_WINDOWS": Linkable(
+                    SRCS=[
+                        "src/x86/ffiw64.c",
+                        "configs/x86_64-microsoft-windows/win64_intel.masm",
+                    ],
+                ),
+                "ARCH_ARM7": Linkable(
+                    SRCS=[
+                        "src/arm/ffi.c",
+                        "src/arm/sysv.S",
+                    ],
+                ),
+                "ARCH_ARM64": Linkable(
+                    SRCS=[
+                        "src/aarch64/ffi.c",
+                        "src/aarch64/sysv.S",
+                    ],
+                ),
+                "ARCH_PPC64LE": Linkable(
+                    SRCS=[
+                        "src/powerpc/ffi.c",
+                        "src/powerpc/ffi_linux64.c",
+                        "src/powerpc/ffi_sysv.c",
+                        "src/powerpc/linux64.S",
+                        "src/powerpc/linux64_closure.S",
+                        "src/powerpc/ppc_closure.S",
+                        "src/powerpc/sysv.S",
+                    ],
+                ),
+            }),
         )
 
     def _add_test(testdir, src):

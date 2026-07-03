@@ -47,87 +47,45 @@ IF (ARCH_ARM64 AND OS_ANDROID)
         contrib/restricted/libffi/configs/aarch64-unknown-linux-android21
         GLOBAL contrib/restricted/libffi/configs/aarch64-unknown-linux-android21/include
     )
-    SRCS(
-        src/aarch64/ffi.c
-        src/aarch64/sysv.S
-    )
 ELSEIF (ARCH_ARM64 AND OS_DARWIN)
     ADDINCL(
         contrib/restricted/libffi/configs/aarch64-apple-macos
         GLOBAL contrib/restricted/libffi/configs/aarch64-apple-macos/include
-    )
-    SRCS(
-        src/aarch64/ffi.c
-        src/aarch64/sysv.S
     )
 ELSEIF (ARCH_ARM64 AND OS_IOS)
     ADDINCL(
         contrib/restricted/libffi/configs/aarch64-apple-iphoneos
         GLOBAL contrib/restricted/libffi/configs/aarch64-apple-iphoneos/include
     )
-    SRCS(
-        src/aarch64/ffi.c
-        src/aarch64/sysv.S
-    )
 ELSEIF (ARCH_ARM64 AND OS_LINUX)
     ADDINCL(
         contrib/restricted/libffi/configs/aarch64-unknown-linux-gnu
         GLOBAL contrib/restricted/libffi/configs/aarch64-unknown-linux-gnu/include
-    )
-    SRCS(
-        src/aarch64/ffi.c
-        src/aarch64/sysv.S
     )
 ELSEIF (ARCH_ARM7 AND OS_ANDROID)
     ADDINCL(
         contrib/restricted/libffi/configs/armv7a-unknown-linux-androideabi16
         GLOBAL contrib/restricted/libffi/configs/armv7a-unknown-linux-androideabi16/include
     )
-    SRCS(
-        src/arm/ffi.c
-        src/arm/sysv.S
-    )
 ELSEIF (ARCH_ARM7 AND OS_LINUX)
     ADDINCL(
         contrib/restricted/libffi/configs/armv7a-unknown-linux-gnueabihf
         GLOBAL contrib/restricted/libffi/configs/armv7a-unknown-linux-gnueabihf/include
-    )
-    SRCS(
-        src/arm/ffi.c
-        src/arm/sysv.S
     )
 ELSEIF (ARCH_I386 AND OS_ANDROID)
     ADDINCL(
         contrib/restricted/libffi/configs/i686-pc-linux-android16
         GLOBAL contrib/restricted/libffi/configs/i686-pc-linux-android16/include
     )
-    SRCS(
-        src/x86/ffi.c
-        src/x86/sysv.S
-    )
 ELSEIF (ARCH_I386 AND OS_WINDOWS)
     ADDINCL(
         contrib/restricted/libffi/configs/i386-microsoft-windows
         GLOBAL contrib/restricted/libffi/configs/i386-microsoft-windows/include
     )
-    LDFLAGS(/safeseh:no)
-    SRCS(
-        configs/i386-microsoft-windows/sysv_intel.masm
-        src/x86/ffi.c
-    )
 ELSEIF (ARCH_PPC64LE AND OS_LINUX)
     ADDINCL(
         contrib/restricted/libffi/configs/powerpc64le-unknown-linux-gnu
         GLOBAL contrib/restricted/libffi/configs/powerpc64le-unknown-linux-gnu/include
-    )
-    SRCS(
-        src/powerpc/ffi.c
-        src/powerpc/ffi_linux64.c
-        src/powerpc/ffi_sysv.c
-        src/powerpc/linux64.S
-        src/powerpc/linux64_closure.S
-        src/powerpc/ppc_closure.S
-        src/powerpc/sysv.S
     )
 ELSEIF (ARCH_WASM32 AND OS_EMSCRIPTEN)
     ADDINCL(
@@ -144,53 +102,25 @@ ELSEIF (ARCH_X86_64 AND OS_ANDROID)
         contrib/restricted/libffi/configs/x86_64-pc-linux-android21
         GLOBAL contrib/restricted/libffi/configs/x86_64-pc-linux-android21/include
     )
-    SRCS(
-        src/x86/ffi64.c
-        src/x86/ffiw64.c
-        src/x86/unix64.S
-        src/x86/win64.S
-    )
 ELSEIF (ARCH_X86_64 AND OS_DARWIN)
     ADDINCL(
         contrib/restricted/libffi/configs/x86_64-apple-macosx
         GLOBAL contrib/restricted/libffi/configs/x86_64-apple-macosx/include
-    )
-    SRCS(
-        src/x86/ffi64.c
-        src/x86/ffiw64.c
-        src/x86/unix64.S
-        src/x86/win64.S
     )
 ELSEIF (ARCH_X86_64 AND OS_IOS)
     ADDINCL(
         contrib/restricted/libffi/configs/x86_64-apple-iphonesimulator
         GLOBAL contrib/restricted/libffi/configs/x86_64-apple-iphonesimulator/include
     )
-    SRCS(
-        src/x86/ffi64.c
-        src/x86/ffiw64.c
-        src/x86/unix64.S
-        src/x86/win64.S
-    )
 ELSEIF (ARCH_X86_64 AND OS_LINUX)
     ADDINCL(
         contrib/restricted/libffi/configs/x86_64-unknown-linux-gnu
         GLOBAL contrib/restricted/libffi/configs/x86_64-unknown-linux-gnu/include
     )
-    SRCS(
-        src/x86/ffi64.c
-        src/x86/ffiw64.c
-        src/x86/unix64.S
-        src/x86/win64.S
-    )
 ELSEIF (ARCH_X86_64 AND OS_WINDOWS)
     ADDINCL(
         contrib/restricted/libffi/configs/x86_64-microsoft-windows
         GLOBAL contrib/restricted/libffi/configs/x86_64-microsoft-windows/include
-    )
-    SRCS(
-        configs/x86_64-microsoft-windows/win64_intel.masm
-        src/x86/ffiw64.c
     )
 ELSEIF (OS_NONE OR OS_FREERTOS OR OS_ZEPHYR)
     ADDINCL(
@@ -199,6 +129,51 @@ ELSEIF (OS_NONE OR OS_FREERTOS OR OS_ZEPHYR)
     )
 ELSE()
     MESSAGE(FATAL_ERROR Unsupported libffi platform: ${TARGET_PLATFORM} / ${HARDWARE_TYPE})
+ENDIF()
+
+IF (ARCH_ARM64)
+    SRCS(
+        src/aarch64/ffi.c
+        src/aarch64/sysv.S
+    )
+ELSEIF (ARCH_ARM7)
+    SRCS(
+        src/arm/ffi.c
+        src/arm/sysv.S
+    )
+ELSEIF (ARCH_I386 AND NOT OS_WINDOWS)
+    SRCS(
+        src/x86/ffi.c
+        src/x86/sysv.S
+    )
+ELSEIF (ARCH_I386 AND OS_WINDOWS)
+    LDFLAGS(/safeseh:no)
+    SRCS(
+        configs/i386-microsoft-windows/sysv_intel.masm
+        src/x86/ffi.c
+    )
+ELSEIF (ARCH_PPC64LE)
+    SRCS(
+        src/powerpc/ffi.c
+        src/powerpc/ffi_linux64.c
+        src/powerpc/ffi_sysv.c
+        src/powerpc/linux64.S
+        src/powerpc/linux64_closure.S
+        src/powerpc/ppc_closure.S
+        src/powerpc/sysv.S
+    )
+ELSEIF (ARCH_X86_64 AND NOT OS_WINDOWS)
+    SRCS(
+        src/x86/ffi64.c
+        src/x86/ffiw64.c
+        src/x86/unix64.S
+        src/x86/win64.S
+    )
+ELSEIF (ARCH_X86_64 AND OS_WINDOWS)
+    SRCS(
+        configs/x86_64-microsoft-windows/win64_intel.masm
+        src/x86/ffiw64.c
+    )
 ENDIF()
 
 END()

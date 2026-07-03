@@ -8,6 +8,17 @@ The build process using the source code is described in the source code reposito
 
 {% list tabs %}
 
+- C++
+
+  Clone the [ydb-cpp-sdk](https://github.com/ydb-platform/ydb-cpp-sdk) repository and run the command from the command line:
+
+  {% include [install/cmd_cpp.md](install/cmd_cpp.md) %}
+
+  - `compiler` - your compiler (`clang` or `gcc`)
+  - `ydb_install_dir` - the path where you want to install the SDK.
+
+  Before running the command, make sure all dependencies are installed.
+
 - Python
 
   Run the command from the command line:
@@ -32,10 +43,6 @@ The build process using the source code is described in the source code reposito
 
   Add dependencies to the Maven project as described in the ["Install the SDK"](https://github.com/ydb-platform/ydb-java-sdk#install-the-sdk) step of the `readme.md` file in the source code repository.
 
-- PHP
-
-  {% include [install/cmd_php.md](install/cmd_php.md) %}
-
 - JavaScript
 
   {% include [install/cmd_npm.md](install/cmd_npm.md) %}
@@ -46,5 +53,8 @@ The build process using the source code is described in the source code reposito
 
   {% include [install/cmd_rust.md](install/cmd_rust.md) %}
 
-{% endlist %}
+- PHP
 
+  {% include [install/cmd_php.md](install/cmd_php.md) %}
+
+{% endlist %}

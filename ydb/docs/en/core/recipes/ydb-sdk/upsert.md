@@ -1,6 +1,6 @@
-# Upsert data
+# Inserting data
 
-Below are code examples of using the built-in upsert tools of the {{ ydb-short-name }} SDK:
+Below are examples of using the {{ ydb-short-name }} SDK built-in tools to perform inserts:
 
 {% list tabs %}
 
@@ -284,8 +284,7 @@ Below are code examples of using the built-in upsert tools of the {{ ydb-short-n
 
   - Native SDK
 
-    Use `SessionRetryContext` and `TableSession.executeDataQuery` with the `$seriesData` parameter of type `List<Struct<...>>`. Values for `AS_TABLE($seriesData)` are collected in the same way as row structures in the [batch upsert](./bulk-upsert.md) example.
-
+    Use `SessionRetryContext` and `TableSession.executeDataQuery` with a `$seriesData` parameter of type `List<Struct<...>>`. Build values for `AS_TABLE($seriesData)` the same way as row structs in the [batch insert](./bulk-upsert.md) example.
 
     ```java
     SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
@@ -318,12 +317,11 @@ Below are code examples of using the built-in upsert tools of the {{ ydb-short-n
                  SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
                  """
          )) {
-        // The $seriesData parameter is set according to the query type (see the JDBC driver documentation)
+        // Set $seriesData according to the query type (see JDBC driver documentation)
     }
     ```
 
-
-    In Spring Boot, Hibernate, JOOQ, and other frameworks on top of JDBC, the driver also tries to optimize **large** sequences of inserts and updates: when necessary, **UPSERT**, `INSERT`, `UPDATE`, `DELETE` are automatically **grouped into batches** on the driver side (including large batches from ORM).
+    In Spring Boot, Hibernate, JOOQ, and other JDBC stacks, the driver also tries to optimize **large** sequences of inserts and updates: when needed, **UPSERT**, `INSERT`, `UPDATE`, and `DELETE` are **batched** on the driver side (including large batches from ORMs).
 
   {% endlist %}
 
@@ -333,8 +331,7 @@ Below are code examples of using the built-in upsert tools of the {{ ydb-short-n
 
   - Native SDK
 
-    To upsert data, use `QuerySessionPool` and the `execute_with_retries` method with a parameterized YQL query. The query operates on the container type `List<Struct<...>>`, which allows passing multiple rows in a single call.
-
+    Use `QuerySessionPool` and `execute_with_retries` with a parameterized YQL query. The query uses the container type `List<Struct<...>>`, so you can pass several rows in one call.
 
     ```python
     import os
@@ -443,8 +440,7 @@ Below are code examples of using the built-in upsert tools of the {{ ydb-short-n
 
   - SQLAlchemy
 
-    When using {{ ydb-short-name }} via SQLAlchemy, the `ydb_sqlalchemy.upsert` function is used to insert data, which generates an `UPSERT INTO` query based on the table and the passed values. You can insert either a single row or multiple rows in one call:
-
+    When using {{ ydb-short-name }} through SQLAlchemy, use the `ydb_sqlalchemy.upsert` helper to build an `UPSERT INTO` statement from a table and values. You can insert one row or several rows in one call:
 
     ```python
     import os
@@ -536,6 +532,7 @@ Below are code examples of using the built-in upsert tools of the {{ ydb-short-n
   const sql = query(driver)
   await sql`UPSERT INTO users SELECT * FROM AS_TABLE(${users})`
   ```
+
 
 - Rust
 

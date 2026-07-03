@@ -6,6 +6,47 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
 
 {% list tabs %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+
+    int main() {
+      auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+      auto driverConfig = NYdb::TDriverConfig(connectionString)
+        .SetBalancingPolicy(NYdb::TBalancingPolicy::UseAllNodes());
+
+      NYdb::TDriver driver(driverConfig);
+      // ...
+      driver.Stop(true);
+      return 0;
+    }
+    ```
+
+  - userver
+
+    {% cut "static config" %}
+
+    ```yaml
+    ydb:
+        databases:
+            db:
+                endpoint: grpc://localhost:2136
+                database: /local
+                prefer_local_dc: false
+    ```
+
+    {% endcut %}
+
+    Initialization of `ydb::YdbComponent`, obtaining `ydb::TableClient`, and starting `components::MinimalServerComponentList` — as in the example from [init.md](./init.md).
+
+  {% endlist %}
+
 - Go
 
   {% list tabs %}
@@ -85,24 +126,6 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
 
   {% endlist %}
 
-- C++
-
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
-
-  int main() {
-    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
-
-    auto driverConfig = NYdb::TDriverConfig(connectionString)
-      .SetBalancingPolicy(NYdb::TBalancingPolicy::UseAllNodes());
-
-    NYdb::TDriver driver(driverConfig);
-    // ...
-    driver.Stop(true);
-    return 0;
-  }
-  ```
-
 - Python
 
   {% list tabs %}
@@ -164,9 +187,13 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
 
   {% endlist %}
 
+- C#
+
+  This algorithm is used by default.
+
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Java
 
@@ -198,5 +225,9 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
 - Rust
 
   The RandomChoice policy (random endpoint selection among discovery nodes) is enabled **by default** — no extra configuration is required.
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

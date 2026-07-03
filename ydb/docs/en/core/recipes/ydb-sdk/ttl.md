@@ -1,16 +1,17 @@
-# Configuring Time to Live (TTL)
+# Configuring table row Time to Live (TTL)
 
-This section contains recipes for configuration of table's TTL with {{ ydb-short-name }} SDK.
+This section contains examples of configuring TTL for row-oriented and column-oriented tables with the {{ ydb-short-name }} SDK.
 
-## Enabling TTL for an existing table {#enable-on-existent-table}
+## Enabling TTL for existing row-oriented and column-oriented tables {#enable-on-existent-table}
 
-In the example below, the items of the `mytable` table will be deleted an hour after the time set in the `created_at` column:
+In the example below, the rows of the `mytable` table will be deleted an hour after the time recorded in the `created_at` column:
 
 {% list tabs group=tool %}
 
 {% if oss == true %}
 
 - C++
+
 
   ```c++
   session.AlterTable(
@@ -26,6 +27,7 @@ In the example below, the items of the `mytable` table will be deleted an hour a
 
 - Go
 
+
   ```go
   err := session.AlterTable(ctx, "mytable",
     options.WithSetTimeToLiveSettings(
@@ -36,15 +38,19 @@ In the example below, the items of the `mytable` table will be deleted an hour a
 
 - Python
 
+
   ```python
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_date_type_column('created_at', 3600))
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - Java
+
 
   ```java
   AlterTableSettings settings = new AlterTableSettings()
@@ -63,6 +69,7 @@ The example below shows how to use the `modified_at` column with a numeric type 
 
 - C++
 
+
   ```c++
   session.AlterTable(
     "mytable",
@@ -77,6 +84,7 @@ The example below shows how to use the `modified_at` column with a numeric type 
 
 - Go
 
+
   ```go
   err := session.AlterTable(ctx, "mytable",
     options.WithSetTimeToLiveSettings(
@@ -87,15 +95,19 @@ The example below shows how to use the `modified_at` column with a numeric type 
 
 - Python
 
+
   ```python
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_value_since_unix_epoch('modified_at', UNIT_SECONDS, 3600))
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - Java
+
 
   ```java
   AlterTableSettings settings = new AlterTableSettings()
@@ -114,7 +126,7 @@ The example below shows how to use the `modified_at` column with a numeric type 
 
 {% include [OLTP_not_allow_note](../../_includes/not_allow_for_oltp_note.md) %}
 
-To enable data eviction, an [external data source](../../concepts/datamodel/external_data_source.md) object that describes a connection to the external storage is needed. Refer to [YQL recipe](../../yql/reference/recipes/ttl.md#enable-tiering-on-existing-tables) for examples of creating an external data source.
+To enable data eviction, an [external data source](../../concepts/datamodel/external_data_source.md) object that describes a connection to the external storage is needed. An external data source object can be created via [YQL](../../yql/reference/recipes/ttl.md#enable-tiering-on-existing-tables) and the {{ ydb-short-name }} CLI.
 
 In the following example, rows of the table `mytable` will be moved to the bucket described in the external data source `/Root/s3_cold_data` one hour after the time recorded in the column `created_at` and will be deleted after 24 hours:
 
@@ -123,6 +135,7 @@ In the following example, rows of the table `mytable` will be moved to the bucke
 {% if oss == true %}
 
 - C++
+
 
   ```c++
   session.AlterTable(
@@ -139,21 +152,21 @@ In the following example, rows of the table `mytable` will be moved to the bucke
 
 {% endif %}
 
-- Java
-
-  This functionality is not currently supported.
-
-- Go
-
-  This functionality is not currently supported.
-
-- Python
-
-  This functionality is not currently supported.
-
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+- Go
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+- Python
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+- Java
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -166,6 +179,7 @@ For a newly created table, you can pass TTL settings along with the table descri
 {% if oss == true %}
 
 - C++
+
 
   ```c++
   session.CreateTable(
@@ -183,6 +197,7 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 - Go
 
+
   ```go
   err := session.CreateTable(ctx, "mytable",
     options.WithColumn("id", types.Optional(types.TypeUint64)),
@@ -195,6 +210,7 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 - Python
 
+
   ```python
   session.create_table(
     'mytable',
@@ -206,11 +222,14 @@ For a newly created table, you can pass TTL settings along with the table descri
   )
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - Java
+
 
   ```java
   TableDescription description = TableDescription.newBuilder()
@@ -233,6 +252,7 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 - C++
 
+
   ```c++
   session.AlterTable(
     "mytable",
@@ -247,6 +267,7 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 - Go
 
+
   ```go
   err := session.AlterTable(ctx, "mytable",
     options.WithDropTimeToLive(),
@@ -255,15 +276,19 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 - Python
 
+
   ```python
   session.alter_table('mytable', drop_ttl_settings=True)
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - Java
+
 
   ```java
   AlterTableSettings settings = new AlterTableSettings()
@@ -284,6 +309,7 @@ The current TTL settings can be obtained from the table description:
 
 - C++
 
+
   ```c++
   auto desc = session.DescribeTable("mytable").GetValueSync().GetTableDescription();
   auto ttl = desc.GetTtlSettings();
@@ -292,6 +318,7 @@ The current TTL settings can be obtained from the table description:
 {% endif %}
 
 - Go
+
 
   ```go
   desc, err := session.DescribeTable(ctx, "mytable")
@@ -303,20 +330,23 @@ The current TTL settings can be obtained from the table description:
 
 - Python
 
+
   ```python
   desc = session.describe_table('mytable')
   ttl = desc.ttl_settings
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - Java
+
 
   ```java
   TableTtl ttl = session.describeTable("mytable").join().getValue().getTableDescription().getTableTtl();
   ```
 
 {% endlist %}
-

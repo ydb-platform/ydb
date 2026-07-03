@@ -52,7 +52,7 @@ public:
         for (auto&& i : chunks) {
             checkRecordsCount += i->GetRecordsCountVerified();
             if (chunks.size() > 1) {
-                YDB_LOG_DEBUG("Dump settings, stats, columnId, packed",
+                YDB_LOG_DEBUG("",
                     {"settings", Settings.DebugString()},
                     {"stats", Stats ? Stats->DebugString() : TString("no_stats")},
                     {"columnId", ColumnId},
@@ -153,7 +153,7 @@ public:
         if (needWarnLog) {
             auto batchStats = Stats->GetStatsForColumns(ResultFiltered->GetColumnIds(), false);
             for (auto&& i : result) {
-                YDB_LOG_DEBUG("Dump pSize, expectedSize, sType, settings, count, rCount, bStats",
+                YDB_LOG_DEBUG("",
                     {"pSize", i.GetPackedSize()},
                     {"expectedSize", batchStats ? batchStats->PredictPackedSize(i.GetRecordsCount()) : 0},
                     {"sType", SplittingType ? (ui32)*SplittingType : 999999},

@@ -13,7 +13,7 @@
 namespace NKikimr::NOlap {
 
 void TColumnEngineChanges::SetStage(const NChanges::EStage stage) {
-    YDB_LOG_DEBUG("Dump event, stage, taskId",
+    YDB_LOG_DEBUG("",
         {"event", "new_stage"},
         {"stage", ::ToString(stage)},
         {"taskId", GetTaskIdentifier()});
@@ -59,7 +59,7 @@ void TColumnEngineChanges::WriteIndexOnExecute(NColumnShard::TColumnShard* self,
 void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     Y_ABORT_UNLESS(StateGuard.GetStage() == NChanges::EStage::Written || !self);
     SetStage(NChanges::EStage::Finished);
-    YDB_LOG_DEBUG("Dump event, type, success",
+    YDB_LOG_DEBUG("",
         {"event", "WriteIndexComplete"},
         {"type", TypeString()},
         {"success", context.FinishedSuccessfully});

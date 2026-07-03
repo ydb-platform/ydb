@@ -66,7 +66,7 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
                     break;
             }
         }
-        YDB_LOG_DEBUG("Dump portions, taskId",
+        YDB_LOG_DEBUG("",
             {"portions", sb},
             {"taskId", GetTaskIdentifier()});
     }

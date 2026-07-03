@@ -138,7 +138,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         for (auto&& p : AppendedPortions) {
             sbAppended << p.GetPortionConstructor().DebugString() << ";";
         }
-        YDB_LOG_DEBUG("Dump event, appended, switched",
+        YDB_LOG_DEBUG("",
             {"event", "blobs_created_diff"},
             {"appended", sbAppended},
             {"switched", sbSwitched});

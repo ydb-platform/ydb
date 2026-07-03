@@ -25,13 +25,13 @@ TColumnPortionResult TSparsedMerger::DoExecute(const TChunkMergeContext& chunkCo
         }
         if (!Cursors[idx].InitGlobalRemapping(chunkContext.GetRemapper().GetReverseIndexes(idx), chunkContext.GetRemapper().GetOffset(),
                 chunkContext.GetRemapper().GetSize())) {
-            YDB_LOG_TRACE("Dump event, idx",
+            YDB_LOG_TRACE("",
                 {"event", "skip_source"},
                 {"idx", idx});
             continue;
         }
         if (chunkContext.GetRemapper().GetRecordsCount() <= Cursors[idx].GetGlobalResultIndexVerified()) {
-            YDB_LOG_TRACE("Dump event, idx",
+            YDB_LOG_TRACE("",
                 {"event", "skip_source"},
                 {"idx", idx});
             continue;
@@ -48,17 +48,17 @@ TColumnPortionResult TSparsedMerger::DoExecute(const TChunkMergeContext& chunkCo
                                                                    "cursor", heap.back()->DebugString())("context", chunkContext.DebugString());
         AFL_VERIFY(heap.back()->AddIndexTo(*writer));
         if (!heap.back()->Next()) {
-            YDB_LOG_TRACE("Dump event, idx",
+            YDB_LOG_TRACE("",
                 {"event", "stopped_source"},
                 {"idx", heap.back()->GetCursorIdx()});
             heap.pop_back();
         } else if (!heap.back()->GetGlobalResultIndexImpl()) {
-            YDB_LOG_TRACE("Dump event, idx",
+            YDB_LOG_TRACE("",
                 {"event", "stopped_source"},
                 {"idx", heap.back()->GetCursorIdx()});
             heap.pop_back();
         } else if (chunkContext.GetRemapper().GetRecordsCount() <= heap.back()->GetGlobalResultIndexVerified()) {
-            YDB_LOG_TRACE("Dump event, idx",
+            YDB_LOG_TRACE("",
                 {"event", "stopped_source"},
                 {"idx", heap.back()->GetCursorIdx()});
             heap.pop_back();
@@ -75,7 +75,7 @@ TColumnPortionResult TSparsedMerger::TWriter::Flush(const ui32 recordsCount) {
     auto schema = std::make_shared<arrow::Schema>(fields);
     std::vector<std::shared_ptr<arrow::Array>> columns = { NArrow::TStatusValidator::GetValid(IndexBuilder->Finish()),
         NArrow::TStatusValidator::GetValid(ValueBuilder->Finish()) };
-    YDB_LOG_TRACE("Dump event, count, useful",
+    YDB_LOG_TRACE("",
         {"event", "sparsed_flush"},
         {"count", recordsCount},
         {"useful", UsefulRecordsCount});
@@ -110,7 +110,7 @@ bool TSparsedMerger::TSparsedChunkCursor::MoveToSignificant(const std::optional<
                 return true;
             }
         }
-        YDB_LOG_TRACE("Dump event, idx, cursorIdx, recordIdx, lb",
+        YDB_LOG_TRACE("",
             {"event", "skip_record"},
             {"idx", ScanIndex},
             {"cursorIdx", CursorIdx},
@@ -118,7 +118,7 @@ bool TSparsedMerger::TSparsedChunkCursor::MoveToSignificant(const std::optional<
             {"lb", sourceLowerBound});
         ++ScanIndex;
         while (ScanIndex < GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->length()) {
-            YDB_LOG_TRACE("Dump event, idx, cursorIdx, recordIdx, lb",
+            YDB_LOG_TRACE("",
                 {"event", "skip_record"},
                 {"idx", ScanIndex},
                 {"cursorIdx", CursorIdx},
@@ -162,14 +162,14 @@ std::optional<i64> TSparsedMerger::TSparsedChunkCursor::GetGlobalResultIndexImpl
 bool TSparsedMerger::TSparsedChunkCursor::InitGlobalRemapping(
     const TSourceReverseRemap& remapToGlobalResult, const ui32 globalResultOffset, const ui32 globalResultSize) {
     if (remapToGlobalResult.IsEmpty()) {
-        YDB_LOG_TRACE("Dump event, reason, idx",
+        YDB_LOG_TRACE("",
             {"event", "skip_source"},
             {"reason", "empty"},
             {"idx", GetCursorIdx()});
         return false;
     }
     if (globalResultOffset + globalResultSize <= remapToGlobalResult.GetMinResultIndex()) {
-        YDB_LOG_TRACE("Dump event, reason, idx",
+        YDB_LOG_TRACE("",
             {"event", "skip_source"},
             {"reason", "too_early"},
             {"idx", GetCursorIdx()});
@@ -186,7 +186,7 @@ bool TSparsedMerger::TSparsedChunkCursor::InitGlobalRemapping(
         }
     }
     if (!GetGlobalResultIndexImpl()) {
-        YDB_LOG_TRACE("Dump event, reason, idx, offset, size, debug, pos",
+        YDB_LOG_TRACE("",
             {"event", "skip_source"},
             {"reason", "not_index"},
             {"idx", GetCursorIdx()},

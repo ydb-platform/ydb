@@ -24,7 +24,7 @@ void TRemovePortionsChange::DoApplyOnExecute(
     }
 
     if (fetchedDataAccessors.HasRemovedData()) {
-        YDB_LOG_DEBUG("Dump error",
+        YDB_LOG_DEBUG("",
             {"error", TStringBuilder{} << "Data accessor result with removed data, " << fetchedDataAccessors.GetRemovedData().size()});
     }
 

@@ -358,7 +358,7 @@ public:
 
             YDB_LOG_INFO("GetObject read",
                 {"bytes", bytesRead},
-                {"from", key});
+                {"key", key});
 
             Aws::S3::Model::GetObjectResult awsResult;
             awsResult.SetContentLength(bytesRead);
@@ -393,8 +393,8 @@ public:
             const i64 fileSize = file.GetLength();
 
             YDB_LOG_INFO("HeadObject",
-                {"file size", fileSize},
-                {"for", key});
+                {"fileSize", fileSize},
+                {"key", key});
 
             Aws::S3::Model::HeadObjectResult awsResult;
             awsResult.SetContentLength(fileSize);
@@ -541,7 +541,7 @@ public:
     void Handle(TEvDeleteObjectsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         YDB_LOG_WARN("DeleteObjects: not implemented",
-            {"objects count", request.GetDelete().GetObjects().size()});
+            {"objectsCount", request.GetDelete().GetObjects().size()});
         ReplyError<TEvDeleteObjectsResponse>(ev->Sender, {.ErrorMessage = "Not implemented"});
     }
 
@@ -627,7 +627,7 @@ public:
             YDB_LOG_INFO("UploadPart: written under lock",
                 {"uploadId", uploadId},
                 {"part", partNumber},
-                {"total size", session.TotalSize});
+                {"totalSize", session.TotalSize});
 
             const TString etag = TStringBuilder() << "\"part" << partNumber << "\"";
 
@@ -705,7 +705,7 @@ public:
 
             YDB_LOG_INFO("CompleteMultipartUpload: file mv",
                 {"uploadId", uploadId},
-                {"total size", session.TotalSize},
+                {"totalSize", session.TotalSize},
                 {"from", incompleteKey},
                 {"to", key});
 

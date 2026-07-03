@@ -116,6 +116,9 @@ private:
 private:
     size_t NodesCount() const { return NodeIdByIdx.size(); }
 
+    // Maps an external node id to its internal index, ensuring the node is known.
+    TNodeIdx ResolveNodeIdx(TNodeId node) const;
+
     // The basic placement action: pin a column of a group to a node.
     void PlaceColumnOnNode(TGroup& group, size_t columnIdx, TNodeIdx node);
 

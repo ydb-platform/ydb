@@ -2986,6 +2986,44 @@ void TKqpTasksGraph::FillSecureParamsFromStage(THashMap<TString, TString>& secur
     }
 }
 
+bool TKqpTasksGraph::StageNeedsLocalPlacement(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo) const {
+    for (const auto& transform : stage.GetOutputTransforms()) {
+        if (transform.HasInternalSink()) {
+            // BuildInternalOutputTransform always sets Type = KqpTableSinkName for these, unconditionally.
+            return true;
+        }
+    }
+
+    for (const auto& sink : stage.GetSinks()) {
+        if (!sink.HasInternalSink()) {
+            continue;
+        }
+
+        const auto& intSink = sink.GetInternalSink();
+        if (intSink.GetType() != NYql::KqpTableSinkName) {
+            continue;
+        }
+        if (!intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+            continue;
+        }
+
+        NKikimrKqp::TKqpTableSinkSettings settings;
+        if (!stageInfo.Meta.ResolvedSinkSettings) {
+            YQL_ENSURE(intSink.GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+        } else {
+            settings = *stageInfo.Meta.ResolvedSinkSettings;
+        }
+
+        // Mirrors FillKqpTableSinkSettings: the buffer actor is attached (and thus the local-node requirement) exactly
+        // for consistent-tx, non-OLAP writes.
+        if (!settings.GetInconsistentTx() && !settings.GetIsOlap()) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void TKqpTasksGraph::BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) const {
     const auto& extSink = sink.GetExternalSink();
     auto sinkName = extSink.GetSinkName();
@@ -3805,12 +3843,20 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
         }
     }
 
+    // Tasks writing through the shared per-query buffer actor must run on the executer's own node (see
+    // StageNeedsLocalPlacement, mirrors the old NeedToRunLocally). A write stage is not expected to be COPY, but if it
+    // is, AddTask propagates this pin to the group's shared column (root) so the whole column stays co-located and local.
+    std::optional<ui64> pinnedNode;
+    if (StageNeedsLocalPlacement(stage, stageInfo)) {
+        pinnedNode = GetMeta().ExecuterId.NodeId();
+    }
+
     MaxTasksGraph->AddStage(stageInfo, stageType, inputs, copyInput);
     if (partitionsCount) {
         // It's possible to have zero partitions in case we COPY from input stage, which is empty because of non-intersecting param values:
         // i.e. "WHERE a > $1 AND a < $2", where $1 = $2 = 10
         for (ui32 i = 0; i < partitionsCount; ++i) {
-            MaxTasksGraph->AddTask(AddTask(stageInfo, TTask::UNKNOWN), std::nullopt);
+            MaxTasksGraph->AddTask(AddTask(stageInfo, TTask::UNKNOWN), pinnedNode);
         }
     } else {
         YQL_ENSURE(stageType == TMaxTasksGraph::COPY);

@@ -470,6 +470,15 @@ private:
 
     void FillSecureParamsFromStage(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const;
 
+    // True if the stage writes through the shared per-query buffer actor (a consistent-tx, non-OLAP internal
+    // KqpTableSink, or any internal-sink output transform - see FillKqpTableSinkSettings/BuildInternalSinks/
+    // BuildInternalOutputTransform). Such tasks must be pinned to the executer's own node: the buffer actor talks
+    // to them via a direct, non-serializable actor Send (TKqpForwardWriteActor::SendData), not over the
+    // interconnect, so placing the task remotely trips the "IsSerializable()" VERIFY in GenericSend. Mirrors the
+    // pre-refactor NeedToRunLocally check (kqp_planner.cpp), but computed straight off the physical plan because
+    // MaxTasksGraph placement now runs before BuildSinks fills task.Outputs.
+    bool StageNeedsLocalPlacement(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo) const;
+
     void BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) const;
     void BuildInternalSinks(const NKqpProto::TKqpSink& sink, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const;
     void BuildInternalOutputTransform(const NKqpProto::TKqpOutputTransform& transform, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const;

@@ -96,6 +96,12 @@ void TMaxTasksGraph::AddStage(TStageInfo& stageInfo, EStageType type, const std:
     CheckInvariants();
 }
 
+TMaxTasksGraph::TNodeIdx TMaxTasksGraph::ResolveNodeIdx(TNodeId node) const {
+    auto nodeIt = NodeIds.find(node);
+    Y_ENSURE(nodeIt != NodeIds.end(), "Trying to add task to unknown node: " << node); // TODO: how can there be unknown nodes?
+    return nodeIt->second;
+}
+
 void TMaxTasksGraph::AddTask(const TTask& task, std::optional<TNodeId> node) {
     const TStageIdx stageIdx = StageIds.at(task.StageId);
     auto& stage = Stages.at(stageIdx);
@@ -108,16 +114,24 @@ void TMaxTasksGraph::AddTask(const TTask& task, std::optional<TNodeId> node) {
         // The root defines the group's columns.
         Y_ENSURE(group.ColumnNodes.size() == columnIdx);
         if (node) {
-            auto nodeIt = NodeIds.find(*node);
-            Y_ENSURE(nodeIt != NodeIds.end(), "Trying to add task to unknown node: " << *node); // TODO: how can there be unknown nodes?
-            group.ColumnNodes.push_back(nodeIt->second); // pinned column.
+            group.ColumnNodes.push_back(ResolveNodeIdx(*node)); // pinned column.
         } else {
-            group.ColumnNodes.push_back(std::nullopt);   // free column, placed in DistributeTasksToNodes.
+            group.ColumnNodes.push_back(std::nullopt);          // free column, placed in DistributeTasksToNodes.
         }
     } else {
-        // A follower task joins an existing column and inherits its node; the `node` argument is ignored on purpose
-        // (production always passes nullopt for copy tasks).
+        // A follower task joins an existing column and inherits its node. Normally the `node` argument is nullopt for
+        // copy tasks; the one exception is a stage that must run on a specific node regardless of the copy connection
+        // (a buffer-actor write - see StageNeedsLocalPlacement). In that case pin the whole shared column, and require
+        // it not to clash with an existing pin (e.g. the root being a scan already tied to a shard node).
         Y_ENSURE(columnIdx < group.ColumnNodes.size(), "follower stage has more tasks than its group root");
+        if (node) {
+            const TNodeIdx nodeIdx = ResolveNodeIdx(*node);
+            auto& columnNode = group.ColumnNodes[columnIdx];
+            Y_ENSURE(!columnNode || *columnNode == nodeIdx,
+                "Cannot pin copy-group column " << columnIdx << " to node " << *node << ": already pinned to node "
+                    << NodeIdByIdx[*columnNode]);
+            columnNode = nodeIdx;
+        }
     }
 
     CheckInvariants();

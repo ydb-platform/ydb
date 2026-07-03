@@ -487,6 +487,10 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr& ev) {
     UpdateStorageConfig();
     InitializeDetailedMetrics();
     UpdateLockedGroupsIdInChildPartitions(false);
+
+    if (CurrentStateFunc() == &TConsumerActor::StateWork) {
+        ScheduleProcessing();
+    }
 }
 
 void TConsumerActor::HandleInit(TEvPQ::TEvEndOffsetChanged::TPtr& ev) {
@@ -625,8 +629,10 @@ void TConsumerActor::ScheduleProcessing() {
         return;
     }
 
+    const bool force = NextForcedProcessingTime <= TInstant::Now();
     const bool dlqEmptyOrAlreadyProcessing = DLQMoverActorId || Storage->DLQEmpty();
-    if (ReadRequestsQueue.empty() &&
+    if (!force &&
+        ReadRequestsQueue.empty() &&
         CommitRequestsQueue.empty() &&
         UnlockRequestsQueue.empty() &&
         ChangeMessageDeadlineRequestsQueue.empty() &&
@@ -649,6 +655,7 @@ void TConsumerActor::ProcessEventQueue() {
     LOG_D("ProcessEventQueue");
 
     NextProcessingTime = TInstant::Now() + TDuration::MilliSeconds(AppData()->PQConfig.GetMLPBatchWindowMilliSeconds());
+    NextForcedProcessingTime = TInstant::Now() + TDuration::Seconds(1);
 
     for (auto& ev : CommitRequestsQueue) {
         for (auto offset : ev->Get()->Record.GetOffset()) {
@@ -984,6 +991,7 @@ void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr& ev) {
             }
             NotifyPQRB(true);
             UpdateMetrics();
+            ScheduleProcessing();
             Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
             break;
         }

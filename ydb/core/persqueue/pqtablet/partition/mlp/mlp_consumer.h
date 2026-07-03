@@ -139,6 +139,7 @@ private:
 
     bool ProcessingScheduled = false;
     TInstant NextProcessingTime;
+    TInstant NextForcedProcessingTime;
 
     ui64 LastWALIndex = 0;
     bool HasSnapshot = false;

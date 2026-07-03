@@ -49,7 +49,7 @@ public:
             {
                 TYdbDumpExportSettings dataFormatSettings;
                 dataFormatSettings.WithColumns(Columns);
-                std::unique_ptr<IExportDataFormat> dataFormat(CreateExportDataFormat(std::move(dataFormatSettings)));
+                auto dataFormat = CreateExportDataFormat(std::move(dataFormatSettings));
                 buffer = CreateS3ExportBuffer(std::move(settings), std::move(dataFormat));
                 break;
             }
@@ -67,7 +67,7 @@ public:
                         .WithLevel(settings.CompressionSettings->CompressionLevel));
                     settings.WithoutCompression();
                 }
-                std::unique_ptr<IExportDataFormat> dataFormat(CreateExportDataFormat(std::move(dataFormatSettings)));
+                auto dataFormat = CreateExportDataFormat(std::move(dataFormatSettings));
                 buffer = CreateS3ExportBuffer(std::move(settings), std::move(dataFormat));
                 break;
             }

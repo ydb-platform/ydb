@@ -437,7 +437,7 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
             TYdbDumpExportSettings settings;
             settings
                 .WithColumns(Columns);
-            dataFormat.reset(CreateExportDataFormat(std::move(settings)));
+            dataFormat = CreateExportDataFormat(std::move(settings));
             break;
         }
     case EDataFormat::Parquet:
@@ -461,7 +461,7 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
             case ECompressionCodec::Invalid:
                 Y_ENSURE(false, "unreachable");
             }
-            dataFormat.reset(CreateExportDataFormat(std::move(settings)));
+            dataFormat = CreateExportDataFormat(std::move(settings));
             break;
         }
     case EDataFormat::Invalid:

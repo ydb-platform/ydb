@@ -224,8 +224,8 @@ private:
 
 } // namespace
 
-IExportDataFormat* CreateExportDataFormat(TParquetExportSettings&& settings) {
-    return new TDataFormatParquet(std::move(settings));
+std::unique_ptr<IExportDataFormat> CreateExportDataFormat(TParquetExportSettings&& settings) {
+    return std::make_unique<TDataFormatParquet>(std::move(settings));
 }
 
 } // namespace NKikimr::NDataShard

@@ -187,8 +187,8 @@ private:
 
 } // namespace
 
-IExportDataFormat* CreateExportDataFormat(TYdbDumpExportSettings&& settings) {
-    return new TDataFormatYdbDump(std::move(settings));
+std::unique_ptr<IExportDataFormat> CreateExportDataFormat(TYdbDumpExportSettings&& settings) {
+    return std::make_unique<TDataFormatYdbDump>(std::move(settings));
 }
 
 } // namespace NKikimr::NDataShard

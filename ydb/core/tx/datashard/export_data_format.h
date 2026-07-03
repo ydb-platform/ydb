@@ -11,6 +11,8 @@
 #include <util/generic/vector.h>
 #include <util/generic/maybe.h>
 
+#include <memory>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -78,8 +80,8 @@ struct TParquetExportSettings {
     TMaybe<TCompressionSettings> CompressionSettings;
 };
 
-IExportDataFormat* CreateExportDataFormat(TYdbDumpExportSettings&& settings);
-IExportDataFormat* CreateExportDataFormat(TParquetExportSettings&& settings);
+std::unique_ptr<IExportDataFormat> CreateExportDataFormat(TYdbDumpExportSettings&& settings);
+std::unique_ptr<IExportDataFormat> CreateExportDataFormat(TParquetExportSettings&& settings);
 
 } // namespace NDataShard
 } // namespace NKikimr

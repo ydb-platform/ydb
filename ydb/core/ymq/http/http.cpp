@@ -75,11 +75,16 @@ public:
         response.FolderId = resp.GetFolderId();
         response.IsFifo = resp.GetIsFifo();
         response.ResourceId = resp.GetResourceId();
+        response.SkipMetering = IamAuthFailed_;
         for (const auto& tag : resp.GetQueueTags()) {
             response.QueueTags[tag.GetKey()] = tag.GetValue();
         }
 
         Request_->SendResponse(response);
+    }
+
+    void OnIamAuthError() override {
+        IamAuthFailed_ = true;
     }
 
 private:
@@ -100,6 +105,7 @@ private:
 private:
     THttpRequest* const Request_;
     const TSqsRequest RequestParams_;
+    bool IamAuthFailed_ = false;
 };
 
 class TPingHttpCallback : public IPingReplyCallback {
@@ -151,7 +157,7 @@ void THttpRequest::WriteResponse(const TReplyParams& replyParams, const TSqsHttp
         httpResponse.SetContent(response.Body, response.ContentType);
     }
 
-    if (Parent_->Config.GetYandexCloudMode() && !IsPrivateRequest_) {
+    if (Parent_->Config.GetYandexCloudMode() && !IsPrivateRequest_ && !response.SkipMetering) {
         // Send request attributes to the metering actor
         auto reportRequestAttributes = MakeHolder<TSqsEvents::TEvReportProcessedRequestAttributes>();
 

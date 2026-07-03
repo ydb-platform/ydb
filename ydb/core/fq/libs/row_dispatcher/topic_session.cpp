@@ -461,6 +461,11 @@ void TTopicSession::Bootstrap() {
 void TTopicSession::PassAway() {
     LOG_ROW_DISPATCHER_INFO("PassAway");
     StopReadSession();
+    for (const auto& [actorId, clientInfo] : Clients) {
+        if (const auto formatIt = FormatHandlers.find(clientInfo->HandlerSettings); formatIt != FormatHandlers.end()) {
+            formatIt->second->RemoveClient(clientInfo->GetClientId());
+        }
+    }
     FormatHandlers.clear();
     TBase::PassAway();
 }

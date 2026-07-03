@@ -272,6 +272,7 @@ public:
         TKikimrSettings settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetUseRealThreads(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableColumnStatistics(true);
 
         // settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMaxChannelCountPerNode(100);
         // settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

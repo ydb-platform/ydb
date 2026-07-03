@@ -672,6 +672,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+                runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
 
                 TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot",
                     NLocalIndexes::OlapTableWithBloomAndNgramIndexes("ColumnTableSrc"));

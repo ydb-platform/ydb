@@ -289,7 +289,7 @@ def build_html_dashboard(
       <span id="markersLegendSuites"></span>
       <span id="markersLegendStats" style="margin-left:6px;color:#586069;"></span>
     </span>
-    <span id="syntheticCheckboxWrap" style="margin-left: 16px;" title="">
+    <span id="syntheticCheckboxWrap" style="margin-left: 16px;" title="When enabled, suites without report CPU/RAM use ya.make REQUIREMENTS as estimated chart values.">
       <label style="display:flex;align-items:center;gap:6px;">
         <input type="checkbox" id="includeSyntheticCb" checked />
         <span>Include estimated (from ya.make) CPU/RAM</span>
@@ -319,7 +319,7 @@ def build_html_dashboard(
         <li><b>RAM shown on charts:</b> <code>ram_gb = ram_kb_report / (1024 * 1024)</code>. Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
         <li><b>Estimated mode (from ya.make):</b> if report metrics are missing and checkbox is enabled, script uses <code>REQUIREMENTS(cpu:X ram:Y)</code>: <code>cpu_sec_report = X * evlog_dur_sec</code>, <code>ram_kb_report = Y * 1024 * 1024</code>.</li>
         <li><b>Tests at cursor time:</b> in click tables, <code>tests</code> means tests in chunks that are active at that cursor moment (not total tests in suite).</li>
-        <li><b>SPLIT_FACTOR:</b> <code>ya_split_factor</code> is read from <code>ya.make</code>. Column <code>chunks</code> is real runtime chunk count from evlog/report. Highlight means mismatch (<code>chunks != SPLIT_FACTOR</code>), which can explain differences between expected and observed parallelism.</li>
+        <li><b>SPLIT_FACTOR:</b> <code>ya_split_factor</code> is the <b>effective</b> split from ya.make (with <code>FORK_TEST_FILES</code>: <code>TEST_SRCS count × SPLIT_FACTOR(N)</code>). Column <code>chunks</code> is real runtime chunk count. Hover cells for details. Highlight on <code>chunks</code> means mismatch with ya.make.</li>
         <li><b>Recommended split formula:</b>
           let <code>T = size_timeout_sec</code> (from SIZE), <code>B = 0.98 * T</code> (chunk timeout budget),
           and <code>L = 0.5 * T</code> (target chunk load). For each chunk we compute
@@ -467,14 +467,14 @@ def build_html_dashboard(
       const failedTotal = timeoutTotal + regularTotal;
       const failedMuted = timeoutMuted + regularMuted;
       const totalCard =
-        '<div class="headline-card">' +
+        '<div class="headline-card" title="Total suites, chunks and tests in this run (from report).">' +
           '<div class="headline-card-name">Total</div>' +
           '<div><b>suites:</b> ' + String(Math.round(Number(total.suites || 0))) + '</div>' +
           '<div><b>chunks:</b> ' + String(Math.round(Number(total.chunks || 0))) + '</div>' +
           '<div><b>tests:</b> ' + String(Math.round(Number(total.tests || 0))) + '</div>' +
         '</div>';
       const issuesCard =
-        '<div class="headline-card">' +
+        '<div class="headline-card" title="Test-level failures: timeout = exceeded SIZE limit; regular = other errors; muted = known failures.">' +
           '<div class="headline-card-name">Test issues</div>' +
           '<div><b>failed:</b> ' + String(failedTotal) + ' (muted ' + String(failedMuted) + ')</div>' +
           '<div><b>timeout:</b> ' + String(timeoutTotal) + ' (muted ' + String(timeoutMuted) + ')</div>' +
@@ -492,7 +492,7 @@ def build_html_dashboard(
       const cFailedTotal = cTimeoutTotal + cRegularTotal;
       const cFailedMuted = cTimeoutMuted + cRegularMuted;
       const suiteChunkIssuesCard =
-        '<div class="headline-card">' +
+        '<div class="headline-card" title="Chunk-level failures: one timeout often means too many slow tests in one chunk (raise SPLIT_FACTOR).">' +
           '<div class="headline-card-name">Chunk issues</div>' +
           '<div><b>failed:</b> ' + String(cFailedTotal) + ' (muted ' + String(cFailedMuted) + ')</div>' +
           '<div><b>timeout:</b> ' + String(cTimeoutTotal) + ' (muted ' + String(cTimeoutMuted) + ')</div>' +
@@ -507,7 +507,7 @@ def build_html_dashboard(
       const metricCards = metrics.map(([key, title]) => {{
         const s = (hs[key] && typeof hs[key] === 'object') ? hs[key] : {{}};
         return (
-          '<div class="headline-card">' +
+          '<div class="headline-card" title="Peak / p95 / median of ' + title + ' across the whole ya make run (from monitor or stacked model).">' +
             '<div class="headline-card-name">' + title + '</div>' +
             '<div><b>max:</b> ' + formatHeadlineValue(key, s.max) + '</div>' +
             '<div><b>p95:</b> ' + formatHeadlineValue(key, s.p95) + '</div>' +
@@ -516,7 +516,7 @@ def build_html_dashboard(
         );
       }}).join('');
       const durationCard =
-        '<div class="headline-card">' +
+        '<div class="headline-card" title="Wall-clock span from first to last test event in report.">' +
           '<div class="headline-card-name">Total duration (start → end)</div>' +
           '<div><b>duration:</b> ' + formatHeadlineValue('total_duration_sec', hs.total_duration_sec) + '</div>' +
         '</div>';
@@ -1301,99 +1301,118 @@ def build_html_dashboard(
         'peak_self_ram_gb_during_suite', 'peak_self_ram_at_sec'
       ];
 
-      function actionCell(action) {{
-        if (action === 'raise') return '<span style="color:#856404;background:#fff3cd;padding:2px 6px;border-radius:10px;">raise</span>';
-        if (action === 'lower') return '<span style="color:#0c5460;background:#d1ecf1;padding:2px 6px;border-radius:10px;">lower</span>';
-        if (action === 'set') return '<span style="color:#721c24;background:#f8d7da;padding:2px 6px;border-radius:10px;">set</span>';
-        return '<span style="color:#155724;background:#d4edda;padding:2px 6px;border-radius:10px;">ok</span>';
+      function titleAttr(text) {{
+        return String(text || '').replace(/"/g, '&quot;');
+      }}
+
+      function tipCell(text, tooltip, extraStyle) {{
+        const t = text == null ? '' : String(text);
+        const tip = titleAttr(tooltip || '');
+        if (!tip) return t;
+        const style = 'cursor:help;text-decoration:underline dotted;' + (extraStyle || '');
+        return '<span title="' + tip + '" style="' + style + '">' + t + '</span>';
+      }}
+
+      function actionCell(action, tooltip) {{
+        const tip = tooltip ? ' title="' + titleAttr(tooltip) + '"' : '';
+        if (action === 'raise') return '<span' + tip + ' style="color:#856404;background:#fff3cd;padding:2px 6px;border-radius:10px;cursor:help;">raise</span>';
+        if (action === 'lower') return '<span' + tip + ' style="color:#0c5460;background:#d1ecf1;padding:2px 6px;border-radius:10px;cursor:help;">lower</span>';
+        if (action === 'set') return '<span' + tip + ' style="color:#721c24;background:#f8d7da;padding:2px 6px;border-radius:10px;cursor:help;">set</span>';
+        return '<span' + tip + ' style="color:#155724;background:#d4edda;padding:2px 6px;border-radius:10px;cursor:help;">ok</span>';
       }}
 
       function renderSuggestionsTable() {{
         const q = (document.getElementById('suiteSearch')?.value || '').trim().toLowerCase();
         const filtered = data.cpu_suggestions.filter(s => !q || String(s.suite_path || '').toLowerCase().includes(q));
         const rowsData = filtered.map((s, i) => {{
-          const cpuExplain = String(s.recommended_cpu_explain || '').replace(/"/g, '&quot;');
           const cpuReqText = String(s.recommended_cpu ?? 1);
+          const cpuTooltip = s.recommended_cpu_tooltip || s.recommended_cpu_explain || '';
           const cpuBadge = cpuReqText === 'all'
-            ? '<span title="' + cpuExplain + '" style="display:inline-block;padding:2px 8px;border-radius:10px;background:#ffe8cc;color:#7c2d12;border:1px solid #fdba74;font-weight:700;">cpu:all</span>'
-            : '<span title="' + cpuExplain + '"><b>cpu:' + cpuReqText + '</b></span>';
-          const cpuCell = cpuBadge + (s.has_synthetic ? ' <span style="color:#b8860b;">(estimated from ya.make)</span>' : '');
+            ? tipCell('cpu:all', cpuTooltip, 'display:inline-block;padding:2px 8px;border-radius:10px;background:#ffe8cc;color:#7c2d12;border:1px solid #fdba74;font-weight:700;text-decoration:none;')
+            : tipCell('cpu:' + cpuReqText, cpuTooltip, 'font-weight:700;');
+          const cpuCell = cpuBadge + (s.has_synthetic ? ' ' + tipCell('(estimated from ya.make)', 'CPU/RAM estimated from ya.make REQUIREMENTS when report metrics missing.', 'color:#b8860b;text-decoration:none;') : '');
           const durationBoost = Boolean(s.recommended_cpu_duration_boost);
           const sizeCapped = durationBoost && (s.recommended_cpu_small_cap_applied || s.recommended_cpu_medium_cap_applied);
           const maxTestDur = Number(s.max_test_duration_sec || 0);
           const durThreshold = Number(s.long_test_threshold_sec || 0);
-          const durPart = (Number.isFinite(maxTestDur) && Number.isFinite(durThreshold) && durThreshold > 0)
-            ? ('max test duration ' + maxTestDur.toFixed(1) + 's >= threshold ' + durThreshold + 's')
-            : 'duration threshold reached';
           const sizeCapHint = sizeCapped
-            ? (s.recommended_cpu_small_cap_applied
-                ? (durPart + '; SMALL cap keeps max cpu:1 — consider increasing SIZE to MEDIUM')
-                : (durPart + '; MEDIUM cap keeps max cpu:4 — consider increasing SIZE to LARGE'))
-            : '';
+            ? ((s.recommended_cpu_small_cap_applied
+                ? ('Longest test ' + maxTestDur.toFixed(0) + 's exceeds SMALL threshold ' + durThreshold + 's. CPU capped at 1 — consider SIZE(MEDIUM).')
+                : ('Longest test ' + maxTestDur.toFixed(0) + 's exceeds MEDIUM threshold ' + durThreshold + 's. CPU capped at 4 — consider SIZE(LARGE).')))
+            : (s.ya_size_tooltip || ('SIZE(' + (s.ya_size || '') + ') from ya.make: sets per-test timeout and CPU caps.'));
           const sizeCell = sizeCapped
-            ? '<span title="' + sizeCapHint + '" style="display:inline-flex;align-items:center;gap:2px;color:#991b1b;font-weight:600;">'
-              + (s.ya_size || '') + ' <span style="color:#dc2626;font-size:1em;" aria-label="cap">↑</span></span>'
-            : String(s.ya_size ?? '');
-          const yaSplitTooltip = (s.ya_split_factor_tooltip || '').replace(/"/g, '&quot;');
+            ? tipCell(String(s.ya_size || '') + ' ↑', sizeCapHint, 'display:inline-flex;align-items:center;gap:2px;color:#991b1b;font-weight:600;text-decoration:none;')
+            : tipCell(String(s.ya_size ?? ''), sizeCapHint, '');
           const yaChunksCell = s.ya_split_factor != null
-            ? (yaSplitTooltip ? '<span title="' + yaSplitTooltip + '">' + String(s.ya_split_factor) + '</span>' : String(s.ya_split_factor))
+            ? tipCell(String(s.ya_split_factor), s.ya_split_factor_tooltip, '')
             : '';
           const realChunks = s.chunks_count ?? 0;
           const chunksMismatch = s.chunks_count_mismatch;
-          const chunksCell = chunksMismatch
-            ? '<span title="Runtime chunks (evlog): ' + realChunks + ', ya.make SPLIT_FACTOR: ' + (s.ya_split_factor ?? '') + '" style="background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;border:1px solid #f59e0b;">' + realChunks + '</span>'
-            : String(realChunks);
+          const chunksTooltip = s.chunks_count_tooltip || (
+            'Runtime chunks: ' + realChunks +
+            (s.ya_split_factor != null ? '; ya.make effective: ' + s.ya_split_factor : '')
+          );
+          const chunksCell = tipCell(
+            String(realChunks),
+            chunksTooltip,
+            chunksMismatch
+              ? 'background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;border:1px solid #f59e0b;text-decoration:none;'
+              : ''
+          );
           const recSplit = Number(s.recommended_split ?? realChunks);
-          const recSplitAction = String(s.recommended_split_action || 'ok');
-          const recSplitExplain = String(s.recommended_split_explain || '').replace(/"/g, '&quot;');
-          const recSplitCell = recSplit > Number(realChunks)
-            ? '<span title="' + recSplitExplain + '" style="color:#991b1b;font-weight:700;">' + recSplit + ' ↑</span>'
-            : '<span title="' + recSplitExplain + '">' + recSplit + '</span>';
+          const recSplitTooltip = s.recommended_split_tooltip || s.recommended_split_explain || '';
+          const recSplitCell = tipCell(
+            String(recSplit) + (recSplit > Number(realChunks) ? ' ↑' : ''),
+            recSplitTooltip,
+            recSplit > Number(realChunks) ? 'color:#991b1b;font-weight:700;text-decoration:none;' : ''
+          );
+          const testTip = s.test_status_tooltip || 'Test-level status counts from report.json.';
+          const chunkTip = s.chunk_status_tooltip || 'Chunk-level status counts from report.json.';
           return [
             String(i + 1),
             '<label style="display:inline-flex;align-items:center;gap:5px;max-width:420px;">' +
-            '<input type="checkbox" class="suite-marker-cb" style="flex-shrink:0;cursor:pointer;" data-suite="' + (s.suite_path || '').replace(/"/g, '&quot;') + '" onchange="toggleSuiteMarkers(this.dataset.suite, this.checked)">' +
-            '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (s.suite_path || '').replace(/"/g, '&quot;') + '">' + (s.suite_path || '') + '</span>' +
+            '<input type="checkbox" class="suite-marker-cb" style="flex-shrink:0;cursor:pointer;" data-suite="' + titleAttr(s.suite_path || '') + '" onchange="toggleSuiteMarkers(this.dataset.suite, this.checked)">' +
+            tipCell(s.suite_path || '', s.suite_path_tooltip || s.suite_path, 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:380px;display:inline-block;') +
             '</label>',
-            String(s.ya_ram_gb ?? ''),
-            String(s.ya_cpu_cores ?? ''),
+            tipCell(String(s.ya_ram_gb ?? ''), s.ya_ram_gb_tooltip, ''),
+            tipCell(String(s.ya_cpu_cores ?? ''), s.ya_cpu_cores_tooltip, ''),
             sizeCell,
             yaChunksCell,
             chunksCell,
             recSplitCell,
-            actionCell(s.recommended_split_action || 'ok'),
-            (s.median_cores != null ? Number(s.median_cores).toFixed(3) : ''),
-            (s.p95_cores != null ? Number(s.p95_cores).toFixed(3) : ''),
-            (s.total_cpu_sec != null ? Number(s.total_cpu_sec).toFixed(1) : ''),
-            (s.total_ram_gb != null ? Number(s.total_ram_gb).toFixed(3) : ''),
-            (s.total_dur_sec != null ? Number(s.total_dur_sec).toFixed(1) : '') + ' s',
-            (s.total_dur_report_sec != null ? Number(s.total_dur_report_sec).toFixed(1) : '') + ' s',
-            (s.total_dur_evlog_sec != null ? Number(s.total_dur_evlog_sec).toFixed(1) : '') + ' s',
+            actionCell(s.recommended_split_action || 'ok', s.split_action_tooltip),
+            tipCell(s.median_cores != null ? Number(s.median_cores).toFixed(3) : '', s.median_cores_tooltip, ''),
+            tipCell(s.p95_cores != null ? Number(s.p95_cores).toFixed(3) : '', s.p95_cores_tooltip, ''),
+            tipCell(s.total_cpu_sec != null ? Number(s.total_cpu_sec).toFixed(1) : '', s.total_cpu_sec_tooltip, ''),
+            tipCell(s.total_ram_gb != null ? Number(s.total_ram_gb).toFixed(3) : '', s.total_ram_gb_tooltip, ''),
+            tipCell((s.total_dur_sec != null ? Number(s.total_dur_sec).toFixed(1) : '') + ' s', s.total_dur_sec_tooltip, ''),
+            tipCell((s.total_dur_report_sec != null ? Number(s.total_dur_report_sec).toFixed(1) : '') + ' s', s.total_dur_report_sec_tooltip, ''),
+            tipCell((s.total_dur_evlog_sec != null ? Number(s.total_dur_evlog_sec).toFixed(1) : '') + ' s', s.total_dur_evlog_sec_tooltip, ''),
             cpuCell,
-            actionCell(s.cpu_action || 'ok'),
-            String(s.test_total ?? ''),
-            String(s.test_passed ?? ''),
-            String(s.test_errors || 0),
-            String(s.test_timeouts || 0),
-            String(s.test_muted || 0),
-            String(s.test_muted_timeouts || 0),
-            String(s.test_skipped || 0),
-            String(s.test_fails_total || 0),
-            String(s.chunk_total ?? ''),
-            String(s.chunk_passed ?? ''),
-            String(s.chunk_errors || 0),
-            String(s.chunk_timeouts || 0),
-            String(s.chunk_muted || 0),
-            String(s.chunk_muted_timeouts || 0),
-            String(s.chunk_fails_total || 0),
-            String(s.max_parallel_self || 0),
-            formatAbsSecLabel(s.max_parallel_self_at_sec),
-            String(s.peak_others_during_suite || 0),
-            formatAbsSecLabel(s.peak_others_during_suite_at_sec),
-            s.peak_self_cpu_cores_during_suite != null ? Number(s.peak_self_cpu_cores_during_suite).toFixed(1) : '',
-            formatAbsSecLabel(s.peak_self_cpu_at_sec),
-            s.peak_self_ram_gb_during_suite != null ? Number(s.peak_self_ram_gb_during_suite).toFixed(2) : '',
-            formatAbsSecLabel(s.peak_self_ram_at_sec),
+            actionCell(s.cpu_action || 'ok', s.cpu_action_tooltip),
+            tipCell(String(s.test_total ?? ''), testTip, ''),
+            tipCell(String(s.test_passed ?? ''), testTip, ''),
+            tipCell(String(s.test_errors || 0), testTip + ' errors = failed tests excluding timeouts.', ''),
+            tipCell(String(s.test_timeouts || 0), testTip + ' timeouts often mean chunk overloaded or SIZE too small.', s.test_timeouts > 0 ? 'color:#991b1b;font-weight:700;text-decoration:none;' : ''),
+            tipCell(String(s.test_muted || 0), testTip, ''),
+            tipCell(String(s.test_muted_timeouts || 0), testTip, ''),
+            tipCell(String(s.test_skipped || 0), testTip, ''),
+            tipCell(String(s.test_fails_total || 0), testTip, ''),
+            tipCell(String(s.chunk_total ?? ''), chunkTip, ''),
+            tipCell(String(s.chunk_passed ?? ''), chunkTip, ''),
+            tipCell(String(s.chunk_errors || 0), chunkTip, ''),
+            tipCell(String(s.chunk_timeouts || 0), chunkTip + ' chunk timeout = whole chunk exceeded SIZE limit.', s.chunk_timeouts > 0 ? 'color:#991b1b;font-weight:700;text-decoration:none;' : ''),
+            tipCell(String(s.chunk_muted || 0), chunkTip, ''),
+            tipCell(String(s.chunk_muted_timeouts || 0), chunkTip, ''),
+            tipCell(String(s.chunk_fails_total || 0), chunkTip, ''),
+            tipCell(String(s.max_parallel_self || 0), s.max_parallel_self_tooltip, ''),
+            tipCell(formatAbsSecLabel(s.max_parallel_self_at_sec), 'Wall-clock time when this suite reached peak parallelism.', ''),
+            tipCell(String(s.peak_others_during_suite || 0), s.peak_others_tooltip, ''),
+            tipCell(formatAbsSecLabel(s.peak_others_during_suite_at_sec), 'Wall-clock time when other suites peaked during this suite run.', ''),
+            tipCell(s.peak_self_cpu_cores_during_suite != null ? Number(s.peak_self_cpu_cores_during_suite).toFixed(1) : '', s.peak_self_cpu_tooltip, ''),
+            tipCell(formatAbsSecLabel(s.peak_self_cpu_at_sec), 'Wall-clock time of peak CPU for this suite.', ''),
+            tipCell(s.peak_self_ram_gb_during_suite != null ? Number(s.peak_self_ram_gb_during_suite).toFixed(2) : '', s.peak_self_ram_tooltip, ''),
+            tipCell(formatAbsSecLabel(s.peak_self_ram_at_sec), 'Wall-clock time of peak RAM for this suite.', ''),
           ];
         }});
 
@@ -1425,45 +1444,45 @@ def build_html_dashboard(
           '</tr>';
         const subHeader =
           '<tr>' +
-          '<th data-col="2" style="cursor:pointer;user-select:none;">ya_ram_gb' + marker(2) + '</th>' +
-          '<th data-col="3" style="cursor:pointer;user-select:none;">ya_cpu' + marker(3) + '</th>' +
-          '<th data-col="4" style="cursor:pointer;user-select:none;">ya_size' + marker(4) + '</th>' +
-          '<th data-col="5" class="group-end" style="cursor:pointer;user-select:none;" title="SPLIT_FACTOR(N) from ya.make">ya_split_factor' + marker(5) + '</th>' +
-          '<th data-col="6" style="cursor:pointer;user-select:none;" title="Chunk runs (evlog). Highlighted if ≠ ya.make SPLIT_FACTOR">chunks' + marker(6) + '</th>' +
-          '<th data-col="7" style="cursor:pointer;user-select:none;" title="Heuristic split recommendation for timeout cases">recommended_split' + marker(7) + '</th>' +
-          '<th data-col="8" class="group-end" style="cursor:pointer;user-select:none;" title="Compare recommended_split to ya_split_factor">split_action' + marker(8) + '</th>' +
-          '<th data-col="9" style="cursor:pointer;user-select:none;">median_cores' + marker(9) + '</th>' +
-          '<th data-col="10" style="cursor:pointer;user-select:none;">p95_cores' + marker(10) + '</th>' +
-          '<th data-col="11" class="group-end" style="cursor:pointer;user-select:none;">total_cpu_sec' + marker(11) + '</th>' +
-          '<th data-col="12" class="group-end" style="cursor:pointer;user-select:none;">total_ram_gb' + marker(12) + '</th>' +
-          '<th data-col="13" style="cursor:pointer;user-select:none;" title="Sum of max(report, evlog) duration per run">total_dur_sec' + marker(13) + '</th>' +
-          '<th data-col="14" style="cursor:pointer;user-select:none;" title="Sum of report duration per run">total_dur_report_sec' + marker(14) + '</th>' +
-          '<th data-col="15" class="group-end" style="cursor:pointer;user-select:none;" title="Sum of evlog duration per run">total_dur_evlog_sec' + marker(15) + '</th>' +
-          '<th data-col="16" style="cursor:pointer;user-select:none;">recommended_cpu' + marker(16) + '</th>' +
-          '<th data-col="17" class="group-end" style="cursor:pointer;user-select:none;">cpu_action' + marker(17) + '</th>' +
-          '<th data-col="18" style="cursor:pointer;user-select:none;">total' + marker(18) + '</th>' +
-          '<th data-col="19" style="cursor:pointer;user-select:none;">passed' + marker(19) + '</th>' +
-          '<th data-col="20" style="cursor:pointer;user-select:none;">errors' + marker(20) + '</th>' +
-          '<th data-col="21" style="cursor:pointer;user-select:none;">timeouts' + marker(21) + '</th>' +
-          '<th data-col="22" style="cursor:pointer;user-select:none;">muted' + marker(22) + '</th>' +
-          '<th data-col="23" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(23) + '</th>' +
-          '<th data-col="24" style="cursor:pointer;user-select:none;">skipped' + marker(24) + '</th>' +
-          '<th data-col="25" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(25) + '</th>' +
-          '<th data-col="26" style="cursor:pointer;user-select:none;">total' + marker(26) + '</th>' +
-          '<th data-col="27" style="cursor:pointer;user-select:none;">passed' + marker(27) + '</th>' +
-          '<th data-col="28" style="cursor:pointer;user-select:none;">errors' + marker(28) + '</th>' +
-          '<th data-col="29" style="cursor:pointer;user-select:none;">timeouts' + marker(29) + '</th>' +
-          '<th data-col="30" style="cursor:pointer;user-select:none;">muted' + marker(30) + '</th>' +
-          '<th data-col="31" style="cursor:pointer;user-select:none;">muted_timeouts' + marker(31) + '</th>' +
-          '<th data-col="32" class="group-end" style="cursor:pointer;user-select:none;">fails_total' + marker(32) + '</th>' +
-          '<th data-col="33" style="cursor:pointer;user-select:none;" title="Peak simultaneous chunks of this suite">par' + marker(33) + '</th>' +
-          '<th data-col="34" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time when suite parallelism peaked (timezone-aware)">at' + marker(34) + '</th>' +
-          '<th data-col="35" style="cursor:pointer;user-select:none;" title="Peak chunks of OTHER suites while this suite was running">others' + marker(35) + '</th>' +
-          '<th data-col="36" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak others (timezone-aware)">at' + marker(36) + '</th>' +
-          '<th data-col="37" style="cursor:pointer;user-select:none;" title="Peak CPU of THIS suite (cores) while this suite was running">cores' + marker(37) + '</th>' +
-          '<th data-col="38" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite CPU (timezone-aware)">at' + marker(38) + '</th>' +
-          '<th data-col="39" style="cursor:pointer;user-select:none;" title="Peak RAM of THIS suite (GB) while this suite was running">GB' + marker(39) + '</th>' +
-          '<th data-col="40" class="group-end" style="cursor:pointer;user-select:none;" title="Absolute time of peak suite RAM (timezone-aware)">at' + marker(40) + '</th>' +
+          '<th data-col="2" style="cursor:pointer;user-select:none;" title="REQUIREMENTS(ram:N) from ya.make">ya_ram_gb' + marker(2) + '</th>' +
+          '<th data-col="3" style="cursor:pointer;user-select:none;" title="REQUIREMENTS(cpu:N) from ya.make">ya_cpu' + marker(3) + '</th>' +
+          '<th data-col="4" style="cursor:pointer;user-select:none;" title="SIZE(SMALL/MEDIUM/LARGE): per-test timeout and CPU caps">ya_size' + marker(4) + '</th>' +
+          '<th data-col="5" class="group-end" style="cursor:pointer;user-select:none;" title="Effective split from ya.make (FORK_TEST_FILES × SPLIT_FACTOR). Hover cell for formula.">ya_split_factor' + marker(5) + '</th>' +
+          '<th data-col="6" style="cursor:pointer;user-select:none;" title="Chunk processes actually started at runtime. Hover for comparison with ya.make.">chunks' + marker(6) + '</th>' +
+          '<th data-col="7" style="cursor:pointer;user-select:none;" title="Suggested SPLIT_FACTOR based on per-chunk serial test time vs SIZE timeout. Hover for details and ya.make value to set.">recommended_split' + marker(7) + '</th>' +
+          '<th data-col="8" class="group-end" style="cursor:pointer;user-select:none;" title="raise/lower/ok: compare recommended_split to ya_split_factor. Hover badge for hint.">split_action' + marker(8) + '</th>' +
+          '<th data-col="9" style="cursor:pointer;user-select:none;" title="Median estimated CPU cores per chunk run">median_cores' + marker(9) + '</th>' +
+          '<th data-col="10" style="cursor:pointer;user-select:none;" title="95th percentile cores per chunk; basis for recommended_cpu">p95_cores' + marker(10) + '</th>' +
+          '<th data-col="11" class="group-end" style="cursor:pointer;user-select:none;" title="Total CPU-seconds summed over chunk runs">total_cpu_sec' + marker(11) + '</th>' +
+          '<th data-col="12" class="group-end" style="cursor:pointer;user-select:none;" title="Total peak RAM (GB) summed over chunk runs">total_ram_gb' + marker(12) + '</th>' +
+          '<th data-col="13" style="cursor:pointer;user-select:none;" title="Sum of max(report, evlog) wall time per chunk">total_dur_sec' + marker(13) + '</th>' +
+          '<th data-col="14" style="cursor:pointer;user-select:none;" title="Sum of report.json wall time per chunk">total_dur_report_sec' + marker(14) + '</th>' +
+          '<th data-col="15" class="group-end" style="cursor:pointer;user-select:none;" title="Sum of evlog wall time per chunk">total_dur_evlog_sec' + marker(15) + '</th>' +
+          '<th data-col="16" style="cursor:pointer;user-select:none;" title="Suggested REQUIREMENTS(cpu:N) for ya.make">recommended_cpu' + marker(16) + '</th>' +
+          '<th data-col="17" class="group-end" style="cursor:pointer;user-select:none;" title="raise/lower/ok vs current ya.make cpu">cpu_action' + marker(17) + '</th>' +
+          '<th data-col="18" style="cursor:pointer;user-select:none;" title="Total test rows in report">total' + marker(18) + '</th>' +
+          '<th data-col="19" style="cursor:pointer;user-select:none;" title="Tests with OK/PASS status">passed' + marker(19) + '</th>' +
+          '<th data-col="20" style="cursor:pointer;user-select:none;" title="Failed tests (non-timeout)">errors' + marker(20) + '</th>' +
+          '<th data-col="21" style="cursor:pointer;user-select:none;" title="Tests that exceeded SIZE timeout">timeouts' + marker(21) + '</th>' +
+          '<th data-col="22" style="cursor:pointer;user-select:none;" title="Tests in mute list">muted' + marker(22) + '</th>' +
+          '<th data-col="23" style="cursor:pointer;user-select:none;" title="Muted tests that timed out">muted_timeouts' + marker(23) + '</th>' +
+          '<th data-col="24" style="cursor:pointer;user-select:none;" title="Skipped tests">skipped' + marker(24) + '</th>' +
+          '<th data-col="25" class="group-end" style="cursor:pointer;user-select:none;" title="errors + timeouts">fails_total' + marker(25) + '</th>' +
+          '<th data-col="26" style="cursor:pointer;user-select:none;" title="Total chunk rows in report">total' + marker(26) + '</th>' +
+          '<th data-col="27" style="cursor:pointer;user-select:none;" title="Chunks with OK/PASS">passed' + marker(27) + '</th>' +
+          '<th data-col="28" style="cursor:pointer;user-select:none;" title="Failed chunks (non-timeout)">errors' + marker(28) + '</th>' +
+          '<th data-col="29" style="cursor:pointer;user-select:none;" title="Chunks that exceeded SIZE timeout">timeouts' + marker(29) + '</th>' +
+          '<th data-col="30" style="cursor:pointer;user-select:none;" title="Chunks with muted failures">muted' + marker(30) + '</th>' +
+          '<th data-col="31" style="cursor:pointer;user-select:none;" title="Muted chunk timeouts">muted_timeouts' + marker(31) + '</th>' +
+          '<th data-col="32" class="group-end" style="cursor:pointer;user-select:none;" title="chunk errors + timeouts">fails_total' + marker(32) + '</th>' +
+          '<th data-col="33" style="cursor:pointer;user-select:none;" title="Max simultaneous chunk processes of this suite">par' + marker(33) + '</th>' +
+          '<th data-col="34" class="group-end" style="cursor:pointer;user-select:none;" title="When peak parallelism happened">at' + marker(34) + '</th>' +
+          '<th data-col="35" style="cursor:pointer;user-select:none;" title="Max parallel chunks of other suites during this suite">others' + marker(35) + '</th>' +
+          '<th data-col="36" class="group-end" style="cursor:pointer;user-select:none;" title="When other suites peaked">at' + marker(36) + '</th>' +
+          '<th data-col="37" style="cursor:pointer;user-select:none;" title="Peak estimated CPU cores (sum) for this suite">cores' + marker(37) + '</th>' +
+          '<th data-col="38" class="group-end" style="cursor:pointer;user-select:none;" title="When CPU peaked">at' + marker(38) + '</th>' +
+          '<th data-col="39" style="cursor:pointer;user-select:none;" title="Peak RAM (GB, sum) for this suite">GB' + marker(39) + '</th>' +
+          '<th data-col="40" class="group-end" style="cursor:pointer;user-select:none;" title="When RAM peaked">at' + marker(40) + '</th>' +
           '</tr>';
 
         const groupEnds = new Set([5, 8, 11, 12, 15, 17, 25, 32, 34, 36, 38, 40]);
@@ -1519,15 +1538,17 @@ def build_html_dashboard(
           return 0;
         }});
         const heavyBody = heavyTestsFlat.map((x, i) => {{
+          const durTip = 'Test duration ' + x.duration_sec.toFixed(1) + 's (' + (x.duration_sec / 60).toFixed(1) + ' min). Near SIZE timeout → consider more SPLIT_FACTOR or larger SIZE.';
+          const thrTip = 'Heavy test threshold: 97% of SIZE timeout ≈ ' + x.threshold_sec.toFixed(0) + 's.';
           return (
             '<tr>' +
               '<td>' + (i + 1) + '</td>' +
-              '<td>' + x.suite_path + '</td>' +
-              '<td>' + x.ya_size + '</td>' +
-              '<td>' + (Number.isFinite(x.threshold_sec) ? x.threshold_sec.toFixed(1) + ' s' : '') + '</td>' +
-              '<td>' + x.test_name + '</td>' +
-              '<td>' + (Number.isFinite(x.duration_sec) ? x.duration_sec.toFixed(1) + ' s' : '') + '</td>' +
-              '<td>' + x.chunk_label + '</td>' +
+              '<td>' + tipCell(x.suite_path, 'Suite path', 'max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;') + '</td>' +
+              '<td>' + tipCell(x.ya_size, 'SIZE from ya.make sets per-test timeout', '') + '</td>' +
+              '<td>' + tipCell((Number.isFinite(x.threshold_sec) ? x.threshold_sec.toFixed(1) + ' s' : ''), thrTip, '') + '</td>' +
+              '<td>' + tipCell(x.test_name, 'Parametrized test name from report', 'max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;') + '</td>' +
+              '<td>' + tipCell((Number.isFinite(x.duration_sec) ? x.duration_sec.toFixed(1) + ' s' : ''), durTip, x.duration_sec >= x.threshold_sec ? 'color:#991b1b;font-weight:700;text-decoration:none;' : '') + '</td>' +
+              '<td>' + tipCell(x.chunk_label, 'Chunk where this test ran', '') + '</td>' +
             '</tr>'
           );
         }}).join('');
@@ -1765,7 +1786,7 @@ def build_html_dashboard(
         const markers = ((_suiteMarkerData[sp] || {{}}).markers || []);
         const errN = markers.filter(m => m.kind === 'error').length;
         const toN = markers.filter(m => m.kind === 'timeout').length;
-        return '<span style="display:inline-block;margin-right:4px;padding:1px 5px;border-radius:3px;background:' + color + ';color:#fff;font-size:10px;" title="' + sp + ' | errors:' + errN + ' | timeouts:' + toN + '">' + short + '</span>';
+        return '<span style="display:inline-block;margin-right:4px;padding:1px 5px;border-radius:3px;background:' + color + ';color:#fff;font-size:10px;cursor:help;" title="Suite: ' + titleAttr(sp) + '. Chart markers: ' + errN + ' error(s), ' + toN + ' timeout(s).">' + short + '</span>';
       }});
       document.getElementById('markersLegendSuites').innerHTML = badges.join('');
       const st = _countEventMarkers();

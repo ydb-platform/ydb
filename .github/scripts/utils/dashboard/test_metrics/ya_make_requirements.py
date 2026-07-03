@@ -217,7 +217,13 @@ def _parse_active_attrs(text: str, sanitizer: Optional[str]) -> dict[str, Any]:
             raw = int(attrs["split_factor"])
             effective = test_srcs_count * raw
             attrs["effective_split_factor"] = effective
-            attrs["split_factor_tooltip"] = f"FORK_TEST_FILES: {test_srcs_count} files × SPLIT_FACTOR({raw}) = {effective}"
+            attrs["split_factor_tooltip"] = (
+                f"Effective split {effective} = {test_srcs_count} TEST_SRCS files × SPLIT_FACTOR({raw}). "
+                f"ya.make contains SPLIT_FACTOR({raw}), not {effective}."
+            )
+    elif attrs.get("split_factor") is not None:
+        raw = int(attrs["split_factor"])
+        attrs["split_factor_tooltip"] = f"SPLIT_FACTOR({raw}) from ya.make (no FORK_TEST_FILES)."
 
     return attrs
 

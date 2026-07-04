@@ -40,7 +40,7 @@ struct TReceiveAttemptPartitionKey {
 struct TReceiveAttemptPartitionUpsert {
     TReceiveAttemptPartitionKey Key;
     ui32 PartitionId = 0;
-    ui64 ExpiryMicros = 0;
+    ui64 ExpirySeconds = 0;
 };
 
 struct TReceiveAttemptPartitionDelete {

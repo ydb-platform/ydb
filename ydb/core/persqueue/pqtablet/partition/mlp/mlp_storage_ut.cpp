@@ -3717,6 +3717,49 @@ Y_UNIT_TEST(ReadAttemptPurgeClearsReplayState) {
     UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(second), (std::vector<ui64>{10, 11, 12}));
 }
 
+Y_UNIT_TEST(ReadAttemptSnapshotPersistence) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    for (ui32 group = 0; group < 3; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    const TString attemptId = "my_attempt";
+    const auto first = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1, 2}));
+
+    const auto snapshot = utils.CreateSnapshot();
+
+    TUtils loaded(TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 8, .KeepMessageOrder = true});
+    loaded.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    loaded.LoadSnapshot(snapshot);
+
+    const auto second = loaded.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(second), GetReadOffsets(first));
+}
+
+Y_UNIT_TEST(ReadAttemptWALPersistence) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    for (ui32 group = 0; group < 3; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    utils.Begin();
+    const TString attemptId = "my_attempt";
+    const auto first = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1, 2}));
+    utils.End();
+
+    TUtils loaded(TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 8, .KeepMessageOrder = true});
+    loaded.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    loaded.LoadSnapshot(utils.BeginSnapshot);
+    loaded.LoadWAL(utils.WAL);
+
+    const auto second = loaded.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(second), GetReadOffsets(first));
+}
+
 Y_UNIT_TEST(ReadWithZeroVisibilityTimeoutUnlocksImmediately) {
     // SQS VisibilityTimeout=0: messages are handed to the client but their lock is released right away,
     // so they stay Unprocessed and can be received again immediately (with a growing receive count).

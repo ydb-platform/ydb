@@ -16,10 +16,6 @@
 
 namespace NKikimr::NPQ::NMLP {
 
-inline EOperationResult FromProto(NKikimrPQ::EMLPOperationResult result) {
-    return static_cast<EOperationResult>(static_cast<ui8>(result));
-}
-
 template<typename TRequest, typename TResponse, typename TSettings>
 class TChangerActor : public TBaseActor<TChangerActor<TRequest, TResponse, TSettings>>
                     , public TConstantLogPrefix {
@@ -138,7 +134,7 @@ private:
         partitionInfo.Success = true;
         partitionInfo.HasOffsetResults = record.OffsetResultsSize() > 0;
         for (const auto& [offset, status] : record.GetOffsetResults()) {
-            partitionInfo.OffsetResults.emplace(offset, FromProto(status));
+            partitionInfo.OffsetResults.emplace(offset, static_cast<EOperationResult>(static_cast<ui8>(status)));
         }
 
         --PendingRequests;

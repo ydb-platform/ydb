@@ -309,59 +309,59 @@ private:
                     }
 
                     auto* item = Response_.MutableReceiveMessage()->AddMessages();
-                if (message.ApproximateFirstReceiveTimestamp) {
-                    item->SetApproximateFirstReceiveTimestamp(message.ApproximateFirstReceiveTimestamp->MilliSeconds());
-                }
-                if (message.ApproximateReceiveCount) {
-                    item->SetApproximateReceiveCount(message.ApproximateReceiveCount.value());
-                }
-                item->SetMessageId(ToMessageId(message.MessageId));
-                item->SetMD5OfMessageBody(MD5::Calc(message.Data));
-                item->SetData(std::move(message.Data));
+                    if (message.ApproximateFirstReceiveTimestamp) {
+                        item->SetApproximateFirstReceiveTimestamp(message.ApproximateFirstReceiveTimestamp->MilliSeconds());
+                    }
+                    if (message.ApproximateReceiveCount) {
+                        item->SetApproximateReceiveCount(message.ApproximateReceiveCount.value());
+                    }
+                    item->SetMessageId(ToMessageId(message.MessageId));
+                    item->SetMD5OfMessageBody(MD5::Calc(message.Data));
+                    item->SetData(std::move(message.Data));
 
-                TReceipt receipt;
-                receipt.SetSource(NSQS::TReceipt::Topic);
-                receipt.SetOffset(message.MessageId.Offset);
-                receipt.SetShard(message.MessageId.PartitionId);
-                item->SetReceiptHandle(EncodeReceiptHandle(receipt));
+                    TReceipt receipt;
+                    receipt.SetSource(NSQS::TReceipt::Topic);
+                    receipt.SetOffset(message.MessageId.Offset);
+                    receipt.SetShard(message.MessageId.PartitionId);
+                    item->SetReceiptHandle(EncodeReceiptHandle(receipt));
 
-                item->SetSentTimestamp(message.SentTimestamp.MilliSeconds());
+                    item->SetSentTimestamp(message.SentTimestamp.MilliSeconds());
 
-                if (auto it = message.Attributes.find("sender_id"); it != message.Attributes.end()) {
-                    item->SetSenderId(std::move(it->second));
-                }
+                    if (auto it = message.Attributes.find("sender_id"); it != message.Attributes.end()) {
+                        item->SetSenderId(std::move(it->second));
+                    }
 
-                Ydb::Ymq::V1::Message ymqMessage;
-                if (NSQS::DeserializeUserAttributes(ymqMessage, message.Attributes)) {
-                    if (ymqMessage.message_attributes_size() > 0) {
-                        item->SetMD5OfMessageAttributes(ymqMessage.m_d_5_of_message_attributes());
-                        for (auto&& [name, v] : ymqMessage.message_attributes()) {
-                            auto* value = item->AddMessageAttributes();
-                            value->SetName(std::move(name));
-                            if (auto&& d = v.string_value()) {
-                                value->SetStringValue(std::move(d));
-                            } else if (auto&& d = v.binary_value()) {
-                                value->SetBinaryValue(std::move(d));
-                            } else {
-                                continue;
+                    Ydb::Ymq::V1::Message ymqMessage;
+                    if (NSQS::DeserializeUserAttributes(ymqMessage, message.Attributes)) {
+                        if (ymqMessage.message_attributes_size() > 0) {
+                            item->SetMD5OfMessageAttributes(ymqMessage.m_d_5_of_message_attributes());
+                            for (auto&& [name, v] : ymqMessage.message_attributes()) {
+                                auto* value = item->AddMessageAttributes();
+                                value->SetName(std::move(name));
+                                if (auto&& d = v.string_value()) {
+                                    value->SetStringValue(std::move(d));
+                                } else if (auto&& d = v.binary_value()) {
+                                    value->SetBinaryValue(std::move(d));
+                                } else {
+                                    continue;
+                                }
+                                value->SetDataType(std::move(v.data_type()));
                             }
-                            value->SetDataType(std::move(v.data_type()));
                         }
+                    } else {
+                        RLOG_SQS_WARN("Unable to deserialize message attributes");
                     }
-                } else {
-                    RLOG_SQS_WARN("Unable to deserialize message attributes");
-                }
 
-                if (!message.MessageGroupId.empty()) {
-                    item->SetMessageGroupId(message.MessageGroupId);
-                }
-
-                if (IsFifoQueue()) {
-                    if (!message.MessageDeduplicationId.empty()) {
-                        item->SetMessageDeduplicationId(message.MessageDeduplicationId);
+                    if (!message.MessageGroupId.empty()) {
+                        item->SetMessageGroupId(message.MessageGroupId);
                     }
-                    item->SetSequenceNumber(message.MessageId.Offset);
-                }
+
+                    if (IsFifoQueue()) {
+                        if (!message.MessageDeduplicationId.empty()) {
+                            item->SetMessageDeduplicationId(message.MessageDeduplicationId);
+                        }
+                        item->SetSequenceNumber(message.MessageId.Offset);
+                    }
                 }
 
                 if (QueueCounters_ && !ShouldReportTopicActionMetricsToPqrb()) {

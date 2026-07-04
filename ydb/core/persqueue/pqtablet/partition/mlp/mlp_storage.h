@@ -170,6 +170,11 @@ public:
 
     friend struct TMessageIterator;
 
+    struct TReceiveAttempt {
+        std::vector<ui64> Offsets;
+        TInstant Expiry;
+    };
+
     struct TBatch {
         friend class TStorage;
 
@@ -192,6 +197,8 @@ public:
         void DeleteFromSlow(ui64 offset);
         void SetPurged();
         void SetUpdateExternalLockedMessageGroupsId(ui32 parentPartitionId);
+        void AddReceiveAttemptUpsert(const TString& receiveAttemptId, const TReceiveAttempt& attempt);
+        void AddReceiveAttemptDelete(const TString& receiveAttemptId);
 
         void Compacted(size_t count);
         void MoveBaseTime(TInstant baseDeadline, TInstant baseWriteTimestamp);
@@ -208,6 +215,9 @@ public:
         size_t CompactedMessages = 0;
         bool Purged = false;
         absl::flat_hash_set<ui32> UpdateExternalLockedMessageGroupsId;
+
+        THashMap<TString, TReceiveAttempt> ReceiveAttemptUpserts;
+        THashSet<TString> ReceiveAttemptDeletes;
 
         std::optional<TInstant> BaseDeadline;
         std::optional<TInstant> BaseWriteTimestamp;
@@ -354,11 +364,9 @@ private:
     void MarkReceiveAttemptOffsetInvalid(ui64 offset);
     void CleanupReceiveAttempts(TInstant now);
     void ClearReceiveAttempts();
+    void RecordReceiveAttemptUpsert(const TString& receiveAttemptId, const TReceiveAttempt& attempt);
+    void RecordReceiveAttemptDelete(const TString& receiveAttemptId);
 
-    struct TReceiveAttempt {
-        std::vector<ui64> Offsets;
-        TInstant Expiry;
-    };
     THashMap<TString, TReceiveAttempt> ReceiveAttempts_;
     absl::flat_hash_set<ui64> InvalidatedReceiveAttemptOffsets_;
     // The window during which a repeated read with the same receive-request-attempt-id replays

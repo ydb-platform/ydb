@@ -1,7 +1,17 @@
 #include "read_balancer__mlp_balancing.h"
 #include "read_balancer_log.h"
 
+#include <util/generic/ymath.h>
+
 namespace NKikimr::NPQ::NBalancing {
+
+namespace {
+
+ui64 ReceiveAttemptExpiryToSeconds(TInstant expiry) {
+    return CeilDiv<ui64>(expiry.MicroSeconds(), 1'000'000ULL);
+}
+
+} // namespace
 
 TMLPConsumer::TMLPConsumer(TMLPBalancer& balancer, const TString& consumerName)
     : Balancer(balancer)
@@ -61,7 +71,7 @@ TPrepareGetPartitionResponse TMLPConsumer::PrepareGetPartitionResponse(const TSt
                             .ReceiveAttemptId = receiveAttemptId,
                         },
                         .PartitionId = node->Id,
-                        .ExpiryMicros = it->second.Expiry.MicroSeconds(),
+                        .ExpirySeconds = ReceiveAttemptExpiryToSeconds(it->second.Expiry),
                     };
                     return result;
                 }
@@ -88,7 +98,7 @@ TPrepareGetPartitionResponse TMLPConsumer::PrepareGetPartitionResponse(const TSt
                 .ReceiveAttemptId = receiveAttemptId,
             },
             .PartitionId = result.Node->Id,
-            .ExpiryMicros = expiry.MicroSeconds(),
+            .ExpirySeconds = ReceiveAttemptExpiryToSeconds(expiry),
         };
     }
 

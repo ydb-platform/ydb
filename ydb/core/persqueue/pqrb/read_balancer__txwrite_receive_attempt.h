@@ -25,7 +25,7 @@ struct TPersQueueReadBalancer::TTxWriteReceiveAttemptPartitions : public ITransa
         for (const auto& upsert : Batch.Upserts) {
             db.Table<Schema::ReceiveAttemptPartitions>().Key(upsert.Key.Consumer, upsert.Key.ReceiveAttemptId).Update(
                 NIceDb::TUpdate<Schema::ReceiveAttemptPartitions::PartitionId>(upsert.PartitionId),
-                NIceDb::TUpdate<Schema::ReceiveAttemptPartitions::Expiry>(upsert.ExpiryMicros)
+                NIceDb::TUpdate<Schema::ReceiveAttemptPartitions::Expiry>(upsert.ExpirySeconds)
             );
         }
         for (const auto& del : Batch.Deletes) {

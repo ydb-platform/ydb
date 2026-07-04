@@ -104,7 +104,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                     receiveAttemptsRowset.GetValue<Schema::ReceiveAttemptPartitions::Consumer>(),
                     receiveAttemptsRowset.GetValue<Schema::ReceiveAttemptPartitions::ReceiveAttemptId>(),
                     receiveAttemptsRowset.GetValue<Schema::ReceiveAttemptPartitions::PartitionId>(),
-                    TInstant::MicroSeconds(receiveAttemptsRowset.GetValue<Schema::ReceiveAttemptPartitions::Expiry>())
+                    TInstant::Seconds(receiveAttemptsRowset.GetValue<Schema::ReceiveAttemptPartitions::Expiry>())
                 );
                 if (!receiveAttemptsRowset.Next())
                     return false;

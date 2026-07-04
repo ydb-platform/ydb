@@ -362,24 +362,44 @@ void TStorage::CleanupReceiveAttempts(TInstant now) {
         return;
     }
 
-    EraseNodesIf(ReceiveAttempts_, [now, this](const auto& entry) {
-        if (entry.second.Expiry <= now) {
-            return true;
-        }
-        for (ui64 attemptOffset : entry.second.Offsets) {
-            if (InvalidatedReceiveAttemptOffsets_.contains(attemptOffset)) {
-                return true;
+    std::vector<TString> receiveAttemptIdsToDelete;
+    for (const auto& [receiveAttemptId, attempt] : ReceiveAttempts_) {
+        const bool expired = attempt.Expiry <= now;
+        bool invalidated = false;
+        if (!expired) {
+            for (ui64 attemptOffset : attempt.Offsets) {
+                if (InvalidatedReceiveAttemptOffsets_.contains(attemptOffset)) {
+                    invalidated = true;
+                    break;
+                }
             }
         }
-        return false;
-    });
+        if (expired || invalidated) {
+            receiveAttemptIdsToDelete.push_back(receiveAttemptId);
+        }
+    }
+    for (const auto& receiveAttemptId : receiveAttemptIdsToDelete) {
+        RecordReceiveAttemptDelete(receiveAttemptId);
+        ReceiveAttempts_.erase(receiveAttemptId);
+    }
 
     InvalidatedReceiveAttemptOffsets_.clear();
 }
 
 void TStorage::ClearReceiveAttempts() {
+    for (const auto& [receiveAttemptId, _] : ReceiveAttempts_) {
+        RecordReceiveAttemptDelete(receiveAttemptId);
+    }
     ReceiveAttempts_.clear();
     InvalidatedReceiveAttemptOffsets_.clear();
+}
+
+void TStorage::RecordReceiveAttemptUpsert(const TString& receiveAttemptId, const TReceiveAttempt& attempt) {
+    Batch.AddReceiveAttemptUpsert(receiveAttemptId, attempt);
+}
+
+void TStorage::RecordReceiveAttemptDelete(const TString& receiveAttemptId) {
+    Batch.AddReceiveAttemptDelete(receiveAttemptId);
 }
 
 std::deque<TReadMessage> TStorage::Read(
@@ -406,6 +426,7 @@ std::deque<TReadMessage> TStorage::Read(
                 }
             }
             attempt.Expiry = now + ReceiveAttemptIdPeriod;
+            RecordReceiveAttemptUpsert(receiveAttemptId, attempt);
             if (immediateUnlock) {
                 for (const auto& message : messages) {
                     DoUnlock(message.Offset);
@@ -440,6 +461,7 @@ std::deque<TReadMessage> TStorage::Read(
             attempt.Offsets.push_back(message.Offset);
         }
         ReceiveAttempts_[receiveAttemptId] = std::move(attempt);
+        RecordReceiveAttemptUpsert(receiveAttemptId, ReceiveAttempts_[receiveAttemptId]);
     }
 
     return messages;
@@ -1678,6 +1700,16 @@ void TStorage::TBatch::SetUpdateExternalLockedMessageGroupsId(ui32 parentPartiti
     UpdateExternalLockedMessageGroupsId.insert(parentPartitionId);
 }
 
+void TStorage::TBatch::AddReceiveAttemptUpsert(const TString& receiveAttemptId, const TReceiveAttempt& attempt) {
+    ReceiveAttemptDeletes.erase(receiveAttemptId);
+    ReceiveAttemptUpserts[receiveAttemptId] = attempt;
+}
+
+void TStorage::TBatch::AddReceiveAttemptDelete(const TString& receiveAttemptId) {
+    ReceiveAttemptUpserts.erase(receiveAttemptId);
+    ReceiveAttemptDeletes.insert(receiveAttemptId);
+}
+
 void TStorage::TBatch::Compacted(size_t count) {
     CompactedMessages += count;
 }
@@ -1697,7 +1729,9 @@ bool TStorage::TBatch::Empty() const {
         && DeletedFromSlowZone.empty()
         && CompactedMessages == 0
         && !Purged
-        && UpdateExternalLockedMessageGroupsId.empty();
+        && UpdateExternalLockedMessageGroupsId.empty()
+        && ReceiveAttemptUpserts.empty()
+        && ReceiveAttemptDeletes.empty();
 }
 
 size_t TStorage::TBatch::AddedMessageCount() const {

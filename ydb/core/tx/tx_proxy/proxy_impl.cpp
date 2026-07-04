@@ -260,7 +260,6 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
             Y_DEBUG_ABORT_UNLESS(txid != 0);
             const TActorId reqId = ctx.Register(CreateTxProxyDataReq(Services, txid, TxProxyMon, RequestControls,
                 NACLib::TUserContextBuilder().Build() /* don't pass UserSID for DDL transactions */));
-            TxProxyMon->MakeRequest->Inc();
             YDB_LOG_DEBUG_CTX(ctx, "DataReq",
                 {"selfId", SelfId()},
                 {"cookie", (ui64)ev->Cookie},

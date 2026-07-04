@@ -36,6 +36,13 @@ MEM_BUDGET_GB = 200.0
 MEM_MIN_CHUNK_GB = 24.0
 # CPU tiers allowed for memory-driven throttling (may exceed the p95 cap of 16).
 MEM_CPU_TIERS = (1, 2, 4, 8, 16, 32, 48, 96)
+# Runner CPU utilization (percent) at/above which we treat the box as saturated. When a
+# near-budget single test runs on a saturated runner, its wall time is likely inflated by
+# contention, so raising cpu (fewer parallel chunks) can pull it back under the timeout.
+CPU_SATURATION_PCT = 90.0
+# A single test is "near budget" (decontention may help) if it is within this factor of the
+# SIZE timeout. Far above -> genuinely oversized, decontention will not save it.
+NEAR_BUDGET_FACTOR = 1.10
 
 
 def _round_cpu_up(cores: float, tiers: tuple[int, ...] = MEM_CPU_TIERS) -> int:
@@ -44,6 +51,22 @@ def _round_cpu_up(cores: float, tiers: tuple[int, ...] = MEM_CPU_TIERS) -> int:
         if cores <= tier:
             return tier
     return tiers[-1]
+
+
+def _window_percentiles(
+    series: Optional[list[tuple[float, float]]], start_sec: Optional[float], end_sec: Optional[float]
+) -> tuple[Optional[float], Optional[float]]:
+    """Return (median, p95) of the series values whose timestamp falls in [start, end]."""
+    if not series or start_sec is None or end_sec is None or end_sec <= start_sec:
+        return None, None
+    vals = [v for (t, v) in series if start_sec <= t <= end_sec]
+    if not vals:
+        return None, None
+    vals.sort()
+    n = len(vals)
+    median = vals[n // 2] if n % 2 else (vals[n // 2 - 1] + vals[n // 2]) / 2.0
+    p95 = vals[min(n - 1, int(math.ceil(0.95 * n)) - 1)]
+    return round(median, 1), round(p95, 1)
 
 
 # When SPLIT_FACTOR is not set in ya.make, runner may pick 1..10. No need to suggest "set" if recommended is in that range.
@@ -199,6 +222,7 @@ def build_cpu_recommendations(
     max_test_duration_sec_by_suite: Optional[dict[str, float]] = None,
     test_duration_stats_by_suite: Optional[dict[str, dict[str, Any]]] = None,
     maximize_reqs_for_timeout_tests: bool = False,
+    runner_cpu_series: Optional[list[tuple[float, float]]] = None,
 ) -> list[dict[str, Any]]:
     dedup_runs_by_chunk: dict[tuple[str, str], dict[str, Any]] = {}
     dedup_runs_fallback: list[dict[str, Any]] = []
@@ -457,6 +481,33 @@ def build_cpu_recommendations(
             and timeout_budget_sec > 0
             and max_single_test_in_overloaded_sec >= timeout_budget_sec
         )
+        # Runner CPU saturation during this suite's window (from resources monitor). A
+        # near-budget single test on a saturated runner is likely contention-inflated, so
+        # raising cpu (fewer parallel chunks) may pull it back under the timeout instead of
+        # needing a test-level fix. Uses the all-runs window (evlog seconds).
+        suite_win_start = suite_start_us_all.get(suite)
+        suite_win_end = suite_end_us_all.get(suite)
+        runner_cpu_pct_median, runner_cpu_pct_p95 = _window_percentiles(
+            runner_cpu_series,
+            suite_win_start / 1e6 if suite_win_start is not None else None,
+            suite_win_end / 1e6 if suite_win_end is not None else None,
+        )
+        near_budget_single_test = (
+            single_test_blocks_split
+            and timeout_sec > 0
+            and max_single_test_in_overloaded_sec <= float(timeout_sec) * NEAR_BUDGET_FACTOR
+        )
+        runner_saturated = (
+            runner_cpu_pct_median is not None and runner_cpu_pct_median >= CPU_SATURATION_PCT
+        )
+        single_test_contention_suspected = bool(near_budget_single_test and runner_saturated)
+        # Suggested cpu to halve parallelism (decontention). Only when we have a current cpu.
+        cpu_for_contention: Any = None
+        if single_test_contention_suspected and ya_cpu is not None:
+            try:
+                cpu_for_contention = _round_cpu_up(int(ya_cpu) * 2)
+            except (TypeError, ValueError):
+                cpu_for_contention = None
         # Severity: "timeout" if a real timeout already occurred, "at_risk" if a chunk
         # exceeds the serial-time budget but has not timed out yet, else "none".
         if overloaded_chunks > 0:
@@ -619,11 +670,22 @@ def build_cpu_recommendations(
             if overloaded_chunk_examples:
                 recommended_split_tooltip += f" Examples: {', '.join(overloaded_chunk_examples[:2])}."
             if single_test_blocks_split:
-                recommended_split_tooltip += (
-                    f" WARNING: a single test runs ~{max_single_test_in_overloaded_sec / 60:.0f} min "
-                    f"(≥ budget) — SPLIT_FACTOR cannot help. Fix the test: raise TIMEOUT(), "
-                    f"reduce its work, or keep it muted."
-                )
+                if single_test_contention_suspected:
+                    recommended_split_tooltip += (
+                        f" WARNING: a single test runs ~{max_single_test_in_overloaded_sec / 60:.0f} min "
+                        f"(≥ budget) — SPLIT_FACTOR cannot help. But the runner was CPU-saturated "
+                        f"(~{runner_cpu_pct_median:.0f}% median) during this suite and the test is only "
+                        f"marginally over budget, so it is likely contention-inflated. TRY raising "
+                        f"REQUIREMENTS(cpu) from {ya_cpu} to {cpu_for_contention} to halve parallel chunks "
+                        f"(REQUIREMENTS(ram) is ignored locally); decontention may pull it under the timeout. "
+                        f"If it stays over, then fix the test: raise TIMEOUT(), reduce its work, or mute."
+                    )
+                else:
+                    recommended_split_tooltip += (
+                        f" WARNING: a single test runs ~{max_single_test_in_overloaded_sec / 60:.0f} min "
+                        f"(≥ budget) — SPLIT_FACTOR cannot help. Fix the test: raise TIMEOUT(), "
+                        f"reduce its work, or keep it muted."
+                    )
         elif recommended_split_action == "lower":
             recommended_split_tooltip = (
                 f"Can lower split from {ya_split_factor} to {recommended_split}: "
@@ -854,6 +916,10 @@ def build_cpu_recommendations(
             "overloaded_chunks": overloaded_chunks,
             "single_test_blocks_split": single_test_blocks_split,
             "max_single_test_in_overloaded_sec": round(max_single_test_in_overloaded_sec, 3),
+            "single_test_contention_suspected": single_test_contention_suspected,
+            "cpu_for_contention": cpu_for_contention,
+            "runner_cpu_pct_median_during_suite": runner_cpu_pct_median,
+            "runner_cpu_pct_p95_during_suite": runner_cpu_pct_p95,
             "chunks_count_tooltip": chunks_count_tooltip,
             "split_action_tooltip": split_action_tooltip,
             "ya_split_factor_raw": ya_split_factor_raw,

@@ -31,12 +31,6 @@
 
 {% include notitle [Содержание](ingestion/_includes/toc-table-streaming.md) %}
 
-## Перенос данных из других СУБД {#transfer}
-
-[Матрица совместимости и пошаговые инструкции](transfer/index.md).
-
-{% include notitle [Содержание](transfer/_includes/toc-table.md) %}
-
 ## Миграции данных {#data_migration}
 
 {% include notitle [Содержание](data-migration/_includes/toc-table.md) %}

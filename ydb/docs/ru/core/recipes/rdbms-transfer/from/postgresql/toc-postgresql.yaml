@@ -1,0 +1,15 @@
+items:
+- name: Обзор
+  href: index.md
+- name: CLI import file
+  href: cli-import-file.md
+- name: dbt
+  href: dbt.md
+- name: Федеративные запросы
+  href: federated-queries.md
+- name: Spark
+  href: spark.md
+- name: ydb-importer
+  href: ydb-importer.md
+- name: ydb-pg-extension
+  href: ydb-pg-extension.md

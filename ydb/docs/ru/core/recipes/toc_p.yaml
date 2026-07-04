@@ -47,6 +47,11 @@ items:
   include:
     mode: link
     path: transfer/toc_p.yaml
+- name: Перенос данных из других СУБД
+  href: rdbms-transfer/index.md
+  include:
+    mode: link
+    path: rdbms-transfer/toc_p.yaml
 - name: Резервное копирование в NFS
   href: nfs-backup/nfs-backup.md
 - name: Импорт и экспорт данных в колоночные таблицы

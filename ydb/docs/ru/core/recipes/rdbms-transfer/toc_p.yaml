@@ -1,0 +1,64 @@
+items:
+- name: Обзор
+  href: index.md
+- name: Инструменты
+  items:
+  - name: CLI import file
+    href: tools/cli-import-file.md
+  - name: Spark
+    href: tools/spark.md
+  - name: Федеративные запросы
+    href: tools/federated-queries.md
+  - name: dbt
+    href: tools/dbt.md
+  - name: ydb-importer
+    href: tools/ydb-importer.md
+  - name: ydb-pg-extension
+    href: tools/ydb-pg-extension.md
+  - name: mysql2ydb
+    href: tools/mysql2ydb.md
+- name: PostgreSQL
+  href: from/postgresql/index.md
+  include:
+    mode: link
+    path: from/postgresql/toc-postgresql.yaml
+- name: MySQL / MariaDB
+  href: from/mysql/index.md
+  include:
+    mode: link
+    path: from/mysql/toc-mysql.yaml
+- name: Microsoft SQL Server
+  href: from/mssql/index.md
+  include:
+    mode: link
+    path: from/mssql/toc-mssql.yaml
+- name: ClickHouse
+  href: from/clickhouse/index.md
+  include:
+    mode: link
+    path: from/clickhouse/toc-clickhouse.yaml
+- name: Greenplum
+  href: from/greenplum/index.md
+  include:
+    mode: link
+    path: from/greenplum/toc-greenplum.yaml
+- name: Oracle Database
+  href: from/oracle/index.md
+  include:
+    mode: link
+    path: from/oracle/toc-oracle.yaml
+- name: IBM Db2
+  href: from/db2/index.md
+  include:
+    mode: link
+    path: from/db2/toc-db2.yaml
+- name: IBM Informix
+  href: from/informix/index.md
+  include:
+    mode: link
+    path: from/informix/toc-informix.yaml
+- name: SQLite
+  href: from/sqlite/index.md
+  include:
+    mode: link
+    path: from/sqlite/toc-sqlite.yaml

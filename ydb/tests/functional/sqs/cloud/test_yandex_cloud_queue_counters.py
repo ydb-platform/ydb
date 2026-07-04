@@ -60,6 +60,19 @@ class TestYmqQueueCounters(get_test_with_sqs_tenant_installation(KikimrSqsTestBa
         resource_id_end_index = len(queue_url) - len(queue_name) - 1
         return queue_url[resource_id_start_index:resource_id_end_index]
 
+    def _wait_for_ymq_counters(self, assert_counters):
+        attempts = 10
+        while attempts:
+            attempts -= 1
+            ymq_counters = self._get_ymq_counters(cloud=self.cloud_id, folder=self.folder_id)
+            try:
+                assert_counters(ymq_counters)
+                return
+            except AssertionError:
+                if not attempts:
+                    raise
+                time.sleep(0.5)
+
     def test_ymq_send_read_delete(self):
         self._sqs_api = self._create_api_for_user(self._username, raise_on_error=True, force_private=True, iam_token=self.iam_token, folder_id=self.folder_id)
 
@@ -72,49 +85,50 @@ class TestYmqQueueCounters(get_test_with_sqs_tenant_installation(KikimrSqsTestBa
         handle = self._read_while_not_empty(queue_url, 1)[0]["ReceiptHandle"]
         self._sqs_api.delete_message(queue_url, handle)
 
-        ymq_counters = self._get_ymq_counters(cloud=self.cloud_id, folder=self.folder_id)
+        def assert_counters(ymq_counters):
+            send_message_count = self._get_counter_value(ymq_counters, {
+                'queue': queue_resource_id,
+                'name': 'queue.messages.sent_count_per_second',
+            })
+            assert send_message_count == 1
 
-        send_message_count = self._get_counter_value(ymq_counters, {
-            'queue': queue_resource_id,
-            'name': 'queue.messages.sent_count_per_second',
-        })
-        assert send_message_count == 1
+            send_message_bytes_written = self._get_counter_value(ymq_counters, {
+                'queue': queue_resource_id,
+                'name': 'queue.messages.sent_bytes_per_second',
+            })
+            assert send_message_bytes_written == len(message_payload)
 
-        send_message_bytes_written = self._get_counter_value(ymq_counters, {
-            'queue': queue_resource_id,
-            'name': 'queue.messages.sent_bytes_per_second',
-        })
-        assert send_message_bytes_written == len(message_payload)
+            message_receive_attempts = self._get_counter(ymq_counters, {
+                'queue': queue_resource_id,
+                'name': 'queue.messages.receive_attempts_count_rate',
+            })
+            assert message_receive_attempts['hist']['buckets'][0] == 1
 
-        message_receive_attempts = self._get_counter(ymq_counters, {
-            'queue': queue_resource_id,
-            'name': 'queue.messages.receive_attempts_count_rate',
-        })
-        assert message_receive_attempts['hist']['buckets'][0] == 1
+            receive_message_count = self._get_counter_value(ymq_counters, {
+                'queue': queue_resource_id,
+                'name': 'queue.messages.received_count_per_second',
+            })
+            assert receive_message_count == 1
 
-        receive_message_count = self._get_counter_value(ymq_counters, {
-            'queue': queue_resource_id,
-            'name': 'queue.messages.received_count_per_second',
-        })
-        assert receive_message_count == 1
+            recide_duration_buckets = self._get_counter(ymq_counters, {
+                'queue': queue_resource_id,
+                'name': 'queue.messages.reside_duration_milliseconds',
+            })['hist']['buckets']
+            assert any(map(lambda x: x > 0, recide_duration_buckets))
 
-        recide_duration_buckets = self._get_counter(ymq_counters, {
-            'queue': queue_resource_id,
-            'name': 'queue.messages.reside_duration_milliseconds',
-        })['hist']['buckets']
-        assert any(map(lambda x: x > 0, recide_duration_buckets))
+            receive_message_bytes_read = self._get_counter_value(ymq_counters, {
+                'queue': queue_resource_id,
+                'name': 'queue.messages.received_bytes_per_second',
+            })
+            assert receive_message_bytes_read > 0
 
-        receive_message_bytes_read = self._get_counter_value(ymq_counters, {
-            'queue': queue_resource_id,
-            'name': 'queue.messages.received_bytes_per_second',
-        })
-        assert receive_message_bytes_read > 0
+            client_message_processing_duration_buckets = self._get_counter(ymq_counters, {
+                'queue': queue_resource_id,
+                'name': 'queue.messages.client_processing_duration_milliseconds',
+            })['hist']['buckets']
+            assert any(map(lambda x: x > 0, client_message_processing_duration_buckets))
 
-        client_message_processing_duration_buckets = self._get_counter(ymq_counters, {
-            'queue': queue_resource_id,
-            'name': 'queue.messages.client_processing_duration_milliseconds',
-        })['hist']['buckets']
-        assert any(map(lambda x: x > 0, client_message_processing_duration_buckets))
+        self._wait_for_ymq_counters(assert_counters)
 
     def test_counters_when_sending_duplicates(self):
         self._sqs_api = self._create_api_for_user(self._username, raise_on_error=True, force_private=True, iam_token=self.iam_token, folder_id=self.folder_id)
@@ -131,13 +145,14 @@ class TestYmqQueueCounters(get_test_with_sqs_tenant_installation(KikimrSqsTestBa
                 group_id="group_id",
             )
 
-        ymq_counters = self._get_ymq_counters(cloud=self.cloud_id, folder=self.folder_id)
+        def assert_counters(ymq_counters):
+            send_message_deduplication_count = self._get_counter_value(ymq_counters, {
+                'queue': queue_resource_id,
+                'name': 'queue.messages.deduplicated_count_per_second',
+            })
+            assert send_message_deduplication_count == 1
 
-        send_message_deduplication_count = self._get_counter_value(ymq_counters, {
-            'queue': queue_resource_id,
-            'name': 'queue.messages.deduplicated_count_per_second',
-        })
-        assert send_message_deduplication_count == 1
+        self._wait_for_ymq_counters(assert_counters)
 
     def test_counters_when_reading_from_empty_queue(self):
         self._sqs_api = self._create_api_for_user(self._username, raise_on_error=True, force_private=True, iam_token=self.iam_token, folder_id=self.folder_id)
@@ -166,22 +181,23 @@ class TestYmqQueueCounters(get_test_with_sqs_tenant_installation(KikimrSqsTestBa
         self._sqs_api.send_message(queue_url, message_payload)
         self._read_while_not_empty(queue_url, 1)
 
-        ymq_counters = self._get_ymq_counters(cloud=self.cloud_id, folder=self.folder_id)
+        def assert_counters(ymq_counters):
+            successes = self._get_counter_value(ymq_counters, {
+                'queue': queue_resource_id,
+                'method': 'receive_message',
+                'name': 'api.http.requests_count_per_second',
+            })
+            assert successes == 1
 
-        successes = self._get_counter_value(ymq_counters, {
-            'queue': queue_resource_id,
-            'method': 'receive_message',
-            'name': 'api.http.requests_count_per_second',
-        })
-        assert successes == 1
+            durations = self._get_counter(ymq_counters, {
+                'queue': queue_resource_id,
+                'method': 'receive_message',
+                'name': 'api.http.request_duration_milliseconds',
+            })
+            duration_buckets = durations['hist']['buckets']
+            assert any(map(lambda x: x > 0, duration_buckets))
 
-        durations = self._get_counter(ymq_counters, {
-            'queue': queue_resource_id,
-            'method': 'receive_message',
-            'name': 'api.http.request_duration_milliseconds',
-        })
-        duration_buckets = durations['hist']['buckets']
-        assert any(map(lambda x: x > 0, duration_buckets))
+        self._wait_for_ymq_counters(assert_counters)
 
     def test_purge_queue_counters(self):
 
@@ -194,16 +210,11 @@ class TestYmqQueueCounters(get_test_with_sqs_tenant_installation(KikimrSqsTestBa
             self._sqs_api.send_message(queue_url, "foobar")
             self._sqs_api.purge_queue(queue_url)
 
-        attempts = 10
-        while attempts:
-            attempts -= 1
-            ymq_counters = self._get_ymq_counters(cloud=self.cloud_id, folder=self.folder_id)
+        def assert_counters(ymq_counters):
             purged_derivative = self._get_counter_value(ymq_counters, {
                 'queue': queue_resource_id,
                 'name': 'queue.messages.purged_count_per_second',
             })
-            if purged_derivative > 0:
-                return
-            if not attempts:
-                assert purged_derivative > 0
-            time.sleep(0.5)
+            assert purged_derivative > 0
+
+        self._wait_for_ymq_counters(assert_counters)

@@ -415,10 +415,10 @@ private:
 
                 auto structType = AS_TYPE(NKikimr::NMiniKQL::TStructType, type);
                 auto membersCount = structType->GetMembersCount();
-                if (membersCount == 0) {
-                    return true;
-                }
                 if (value.RefCount() != expectedRefs) {
+                    if (membersCount == 0) {
+                        return true;
+                    }
                     Y_DEBUG_ABORT("%s", (TStringBuilder() << value.RefCount() << "!=" << expectedRefs).c_str());
                     return false;
                 }
@@ -438,10 +438,10 @@ private:
                 }
                 auto tupleType = AS_TYPE(NKikimr::NMiniKQL::TTupleType, type);
                 auto elementsCount = tupleType->GetElementsCount();
-                if (elementsCount == 0) { // special case: shared empty list
-                    return true;
-                }
                 if (value.RefCount() != expectedRefs) {
+                    if (elementsCount == 0) { // special case: shared empty list
+                        return true;
+                    }
                     Y_DEBUG_ABORT("%s", (TStringBuilder() << value.RefCount() << "!=" << expectedRefs).c_str());
                     return false;
                 }
@@ -484,10 +484,10 @@ private:
                     Y_DEBUG_ABORT();
                     return false;
                 }
-                if (value.GetDictLength() == 0) { // special case: shared empty dict
-                    return true;
-                }
                 if (value.RefCount() != expectedRefs) {
+                    if (value.GetDictLength() == 0) { // special case: shared empty dict
+                        return true;
+                    }
                     Y_DEBUG_ABORT("%s", (TStringBuilder() << value.RefCount() << "!=" << expectedRefs).c_str());
                     return false;
                 }

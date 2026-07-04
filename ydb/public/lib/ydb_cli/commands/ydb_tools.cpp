@@ -116,7 +116,8 @@ int TCommandDump::Run(TConfig& config) {
     auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
-    NDump::TClient client(CreateDriver(config), std::move(log));
+    auto driver = CreateDriver(config);
+    NDump::TClient client(driver, std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Dump(Path, FilePath, settings));
 
     return EXIT_SUCCESS;
@@ -300,7 +301,8 @@ int TCommandRestore::Run(TConfig& config) {
     auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
-    NDump::TClient client(CreateDriver(config), std::move(log));
+    auto driver = CreateDriver(config);
+    NDump::TClient client(driver, std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Restore(FilePath, Path, settings));
 
     return EXIT_SUCCESS;

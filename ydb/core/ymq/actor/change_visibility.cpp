@@ -40,7 +40,12 @@ protected:
                 return;
             }
 
-            const TReceipt receipt = DecodeReceiptHandle(entry.GetReceiptHandle()); // can throw
+            TReceipt receipt;
+            if (!TryDecodeReceiptHandle(entry.GetReceiptHandle(), receipt)) {
+                RLOG_SQS_WARN("Failed to decode receipt handle " << entry.GetReceiptHandle());
+                MakeError(resp, NErrors::RECEIPT_HANDLE_IS_INVALID);
+                return;
+            }
             RLOG_SQS_DEBUG("Decoded receipt handle: " << receipt);
             if (receipt.GetSource() == TReceipt::Table) {
                 if (receipt.GetShard() >= Shards_) {

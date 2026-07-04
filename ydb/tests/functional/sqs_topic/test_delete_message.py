@@ -9,6 +9,24 @@ from ydb.tests.library.sqs_topic.test_base import KikimrSqsTopicTestBase
 
 
 class TestSqsTopicDeleteMessage(KikimrSqsTopicTestBase):
+    def test_delete_message_invalid_receipt_handle(self):
+        queue_name = self._make_queue_name('delete_message_invalid_receipt_handle')
+        self._queue_url = self._boto_client.create_queue(QueueName=queue_name)['QueueUrl']
+
+        def delete_message_with_invalid_handle():
+            self._boto_client.delete_message(
+                QueueUrl=self._queue_url,
+                ReceiptHandle='not_a_receipt_handle',
+            )
+
+        assert_that(
+            delete_message_with_invalid_handle,
+            raises(
+                botocore.exceptions.ClientError,
+                pattern='ReceiptHandleIsInvalid',
+            ),
+        )
+
     def test_delete_message(self):
         queue_name = self._make_queue_name('delete_message')
         self._queue_url = self._boto_client.create_queue(QueueName=queue_name)['QueueUrl']

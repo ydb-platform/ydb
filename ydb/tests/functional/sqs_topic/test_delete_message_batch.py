@@ -7,6 +7,25 @@ from ydb.tests.library.sqs_topic.test_base import KikimrSqsTopicTestBase
 
 
 class TestSqsTopicDeleteMessageBatch(KikimrSqsTopicTestBase):
+    def test_delete_message_batch_invalid_receipt_handle(self):
+        queue_name = self._make_queue_name('delete_message_batch_invalid_receipt_handle')
+        self._queue_url = self._boto_client.create_queue(QueueName=queue_name)['QueueUrl']
+
+        batch_response = self._boto_client.delete_message_batch(
+            QueueUrl=self._queue_url,
+            Entries=[
+                {
+                    'Id': '0',
+                    'ReceiptHandle': 'not_a_receipt_handle',
+                },
+            ],
+        )
+
+        assert_that(batch_response.get('Successful', []), has_length(0))
+        assert_that(batch_response['Failed'], has_length(1))
+        assert_that(batch_response['Failed'][0]['Id'], equal_to('0'))
+        assert_that(batch_response['Failed'][0]['Code'], equal_to('ReceiptHandleIsInvalid'))
+
     def test_delete_message_batch(self):
         queue_name = self._make_queue_name('delete_message_batch')
         self._queue_url = self._boto_client.create_queue(QueueName=queue_name)['QueueUrl']

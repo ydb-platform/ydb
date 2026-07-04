@@ -64,12 +64,12 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         if (d) {
             //            if (currentTierName == "deploy_logs_s3" && targetTierName == IStoragesManager::DefaultStorageId) {
             //                YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
-                                  {"tieringInfo", tieringInfo.DebugString()},
-                                  {"max", max->ToString()},
-                                  {"now", now},
-                                  {"d", *d},
-                                  {"tiering", Tiering->GetDebugString()},
-                                  {"pathId", PathId});
+            //                    {"tieringInfo", tieringInfo.DebugString()},
+            //                    {"max", max->ToString()},
+            //                    {"now", now},
+            //                    {"d", *d},
+            //                    {"tiering", Tiering->GetDebugString()},
+            //                    {"pathId", PathId});
             //                AFL_VERIFY(false)("tiering_info", tieringInfo.DebugString())("max", max->ToString())("now", now.ToString())("d", *d)("tiering", Tiering->GetDebugString())("pathId", PathId);
             //            }
             auto storagesWrite = targetSchema->GetIndexInfo().GetUsedStorageIds(targetTierName);

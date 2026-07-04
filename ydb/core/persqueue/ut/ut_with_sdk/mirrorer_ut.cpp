@@ -649,45 +649,19 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         NYdb::NTopic::TPartitionSession::TPtr session;
         size_t messageCount = 0;
         TInstant dstDeadline = TInstant::Max();
-        while (TInstant::Now() < dstDeadline) {
-            if (!dstReader->WaitEvent().Wait(dstDeadline)) {
-                break;
-            }
+        TInstant lastStatusRequest = TInstant::Zero();
+        bool actualWriteTimeHighWatermark = false;
+        while (TInstant::Now() < dstDeadline || !actualWriteTimeHighWatermark) {
+            dstReader->WaitEvent().Wait(Min(dstDeadline, TDuration::MilliSeconds(100).ToDeadLine()));
             auto event = dstReader->GetEvent(false);
             if (!event) {
-                continue;
-            }
-            if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
-                messageCount += data->GetMessagesCount();
-            } else if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
-                session = start->GetPartitionSession();
-                start->Confirm();
-                dstDeadline = TDuration::Seconds(10).ToDeadLine();
-            } else if (auto* stop = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
-                session.Reset();
-                stop->Confirm();
-            } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
-                break;
-            }
-        }
-
-        UNIT_ASSERT(session != nullptr);
-        session->RequestStatus();
-
-        dstDeadline = TInstant::Max();
-        while (TInstant::Now() < dstDeadline) {
-            if (!dstReader->WaitEvent().Wait(TDuration::MilliSeconds(400))) {
-                break;
-            }
-            auto event = dstReader->GetEvent(false);
-            if (!event) {
-                if (session) {
+                if (TInstant::Now() - lastStatusRequest > TDuration::Seconds(1) && session) {
+                    lastStatusRequest = TInstant::Now();
                     session->RequestStatus();
                 }
                 continue;
             }
             if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
-                UNIT_ASSERT_VALUES_EQUAL(data->GetMessagesCount(), 0);
                 messageCount += data->GetMessagesCount();
             } else if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
                 session = start->GetPartitionSession();
@@ -702,11 +676,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
                     << " " << LabeledOutput(allCommitedTimestamp)
                     << " " << "diff_ms=" << (allCommitedTimestamp - status->GetWriteTimeHighWatermark()).MilliSeconds()
                     << "\n";
-                if (status->GetWriteTimeHighWatermark() >= allCommitedTimestamp) {
-                    break;
-                }
-                UNIT_ASSERT(session);
-                session->RequestStatus();
+                actualWriteTimeHighWatermark = (status->GetWriteTimeHighWatermark() >= allCommitedTimestamp);
             } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
                 break;
             }

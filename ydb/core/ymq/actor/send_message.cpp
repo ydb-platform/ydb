@@ -247,6 +247,7 @@ private:
                 if (it != BlockedDeduplicationMessageIds_.end()) {
                     const auto& [messageId, sequenceNumber] = it->second;
                     AddResponse(currentRequest, currentResponse, messageId, sequenceNumber);
+                    AccumulateTopicSendMetrics(Ydb::StatusIds::ALREADY_EXISTS, 0);
                     continue;
                 }
             }
@@ -287,6 +288,7 @@ private:
             Register(NPQ::NMLP::CreateWriter(SelfId(), std::move(writerSettings)));
         } else {
             ReportTopicSendCounters();
+            ReportTopicSendMetricsToPqrb(0);
             SendReplyAndDie();
         }
     }
@@ -409,14 +411,16 @@ private:
     }
 
     void ReportTopicSendMetricsToPqrb(ui64 balancerTabletId) {
-        if (!TopicSendHasWritten_) {
+        if (!TopicSendHasWritten_ && !TopicSendHasDedup_) {
             return;
         }
 
         NKikimrPQ::TEvTopicSqsActionMetrics metrics;
         auto* send = IsBatch_ ? metrics.MutableSendMessageBatch() : metrics.MutableSendMessage();
-        send->SetSendMessageCount(1);
-        send->SetBytesWritten(TopicSendBytesWritten_);
+        if (TopicSendHasWritten_) {
+            send->SetSendMessageCount(1);
+            send->SetBytesWritten(TopicSendBytesWritten_);
+        }
         if (TopicSendHasDedup_) {
             send->SetDeduplicationCount(1);
         }

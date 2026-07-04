@@ -698,6 +698,92 @@ class KikimrSqsTestBase(object):
             return attempts
         return 30 if self._is_topic_migration_stage() else 10
 
+    def _retry_attempts(self, non_migration, migration):
+        return migration if self._is_topic_migration_stage() else non_migration
+
+    def _get_queue_resource_id(self, queue_url, queue_name, cloud_id=None):
+        cloud_id = cloud_id if cloud_id is not None else getattr(self, 'cloud_id', None)
+        assert cloud_id is not None, 'cloud_id is required'
+        folder_index = queue_url.find(cloud_id)
+        assert folder_index != -1
+        resource_id_start_index = folder_index + len(cloud_id) + 1
+        resource_id_end_index = len(queue_url) - len(queue_name) - 1
+        return queue_url[resource_id_start_index:resource_id_end_index]
+
+    def _wait_for_dlq_message_count(self, dlq_url, expected_message_count, sleep_sec=0.5):
+        attempts = self._retry_attempts(20, 60)
+        while attempts:
+            attempts -= 1
+            if self._is_topic_migration_stage():
+                message_count = int(self._sqs_api.get_queue_attributes(dlq_url).get('ApproximateNumberOfMessages', 0))
+                msgs = self._read_single_message_no_wait(dlq_url)
+                if message_count >= expected_message_count and len(msgs) >= min(expected_message_count, 1):
+                    if message_count == expected_message_count:
+                        return
+            else:
+                message_count = int(self._sqs_api.get_queue_attributes(dlq_url)['ApproximateNumberOfMessages'])
+                if message_count == expected_message_count:
+                    return
+            time.sleep(sleep_sec)
+        message_count = int(self._sqs_api.get_queue_attributes(dlq_url).get('ApproximateNumberOfMessages', 0))
+        assert_that(message_count, equal_to(expected_message_count))
+
+    def _wait_for_messages_in_dlq(self, dlq_url, messages_count, wait_timeout=0, sleep_sec=0.5):
+        attempts = self._retry_attempts(1, 60)
+        last_result = []
+        while attempts:
+            attempts -= 1
+            last_result = self._read_messages_and_assert(
+                dlq_url, messages_count=messages_count, visibility_timeout=0, wait_timeout=wait_timeout,
+                matcher=None
+            )
+            if len(last_result) == messages_count:
+                return last_result
+            time.sleep(sleep_sec)
+        assert_that(len(last_result), equal_to(messages_count))
+        return last_result
+
+    def _wait_for_message_body_in_dlq(self, dlq_url, msg_body, sleep_sec=0.5):
+        attempts = self._retry_attempts(1, 60)
+        while attempts:
+            attempts -= 1
+            msgs_from_dlq = self._read_single_message_no_wait(dlq_url)
+            if msgs_from_dlq and msgs_from_dlq[0]['Body'] == msg_body:
+                return msgs_from_dlq[0]
+            if attempts:
+                logging.debug(
+                    'Wait for async DLQ move on topic path. Attempts left: {}'.format(attempts))
+                time.sleep(sleep_sec)
+        assert_that(None, not_none(), 'Message {} was not moved to DLQ'.format(msg_body))
+
+    def _wait_for_message_body_in_queue(
+        self, queue_url, msg_body, visibility_timeout=0, per_read_wait_timeout=None, sleep_sec=0.5
+    ):
+        if per_read_wait_timeout is None:
+            per_read_wait_timeout = 1 if self._is_topic_migration_stage() else 10
+        attempts = self._retry_attempts(1, 60)
+        result_list = []
+        while attempts:
+            attempts -= 1
+            result_list = self._read_while_not_empty(
+                queue_url=queue_url,
+                messages_count=1,
+                visibility_timeout=visibility_timeout,
+                wait_timeout=per_read_wait_timeout,
+            )
+            if result_list and result_list[0]['Body'] == msg_body:
+                return result_list
+            result_list = []
+            if self._is_topic_migration_stage() and attempts:
+                logging.debug(
+                    'Wait for message restore to source queue after DLQ delete. Attempts left: {}'.format(
+                        attempts))
+                time.sleep(sleep_sec)
+            else:
+                break
+        assert_that(result_list[0]['Body'], equal_to(msg_body))
+        return result_list
+
     def _wait_for_sqs_counters(self, assert_fn, attempts=None, sleep_sec=0.5, node_index=0, counters_format='json'):
         attempts = self._async_metrics_retry_attempts(attempts)
         while attempts:

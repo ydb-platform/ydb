@@ -637,6 +637,8 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         }
         UNIT_ASSERT_C(committed, "mirror_consumer did not commit all skipped messages within timeout");
 
+        const TInstant allCommitedTimestamp = TInstant::Now();
+
         // Read from the destination topic; nothing must be there except the prefill messages
         auto dstReader = topicClient.CreateReadSession(
             NYdb::NTopic::TReadSessionSettings()
@@ -644,6 +646,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
                 .ConsumerName("reader")
         );
 
+        NYdb::NTopic::TPartitionSession::TPtr session;
         size_t messageCount = 0;
         TInstant dstDeadline = TInstant::Max();
         while (TInstant::Now() < dstDeadline) {
@@ -657,10 +660,53 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
             if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
                 messageCount += data->GetMessagesCount();
             } else if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                session = start->GetPartitionSession();
                 start->Confirm();
                 dstDeadline = TDuration::Seconds(10).ToDeadLine();
             } else if (auto* stop = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                session.Reset();
                 stop->Confirm();
+            } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+                break;
+            }
+        }
+
+        UNIT_ASSERT(session != nullptr);
+        session->RequestStatus();
+
+        dstDeadline = TInstant::Max();
+        while (TInstant::Now() < dstDeadline) {
+            if (!dstReader->WaitEvent().Wait(TDuration::MilliSeconds(400))) {
+                break;
+            }
+            auto event = dstReader->GetEvent(false);
+            if (!event) {
+                if (session) {
+                    session->RequestStatus();
+                }
+                continue;
+            }
+            if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                UNIT_ASSERT_VALUES_EQUAL(data->GetMessagesCount(), 0);
+                messageCount += data->GetMessagesCount();
+            } else if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                session = start->GetPartitionSession();
+                start->Confirm();
+                dstDeadline = TDuration::Seconds(10).ToDeadLine();
+            } else if (auto* stop = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                session.Reset();
+                stop->Confirm();
+            } else if (auto* status = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>(&*event)) {
+                Cerr << "Status event:"
+                    << " " << status->DebugString()
+                    << " " << LabeledOutput(allCommitedTimestamp)
+                    << " " << "diff_ms=" << (allCommitedTimestamp - status->GetWriteTimeHighWatermark()).MilliSeconds()
+                    << "\n";
+                if (status->GetWriteTimeHighWatermark() >= allCommitedTimestamp) {
+                    break;
+                }
+                UNIT_ASSERT(session);
+                session->RequestStatus();
             } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
                 break;
             }

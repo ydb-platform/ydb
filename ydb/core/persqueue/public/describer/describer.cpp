@@ -122,7 +122,9 @@ public:
                     break;
                 }
                 case TSchemeCacheNavigate::EStatus::AccessDenied: {
-                    LOG_D("Path '" << realPath << "' ACCESS DENIED");
+                    YDB_LOG_DEBUG("Path ACCESS DENIED",
+                        {"logPrefix", LOG_PREFIX},
+                        {"realPath", realPath});
                     Result[originalPath] = TTopicInfo{
                         .Status = EStatus::UNAUTHORIZED
                     };

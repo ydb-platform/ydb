@@ -356,6 +356,16 @@ void TTopicSqsMetricsHandler::Update(
     if (Counters_.MessagesMovedToDLQ) {
         Counters_.MessagesMovedToDLQ->Set(deletedByMovedToDlq);
     }
+    if (Counters_.MessagesPurged) {
+        const ui64 purgedMessageCount = GetLabeledMetric(mlpConsumerLabeledCounters, METRIC_PURGED_COUNT);
+        const ui64 delta = purgedMessageCount >= PreviousPurgedMessageCount_
+            ? purgedMessageCount - PreviousPurgedMessageCount_
+            : purgedMessageCount;
+        if (delta > 0) {
+            Counters_.MessagesPurged->Add(delta);
+        }
+        PreviousPurgedMessageCount_ = purgedMessageCount;
+    }
     FlushPendingActionMetrics();
 }
 

@@ -92,6 +92,7 @@ private:
     ui64 PendingReceiveMessageCount_ = 0;
     ui64 PendingReceiveMessageBytesRead_ = 0;
     ui64 PendingReceiveMessageEmptyCount_ = 0;
+    ui64 PreviousPurgedMessageCount_ = 0;
 };
 
 }

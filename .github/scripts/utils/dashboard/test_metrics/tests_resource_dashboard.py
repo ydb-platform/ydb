@@ -1528,6 +1528,17 @@ def main() -> None:
     if args.resources_jsonl and args.resources_jsonl.exists():
         resources_overlay = _build_resources_overlay(args.resources_jsonl, enriched_runs)
 
+    # Runner CPU-utilization series (evlog_sec, cpu_pct) for saturation-aware recommendations.
+    runner_cpu_series: Optional[list[tuple[float, float]]] = None
+    if resources_overlay:
+        xs = resources_overlay.get("xs_evlog_sec") or []
+        cores = resources_overlay.get("cpu_total_cores") or []
+        machine_cores = float(resources_overlay.get("cpu_cores", 0) or 0)
+        if xs and cores and machine_cores > 0:
+            runner_cpu_series = [
+                (float(t), float(c) / machine_cores * 100.0) for t, c in zip(xs, cores)
+            ]
+
     cpu_suggestions = build_cpu_recommendations(
         enriched_runs,
         requirements_cache=requirements_cache,
@@ -1536,6 +1547,7 @@ def main() -> None:
         max_test_duration_sec_by_suite=max_test_duration_sec_by_suite,
         test_duration_stats_by_suite=test_duration_stats_by_suite,
         maximize_reqs_for_timeout_tests=args.maximize_reqs_for_timeout_tests,
+        runner_cpu_series=runner_cpu_series,
     )
     suite_test_event_times = build_test_event_times_direct(
         args.report, args.suite_path, enriched_runs, args.evlog

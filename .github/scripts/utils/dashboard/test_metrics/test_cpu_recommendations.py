@@ -136,6 +136,61 @@ def test_single_test_blocks_split():
     assert "SPLIT_FACTOR cannot help" in r["recommended_split_tooltip"]
 
 
+def test_single_test_contention_suspected_on_saturated_runner():
+    """A near-budget single test on a CPU-saturated runner suggests raising cpu (decontention)."""
+    suite = "s/contention"
+    runs = [
+        _run(suite, 0, 0, 1000, cores=2.0),
+        _run(suite, 1, 0, 1000, cores=2.0),
+    ]
+    chunk_loads = [
+        {"sum_duration_sec": 3601.0, "max_test_duration_sec": 3601.0, "chunk_idx": 0, "chunk_group": None},
+        {"sum_duration_sec": 300.0, "max_test_duration_sec": 300.0, "chunk_idx": 1, "chunk_group": None},
+    ]
+    # Runner pinned near 95% during the suite window ([0,1000] evlog sec).
+    cpu_series = [(100.0, 95.0), (400.0, 96.0), (700.0, 94.0), (900.0, 97.0)]
+    recs = _by_suite(build_cpu_recommendations(
+        runs,
+        requirements_cache={suite: {"cpu_cores": 2, "size": "LARGE", "split_factor": 2}},
+        report_status_by_suite={suite: {"tests": _status(timeouts=2), "chunks": _status()}},
+        max_test_duration_sec_by_suite={suite: 3601.0},
+        test_duration_stats_by_suite={suite: {"chunk_loads": chunk_loads}},
+        runner_cpu_series=cpu_series,
+    ))
+    r = recs[suite]
+    assert r["single_test_blocks_split"] is True
+    assert r["single_test_contention_suspected"] is True, r["recommended_split_explain"]
+    assert r["cpu_for_contention"] == 4  # 2 -> 4 (halve parallelism)
+    assert r["runner_cpu_pct_median_during_suite"] >= 90
+    assert "TRY raising REQUIREMENTS(cpu)" in r["recommended_split_tooltip"]
+
+
+def test_single_test_not_contention_when_way_over_budget():
+    """A single test far over budget is genuinely oversized: no contention suggestion."""
+    suite = "s/oversized"
+    runs = [
+        _run(suite, 0, 0, 1000, cores=2.0),
+        _run(suite, 1, 0, 1000, cores=2.0),
+    ]
+    chunk_loads = [
+        {"sum_duration_sec": 7200.0, "max_test_duration_sec": 7200.0, "chunk_idx": 0, "chunk_group": None},
+        {"sum_duration_sec": 300.0, "max_test_duration_sec": 300.0, "chunk_idx": 1, "chunk_group": None},
+    ]
+    cpu_series = [(100.0, 95.0), (400.0, 96.0), (700.0, 94.0), (900.0, 97.0)]
+    recs = _by_suite(build_cpu_recommendations(
+        runs,
+        requirements_cache={suite: {"cpu_cores": 2, "size": "LARGE", "split_factor": 2}},
+        report_status_by_suite={suite: {"tests": _status(timeouts=2), "chunks": _status()}},
+        max_test_duration_sec_by_suite={suite: 7200.0},
+        test_duration_stats_by_suite={suite: {"chunk_loads": chunk_loads}},
+        runner_cpu_series=cpu_series,
+    ))
+    r = recs[suite]
+    assert r["single_test_blocks_split"] is True
+    assert r["single_test_contention_suspected"] is False, r["recommended_split_explain"]
+    assert "Fix the test" in r["recommended_split_tooltip"]
+
+
 def test_cpu_lower_suppressed_under_split_pressure():
     """When p95 says lower but the suite is overloaded, keep cpu action 'ok'."""
     suite = "s/pressure"
@@ -214,6 +269,8 @@ def _all_tests():
         test_cpu_is_p95_only_no_duration_boost,
         test_split_raised_proactively_without_timeout,
         test_single_test_blocks_split,
+        test_single_test_contention_suspected_on_saturated_runner,
+        test_single_test_not_contention_when_way_over_budget,
         test_cpu_lower_suppressed_under_split_pressure,
         test_memory_drives_cpu_bump_not_ram,
         test_light_suite_no_memory_cpu_bump,

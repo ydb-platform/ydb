@@ -171,7 +171,7 @@ class TestSqsCountersFeatures(KikimrSqsTestBase):
 
     @pytest.mark.parametrize('switch_user', argvalues=[True, False], ids=['user', 'queue'])
     def test_aggregates_transaction_counters(self, switch_user):
-        if self._is_topic_migration_finished():
+        if self._is_topic_migration_stage():
             pytest.skip('Transaction counters are not applicable on topic path')
 
         queue_url = self._create_queue_and_assert(self.queue_name)

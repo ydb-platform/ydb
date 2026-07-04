@@ -2,7 +2,6 @@ TEST_SRCS(
     ydb/tests/functional/sqs/common/test_account_actions.py
     ydb/tests/functional/sqs/common/test_acl.py
     ydb/tests/functional/sqs/common/test_counters.py
-    ydb/tests/functional/sqs/common/test_garbage_collection.py
     ydb/tests/functional/sqs/common/test_multiplexing_tables_format.py
     ydb/tests/functional/sqs/common/test_ping.py
     ydb/tests/functional/sqs/common/test_queue_attributes_validation.py

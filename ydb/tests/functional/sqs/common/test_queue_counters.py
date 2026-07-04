@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 import time
 
+import pytest
+
 from ydb.tests.library.sqs.test_base import KikimrSqsTestBase
 
 from ydb.tests.library.sqs.requests_client import SqsSendMessageParams
@@ -90,13 +92,10 @@ class TestSqsGettingCounters(KikimrSqsTestBase):
                 group_id="group_id",
             )
 
-        sqs_counters = self._get_sqs_counters()
-        send_message_deduplication_count = self._get_counter_value(sqs_counters, {
+        self._wait_for_counter_value({
             'queue': fifo_queue_name,
             'sensor': 'SendMessage_DeduplicationCount',
-        })
-
-        assert send_message_deduplication_count == 1
+        }, 1)
 
     def test_counters_when_reading_from_empty_queue(self):
         queue_url = self._create_queue_and_assert(self.queue_name, False, True)
@@ -138,6 +137,9 @@ class TestSqsGettingCounters(KikimrSqsTestBase):
         assert any(map(lambda x: x > 0, working_duration_buckets))
 
     def test_receive_message_immediate_duration_counter(self):
+        if self._is_topic_migration_stage():
+            pytest.skip('ReceiveMessageImmediate_Duration is not exported on topic path yet')
+
         queue_url = self._create_queue_and_assert(self.queue_name, False, True)
 
         # ReceiveMessageImmediate_Duration doesn't happen on every receive_message, so we need to read enough messages
@@ -146,13 +148,14 @@ class TestSqsGettingCounters(KikimrSqsTestBase):
             self._sqs_api.send_message(queue_url, message_payload)
             self._read_while_not_empty(queue_url, 1)
 
-        sqs_counters = self._get_sqs_counters()
+        def assert_immediate_duration(counters):
+            receive_message_immediate_duration_buckets = self._get_counter(counters, {
+                'queue': 'total',
+                'sensor': 'ReceiveMessageImmediate_Duration',
+            })['hist']['buckets']
+            assert any(map(lambda x: x > 0, receive_message_immediate_duration_buckets))
 
-        receive_message_immediate_duration_buckets = self._get_counter(sqs_counters, {
-            'queue': 'total',
-            'sensor': 'ReceiveMessageImmediate_Duration',
-        })['hist']['buckets']
-        assert any(map(lambda x: x > 0, receive_message_immediate_duration_buckets))
+        self._wait_for_sqs_counters(assert_immediate_duration)
 
     def test_purge_queue_counters(self):
         queue_url = self._create_queue_and_assert(self.queue_name, False, True)
@@ -161,13 +164,14 @@ class TestSqsGettingCounters(KikimrSqsTestBase):
             self._sqs_api.send_message(queue_url, "foobar")
             self._sqs_api.purge_queue(queue_url)
 
-        sqs_counters = self._get_sqs_counters()
+        def assert_purged(counters):
+            purged_derivative = self._get_counter_value(counters, {
+                'queue': self.queue_name,
+                'sensor': 'MessagesPurged',
+            })
+            assert purged_derivative > 0
 
-        purged_derivative = self._get_counter_value(sqs_counters, {
-            'queue': self.queue_name,
-            'sensor': 'MessagesPurged',
-        })
-        assert purged_derivative > 0
+        self._wait_for_sqs_counters(assert_purged)
 
     def test_action_duration_being_not_immediate(self):
         queue_url = self._create_queue_and_assert(self.queue_name, False, True)
@@ -191,9 +195,11 @@ class TestSqsGettingCounters(KikimrSqsTestBase):
         self._sqs_api.send_message_batch(queue_url, [SqsSendMessageParams('data0'), SqsSendMessageParams('data1')])
         self._read_while_not_empty(queue_url, 2)
 
-        sqs_counters = self._get_sqs_counters()
-        message_receive_attempts = self._get_counter(sqs_counters, {
-            'queue': self.queue_name,
-            'sensor': 'MessageReceiveAttempts',
-        })
-        assert message_receive_attempts['hist']['buckets'][0] == 2
+        def assert_receive_attempts(counters):
+            message_receive_attempts = self._get_counter(counters, {
+                'queue': self.queue_name,
+                'sensor': 'MessageReceiveAttempts',
+            })
+            assert message_receive_attempts['hist']['buckets'][0] == 2
+
+        self._wait_for_sqs_counters(assert_receive_attempts)

@@ -329,10 +329,15 @@ class KikimrSqsTestBase(object):
 
     @classmethod
     def _setup_config_generator(cls):
+        log_configs = {'SQS': LogLevels.TRACE}
+        if cls._is_topic_migration_stage():
+            log_configs['PQ_MLP_DLQ_MOVER'] = LogLevels.DEBUG
+            log_configs['PQ_MLP_CONSUMER'] = LogLevels.DEBUG
+
         config_generator = KikimrConfigGenerator(
             erasure=cls.erasure,
             use_in_memory_pdisks=cls.use_in_memory_pdisks,
-            additional_log_configs={'SQS': LogLevels.TRACE},
+            additional_log_configs=log_configs,
             enable_sqs=True,
         )
         for flag, enabled in cls._get_sqs_migration_feature_flags().items():
@@ -572,6 +577,14 @@ class KikimrSqsTestBase(object):
                         raise AssertionError("Message {} appeared twice before visibility timeout expired".format(msg_id))
         return ret
 
+    def _read_single_message_no_wait(self, queue_url, visibility_timeout=0):
+        return self._read_while_not_empty(
+            queue_url,
+            messages_count=1,
+            visibility_timeout=visibility_timeout,
+            wait_timeout=0,
+        )
+
     def _read_messages_and_assert(
             self, queue_url, messages_count, matcher=None, visibility_timeout=None, wait_timeout=1
     ):
@@ -679,6 +692,61 @@ class KikimrSqsTestBase(object):
     def _get_counter_value(self, counters, labels, default_value=None):
         sensor = self._get_counter(counters, labels)
         return sensor['value'] if sensor is not None else default_value
+
+    def _async_metrics_retry_attempts(self, attempts=None):
+        if attempts is not None:
+            return attempts
+        return 30 if self._is_topic_migration_stage() else 10
+
+    def _wait_for_sqs_counters(self, assert_fn, attempts=None, sleep_sec=0.5, node_index=0, counters_format='json'):
+        attempts = self._async_metrics_retry_attempts(attempts)
+        while attempts:
+            attempts -= 1
+            counters = self._get_counters(
+                node_index, "sqs", counters_format, dump_to_log=(attempts == 0)
+            )
+            try:
+                assert_fn(counters)
+                return counters
+            except AssertionError:
+                if not attempts:
+                    raise
+                time.sleep(sleep_sec)
+
+    def _wait_for_counter_value(self, labels, expected, default_value=None, attempts=None, sleep_sec=0.5, node_index=0):
+        def assert_fn(counters):
+            value = self._get_counter_value(counters, labels, default_value)
+            assert_that(value, equal_to(expected))
+
+        self._wait_for_sqs_counters(
+            assert_fn, attempts=attempts, sleep_sec=sleep_sec, node_index=node_index
+        )
+
+    def _wait_for_approximate_messages_count(self, queue_url, expected, attempts=None, sleep_sec=0.5):
+        attempts = self._async_metrics_retry_attempts(attempts)
+        last_count = None
+        while attempts:
+            attempts -= 1
+            attrs = self._sqs_api.get_queue_attributes(queue_url)
+            last_count = int(attrs.get('ApproximateNumberOfMessages', 0))
+            if last_count == expected:
+                return last_count
+            if not attempts:
+                assert_that(last_count, equal_to(expected))
+            time.sleep(sleep_sec)
+
+    def _wait_for_ymq_counters(self, assert_fn, cloud, folder, attempts=None, sleep_sec=0.5, node_index=0):
+        attempts = self._async_metrics_retry_attempts(attempts)
+        while attempts:
+            attempts -= 1
+            ymq_counters = self._get_ymq_counters(cloud=cloud, folder=folder, node_index=node_index)
+            try:
+                assert_fn(ymq_counters)
+                return ymq_counters
+            except AssertionError:
+                if not attempts:
+                    raise
+                time.sleep(sleep_sec)
 
     def _kick_tablets_from_node(self, node_index):
         mon_port = self._get_mon_port(0)

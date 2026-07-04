@@ -234,7 +234,6 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
                 not_(has_item('SequenceNumber'))
             )
 
-        counters = self._get_sqs_counters()
         send_counter_labels = {
             'subsystem': 'core',
             'user': self._username,
@@ -247,8 +246,8 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             'queue': self.queue_name,
             'sensor': 'ReceiveMessage_Count',
         }
-        assert_that(self._get_counter_value(counters, send_counter_labels, 0), equal_to(1))
-        assert_that(self._get_counter_value(counters, receive_counter_labels, 0), equal_to(1))
+        self._wait_for_counter_value(send_counter_labels, 1, default_value=0)
+        self._wait_for_counter_value(receive_counter_labels, 1, default_value=0)
 
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_validates_message_attributes(self, tables_format):

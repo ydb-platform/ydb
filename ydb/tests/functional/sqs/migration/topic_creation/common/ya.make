@@ -3,4 +3,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(YDB_SQS_MIGRATION_STAGE=topic_creation)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/functional/sqs/migration/suites/common.inc)
+TEST_SRCS(
+    ydb/tests/functional/sqs/common/test_garbage_collection.py
+)
 END()

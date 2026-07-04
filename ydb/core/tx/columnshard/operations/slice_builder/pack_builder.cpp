@@ -158,8 +158,8 @@ public:
                     }
                 }
                 //                YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
-                                      {"data", NArrow::DebugJson(i, 5, 5)},
-                                      {"writeId", SequentialWriteId[idx]});
+                //                    {"data", NArrow::DebugJson(i, 5, 5)},
+                //                    {"writeId", SequentialWriteId[idx]});
                 recordsCountSum += i->num_rows();
                 gContainer
                     ->AddField(IIndexInfo::GetWriteIdField(), NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(

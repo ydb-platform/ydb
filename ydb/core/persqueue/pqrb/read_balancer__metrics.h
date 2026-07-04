@@ -1,5 +1,7 @@
 #pragma once
 
+#include "read_balancer__sqs_metrics.h"
+
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
@@ -7,6 +9,7 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
+#include <memory>
 #include <vector>
 
 namespace NKikimr::NPQ {
@@ -84,13 +87,8 @@ private:
 
     absl::flat_hash_map<ui32, NKikimrPQ::TStatusResponse_TPartResult> PartitionStatuses;
 
-    bool SqsMetricsEnabled_ = false;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SqsMessagesCount_;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SqsInflyMessagesCount_;
-    ::NMonitoring::TDynamicCounters::TCounterPtr YmqStoredCount_;
-    ::NMonitoring::TDynamicCounters::TCounterPtr YmqInflightCount_;
+    std::unique_ptr<TTopicSqsMetricsHandler> SqsMetricsHandler_;
 
     void InitializeSqsQueueMetrics(const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx);
-    void UpdateSqsQueueMetrics(ui64 storedCount, ui64 inflightCount);
 };
 }

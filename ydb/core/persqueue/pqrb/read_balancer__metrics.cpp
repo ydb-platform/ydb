@@ -307,6 +307,7 @@ void TTopicMetricsHandler::UpdateConfig(const NKikimrPQ::TPQTabletConfig& tablet
 
     InitializeKeyCompactionCounters(tabletConfig);
     InitializeConsumerCounters(tabletConfig, ctx);
+    InitializeSqsQueueMetrics(tabletConfig, ctx);
 
     size_t inactiveCount = std::count_if(tabletConfig.GetAllPartitions().begin(), tabletConfig.GetAllPartitions().end(), [](auto& p) {
         return p.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Inactive;
@@ -370,71 +371,19 @@ void TTopicMetricsHandler::UpdateMetrics() {
         }
     }
 
-    if (SqsMetricsEnabled_) {
+    if (SqsMetricsHandler_) {
         auto it = collector.Consumers.find(TString(SqsConsumerName));
         if (it != collector.Consumers.end()) {
-            const auto& aggregatedCounters = it->second.MLPConsumerLabeledCounters.Aggregator.GetCounters();
-            const auto getMetric = [&](EMLPConsumerLabeledCounters index) -> ui64 {
-                const size_t idx = static_cast<size_t>(index);
-                if (aggregatedCounters.Size() <= idx) {
-                    return 0;
-                }
-                return aggregatedCounters[idx].Get();
-            };
-            const ui64 locked = getMetric(METRIC_INFLIGHT_LOCKED_COUNT);
-            const ui64 delayed = getMetric(METRIC_INFLIGHT_DELAYED_COUNT);
-            const ui64 unlocked = getMetric(METRIC_INFLIGHT_UNLOCKED_COUNT);
-            const ui64 scheduledToDlq = getMetric(METRIC_INFLIGHT_SCHEDULED_TO_DLQ_COUNT);
-            UpdateSqsQueueMetrics(locked + delayed + unlocked + scheduledToDlq, locked);
+            SqsMetricsHandler_->Update(it->second.MLPConsumerLabeledCounters.Aggregator);
         }
     }
 }
 
 void TTopicMetricsHandler::InitializeSqsQueueMetrics(const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx) {
-    SqsMetricsEnabled_ = tabletConfig.GetSqsExportMetrics() && !tabletConfig.GetSqsQueueName().empty();
-    if (!SqsMetricsEnabled_) {
-        return;
-    }
-
-    const TString& account = tabletConfig.GetSqsAccountName();
-    const TString& queueName = tabletConfig.GetSqsQueueName();
-    const TString& folderId = tabletConfig.GetSqsFolderId();
-
-    auto sqsCounters = NKikimr::GetServiceCounters(AppData(ctx)->Counters, "sqs");
-    auto sqsQueueCounters = sqsCounters
-        ->GetSubgroup("subsystem", "core")
-        ->GetSubgroup("user", account)
-        ->GetSubgroup("queue", queueName);
-    SqsMessagesCount_ = sqsQueueCounters->GetExpiringNamedCounter("sensor", "MessagesCount", false);
-    SqsInflyMessagesCount_ = sqsQueueCounters->GetExpiringNamedCounter("sensor", "InflyMessagesCount", false);
-
-    if (!folderId.empty()) {
-        auto ymqCounters = NKikimr::GetServiceCounters(AppData(ctx)->Counters, "ymq_public");
-        auto ymqQueueCounters = ymqCounters
-            ->GetSubgroup("cloud", account)
-            ->GetSubgroup("folder", folderId)
-            ->GetSubgroup("queue", queueName);
-        YmqStoredCount_ = ymqQueueCounters->GetExpiringNamedCounter("name", "queue.messages.stored_count", false);
-        YmqInflightCount_ = ymqQueueCounters->GetExpiringNamedCounter("name", "queue.messages.inflight_count", false);
-    }
-}
-
-void TTopicMetricsHandler::UpdateSqsQueueMetrics(ui64 storedCount, ui64 inflightCount) {
-    if (!SqsMetricsEnabled_) {
-        return;
-    }
-
-    if (SqsMessagesCount_) {
-        SqsMessagesCount_->Set(storedCount);
-    }
-    if (SqsInflyMessagesCount_) {
-        SqsInflyMessagesCount_->Set(inflightCount);
-    }
-    if (YmqStoredCount_) {
-        YmqStoredCount_->Set(storedCount);
-    }
-    if (YmqInflightCount_) {
-        YmqInflightCount_->Set(inflightCount);
+    if (TTopicSqsMetricsHandler::IsApplicable(tabletConfig)) {
+        SqsMetricsHandler_ = std::make_unique<TTopicSqsMetricsHandler>(tabletConfig, ctx);
+    } else {
+        SqsMetricsHandler_.reset();
     }
 }
 

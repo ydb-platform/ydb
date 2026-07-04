@@ -3,18 +3,27 @@
 namespace NKikimr {
 namespace NKqp {
 
-// Main shape this handles:
+// Main shapes this handles:
 // A: Map [ x <- a, y <- b ]  == becomes ==>  UnionAll [ x, y ]
 // B: `- UnionAll [ a, b ]                       |- Map [ x <- a, y <- b ]
 // C:    |- left                                 |  `- left
 // D:    `- right                                `- Map [ x <- a, y <- b ]
 // E:                                                 `- right
 //
-// The rule intentionally handles only whole pure semantic-rename Maps. Pushing
-// append aliases through UnionAll can move type wrappers below sequence
-// extension and change type alignment between branches.
+// A: Map [ x <- a, z := f(a) ]  == becomes ==>  Map [ z := f(x) ]
+// B: `- UnionAll [ a, b ]                         `- UnionAll [ x, b ]
+// C:    |- left                                      |- Map [ x <- a ]
+// D:    `- right                                     |  `- left
+// E:                                                 `- Map [ x <- a ]
+// F:                                                    `- right
+//
+// The rule intentionally pushes only semantic renames. Append aliases and other
+// expressions stay above UnionAll; moving them below sequence extension can
+// change type alignment between branches.
 
 namespace {
+
+using TRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>;
 
 bool TryAddColumn(TVector<TInfoUnit>& columns, TInfoUnitSet& columnSet, const TInfoUnit& column) {
     if (columnSet.contains(column)) {
@@ -23,6 +32,44 @@ bool TryAddColumn(TVector<TInfoUnit>& columns, TInfoUnitSet& columnSet, const TI
 
     columns.push_back(column);
     columnSet.insert(column);
+    return true;
+}
+
+TInfoUnitSet GetRenameSources(const TVector<TMapElement>& mapElements) {
+    TInfoUnitSet result;
+    for (const auto& mapElement : mapElements) {
+        if (mapElement.IsRename()) {
+            result.insert(mapElement.GetRename());
+        }
+    }
+    return result;
+}
+
+bool BuildMapOutput(
+    const TVector<TInfoUnit>& inputColumns,
+    const TVector<TMapElement>& mapElements,
+    TVector<TInfoUnit>* outputColumns = nullptr)
+{
+    const auto renameSources = GetRenameSources(mapElements);
+
+    TVector<TInfoUnit> result;
+    result.reserve(inputColumns.size() + mapElements.size());
+    TInfoUnitSet resultSet;
+    for (const auto& column : inputColumns) {
+        if (!renameSources.contains(column) && !TryAddColumn(result, resultSet, column)) {
+            return false;
+        }
+    }
+
+    for (const auto& mapElement : mapElements) {
+        if (!TryAddColumn(result, resultSet, mapElement.GetElementName())) {
+            return false;
+        }
+    }
+
+    if (outputColumns) {
+        *outputColumns = std::move(result);
+    }
     return true;
 }
 
@@ -59,13 +106,107 @@ bool BuildRenamedOutput(
     return true;
 }
 
+void RecomputeChangedNames(
+    const TVector<TMapElement>& mapElements,
+    const TVector<bool>& pushed,
+    TInfoUnitSet& changedNames)
+{
+    changedNames.clear();
+    for (size_t idx = 0; idx < mapElements.size(); ++idx) {
+        if (!pushed[idx]) {
+            continue;
+        }
+
+        const auto& mapElement = mapElements[idx];
+        changedNames.insert(mapElement.GetRename());
+        changedNames.insert(mapElement.GetElementName());
+    }
+}
+
+bool RemoveCandidateWithName(
+    const TVector<TMapElement>& mapElements,
+    const TInfoUnit& name,
+    TVector<bool>& pushed)
+{
+    bool changed = false;
+    for (size_t idx = 0; idx < mapElements.size(); ++idx) {
+        if (!pushed[idx]) {
+            continue;
+        }
+
+        const auto& mapElement = mapElements[idx];
+        if (mapElement.GetRename() == name || mapElement.GetElementName() == name) {
+            pushed[idx] = false;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+void RemoveCandidatesReferencedByResidualRenames(
+    const TVector<TMapElement>& mapElements,
+    TVector<bool>& pushed)
+{
+    TInfoUnitSet changedNames;
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        RecomputeChangedNames(mapElements, pushed, changedNames);
+
+        for (size_t idx = 0; idx < mapElements.size(); ++idx) {
+            if (pushed[idx]) {
+                continue;
+            }
+
+            const auto& mapElement = mapElements[idx];
+            if (mapElement.IsRename() &&
+                changedNames.contains(mapElement.GetRename()) &&
+                RemoveCandidateWithName(mapElements, mapElement.GetRename(), pushed)) {
+                changed = true;
+            }
+        }
+    }
+}
+
+void ApplyRenamesToResidualExpressions(TVector<TMapElement>& residualElements, const TRenameMap& renameMap) {
+    if (renameMap.empty()) {
+        return;
+    }
+
+    for (auto& mapElement : residualElements) {
+        if (!mapElement.IsRename()) {
+            mapElement.SetExpression(mapElement.GetExpression().ApplyRenames(renameMap));
+        }
+    }
+}
+
+bool ResidualIsValid(
+    const TVector<TInfoUnit>& unionColumns,
+    const TInfoUnitSet& pushedRenameSources,
+    const TVector<TMapElement>& residualElements)
+{
+    for (const auto& mapElement : residualElements) {
+        if (mapElement.IsRename()) {
+            if (!ContainsInfoUnit(unionColumns, mapElement.GetRename())) {
+                return false;
+            }
+            continue;
+        }
+
+        for (const auto& iu : mapElement.GetExpression().GetInputIUs(false, true)) {
+            if (pushedRenameSources.contains(iu)) {
+                return false;
+            }
+        }
+    }
+
+    return BuildMapOutput(unionColumns, residualElements);
+}
+
 } // anonymous namespace
 
 TIntrusivePtr<IOperator>
 TPushMapElementsThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(props);
-
     if (input->Kind != EOperator::Map) {
         return input;
     }
@@ -84,36 +225,75 @@ TPushMapElementsThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOp
         return input;
     }
 
-    const auto unionColumns = unionAll->Columns;
-    TInfoUnitSet renameSources;
-    for (const auto& mapElement : topMap->MapElements) {
+    const auto originalUnionColumns = unionAll->Columns;
+    TVector<bool> pushed(topMap->MapElements.size(), false);
+    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
+        const auto& mapElement = topMap->MapElements[idx];
         if (!mapElement.IsRename()) {
-            return input;
+            continue;
         }
 
         const auto from = mapElement.GetRename();
-        if (from == mapElement.GetElementName() || !ContainsInfoUnit(unionColumns, from)) {
-            return input;
+        if (from != mapElement.GetElementName() && ContainsInfoUnit(originalUnionColumns, from)) {
+            pushed[idx] = true;
+        }
+    }
+
+    RemoveCandidatesReferencedByResidualRenames(topMap->MapElements, pushed);
+
+    TVector<TMapElement> pushedElements;
+    TVector<TMapElement> residualElements;
+    pushedElements.reserve(topMap->MapElements.size());
+    residualElements.reserve(topMap->MapElements.size());
+    TInfoUnitSet pushedRenameSources;
+    TRenameMap renameMap;
+
+    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
+        const auto& mapElement = topMap->MapElements[idx];
+        if (!pushed[idx]) {
+            residualElements.push_back(mapElement);
+            continue;
         }
 
-        renameSources.insert(from);
+        pushedElements.push_back(mapElement);
+        pushedRenameSources.insert(mapElement.GetRename());
+        if (!renameMap.contains(mapElement.GetRename())) {
+            renameMap.emplace(mapElement.GetRename(), mapElement.GetElementName());
+        }
+    }
+
+    if (pushedElements.empty()) {
+        return input;
     }
 
     TVector<TInfoUnit> newColumns;
-    if (!BuildRenamedOutput(unionColumns, renameSources, topMap->MapElements, &newColumns)) {
+    if (!BuildRenamedOutput(originalUnionColumns, pushedRenameSources, pushedElements, &newColumns)) {
         return input;
     }
 
     for (const auto& child : unionAll->Children) {
-        if (!BuildRenamedOutput(child->GetOutputIUs(), renameSources, topMap->MapElements)) {
+        if (!BuildRenamedOutput(child->GetOutputIUs(), pushedRenameSources, pushedElements)) {
             return input;
         }
     }
 
-    unionAll->Children[0] = MakeIntrusive<TOpMap>(unionAll->Children[0], topMap->Pos, topMap->MapElements, topMap->Ordered);
-    unionAll->Children[1] = MakeIntrusive<TOpMap>(unionAll->Children[1], topMap->Pos, topMap->MapElements, topMap->Ordered);
+    ApplyRenamesToResidualExpressions(residualElements, renameMap);
+    if (!residualElements.empty() && !ResidualIsValid(newColumns, pushedRenameSources, residualElements)) {
+        return input;
+    }
+
+    unionAll->Children[0] = MakeIntrusive<TOpMap>(unionAll->Children[0], topMap->Pos, pushedElements, topMap->Ordered);
+    unionAll->Children[1] = MakeIntrusive<TOpMap>(unionAll->Children[1], topMap->Pos, pushedElements, topMap->Ordered);
     unionAll->Columns = std::move(newColumns);
-    return unionAll;
+    if (!renameMap.empty()) {
+        props.Subplans.RenameReferences(renameMap, ctx.ExprCtx);
+    }
+
+    if (residualElements.empty()) {
+        return unionAll;
+    }
+
+    return MakeIntrusive<TOpMap>(unionAll, topMap->Pos, residualElements, topMap->Ordered);
 }
 
 } // namespace NKqp

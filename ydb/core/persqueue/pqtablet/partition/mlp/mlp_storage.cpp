@@ -3,6 +3,7 @@
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/algorithm.h>
 #include <util/string/join.h>
 
 #include <ranges>
@@ -361,25 +362,17 @@ void TStorage::CleanupReceiveAttempts(TInstant now) {
         return;
     }
 
-    std::vector<TString> toErase;
-    toErase.reserve(ReceiveAttempts_.size());
-
-    for (const auto& [attemptId, attempt] : ReceiveAttempts_) {
-        if (attempt.Expiry <= now) {
-            toErase.push_back(attemptId);
-            continue;
+    EraseNodesIf(ReceiveAttempts_, [now, this](const auto& entry) {
+        if (entry.second.Expiry <= now) {
+            return true;
         }
-        for (ui64 attemptOffset : attempt.Offsets) {
+        for (ui64 attemptOffset : entry.second.Offsets) {
             if (InvalidatedReceiveAttemptOffsets_.contains(attemptOffset)) {
-                toErase.push_back(attemptId);
-                break;
+                return true;
             }
         }
-    }
-
-    for (const auto& attemptId : toErase) {
-        ReceiveAttempts_.erase(attemptId);
-    }
+        return false;
+    });
 
     InvalidatedReceiveAttemptOffsets_.clear();
 }

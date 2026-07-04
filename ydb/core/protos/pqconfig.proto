@@ -514,8 +514,6 @@ message TPQTabletConfig {
     optional string SqsCloudId = 46 [default = ""];
     optional string SqsFolderId = 47 [default = ""];
     optional bool SqsExportMetrics = 48 [default = false];
-
-    reserved 49; // ReadRequestAttemptIdPeriodMs; moved back to TConsumer
 }
 
 message THeartbeat {

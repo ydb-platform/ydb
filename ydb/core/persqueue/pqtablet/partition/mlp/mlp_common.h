@@ -26,6 +26,23 @@ struct TResult {
     ui64 Cookie;
 };
 
+struct TOffsetsResult : public TResult {
+    TOffsetsResult(const NActors::TActorId& sender, ui64 cookie,
+                   std::vector<ui64>&& successfulOffsets, std::vector<ui64>&& failedOffsets = {})
+        : TResult(sender, cookie)
+        , SuccessfulOffsets(std::move(successfulOffsets))
+        , FailedOffsets(std::move(failedOffsets))
+    {
+    }
+
+    std::vector<ui64> SuccessfulOffsets;
+    std::vector<ui64> FailedOffsets;
+};
+
+using TCommitResult = TOffsetsResult;
+using TUnlockResult = TOffsetsResult;
+using TChangeMessageDeadlineResult = TOffsetsResult;
+
 struct TReadMessage {
     ui64 Offset;
     ui32 ApproximateReceiveCount;

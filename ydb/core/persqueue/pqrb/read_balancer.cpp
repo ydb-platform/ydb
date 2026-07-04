@@ -169,6 +169,7 @@ void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TA
         }
         default: {
             GetStat(ctx); //TODO: do it only on signals from outerspace right now
+            MLPBalancer->CleanupReceiveAttemptPartitions(TInstant::Now());
             auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
             ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
         }

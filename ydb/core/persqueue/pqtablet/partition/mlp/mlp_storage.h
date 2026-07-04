@@ -360,8 +360,8 @@ private:
     THashMap<TString, TReceiveAttempt> ReceiveAttempts_;
     absl::flat_hash_set<ui64> InvalidatedReceiveAttemptOffsets_;
     // The window during which a repeated read with the same receive-request-attempt-id replays
-    // the same messages (SQS FIFO semantics). Default 5 minutes; overridden from consumer config.
-    TDuration ReceiveAttemptIdPeriod = TDuration::Minutes(5);
+    // the same messages (SQS FIFO semantics). Overridden from consumer config on actor init.
+    TDuration ReceiveAttemptIdPeriod = TDuration::MilliSeconds(NKikimrPQ::TPQTabletConfig::TConsumer().GetReadRequestAttemptIdPeriodMs());
 
     struct TNextMessageResult {
         TMessage* Message; // nullable

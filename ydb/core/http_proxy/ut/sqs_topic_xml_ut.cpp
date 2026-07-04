@@ -757,7 +757,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
         UNIT_ASSERT(!receiptHandle.empty());
 
         DeleteMessageXml({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}});
-        DeleteMessageXml({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}});
+        DeleteMessageXml({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}}, 400);
     }
 
     Y_UNIT_TEST_F(TestDeleteMessageBatch, TFixture) {

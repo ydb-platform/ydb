@@ -8,6 +8,9 @@
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/util/backoff.h>
 
+#include <type_traits>
+#include <unordered_set>
+
 #define Service TBase::Service
 #define LogBuilder TBase::LogBuilder
 
@@ -126,8 +129,16 @@ private:
         }
 
         auto& partitionInfo = it->second;
+        const auto& record = ev->Get()->Record;
 
         partitionInfo.Success = true;
+        partitionInfo.HasOffsetListsInResponse = !record.GetSuccessfulOffsets().empty() || !record.GetFailedOffsets().empty();
+        for (auto offset : record.GetSuccessfulOffsets()) {
+            partitionInfo.SuccessfulOffsets.insert(offset);
+        }
+        for (auto offset : record.GetFailedOffsets()) {
+            partitionInfo.FailedOffsets.insert(offset);
+        }
 
         --PendingRequests;
         ReplyIfPossible();
@@ -207,7 +218,17 @@ private:
         auto response = std::make_unique<TEvChangeResponse>();
         for (auto& [partitionId, partitionInfo]: PendingPartitions) {
             for (auto offset : partitionInfo.Offsets) {
-                response->Messages.emplace_back(TMessageId(partitionId, offset), partitionInfo.Success);
+                bool success = false;
+                if (partitionInfo.Error) {
+                    success = false;
+                } else if (!partitionInfo.HasOffsetListsInResponse) {
+                    // Backward compatibility: old tablets don't populate offset lists.
+                    // Can be removed in 27-1.
+                    success = partitionInfo.Success;
+                } else {
+                    success = partitionInfo.SuccessfulOffsets.contains(offset);
+                }
+                response->Messages.emplace_back(TMessageId(partitionId, offset), success);
             }
         }
 
@@ -233,8 +254,11 @@ private:
     struct TRequestInfo {
         bool Error = false;
         bool Success = false;
+        bool HasOffsetListsInResponse = false;
         ui64 TabletId = 0;
         std::vector<ui64> Offsets;
+        std::unordered_set<ui64> SuccessfulOffsets;
+        std::unordered_set<ui64> FailedOffsets;
     };
 
     // partitionId -> request info

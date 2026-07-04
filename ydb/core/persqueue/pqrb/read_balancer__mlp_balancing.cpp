@@ -3,8 +3,16 @@
 
 namespace NKikimr::NPQ::NBalancing {
 
-TMLPConsumer::TMLPConsumer(TMLPBalancer& balancer)
-    : Balancer(balancer) {
+TMLPConsumer::TMLPConsumer(TMLPBalancer& balancer, const TString& consumerName)
+    : Balancer(balancer)
+    , ConsumerName(consumerName) {
+}
+
+TDuration TMLPConsumer::GetReceiveAttemptIdPeriod() const {
+    if (const auto* consumerConfig = NPQ::GetConsumer(GetConfig(), ConsumerName)) {
+        return TDuration::MilliSeconds(consumerConfig->GetReadRequestAttemptIdPeriodMs());
+    }
+    return TDuration::MilliSeconds(NKikimrPQ::TPQTabletConfig::TConsumer().GetReadRequestAttemptIdPeriodMs());
 }
 
 const NKikimrPQ::TPQTabletConfig& TMLPConsumer::GetConfig() const {
@@ -18,10 +26,13 @@ const TPartitionGraph& TMLPConsumer::GetPartitionGraph() const {
 const TPartitionGraph::Node* TMLPConsumer::NextPartition(const TString& receiveAttemptId) {
     if (!receiveAttemptId.empty()) {
         if (auto it = ReceiveAttemptPartitions.find(receiveAttemptId); it != ReceiveAttemptPartitions.end()) {
-            if (const auto* node = GetPartitionGraph().GetPartition(it->second)) {
-                return node;
+            if (it->second.Expiry > TInstant::Now()) {
+                if (const auto* node = GetPartitionGraph().GetPartition(it->second.PartitionId)) {
+                    it->second.Expiry = TInstant::Now() + GetReceiveAttemptIdPeriod();
+                    return node;
+                }
             }
-            // The remembered partition no longer exists; fall through and pick a new one.
+            // The remembered partition is expired or no longer exists; fall through and pick a new one.
             ReceiveAttemptPartitions.erase(it);
         }
     }
@@ -37,7 +48,10 @@ const TPartitionGraph::Node* TMLPConsumer::NextPartition(const TString& receiveA
     }
 
     if (node && !receiveAttemptId.empty()) {
-        ReceiveAttemptPartitions[receiveAttemptId] = node->Id;
+        ReceiveAttemptPartitions[receiveAttemptId] = {
+            .PartitionId = node->Id,
+            .Expiry = TInstant::Now() + GetReceiveAttemptIdPeriod(),
+        };
     }
 
     return node;
@@ -84,6 +98,12 @@ bool TMLPConsumer::SetUseForReading(
     }
 
     return false;
+}
+
+void TMLPConsumer::CleanupReceiveAttemptPartitions(TInstant now) {
+    absl::erase_if(ReceiveAttemptPartitions, [now](const auto& entry) {
+        return entry.second.Expiry <= now;
+    });
 }
 
 void TMLPConsumer::Rebuild() {
@@ -140,7 +160,7 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) {
         return;
     }
 
-    auto [it, newConsumer] = Consumers.try_emplace(consumerName, *this);
+    auto [it, newConsumer] = Consumers.try_emplace(consumerName, *this, consumerName);
     auto& consumer = it->second;
     if (newConsumer) {
         consumer.Rebuild();
@@ -213,7 +233,7 @@ void TMLPBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActo
 
             auto mit = mlpConsumers.find(consumerName);
             if (mit != std::end(mlpConsumers)) {
-                auto [it, inserted] = Consumers.try_emplace(consumerName, *this);
+                auto [it, inserted] = Consumers.try_emplace(consumerName, *this, consumerName);
                 auto& consumer = it->second;
 
                 auto readingIsFinished = consumerResult.GetReadingFinished();
@@ -268,6 +288,12 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
                      record.GetCookie());
 }
 
+void TMLPBalancer::CleanupReceiveAttemptPartitions(TInstant now) {
+    for (auto& [_, consumer] : Consumers) {
+        consumer.CleanupReceiveAttemptPartitions(now);
+    }
+}
+
 void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
     absl::flat_hash_set<TString> mlpConsumers;
     for (const auto& consumer : GetConfig().GetConsumers()) {
@@ -293,7 +319,7 @@ void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
     }
 
     for (const auto& consumerName : mlpConsumers) {
-        auto [it, inserted] = Consumers.try_emplace(consumerName, *this);
+        auto [it, inserted] = Consumers.try_emplace(consumerName, *this, consumerName);
         if (inserted) {
             it->second.Rebuild();
         }
@@ -318,7 +344,7 @@ void TMLPBalancer::SetUseForReading(const TString& consumerName,
         return;
     }
 
-    auto [it, _] = Consumers.try_emplace(consumerName, *this);
+    auto [it, _] = Consumers.try_emplace(consumerName, *this, consumerName);
     auto& consumer = it->second;
 
     if (consumer.SetUseForReading(partitionId, readingIsFinished, useForReading, metrics, generation, cookie)) {

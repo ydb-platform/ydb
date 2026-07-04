@@ -79,6 +79,27 @@ void ReplyOk(const TActorIdentity selfActorId, ui32 partitionId, std::deque<T>& 
     queue.clear();
 }
 
+template<typename R>
+void ReplyOffsetsOk(const TActorIdentity selfActorId, const NActors::TActorId& sender, ui64 cookie,
+    const std::vector<ui64>& successfulOffsets, const std::vector<ui64>& failedOffsets) {
+    auto* response = new R();
+    for (auto offset : successfulOffsets) {
+        response->Record.AddSuccessfulOffsets(offset);
+    }
+    for (auto offset : failedOffsets) {
+        response->Record.AddFailedOffsets(offset);
+    }
+    selfActorId.Send(sender, response, 0, cookie);
+}
+
+template<typename R>
+void ReplyOffsetsOkAll(const TActorIdentity selfActorId, std::deque<TOffsetsResult>& queue) {
+    for (auto& ev : queue) {
+        ReplyOffsetsOk<R>(selfActorId, ev.Sender, ev.Cookie, ev.SuccessfulOffsets, ev.FailedOffsets);
+    }
+    queue.clear();
+}
+
 }
 
 TString MakeSnapshotKey(ui32 partitionId, const TString& consumerName) {
@@ -414,9 +435,9 @@ void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
         auto msgs = std::exchange(PendingReadQueue, {});
         RegisterWithSameMailbox(CreateMessageEnricher(TabletId, PartitionId, Config.GetName(), std::move(msgs)));
     }
-    ReplyOk<TEvPQ::TEvMLPCommitResponse>(SelfId(), PartitionId, PendingCommitQueue);
-    ReplyOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PartitionId, PendingUnlockQueue);
-    ReplyOk<TEvPQ::TEvMLPChangeMessageDeadlineResponse>(SelfId(), PartitionId, PendingChangeMessageDeadlineQueue);
+    ReplyOffsetsOkAll<TEvPQ::TEvMLPCommitResponse>(SelfId(), PendingCommitQueue);
+    ReplyOffsetsOkAll<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PendingUnlockQueue);
+    ReplyOffsetsOkAll<TEvPQ::TEvMLPChangeMessageDeadlineResponse>(SelfId(), PendingChangeMessageDeadlineQueue);
     ReplyOk<TEvPQ::TEvMLPPurgeResponse>(SelfId(), PartitionId, PendingPurgeQueue);
 
     MoveToDLQIfPossible();
@@ -659,40 +680,64 @@ void TConsumerActor::ProcessEventQueue() {
     NextForcedProcessingTime = TInstant::Now() + TDuration::Seconds(1);
 
     for (auto& ev : CommitRequestsQueue) {
+        std::vector<ui64> successfulOffsets;
+        std::vector<ui64> failedOffsets;
+        successfulOffsets.reserve(ev->Get()->Record.GetOffset().size());
+        failedOffsets.reserve(ev->Get()->Record.GetOffset().size());
         for (auto offset : ev->Get()->Record.GetOffset()) {
-            Storage->Commit(offset);
+            if (Storage->Commit(offset)) {
+                successfulOffsets.push_back(offset);
+            } else {
+                failedOffsets.push_back(offset);
+            }
         }
 
         if (Storage->IsBatchEmpty()) {
-            ReplyOk<TEvPQ::TEvMLPCommitResponse>(SelfId(), PartitionId, *ev);
+            ReplyOffsetsOk<TEvPQ::TEvMLPCommitResponse>(SelfId(), ev->Sender, ev->Cookie, successfulOffsets, failedOffsets);
         } else {
-            PendingCommitQueue.emplace_back(ev->Sender, ev->Cookie);
+            PendingCommitQueue.emplace_back(ev->Sender, ev->Cookie, std::move(successfulOffsets), std::move(failedOffsets));
         }
     }
     CommitRequestsQueue.clear();
 
     for (auto& ev : UnlockRequestsQueue) {
+        std::vector<ui64> successfulOffsets;
+        std::vector<ui64> failedOffsets;
+        successfulOffsets.reserve(ev->Get()->Record.GetOffset().size());
+        failedOffsets.reserve(ev->Get()->Record.GetOffset().size());
         for (auto offset : ev->Get()->Record.GetOffset()) {
-            Storage->Unlock(offset);
+            if (Storage->Unlock(offset)) {
+                successfulOffsets.push_back(offset);
+            } else {
+                failedOffsets.push_back(offset);
+            }
         }
 
         if (Storage->IsBatchEmpty()) {
-            ReplyOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PartitionId, *ev);
+            ReplyOffsetsOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), ev->Sender, ev->Cookie, successfulOffsets, failedOffsets);
         } else {
-            PendingUnlockQueue.emplace_back(ev->Sender, ev->Cookie);
+            PendingUnlockQueue.emplace_back(ev->Sender, ev->Cookie, std::move(successfulOffsets), std::move(failedOffsets));
         }
     }
     UnlockRequestsQueue.clear();
 
     for (auto& ev : ChangeMessageDeadlineRequestsQueue) {
-        for (const auto &message : ev->Get()->Record.GetMessage()) {
-            Storage->ChangeMessageDeadline(message.GetOffset(), TInstant::Seconds(message.GetDeadlineTimestampSeconds()));
+        std::vector<ui64> successfulOffsets;
+        std::vector<ui64> failedOffsets;
+        successfulOffsets.reserve(ev->Get()->Record.GetMessage().size());
+        failedOffsets.reserve(ev->Get()->Record.GetMessage().size());
+        for (const auto& message : ev->Get()->Record.GetMessage()) {
+            if (Storage->ChangeMessageDeadline(message.GetOffset(), TInstant::Seconds(message.GetDeadlineTimestampSeconds()))) {
+                successfulOffsets.push_back(message.GetOffset());
+            } else {
+                failedOffsets.push_back(message.GetOffset());
+            }
         }
 
         if (Storage->IsBatchEmpty()) {
-            ReplyOk<TEvPQ::TEvMLPChangeMessageDeadlineResponse>(SelfId(), PartitionId, *ev);
+            ReplyOffsetsOk<TEvPQ::TEvMLPChangeMessageDeadlineResponse>(SelfId(), ev->Sender, ev->Cookie, successfulOffsets, failedOffsets);
         } else {
-            PendingChangeMessageDeadlineQueue.emplace_back(ev->Sender, ev->Cookie);
+            PendingChangeMessageDeadlineQueue.emplace_back(ev->Sender, ev->Cookie, std::move(successfulOffsets), std::move(failedOffsets));
         }
     }
     ChangeMessageDeadlineRequestsQueue.clear();

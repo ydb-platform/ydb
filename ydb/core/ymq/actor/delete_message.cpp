@@ -217,7 +217,7 @@ private:
             }
             return message.Success ?
                   TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK
-                : TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::Failed;
+                : TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::NotFound;
         };
 
         ui32 deletedCount = 0;

@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from hamcrest import assert_that, equal_to, has_length, not_none
+import botocore
+
+from hamcrest import assert_that, equal_to, has_length, not_none, raises
 
 from ydb.tests.library.sqs_topic.test_base import KikimrSqsTopicTestBase
 
@@ -47,6 +49,47 @@ class TestSqsTopicDeleteMessage(KikimrSqsTopicTestBase):
         assert_that(
             self._get_consumer_uncommitted_messages_count(queue_name),
             equal_to(0),
+        )
+
+    def test_delete_message_double_commit(self):
+        queue_name = self._make_queue_name('delete_message_double_commit')
+        self._queue_url = self._boto_client.create_queue(QueueName=queue_name)['QueueUrl']
+
+        message_body = 'hello from sqs'
+        self._boto_client.send_message(
+            QueueUrl=self._queue_url,
+            MessageBody=message_body,
+        )
+
+        response = self._boto_client.receive_message(
+            QueueUrl=self._queue_url,
+            WaitTimeSeconds=20,
+            MaxNumberOfMessages=1,
+        )
+
+        messages = response.get('Messages')
+        assert_that(messages, not_none())
+        assert_that(messages, has_length(1))
+        assert_that(messages[0]['Body'], equal_to(message_body))
+        receipt_handle = messages[0]['ReceiptHandle']
+
+        self._boto_client.delete_message(
+            QueueUrl=self._queue_url,
+            ReceiptHandle=receipt_handle,
+        )
+
+        def delete_message_again():
+            self._boto_client.delete_message(
+                QueueUrl=self._queue_url,
+                ReceiptHandle=receipt_handle,
+            )
+
+        assert_that(
+            delete_message_again,
+            raises(
+                botocore.exceptions.ClientError,
+                pattern='InvalidParameterValue',
+            ),
         )
 
     def test_delete_message_fifo_queue(self):

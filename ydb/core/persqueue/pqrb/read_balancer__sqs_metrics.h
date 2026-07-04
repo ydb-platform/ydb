@@ -1,11 +1,13 @@
 #pragma once
 
+#include <ydb/core/persqueue/events/internal/protos/events.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
+#include <util/generic/array_ref.h>
 #include <util/generic/hash.h>
 
 namespace NKikimr::NPQ {
@@ -28,15 +30,6 @@ struct TTopicYmqActionCounters {
     ::NMonitoring::TDynamicCounters::TCounterPtr Success;
     ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
     ::NMonitoring::THistogramPtr Duration;
-};
-
-struct TTopicTransactionCounters {
-    ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCount;
-    ::NMonitoring::TDynamicCounters::TCounterPtr TransactionsCount;
-    ::NMonitoring::TDynamicCounters::TCounterPtr TransactionsInfly;
-    ::NMonitoring::TDynamicCounters::TCounterPtr TransactionRetryTimeouts;
-    ::NMonitoring::TDynamicCounters::TCounterPtr TransactionRetries;
-    ::NMonitoring::TDynamicCounters::TCounterPtr TransactionsFailed;
 };
 
 struct TTopicQueueLeaderCounters {
@@ -64,7 +57,6 @@ struct TTopicQueueLeaderCounters {
     ::NMonitoring::TDynamicCounters::TCounterPtr InflyMessagesCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr OldestMessageAgeSeconds;
 
-    TTopicTransactionCounters TransactionCounters;
     ::NMonitoring::TDynamicCounters::TCounterPtr ReceiveMessage_KeysInvalidated;
     ::NMonitoring::THistogramPtr ReceiveMessageImmediate_Duration;
 
@@ -77,11 +69,29 @@ public:
     static bool IsApplicable(const NKikimrPQ::TPQTabletConfig& tabletConfig);
 
     TTopicSqsMetricsHandler(const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx);
-    void Update(const TTabletLabeledCountersBase& mlpConsumerMetrics);
+    void Update(
+        const TTabletLabeledCountersBase& clientLabeledCounters,
+        const TTabletLabeledCountersBase& mlpConsumerLabeledCounters,
+        TConstArrayRef<ui64> messageLockAttemptsValues,
+        TConstArrayRef<ui64> messageLockingDurationValues,
+        TConstArrayRef<ui64> waitingLockingDurationValues,
+        ui64 deletedByMovedToDlq
+    );
+    void AddActionMetrics(const NKikimrPQ::TEvTopicSqsActionMetrics& metrics);
 
 private:
+    void FlushPendingActionMetrics();
+
     ETopicSqsCountersBackend Backend_;
     TTopicQueueLeaderCounters Counters_;
+
+    ui64 PendingSendMessageCount_ = 0;
+    ui64 PendingBytesWritten_ = 0;
+    ui64 PendingDeduplicationCount_ = 0;
+    ui64 PendingDeleteMessageCount_ = 0;
+    ui64 PendingReceiveMessageCount_ = 0;
+    ui64 PendingReceiveMessageBytesRead_ = 0;
+    ui64 PendingReceiveMessageEmptyCount_ = 0;
 };
 
 }

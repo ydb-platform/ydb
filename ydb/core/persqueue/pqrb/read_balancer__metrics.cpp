@@ -374,7 +374,14 @@ void TTopicMetricsHandler::UpdateMetrics() {
     if (SqsMetricsHandler_) {
         auto it = collector.Consumers.find(TString(SqsConsumerName));
         if (it != collector.Consumers.end()) {
-            SqsMetricsHandler_->Update(it->second.MLPConsumerLabeledCounters.Aggregator);
+            SqsMetricsHandler_->Update(
+                it->second.ClientLabeledCounters.Aggregator,
+                it->second.MLPConsumerLabeledCounters.Aggregator,
+                it->second.MLPMessageLockAttemptsCounter.Values,
+                it->second.MLPMessageLockingDurationCounter.Values,
+                it->second.MLPWaitingLockingDurationCounter.Values,
+                it->second.DeletedByMovedToDLQ
+            );
         }
     }
 }
@@ -384,6 +391,12 @@ void TTopicMetricsHandler::InitializeSqsQueueMetrics(const NKikimrPQ::TPQTabletC
         SqsMetricsHandler_ = std::make_unique<TTopicSqsMetricsHandler>(tabletConfig, ctx);
     } else {
         SqsMetricsHandler_.reset();
+    }
+}
+
+void TTopicMetricsHandler::AddSqsActionMetrics(const NKikimrPQ::TEvTopicSqsActionMetrics& metrics) {
+    if (SqsMetricsHandler_) {
+        SqsMetricsHandler_->AddActionMetrics(metrics);
     }
 }
 

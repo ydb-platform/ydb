@@ -4,6 +4,8 @@
 #include "log.h"
 #include "params.h"
 
+#include "topic_pqrb_metrics.h"
+
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/base/limits.h>
@@ -259,10 +261,22 @@ private:
             ADD_COUNTER_COUPLE(QueueCounters_, DeleteMessage_Count, deleted_count_per_second, deletedCount);
         }
 
+        ReportTopicDeleteMetricsToPqrb(ev->Get()->BalancerTabletId, deletedCount);
+
         --RequestsToLeader_;
         if (RequestsToLeader_ == 0) {
             SendReplyAndDie();
         }
+    }
+
+    void ReportTopicDeleteMetricsToPqrb(ui64 balancerTabletId, ui32 deletedCount) {
+        if (deletedCount == 0) {
+            return;
+        }
+
+        NKikimrPQ::TEvTopicSqsActionMetrics metrics;
+        metrics.SetDeleteMessageCount(deletedCount);
+        SendTopicSqsActionMetricsToPqrb(*this, balancerTabletId, metrics);
     }
 
     const TDeleteMessageRequest& Request() const {

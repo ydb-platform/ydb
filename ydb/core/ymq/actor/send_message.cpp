@@ -5,7 +5,8 @@
 #include "params.h"
 #include "serviceid.h"
 
-#include <ydb/core/persqueue/public/describer/describer.h>
+#include "topic_pqrb_metrics.h"
+
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
 #include <ydb/core/ymq/attributes/attributes.h>
@@ -246,9 +247,6 @@ private:
                 if (it != BlockedDeduplicationMessageIds_.end()) {
                     const auto& [messageId, sequenceNumber] = it->second;
                     AddResponse(currentRequest, currentResponse, messageId, sequenceNumber);
-                    TopicSendHasSuccess_ = true;
-                    TopicSendBytesWritten_ += currentRequest->GetMessageBody().size();
-                    TopicSendHasDedup_ = true;
                     continue;
                 }
             }
@@ -384,8 +382,17 @@ private:
         }
     }
 
+    void AccumulateTopicSendMetrics(Ydb::StatusIds::StatusCode status, size_t bodySize) {
+        if (status == Ydb::StatusIds::SUCCESS) {
+            TopicSendHasWritten_ = true;
+            TopicSendBytesWritten_ += bodySize;
+        } else if (status == Ydb::StatusIds::ALREADY_EXISTS) {
+            TopicSendHasDedup_ = true;
+        }
+    }
+
     void ReportTopicSendCounters() {
-        if (!QueueCounters_ || !TopicSendHasSuccess_) {
+        if (!QueueCounters_ || (!TopicSendHasWritten_ && !TopicSendHasDedup_)) {
             return;
         }
 
@@ -396,6 +403,20 @@ private:
         if (TopicSendHasDedup_) {
             INC_COUNTER_COUPLE(QueueCounters_, SendMessage_DeduplicationCount, deduplicated_count_per_second);
         }
+    }
+
+    void ReportTopicSendMetricsToPqrb(ui64 balancerTabletId) {
+        if (!TopicSendHasWritten_) {
+            return;
+        }
+
+        NKikimrPQ::TEvTopicSqsActionMetrics metrics;
+        metrics.SetSendMessageCount(1);
+        metrics.SetBytesWritten(TopicSendBytesWritten_);
+        if (TopicSendHasDedup_) {
+            metrics.SetDeduplicationCount(1);
+        }
+        SendTopicSqsActionMetricsToPqrb(*this, balancerTabletId, metrics);
     }
 
     void Handle(NPQ::NMLP::TEvWriteResponse::TPtr& ev) {
@@ -421,11 +442,7 @@ private:
                         NPQ::NDescriber::Description(GetTopicName(), response->DescribeStatus));
                 }
             } else if (message.Status == Ydb::StatusIds::SUCCESS || message.Status == Ydb::StatusIds::ALREADY_EXISTS) {
-                TopicSendHasSuccess_ = true;
-                TopicSendBytesWritten_ += currentRequest->GetMessageBody().size();
-                if (message.Status == Ydb::StatusIds::ALREADY_EXISTS) {
-                    TopicSendHasDedup_ = true;
-                }
+                AccumulateTopicSendMetrics(message.Status, currentRequest->GetMessageBody().size());
                 AddResponse(
                     currentRequest,
                     currentResponse,
@@ -438,6 +455,7 @@ private:
         }
 
         ReportTopicSendCounters();
+        ReportTopicSendMetricsToPqrb(response->BalancerTabletId);
         SendReplyAndDie();
     }
 
@@ -500,7 +518,7 @@ private:
     const bool IsBatch_;
     // deduplication message id -> sequenceNumber
     std::unordered_map<TString, std::pair<TString, ui64>> BlockedDeduplicationMessageIds_;
-    bool TopicSendHasSuccess_ = false;
+    bool TopicSendHasWritten_ = false;
     ui64 TopicSendBytesWritten_ = 0;
     bool TopicSendHasDedup_ = false;
 };

@@ -942,6 +942,10 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TP
     PendingMLPRequests.push_back(std::move(ev));
 }
 
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvTopicSqsActionMetrics::TPtr& ev) {
+    TopicMetricsHandler->AddSqsActionMetrics(ev->Get()->Record);
+}
+
 void TPersQueueReadBalancer::ProcessPendingMLPRequests(const TActorContext&) {
     if (!StatsRequestTracker.StatsReceived) {
         return;
@@ -976,6 +980,7 @@ STFUNC(TPersQueueReadBalancer::StateInit) {
         hFunc(TEvPQ::TEvMLPGetPartitionRequest, Handle);
         hFunc(TEvPQ::TEvMLPConsumerStatus, Handle);
         hFunc(TEvPQ::TEvMLPGetRuntimeAttributesRequest, Handle);
+        hFunc(TEvPQ::TEvTopicSqsActionMetrics, Handle);
         // From kafka
         HFunc(TEvPersQueue::TEvBalancingSubscribe, Handle);
         HFunc(TEvPersQueue::TEvBalancingUnsubscribe, Handle);
@@ -1024,6 +1029,7 @@ STFUNC(TPersQueueReadBalancer::StateWork) {
         hFunc(TEvPQ::TEvMLPGetPartitionRequest, Handle);
         hFunc(TEvPQ::TEvMLPGetRuntimeAttributesRequest, Handle);
         hFunc(TEvPQ::TEvMLPConsumerStatus, Handle);
+        hFunc(TEvPQ::TEvTopicSqsActionMetrics, Handle);
         default:
             HandleDefaultEvents(ev, SelfId());
             break;

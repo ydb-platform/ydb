@@ -217,6 +217,9 @@ private:
         }
 
         auto response = std::make_unique<TEvChangeResponse>();
+        if (TopicInfo) {
+            response->BalancerTabletId = TopicInfo->Description.GetBalancerTabletID();
+        }
         for (auto& [partitionId, partitionInfo]: PendingPartitions) {
             for (auto offset : partitionInfo.Offsets) {
                 EOperationResult status = EOperationResult::Failed;

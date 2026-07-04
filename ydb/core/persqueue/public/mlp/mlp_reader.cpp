@@ -126,6 +126,7 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvMLPReadResponse");
 
     auto response = std::make_unique<TEvReadResponse>();
+    response->BalancerTabletId = Info->Description.GetBalancerTabletID();
     for (auto& message : *ev->Get()->Record.MutableMessage()) {
         NKikimrPQClient::TDataChunk proto;
         bool res = proto.ParseFromString(message.GetData());

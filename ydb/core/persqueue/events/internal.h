@@ -243,6 +243,7 @@ struct TEvPQ {
         EvConsumerBatchProcessorMetrics,
         EvProcessBatchRead,
         EvProcessBatchReadResult,
+        EvTopicSqsActionMetrics,
         EvEnd,
     };
 
@@ -1887,6 +1888,16 @@ struct TEvPQ {
 
         NYdb::TStatus Status;
         ui64 EndOffset;
+    };
+
+    struct TEvTopicSqsActionMetrics : TEventPB<TEvTopicSqsActionMetrics, NKikimrPQ::TEvTopicSqsActionMetrics, EvTopicSqsActionMetrics> {
+        TEvTopicSqsActionMetrics() = default;
+
+        TEvTopicSqsActionMetrics(ui64 sendMessageCount, ui64 bytesWritten, ui64 deduplicationCount) {
+            Record.SetSendMessageCount(sendMessageCount);
+            Record.SetBytesWritten(bytesWritten);
+            Record.SetDeduplicationCount(deduplicationCount);
+        }
     };
 };
 

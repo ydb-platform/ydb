@@ -38,6 +38,7 @@ struct TMessageId {
 struct TEvWriteResponse : public NActors::TEventLocal<TEvWriteResponse, EEv::EvWriteResponse> {
 
     NDescriber::EStatus DescribeStatus;
+    ui64 BalancerTabletId = 0;
 
     struct TMessage {
         size_t Index;
@@ -58,6 +59,7 @@ struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EEv::EvRea
 
     Ydb::StatusIds::StatusCode Status;
     TString ErrorDescription;
+    ui64 BalancerTabletId = 0;
 
     struct TMessage {
         TMessageId MessageId;
@@ -84,6 +86,7 @@ struct TEvChangeResponse : public NActors::TEventLocal<TEvChangeResponse, EEv::E
 
     Ydb::StatusIds::StatusCode Status;
     TString ErrorDescription;
+    ui64 BalancerTabletId = 0;
 
     struct TResult {
         TMessageId MessageId;

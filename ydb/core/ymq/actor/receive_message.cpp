@@ -6,6 +6,8 @@
 #include "log.h"
 #include "params.h"
 
+#include "topic_pqrb_metrics.h"
+
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/ymq/attributes/attributes.h>
 #include <ydb/core/ymq/attributes/attributes_md5.h>
@@ -290,6 +292,7 @@ private:
                 if (QueueCounters_) {
                     INC_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_EmptyCount, empty_receive_attempts_count_per_second);
                 }
+                ReportTopicReceiveMetricsToPqrb(ev->Get()->BalancerTabletId, 0, 0, 1);
             } else {
                 ui64 bytesRead = 0;
                 const TInstant now = TActivationContext::Now();
@@ -365,9 +368,27 @@ private:
                     ADD_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_Count, received_count_per_second, messages.size());
                     ADD_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_BytesRead, received_bytes_per_second, bytesRead);
                 }
+                ReportTopicReceiveMetricsToPqrb(ev->Get()->BalancerTabletId, messages.size(), bytesRead, 0);
             }
         }
         SendReplyAndDie();
+    }
+
+    void ReportTopicReceiveMetricsToPqrb(
+        ui64 balancerTabletId,
+        ui64 receivedCount,
+        ui64 bytesRead,
+        ui64 emptyCount
+    ) {
+        NKikimrPQ::TEvTopicSqsActionMetrics metrics;
+        if (receivedCount > 0) {
+            metrics.SetReceiveMessageCount(receivedCount);
+            metrics.SetReceiveMessageBytesRead(bytesRead);
+        }
+        if (emptyCount > 0) {
+            metrics.SetReceiveMessageEmptyCount(emptyCount);
+        }
+        SendTopicSqsActionMetricsToPqrb(*this, balancerTabletId, metrics);
     }
 
     bool HandleWakeup(TEvWakeup::TPtr& ev) override {

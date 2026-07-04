@@ -181,3 +181,14 @@ message TEvMLPUpdateExternalLockedMessageGroupsId {
     optional string Consumer = 2;
     optional TExternalLockedMessageGroupsId Update = 3;
 }
+
+// To PQRB from YMQ topic-path action actors.
+message TEvTopicSqsActionMetrics {
+    optional uint64 SendMessageCount = 1;
+    optional uint64 BytesWritten = 2;
+    optional uint64 DeduplicationCount = 3;
+    optional uint64 DeleteMessageCount = 4;
+    optional uint64 ReceiveMessageCount = 5;
+    optional uint64 ReceiveMessageBytesRead = 6;
+    optional uint64 ReceiveMessageEmptyCount = 7;
+}

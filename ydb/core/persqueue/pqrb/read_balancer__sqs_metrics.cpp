@@ -2,10 +2,12 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/library/actors/core/actor.h>
 
+#include <util/generic/array_ref.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NPQ {
@@ -17,7 +19,6 @@ constexpr TStringBuf YmqNameLabel = "name";
 constexpr TStringBuf YmqQueueCounterPrefix = "queue.messages.";
 constexpr TStringBuf YmqMethodLabel = "method";
 constexpr TStringBuf YmqActionCounterPrefix = "api.http.";
-constexpr TStringBuf QueryTypeLabel = "query_type";
 
 const NMonitoring::TBucketBounds FastActionsDurationBucketsMs = {
     5, 10, 25, 50, 75, 100, 150, 300, 500, 1000, 5000,
@@ -46,7 +47,6 @@ const NMonitoring::TBucketBounds YmqClientDurationBucketsMs = {
     100, 200, 500, 1'000, 2'000, 5'000, 10'000, 20'000, 60'000, 120'000, 300'000, 600'000, 3'600'000, 7'200'000,
 };
 
-const NMonitoring::TBucketBounds MessageReceiveAttemptsBuckets = {1, 2, 5};
 
 struct TQueueActionDesc {
     TString Name;
@@ -90,18 +90,36 @@ const TQueueActionDesc YmqQueueProxyActions[] = {
     {"UntagQueue", "UntagQueue", "untag_queue", false, true},
 };
 
-const TString QueryTypes[] = {
-    "WRITE_MESSAGE_ID",
-    "PURGE_QUEUE_ID",
-};
-
-ui64 GetMlpConsumerMetric(const TTabletLabeledCountersBase& mlpConsumerMetrics, EMLPConsumerLabeledCounters index) {
-    const auto& aggregatedCounters = mlpConsumerMetrics.GetCounters();
+template<typename TEnum>
+ui64 GetLabeledMetric(const TTabletLabeledCountersBase& metrics, TEnum index) {
+    const auto& aggregatedCounters = metrics.GetCounters();
     const size_t idx = static_cast<size_t>(index);
     if (aggregatedCounters.Size() <= idx) {
         return 0;
     }
     return aggregatedCounters[idx].Get();
+}
+
+ui64 GetTimelagMetricMs(const TTabletLabeledCountersBase& metrics, EClientLabeledCounters index) {
+    const ui64 value = GetLabeledMetric(metrics, index);
+    const ui64 now = TAppData::TimeProvider->Now().MilliSeconds();
+    return value < now ? now - value : 0;
+}
+
+void SetHistogram(
+    NMonitoring::THistogramPtr& counter,
+    TConstArrayRef<ui64> values,
+    const NMonitoring::TBucketBounds& bounds
+) {
+    if (!counter || values.size() != bounds.size() + 1) {
+        return;
+    }
+
+    counter->Reset();
+    for (size_t i = 0; i < bounds.size(); ++i) {
+        counter->Collect(bounds[i], values[i]);
+    }
+    counter->Collect(Max<double>(), values[values.size() - 1]);
 }
 
 NMonitoring::TDynamicCounterPtr GetSqsQueueCountersRoot(
@@ -217,26 +235,6 @@ void InitYmqActionCounters(
         actionCounters.SubGroup, TStringBuilder() << YmqActionCounterPrefix << "request_duration_milliseconds", buckets);
 }
 
-void InitTransactionCounters(TTopicTransactionCounters& counters, const NMonitoring::TDynamicCounterPtr& root) {
-    auto transactionsByType = root->GetSubgroup(TString(SqsSensorLabel), "TransactionsByType");
-    auto transactionsDurationByType = root->GetSubgroup(TString(SqsSensorLabel), "TransactionsDurationsByType");
-    auto transactionsFailedByType = root->GetSubgroup(TString(SqsSensorLabel), "TransactionsFailedByType");
-
-    for (const auto& queryType : QueryTypes) {
-        transactionsByType->GetExpiringNamedCounter(TString(QueryTypeLabel), queryType, true);
-        transactionsFailedByType->GetExpiringNamedCounter(TString(QueryTypeLabel), queryType, true);
-        transactionsDurationByType->GetExpiringNamedHistogram(
-            TString(QueryTypeLabel), queryType, NMonitoring::ExplicitHistogram(DurationBucketsMs));
-    }
-
-    counters.CompileQueryCount = MakeSqsCounter(root, "CompileQueryCount", true, true);
-    counters.TransactionsCount = MakeSqsCounter(root, "TransactionsCount", true, true);
-    counters.TransactionsInfly = MakeSqsCounter(root, "TransactionsInfly", false, true);
-    counters.TransactionRetryTimeouts = MakeSqsCounter(root, "TransactionRetryTimeouts", true, true);
-    counters.TransactionRetries = MakeSqsCounter(root, "TransactionRetries", true, true);
-    counters.TransactionsFailed = MakeSqsCounter(root, "TransactionsFailed", true, true);
-}
-
 void InitSqsLeaderCounters(
     TTopicQueueLeaderCounters& counters,
     const NMonitoring::TDynamicCounterPtr& root,
@@ -247,9 +245,9 @@ void InitSqsLeaderCounters(
     counters.QueueLeaderStartProblems = MakeSqsCounter(root, "QueueLeaderStartProblems", true, false);
 
     counters.MessagesPurged = MakeSqsCounter(root, "MessagesPurged", true, true);
-    counters.MessageReceiveAttempts = MakeSqsHistogram(root, "MessageReceiveAttempts", MessageReceiveAttemptsBuckets, true);
-    counters.ClientMessageProcessing_Duration = MakeSqsHistogram(root, "ClientMessageProcessing_Duration", ClientDurationBucketsMs, true);
-    counters.MessageReside_Duration = MakeSqsHistogram(root, "MessageReside_Duration", ClientDurationBucketsMs, true);
+    counters.MessageReceiveAttempts = MakeSqsHistogram(root, "MessageReceiveAttempts", MLP_LOCKS_BOUNDS, true);
+    counters.ClientMessageProcessing_Duration = MakeSqsHistogram(root, "ClientMessageProcessing_Duration", SLOW_LATENCY_BOUNDS, true);
+    counters.MessageReside_Duration = MakeSqsHistogram(root, "MessageReside_Duration", SLOW_LATENCY_BOUNDS, true);
 
     counters.DeleteMessage_Count = MakeSqsCounter(root, "DeleteMessage_Count", true, true);
     counters.ReceiveMessage_EmptyCount = MakeSqsCounter(root, "ReceiveMessage_EmptyCount", true, true);
@@ -269,8 +267,6 @@ void InitSqsLeaderCounters(
     counters.ReceiveMessage_KeysInvalidated = MakeSqsCounter(root, "ReceiveMessage_KeysInvalidated", true, true);
     counters.ReceiveMessageImmediate_Duration = MakeSqsHistogram(root, "ReceiveMessageImmediate_Duration", DurationBucketsMs, true);
 
-    InitTransactionCounters(counters.TransactionCounters, root);
-
     for (const auto& action : SqsQueueProxyActions) {
         InitSqsActionCounters(counters, root, cfg, action);
     }
@@ -281,11 +277,11 @@ void InitYmqLeaderCounters(
     const NMonitoring::TDynamicCounterPtr& root
 ) {
     counters.MessagesPurged = MakeYmqCounter(root, YmqQueueCounterName("purged_count_per_second"), true);
-    counters.MessageReceiveAttempts = MakeYmqHistogram(root, YmqQueueCounterName("receive_attempts_count_rate"), MessageReceiveAttemptsBuckets);
+    counters.MessageReceiveAttempts = MakeYmqHistogram(root, YmqQueueCounterName("receive_attempts_count_rate"), MLP_LOCKS_BOUNDS);
     counters.ClientMessageProcessing_Duration = MakeYmqHistogram(
-        root, YmqQueueCounterName("client_processing_duration_milliseconds"), YmqClientDurationBucketsMs);
+        root, YmqQueueCounterName("client_processing_duration_milliseconds"), SLOW_LATENCY_BOUNDS);
     counters.MessageReside_Duration = MakeYmqHistogram(
-        root, YmqQueueCounterName("reside_duration_milliseconds"), YmqClientDurationBucketsMs);
+        root, YmqQueueCounterName("reside_duration_milliseconds"), SLOW_LATENCY_BOUNDS);
 
     counters.DeleteMessage_Count = MakeYmqCounter(root, YmqQueueCounterName("deleted_count_per_second"), true);
     counters.ReceiveMessage_EmptyCount = MakeYmqCounter(root, YmqQueueCounterName("empty_receive_attempts_count_per_second"), true);
@@ -330,19 +326,79 @@ TTopicSqsMetricsHandler::TTopicSqsMetricsHandler(const NKikimrPQ::TPQTabletConfi
     }
 }
 
-void TTopicSqsMetricsHandler::Update(const TTabletLabeledCountersBase& mlpConsumerMetrics) {
-    const ui64 locked = GetMlpConsumerMetric(mlpConsumerMetrics, METRIC_INFLIGHT_LOCKED_COUNT);
-    const ui64 delayed = GetMlpConsumerMetric(mlpConsumerMetrics, METRIC_INFLIGHT_DELAYED_COUNT);
-    const ui64 unlocked = GetMlpConsumerMetric(mlpConsumerMetrics, METRIC_INFLIGHT_UNLOCKED_COUNT);
-    const ui64 scheduledToDlq = GetMlpConsumerMetric(mlpConsumerMetrics, METRIC_INFLIGHT_SCHEDULED_TO_DLQ_COUNT);
-    const ui64 storedCount = locked + delayed + unlocked + scheduledToDlq;
+void TTopicSqsMetricsHandler::Update(
+    const TTabletLabeledCountersBase& clientLabeledCounters,
+    const TTabletLabeledCountersBase& mlpConsumerLabeledCounters,
+    TConstArrayRef<ui64> messageLockAttemptsValues,
+    TConstArrayRef<ui64> messageLockingDurationValues,
+    TConstArrayRef<ui64> waitingLockingDurationValues,
+    ui64 deletedByMovedToDlq
+) {
+    const ui64 messagesCount = GetLabeledMetric(clientLabeledCounters, METRIC_TOTAL_COMMIT_MESSAGE_LAG);
+    const ui64 inflightMessagesCount = GetLabeledMetric(mlpConsumerLabeledCounters, METRIC_INFLIGHT_LOCKED_COUNT);
+    const ui64 committedReadLagMs = GetTimelagMetricMs(clientLabeledCounters, METRIC_COMMIT_WRITE_TIME);
 
     if (Counters_.MessagesCount) {
-        Counters_.MessagesCount->Set(storedCount);
+        Counters_.MessagesCount->Set(messagesCount);
     }
     if (Counters_.InflyMessagesCount) {
-        Counters_.InflyMessagesCount->Set(locked);
+        Counters_.InflyMessagesCount->Set(inflightMessagesCount);
     }
+    if (Counters_.OldestMessageAgeSeconds) {
+        const ui64 oldestMessageAge = Backend_ == ETopicSqsCountersBackend::Sqs
+            ? committedReadLagMs / 1000
+            : committedReadLagMs;
+        Counters_.OldestMessageAgeSeconds->Set(oldestMessageAge);
+    }
+    SetHistogram(Counters_.MessageReceiveAttempts, messageLockAttemptsValues, MLP_LOCKS_BOUNDS);
+    SetHistogram(Counters_.ClientMessageProcessing_Duration, messageLockingDurationValues, SLOW_LATENCY_BOUNDS);
+    SetHistogram(Counters_.MessageReside_Duration, waitingLockingDurationValues, SLOW_LATENCY_BOUNDS);
+    if (Counters_.MessagesMovedToDLQ) {
+        Counters_.MessagesMovedToDLQ->Set(deletedByMovedToDlq);
+    }
+    FlushPendingActionMetrics();
+}
+
+void TTopicSqsMetricsHandler::AddActionMetrics(const NKikimrPQ::TEvTopicSqsActionMetrics& metrics) {
+    PendingSendMessageCount_ += metrics.GetSendMessageCount();
+    PendingBytesWritten_ += metrics.GetBytesWritten();
+    PendingDeduplicationCount_ += metrics.GetDeduplicationCount();
+    PendingDeleteMessageCount_ += metrics.GetDeleteMessageCount();
+    PendingReceiveMessageCount_ += metrics.GetReceiveMessageCount();
+    PendingReceiveMessageBytesRead_ += metrics.GetReceiveMessageBytesRead();
+    PendingReceiveMessageEmptyCount_ += metrics.GetReceiveMessageEmptyCount();
+}
+
+void TTopicSqsMetricsHandler::FlushPendingActionMetrics() {
+    if (PendingSendMessageCount_ > 0 && Counters_.SendMessage_Count) {
+        Counters_.SendMessage_Count->Add(PendingSendMessageCount_);
+    }
+    if (PendingBytesWritten_ > 0 && Counters_.SendMessage_BytesWritten) {
+        Counters_.SendMessage_BytesWritten->Add(PendingBytesWritten_);
+    }
+    if (PendingDeduplicationCount_ > 0 && Counters_.SendMessage_DeduplicationCount) {
+        Counters_.SendMessage_DeduplicationCount->Add(PendingDeduplicationCount_);
+    }
+    if (PendingDeleteMessageCount_ > 0 && Counters_.DeleteMessage_Count) {
+        Counters_.DeleteMessage_Count->Add(PendingDeleteMessageCount_);
+    }
+    if (PendingReceiveMessageCount_ > 0 && Counters_.ReceiveMessage_Count) {
+        Counters_.ReceiveMessage_Count->Add(PendingReceiveMessageCount_);
+    }
+    if (PendingReceiveMessageBytesRead_ > 0 && Counters_.ReceiveMessage_BytesRead) {
+        Counters_.ReceiveMessage_BytesRead->Add(PendingReceiveMessageBytesRead_);
+    }
+    if (PendingReceiveMessageEmptyCount_ > 0 && Counters_.ReceiveMessage_EmptyCount) {
+        Counters_.ReceiveMessage_EmptyCount->Add(PendingReceiveMessageEmptyCount_);
+    }
+
+    PendingSendMessageCount_ = 0;
+    PendingBytesWritten_ = 0;
+    PendingDeduplicationCount_ = 0;
+    PendingDeleteMessageCount_ = 0;
+    PendingReceiveMessageCount_ = 0;
+    PendingReceiveMessageBytesRead_ = 0;
+    PendingReceiveMessageEmptyCount_ = 0;
 }
 
 }

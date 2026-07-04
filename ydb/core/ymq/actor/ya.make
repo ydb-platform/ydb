@@ -89,6 +89,7 @@ PEERDIR(
     ydb/core/ymq/queues/common
     ydb/core/ymq/queues/fifo
     ydb/core/ymq/queues/std
+    ydb/core/persqueue/events
     ydb/library/aclib
     ydb/library/http_proxy/authorization
     ydb/library/http_proxy/error

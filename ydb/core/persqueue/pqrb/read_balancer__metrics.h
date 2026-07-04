@@ -54,6 +54,7 @@ public:
 
     void Handle(NKikimrPQ::TStatusResponse_TPartResult&& partitionStatus);
     void UpdateMetrics();
+    void AddSqsActionMetrics(const NKikimrPQ::TEvTopicSqsActionMetrics& metrics);
 
 protected:
     void InitializeKeyCompactionCounters(const NKikimrPQ::TPQTabletConfig& tabletConfig);

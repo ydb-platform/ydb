@@ -713,7 +713,7 @@ ydb/tests/compatibility/workloads test_simple_reader.py.TestSimpleReaderRestartT
 ydb/tests/compatibility/workloads test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_stable-26-2-1_to_stable-26-2-1]
 ydb/tests/compatibility/workloads test_simple_reader.py.TestSimpleReaderTabletTransfer.test_simple_reader_tablet_transfer[rolling_stable-26-1-1_to_stable-26-2-1]
 ydb/tests/compatibility/workloads test_simple_reader.py.TestSimpleReaderTabletTransfer.test_simple_reader_tablet_transfer[rolling_stable-26-2-1_to_prestable-26-3]
-ydb/tests/compatibility/stress test_stress.py.TestStress.test_log[mixed_prestable-26-3_and_stable-26-2-1-column]
+ydb/tests/compatibility/stress_heavy test_stress.py.TestStress.test_log[mixed_prestable-26-3_and_stable-26-2-1-column]
 ydb/tests/compatibility/stress test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3_and_stable-26-2-1-column-date64]
 ydb/tests/compatibility/stress test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3_and_stable-26-2-1-column]
 ydb/tests/compatibility/workloads test_table_schema_compatibility.py.TestTableSchemaCompatibilityMixed.test_schema_changes_in_mixed_cluster[mixed_prestable-26-3]

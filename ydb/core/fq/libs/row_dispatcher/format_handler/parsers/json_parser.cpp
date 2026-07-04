@@ -459,19 +459,19 @@ private:
                     Y_DEBUG_ABORT();
                     return false;
                 }
-                if (value.GetListLength() == 0) { // special case: shared empty list
-                    return true;
-                }
                 if (value.RefCount() != expectedRefs) {
+                    if (value.GetListLength() == 0) { // special case: shared empty list
+                        return true;
+                    }
                     Y_DEBUG_ABORT("%s", (TStringBuilder() << value.RefCount() << "!=" << expectedRefs).c_str());
                     return false;
                 }
                 auto listType = AS_TYPE(NKikimr::NMiniKQL::TListType, type);
                 auto itemType = listType->GetItemType();
                 auto listIterator = value.GetListIterator();
-                NYql::NUdf::TUnboxedValue itemValue;
-                while(listIterator.Next(itemValue)) {
-                    if (!ValidateObjectRefs(itemType, itemValue, 2)) {
+
+                for(NYql::NUdf::TUnboxedValue itemValue; listIterator.Next(itemValue); ) {
+                    if (!ValidateObjectRefs(itemType, itemValue, 2)) { // two refs expected: one from object, one from itemValue
                         Y_DEBUG_ABORT();
                         return false;
                     }
@@ -495,13 +495,13 @@ private:
                 auto keyType = dictType->GetKeyType();
                 auto valueType = dictType->GetPayloadType();
                 auto dictIterator = value.GetDictIterator();
-                NYql::NUdf::TUnboxedValue keyValue, payload;
-                while(dictIterator.NextPair(keyValue, payload)) {
-                    if (!ValidateObjectRefs(keyType, keyValue, 2)) {
+
+                for(NYql::NUdf::TUnboxedValue keyValue, payload; dictIterator.NextPair(keyValue, payload); ) {
+                    if (!ValidateObjectRefs(keyType, keyValue, 2)) { // two refs expected: one from object, one from keyValue
                         Y_DEBUG_ABORT();
                         return false;
                     }
-                    if (!ValidateObjectRefs(valueType, payload, 2)) {
+                    if (!ValidateObjectRefs(valueType, payload, 2)) { // two refs expected: one from object, one from payload
                         Y_DEBUG_ABORT();
                         return false;
                     }

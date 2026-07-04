@@ -122,7 +122,7 @@ public:
             YDB_LOG_DEBUG("Created transaction",
                 {"logPrefix", LogPrefix},
                 {"operationType", NKikimrSchemeOp::EOperationType_Name(OperationType)},
-                {"path", path});
+                {"path", path.Str()});
 
             modifyScheme->SetOperationType(operationType);
             modifyScheme->SetInternal(true);

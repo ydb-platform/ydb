@@ -14,8 +14,6 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-// Converts rows (key-value pairs of serialized cells) into an Arrow RecordBatch.
-// Returns nullptr and sets errorMessage on failure.
 std::shared_ptr<arrow::RecordBatch> RowsToBatch(
     const TVector<std::pair<TSerializedCellVec, TString>>& rows,
     const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema,

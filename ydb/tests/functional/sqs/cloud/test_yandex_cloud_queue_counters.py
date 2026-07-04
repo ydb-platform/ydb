@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import random
 import logging
+import time
 import uuid
 
 import yatest
@@ -193,9 +194,16 @@ class TestYmqQueueCounters(get_test_with_sqs_tenant_installation(KikimrSqsTestBa
             self._sqs_api.send_message(queue_url, "foobar")
             self._sqs_api.purge_queue(queue_url)
 
-        ymq_counters = self._get_ymq_counters(cloud=self.cloud_id, folder=self.folder_id)
-        purged_derivative = self._get_counter_value(ymq_counters, {
-            'queue': queue_resource_id,
-            'name': 'queue.messages.purged_count_per_second',
-        })
-        assert purged_derivative > 0
+        attempts = 10
+        while attempts:
+            attempts -= 1
+            ymq_counters = self._get_ymq_counters(cloud=self.cloud_id, folder=self.folder_id)
+            purged_derivative = self._get_counter_value(ymq_counters, {
+                'queue': queue_resource_id,
+                'name': 'queue.messages.purged_count_per_second',
+            })
+            if purged_derivative > 0:
+                return
+            if not attempts:
+                assert purged_derivative > 0
+            time.sleep(0.5)

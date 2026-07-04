@@ -350,6 +350,10 @@ class KikimrSqsTestBase(object):
         config_generator.yaml_config['sqs_config']['create_legacy_duration_counters'] = False
         config_generator.yaml_config['sqs_config']['validate_message_body'] = True
 
+        if cls._is_topic_migration_stage():
+            config_generator.yaml_config['pqconfig']['balancer_wakeup_interval_sec'] = 1
+            config_generator.yaml_config['pqconfig']['balancer_stats_wakeup_interval_sec'] = 1
+
         return config_generator
 
     @classmethod

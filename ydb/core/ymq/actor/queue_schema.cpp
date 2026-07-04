@@ -507,7 +507,7 @@ void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir
     }
     params.AccountName = AccountName_;
     params.FolderId = FolderId_;
-    params.QueueName = IsCloudMode_ ? CustomQueueName_ : QueuePath_.QueueName;
+    params.QueueName = QueuePath_.QueueName;
 
     auto request = BuildCreateTopicTx(workingDir, dirName, IsFifo_, params);
     Register(NPQ::NSchema::CreateCreateTopicActor(SelfId(), {

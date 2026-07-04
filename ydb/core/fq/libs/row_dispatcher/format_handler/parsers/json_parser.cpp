@@ -33,7 +33,7 @@ TStringBuf GetTypeName(const NKikimr::NMiniKQL::TType* type) {
 static std::string JsonTypeToString(const simdjson::builtin::ondemand::json_type& json_type) {
     std::stringstream ss;
     ss << json_type;
-    return std::move(ss.str());
+    return std::move(ss).str();
 }
 
 #define CHECK_JSON_ERROR(value)                 \

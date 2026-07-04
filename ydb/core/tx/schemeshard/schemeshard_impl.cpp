@@ -3394,6 +3394,13 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
         Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->IncrementalBackupConfig().SerializeToString(&incrementalBackupConfig);
     }
 
+    TString statistics;
+    if (tableInfo->HasMultiColumnStatistics()) {
+        NKikimrSchemeOp::TTableDescription statisticsHolder;
+        statisticsHolder.MutableMultiColumnStatistics()->CopyFrom(tableInfo->MultiColumnStatistics());
+        Y_PROTOBUF_SUPPRESS_NODISCARD statisticsHolder.SerializeToString(&statistics);
+    }
+
     if (pathId.OwnerId == TabletID()) {
         db.Table<Schema::Tables>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::Tables::NextColId>(tableInfo->NextColumnId),
@@ -3408,7 +3415,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::Tables::IsTemporary>(tableInfo->IsTemporary),
             NIceDb::TUpdate<Schema::Tables::OwnerActorId>(tableInfo->OwnerActorId.ToString()),
             NIceDb::TUpdate<Schema::Tables::IncrementalBackupConfig>(incrementalBackupConfig),
-            NIceDb::TUpdate<Schema::Tables::DetailedMetricsSettings>(detailedMetricsSettings)
+            NIceDb::TUpdate<Schema::Tables::DetailedMetricsSettings>(detailedMetricsSettings),
+            NIceDb::TUpdate<Schema::Tables::MultiColumnStatistics>(statistics)
         );
     } else {
         db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
@@ -3424,7 +3432,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::MigratedTables::IsTemporary>(tableInfo->IsTemporary),
             NIceDb::TUpdate<Schema::MigratedTables::OwnerActorId>(tableInfo->OwnerActorId.ToString()),
             NIceDb::TUpdate<Schema::MigratedTables::IncrementalBackupConfig>(incrementalBackupConfig),
-            NIceDb::TUpdate<Schema::MigratedTables::DetailedMetricsSettings>(detailedMetricsSettings)
+            NIceDb::TUpdate<Schema::MigratedTables::DetailedMetricsSettings>(detailedMetricsSettings),
+            NIceDb::TUpdate<Schema::MigratedTables::MultiColumnStatistics>(statistics)
         );
     }
 

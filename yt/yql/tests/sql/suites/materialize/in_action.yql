@@ -1,0 +1,8 @@
+use plato;
+
+DEFINE ACTION $process() AS
+    MATERIALIZE Input INTO $tmp;
+    INSERT INTO Output SELECT * FROM $tmp;
+END DEFINE;
+
+DO $process();

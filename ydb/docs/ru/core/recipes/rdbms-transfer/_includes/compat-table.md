@@ -8,13 +8,15 @@
 | [Spark](../tools/spark.md) | [да](../from/postgresql/spark.md) | [да](../from/mysql/spark.md) | [да](../from/mssql/spark.md) | [да](../from/clickhouse/spark.md) | [да](../from/greenplum/spark.md) | [да](../from/oracle/spark.md) | [да](../from/db2/spark.md) | [да](../from/informix/spark.md) | [да](../from/sqlite/spark.md) |
 | [Федеративные запросы](../tools/federated-queries.md) | [да](../from/postgresql/federated-queries.md) | [да](../from/mysql/federated-queries.md) | [да](../from/mssql/federated-queries.md) | [да](../from/clickhouse/federated-queries.md) | [да](../from/greenplum/federated-queries.md) | — | — | — | — |
 | [dbt](../tools/dbt.md) | [да](../from/postgresql/dbt.md) | [да](../from/mysql/dbt.md) | [да](../from/mssql/dbt.md) | [да](../from/clickhouse/dbt.md) | [да](../from/greenplum/dbt.md) | — | — | — | — |
-| [ydb-importer](../tools/ydb-importer.md) | [да](../from/postgresql/ydb-importer.md) | [да](../from/mysql/ydb-importer.md) | [да](../from/mssql/ydb-importer.md) | — | — | [да](../from/oracle/ydb-importer.md) | [да](../from/db2/ydb-importer.md) | — | — |
+| [ydb-importer](../tools/ydb-importer.md) | [да](../from/postgresql/ydb-importer.md) | [да](../from/mysql/ydb-importer.md) | [да](../from/mssql/ydb-importer.md) | [да](../from/clickhouse/ydb-importer.md) | [да](../from/greenplum/ydb-importer.md) | [да](../from/oracle/ydb-importer.md) | [да](../from/db2/ydb-importer.md) | [да](../from/informix/ydb-importer.md) | — |
 | [ydb-pg-extension](../tools/ydb-pg-extension.md) | [да](../from/postgresql/ydb-pg-extension.md) | — | — | — | — | — | — | — | — |
 | [mysql2ydb](../tools/mysql2ydb.md) | — | [да](../from/mysql/mysql2ydb.md) | — | — | — | — | — | — | — |
 
 {% note info %}
 
 **dbt** — материализация через External Data Source и `dbt run`; прямого JDBC к источнику нет. Подробнее — [dbt](../tools/dbt.md) и [интеграция dbt](../../../integrations/migration/dbt.md).
+
+**ydb-importer** — параллельный JDBC-импорт; штатно протестирован для PostgreSQL, MySQL, Oracle, MSSQL, Db2 и Informix. Для ClickHouse и Greenplum есть [примеры конфигурации](https://github.com/ydb-platform/ydb-importer/tree/main/scripts) (`sample-clickhouse.xml`, `sample-greenplum.xml`); перед production проверьте маппинг типов на ваших таблицах.
 
 **SQLite + dbt** — только [seeds](https://docs.getdbt.com/docs/build/seeds) из CSV; для полной миграции — [CLI import file](../from/sqlite/cli-import-file.md) или [Spark](../from/sqlite/spark.md).
 

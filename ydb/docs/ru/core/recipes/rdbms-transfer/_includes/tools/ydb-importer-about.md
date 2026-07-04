@@ -1,6 +1,6 @@
 ## ydb-importer {#about}
 
-**ydb-importer** — Java-утилита для параллельного импорта из JDBC-источников в {{ ydb-short-name }} через Bulk Upsert. Конфигурация — XML; поддерживаются PostgreSQL, MySQL, Oracle, MSSQL, Db2 и другие JDBC-СУБД.
+**ydb-importer** — Java-утилита для параллельного импорта из JDBC-источников в {{ ydb-short-name }} через Bulk Upsert. Конфигурация — XML. Штатно протестированы PostgreSQL, MySQL, Oracle, MSSQL, Db2 и Informix; для ClickHouse и Greenplum — [примеры конфигурации](https://github.com/ydb-platform/ydb-importer/tree/main/scripts).
 
 ### Системные требования
 

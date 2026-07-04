@@ -6,6 +6,7 @@
 | --- | --- |
 | [CLI import file](../../tools/cli-import-file.md) | [Инструкция](cli-import-file.md) |
 | [Spark](../../tools/spark.md) | [Инструкция](spark.md) |
+| [ydb-importer](../../tools/ydb-importer.md) | [Инструкция](ydb-importer.md) |
 
 Общие сведения об инструментах: каталог [tools/](../../tools/).
 

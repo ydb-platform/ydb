@@ -8,6 +8,7 @@
 | [dbt](../../tools/dbt.md) | [Инструкция](dbt.md) |
 | [Федеративные запросы](../../tools/federated-queries.md) | [Инструкция](federated-queries.md) |
 | [Spark](../../tools/spark.md) | [Инструкция](spark.md) |
+| [ydb-importer](../../tools/ydb-importer.md) | [Инструкция](ydb-importer.md) |
 
 Общие сведения об инструментах: каталог [tools/](../../tools/).
 

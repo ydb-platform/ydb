@@ -9,3 +9,5 @@ items:
   href: federated-queries.md
 - name: Spark
   href: spark.md
+- name: ydb-importer
+  href: ydb-importer.md

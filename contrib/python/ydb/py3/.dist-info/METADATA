@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: ydb
-Version: 3.28.4
+Version: 3.29.6
 Summary: YDB Python SDK
 Home-page: http://github.com/ydb-platform/ydb-python-sdk
 Author: Yandex LLC
@@ -21,6 +21,8 @@ Requires-Dist: grpcio >=1.42.0
 Requires-Dist: packaging
 Requires-Dist: protobuf <7.0.0,>=3.13.0
 Requires-Dist: aiohttp <4
+Provides-Extra: opentelemetry
+Requires-Dist: opentelemetry-api >=1.0.0 ; extra == 'opentelemetry'
 Provides-Extra: yc
 Requires-Dist: yandexcloud ; extra == 'yc'
 
@@ -31,6 +33,7 @@ YDB Python SDK
 [![API Reference](https://img.shields.io/badge/API-Reference-lightgreen.svg)](https://ydb-platform.github.io/ydb-python-sdk)
 [![Functional tests](https://github.com/ydb-platform/ydb-python-sdk/actions/workflows/tests.yaml/badge.svg)](https://github.com/ydb-platform/ydb-python-sdk/actions/workflows/tests.yaml)
 [![Style checks](https://github.com/ydb-platform/ydb-python-sdk/actions/workflows/style.yaml/badge.svg)](https://github.com/ydb-platform/ydb-python-sdk/actions/workflows/style.yaml)
+[![codecov](https://codecov.io/gh/ydb-platform/ydb-python-sdk/graph/badge.svg)](https://codecov.io/gh/ydb-platform/ydb-python-sdk)
 
 Officially supported Python client for YDB.
 

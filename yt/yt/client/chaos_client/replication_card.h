@@ -5,8 +5,11 @@
 #include <yt/yt/client/chaos_client/public.h>
 
 #include <yt/yt/client/table_client/unversioned_row.h>
+#include <yt/yt/client/table_client/schema.h>
 
-#include <yt/yt/client/tablet_client/public.h>
+#include <yt/yt/client/tablet_client/index_info.h>
+
+#include <yt/yt/core/ytree/yson_struct.h>
 
 namespace NYT::NChaosClient {
 
@@ -80,6 +83,7 @@ struct TReplicationCard
     NTransactionClient::TTimestamp CurrentTimestamp = NTransactionClient::NullTimestamp;
     NTabletClient::TReplicatedTableOptionsPtr ReplicatedTableOptions;
     TReplicationCardCollocationId ReplicationCardCollocationId;
+    THashMap<TReplicationCardId, NTabletClient::TIndexInfo> SecondaryIndices;
 
     //! Returns pointer to replica with a given id, nullptr if none.
     TReplicaInfo* FindReplica(TReplicaId replicaId);

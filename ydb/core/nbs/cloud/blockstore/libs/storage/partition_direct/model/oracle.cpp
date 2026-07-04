@@ -129,14 +129,15 @@ void TOracle::Think(TInstant now)
     for (size_t i = 0; i < HostStatistics.size(); ++i) {
         auto errorsInfo = HostStatistics[i].GetErrorsInfo(now);
 
-        const bool hasSufferingSymptom = (errorsInfo.ErrorCount != 0);
+        const bool hasSufferingSymptom =
+            (errorsInfo.ConsecutiveErrorCount != 0);
         const bool hasTemporaryOfflineSymptom =
             hasSufferingSymptom &&
-            ((errorsInfo.ErrorCount >=
+            ((errorsInfo.ConsecutiveErrorCount >=
                   config.GetMinErrorsCountBeforeGoingOffline() &&
               errorsInfo.FromFirstError >
                   config.GetMaxDurationBeforeGoingTemporaryOffline()) ||
-             (errorsInfo.ErrorCount >=
+             (errorsInfo.ConsecutiveErrorCount >=
               config.GetErrorsCountForGoingOffline()) ||
              (HostStateController->GetHostPBufferUsedSize(i) >=
               config.GetErrorsTotalSizeForGoingOffline()));
@@ -193,6 +194,14 @@ void TOracle::OnRequestFailed(
     TInstant now)
 {
     HostStatistics[hostIndex].OnError(now, operation);
+}
+
+void TOracle::OnRequestCancelled(
+    THostIndex hostIndex,
+    EOperation operation,
+    TInstant now)
+{
+    HostStatistics[hostIndex].OnCancelled(now, operation);
 }
 
 THostIndex TOracle::SelectBestPBufferHost(
@@ -270,6 +279,11 @@ TDuration TOracle::GetEraseRequestTimeout() const
 EWriteMode TOracle::GetWriteMode() const
 {
     return DefaultWriteMode;
+}
+
+const THostStat& TOracle::GetHostStatistics(THostIndex hostIndex) const
+{
+    return HostStatistics[hostIndex];
 }
 
 TString TOracle::Dump() const

@@ -106,7 +106,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
 
         const bool result = !hasAt
                                 ? ClusterExprOrBinding(clusterExpr, service, cluster, isBinding)
-                                : ClusterExpr(clusterExpr, false, service, cluster);
+                                : ClusterExpr(clusterExpr, /*allowWildcard=*/false, service, cluster);
 
         if (!result) {
             return nullptr;

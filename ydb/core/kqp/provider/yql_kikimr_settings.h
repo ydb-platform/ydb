@@ -92,7 +92,7 @@ public:
     NCommon::TConfSetting<bool, Static> OptShuffleElimination;
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationWithMap;
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationForAggregation;
-    NCommon::TConfSetting<bool, Static> OptUseSortForPartitionsByKeys;
+    NCommon::TConfSetting<bool, Static> WindowFunctionsV2;
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizationLevel;
     NCommon::TConfSetting<bool, Static> OptDisallowFuseJoins;
     NCommon::TConfSetting<bool, Static> OptCreateStageForAggregation;

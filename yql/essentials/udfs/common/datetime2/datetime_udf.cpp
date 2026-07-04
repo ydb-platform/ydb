@@ -117,16 +117,16 @@ TStringBuf GetSecondPolyArgType(ESecondPolyArg secondArg, bool wide) {
 TString BuildBoundaryPolyArgs(ESecondPolyArg secondArg = ESecondPolyArg::None) {
     TStringBuilder sb;
     sb << "[";
-    AddBoundaryResourcePolyArgs(true, sb, TMResourceName, GetSecondPolyArgType(secondArg, false));
-    AddBoundaryResourcePolyArgs(false, sb, TM64ResourceName, GetSecondPolyArgType(secondArg, true));
+    AddBoundaryResourcePolyArgs(/*first=*/true, sb, TMResourceName, GetSecondPolyArgType(secondArg, /*wide=*/false));
+    AddBoundaryResourcePolyArgs(/*first=*/false, sb, TM64ResourceName, GetSecondPolyArgType(secondArg, /*wide=*/true));
     TVector<std::pair<TStringBuf, TStringBuf>> plainDates;
     for (ui32 i = 0; i < DataSlotCount; ++i) { // NOLINT(modernize-loop-convert)
         if (DataTypeInfos[i].Features & NUdf::ExtDateType) {
-            plainDates.emplace_back(std::make_pair(DataTypeInfos[i].Name, GetSecondPolyArgType(secondArg, true)));
+            plainDates.emplace_back(std::make_pair(DataTypeInfos[i].Name, GetSecondPolyArgType(secondArg, /*wide=*/true)));
         }
 
         if (DataTypeInfos[i].Features & (NUdf::DateType | NUdf::TzDateType)) {
-            plainDates.emplace_back(std::make_pair(DataTypeInfos[i].Name, GetSecondPolyArgType(secondArg, false)));
+            plainDates.emplace_back(std::make_pair(DataTypeInfos[i].Name, GetSecondPolyArgType(secondArg, /*wide=*/false)));
         }
     }
 
@@ -277,7 +277,7 @@ public:
     }
 
     static TString BuildPolyArgs() {
-        return BuildPolyArgsWithVersion(NYql::UnknownLangVersion, true);
+        return BuildPolyArgsWithVersion(NYql::UnknownLangVersion, /*full=*/true);
     }
 
     static TString BuildPolyArgsWithVersion(NYql::TLangVersion langver, bool full = false) {
@@ -1290,7 +1290,7 @@ TBlockItem TMakeDateKernelExec<TTzTimestamp>::Make(TTMStorage& storage, const IV
 BEGIN_SIMPLE_STRICT_ARROW_UDF(TMakeDate, TDate(TAutoMap<TResource<TMResourceName>>)) {
     auto& builder = valueBuilder->GetDateBuilder();
     auto& storage = Reference<TMResourceName>(args[0]);
-    return TUnboxedValuePod(storage.ToDate(builder, false));
+    return TUnboxedValuePod(storage.ToDate(builder, /*local=*/false));
 }
 END_SIMPLE_ARROW_UDF(TMakeDate, TMakeDateKernelExec<TDate>::Do);
 
@@ -1312,7 +1312,7 @@ BEGIN_SIMPLE_STRICT_ARROW_UDF(TMakeTzDate, TTzDate(TAutoMap<TResource<TMResource
     auto& builder = valueBuilder->GetDateBuilder();
     auto& storage = Reference<TMResourceName>(args[0]);
     try {
-        TUnboxedValuePod result(storage.ToDate(builder, true));
+        TUnboxedValuePod result(storage.ToDate(builder, /*local=*/true));
         result.SetTimezoneId(storage.TimezoneId);
         return result;
     } catch (const std::exception& e) {
@@ -1353,7 +1353,7 @@ SIMPLE_STRICT_UDF(TConvert, TResource<TM64ResourceName>(TAutoMap<TResource<TMRes
 
 SIMPLE_STRICT_UDF(TMakeDate32, TDate32(TAutoMap<TResource<TM64ResourceName>>)) {
     auto& storage = Reference<TM64ResourceName>(args[0]);
-    return TUnboxedValuePod(storage.ToDate32(valueBuilder->GetDateBuilder(), false));
+    return TUnboxedValuePod(storage.ToDate32(valueBuilder->GetDateBuilder(), /*local=*/false));
 }
 
 SIMPLE_STRICT_UDF(TMakeDatetime64, TDatetime64(TAutoMap<TResource<TM64ResourceName>>)) {
@@ -1370,7 +1370,7 @@ SIMPLE_STRICT_UDF(TMakeTzDate32, TTzDate32(TAutoMap<TResource<TM64ResourceName>>
     auto& builder = valueBuilder->GetDateBuilder();
     auto& storage = Reference<TM64ResourceName>(args[0]);
     try {
-        TUnboxedValuePod result(storage.ToDate32(builder, true));
+        TUnboxedValuePod result(storage.ToDate32(builder, /*local=*/true));
         result.SetTimezoneId(storage.TimezoneId);
         return result;
     } catch (const std::exception& e) {

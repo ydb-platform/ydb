@@ -59,7 +59,6 @@ private:
     TCallbackList<void(const TError&)> Handlers_;
     THashSet<TWeakPtr<TCancelableContext>> PropagateToContexts_;
     THashSet<TFuture<void>> PropagateToFutures_;
-
 };
 
 DEFINE_REFCOUNTED_TYPE(TCancelableContext)

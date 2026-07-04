@@ -2,6 +2,12 @@
 {#- Include macroses.jinja then include use_macroses.jinja not work! -#}
 {#- That is why all common macroses here -#}
 
+{#-
+    Feature flags:
+    auto_resource_sets = true - auto create additional resources.srcDir(...).include('**/*') for each java.srcDir with 'resources' in it
+    named_tests = true - make different named sourceSets for each test with depends between tests
+-#}
+
 {%- macro PatchRootCommon(path, out_root) -%}
 {#- Replace (export_root / curdir) => (BINDIR), (export_root) ==> (BUILD_ROOT in ymake) to baseBuildDir in Gradle - root of all build folders for modules -#}
 "{{ path|replace(export_root + "/" + curdir, "$projectBuildDir")|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, out_root)|replace(output_root, out_root) }}"
@@ -80,6 +86,35 @@
     environment("{{ key_and_value[0] }}", "{{ key_and_value[1] }}")
 {%-             endif -%}
 {%-         endfor -%}
+{%-     endif -%}
+{%- endmacro -%}
+
+{%- set NS_TEST = "test" -%}
+{%- set NS_SRC_TEST = "src/test" -%}
+
+{%- macro TestRelDir2SourceSetName(test_reldir) -%}
+{%-     if (test_reldir == NS_TEST) or (test_reldir == NS_SRC_TEST) -%}
+{{ NS_TEST }}
+{%-     else -%}
+{#-
+{%-         set dir_and_basename = rsplit(test_reldir, '/', 2) -%}
+{%-         set testname = dir_and_basename|last|replace('.', '')|replace('-', '_') -%}
+{%-         set parts = split(testname, '_') -%}
+-#}
+{%-         set testname = test_reldir|replace('.', '')|replace('-', '/')|replace('_', '/') -%}
+{%-         set parts = split(testname, '/') -%}
+{%-         for part in parts -%}
+{%-             if loop.first -%}{{ part }}{%- else -%}{{ part|capitalize }}{%- endif -%}
+{%-         endfor -%}
+{%-     endif -%}
+{%- endmacro -%}
+
+{%- macro SourceSetName(extra_target) -%}
+{%-     set test_reldir = extra_target.test_reldir -%}
+{%-     if (test_reldir is defined) and (test_reldir != "") -%}
+{{ TestRelDir2SourceSetName(test_reldir) }}
+{%-     else -%}
+{{ NS_TEST }}
 {%-     endif -%}
 {%- endmacro -%}
 

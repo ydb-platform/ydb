@@ -60,10 +60,11 @@
 +    'region': ('region', 'AWS_DEFAULT_REGION', 'yandex', None),
 --- contrib/python/botocore/py3/botocore/loaders.py	(index)
 +++ contrib/python/botocore/py3/botocore/loaders.py	(working tree)
-@@ -101,14 +101,17 @@ information that doesn't quite fit in the original models, but is still needed
+@@ -101,15 +101,17 @@ information that doesn't quite fit in the original models, but is still needed
  for the sdk. For instance, additional operation parameters might be added here
  which don't represent the actual service api.
  """
+-
 +import collections
  import logging
  import os

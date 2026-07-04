@@ -298,7 +298,7 @@ private:
                 const TInstant now = TActivationContext::Now();
                 for (auto&& message : messages) {
                     bytesRead += message.Data.size();
-                    if (QueueCounters_) {
+                    if (QueueCounters_ && !ShouldReportTopicActionMetricsToPqrb()) {
                         const ui32 receiveCount = message.ApproximateReceiveCount ? message.ApproximateReceiveCount.value() : 1;
                         COLLECT_HISTOGRAM_COUNTER(QueueCounters_, MessageReceiveAttempts, receiveCount);
                         COLLECT_HISTOGRAM_COUNTER(QueueCounters_, receive_attempts_count_rate, receiveCount);
@@ -364,7 +364,7 @@ private:
                 }
                 }
 
-                if (QueueCounters_) {
+                if (QueueCounters_ && !ShouldReportTopicActionMetricsToPqrb()) {
                     ADD_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_Count, received_count_per_second, messages.size());
                     ADD_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_BytesRead, received_bytes_per_second, bytesRead);
                 }

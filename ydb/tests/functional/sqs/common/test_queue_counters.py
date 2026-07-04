@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import time
+
 from ydb.tests.library.sqs.test_base import KikimrSqsTestBase
 
 from ydb.tests.library.sqs.requests_client import SqsSendMessageParams
@@ -7,16 +9,7 @@ from ydb.tests.library.sqs.requests_client import SqsSendMessageParams
 
 class TestSqsGettingCounters(KikimrSqsTestBase):
 
-    def test_counters_when_sending_reading_deleting(self):
-        queue_url = self._create_queue_and_assert(self.queue_name, False, True)
-
-        message_payload = "foobar"
-        self._sqs_api.send_message(queue_url, message_payload)
-        handle = self._read_while_not_empty(queue_url, 1)[0]["ReceiptHandle"]
-        self._sqs_api.delete_message(queue_url, handle)
-
-        sqs_counters = self._get_sqs_counters()
-
+    def _assert_counters_when_sending_reading_deleting(self, sqs_counters, message_payload):
         send_message_count = self._get_counter_value(sqs_counters, {
             'queue': self.queue_name,
             'sensor': 'SendMessage_Count',
@@ -64,6 +57,26 @@ class TestSqsGettingCounters(KikimrSqsTestBase):
             'sensor': 'ClientMessageProcessing_Duration',
         })['hist']['buckets']
         assert any(map(lambda x: x > 0, client_message_processing_duration_buckets))
+
+    def test_counters_when_sending_reading_deleting(self):
+        queue_url = self._create_queue_and_assert(self.queue_name, False, True)
+
+        message_payload = "foobar"
+        self._sqs_api.send_message(queue_url, message_payload)
+        handle = self._read_while_not_empty(queue_url, 1)[0]["ReceiptHandle"]
+        self._sqs_api.delete_message(queue_url, handle)
+
+        attempts = 20
+        while attempts:
+            attempts -= 1
+            sqs_counters = self._get_sqs_counters()
+            try:
+                self._assert_counters_when_sending_reading_deleting(sqs_counters, message_payload)
+                return
+            except AssertionError:
+                if not attempts:
+                    raise
+                time.sleep(0.5)
 
     def test_counters_when_sending_duplicates(self):
         fifo_queue_name = self.queue_name + ".fifo"

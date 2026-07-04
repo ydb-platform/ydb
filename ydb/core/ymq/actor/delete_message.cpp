@@ -257,7 +257,7 @@ private:
             ProcessAnswer(Response_.MutableDeleteMessage(), messageStatus);
         }
 
-        if (QueueCounters_ && deletedCount > 0) {
+        if (QueueCounters_ && deletedCount > 0 && !ShouldReportTopicActionMetricsToPqrb()) {
             ADD_COUNTER_COUPLE(QueueCounters_, DeleteMessage_Count, deleted_count_per_second, deletedCount);
         }
 

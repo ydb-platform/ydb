@@ -1099,8 +1099,8 @@ void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
         UpdateLockedGroupsIdInChildPartitions(false);
         return;
     }
-    NotifyPQRB(true);
     UpdateMetrics();
+    NotifyPQRB(true);
     Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
 }
 

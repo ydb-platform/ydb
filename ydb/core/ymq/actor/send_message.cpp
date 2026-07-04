@@ -392,6 +392,9 @@ private:
     }
 
     void ReportTopicSendCounters() {
+        if (ShouldReportTopicActionMetricsToPqrb()) {
+            return;
+        }
         if (!QueueCounters_ || (!TopicSendHasWritten_ && !TopicSendHasDedup_)) {
             return;
         }

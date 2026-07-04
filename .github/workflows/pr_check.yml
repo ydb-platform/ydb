@@ -19,6 +19,7 @@ on:
       - 'main'
       - 'stable-*'
       - 'stream-nb-*'
+      - 'ci-test*'  # TEMP smoke: trigger postcommit path on test branches
     paths-ignore:
       - 'ydb/docs/**'
 # Only 'rebase-and-check' and 'ok-to-test' labels should re-trigger checks.

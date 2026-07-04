@@ -6,6 +6,7 @@
 
 | Язык | Репозиторий на GitHub | Справка по API |
 |----------|------------|----------------|
+<<<<<<< HEAD
 {% if oss %}
 | C++ | [ydb-platform/ydb/tree/main/ydb/public/sdk/cpp](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp) | N/A |
 {% endif %}
@@ -14,8 +15,18 @@
 | Java | [ydb-platform/ydb-java-sdk](https://github.com/ydb-platform/ydb-java-sdk) | N/A |
 | Node.js | [ydb-platform/ydb-nodejs-sdk](https://github.com/ydb-platform/ydb-nodejs-sdk) | N/A |
 | PHP | [ydb-platform/ydb-php-sdk](https://github.com/ydb-platform/ydb-php-sdk) | N/A |
+=======
+| Go | [ydb-platform/ydb-go-sdk](https://github.com/ydb-platform/ydb-go-sdk) | [https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3) |
+| Java | [ydb-platform/ydb-java-sdk](https://github.com/ydb-platform/ydb-java-sdk) | N/A |
+>>>>>>> b1a26609898 (add .deb package docs (#44456))
 | Python | [ydb-platform/ydb-python-sdk](https://github.com/ydb-platform/ydb-python-sdk) | [https://ydb-platform.github.io/ydb-python-sdk](https://ydb-platform.github.io/ydb-python-sdk/) |
+| С# | [ydb-platform/ydb-dotnet-sdk](https://github.com/ydb-platform/ydb-dotnet-sdk) | N/A |
+| JavaScript | [ydb-platform/ydb-js-sdk](https://github.com/ydb-platform/ydb-js-sdk) | [https://ydb.js.org](https://ydb.js.org) |
 | Rust | [ydb-platform/ydb-rs-sdk](https://github.com/ydb-platform/ydb-rs-sdk) | N/A |
+{% if oss %}
+| C++ | [ydb-platform/ydb-cpp-sdk](https://github.com/ydb-platform/ydb-cpp-sdk) | N/A |
+{% endif %}
+| PHP | [ydb-platform/ydb-php-sdk](https://github.com/ydb-platform/ydb-php-sdk) | N/A |
 
 Документация по SDK содержит следующие разделы:
 

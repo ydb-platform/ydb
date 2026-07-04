@@ -973,8 +973,16 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         assert_that(int(attributes['ApproximateNumberOfMessagesDelayed']), equal_to(0))
 
         self._send_message_and_assert(queue_url, 'test', delay_seconds=900, seq_no='1' if is_fifo else None, group_id='group' if is_fifo else None)
-        attributes = self._sqs_api.get_queue_attributes(queue_url, ['ApproximateNumberOfMessagesDelayed'])
-        assert_that(int(attributes['ApproximateNumberOfMessagesDelayed']), equal_to(1))
+        attempts = 10
+        while attempts:
+            attempts -= 1
+            attributes = self._sqs_api.get_queue_attributes(queue_url, ['ApproximateNumberOfMessagesDelayed'])
+            delayed_count = int(attributes['ApproximateNumberOfMessagesDelayed'])
+            if delayed_count != 1 and attempts:
+                time.sleep(0.5)
+                continue
+            assert_that(delayed_count, equal_to(1))
+            break
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)

@@ -22,6 +22,11 @@ items:
   include:
     mode: link
     path: from/postgresql/toc-postgresql.yaml
+- name: Greenplum
+  href: from/greenplum/index.md
+  include:
+    mode: link
+    path: from/greenplum/toc-greenplum.yaml
 - name: MySQL / MariaDB
   href: from/mysql/index.md
   include:
@@ -37,28 +42,8 @@ items:
   include:
     mode: link
     path: from/clickhouse/toc-clickhouse.yaml
-- name: Greenplum
-  href: from/greenplum/index.md
-  include:
-    mode: link
-    path: from/greenplum/toc-greenplum.yaml
 - name: Oracle Database
   href: from/oracle/index.md
   include:
     mode: link
     path: from/oracle/toc-oracle.yaml
-- name: IBM Db2
-  href: from/db2/index.md
-  include:
-    mode: link
-    path: from/db2/toc-db2.yaml
-- name: IBM Informix
-  href: from/informix/index.md
-  include:
-    mode: link
-    path: from/informix/toc-informix.yaml
-- name: SQLite
-  href: from/sqlite/index.md
-  include:
-    mode: link
-    path: from/sqlite/toc-sqlite.yaml

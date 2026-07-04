@@ -54,4 +54,4 @@ spark-shell --master 'local[*]' \
 
 ### JDBC-драйвер источника
 
-Драйвер СУБД-источника добавляется вторым артефактом в `--packages` или через `--jars /path/to/driver.jar` (Oracle, Db2, Informix часто только так).
+Драйвер СУБД-источника добавляется вторым артефактом в `--packages` или через `--jars /path/to/driver.jar` (Oracle и часть enterprise-СУБД часто только так).

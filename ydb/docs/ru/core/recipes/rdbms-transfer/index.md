@@ -21,14 +21,11 @@
 | СУБД | Обзор рецептов |
 | --- | --- |
 | PostgreSQL | [from/postgresql/](from/postgresql/index.md) |
+| Greenplum | [from/greenplum/](from/greenplum/index.md) |
 | MySQL / MariaDB | [from/mysql/](from/mysql/index.md) |
 | Microsoft SQL Server | [from/mssql/](from/mssql/index.md) |
 | ClickHouse | [ClickHouse](from/clickhouse/index.md) |
-| Greenplum | [from/greenplum/](from/greenplum/index.md) |
 | Oracle Database | [from/oracle/](from/oracle/index.md) |
-| IBM Db2 | [from/db2/](from/db2/index.md) |
-| IBM Informix | [from/informix/](from/informix/index.md) |
-| SQLite | [from/sqlite/](from/sqlite/index.md) |
 
 ## Смотрите также
 

@@ -279,9 +279,10 @@ public:
                     status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Dict), expected object, but got " << JsonTypeToString(cellType));
                     return false;
                 }
+                auto jsonObject = jsonValue.get_object();
                 {
                     bool isEmpty;
-                    CHECK_JSON_ERROR(jsonValue.get_object().is_empty().get(isEmpty)) {
+                    CHECK_JSON_ERROR(jsonObject.is_empty().get(isEmpty)) {
                         SetParsingError(error, jsonValue, "parse as object", status);
                         return false;
                     }
@@ -305,7 +306,7 @@ public:
                 status = TStatus::Success();
                 resultValue = HolderFactory->CreateDirectHashedDictHolder(
                     [&, this](auto& map) {
-                        for (auto elt : jsonValue.get_object()) {
+                        for (auto elt : jsonObject) {
                             std::string_view name;
                             {
                                 CHECK_JSON_ERROR(elt.escaped_key().get(name)) {

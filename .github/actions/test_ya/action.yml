@@ -144,8 +144,13 @@ runs:
 
     - name: Resolve analytics job name
       shell: bash
+      env:
+        WORKFLOW_NAME: ${{ github.workflow }}
+        BUILD_PRESET: ${{ inputs.build_preset }}
+        EVENT_NAME: ${{ github.event_name }}
       run: |
-        echo "ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "${{ github.workflow }}" "${{ inputs.build_preset }}" "${{ github.event_name }}")" >> "$GITHUB_ENV"
+        ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
+        echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
 
     - name: Setup cache
       shell: bash

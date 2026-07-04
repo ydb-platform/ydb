@@ -1361,7 +1361,7 @@ def main() -> None:
     p.add_argument(
         "--maximize-reqs-for-timeout-tests",
         action="store_true",
-        help="For suites crossing test-duration threshold (SMALL=60s, MEDIUM=600s, LARGE=1800s) use size max: SMALL=1, MEDIUM=4, LARGE=4",
+        help="For suites crossing test-duration threshold (SMALL=60s, MEDIUM=600s, LARGE=3600s) use size max: SMALL=1, MEDIUM=4, LARGE=4",
     )
     p.add_argument("--repo-root", type=Path, default=None, help="Repo root to read ya.make REQUIREMENTS for synthetic CPU/RAM when report has no metrics")
     p.add_argument(

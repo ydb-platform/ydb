@@ -72,7 +72,7 @@ def test_cpu_is_p95_only_no_duration_boost():
         runs,
         requirements_cache={suite: {"cpu_cores": 2, "size": "LARGE", "split_factor": 3}},
         report_status_by_suite={suite: {"tests": _status(), "chunks": _status()}},
-        max_test_duration_sec_by_suite={suite: 2000.0},  # >= LARGE 1800 -> long test present
+        max_test_duration_sec_by_suite={suite: 4000.0},  # >= LARGE 3600 -> long test present
         test_duration_stats_by_suite={suite: {"chunk_loads": []}},
     ))
     r = recs[suite]
@@ -90,23 +90,50 @@ def test_split_raised_proactively_without_timeout():
         _run(suite, 0, 0, 1000, cores=2.0),
         _run(suite, 1, 0, 1000, cores=2.0),
     ]
+    # Overpacked chunk: many small tests summing to 7200s (>budget 3528), heaviest single
+    # test only 500s -> split CAN help.
     chunk_loads = [
-        {"sum_duration_sec": 3600.0, "chunk_idx": 0, "chunk_group": None},
-        {"sum_duration_sec": 200.0, "chunk_idx": 1, "chunk_group": None},
+        {"sum_duration_sec": 7200.0, "max_test_duration_sec": 500.0, "chunk_idx": 0, "chunk_group": None},
+        {"sum_duration_sec": 200.0, "max_test_duration_sec": 200.0, "chunk_idx": 1, "chunk_group": None},
     ]
     recs = _by_suite(build_cpu_recommendations(
         runs,
         requirements_cache={suite: {"cpu_cores": 2, "size": "LARGE", "split_factor": 2}},
         report_status_by_suite={suite: {"tests": _status(timeouts=0), "chunks": _status()}},
-        max_test_duration_sec_by_suite={suite: 3600.0},
+        max_test_duration_sec_by_suite={suite: 500.0},
         test_duration_stats_by_suite={suite: {"chunk_loads": chunk_loads}},
     ))
     r = recs[suite]
     assert r["split_severity"] == "at_risk", r["recommended_split_explain"]
     assert r["recommended_split_action"] == "raise"
     assert r["recommended_split"] > r["chunks_count"]
-    # heaviest chunk 3600s vs target 900s -> at least 3 extra chunks
+    # heaviest chunk 7200s vs target 1800s -> at least 3 extra chunks
     assert r["recommended_split"] >= r["chunks_count"] + 3
+    assert r["single_test_blocks_split"] is False
+
+
+def test_single_test_blocks_split():
+    """A single test at/above the budget must flag single_test_blocks_split (split useless)."""
+    suite = "s/singletest"
+    runs = [
+        _run(suite, 0, 0, 1000, cores=2.0),
+        _run(suite, 1, 0, 1000, cores=2.0),
+    ]
+    # One chunk is a single 3601s test (> budget 3528) -> cannot be split further.
+    chunk_loads = [
+        {"sum_duration_sec": 3601.0, "max_test_duration_sec": 3601.0, "chunk_idx": 0, "chunk_group": None},
+        {"sum_duration_sec": 300.0, "max_test_duration_sec": 300.0, "chunk_idx": 1, "chunk_group": None},
+    ]
+    recs = _by_suite(build_cpu_recommendations(
+        runs,
+        requirements_cache={suite: {"cpu_cores": 2, "size": "LARGE", "split_factor": 2}},
+        report_status_by_suite={suite: {"tests": _status(timeouts=2), "chunks": _status()}},
+        max_test_duration_sec_by_suite={suite: 3601.0},
+        test_duration_stats_by_suite={suite: {"chunk_loads": chunk_loads}},
+    ))
+    r = recs[suite]
+    assert r["single_test_blocks_split"] is True, r["recommended_split_explain"]
+    assert "SPLIT_FACTOR cannot help" in r["recommended_split_tooltip"]
 
 
 def test_cpu_lower_suppressed_under_split_pressure():
@@ -117,14 +144,14 @@ def test_cpu_lower_suppressed_under_split_pressure():
         _run(suite, 1, 0, 1000, cores=2.0),
     ]
     chunk_loads = [
-        {"sum_duration_sec": 3600.0, "chunk_idx": 0, "chunk_group": None},
+        {"sum_duration_sec": 7200.0, "max_test_duration_sec": 500.0, "chunk_idx": 0, "chunk_group": None},
     ]
     recs = _by_suite(build_cpu_recommendations(
         runs,
         # ya.make reserves cpu:8 but observed p95 is ~2 -> would normally be "lower"
         requirements_cache={suite: {"cpu_cores": 8, "size": "LARGE", "split_factor": 2}},
         report_status_by_suite={suite: {"tests": _status(timeouts=0), "chunks": _status()}},
-        max_test_duration_sec_by_suite={suite: 3600.0},
+        max_test_duration_sec_by_suite={suite: 500.0},
         test_duration_stats_by_suite={suite: {"chunk_loads": chunk_loads}},
     ))
     r = recs[suite]
@@ -173,6 +200,7 @@ def _all_tests():
     return [
         test_cpu_is_p95_only_no_duration_boost,
         test_split_raised_proactively_without_timeout,
+        test_single_test_blocks_split,
         test_cpu_lower_suppressed_under_split_pressure,
         test_ram_recommendation_set_for_high_memory,
         test_ram_ok_when_reservation_fits,

@@ -20,7 +20,7 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
 
-#define LOG_PREFIX "Direct read proxy " << ctx.SelfID.ToString() << ": " PQ_LOG_PREFIX
+#define LOG_PREFIX (TStringBuilder() << "Direct read proxy " << ctx.SelfID.ToString() << ": " << PQ_LOG_PREFIX)
 
 namespace NKikimr::NGRpcProxy::V1 {
 

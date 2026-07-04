@@ -220,9 +220,16 @@ private:
             if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
                 return TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::Failed;
             }
-            return message.Success ?
-                  TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK
-                : TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::NotFound;
+            switch (message.Status) {
+                case NPQ::NMLP::EOperationResult::Success:
+                    return TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK;
+                case NPQ::NMLP::EOperationResult::NotFound:
+                    return TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::NotFound;
+                case NPQ::NMLP::EOperationResult::NotInFlight:
+                case NPQ::NMLP::EOperationResult::Failed:
+                    return TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::Failed;
+            }
+            Y_UNREACHABLE();
         };
 
         ui32 deletedCount = 0;

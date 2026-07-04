@@ -9,12 +9,16 @@
 #include <ydb/core/util/backoff.h>
 
 #include <type_traits>
-#include <unordered_set>
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
 #define Service TBase::Service
 #define LogBuilder TBase::LogBuilder
 
 namespace NKikimr::NPQ::NMLP {
+
+inline EOperationResult FromProto(NKikimrPQ::EMLPOperationResult result) {
+    return static_cast<EOperationResult>(static_cast<ui8>(result));
+}
 
 template<typename TRequest, typename TResponse, typename TSettings>
 class TChangerActor : public TBaseActor<TChangerActor<TRequest, TResponse, TSettings>>
@@ -132,12 +136,9 @@ private:
         const auto& record = ev->Get()->Record;
 
         partitionInfo.Success = true;
-        partitionInfo.HasOffsetListsInResponse = !record.GetSuccessfulOffsets().empty() || !record.GetFailedOffsets().empty();
-        for (auto offset : record.GetSuccessfulOffsets()) {
-            partitionInfo.SuccessfulOffsets.insert(offset);
-        }
-        for (auto offset : record.GetFailedOffsets()) {
-            partitionInfo.FailedOffsets.insert(offset);
+        partitionInfo.HasOffsetResults = record.OffsetResultsSize() > 0;
+        for (const auto& [offset, status] : record.GetOffsetResults()) {
+            partitionInfo.OffsetResults.emplace(offset, FromProto(status));
         }
 
         --PendingRequests;
@@ -218,17 +219,18 @@ private:
         auto response = std::make_unique<TEvChangeResponse>();
         for (auto& [partitionId, partitionInfo]: PendingPartitions) {
             for (auto offset : partitionInfo.Offsets) {
-                bool success = false;
+                EOperationResult status = EOperationResult::Failed;
                 if (partitionInfo.Error) {
-                    success = false;
-                } else if (!partitionInfo.HasOffsetListsInResponse) {
-                    // Backward compatibility: old tablets don't populate offset lists.
+                    status = EOperationResult::Failed;
+                } else if (!partitionInfo.HasOffsetResults) {
+                    // Backward compatibility: old tablets don't populate offset results.
                     // Can be removed in 27-1.
-                    success = partitionInfo.Success;
-                } else {
-                    success = partitionInfo.SuccessfulOffsets.contains(offset);
+                    status = partitionInfo.Success ? EOperationResult::Success : EOperationResult::Failed;
+                } else if (const auto statusIt = partitionInfo.OffsetResults.find(offset);
+                           statusIt != partitionInfo.OffsetResults.end()) {
+                    status = statusIt->second;
                 }
-                response->Messages.emplace_back(TMessageId(partitionId, offset), success);
+                response->Messages.emplace_back(TMessageId(partitionId, offset), status);
             }
         }
 
@@ -254,22 +256,21 @@ private:
     struct TRequestInfo {
         bool Error = false;
         bool Success = false;
-        bool HasOffsetListsInResponse = false;
+        bool HasOffsetResults = false;
         ui64 TabletId = 0;
         std::vector<ui64> Offsets;
-        std::unordered_set<ui64> SuccessfulOffsets;
-        std::unordered_set<ui64> FailedOffsets;
+        absl::flat_hash_map<ui64, EOperationResult> OffsetResults;
     };
 
     // partitionId -> request info
-    std::unordered_map<ui32, TRequestInfo> PendingPartitions;
+    absl::flat_hash_map<ui32, TRequestInfo> PendingPartitions;
 
     struct TPipeInfo {
         ui64 Cookie = 0;
         bool Subscribed = false;
     };
     // tabletId -> cookie
-    std::unordered_map<ui64, TPipeInfo> Pipes;
+    absl::flat_hash_map<ui64, TPipeInfo> Pipes;
 
     size_t PendingRequests = 0;
 };

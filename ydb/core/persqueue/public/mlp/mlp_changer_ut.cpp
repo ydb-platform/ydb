@@ -58,7 +58,7 @@ Y_UNIT_TEST(PartitionNotExists) {
     UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 13);
     UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 17);
-    UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Success, false);
+    UNIT_ASSERT(result->Messages[0].Status == EOperationResult::Failed);
 }
 
 Y_UNIT_TEST(CommitTest) {
@@ -84,7 +84,7 @@ Y_UNIT_TEST(CommitTest) {
     UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
     UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 0);
-    UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Success, true);
+    UNIT_ASSERT(result->Messages[0].Status == EOperationResult::Success);
 
     auto describe = setup->DescribeConsumer("/Root/topic1", "mlp-consumer");
     UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitions()[0].GetPartitionConsumerStats()->GetCommittedOffset(), 1);
@@ -113,7 +113,7 @@ Y_UNIT_TEST(DoubleCommitTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 0);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Success, attempt == 0);
+        UNIT_ASSERT(result->Messages[0].Status == (attempt == 0 ? EOperationResult::Success : EOperationResult::NotFound));
     }
 
     auto describe = setup->DescribeConsumer("/Root/topic1", "mlp-consumer");
@@ -164,7 +164,7 @@ Y_UNIT_TEST(ReadAndReleaseTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 1);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Success, true);
+        UNIT_ASSERT(result->Messages[0].Status == EOperationResult::Success);
     }
 
     {
@@ -182,7 +182,7 @@ Y_UNIT_TEST(ReadAndReleaseTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 0);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Success, true);
+        UNIT_ASSERT(result->Messages[0].Status == EOperationResult::Success);
     }
 
     Sleep(TDuration::Seconds(2));

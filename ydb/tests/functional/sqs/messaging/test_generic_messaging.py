@@ -623,7 +623,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         )
         receipt_handle = self.read_result[0]['ReceiptHandle']
         logging.debug('Received receipt handle: {}'.format(receipt_handle))
-        time.sleep(2)
+        time.sleep(8)
 
         def call_change_visibility():
             self._sqs_api.change_message_visibility(self.queue_url, receipt_handle, 1000)

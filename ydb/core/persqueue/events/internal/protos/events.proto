@@ -95,10 +95,16 @@ message TEvMLPCommitRequest {
     repeated uint64 Offset = 4;
 }
 
+enum EMLPOperationResult {
+    Success = 0;
+    NotFound = 1;
+    NotInFlight = 2;
+    Failed = 3;
+}
+
 // From PQTablet
 message TEvMLPCommitResponse {
-    repeated uint64 SuccessfulOffsets = 1;
-    repeated uint64 FailedOffsets = 2;
+    map<uint64, EMLPOperationResult> OffsetResults = 1;
 }
 
 // To PQTablet
@@ -112,8 +118,7 @@ message TEvMLPUnlockRequest {
 
 // From PQTablet
 message TEvMLPUnlockResponse {
-    repeated uint64 SuccessfulOffsets = 1;
-    repeated uint64 FailedOffsets = 2;
+    map<uint64, EMLPOperationResult> OffsetResults = 1;
 }
 
 // To PQTablet
@@ -131,8 +136,7 @@ message TEvMLPChangeMessageDeadlineRequest {
 
 // From PQTablet
 message TEvMLPChangeMessageDeadlineResponse {
-    repeated uint64 SuccessfulOffsets = 1;
-    repeated uint64 FailedOffsets = 2;
+    map<uint64, EMLPOperationResult> OffsetResults = 1;
 }
 
 // To PQTablet

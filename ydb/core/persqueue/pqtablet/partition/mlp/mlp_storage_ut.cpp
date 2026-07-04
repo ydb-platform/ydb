@@ -195,11 +195,11 @@ struct TUtils {
     }
 
     bool Commit(ui64 offset) {
-        return Storage.Commit(offset);
+        return Storage.Commit(offset) == EOperationResult::Success;
     }
 
     bool Unlock(ui64 offset) {
-        return Storage.Unlock(offset);
+        return Storage.Unlock(offset) == EOperationResult::Success;
     }
 
     void AddMessageWithGroup(ui64 offset, ui32 groupHash) {
@@ -304,7 +304,7 @@ Y_UNIT_TEST(CommitToEmptyStorage) {
     TStorage storage(CreateDefaultTimeProvider(), {});
 
     auto result = storage.Commit(123);
-    UNIT_ASSERT(!result);
+    UNIT_ASSERT(result == EOperationResult::NotFound);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
@@ -330,7 +330,7 @@ Y_UNIT_TEST(UnlockToEmptyStorage) {
     TStorage storage(CreateDefaultTimeProvider(), {});
 
     auto result = storage.Unlock(123);
-    UNIT_ASSERT(!result);
+    UNIT_ASSERT(result == EOperationResult::NotFound);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
@@ -356,7 +356,7 @@ Y_UNIT_TEST(ChangeDeadlineEmptyStorage) {
     TStorage storage(CreateDefaultTimeProvider(), {});
 
     auto result = storage.ChangeMessageDeadline(123, TInstant::Now());
-    UNIT_ASSERT(!result);
+    UNIT_ASSERT(result == EOperationResult::NotFound);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
@@ -449,7 +449,7 @@ Y_UNIT_TEST(AddBatchedMessageToEmptyStorage) {
         auto empty = storage.Next(timeProvider->Now() + TDuration::Seconds(30), position);
         UNIT_ASSERT(!empty);
 
-        UNIT_ASSERT(storage.Commit(3));
+        UNIT_ASSERT(storage.Commit(3) == EOperationResult::Success);
         UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), 7);
     };
 
@@ -998,7 +998,7 @@ Y_UNIT_TEST(CommitLockedMessage_WithoutKeepMessageOrder) {
     }
     {
         auto result = storage.Commit(3);
-        UNIT_ASSERT(result);
+        UNIT_ASSERT(result == EOperationResult::Success);
     }
 
     auto it = storage.begin();
@@ -1042,7 +1042,7 @@ Y_UNIT_TEST(CommitLockedMessage_WithKeepMessageOrder) {
     }
 
     auto result = storage.Commit(3);
-    UNIT_ASSERT(result);
+    UNIT_ASSERT(result == EOperationResult::Success);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
@@ -1071,7 +1071,7 @@ Y_UNIT_TEST(CommitUnlockedMessage) {
     storage.AddMessage(3, true, 5, writeTimestamp);
 
     auto result = storage.Commit(3);
-    UNIT_ASSERT(result);
+    UNIT_ASSERT(result == EOperationResult::Success);
 
     auto it = storage.begin();
     UNIT_ASSERT(it != storage.end());
@@ -1112,11 +1112,11 @@ Y_UNIT_TEST(CommitCommittedMessage) {
 
     {
         auto result = storage.Commit(3);
-        UNIT_ASSERT(result);
+        UNIT_ASSERT(result == EOperationResult::Success);
     }
     {
         auto result = storage.Commit(3);
-        UNIT_ASSERT(!result);
+        UNIT_ASSERT(result == EOperationResult::NotFound);
     }
 
     auto it = storage.begin();
@@ -1163,7 +1163,7 @@ Y_UNIT_TEST(UnlockLockedMessage_WithoutKeepMessageOrder) {
     }
 
     auto result = storage.Unlock(3);
-    UNIT_ASSERT(result);
+    UNIT_ASSERT(result == EOperationResult::Success);
 
     auto it = storage.begin();
     UNIT_ASSERT(it != storage.end());
@@ -1205,7 +1205,7 @@ Y_UNIT_TEST(UnlockLockedMessage_WithKeepMessageOrder) {
     }
 
     auto result = storage.Unlock(3);
-    UNIT_ASSERT(result);
+    UNIT_ASSERT(result == EOperationResult::Success);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
@@ -1231,7 +1231,7 @@ Y_UNIT_TEST(UnlockUnlockedMessage) {
     storage.AddMessage(3, true, 5, TInstant::Now());
 
     auto result = storage.Unlock(3);
-    UNIT_ASSERT(!result);
+    UNIT_ASSERT(result == EOperationResult::NotInFlight);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
@@ -1261,11 +1261,11 @@ Y_UNIT_TEST(UnlockCommittedMessage) {
 
     {
         auto result = storage.Commit(3);
-        UNIT_ASSERT(result);
+        UNIT_ASSERT(result == EOperationResult::Success);
     }
 
     auto result = storage.Unlock(3);
-    UNIT_ASSERT(!result);
+    UNIT_ASSERT(result == EOperationResult::NotFound);
 
     auto it = storage.begin();
     UNIT_ASSERT(it != storage.end());
@@ -1313,7 +1313,7 @@ Y_UNIT_TEST(ChangeDeadlineLockedMessage) {
     timeProvider->Tick(TDuration::Seconds(1));
 
     auto result = storage.ChangeMessageDeadline(3, timeProvider->Now() + TDuration::Seconds(7));
-    UNIT_ASSERT(result);
+    UNIT_ASSERT(result == EOperationResult::Success);
 
     auto it = storage.begin();
     UNIT_ASSERT(it != storage.end());
@@ -1345,7 +1345,7 @@ Y_UNIT_TEST(ChangeDeadlineUnlockedMessage) {
     storage.AddMessage(3, true, 5, TInstant::Now());
 
     auto result = storage.ChangeMessageDeadline(3, now + TDuration::Seconds(5));
-    UNIT_ASSERT(!result);
+    UNIT_ASSERT(result == EOperationResult::NotInFlight);
 
     auto deadline = storage.GetMessageDeadline(3);
     UNIT_ASSERT_VALUES_EQUAL(deadline, TInstant::Zero());
@@ -1615,7 +1615,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Committed) {
         storage.AddMessage(3, true, 5, writeTimestamp);
 
         auto r = storage.Commit(3);
-        UNIT_ASSERT(r);
+        UNIT_ASSERT(r == EOperationResult::Success);
 
         auto batch = storage.ExtractBatch();
         UNIT_ASSERT_VALUES_EQUAL(batch.AddedMessageCount(), 1);
@@ -3333,7 +3333,7 @@ Y_UNIT_TEST(FairnessWithRetention) {
         UNIT_ASSERT_C(result.has_value(), LabeledOutput(i));
         UNIT_ASSERT_C(result->Offset != 0, "expired offset 0 must never be returned");
         seen.insert(result->Offset);
-        UNIT_ASSERT(storage.Commit(result->Offset));
+        UNIT_ASSERT(storage.Commit(result->Offset) == EOperationResult::Success);
     }
     UNIT_ASSERT_VALUES_EQUAL(seen.size(), 2);
     UNIT_ASSERT(seen.contains(1) && seen.contains(2));
@@ -3370,7 +3370,7 @@ Y_UNIT_TEST(FairnessWithDlq) {
     }
 
     // Commit the DLQ head; group A unblocks and its next message (offset 1) becomes eligible.
-    UNIT_ASSERT(storage.Commit(0));
+    UNIT_ASSERT(storage.Commit(0) == EOperationResult::Success);
     {
         auto candidates = ProbeCandidates(storage);
         UNIT_ASSERT_C(candidates.contains(1), "group A must be eligible after DLQ head committed");
@@ -3428,7 +3428,7 @@ Y_UNIT_TEST(FairnessSkipThenNoSkip) {
         ui32 g = group.at(offset);
         UNIT_ASSERT_VALUES_EQUAL_C(offset, nextExpectedInGroup.at(g), "FIFO within group violated");
         ++nextExpectedInGroup[g];
-        UNIT_ASSERT(storage.Commit(offset));
+        UNIT_ASSERT(storage.Commit(offset) == EOperationResult::Success);
     };
 
     // Phase 1: skip groups A and B, so only group C is served.
@@ -3669,7 +3669,9 @@ Y_UNIT_TEST(ReadAttemptChangeMessageDeadlineInvalidatesReplay) {
     const auto first = utils.ReadMessages(3, attemptId);
     UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1, 2}));
 
-    UNIT_ASSERT(utils.Storage.ChangeMessageDeadline(1, utils.TimeProvider->Now() + TDuration::Seconds(15)));
+    UNIT_ASSERT(
+        utils.Storage.ChangeMessageDeadline(1, utils.TimeProvider->Now() + TDuration::Seconds(15))
+        == EOperationResult::Success);
     utils.Storage.ProccessDeadlines();
 
     const auto second = utils.ReadMessages(3, attemptId);

@@ -445,26 +445,38 @@ std::deque<TReadMessage> TStorage::Read(
     return messages;
 }
 
-bool TStorage::Commit(ui64 messageId) {
-    if (!DoCommit(messageId, Metrics.TotalCommittedMessageCount)) {
-        return false;
+EOperationResult TStorage::Commit(ui64 messageId) {
+    auto result = DoCommit(messageId, Metrics.TotalCommittedMessageCount);
+    if (result == EOperationResult::Success) {
+        MarkReceiveAttemptOffsetInvalid(messageId);
     }
-    MarkReceiveAttemptOffsetInvalid(messageId);
-    return true;
+    return result;
 }
 
-bool TStorage::Unlock(ui64 messageId) {
-    if (!DoUnlock(messageId)) {
-        return false;
-    }
-    MarkReceiveAttemptOffsetInvalid(messageId);
-    return true;
-}
-
-bool TStorage::ChangeMessageDeadline(ui64 messageId, TInstant deadline) {
+EOperationResult TStorage::Unlock(ui64 messageId) {
     auto [message, _] = GetMessageInt(messageId);
     if (!message) {
-        return false;
+        return EOperationResult::NotFound;
+    }
+
+    switch (message->GetStatus()) {
+        case EMessageStatus::Locked:
+            DoUnlock(messageId, *message);
+            MarkReceiveAttemptOffsetInvalid(messageId);
+            return EOperationResult::Success;
+        case EMessageStatus::Committed:
+            return EOperationResult::NotFound;
+        case EMessageStatus::Unprocessed:
+            return EOperationResult::NotInFlight;
+        default:
+            return EOperationResult::Failed;
+    }
+}
+
+EOperationResult TStorage::ChangeMessageDeadline(ui64 messageId, TInstant deadline) {
+    auto [message, _] = GetMessageInt(messageId);
+    if (!message) {
+        return EOperationResult::NotFound;
     }
 
     switch (message->GetStatus()) {
@@ -476,10 +488,14 @@ bool TStorage::ChangeMessageDeadline(ui64 messageId, TInstant deadline) {
             message->DeadlineDelta = newDeadlineDelta;
 
             MarkReceiveAttemptOffsetInvalid(messageId);
-            return true;
+            return EOperationResult::Success;
         }
+        case EMessageStatus::Unprocessed:
+            return EOperationResult::NotInFlight;
+        case EMessageStatus::Committed:
+            return EOperationResult::NotFound;
         default:
-            return false;
+            return EOperationResult::Failed;
     }
 }
 
@@ -1339,10 +1355,14 @@ void TStorage::UpdateMessageLockingDurationMetrics(const TMessage& message) {
     Metrics.MessageLockingDuration.IncrementFor(lockingDuration.MilliSeconds());
 }
 
-bool TStorage::DoCommit(ui64 offset, size_t& totalMetrics) {
+EOperationResult TStorage::DoCommit(ui64 offset, size_t& totalMetrics) {
     auto [message, slowZone] = GetMessageInt(offset);
     if (!message) {
-        return false;
+        return EOperationResult::NotFound;
+    }
+
+    if (message->GetStatus() == EMessageStatus::Committed) {
+        return EOperationResult::NotFound;
     }
 
     UpdateMessageGroupOnMessageStatusChange(offset, *message, EMessageStatus::Committed);
@@ -1377,7 +1397,7 @@ bool TStorage::DoCommit(ui64 offset, size_t& totalMetrics) {
             ++totalMetrics;
             break;
         case EMessageStatus::Committed:
-            return false;
+            return EOperationResult::NotFound;
         case EMessageStatus::DLQ:
             ++Metrics.CommittedMessageCount;
             DLQMessages.erase(offset);
@@ -1398,18 +1418,18 @@ bool TStorage::DoCommit(ui64 offset, size_t& totalMetrics) {
 
     UpdateFirstUncommittedOffset();
 
-    return true;
+    return EOperationResult::Success;
 }
 
-bool TStorage::DoUnlock(ui64 offset) {
+EOperationResult TStorage::DoUnlock(ui64 offset) {
     auto [message, _] = GetMessageInt(offset, EMessageStatus::Locked);
     if (!message) {
-        return false;
+        return EOperationResult::Failed;
     }
 
     DoUnlock(offset, *message);
 
-    return true;
+    return EOperationResult::Success;
 }
 
 void TStorage::DoUnlock(ui64 offset, TMessage& message) {

@@ -2,9 +2,20 @@
 
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/library/actors/core/actorid.h>
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+
 namespace NKikimr::NPQ::NMLP {
+
+inline NKikimrPQ::EMLPOperationResult ToProto(EOperationResult result) {
+    return static_cast<NKikimrPQ::EMLPOperationResult>(static_cast<ui8>(result));
+}
+
+inline EOperationResult FromProto(NKikimrPQ::EMLPOperationResult result) {
+    return static_cast<EOperationResult>(static_cast<ui8>(result));
+}
 
 struct TDLQMessage {
     ui64 Offset;
@@ -28,15 +39,13 @@ struct TResult {
 
 struct TOffsetsResult : public TResult {
     TOffsetsResult(const NActors::TActorId& sender, ui64 cookie,
-                   std::vector<ui64>&& successfulOffsets, std::vector<ui64>&& failedOffsets = {})
+                   absl::flat_hash_map<ui64, EOperationResult>&& offsetResults = {})
         : TResult(sender, cookie)
-        , SuccessfulOffsets(std::move(successfulOffsets))
-        , FailedOffsets(std::move(failedOffsets))
+        , OffsetResults(std::move(offsetResults))
     {
     }
 
-    std::vector<ui64> SuccessfulOffsets;
-    std::vector<ui64> FailedOffsets;
+    absl::flat_hash_map<ui64, EOperationResult> OffsetResults;
 };
 
 using TCommitResult = TOffsetsResult;

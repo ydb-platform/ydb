@@ -223,9 +223,17 @@ private:
             if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
                 return TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::Failed;
             }
-            return message.Success ?
-                  TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::OK
-                : TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::Failed;
+            switch (message.Status) {
+                case NPQ::NMLP::EOperationResult::Success:
+                    return TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::OK;
+                case NPQ::NMLP::EOperationResult::NotFound:
+                    return TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::NotFound;
+                case NPQ::NMLP::EOperationResult::NotInFlight:
+                    return TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::NotInFly;
+                case NPQ::NMLP::EOperationResult::Failed:
+                    return TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::Failed;
+            }
+            Y_UNREACHABLE();
         };
 
         if (IsBatch_) {

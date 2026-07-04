@@ -14,6 +14,13 @@ class TUserToken;
 
 namespace NKikimr::NPQ::NMLP {
 
+enum class EOperationResult : ui8 {
+    Success = 0,
+    NotFound = 1,
+    NotInFlight = 2,
+    Failed = 3,
+};
+
 enum EEv : ui32 {
     EvReadResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::MLP),
     EvWriteResponse,
@@ -80,7 +87,7 @@ struct TEvChangeResponse : public NActors::TEventLocal<TEvChangeResponse, EEv::E
 
     struct TResult {
         TMessageId MessageId;
-        bool Success = false;
+        EOperationResult Status = EOperationResult::Failed;
     };
     std::vector<TResult> Messages;
 };

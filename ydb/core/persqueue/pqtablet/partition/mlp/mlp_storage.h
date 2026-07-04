@@ -3,6 +3,8 @@
 #include "mlp.h"
 #include "mlp_common.h"
 
+#include <ydb/core/persqueue/public/mlp/mlp.h>
+
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
@@ -266,11 +268,11 @@ public:
         size_t maxCount,
         const TString& receiveAttemptId
     );
-    bool Commit(ui64 message);
-    bool Unlock(ui64 message);
+    EOperationResult Commit(ui64 message);
+    EOperationResult Unlock(ui64 message);
     // For SQS compatibility
     // https://docs.amazonaws.cn/en_us/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
-    bool ChangeMessageDeadline(ui64 message, TInstant deadline);
+    EOperationResult ChangeMessageDeadline(ui64 message, TInstant deadline);
     bool Purge(ui64 endOffset);
     bool AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay = TDuration::Zero(), ui64 logicalMessageCount = 1);
     bool MarkDLQMoved(TDLQMessage message);
@@ -311,8 +313,8 @@ private:
     ui64 NormalizeDeadline(TInstant deadline);
 
     ui64 DoLock(ui64 offset, TMessage& message, TInstant deadline);
-    bool DoCommit(ui64 offset, size_t& totalMetrics);
-    bool DoUnlock(ui64 offset);
+    EOperationResult DoCommit(ui64 offset, size_t& totalMetrics);
+    EOperationResult DoUnlock(ui64 offset);
     void DoUnlock(ui64 offset, TMessage& message);
     bool DoUndelay(ui64 offset);
     TUpdateExternalLockedMessageGroupsResult DoUpdateExternalLockedMessageGroupsId(const NKikimrPQ::TExternalLockedMessageGroupsId&, bool loadState);

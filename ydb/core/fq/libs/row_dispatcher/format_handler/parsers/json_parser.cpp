@@ -481,6 +481,7 @@ private:
 
             case NKikimr::NMiniKQL::TTypeBase::EKind::Dict: {
                 if (!value.IsBoxed()) {
+                    Y_DEBUG_ABORT();
                     return false;
                 }
                 if (value.GetDictLength() == 0) { // special case: shared empty dict

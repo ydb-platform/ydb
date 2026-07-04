@@ -890,7 +890,7 @@ private:
         LongTxId = msg->GetLongTxId();
 
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Started LongTx",
-            {"longTxId", LongTxId});
+            {"txId", LongTxId});
 
         auto outputColumns = GetOutputColumns(ctx);
         if (!outputColumns.empty()) {

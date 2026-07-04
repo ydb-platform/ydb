@@ -41,12 +41,15 @@ DEFAULT_SPLIT_FACTOR_MAX = 10
 
 
 def _size_duration_threshold_sec(size_u: str) -> int:
+    # ya per-test timeout defaults by SIZE (seconds). LARGE is 3600s (not 1800):
+    # empirically chunk/test processes on LARGE time out at ~3600s, and tests up to
+    # ~3265s pass on release. Using the real value keeps split budgets accurate.
     if size_u == "SMALL":
         return 60
     if size_u == "MEDIUM":
         return 600
     if size_u == "LARGE":
-        return 1800
+        return 3600
     # Conservative default for unknown size.
     return 600
 
@@ -386,6 +389,10 @@ def build_cpu_recommendations(
         overloaded_total_duration_sec = 0.0
         overloaded_chunk_examples: list[str] = []
         max_chunk_load_sec = 0.0
+        # Largest single test inside any overloaded chunk. If this alone is at/above the
+        # budget, splitting cannot help (one test = one chunk) -> the fix is TIMEOUT()/
+        # reduce/mute, not SPLIT_FACTOR.
+        max_single_test_in_overloaded_sec = 0.0
         # Detect overloaded chunks regardless of whether a timeout already happened,
         # so we can recommend split proactively (before the first timeout).
         if timeout_budget_sec > 0 and chunk_loads:
@@ -397,12 +404,21 @@ def build_cpu_recommendations(
                 if load_sec > timeout_budget_sec:
                     overloaded_chunks += 1
                     overloaded_total_duration_sec += load_sec
+                    cl_max_test = float(cl.get("max_test_duration_sec", 0.0) or 0.0)
+                    if cl_max_test > max_single_test_in_overloaded_sec:
+                        max_single_test_in_overloaded_sec = cl_max_test
                     chunk_idx = int(cl.get("chunk_idx", 0) or 0)
                     chunk_group = cl.get("chunk_group")
                     chunk_name = f"{chunk_group}/chunk{chunk_idx}" if chunk_group else f"chunk{chunk_idx}"
                     overloaded_items.append((load_sec, f"{chunk_name}={load_sec:.1f}s"))
             overloaded_items.sort(key=lambda x: x[0], reverse=True)
             overloaded_chunk_examples = [x[1] for x in overloaded_items[:3]]
+        # A single test at/above the budget cannot be split into smaller chunks.
+        single_test_blocks_split = (
+            overloaded_chunks > 0
+            and timeout_budget_sec > 0
+            and max_single_test_in_overloaded_sec >= timeout_budget_sec
+        )
         # Severity: "timeout" if a real timeout already occurred, "at_risk" if a chunk
         # exceeds the serial-time budget but has not timed out yet, else "none".
         if overloaded_chunks > 0:
@@ -564,6 +580,12 @@ def build_cpu_recommendations(
                 recommended_split_tooltip += f" Set SPLIT_FACTOR({recommended_split}) in ya.make."
             if overloaded_chunk_examples:
                 recommended_split_tooltip += f" Examples: {', '.join(overloaded_chunk_examples[:2])}."
+            if single_test_blocks_split:
+                recommended_split_tooltip += (
+                    f" WARNING: a single test runs ~{max_single_test_in_overloaded_sec / 60:.0f} min "
+                    f"(≥ budget) — SPLIT_FACTOR cannot help. Fix the test: raise TIMEOUT(), "
+                    f"reduce its work, or keep it muted."
+                )
         elif recommended_split_action == "lower":
             recommended_split_tooltip = (
                 f"Can lower split from {ya_split_factor} to {recommended_split}: "
@@ -813,6 +835,8 @@ def build_cpu_recommendations(
             "split_severity": split_severity,
             "max_chunk_load_sec": round(max_chunk_load_sec, 3),
             "overloaded_chunks": overloaded_chunks,
+            "single_test_blocks_split": single_test_blocks_split,
+            "max_single_test_in_overloaded_sec": round(max_single_test_in_overloaded_sec, 3),
             "chunks_count_tooltip": chunks_count_tooltip,
             "split_action_tooltip": split_action_tooltip,
             "ya_split_factor_raw": ya_split_factor_raw,

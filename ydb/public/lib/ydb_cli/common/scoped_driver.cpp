@@ -21,7 +21,7 @@ TScopedDriver::TScopedDriver(TDriver driver)
 TScopedDriver::TScopedDriver(TScopedDriver&& other) noexcept
     : Driver_(std::move(other.Driver_))
 {
-    other.Driiver_.reset();
+    other.Driver_.reset();
 }
 
 TScopedDriver& TScopedDriver::operator=(TScopedDriver&& other) noexcept {

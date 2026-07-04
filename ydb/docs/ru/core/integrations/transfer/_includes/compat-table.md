@@ -15,7 +15,7 @@
 
 {% note info %}
 
-**dbt (dbt-ydb)** — материализация данных через External Data Source и `dbt run`; прямого подключения к исходной СУБД нет. Подробнее — в [инструкции по dbt](../migration/dbt.md).
+**dbt (dbt-ydb)** — материализация данных через External Data Source и `dbt run`; прямого подключения к исходной СУБД нет. Подробнее — в [инструкции по dbt](../../migration/dbt.md).
 
 **SQLite + dbt** — только загрузка небольших справочников через [seeds](https://docs.getdbt.com/docs/build/seeds) из CSV; для полной миграции используйте CLI import file или Spark.
 

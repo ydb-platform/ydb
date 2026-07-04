@@ -22,18 +22,28 @@ def _round_cpu_tier(cores: float) -> int:
     return 16
 
 
-# RAM reservation tiers (GB) for REQUIREMENTS(ram:N). Round up observed per-chunk peak.
-RAM_TIERS_GB = (8, 16, 32, 64, 128, 256)
-# Do not suggest REQUIREMENTS(ram) when there is none and per-chunk peak is below this.
-RAM_SET_THRESHOLD_GB = 24
+# Runner class these compat suites schedule on. IMPORTANT: on a single runner the local
+# `ya make -t` scheduler caps parallelism ONLY by cpu (sum of REQUIREMENTS(cpu) <= cores).
+# REQUIREMENTS(ram) is NOT honored locally, so memory pressure / OOM is controlled by
+# raising cpu (which reduces how many chunks run in parallel), never by ram.
+RUNNER_CORES = 96
+RUNNER_RAM_GB = 283
+# Per-suite co-resident RAM budget: the most one suite may hold at once. Chosen below the
+# machine total to leave headroom for other suites + OS and avoid OOM when a heavy suite
+# packs several chunks in parallel.
+MEM_BUDGET_GB = 200.0
+# Skip memory-driven cpu bumps for light suites (heaviest chunk below this threshold).
+MEM_MIN_CHUNK_GB = 24.0
+# CPU tiers allowed for memory-driven throttling (may exceed the p95 cap of 16).
+MEM_CPU_TIERS = (1, 2, 4, 8, 16, 32, 48, 96)
 
 
-def _round_ram_tier(gb: float) -> int:
-    """Round up to a RAM reservation tier (GB)."""
-    for tier in RAM_TIERS_GB:
-        if gb <= tier:
+def _round_cpu_up(cores: float, tiers: tuple[int, ...] = MEM_CPU_TIERS) -> int:
+    """Round a fractional core count up to the next allowed cpu tier."""
+    for tier in tiers:
+        if cores <= tier:
             return tier
-    return RAM_TIERS_GB[-1]
+    return tiers[-1]
 
 
 # When SPLIT_FACTOR is not set in ya.make, runner may pick 1..10. No need to suggest "set" if recommended is in that range.
@@ -101,6 +111,9 @@ def _compute_parallel_stats(runs: list[dict[str, Any]]) -> dict[str, dict[str, A
     peak_self_cpu_at: dict[str, float] = {}
     peak_self_ram_kb: dict[str, float] = defaultdict(float)
     peak_self_ram_at: dict[str, float] = {}
+    # Physical peak RAM of the single heaviest chunk of the suite (not a sum), used for
+    # memory-driven cpu throttling. ram is per-chunk proc-tree peak minus baseline.
+    max_chunk_ram_kb: dict[str, float] = defaultdict(float)
     peak_others: dict[str, int] = defaultdict(int)
     peak_others_at: dict[str, float] = {}
     peak_cpu: dict[str, float] = defaultdict(float)
@@ -125,6 +138,8 @@ def _compute_parallel_stats(runs: list[dict[str, Any]]) -> dict[str, dict[str, A
         if suite_count[suite] > 0 and suite_ram_kb[suite] > peak_self_ram_kb[suite]:
             peak_self_ram_kb[suite] = suite_ram_kb[suite]
             peak_self_ram_at[suite] = time_us
+        if delta > 0 and dram > max_chunk_ram_kb[suite]:
+            max_chunk_ram_kb[suite] = dram
 
         for s, cnt in suite_count.items():
             if cnt <= 0:
@@ -153,6 +168,7 @@ def _compute_parallel_stats(runs: list[dict[str, Any]]) -> dict[str, dict[str, A
         | set(peak_ram)
         | set(peak_self_cpu)
         | set(peak_self_ram_kb)
+        | set(max_chunk_ram_kb)
     )
     for s in all_suites:
         result[s] = {
@@ -166,6 +182,7 @@ def _compute_parallel_stats(runs: list[dict[str, Any]]) -> dict[str, dict[str, A
             "peak_self_cpu_at_sec": _at(peak_self_cpu_at.get(s)),
             "peak_self_ram_gb_during_suite": round(peak_self_ram_kb[s] / (1024.0 * 1024.0), 3),
             "peak_self_ram_at_sec": _at(peak_self_ram_at.get(s)),
+            "max_chunk_ram_gb": round(max_chunk_ram_kb[s] / (1024.0 * 1024.0), 3),
             "peak_total_cpu_cores_during_suite": round(peak_cpu[s], 3),
             "peak_total_cpu_at_sec": _at(peak_cpu_at.get(s)),
             "peak_total_ram_gb_during_suite": round(peak_ram[s] / (1024.0 * 1024.0), 3),
@@ -360,10 +377,31 @@ def build_cpu_recommendations(
             else:
                 timeout_max_value = 4
         recommended_req: Any = timeout_max_value if timeout_max_policy_applied else recommended
+        # Memory-driven cpu throttle. REQUIREMENTS(ram) is ignored by the local scheduler,
+        # so the only lever against OOM is cpu: a bigger per-chunk cpu slot means fewer
+        # chunks run in parallel. Cap parallelism so heaviest_chunk_ram * parallel stays
+        # within MEM_BUDGET_GB, then raise the cpu recommendation if p95 alone is too low.
+        _ps_mem = parallel_stats.get(suite, {})
+        max_chunk_ram_gb = float(_ps_mem.get("max_chunk_ram_gb", 0.0) or 0.0)
+        cpu_for_memory: Any = None
+        mem_max_parallel = 0
+        mem_driven_cpu = False
+        if max_chunk_ram_gb >= MEM_MIN_CHUNK_GB:
+            mem_max_parallel = max(1, int(MEM_BUDGET_GB // max_chunk_ram_gb))
+            cpu_for_memory = _round_cpu_up(RUNNER_CORES / mem_max_parallel)
+            if recommended_req != "all" and int(recommended_req) < int(cpu_for_memory):
+                recommended_req = cpu_for_memory
+                mem_driven_cpu = True
         explain_parts = [
             f"p95_cores={p95_c:.3f}",
             f"base_tier={base_recommended}",
         ]
+        if cpu_for_memory is not None:
+            explain_parts.append(
+                f"mem: heaviest_chunk={max_chunk_ram_gb:.1f}GB -> cap {mem_max_parallel} parallel "
+                f"(budget {MEM_BUDGET_GB:.0f}GB) -> cpu:{cpu_for_memory}"
+                + ("(applied)" if mem_driven_cpu else "(<=p95, not applied)")
+            )
         if long_test_boost_applied:
             explain_parts.append(
                 f"long_test_present: max_test_duration_sec={max_test_duration_sec:.3f} >= "
@@ -630,6 +668,12 @@ def build_cpu_recommendations(
             cpu_tip_parts.append("Capped at cpu:1 by SIZE(SMALL) limit.")
         elif medium_cap_applied:
             cpu_tip_parts.append("Capped at cpu:4 by SIZE(MEDIUM) limit.")
+        if mem_driven_cpu:
+            cpu_tip_parts.append(
+                f"Memory-driven: heaviest chunk ≈{max_chunk_ram_gb:.1f} GB; cpu raised to "
+                f"cpu:{cpu_for_memory} to cap ~{mem_max_parallel} parallel chunk(s) "
+                f"(budget {MEM_BUDGET_GB:.0f} GB) and avoid OOM (REQUIREMENTS(ram) is ignored locally)."
+            )
         if ya_cpu is not None:
             cpu_tip_parts.append(f"Recommend REQUIREMENTS(cpu:{recommended_req}); ya.make has cpu:{ya_cpu}.")
         else:
@@ -638,9 +682,18 @@ def build_cpu_recommendations(
 
         cpu_action_tooltips = {
             "raise": (
-                f"Increase REQUIREMENTS(cpu) from {ya_cpu} to {recommended_req}. "
-                f"REQUIREMENTS(cpu) is a per-chunk scheduler slot (reserved cores that cap how many "
-                f"chunks run in parallel on a runner); observed p95 exceeds the current slot."
+                (
+                    f"Increase REQUIREMENTS(cpu) from {ya_cpu} to {recommended_req} for MEMORY, not CPU: "
+                    f"heaviest chunk ≈{max_chunk_ram_gb:.1f} GB, and a bigger cpu slot runs fewer chunks "
+                    f"in parallel (~{mem_max_parallel}) so the suite stays within ~{MEM_BUDGET_GB:.0f} GB. "
+                    f"REQUIREMENTS(ram) is ignored by the local scheduler."
+                )
+                if mem_driven_cpu
+                else (
+                    f"Increase REQUIREMENTS(cpu) from {ya_cpu} to {recommended_req}. "
+                    f"REQUIREMENTS(cpu) is a per-chunk scheduler slot (reserved cores that cap how many "
+                    f"chunks run in parallel on a runner); observed p95 exceeds the current slot."
+                )
             ),
             "lower": (
                 f"Decrease REQUIREMENTS(cpu) from {ya_cpu} to {recommended_req}. "
@@ -745,69 +798,33 @@ def build_cpu_recommendations(
             f"Peak sum of RAM for this suite at one moment: {peak_ram:.1f} GB."
         )
 
-        # RAM recommendation axis: REQUIREMENTS(ram:N) reserves memory per chunk so the
-        # scheduler limits how many chunks run in parallel. Base the recommendation on the
-        # observed per-chunk RAM (peak suite RAM divided by peak parallel chunks of this
-        # suite), rounded up to a reservation tier.
+        # Memory axis (informational + cpu-driven). REQUIREMENTS(ram) is NOT honored by the
+        # local ya scheduler, so we never recommend changing it. Memory pressure is turned
+        # into a cpu recommendation above (cpu_for_memory). Here we expose the diagnostic
+        # per-chunk numbers and explain how memory maps onto the cpu slot.
         per_chunk_ram_gb = peak_ram / max_par if max_par > 0 else peak_ram
-        if per_chunk_ram_gb > 0:
-            recommended_ram_gb: Any = _round_ram_tier(per_chunk_ram_gb)
-        else:
-            recommended_ram_gb = None
-        if recommended_ram_gb is None:
-            ram_action = "ok"
-        elif ya_ram is None:
-            ram_action = "set" if per_chunk_ram_gb > RAM_SET_THRESHOLD_GB else "ok"
-        else:
-            try:
-                ya_ram_i = float(ya_ram)
-            except (TypeError, ValueError):
-                ya_ram_i = None
-            if ya_ram_i is None:
-                ram_action = "set"
-            elif recommended_ram_gb > ya_ram_i:
-                ram_action = "raise"
-            elif recommended_ram_gb * 2 <= ya_ram_i:
-                # Only suggest lowering when using well under half the reservation,
-                # to keep a safety margin against OOM.
-                ram_action = "lower"
-            else:
-                ram_action = "ok"
-        recommended_ram_explain = (
-            f"peak_suite_ram_gb={peak_ram:.1f}; max_parallel_self={max_par}; "
-            f"per_chunk_ram_gb={per_chunk_ram_gb:.1f}; "
-            f"recommended_ram_gb={recommended_ram_gb}; ya_ram={ya_ram}; action={ram_action}"
+        mem_explain = (
+            f"max_chunk_ram_gb={max_chunk_ram_gb:.1f}; peak_suite_ram_gb={peak_ram:.1f}; "
+            f"max_parallel_self={max_par}; avg_per_chunk_ram_gb={per_chunk_ram_gb:.1f}; "
+            f"mem_budget_gb={MEM_BUDGET_GB:.0f}; cpu_for_memory={cpu_for_memory}; "
+            f"mem_driven_cpu={mem_driven_cpu}"
         )
-        if recommended_ram_gb is None:
-            recommended_ram_tooltip = "No RAM metrics available to recommend REQUIREMENTS(ram)."
-        else:
-            recommended_ram_tooltip = (
-                f"Observed per-chunk peak RAM ≈{per_chunk_ram_gb:.1f} GB "
-                f"(suite peak {peak_ram:.1f} GB over {max_par} parallel chunk(s)). "
-                f"Recommend REQUIREMENTS(ram:{recommended_ram_gb}); "
-                + (f"ya.make has ram:{ya_ram}." if ya_ram is not None else "ya.make has no ram requirement.")
+        if cpu_for_memory is not None:
+            mem_tooltip = (
+                f"Heaviest chunk peak RAM ≈{max_chunk_ram_gb:.1f} GB. REQUIREMENTS(ram) is ignored by "
+                f"the local ya scheduler, so OOM is controlled via cpu: cap ~{mem_max_parallel} parallel "
+                f"chunk(s) (budget {MEM_BUDGET_GB:.0f} GB) → REQUIREMENTS(cpu:{cpu_for_memory})"
+                + (
+                    f" (applied: cpu {ya_cpu}→{cpu_for_memory})."
+                    if mem_driven_cpu
+                    else "; already covered by the p95 cpu recommendation."
+                )
             )
-        ram_action_tooltips = {
-            "raise": (
-                f"Increase REQUIREMENTS(ram) in ya.make from {ya_ram} to {recommended_ram_gb}: "
-                f"observed per-chunk memory exceeds the reservation, risking OOM / over-parallelism."
-            ),
-            "lower": (
-                f"Decrease REQUIREMENTS(ram) in ya.make from {ya_ram} to {recommended_ram_gb}: "
-                f"per-chunk memory uses well under half the reservation. "
-                f"Note: higher ram reservation limits parallel chunks on the runner."
-            ),
-            "set": (
-                f"Add REQUIREMENTS(ram:{recommended_ram_gb}) to ya.make: "
-                f"per-chunk peak ≈{per_chunk_ram_gb:.1f} GB (no ram requirement today)."
-            ),
-            "ok": (
-                f"Current REQUIREMENTS(ram:{ya_ram}) fits observed per-chunk memory."
-                if ya_ram is not None
-                else "No REQUIREMENTS(ram) needed for observed per-chunk memory."
-            ),
-        }
-        ram_action_tooltip = ram_action_tooltips.get(ram_action, "")
+        else:
+            mem_tooltip = (
+                f"Heaviest chunk peak RAM ≈{max_chunk_ram_gb:.1f} GB (< {MEM_MIN_CHUNK_GB:.0f} GB): "
+                f"no memory-driven cpu bump needed. REQUIREMENTS(ram) has no effect on the local scheduler."
+            )
         test_status_tooltip = (
             f"Test results: {test_status.get('total', 0)} total, "
             f"{test_status.get('passed', 0)} passed, "
@@ -866,11 +883,11 @@ def build_cpu_recommendations(
             "recommended_cpu_tooltip": recommended_cpu_tooltip,
             "cpu_action_tooltip": cpu_action_tooltip,
             "cpu_lower_suppressed": cpu_lower_suppressed,
-            "recommended_ram_gb": recommended_ram_gb,
-            "ram_action": ram_action,
-            "recommended_ram_explain": recommended_ram_explain,
-            "recommended_ram_tooltip": recommended_ram_tooltip,
-            "ram_action_tooltip": ram_action_tooltip,
+            "cpu_for_memory": cpu_for_memory,
+            "mem_driven_cpu": mem_driven_cpu,
+            "max_chunk_ram_gb": round(max_chunk_ram_gb, 3),
+            "mem_explain": mem_explain,
+            "mem_tooltip": mem_tooltip,
             "per_chunk_ram_gb": round(per_chunk_ram_gb, 3),
             "ya_ram_gb_tooltip": ya_ram_gb_tooltip,
             "ya_cpu_cores_tooltip": ya_cpu_cores_tooltip,
@@ -930,6 +947,7 @@ def build_cpu_recommendations(
                 "peak_self_cpu_at_sec": None,
                 "peak_self_ram_gb_during_suite": 0.0,
                 "peak_self_ram_at_sec": None,
+                "max_chunk_ram_gb": 0.0,
                 "peak_total_cpu_cores_during_suite": 0.0,
                 "peak_total_cpu_at_sec": None,
                 "peak_total_ram_gb_during_suite": 0.0,

@@ -5,7 +5,7 @@ These cover the decoupling of the three recommendation axes:
 - CPU comes only from observed p95 cores (duration/timeouts no longer inflate it).
 - Split is recommended proactively from per-chunk serial wall time (even without timeouts).
 - A lower-cpu suggestion is suppressed while a suite is under split/time pressure.
-- RAM is recommended from observed per-chunk peak memory.
+- Memory pressure raises the CPU slot (REQUIREMENTS(ram) is ignored locally), never ram.
 
 Run: python3 test_cpu_recommendations.py
      or: pytest test_cpu_recommendations.py -v
@@ -160,40 +160,53 @@ def test_cpu_lower_suppressed_under_split_pressure():
     assert r["cpu_lower_suppressed"] is True
 
 
-def test_ram_recommendation_set_for_high_memory():
-    """A high per-chunk peak RAM with no ya.make ram should recommend 'set'."""
-    suite = "s/ram"
+def test_memory_drives_cpu_bump_not_ram():
+    """A memory-heavy chunk must raise the CPU slot (to throttle parallelism), because
+    REQUIREMENTS(ram) is ignored by the local scheduler. It must NOT recommend ram."""
+    suite = "s/mem_heavy"
+    # Heaviest chunk ~58 GB. Budget 200 GB -> at most floor(200/58)=3 parallel chunks
+    # -> cpu ceil(96/3)=32. p95 cores are tiny, so memory drives the recommendation.
     runs = [
-        _run(suite, 0, 0, 100, cores=2.0, ram_gb=30.0),
+        _run(suite, 0, 0, 100, cores=2.0, ram_gb=58.0),
+        _run(suite, 1, 0, 100, cores=2.0, ram_gb=40.0),
     ]
     recs = _by_suite(build_cpu_recommendations(
         runs,
-        requirements_cache={suite: {"cpu_cores": 2, "size": "LARGE", "split_factor": 1}},
+        requirements_cache={suite: {"cpu_cores": 16, "ram_gb": 32, "size": "LARGE", "split_factor": 2}},
         report_status_by_suite={suite: {"tests": _status(), "chunks": _status()}},
         max_test_duration_sec_by_suite={suite: 50.0},
         test_duration_stats_by_suite={suite: {"chunk_loads": []}},
     ))
     r = recs[suite]
-    assert r["recommended_ram_gb"] == 32, r["recommended_ram_explain"]
-    assert r["ram_action"] == "set"
+    assert round(r["max_chunk_ram_gb"]) == 58, r["mem_explain"]
+    assert r["cpu_for_memory"] == 32, r["mem_explain"]
+    assert r["mem_driven_cpu"] is True
+    assert r["recommended_cpu"] == 32, r["recommended_cpu_explain"]
+    assert r["cpu_action"] == "raise"
+    # No ram recommendation fields should exist anymore.
+    assert "recommended_ram_gb" not in r
+    assert "ram_action" not in r
 
 
-def test_ram_ok_when_reservation_fits():
-    """Per-chunk peak below the reservation and above half of it -> 'ok'."""
-    suite = "s/ram_ok"
+def test_light_suite_no_memory_cpu_bump():
+    """A suite whose heaviest chunk is small (< threshold) gets no memory-driven bump."""
+    suite = "s/mem_light"
     runs = [
-        _run(suite, 0, 0, 100, cores=2.0, ram_gb=25.0),
+        _run(suite, 0, 0, 100, cores=2.0, ram_gb=12.0),
+        _run(suite, 1, 0, 100, cores=2.0, ram_gb=11.0),
     ]
     recs = _by_suite(build_cpu_recommendations(
         runs,
-        requirements_cache={suite: {"cpu_cores": 2, "ram_gb": 32, "size": "LARGE", "split_factor": 1}},
+        requirements_cache={suite: {"cpu_cores": 4, "size": "LARGE", "split_factor": 2}},
         report_status_by_suite={suite: {"tests": _status(), "chunks": _status()}},
         max_test_duration_sec_by_suite={suite: 50.0},
         test_duration_stats_by_suite={suite: {"chunk_loads": []}},
     ))
     r = recs[suite]
-    assert r["recommended_ram_gb"] == 32
-    assert r["ram_action"] == "ok"
+    assert r["cpu_for_memory"] is None, r["mem_explain"]
+    assert r["mem_driven_cpu"] is False
+    # CPU stays p95-based (2), memory does not inflate it.
+    assert r["recommended_cpu"] == 2
 
 
 def _all_tests():
@@ -202,8 +215,8 @@ def _all_tests():
         test_split_raised_proactively_without_timeout,
         test_single_test_blocks_split,
         test_cpu_lower_suppressed_under_split_pressure,
-        test_ram_recommendation_set_for_high_memory,
-        test_ram_ok_when_reservation_fits,
+        test_memory_drives_cpu_bump_not_ram,
+        test_light_suite_no_memory_cpu_bump,
     ]
 
 

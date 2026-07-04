@@ -436,7 +436,7 @@ public:
 
         Become(&TThis::StateWork);
         YDB_LOG_DEBUG_CTX(ctx, "Become StateWork (SchemeCache",
-            {"actor", SelfId()},
+            {"selfId", SelfId()},
             {"schemeCache", Services.SchemeCache});
     }
 

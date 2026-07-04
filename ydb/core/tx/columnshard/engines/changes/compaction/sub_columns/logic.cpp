@@ -31,8 +31,8 @@ void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAcces
     ResultColumnStats = splitted.ExtractColumns();
     ResultColumnStats->CreateJsonPathAccessorTrieCache();
     //    YDB_LOG_ERROR("",
-              {"columns", ResultColumnStats->DebugJson()},
-              {"others", splitted.ExtractOthers().DebugJson()});
+    //          {"columns", ResultColumnStats->DebugJson()},
+    //          {"others", splitted.ExtractOthers().DebugJson()});
     RemapKeyIndex.RegisterColumnStats(*ResultColumnStats);
     for (auto&& i : OrderedIterators) {
         i.Start();

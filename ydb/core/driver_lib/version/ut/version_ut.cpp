@@ -5,6 +5,9 @@
 
 using namespace NKikimr;
 
+// CI smoke: trigger PR-check for unified pr_check.yml (no-op decorative change).
+// CI smoke: postcommit push path via ci-test* trigger (no-op).
+
 Y_UNIT_TEST_SUITE(VersionParser) {
     Y_UNIT_TEST(Basic) {
         UNIT_ASSERT_VALUES_EQUAL(GetBranchName("svn+ssh://arcadia.yandex.ru/arc/trunk/arcadia"), "trunk");

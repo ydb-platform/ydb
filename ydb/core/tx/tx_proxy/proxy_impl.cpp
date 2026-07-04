@@ -75,17 +75,17 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
     }
 
     void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-        YDB_LOG_NOTICE_CTX(ctx, "HANDLE TEvPoisonPill",
-            {"actor", SelfId()},
+        YDB_LOG_NOTICE_CTX(ctx, "Handle TEvPoisonPill",
+            {"selfId", SelfId()},
             {"sender", ev->Sender});
         Die(ctx);
     }
 
     void ReplyDecline(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, const TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
-        YDB_LOG_NOTICE_CTX(ctx, "DECLINE TEvProposeTransactionStatus reply",
-            {"actor", SelfId()},
+        YDB_LOG_NOTICE_CTX(ctx, "Decline TEvProposeTransactionStatus",
+            {"selfId", SelfId()},
             {"reason", status},
-            {"to", ev->Sender});
+            {"replyTo", ev->Sender});
 
         ctx.Send(ev->Sender, new TEvTxUserProxy::TEvProposeTransactionStatus(status), 0, ev->Cookie);
     }
@@ -93,11 +93,10 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
     void ReplyNotImplemented(const TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
         TxProxyMon->TxNotImplemented->Inc();
         const NKikimrTxUserProxy::TTransaction &tx = ev->Get()->Record.GetTransaction();
-        YDB_LOG_ERROR_CTX(ctx, "",
-            {"actor", SelfId()},
+        YDB_LOG_ERROR_CTX(ctx, "Error",
+            {"selfId", SelfId()},
             {"cookie", (ui64)ev->Cookie},
-            {"userRequestId", tx.GetUserRequestId()},
-            {"userReqId", "RESPONSE"},
+            {"userReqId", tx.GetUserRequestId()},
             {"status", "NotImplemented"},
             {"type", "Unknown"});
         return ReplyDecline(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::NotImplemented, ev, ctx);
@@ -105,20 +104,20 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
 
     void Decline(const TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
         if (ev->Get()->HasSchemeProposal()) {
-            YDB_LOG_WARN_CTX(ctx, "DECLINE TEvProposeTransaction SchemeRequest",
-                {"actor", SelfId()},
+            YDB_LOG_WARN_CTX(ctx, "Decline TEvProposeTransaction SchemeRequest",
+                {"selfId", SelfId()},
                 {"reason", TEvTxUserProxy::TResultStatus::EStatus::ProxyNotReady},
-                {"replyto", ev->Sender});
+                {"replyTo", ev->Sender});
 
             TxProxyMon->SchemeRequestProxyNotReady->Inc();
             return ReplyDecline(TEvTxUserProxy::TResultStatus::EStatus::ProxyNotReady, ev, ctx);
         }
 
         if (ev->Get()->HasMakeProposal()) {
-            YDB_LOG_WARN_CTX(ctx, "DECLINE TEvProposeTransaction DataReques",
-                {"actor", SelfId()},
+            YDB_LOG_WARN_CTX(ctx, "Decline TEvProposeTransaction DataRequest",
+                {"selfId", SelfId()},
                 {"reason", TEvTxUserProxy::TResultStatus::EStatus::ProxyNotReady},
-                {"replyto", ev->Sender});
+                {"replyTo", ev->Sender});
 
             TxProxyMon->MakeRequestProxyNotReady->Inc();
             return ReplyDecline(TEvTxUserProxy::TResultStatus::EStatus::ProxyNotReady, ev, ctx);
@@ -207,10 +206,10 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
-        YDB_LOG_DEBUG_CTX(ctx, "HANDLE TEvClientConnected",
-            {"actor", SelfId()},
-            {"connect", (PipeClientCache->OnConnect(ev) ? "success connect" : "fail connect")},
-            {"tablet", msg->TabletId});
+        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvClientConnected",
+            {"selfId", SelfId()},
+            {"status", (PipeClientCache->OnConnect(ev) ? "success connect" : "fail connect")},
+            {"tabletId", msg->TabletId});
 
         if(!PipeClientCache->OnConnect(ev)) {
             CheckTimeouts(ctx);
@@ -221,9 +220,9 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
-        YDB_LOG_WARN_CTX(ctx, "HANDLE TEvClientDestroyed",
-            {"actor", SelfId()},
-            {"tablet", msg->TabletId});
+        YDB_LOG_WARN_CTX(ctx, "Handle TEvClientDestroyed",
+            {"selfId", SelfId()},
+            {"tabletId", msg->TabletId});
 
         PipeClientCache->OnDisconnect(ev);
         CheckTimeouts(ctx);
@@ -232,7 +231,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
 
     void ProcessRequest(TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx, ui64 txid) {
         YDB_LOG_DEBUG_CTX(ctx, "ProcessProposeTransaction",
-            {"actor", SelfId()},
+            {"selfId", SelfId()},
             {"txId", txid});
 
         RequestControls.Reqister(ctx);
@@ -247,13 +246,11 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
             TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request = new TEvTxProxyReq::TEvSchemeRequest(ev);
             const TActorId reqId = ctx.Register(CreateTxProxyFlatSchemeReq(Services, txid, request, TxProxyMon));
             TxProxyMon->SchemeRequest->Inc();
-            YDB_LOG_DEBUG_CTX(ctx, "Dump actor, cookie, userRequestId, txid, to, userReqId",
-                {"actor", SelfId()},
+            YDB_LOG_DEBUG_CTX(ctx, "Dump",
+                {"selfId", SelfId()},
                 {"cookie", cookie},
-                {"userRequestId", userRequestId},
-                {"txid", txid},
-                {"to", reqId},
-                {"userReqId", "SEND"});
+                {"userReqId", userRequestId},
+                {"txId", txid});
             return;
         }
 
@@ -265,12 +262,11 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
                 NACLib::TUserContextBuilder().Build() /* don't pass UserSID for DDL transactions */));
             TxProxyMon->MakeRequest->Inc();
             YDB_LOG_DEBUG_CTX(ctx, "DataReq",
-                {"actor", SelfId()},
+                {"selfId", SelfId()},
                 {"cookie", (ui64)ev->Cookie},
-                {"requestId", tx.GetUserRequestId()},
-                {"txid", txid},
+                {"userReqId", tx.GetUserRequestId()},
+                {"txId", txid},
                 {"to", reqId},
-                {"userReqId", "SEND"},
                 {"marker", "P0"});
             ctx.Send(reqId, new TEvTxProxyReq::TEvMakeRequest(ev));
             return;
@@ -281,13 +277,12 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
             auto userReqId = tx.GetUserRequestId();
             const TActorId reqId = ctx.Register(CreateTxProxySnapshotReq(Services, txid, std::move(ev), TxProxyMon));
             TxProxyMon->SnapshotRequest->Inc();
-            YDB_LOG_DEBUG_CTX(ctx, "Dump actor, cookie, userReqId, txid, reqId, userReqId, marker",
-                {"actor", SelfId()},
+            YDB_LOG_DEBUG_CTX(ctx, "SnapshotReq",
+                {"selfId", SelfId()},
                 {"cookie", cookie},
                 {"userReqId", userReqId},
-                {"txid", txid},
+                {"txId", txid},
                 {"reqId", reqId},
-                {"userReqId", "SnapshotReq"},
                 {"marker", "P0"});
             return;
         }
@@ -298,13 +293,12 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
             const TActorId reqId = ctx.Register(CreateTxProxyCommitWritesReq(Services, txid, std::move(ev), TxProxyMon,
                 NACLib::TUserContextBuilder().Build() /* don't pass UserSID for DDL transactions */));
             TxProxyMon->CommitWritesRequest->Inc();
-            YDB_LOG_DEBUG_CTX(ctx, "Dump actor, cookie, userReqId, txid, reqId, userReqId, marker",
-                {"actor", SelfId()},
+            YDB_LOG_DEBUG_CTX(ctx, "CommitWritesReq",
+                {"selfId", SelfId()},
                 {"cookie", cookie},
                 {"userReqId", userReqId},
-                {"txid", txid},
+                {"txId", txid},
                 {"reqId", reqId},
-                {"userReqId", "CommitWritesReq"},
                 {"marker", "P0"});
             return;
         }
@@ -315,18 +309,18 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
     void Handle(TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
         const NKikimrTxUserProxy::TTransaction &tx = ev->Get()->Record.GetTransaction();
         YDB_LOG_DEBUG_CTX(ctx, "Handle TEvProposeTransaction",
-            {"actor", SelfId()});
+            {"selfId", SelfId()});
 
         const bool needTxId = ev->Get()->NeedTxId();
 
         if (needTxId) {
             auto txIds = TxAllocatorClient.AllocateTxIds(1, ctx);
             if (!txIds) {
-                YDB_LOG_DEBUG_CTX(ctx, "Scheme",
-                    {"actor", SelfId()},
+                YDB_LOG_DEBUG_CTX(ctx, "Delay request, wait txIds from allocator",
+                    {"selfId", SelfId()},
                     {"cookie", (ui64)ev->Cookie},
-                    {"requestId", tx.GetUserRequestId()},
-                    {"userReqId", "Type#"});
+                    {"userReqId", tx.GetUserRequestId()},
+                    {"type", "Scheme"});
                 return DelayRequest(ev, ctx);
             }
 
@@ -339,7 +333,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
     void ProcessRequest(TEvTxUserProxy::TEvProposeKqpTransaction::TPtr& ev, const TActorContext& ctx, ui64 txid) {
         TxProxyMon->KqpRequest->Inc();
         YDB_LOG_DEBUG_CTX(ctx, "ProcessProposeKqpTransaction",
-            {"actor", SelfId()},
+            {"selfId", SelfId()},
             {"txId", txid});
 
         auto executerEv = MakeHolder<NKqp::TEvKqpExecuter::TEvTxRequest>();
@@ -350,12 +344,12 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
 
     void Handle(TEvTxUserProxy::TEvProposeKqpTransaction::TPtr &ev, const TActorContext &ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "Handle TEvExecuteKqpTransaction",
-            {"actor", SelfId()});
+            {"selfId", SelfId()});
 
         auto txIds = TxAllocatorClient.AllocateTxIds(1, ctx);
         if (!txIds) {
-            YDB_LOG_DEBUG_CTX(ctx, "DELAY REQUEST, wait txids from allocator",
-                {"actor", SelfId()},
+            YDB_LOG_DEBUG_CTX(ctx, "Delay request, wait txIds from allocator",
+                {"selfId", SelfId()},
                 {"cookie", (ui64)ev->Cookie},
                 {"type", "Scheme"});
             return DelayRequest(ev, ctx);
@@ -371,12 +365,12 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
 
     void Handle(TEvTxUserProxy::TEvAllocateTxId::TPtr &ev, const TActorContext &ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "Handle TEvAllocateTxId",
-            {"actor", SelfId()});
+            {"selfId", SelfId()});
 
         auto txIds = TxAllocatorClient.AllocateTxIds(1, ctx);
         if (!txIds) {
-            YDB_LOG_DEBUG_CTX(ctx, "DELAY REQUEST, wait txids from allocator",
-                {"actor", SelfId()},
+            YDB_LOG_DEBUG_CTX(ctx, "Delay request, wait txIds from allocator",
+                {"selfId", SelfId()},
                 {"cookie", ev->Cookie},
                 {"type", "AllocateTxId"});
             return DelayRequest(ev, ctx);
@@ -387,7 +381,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
 
     void Handle(TEvTxUserProxy::TEvGetProxyServicesRequest::TPtr &ev, const TActorContext &ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "Handle TEvGetProxyServicesRequest",
-            {"actor", SelfId()});
+            {"selfId", SelfId()});
 
         auto reply = MakeHolder<TEvTxUserProxy::TEvGetProxyServicesResponse>(Services);
         ctx.Send(ev->Sender, reply.Release(), 0, ev->Cookie);
@@ -395,8 +389,8 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
 
     void Handle(TEvTxUserProxy::TEvNavigate::TPtr &ev, const TActorContext &ctx) {
         TString path = ev->Get()->Record.GetDescribePath().GetPath();
-        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvNavigate describe path",
-            {"actor", SelfId()},
+        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvNavigate",
+            {"selfId", SelfId()},
             {"path", path});
 
         TxProxyMon->Navigate->Inc();
@@ -405,14 +399,14 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
     }
 
     void Handle(TEvTxUserProxy::TEvInvalidateTable::TPtr &ev, const TActorContext &ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "HANDLE EvInvalidateTable",
-            {"actor", SelfId()});
+        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvInvalidateTable",
+            {"selfId", SelfId()});
         ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(TTableId(ev.Get()->Get()->Record.GetSchemeShardId(), ev.Get()->Get()->Record.GetTableId()), ev.Get()->Sender));
     }
 
     void Handle(TEvTxProxySchemeCache::TEvInvalidateTableResult::TPtr &ev, const TActorContext &ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "HANDLE EvInvalidateTableResult",
-            {"actor", SelfId()});
+        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvInvalidateTableResult",
+            {"selfId", SelfId()});
         ctx.Send(ev.Get()->Get()->Sender, new TEvTxUserProxy::TEvInvalidateTableResult);
     }
 
@@ -425,7 +419,7 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "Bootstrap",
-            {"actor", SelfId()});
+            {"selfId", SelfId()});
         TxProxyMon = new TTxProxyMon(AppData(ctx)->Counters);
         CacheCounters = GetServiceCounters(AppData(ctx)->Counters, "proxy")->GetSubgroup("subsystem", "cache");
 
@@ -470,8 +464,8 @@ public:
 
             HFunc(TEvents::TEvPoisonPill, Handle);
         default:
-            YDB_LOG_ERROR("IGNORING message from at StateWork",
-                {"actor", SelfId()},
+            YDB_LOG_ERROR("Ignoring message at StateWork",
+                {"selfId", SelfId()},
                 {"type", ev->GetTypeRewrite()},
                 {"sender", ev->Sender});
             break;

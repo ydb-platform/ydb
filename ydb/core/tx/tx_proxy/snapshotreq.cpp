@@ -308,8 +308,8 @@ public:
                 const TString explanation = TStringBuilder()
                     << "Cannot create snapshot for system tableId# "
                     << entry.KeyDescription->TableId;
-                YDB_LOG_ERROR_CTX(ctx, "",
-                    {"explanation", explanation});
+                YDB_LOG_ERROR_CTX(ctx, "Error",
+                    {"error", explanation});
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, explanation));
                 UnresolvedKeys.push_back(explanation);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx);
@@ -512,11 +512,11 @@ public:
 
                     TxProxyMon->TxResultAborted->Inc();
 
-                    YDB_LOG_ERROR_CTX(ctx, "HANDLE Prepare TEvProposeTransactionResult TCreateSnapshotReq coordinator selected at resolve coordinator selected at propose",
-                        {"explanation", explanation},
-                        {"actorId", ctx.SelfID},
-                        {"keysState", SelectedCoordinator},
-                        {"resultState", privateCoordinator});
+                    YDB_LOG_ERROR_CTX(ctx, "Handle Prepare TEvProposeTransactionResult TCreateSnapshotReq",
+                        {"error", explanation},
+                        {"selfId", ctx.SelfID},
+                        {"selectedCoordinator", SelectedCoordinator},
+                        {"privateCoordinator", privateCoordinator});
 
                     return Die(ctx);
                 }
@@ -537,8 +537,8 @@ public:
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, explanation));
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError,
                         NKikimrIssues::TStatusIds::INTERNAL_ERROR, true, ctx);
-                YDB_LOG_ERROR_CTX(ctx, "",
-                    {"explanation", explanation});
+                YDB_LOG_ERROR_CTX(ctx, "Error",
+                    {"error", explanation});
                 TxProxyMon->TxResultComplete->Inc();
                 return Die(ctx);
             }

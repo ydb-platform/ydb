@@ -148,7 +148,7 @@ protected:
         pSpan.Attribute("bytes", (long)sumBytes);
         pSpan.Attribute("rows", (long)rowsCount);
         pSpan.Attribute("shards_count", (long)splittedData.GetShardsCount());
-        YDB_LOG_DEBUG("",
+        YDB_LOG_DEBUG("Affected shards",
             {"affectedShardsCount", splittedData.GetShardsInfo().size()},
             {"shardsCount", splittedData.GetShardsCount()},
             {"path", Path},

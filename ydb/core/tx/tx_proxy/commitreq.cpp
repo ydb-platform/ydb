@@ -221,8 +221,8 @@ private:
                 const TString explanation = TStringBuilder()
                     << "Cannot commit writes to system tableId# "
                     << entry.KeyDescription->TableId;
-                YDB_LOG_ERROR_CTX(ctx, "",
-                    {"explanation", explanation});
+                YDB_LOG_ERROR_CTX(ctx, "Error",
+                    {"error", explanation});
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, explanation));
                 UnresolvedKeys.push_back(explanation);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx);
@@ -414,9 +414,9 @@ private:
 
                     TxProxyMon->TxResultAborted->Inc();
 
-                    YDB_LOG_ERROR_CTX(ctx, "HANDLE Prepare: coordinator mismatch",
-                        {"explanation", explanation},
-                        {"actorId", ctx.SelfID},
+                    YDB_LOG_ERROR_CTX(ctx, "Handle Prepare TEvProposeTransactionResult TCommitWritesReq",
+                        {"error", explanation},
+                        {"selfId", ctx.SelfID},
                         {"selectedCoordinator", SelectedCoordinator},
                         {"privateCoordinator", privateCoordinator});
 
@@ -448,8 +448,8 @@ private:
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, explanation));
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError,
                         NKikimrIssues::TStatusIds::INTERNAL_ERROR, true, ctx);
-                YDB_LOG_ERROR_CTX(ctx, "",
-                    {"explanation", explanation});
+                YDB_LOG_ERROR_CTX(ctx, "Error",
+                    {"error", explanation});
                 TxProxyMon->TxResultComplete->Inc();
                 return Die(ctx);
             }
@@ -862,8 +862,8 @@ private:
         // no tablets keys are found in requests keys
         // it take place when a transaction have only checks locks
         YDB_LOG_DEBUG_CTX(ctx, "SelectCoordinator unable to choose coordinator from resolved keys, will try to pick it from TEvProposeTransactionResult from datashard",
-            {"actor", ctx.SelfID},
-            {"txid", TxId});
+            {"selfId", ctx.SelfID},
+            {"txId", TxId});
         return 0;
     }
 

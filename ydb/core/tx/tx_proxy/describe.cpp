@@ -179,10 +179,10 @@ class TDescribeReq : public TActor<TDescribeReq> {
         stats->SetPartCount(0);
 
         YDB_LOG_DEBUG_CTX(ctx, "Send sysview TEvDescribeSchemeResult",
-            {"actor", ctx.SelfID},
+            {"selfId", ctx.SelfID},
             {"to", Source},
             {"cookie", SourceCookie},
-            {"TEvDescribeSchemeResult", result->ToString()});
+            {"ev", result->ToString()});
 
         TxProxyMon->NavigateLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
 
@@ -216,10 +216,10 @@ class TDescribeReq : public TActor<TDescribeReq> {
         };
 
         YDB_LOG_DEBUG_CTX(ctx, "Send sysview TEvDescribeSchemeResult",
-            {"actor", ctx.SelfID},
+            {"selfId", ctx.SelfID},
             {"to", Source},
             {"cookie", SourceCookie},
-            {"TEvDescribeSchemeResult", result->ToString()});
+            {"ev", result->ToString()});
 
         TxProxyMon->NavigateLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
 
@@ -354,8 +354,8 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
     Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
     const auto& entry = navigate->ResultSet.front();
 
-    YDB_LOG_CTX(ctx, (navigate->ErrorCount == 0 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_INFO), "HANDLE EvNavigateKeySetResult TDescribeReq",
-        {"actor", ctx.SelfID},
+    YDB_LOG_CTX(ctx, (navigate->ErrorCount == 0 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_INFO), "Handle EvNavigateKeySetResult TDescribeReq",
+        {"selfId", ctx.SelfID},
         {"errorCount", navigate->ErrorCount},
         {"marker", "P5"});
 
@@ -364,7 +364,7 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
         case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied: {
             const ui32 access = NACLib::EAccessRights::DescribeSchema;
             YDB_LOG_ERROR_CTX(ctx, "Access denied (base path)",
-                {"user", (UserToken ? UserToken->GetUserSID() : "empty")},
+                {"userSID", (UserToken ? UserToken->GetUserSID() : "empty")},
                 {"access", NACLib::AccessRightsToString(access)},
                 {"path", JoinPath(entry.Path)});
             ReportError(NKikimrScheme::StatusAccessDenied, "Access denied", ctx);
@@ -394,7 +394,7 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
         ui32 access = NACLib::EAccessRights::DescribeSchema;
         if (entry.SecurityObject != nullptr && !entry.SecurityObject->CheckAccess(access, *UserToken)) {
             YDB_LOG_ERROR_CTX(ctx, "Access denied",
-                {"user", UserToken->GetUserSID()},
+                {"userSID", UserToken->GetUserSID()},
                 {"access", NACLib::AccessRightsToString(access)},
                 {"path", JoinPath(entry.Path)});
             ReportError(NKikimrScheme::StatusAccessDenied, "Access denied", ctx);
@@ -444,11 +444,11 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
 
 
 void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) {
-    YDB_LOG_DEBUG_CTX(ctx, "Handle TEvDescribeSchemeResult Forward",
-        {"actor", ctx.SelfID},
+    YDB_LOG_DEBUG_CTX(ctx, "Handle TEvDescribeSchemeResult",
+        {"selfId", ctx.SelfID},
         {"to", Source},
         {"cookie", ev->Cookie},
-        {"TEvDescribeSchemeResult", ev->Get()->ToString()});
+        {"ev", ev->Get()->ToString()});
 
     TxProxyMon->NavigateLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
 

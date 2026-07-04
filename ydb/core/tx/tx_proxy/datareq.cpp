@@ -1071,11 +1071,11 @@ void TDataReq::ContinueFlatMKQLResolve(const TActorContext &ctx) {
             TString error = TStringBuilder() << "Datashard program size limit exceeded ("
                 << transactionBuffer.size() << " > " << MaxDatashardProgramSize << ")";
 
-            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "",
+            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Error",
                 {"error", error},
-                {"actor", ctx.SelfID},
+                {"selfId", ctx.SelfID},
                 {"txId", TxId},
-                {"shard", shardData.ShardId});
+                {"shardId", shardData.ShardId});
 
             for (ui32 i = 0; i < shx; ++i) {
                 auto result = engine.GetAffectedShard(i, shardData);
@@ -1400,7 +1400,7 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
                         txId, operation, line, backtrace ? backtrace->PrintToString().data() : "");
                 };
                 settings.LogErrorWriter = [txId, actorSystem](const TString& message) {
-                    YDB_LOG_ERROR_CTX_COMP(*actorSystem, NKikimrServices::MINIKQL_ENGINE, "Proxy data request, engine",
+                    YDB_LOG_ERROR_CTX_COMP(*actorSystem, NKikimrServices::MINIKQL_ENGINE, "Proxy data request, engine error",
                         {"txId", txId},
                         {"error", message});
                 };
@@ -1949,9 +1949,9 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
             }
             ReportStatus(errorCode, NKikimrIssues::TStatusIds::INTERNAL_ERROR, true, ctx);
             TxProxyMon->TxResultAborted->Inc();
-            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Coordinator mismatch between resolve and propose states",
-                {"actorId", ctx.SelfID},
-                {"txid", TxId},
+            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Handle Prepare TEvProposeTransactionResult TDataReq all DataShards are prepared successful, but we unable to choose coordinator neither by resolved keys nor by TEvProposeTransactionResult from datashard, tx canceled",
+                {"selfId", ctx.SelfID},
+                {"txId", TxId},
                 {"selectedCoordinator", SelectedCoordinator},
                 {"privateCoordinator", privateCoordinator});
 
@@ -2496,8 +2496,8 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, cons
     // and therefore any shard restart may cause inconsistent response.
     if (ReadTableRequest->ClearanceSenders.contains(shard) || PerTablet[shard].StreamCleared) {
             YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Cannot recover from shard restart",
-                {"shard", shard},
-                {"txid", TxId});
+                {"shardId", shard},
+                {"txId", TxId});
 
             // We must send response to current request too
             auto response = MakeHolder<TEvTxProcessing::TEvStreamClearanceResponse>();
@@ -2511,8 +2511,8 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, cons
         }
 
     YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Got clearance request",
-        {"shard", rec.GetShardId()},
-        {"txid", rec.GetTxId()});
+        {"shardId", rec.GetShardId()},
+        {"txId", rec.GetTxId()});
 
     ctx.Send(ev->Sender, new TEvTxProcessing::TEvStreamClearancePending(TxId));
 
@@ -2521,7 +2521,7 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, cons
 
     if (ReadTableRequest->KeySpace.IsFull()) {
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Collected all clearance requests",
-            {"txid", TxId});
+            {"txId", TxId});
     }
 
     ProcessStreamClearance(true, ctx);
@@ -2533,7 +2533,7 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorCo
     Y_ABORT_UNLESS(ReadTableRequest);
 
     YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Abort read table transaction because stream is dead",
-        {"txid", TxId});
+        {"txId", TxId});
 
     ReportStatus(TEvTxUserProxy::TResultStatus::ExecComplete, NKikimrIssues::TStatusIds::REJECTED, true, ctx);
     Die(ctx);
@@ -2543,7 +2543,7 @@ void TDataReq::HandleResolve(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const T
     Y_UNUSED(ev);
     Y_ABORT_UNLESS(ReadTableRequest);
     YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Abort read table transaction because stream is dead",
-        {"txid", TxId});
+        {"txId", TxId});
 
     ReportStatus(TEvTxUserProxy::TResultStatus::ExecComplete, NKikimrIssues::TStatusIds::REJECTED, true, ctx);
     Become(&TThis::StateResolveTimeout);
@@ -2830,8 +2830,8 @@ ui64 TDataReq::SelectCoordinator(NSchemeCache::TSchemeCacheRequest &cacheRequest
     // no tablets keys are found in requests keys
     // it take place when a transaction have only checks locks
     YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "SelectCoordinator unable to choose coordinator from resolved keys, will try to pick it from TEvProposeTransactionResult from datashard",
-        {"actor", ctx.SelfID},
-        {"txid", TxId});
+        {"selfId", ctx.SelfID},
+        {"txId", TxId});
     return 0;
 }
 
@@ -2969,15 +2969,15 @@ void TDataReq::SendStreamClearanceResponse(ui64 shard, bool cleared, const TActo
     auto it = ReadTableRequest->ClearanceSenders.find(shard);
     if (it == ReadTableRequest->ClearanceSenders.end()) {
         YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "No sender for clearance request",
-            {"shard", shard},
-            {"txid", TxId},
+            {"shardId", shard},
+            {"txId", TxId},
             {"cleared", cleared});
         return;
     }
 
     YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Send stream clearance",
-        {"shard", shard},
-        {"txid", TxId},
+        {"shardId", shard},
+        {"txId", TxId},
         {"cleared", cleared});
 
     ctx.Send(it->second, response.Release());

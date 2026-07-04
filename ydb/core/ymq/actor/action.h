@@ -412,7 +412,8 @@ protected:
 
         const TDuration duration = GetRequestDuration();
         const TDuration workingDuration = GetRequestWorkingDuration();
-        if (QueueLeader_ && (IsActionForQueue(Action_) || IsActionForQueueYMQ(Action_))) {
+        if (QueueLeader_ && (IsActionForQueue(Action_) || IsActionForQueueYMQ(Action_))
+            && !ShouldReportTopicActionMetricsToPqrb()) {
             auto counterChangedEvent = MakeHolder<TSqsEvents::TEvActionCounterChanged>();
             counterChangedEvent->Record.set_action(Action_);
             counterChangedEvent->Record.set_durationms(duration.MilliSeconds());

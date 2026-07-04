@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/persqueue/common/percentiles.h>
+#include <ydb/core/persqueue/events/topic_sqs_action_metrics.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/library/actors/core/actor.h>
@@ -420,7 +421,7 @@ void TTopicSqsMetricsHandler::ApplyActionCounterMetrics(
     }
 }
 
-void TTopicSqsMetricsHandler::AddActionMetrics(const NKikimrPQ::TEvTopicSqsActionMetrics& metrics) {
+void TTopicSqsMetricsHandler::AddProxyActionMetrics(const NKikimrPQ::TEvTopicSqsActionMetrics& metrics) {
     switch (metrics.GetActionCase()) {
     case NKikimrPQ::TEvTopicSqsActionMetrics::kChangeMessageVisibility: {
         const auto& action = metrics.GetChangeMessageVisibility();
@@ -435,13 +436,11 @@ void TTopicSqsMetricsHandler::AddActionMetrics(const NKikimrPQ::TEvTopicSqsActio
     case NKikimrPQ::TEvTopicSqsActionMetrics::kDeleteMessage: {
         const auto& action = metrics.GetDeleteMessage();
         ApplyActionCounterMetrics("DeleteMessage", action.GetErrorsCount(), action.GetDurationMs(), 0);
-        PendingDeleteMessageCount_ += action.GetDeleteMessageCount();
         break;
     }
     case NKikimrPQ::TEvTopicSqsActionMetrics::kDeleteMessageBatch: {
         const auto& action = metrics.GetDeleteMessageBatch();
         ApplyActionCounterMetrics("DeleteMessageBatch", action.GetErrorsCount(), action.GetDurationMs(), 0);
-        PendingDeleteMessageCount_ += action.GetDeleteMessageCount();
         break;
     }
     case NKikimrPQ::TEvTopicSqsActionMetrics::kGetQueueAttributes: {
@@ -467,25 +466,16 @@ void TTopicSqsMetricsHandler::AddActionMetrics(const NKikimrPQ::TEvTopicSqsActio
             action.GetDurationMs(),
             action.GetWorkingDurationMs()
         );
-        PendingReceiveMessageCount_ += action.GetReceiveMessageCount();
-        PendingReceiveMessageBytesRead_ += action.GetReceiveMessageBytesRead();
-        PendingReceiveMessageEmptyCount_ += action.GetReceiveMessageEmptyCount();
         break;
     }
     case NKikimrPQ::TEvTopicSqsActionMetrics::kSendMessage: {
         const auto& action = metrics.GetSendMessage();
         ApplyActionCounterMetrics("SendMessage", action.GetErrorsCount(), action.GetDurationMs(), 0);
-        PendingSendMessageCount_ += action.GetSendMessageCount();
-        PendingBytesWritten_ += action.GetBytesWritten();
-        PendingDeduplicationCount_ += action.GetDeduplicationCount();
         break;
     }
     case NKikimrPQ::TEvTopicSqsActionMetrics::kSendMessageBatch: {
         const auto& action = metrics.GetSendMessageBatch();
         ApplyActionCounterMetrics("SendMessageBatch", action.GetErrorsCount(), action.GetDurationMs(), 0);
-        PendingSendMessageCount_ += action.GetSendMessageCount();
-        PendingBytesWritten_ += action.GetBytesWritten();
-        PendingDeduplicationCount_ += action.GetDeduplicationCount();
         break;
     }
     case NKikimrPQ::TEvTopicSqsActionMetrics::kSetQueueAttributes: {
@@ -514,6 +504,42 @@ void TTopicSqsMetricsHandler::AddActionMetrics(const NKikimrPQ::TEvTopicSqsActio
         break;
     }
     case NKikimrPQ::TEvTopicSqsActionMetrics::ACTION_NOT_SET:
+        break;
+    }
+}
+
+void TTopicSqsMetricsHandler::AddMessageMetrics(const NKikimrPQ::TEvTopicSqsActionMetrics& metrics) {
+    switch (metrics.GetActionCase()) {
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kDeleteMessage: {
+        PendingDeleteMessageCount_ += metrics.GetDeleteMessage().GetDeleteMessageCount();
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kDeleteMessageBatch: {
+        PendingDeleteMessageCount_ += metrics.GetDeleteMessageBatch().GetDeleteMessageCount();
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kReceiveMessage: {
+        const auto& action = metrics.GetReceiveMessage();
+        PendingReceiveMessageCount_ += action.GetReceiveMessageCount();
+        PendingReceiveMessageBytesRead_ += action.GetReceiveMessageBytesRead();
+        PendingReceiveMessageEmptyCount_ += action.GetReceiveMessageEmptyCount();
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kSendMessage: {
+        const auto& action = metrics.GetSendMessage();
+        PendingSendMessageCount_ += action.GetSendMessageCount();
+        PendingBytesWritten_ += action.GetBytesWritten();
+        PendingDeduplicationCount_ += action.GetDeduplicationCount();
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kSendMessageBatch: {
+        const auto& action = metrics.GetSendMessageBatch();
+        PendingSendMessageCount_ += action.GetSendMessageCount();
+        PendingBytesWritten_ += action.GetBytesWritten();
+        PendingDeduplicationCount_ += action.GetDeduplicationCount();
+        break;
+    }
+    default:
         break;
     }
 }

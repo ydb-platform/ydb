@@ -2,13 +2,14 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/events/topic_sqs_action_metrics.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 
 namespace NKikimr::NSQS {
 
 inline bool HasTopicSqsActionMetrics(const NKikimrPQ::TEvTopicSqsActionMetrics& metrics) {
-    return metrics.GetActionCase() != NKikimrPQ::TEvTopicSqsActionMetrics::ACTION_NOT_SET;
+    return NPQ::HasTopicSqsActionMetrics(metrics);
 }
 
 inline void SendTopicSqsActionMetricsToPqrb(

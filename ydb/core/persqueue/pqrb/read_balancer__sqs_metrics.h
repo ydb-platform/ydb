@@ -77,7 +77,8 @@ public:
         TConstArrayRef<ui64> waitingLockingDurationValues,
         ui64 deletedByMovedToDlq
     );
-    void AddActionMetrics(const NKikimrPQ::TEvTopicSqsActionMetrics& metrics);
+    void AddProxyActionMetrics(const NKikimrPQ::TEvTopicSqsActionMetrics& metrics);
+    void AddMessageMetrics(const NKikimrPQ::TEvTopicSqsActionMetrics& metrics);
 
 private:
     void ApplyActionCounterMetrics(const TString& actionName, ui32 errorsCount, ui64 durationMs, ui64 workingDurationMs);

@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/persqueue/common/percentiles.h>
+#include <ydb/core/persqueue/events/topic_sqs_action_metrics.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/actors/core/actor.h>
@@ -395,8 +396,14 @@ void TTopicMetricsHandler::InitializeSqsQueueMetrics(const NKikimrPQ::TPQTabletC
 }
 
 void TTopicMetricsHandler::AddSqsActionMetrics(const NKikimrPQ::TEvTopicSqsActionMetrics& metrics) {
-    if (SqsMetricsHandler_) {
-        SqsMetricsHandler_->AddActionMetrics(metrics);
+    if (!SqsMetricsHandler_) {
+        return;
+    }
+    if (HasTopicSqsProxyActionMetrics(metrics)) {
+        SqsMetricsHandler_->AddProxyActionMetrics(metrics);
+    }
+    if (HasTopicSqsMessageMetrics(metrics)) {
+        SqsMetricsHandler_->AddMessageMetrics(metrics);
     }
 }
 

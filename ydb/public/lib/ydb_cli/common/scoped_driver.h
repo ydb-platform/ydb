@@ -10,7 +10,9 @@ namespace NYdb::NConsoleClient {
 void StopDriver(TDriver& driver, bool wait = true) noexcept;
 
 // Owns a TDriver and calls Stop(true) on destruction or move-assignment.
-// Implicitly converts to const TDriver& / TDriver& for SDK client constructors.
+// Implicitly converts to const TDriver& / TDriver& for SDK client constructors,
+// but only for lvalues — rvalue conversion is deleted to prevent
+// Client(CreateDriver(config)) lifetime bugs at compile time.
 class TScopedDriver {
 public:
     TScopedDriver() = default;
@@ -28,8 +30,10 @@ public:
     const TDriver& Get() const;
     TDriver& Get();
 
-    operator const TDriver&() const;
-    operator TDriver&();
+    operator const TDriver&() const &;
+    operator TDriver&() &;
+    operator const TDriver&() const && = delete;
+    operator TDriver&() && = delete;
 
     explicit operator bool() const noexcept;
 

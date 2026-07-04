@@ -49,11 +49,11 @@ TDriver& TScopedDriver::Get() {
     return *Driver_;
 }
 
-TScopedDriver::operator const TDriver&() const {
+TScopedDriver::operator const TDriver&() const & {
     return Get();
 }
 
-TScopedDriver::operator TDriver&() {
+TScopedDriver::operator TDriver&() & {
     return Get();
 }
 

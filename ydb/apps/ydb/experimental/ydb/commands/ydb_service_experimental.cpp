@@ -535,7 +535,8 @@ int TCommandGenerateNumbers::Run(TConfig& config) {
     settings.RowsPerRequest(RowsPerRequest);
     settings.Threads(Threads);
 
-    TGenerateClient client(CreateDriver(config), config);
+    auto driver = CreateDriver(config);
+    TGenerateClient client(driver, config);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Generate(Path, settings));
 
     return EXIT_SUCCESS;

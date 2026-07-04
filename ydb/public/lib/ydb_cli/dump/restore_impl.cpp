@@ -224,6 +224,16 @@ TStatus CreateTopic(TTopicClient& client, const TString& dbPath, const Ydb::Topi
     return result;
 }
 
+std::vector<TConsumer> ExtractConsumers(Ydb::Topic::CreateTopicRequest& request) {
+    std::vector<TConsumer> consumers;
+    consumers.reserve(request.consumers_size());
+    for (const auto& consumer : request.consumers()) {
+        consumers.emplace_back(consumer);
+    }
+    request.clear_consumers();
+    return consumers;
+}
+
 TStatus CreateCoordinationNode(
     NCoordination::TClient& client,
     const TString& dbPath,
@@ -472,6 +482,8 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
         ExistingEntries.emplace(TString{entry.Name}, entry.Type);
     }
 
+    PendingConsumersRestores.clear();
+
     // restore
     auto restoreResult = Result<TRestoreResult>();
     if (settings.Replace_) {
@@ -480,6 +492,9 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
         restoreResult = RestoreFolder(fsPath, dbPath, settings);
     }
     if (auto result = DelayedRestoreManager.RestoreDelayed(); !result.IsSuccess()) {
+        restoreResult = result;
+    }
+    if (auto result = RestorePendingConsumers(); !result.IsSuccess()) {
         restoreResult = result;
     }
 
@@ -756,6 +771,8 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
         return *error;
     }
 
+    PendingConsumersRestores.clear();
+
     auto dbDesc = ReadDatabaseDescription(fsPath, Log.get());
 
     TString dbPath;
@@ -813,6 +830,9 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
         restoreSettings.ReplaceSysACL(true);
         auto restoreResult = RestoreFolder(fsPath, dbPath, restoreSettings);
         if (auto result = DelayedRestoreManager.RestoreDelayed(); !result.IsSuccess()) {
+            restoreResult = result;
+        }
+        if (auto result = RestorePendingConsumers(); !result.IsSuccess()) {
             restoreResult = result;
         }
         return restoreResult;
@@ -1449,10 +1469,12 @@ TRestoreResult TRestoreClient::RestoreTopic(
         return CheckExistenceAndType(dbPath, ESchemeEntryType::Topic);
     }
 
-    const auto request = ReadTopicCreationRequest(fsPath, Log.get());
+    auto request = ReadTopicCreationRequest(fsPath, Log.get());
+    auto consumers = ExtractConsumers(request);
     auto result = CreateTopic(TopicClient, dbPath, request);
     if (result.IsSuccess()) {
         LOG_D("Created " << dbPath.Quote());
+        ScheduleConsumersRestore(dbPath, std::move(consumers));
         return RestorePermissions(fsPath, dbPath, settings, ExistingEntries.contains(dbPath), false);
     }
 
@@ -2184,7 +2206,28 @@ TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const T
     }
 
     const auto topicPath = Join("/", dbPath, fsPath.GetName());
-    return RestoreConsumers(topicPath, topicDesc.GetConsumers());
+    ScheduleConsumersRestore(topicPath, topicDesc.GetConsumers());
+    return Result<TRestoreResult>();
+}
+
+void TRestoreClient::ScheduleConsumersRestore(const TString& topicPath, std::vector<TConsumer> consumers) {
+    if (consumers.empty()) {
+        return;
+    }
+    PendingConsumersRestores.emplace_back(TPendingConsumersRestore{
+        .TopicPath = topicPath,
+        .Consumers = std::move(consumers),
+    });
+}
+
+TRestoreResult TRestoreClient::RestorePendingConsumers() {
+    auto pending = std::exchange(PendingConsumersRestores, {});
+    for (const auto& entry : pending) {
+        if (auto result = RestoreConsumers(entry.TopicPath, entry.Consumers); !result.IsSuccess()) {
+            return result;
+        }
+    }
+    return Result<TRestoreResult>();
 }
 
 TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const std::vector<TConsumer>& consumers) {

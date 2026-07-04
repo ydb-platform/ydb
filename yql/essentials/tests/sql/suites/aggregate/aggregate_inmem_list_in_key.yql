@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 select x,count(*) as c from (
 select AsList(1,2) as x 
 union all

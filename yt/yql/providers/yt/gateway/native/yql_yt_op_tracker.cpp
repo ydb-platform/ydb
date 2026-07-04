@@ -1,6 +1,7 @@
 #include "yql_yt_op_tracker.h"
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <yt/cpp/mapreduce/interface/operation.h>
 #include <yt/cpp/mapreduce/interface/job_statistics.h>
@@ -91,6 +92,8 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
     if (!publicId) {
         return future;
     }
+    YQL_CLOG(INFO, ProviderYt) << "Tracking progress for publicId=" << *publicId;
+
 
     TOperationProgress progress(TString(YtProviderName), *publicId,
         TOperationProgress::EState::InProgress);
@@ -134,21 +137,23 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
                     auto operationStatistic = operation->GetJobStatistics();
 
                     if (operationStatistic.HasStatistics("data/input/data_weight") && operationStatistic.HasStatistics("data/output/0/data_weight")) {
-                        auto inputSize = *operationStatistic.GetStatistics("data/input/data_weight").Sum();
-                        auto outputSize = 0;
-                        size_t i = 0;
-                        while (true) {
-                            TStringBuilder key;
-                            key << "data/output/" << i << "/data_weight";
-                            if (!operationStatistic.HasStatistics(key)) break;
-                            outputSize += *operationStatistic.GetStatistics(key).Sum();
-                            i++;
-                        }
+                        if (auto inputOperationStatisticSum = operationStatistic.GetStatistics("data/input/data_weight").Sum()) {
+                            auto inputSize = *inputOperationStatisticSum;
+                            auto outputSize = 0;
+                            size_t i = 0;
+                            while (true) {
+                                TStringBuilder key;
+                                key << "data/output/" << i << "/data_weight";
+                                if (!operationStatistic.HasStatistics(key)) break;
+                                outputSize += operationStatistic.GetStatistics(key).Sum().GetOrElse(0);
+                                i++;
+                            }
 
-                        if (inputSize != 0 && outputSize / inputSize >= 20) {
-                            progress.Alerts.push_back(
-                                TOperationProgress::TAlert{"data_explosion", TStringBuilder() << "Total output/input ratio: " << outputSize / inputSize << "x"}
-                            );
+                            if (inputSize != 0 && outputSize / inputSize >= 20) {
+                                progress.Alerts.push_back(
+                                    TOperationProgress::TAlert{"data_explosion", TStringBuilder() << "Total output/input ratio: " << outputSize / inputSize << "x"}
+                                );
+                            }
                         }
                     }
                     jobStatisticsUpdateTimer = TInstant::Now();
@@ -283,6 +288,7 @@ void TOperationTracker::Tracker() {
                     activeOps.push_back(op);
                 }
             } catch (...) {
+                YQL_CLOG(ERROR, ProviderYt) << "Operation tracker failed: " << CurrentExceptionMessage();
             }
             if (!Running_) {
                 break;

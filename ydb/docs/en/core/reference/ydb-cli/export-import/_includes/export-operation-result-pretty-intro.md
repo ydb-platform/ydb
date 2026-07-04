@@ -1,0 +1,1 @@
+- In the `pretty` output mode (default), the operation ID is shown in the id field highlighted with pseudographics:

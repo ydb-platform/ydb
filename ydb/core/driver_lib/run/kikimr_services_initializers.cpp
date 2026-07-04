@@ -126,6 +126,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #include <ydb/core/persqueue/pq.h>
+#include <ydb/core/persqueue/deferred_publish/registry_actor.h>
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
@@ -1651,18 +1652,7 @@ static TIntrusivePtr<TTabletSetupInfo> CreateTablet(
 
     TTabletTypes::EType tabletType = TTabletTypes::StrToType(typeName);
 
-    ui32 workPoolId = appData->UserPoolId;
-    if (appData->FeatureFlags.GetImportantTabletsUseSystemPool()) {
-        switch (tabletType) {
-            case TTabletTypes::Coordinator:
-            case TTabletTypes::Mediator:
-            case TTabletTypes::Hive:
-                workPoolId = appData->SystemPoolId;
-                break;
-            default:
-                break;
-        }
-    }
+    const ui32 workPoolId = SelectTabletWorkPoolId(tabletType, appData);
 
     tabletSetup = MakeTabletSetupInfo(tabletType, tabletInfo->BootType, workPoolId, appData->SystemPoolId);
 
@@ -1683,10 +1673,35 @@ TBootstrapperInitializer::TBootstrapperInitializer(
 void TBootstrapperInitializer::InitializeServices(
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData) {
-    if (Config.HasBootstrapConfig()) {
+    if (!Config.HasBootstrapConfig()) {
+        return;
+    }
+
+    if (appData->FeatureFlags.GetEnableConfiguredBootstrapper()) {
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             TActorId(),
-            TActorSetupCmd(CreateConfiguredTabletBootstrapper(Config.GetBootstrapConfig()), TMailboxType::HTSwap, appData->SystemPoolId)));
+            TActorSetupCmd(CreateConfiguredTabletBootstrapper(Config.GetBootstrapConfig(), /* manageAllTablets */ true), TMailboxType::HTSwap, appData->SystemPoolId)));
+        return;
+    }
+
+    NKikimrConfig::TBootstrap dynamicConfig;
+    dynamicConfig.CopyFrom(Config.GetBootstrapConfig());
+    dynamicConfig.ClearTablet();
+
+    for (const auto &boot : Config.GetBootstrapConfig().GetTablet()) {
+        if (boot.GetAllowDynamicConfiguration()) {
+            dynamicConfig.AddTablet()->CopyFrom(boot);
+        } else if (Find(boot.GetNode(), NodeId) != boot.GetNode().end()) {
+            setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+                MakeBootstrapperID(boot.GetInfo().GetTabletID(), NodeId),
+                TActorSetupCmd(CreateTabletBootstrapper(boot, appData), TMailboxType::HTSwap, appData->SystemPoolId)));
+        }
+    }
+
+    if (dynamicConfig.TabletSize()) {
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+            TActorId(),
+            TActorSetupCmd(CreateConfiguredTabletBootstrapper(dynamicConfig, /* manageAllTablets */ false), TMailboxType::HTSwap, appData->SystemPoolId)));
     }
 }
 
@@ -2033,8 +2048,9 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             && (!kqpConfig.HasEnable() || kqpConfig.GetEnable());
 
         TDuration publishWarmupTimeout = TDuration::Zero();
-        if (kqpEnabled && Config.GetTableServiceConfig().GetEnableCompileCacheWarmup()
-                && !appData->TenantName.empty()) {
+        const TString publisherDomainName = appData->DomainsInfo->Domain ? appData->DomainsInfo->Domain->Name : TString();
+        if (kqpEnabled && NKqp::IsCompileCacheWarmupEnabled(
+                Config.GetTableServiceConfig(), appData->TenantName, publisherDomainName)) {
             publishWarmupTimeout = NKqp::ImportWarmupConfigFromProto(
                 Config.GetTableServiceConfig().GetCompileCacheWarmupConfig()).HardDeadline;
         }
@@ -2301,6 +2317,17 @@ void TPersQueueDirectReadCacheInitializer::InitializeServices(NActors::TActorSys
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
+TTopicDeferredPublishRegistryInitializer::TTopicDeferredPublishRegistryInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
+void TTopicDeferredPublishRegistryInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    IActor* actor = NPQ::NDeferredPublish::CreateDeferredPublishRegistryActor();
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+        NPQ::NDeferredPublish::MakeDeferredPublishRegistryActorId(),
+        TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
+}
+
 TMemProfMonitorInitializer::TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig, TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider)
     : IKikimrServicesInitializer(runConfig)
     , ProcessMemoryInfoProvider(std::move(processMemoryInfoProvider))
@@ -2406,8 +2433,9 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
 
         auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
+        const TString warmupDomainName = appData->DomainsInfo->Domain ? appData->DomainsInfo->Domain->Name : TString();
         TDuration warmupDeadline;
-        if (Config.GetTableServiceConfig().GetEnableCompileCacheWarmup() && !appData->TenantName.empty()) {
+        if (NKqp::IsCompileCacheWarmupEnabled(Config.GetTableServiceConfig(), appData->TenantName, warmupDomainName)) {
             auto warmupProto = Config.GetTableServiceConfig().GetCompileCacheWarmupConfig();
             warmupDeadline = TDuration::Seconds(std::max(
                 warmupProto.GetHardDeadlineSeconds(), warmupProto.GetSoftDeadlineSeconds()));
@@ -2437,7 +2465,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             NSecret::MakeDescribeSchemaSecretServiceId(NodeId),
             TActorSetupCmd(describeSchemaSecretsService, TMailboxType::HTSwap, appData->UserPoolId)));
 
-        if (Config.GetTableServiceConfig().GetEnableCompileCacheWarmup() && !appData->TenantName.empty()) {
+        if (NKqp::IsCompileCacheWarmupEnabled(Config.GetTableServiceConfig(), appData->TenantName, warmupDomainName)) {
             auto warmupConfig = NKqp::ImportWarmupConfigFromProto(Config.GetTableServiceConfig().GetCompileCacheWarmupConfig());
 
             const ui32 cacheSize = Config.GetTableServiceConfig().GetCompileQueryCacheSize();
@@ -2446,7 +2474,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             }
 
             TString database = appData->TenantName;
-            TString cluster = appData->DomainsInfo->Domain ? appData->DomainsInfo->Domain->Name : TString();
+            const TString& cluster = warmupDomainName;
 
             TVector<NActors::TActorId> notifyActorIds = {
                 NKqp::MakeKqpRmServiceID(NodeId),

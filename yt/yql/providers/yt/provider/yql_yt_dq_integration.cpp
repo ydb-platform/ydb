@@ -264,7 +264,9 @@ public:
                         YQL_ENSURE(tableName, "Unaccounted anonymous table: " << pathInfo->Table->Name);
                         pathInfo->Table->Name = tableName;
                     }
-
+                    if (pathInfo->Table->Meta && pathInfo->Table->Meta->Attrs.Value("optimize_for", "scan") != "scan") {
+                        pathInfo->Columns = nullptr;
+                    }
                     paths.push_back(pathInfo);
                     keys.emplace_back(TStringBuilder() << groupId << "/" << pathId);
                 }

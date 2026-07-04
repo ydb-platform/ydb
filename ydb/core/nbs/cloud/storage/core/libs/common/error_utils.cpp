@@ -11,6 +11,12 @@ NProto::TError TranslateError(
     const TString& errorReason,
     ETranslateFlags flags)
 {
+    if (errorResponse == NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN &&
+        errorReason == CantAcquireDataErrorMessage)
+    {
+        return MakeError(E_CANCELLED, errorReason);
+    }
+
     switch (flags) {
         case ETranslateFlags::None: {
             if (HasSuccess(errorResponse)) {

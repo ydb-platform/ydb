@@ -288,7 +288,12 @@ void TQueryBase::RunStreamQuery(TString sql, NYdb::TParamsBuilder* params, ui64 
         *request.mutable_parameters() = NYdb::TProtoAccessor::GetProtoMap(params->Build());
     }
 
-    StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(std::move(request), Database, Nothing(), ActorContext(), true, channelBufferSize);
+    TMaybe<TString> token = Nothing();
+    if (IsSystemUser) {
+        token = NACLib::TSystemUsers::Metadata().SerializeAsString();
+    }
+
+    StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(std::move(request), Database, token, ActorContext(), true, channelBufferSize);
     ReadNextStreamPart();
 }
 

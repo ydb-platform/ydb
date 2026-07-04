@@ -148,6 +148,7 @@ TString TTxMonitoring::RenderMainPage() {
     html << "<b>LastNormalizerSequentialId :</b> " << Self->NormalizerController.GetLastSavedNormalizerId() << "<br />";
     html << "<b>SubDomainLocalPathId :</b> " << Self->SpaceWatcher->SubDomainPathId.value_or(0) << "<br />";
     html << "<b>SubDomainOutOfSpace :</b> " << Self->SpaceWatcher->SubDomainOutOfSpace << "<br />";
+    html << "<b>SubDomainSmallBlobsQuotaExceeded :</b> " << Self->SpaceWatcher->SubDomainSmallBlobsQuotaExceeded << "<br />";
     html << "<h3>Tables Manager</h3>";
     html << "<h4>Status</h4>";
     html << "<pre>" << JsonReport << "</pre><br />";

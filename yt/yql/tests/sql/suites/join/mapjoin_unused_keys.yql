@@ -1,4 +1,3 @@
-/* syntax version 1 */
 use plato;
 pragma yt.MapJoinLimit="1m";
 pragma yt.DisableOptimizers="PhysicalOptimizer-FuseInnerMap";

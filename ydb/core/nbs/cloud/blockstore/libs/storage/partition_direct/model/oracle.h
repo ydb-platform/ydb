@@ -42,6 +42,10 @@ public:
         THostIndex hostIndex,
         EOperation operation,
         TInstant now) = 0;
+    virtual void OnRequestCancelled(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now) = 0;
 
     // Picks the best host (by lowest inflight count) out of the provided set
     // of hosts. Ties are broken uniformly at random.
@@ -58,6 +62,8 @@ public:
     [[nodiscard]] virtual TDuration GetEraseRequestTimeout() const = 0;
     [[nodiscard]] virtual EWriteMode GetWriteMode() const = 0;
 
+    [[nodiscard]] virtual const THostStat& GetHostStatistics(
+        THostIndex hostIndex) const = 0;
     [[nodiscard]] virtual TString Dump() const = 0;
 };
 
@@ -83,6 +89,10 @@ public:
         THostIndex hostIndex,
         EOperation operation,
         TInstant now) override;
+    void OnRequestCancelled(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now) override;
 
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,
@@ -97,6 +107,8 @@ public:
     [[nodiscard]] TDuration GetEraseRequestTimeout() const override;
     [[nodiscard]] EWriteMode GetWriteMode() const override;
 
+    [[nodiscard]] const THostStat& GetHostStatistics(
+        THostIndex hostIndex) const override;
     [[nodiscard]] TString Dump() const override;
 
 private:

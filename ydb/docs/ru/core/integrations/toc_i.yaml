@@ -19,6 +19,11 @@ items:
   include:
     mode: link
     path: ingestion/toc-ingestion.yaml
+- name: Перенос данных из других СУБД
+  href: transfer/index.md
+  include:
+    mode: link
+    path: transfer/toc-transfer.yaml
 - name: Миграции данных
   href: data-migration/index.md
   include:

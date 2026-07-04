@@ -1,0 +1,21 @@
+items:
+- name: Обзор
+  href: index.md
+- name: PostgreSQL
+  href: from/postgresql.md
+- name: MySQL / MariaDB
+  href: from/mysql.md
+- name: Microsoft SQL Server
+  href: from/mssql.md
+- name: ClickHouse
+  href: from/clickhouse.md
+- name: Greenplum
+  href: from/greenplum.md
+- name: Oracle Database
+  href: from/oracle.md
+- name: IBM Db2
+  href: from/db2.md
+- name: IBM Informix
+  href: from/informix.md
+- name: SQLite
+  href: from/sqlite.md

@@ -233,7 +233,7 @@ def build_html_dashboard(
         <li>SIZE still caps recommended CPU (SMALL=1, MEDIUM=4). When CLI flag <code>--maximize-reqs-for-timeout-tests</code> is enabled, suites crossing the duration threshold additionally use size max: <b>SMALL=1, MEDIUM=4, LARGE=4</b>.</li>
         <li><b>recommended_split</b> uses per-<b>chunk</b> load: sum test durations inside each chunk. Overloaded chunks (<code>sum &gt; size_timeout*0.98</code>) are detected <b>even without a timeout</b> (<code>split_severity=at_risk</code>); with a timeout it is <code>timeout</code>. Required chunk count is <code>ceil(overloaded_total / (size_timeout*0.5))</code>, and a single very heavy chunk is split into <code>ceil(max_chunk_load / (size_timeout*0.5))</code> pieces. If a <b>single test</b> alone is at/above the budget (<code>single_test_blocks_split</code>), SPLIT_FACTOR cannot help — the fix is <code>TIMEOUT()</code> / reduce work / mute.</li>
         <li><b>cpu_action</b> compares recommended cpu to <code>ya_cpu</code>. A <b>lower</b> suggestion is suppressed (kept <b>ok</b>) while the suite is under split/time pressure, because a smaller cpu slot increases parallel chunks and can worsen timeouts/OOM.</li>
-        <li><b>recommended_ram</b> / <b>ram_action</b> come from observed per-chunk peak RAM (suite peak ÷ peak parallel chunks) rounded to a reservation tier. Like cpu, <code>REQUIREMENTS(ram)</code> reserves memory per chunk and limits parallelism.</li>
+        <li><b>memory → cpu</b>: on a single runner the local <code>ya make -t</code> scheduler caps parallelism <b>only</b> by cpu (sum of <code>REQUIREMENTS(cpu)</code> ≤ cores). <code>REQUIREMENTS(ram)</code> is <b>not honored locally</b>, so it is never recommended. Instead <b>max_chunk_ram</b> (physical peak of the heaviest chunk) is turned into <b>cpu_for_memory</b>: allow at most <code>floor(mem_budget / max_chunk_ram)</code> parallel chunks, i.e. <code>cpu ≈ ceil(cores / that)</code> (runner ≈ <b>96 cores / 283 GB</b>, per-suite budget ≈ <b>200 GB</b>). When <code>cpu_for_memory &gt; p95 cpu</code>, <b>recommended_cpu</b> is raised to it (shown red) to prevent OOM.</li>
       </ol>
       <ul>
         <li><b>status chunks</b>: counters from report rows where <code>chunk=true</code>. <b>total</b> = all chunk rows, <b>passed</b> = status OK/PASS.</li>
@@ -1302,7 +1302,7 @@ def build_html_dashboard(
         'peak_others_during_suite', 'peak_others_during_suite_at_sec',
         'peak_self_cpu_cores_during_suite', 'peak_self_cpu_at_sec',
         'peak_self_ram_gb_during_suite', 'peak_self_ram_at_sec',
-        'recommended_ram_gb', 'ram_action'
+        'max_chunk_ram_gb', 'cpu_for_memory'
       ];
 
       function titleAttr(text) {{
@@ -1417,10 +1417,10 @@ def build_html_dashboard(
             tipCell(formatAbsSecLabel(s.peak_self_cpu_at_sec), 'Wall-clock time of peak CPU for this suite.', ''),
             tipCell(s.peak_self_ram_gb_during_suite != null ? Number(s.peak_self_ram_gb_during_suite).toFixed(2) : '', s.peak_self_ram_tooltip, ''),
             tipCell(formatAbsSecLabel(s.peak_self_ram_at_sec), 'Wall-clock time of peak RAM for this suite.', ''),
-            (s.recommended_ram_gb != null
-              ? tipCell('ram:' + String(s.recommended_ram_gb), s.recommended_ram_tooltip || s.recommended_ram_explain || '', 'font-weight:700;')
-              : tipCell('—', s.recommended_ram_tooltip || 'No RAM data', '')),
-            actionCell(s.ram_action || 'ok', s.ram_action_tooltip),
+            tipCell(s.max_chunk_ram_gb != null ? Number(s.max_chunk_ram_gb).toFixed(1) : '', s.mem_tooltip || s.mem_explain || '', s.mem_driven_cpu ? 'color:#991b1b;font-weight:700;' : ''),
+            (s.cpu_for_memory != null
+              ? tipCell('cpu:' + String(s.cpu_for_memory), s.mem_tooltip || s.mem_explain || '', s.mem_driven_cpu ? 'font-weight:700;color:#856404;background:#fff3cd;padding:2px 6px;border-radius:10px;text-decoration:none;' : 'font-weight:700;')
+              : tipCell('—', s.mem_tooltip || 'REQUIREMENTS(ram) is ignored by the local scheduler; no memory-driven cpu bump.', '')),
           ];
         }});
 
@@ -1449,7 +1449,7 @@ def build_html_dashboard(
           '<th colspan="2">others during suite</th>' +
           '<th colspan="2">cpu_self_peak during suite</th>' +
           '<th colspan="2">cpu_ram_peak during suite</th>' +
-          '<th colspan="2">ram decision</th>' +
+          '<th colspan="2">memory → cpu</th>' +
           '</tr>';
         const subHeader =
           '<tr>' +
@@ -1492,8 +1492,8 @@ def build_html_dashboard(
           '<th data-col="38" class="group-end" style="cursor:pointer;user-select:none;" title="When CPU peaked">at' + marker(38) + '</th>' +
           '<th data-col="39" style="cursor:pointer;user-select:none;" title="Peak RAM (GB, sum) for this suite">GB' + marker(39) + '</th>' +
           '<th data-col="40" class="group-end" style="cursor:pointer;user-select:none;" title="When RAM peaked">at' + marker(40) + '</th>' +
-          '<th data-col="41" style="cursor:pointer;user-select:none;" title="Suggested REQUIREMENTS(ram:N) from observed per-chunk peak RAM">recommended_ram' + marker(41) + '</th>' +
-          '<th data-col="42" class="group-end" style="cursor:pointer;user-select:none;" title="raise/lower/ok vs current ya.make ram">ram_action' + marker(42) + '</th>' +
+          '<th data-col="41" style="cursor:pointer;user-select:none;" title="Peak RAM (GB) of the single heaviest chunk (physical proc-tree peak). Basis for memory-driven cpu.">max_chunk_ram' + marker(41) + '</th>' +
+          '<th data-col="42" class="group-end" style="cursor:pointer;user-select:none;" title="cpu slot needed so heaviest_chunk_ram × parallel stays within the runner budget. REQUIREMENTS(ram) is ignored locally, so memory is throttled via cpu.">cpu_for_memory' + marker(42) + '</th>' +
           '</tr>';
 
         const groupEnds = new Set([5, 8, 11, 12, 15, 17, 25, 32, 34, 36, 38, 40, 42]);

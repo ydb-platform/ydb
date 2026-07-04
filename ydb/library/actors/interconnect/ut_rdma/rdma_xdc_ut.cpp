@@ -94,14 +94,14 @@ public:
         }
     };
 
-    TSendActor(TActorId recipient, IEventBase* ev, std::shared_ptr<TExtCtx> ctx = nullptr)
+    TSendActor(TActorId recipient, std::unique_ptr<IEventBase>&& ev, std::shared_ptr<TExtCtx> ctx = nullptr)
         : Recipient(recipient)
-        , Event(ev)
+        , Event(std::move(ev))
         , Ctx(ctx)
     {}
 
     void Bootstrap() {
-        Send(Recipient, Event, IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+        Send(Recipient, std::move(Event), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
         Become(&TSendActor::StateResolve);
     }
 
@@ -120,7 +120,7 @@ public:
 
 private:
     TActorId Recipient;
-    IEventBase* Event;
+    std::unique_ptr<IEventBase> Event;
     std::shared_ptr<TExtCtx> Ctx;
 };
 
@@ -158,7 +158,7 @@ private:
 };
 
 struct TEventsForTest {
-    std::vector<TEvTestSerialization*> Events;
+    std::vector<std::unique_ptr<IEventBase>> Events;
     std::unordered_map<ui64, std::function<void(TEvTestSerialization*)>> Checks;
     NMonitoring::TDynamicCounterPtr Counters;
     std::shared_ptr<NInterconnect::NRdma::IMemPool> MemPool;
@@ -182,7 +182,7 @@ struct TEventsForTest {
                 sz = 512;
             }
 
-            auto ev = new TEvTestSerialization();
+            auto ev = std::make_unique<TEvTestSerialization>();
             ev->Record.SetBlobID(i);
             ev->Record.SetBuffer(TStringBuilder{} << "hello world " << i);
             for (ui32 j = 0; j < numPayloads; ++j) {
@@ -213,7 +213,7 @@ struct TEventsForTest {
                 UNIT_ASSERT(ev->AllowExternalDataChannel());
             }
 
-            Events.push_back(ev);
+            Events.push_back(std::move(ev));
 
             Checks.emplace(i, [i, numPayloads, isInline, sz, shuffle](TEvTestSerialization* ev) {
                 UNIT_ASSERT_VALUES_EQUAL(ev->Record.GetBlobID(), i);
@@ -1037,7 +1037,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenRdmaPartContainsMixedChunk
 TEST_F(XdcRdmaTest, SendRdma) {
     TTestICCluster cluster(2);
     auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
-    auto* ev = MakeTestEvent(123, memPool.get());
+    std::unique_ptr<IEventBase> ev(MakeTestEvent(123, memPool.get()));
 
     auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
         Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
@@ -1051,7 +1051,7 @@ TEST_F(XdcRdmaTest, SendRdma) {
 
     Sleep(TDuration::MilliSeconds(1000));
 
-    auto senderPtr = new TSendActor(receiver, ev);
+    auto senderPtr = new TSendActor(receiver, std::move(ev));
     cluster.RegisterActor(senderPtr, 2);
     UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
@@ -1059,7 +1059,7 @@ TEST_F(XdcRdmaTest, SendRdma) {
 TEST_F(XdcRdmaTest, SendRdmaWithShuffledPayload) {
     TTestICCluster cluster(2);
     auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
-    auto ev = new TEvTestSerialization();
+    auto ev = std::make_unique<TEvTestSerialization>();
     ev->Record.SetBlobID(123);
     ev->Record.SetBuffer("hello world");
     for (ui32 i = 0; i < 10; ++i) {
@@ -1091,7 +1091,7 @@ TEST_F(XdcRdmaTest, SendRdmaWithShuffledPayload) {
 
     Sleep(TDuration::MilliSeconds(1000));
 
-    auto senderPtr = new TSendActor(receiver, ev);
+    auto senderPtr = new TSendActor(receiver, std::move(ev));
     cluster.RegisterActor(senderPtr, 2);
     UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
@@ -1099,7 +1099,7 @@ TEST_F(XdcRdmaTest, SendRdmaWithShuffledPayload) {
 TEST_F(XdcRdmaTest, SendRdmaWithRegionOffset) {
     TTestICCluster cluster(2);
     auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
-    auto* ev = MakeTestEvent(123, memPool.get(), false, true);
+    std::unique_ptr<IEventBase> ev(MakeTestEvent(123, memPool.get(), false, true));
 
     auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
         Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
@@ -1113,7 +1113,7 @@ TEST_F(XdcRdmaTest, SendRdmaWithRegionOffset) {
 
     Sleep(TDuration::MilliSeconds(1000));
 
-    auto senderPtr = new TSendActor(receiver, ev);
+    auto senderPtr = new TSendActor(receiver, std::move(ev));
     cluster.RegisterActor(senderPtr, 2);
     UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
@@ -1121,7 +1121,7 @@ TEST_F(XdcRdmaTest, SendRdmaWithRegionOffset) {
 TEST_F(XdcRdmaTest, SendRdmaWithGlueWithRegionOffset) {
     TTestICCluster cluster(2);
     auto memPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
-    auto* ev = MakeTestEvent(123, memPool.get(), true, true);
+    std::unique_ptr<IEventBase> ev(MakeTestEvent(123, memPool.get(), true, true));
 
     auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
         Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
@@ -1139,7 +1139,7 @@ TEST_F(XdcRdmaTest, SendRdmaWithGlueWithRegionOffset) {
 
     Sleep(TDuration::MilliSeconds(1000));
 
-    auto senderPtr = new TSendActor(receiver, ev);
+    auto senderPtr = new TSendActor(receiver, std::move(ev));
     cluster.RegisterActor(senderPtr, 2);
     UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
@@ -1147,7 +1147,7 @@ TEST_F(XdcRdmaTest, SendRdmaWithGlueWithRegionOffset) {
 TEST_F(XdcRdmaTest, SendRdmaWithGlue) {
     TTestICCluster cluster(2);
     auto memPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
-    auto* ev = MakeTestEvent(123, memPool.get(), true, false);
+    std::unique_ptr<IEventBase> ev(MakeTestEvent(123, memPool.get(), true, false));
 
     auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
         Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
@@ -1163,7 +1163,7 @@ TEST_F(XdcRdmaTest, SendRdmaWithGlue) {
 
     Sleep(TDuration::MilliSeconds(1000));
 
-    auto senderPtr = new TSendActor(receiver, ev);
+    auto senderPtr = new TSendActor(receiver, std::move(ev));
     cluster.RegisterActor(senderPtr, 2);
     UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
@@ -1171,7 +1171,7 @@ TEST_F(XdcRdmaTest, SendRdmaWithGlue) {
 TEST_F(XdcRdmaTest, SendRdmaWithMultiGlue) {
     TTestICCluster cluster(2);
     auto memPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
-    auto* ev = MakeMultiGlueTestEvent(123, memPool.get());
+    std::unique_ptr<IEventBase> ev(MakeMultiGlueTestEvent(123, memPool.get()));
 
     auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
         Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
@@ -1189,7 +1189,7 @@ TEST_F(XdcRdmaTest, SendRdmaWithMultiGlue) {
 
     Sleep(TDuration::MilliSeconds(1000));
 
-    auto senderPtr = new TSendActor(receiver, ev);
+    auto senderPtr = new TSendActor(receiver, std::move(ev));
     cluster.RegisterActor(senderPtr, 2);
     UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
@@ -1223,8 +1223,8 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
     // Send one packet to establish session
     {
         auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
-        auto* ev = MakeTestEvent(0, memPool.get());
-        auto senderPtr = new TSendActor(receiver, ev);
+        std::unique_ptr<IEventBase> ev(MakeTestEvent(0, memPool.get()));
+        auto senderPtr = new TSendActor(receiver, std::move(ev));
         cluster.RegisterActor(senderPtr, 2);
 
         UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
@@ -1249,8 +1249,8 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
     {
         auto extCtx = std::make_shared<TSendActor::TExtCtx>();
         auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
-        auto* ev = MakeTestEvent(1, memPool.get());
-        auto senderPtr = new TSendActor(receiver, ev, extCtx);
+        std::unique_ptr<IEventBase> ev(MakeTestEvent(1, memPool.get()));
+        auto senderPtr = new TSendActor(receiver, std::move(ev), extCtx);
         cluster.RegisterActor(senderPtr, 2);
         // Undelivered because we can't allocate memory on the receiver side
         UNIT_ASSERT(extCtx->WaitForUndelivered(10));
@@ -1273,8 +1273,8 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
     // Send one more time (will be delivered through TCP)
     {
         auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
-        auto* ev = MakeTestEvent(1, memPool.get());
-        auto senderPtr = new TSendActor(receiver, ev);
+        std::unique_ptr<IEventBase> ev(MakeTestEvent(1, memPool.get()));
+        auto senderPtr = new TSendActor(receiver, std::move(ev));
         cluster.RegisterActor(senderPtr, 2);
     }
     UNIT_ASSERT(receiverPtr->WaitForReceive(2, 20));
@@ -1288,8 +1288,8 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
 
     {
         auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
-        auto* ev = MakeTestEvent(2, memPool.get());
-        auto senderPtr = new TSendActor(receiver, ev);
+        std::unique_ptr<IEventBase> ev(MakeTestEvent(2, memPool.get()));
+        auto senderPtr = new TSendActor(receiver, std::move(ev));
         cluster.RegisterActor(senderPtr, 2);
     }
     UNIT_ASSERT(receiverPtr->WaitForReceive(3, 20));
@@ -1325,8 +1325,8 @@ TEST_P(XdcRdmaTestCqMode, SendMix) {
     auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
     for (ui32 i = 0; i < numEvents; ++i) {
         const bool isRdma = i % 2 == 0;
-        auto* ev = MakeTestEvent(i, isRdma ? memPool.get() : nullptr);
-        auto senderPtr = new TSendActor(receiver, ev);
+        std::unique_ptr<IEventBase> ev(MakeTestEvent(i, isRdma ? memPool.get() : nullptr));
+        auto senderPtr = new TSendActor(receiver, std::move(ev));
         cluster.RegisterActor(senderPtr, 2);
     }
 
@@ -1360,8 +1360,8 @@ TEST_P(XdcRdmaTestCqMode, SendMixBig) {
     const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
     Sleep(TDuration::MilliSeconds(1000));
 
-    for (auto* ev : events.Events) {
-        auto senderPtr = new TSendActor(receiver, ev);
+    for (auto& ev : events.Events) {
+        auto senderPtr = new TSendActor(receiver, std::move(ev));
         cluster.RegisterActor(senderPtr, 2);
     }
 
@@ -1392,8 +1392,8 @@ TEST_F(XdcRdmaTest, SendMixBigShuffle) {
     const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
     Sleep(TDuration::MilliSeconds(1000));
 
-    for (auto* ev : events.Events) {
-        auto senderPtr = new TSendActor(receiver, ev);
+    for (auto& ev : events.Events) {
+        auto senderPtr = new TSendActor(receiver, std::move(ev));
         cluster.RegisterActor(senderPtr, 2);
     }
 
@@ -1406,7 +1406,7 @@ TEST_F(XdcRdmaTest, SendMixBigShuffle) {
 static void DoSendHugePayloadsNum(const ui32 numPayloads, const size_t payloadSz, TTestICCluster& cluster,
     std::shared_ptr<NInterconnect::NRdma::IMemPool> pool)
 {
-    auto ev = new TEvTestSerialization();
+    auto ev = std::make_unique<TEvTestSerialization>();
     ev->Record.SetBlobID(0);
     ev->Record.SetBuffer(TStringBuilder{} << "hello world ");
     for (ui32 j = 0; j < numPayloads; ++j) {
@@ -1434,7 +1434,7 @@ static void DoSendHugePayloadsNum(const ui32 numPayloads, const size_t payloadSz
     const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
 
     {
-        auto senderPtr = new TSendActor(receiver, ev);
+        auto senderPtr = new TSendActor(receiver, std::move(ev));
         cluster.RegisterActor(senderPtr, 2);
     }
 

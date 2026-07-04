@@ -118,6 +118,8 @@ private:
         } catch (const TFormatFail& ex) {
             ReplyErrorAndDie(ex.Status, ex.Error);
             return true;
+        } catch (const std::exception& ex) {
+            return OnUnhandledException(ex);
         }
 
         return false;

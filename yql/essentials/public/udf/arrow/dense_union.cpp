@@ -83,6 +83,19 @@ TVector<TDenseUnionChildUsage> CalculateDenseUnionChildrenUsage(const arrow::Arr
 }
 
 void AdjustDenseUnionValueOffsets(
+    TArrayRef<const i32> src,
+    TArrayRef<i32> dst,
+    TArrayRef<const i8> typeCodes,
+    TArrayRef<const TDenseUnionChildUsage> childUsage) {
+    Y_ENSURE(dst.size() == src.size(), "src and dst must have the same size");
+    Y_ENSURE(dst.size() == typeCodes.size(), "typeCodes size must match value offsets size");
+    for (size_t rowIndex = 0; rowIndex < dst.size(); ++rowIndex) {
+        const size_t typeCode = static_cast<size_t>(static_cast<ui8>(typeCodes[rowIndex]));
+        dst[rowIndex] = src[rowIndex] - static_cast<i32>(childUsage[typeCode].Offset);
+    }
+}
+
+void AdjustDenseUnionValueOffsetsInplace(
     TArrayRef<i32> valueOffsets,
     TArrayRef<const i8> typeCodes,
     TArrayRef<const TDenseUnionChildUsage> childUsage) {
@@ -92,11 +105,11 @@ void AdjustDenseUnionValueOffsets(
     if (!needsAdjust) {
         return;
     }
-
-    for (size_t rowIndex = 0; rowIndex < valueOffsets.size(); ++rowIndex) {
-        const size_t typeCode = static_cast<size_t>(static_cast<ui8>(typeCodes[rowIndex]));
-        valueOffsets[rowIndex] -= static_cast<i32>(childUsage[typeCode].Offset);
-    }
+    AdjustDenseUnionValueOffsets(
+        TArrayRef<const i32>(valueOffsets.data(), valueOffsets.size()),
+        valueOffsets,
+        typeCodes,
+        childUsage);
 }
 
 } // namespace NYql::NUdf

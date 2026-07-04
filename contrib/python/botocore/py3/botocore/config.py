@@ -115,10 +115,10 @@ class Config:
 
           * ``virtual`` -- Addressing style is always virtual. The name of the
             bucket must be DNS compatible or an exception will be thrown.
-            Endpoints will be addressed as such: ``mybucket.s3.amazonaws.com``
+            Endpoints will be addressed as such: ``amzn-s3-demo-bucket.s3.amazonaws.com``
 
           * ``path`` -- Addressing style is always by path. Endpoints will be
-            addressed as such: ``s3.amazonaws.com/mybucket``
+            addressed as such: ``s3.amazonaws.com/amzn-s3-demo-bucket``
 
         * ``us_east_1_regional_endpoint`` -- Refers to what S3 endpoint to use
           when the region is configured to be us-east-1. Values must be a
@@ -221,6 +221,12 @@ class Config:
 
         Defaults to None.
 
+    :type sigv4a_signing_region_set: string
+    :param sigv4a_signing_region_set: A set of AWS regions to apply the signature for
+        when using SigV4a for signing. Set to ``*`` to represent all regions.
+
+        Defaults to None.
+
     :type client_context_params: dict
     :param client_context_params: A dictionary of parameters specific to
         individual services. If available, valid parameters can be found in
@@ -257,6 +263,7 @@ class Config:
             ('request_min_compression_size_bytes', None),
             ('disable_request_compression', None),
             ('client_context_params', None),
+            ('sigv4a_signing_region_set', None),
         ]
     )
 

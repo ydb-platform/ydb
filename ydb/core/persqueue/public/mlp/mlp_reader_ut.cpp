@@ -296,8 +296,6 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         auto& runtime = setup->GetRuntime();
         TString successfulAttemptId;
 
-        const TString receiveAttemptId = TStringBuilder() << "attempt-" << attempt;
-
         for (ui32 attempt = 0; attempt < 20; ++attempt) {
             const TString receiveAttemptId = TStringBuilder() << "attempt-" << attempt;
             CreateReaderActor(runtime, {

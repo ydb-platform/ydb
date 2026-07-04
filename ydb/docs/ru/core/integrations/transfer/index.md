@@ -6,17 +6,17 @@
 
 ## Инструкции по источникам
 
-| СУБД-источник | Инструкция |
+| СУБД-источник | Обзор |
 | --- | --- |
-| PostgreSQL | [Перенос из PostgreSQL](from/postgresql.md) |
-| MySQL / MariaDB | [Перенос из MySQL / MariaDB](from/mysql.md) |
-| Microsoft SQL Server | [Перенос из Microsoft SQL Server](from/mssql.md) |
-| ClickHouse | [Перенос из ClickHouse](from/clickhouse.md) |
-| Greenplum | [Перенос из Greenplum](from/greenplum.md) |
-| Oracle Database | [Перенос из Oracle Database](from/oracle.md) |
-| IBM Db2 | [Перенос из IBM Db2](from/db2.md) |
-| IBM Informix | [Перенос из IBM Informix](from/informix.md) |
-| SQLite | [Перенос из SQLite](from/sqlite.md) |
+| PostgreSQL | [Перенос из PostgreSQL](from/postgresql/index.md) |
+| MySQL / MariaDB | [Перенос из MySQL / MariaDB](from/mysql/index.md) |
+| Microsoft SQL Server | [Перенос из Microsoft SQL Server](from/mssql/index.md) |
+| ClickHouse | [Перенос из ClickHouse](from/clickhouse/index.md) |
+| Greenplum | [Перенос из Greenplum](from/greenplum/index.md) |
+| Oracle Database | [Перенос из Oracle Database](from/oracle/index.md) |
+| IBM Db2 | [Перенос из IBM Db2](from/db2/index.md) |
+| IBM Informix | [Перенос из IBM Informix](from/informix/index.md) |
+| SQLite | [Перенос из SQLite](from/sqlite/index.md) |
 
 ## Смотрите также
 

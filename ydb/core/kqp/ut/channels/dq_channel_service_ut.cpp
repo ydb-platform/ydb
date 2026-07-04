@@ -302,6 +302,10 @@ struct TLoadTest {
     int FinishCount[2][2] = {{0, 0}, {0, 0}};
 };
 
+struct TReconTest : public TLoadTest {
+
+};
+
 Y_UNIT_TEST_SUITE(Channels20) {
 
     void LoadTest(int count, bool local, const TWorkerSettings& producerSettings, const TWorkerSettings& consumerSettings, const TFailureSettings& = TFailureSettings{}) {
@@ -353,5 +357,16 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(MissedData) {
         LoadTest(100, false, TWorkerSettings{ .MessageCount = 100 }, TWorkerSettings{ .MessageCount = 100 }, TFailureSettings{ .Data = 10 });
+    }
+
+    Y_UNIT_TEST(Reconciliation) {
+        TReconTest test;
+
+        test.Count = 100;
+        test.Local = false;
+        test.ProducerSettings.MessageCount = 100;
+        test.ConsumerSettings.MessageCount = 100;
+
+        test.Run();
     }
 }

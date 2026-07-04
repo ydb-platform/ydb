@@ -4,7 +4,6 @@ RECURSE(
     indexes
     topics
     stress
-    stress_heavy
     rolling
     udf
     federated_queries

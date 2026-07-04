@@ -228,7 +228,6 @@ ydb/services/persqueue_v1/actors/schema/pqv1/ut CreateTopic_PQv1API.SharedConsum
 ydb/services/persqueue_v1/actors/schema/topic/ut CreateTopic_TopicAPI.CreateTopicWithNameEqDB
 ydb/tests/compatibility/common py3test.[test_compatibility.py */*] chunk
 ydb/tests/compatibility/stress py3test.[test_stress.py */*] chunk
-ydb/tests/compatibility/stress_heavy py3test.[test_stress.py */*] chunk
 ydb/tests/compatibility/indexes py3test.[test_vector_index.py */*] chunk
 ydb/tests/compatibility/indexes test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-3_to_prestable-26-3]
 ydb/tests/compatibility/indexes test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-3_to_stable-26-2-1]
@@ -252,7 +251,7 @@ ydb/tests/compatibility/workloads test_simple_reader.py.TestSimpleReaderRestartT
 ydb/tests/compatibility/workloads test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_stable-26-2-1_to_stable-26-2-1]
 ydb/tests/compatibility/workloads test_simple_reader.py.TestSimpleReaderTabletTransfer.test_simple_reader_tablet_transfer[rolling_stable-26-1-1_to_stable-26-2-1]
 ydb/tests/compatibility/workloads test_simple_reader.py.TestSimpleReaderTabletTransfer.test_simple_reader_tablet_transfer[rolling_stable-26-2-1_to_prestable-26-3]
-ydb/tests/compatibility/stress_heavy test_stress.py.TestStress.test_log[mixed_prestable-26-3_and_stable-26-2-1-column]
+ydb/tests/compatibility/stress test_stress.py.TestStress.test_log[mixed_prestable-26-3_and_stable-26-2-1-column]
 ydb/tests/compatibility/stress test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3-column-date64]
 ydb/tests/compatibility/stress test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3-column]
 ydb/tests/compatibility/stress test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3-row]

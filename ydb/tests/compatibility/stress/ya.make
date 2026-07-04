@@ -5,14 +5,14 @@ ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 FORK_TEST_FILES()
 FORK_TESTS()
 FORK_SUBTESTS()
-SPLIT_FACTOR(10)
+SPLIT_FACTOR(32)
 
 TEST_SRCS(
     test_stress.py
 )
 
 SIZE(LARGE)
-REQUIREMENTS(ram:32 cpu:48)
+REQUIREMENTS(ram:32 cpu:96)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 DEPENDS(

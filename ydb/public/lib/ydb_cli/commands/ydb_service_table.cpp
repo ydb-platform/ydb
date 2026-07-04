@@ -86,8 +86,7 @@ void TTableCommand::Config(TConfig& config) {
     // TODO: Session options?
 }
 
-NTable::TSession TTableCommand::GetSession(TConfig& config) {
-    auto driver = CreateDriver(config);
+NTable::TSession TTableCommand::GetSession(const TDriver& driver) {
     NTable::TTableClient client(driver);
     NTable::TCreateSessionResult result = client.GetSession(NTable::TCreateSessionSettings()).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
@@ -211,6 +210,7 @@ void TCommandCreateTable::Validate(TConfig& config) {
 }
 
 int TCommandCreateTable::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
     NTable::TTableBuilder builder;
     for (const TString& column : Columns) {
         TVector<TString> parts = StringSplitter(column).Split(':');
@@ -307,7 +307,7 @@ int TCommandCreateTable::Run(TConfig& config) {
     }
 
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
-        GetSession(config).CreateTable(
+        GetSession(driver).CreateTable(
             Path,
             builder.Build(),
             std::move(tableSettings)
@@ -334,8 +334,9 @@ void TCommandDropTable::ExtractParams(TConfig& config) {
 }
 
 int TCommandDropTable::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
-        GetSession(config).DropTable(
+        GetSession(driver).DropTable(
             Path,
             FillSettings(NTable::TDropTableSettings())
         ).GetValueSync()
@@ -607,8 +608,9 @@ void TCommandExecuteQuery::PrintDataQueryResponse(NTable::TDataQueryResult& resu
 }
 
 int TCommandExecuteQuery::ExecuteSchemeQuery(TConfig& config) {
+    auto driver = CreateDriver(config);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
-        GetSession(config).ExecuteSchemeQuery(
+        GetSession(driver).ExecuteSchemeQuery(
             Query,
             FillSettings(NTable::TExecSchemeQuerySettings())
         ).GetValueSync()
@@ -1045,10 +1047,11 @@ int TCommandExplain::Run(TConfig& config) {
         planJson = result.PlanJson;
         ast = result.Ast;
     } else if (QueryType == "data" && (Analyze || FlameGraphPath)) {
+        auto driver = CreateDriver(config);
         NTable::TExecDataQuerySettings settings;
         settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full);
 
-        auto result = GetSession(config).ExecuteDataQuery(
+        auto result = GetSession(driver).ExecuteDataQuery(
             Query,
             NTable::TTxControl::BeginTx(NTable::TTxSettings::SerializableRW()).CommitTx(),
             FillSettings(settings)
@@ -1060,12 +1063,13 @@ int TCommandExplain::Run(TConfig& config) {
             ast = proto.query_ast();
         }
     } else if (QueryType == "data" && !Analyze) {
+        auto driver = CreateDriver(config);
         NTable::TExplainDataQuerySettings settings(FillSettings(NTable::TExplainDataQuerySettings()));
         if (CollectFullDiagnostics) {
             settings.WithCollectFullDiagnostics(true);
         }
 
-        NTable::TExplainQueryResult result = GetSession(config).ExplainDataQuery(
+        NTable::TExplainQueryResult result = GetSession(driver).ExplainDataQuery(
             Query,
             settings
         ).GetValueSync();

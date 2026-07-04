@@ -370,7 +370,7 @@ int TCommandCopy::Run(TConfig& config) {
         }
     }
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
-        GetSession(config).CopyTables(
+        GetSession(driver).CopyTables(
             copyItems,
             FillSettings(NTable::TCopyTablesSettings())
         ).GetValueSync()
@@ -454,6 +454,7 @@ void TCommandRename::ExtractParams(TConfig& config) {
 }
 
 int TCommandRename::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
     TVector<NYdb::NTable::TRenameItem> renameItems;
     renameItems.reserve(Items.size());
     for (auto& item : Items) {
@@ -463,7 +464,7 @@ int TCommandRename::Run(TConfig& config) {
         }
     }
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
-        GetSession(config).RenameTables(
+        GetSession(driver).RenameTables(
             renameItems,
             FillSettings(NTable::TRenameTablesSettings())
         ).GetValueSync()

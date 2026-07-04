@@ -687,7 +687,7 @@ TImportFileClient::TImpl::~TImpl() {
         ProcessingPool->Stop();
     }
     if (TableClient) {
-        TableClient->Stop().GetValueSync();
+        TableClient->Stop().Wait();
     }
 }
 

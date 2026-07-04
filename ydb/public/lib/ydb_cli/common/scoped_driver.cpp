@@ -20,7 +20,9 @@ TScopedDriver::TScopedDriver(TDriver driver)
 
 TScopedDriver::TScopedDriver(TScopedDriver&& other) noexcept
     : Driver_(std::move(other.Driver_))
-{}
+{
+    other.Driiver_.reset();
+}
 
 TScopedDriver& TScopedDriver::operator=(TScopedDriver&& other) noexcept {
     if (this != &other) {
@@ -28,6 +30,7 @@ TScopedDriver& TScopedDriver::operator=(TScopedDriver&& other) noexcept {
             StopDriver(*Driver_, true);
         }
         Driver_ = std::move(other.Driver_);
+        other.Driver_.reset();
     }
     return *this;
 }
@@ -66,7 +69,9 @@ void TScopedDriver::Stop(bool wait) noexcept {
 }
 
 TDriver TScopedDriver::Release() {
-    return std::move(*Driver_);
+    TDriver driver = std::move(*Driver_);
+    Driver_.reset();
+    return driver;
 }
 
 } // namespace NYdb::NConsoleClient

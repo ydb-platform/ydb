@@ -22,7 +22,6 @@
 
 * [Импорт из JDBC](../data-migration/import-jdbc.md) — подробности про ydb-importer
 * [Импорт из MySQL](../data-migration/import-mysql.md) — подробности про mysql2ydb
-* [Импорт данных из PostgreSQL](../../postgresql/import.md) — pg_dump и pg-convert
 * [Федеративные запросы: импорт и экспорт](../../concepts/query_execution/federated_query/import_and_export.md)
 * [{{ spark-name }}](../query-engines/spark.md) — YDB Spark Connector
 * [{{ dbt }}](../migration/dbt.md) — dbt-ydb

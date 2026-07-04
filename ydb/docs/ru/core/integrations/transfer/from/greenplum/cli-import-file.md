@@ -37,7 +37,7 @@ psql "postgresql://gpadmin:password@gp-master:5432/tpch" -c "SELECT 1"
 
 ## Пошаговая инструкция {#steps}
 
-Подробнее: [import file](../../../reference/ydb-cli/export-import/import-file.md), [импорт из PostgreSQL](../../../postgresql/import.md) (Greenplum упомянут как сценарий файлового импорта).
+Подробнее: [import file](../../../reference/ydb-cli/export-import/import-file.md).
 
 ### Шаг 1. Таблица в {{ ydb-short-name }}
 

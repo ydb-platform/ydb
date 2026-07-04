@@ -11,7 +11,5 @@ items:
   href: dbt.md
 - name: ydb-importer
   href: ydb-importer.md
-- name: pg_dump + pg-convert
-  href: pg-dump.md
 - name: ydb-pg-extension
   href: ydb-pg-extension.md

@@ -601,7 +601,7 @@ private:
         {
             TString error = TStringBuilder()
                 << "Cannot read system table '" << Settings.TablePath << "', tableId# " << TableId;
-            YDB_LOG_ERROR("",
+            YDB_LOG_ERROR("Error",
                 {"logPrefix", LogPrefix},
                 {"error", error});
             TxProxyMon->ResolveKeySetWrongRequest->Inc();
@@ -731,7 +731,7 @@ private:
 
         auto* request = ev->Get()->Request.Get();
         if (request->ErrorCount > 0) {
-            YDB_LOG_ERROR("Resolve request failed for table",
+            YDB_LOG_ERROR("Resolve request failed",
                 {"logPrefix", LogPrefix},
                 {"tablePath", Settings.TablePath},
                 {"errorCount", request->ErrorCount});
@@ -803,7 +803,7 @@ private:
                     << " with access " << NACLib::AccessRightsToString(access)
                     << " to tableId# " << entry.KeyDescription->TableId;
 
-                YDB_LOG_ERROR("",
+                YDB_LOG_ERROR("Error",
                     {"logPrefix", LogPrefix},
                     {"error", error});
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error));
@@ -821,7 +821,7 @@ private:
 
         if (KeyDesc->GetPartitions().empty()) {
             TString error = TStringBuilder() << "No partitions to read from '" << Settings.TablePath << "'";
-            YDB_LOG_ERROR("",
+            YDB_LOG_ERROR("Error",
                 {"logPrefix", LogPrefix},
                 {"error", error});
             return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, NKikimrIssues::TStatusIds::BAD_REQUEST, ctx);
@@ -958,9 +958,9 @@ private:
         NKikimrIssues::TStatusIds::EStatusCode code;
 
         const auto shardStatus = msg->GetStatus();
-        YDB_LOG_DEBUG("Received for CreateVolatileSnapshot from shard",
+        YDB_LOG_DEBUG("Received for CreateVolatileSnapshot",
             {"logPrefix", LogPrefix},
-            {"shardStatus", NKikimrTxDataShard::TEvProposeTransactionResult::EStatus_Name(shardStatus)},
+            {"status", NKikimrTxDataShard::TEvProposeTransactionResult::EStatus_Name(shardStatus)},
             {"shardId", shardId});
 
         switch (shardStatus) {
@@ -999,11 +999,11 @@ private:
                         << " from shard " << shardId
                         << " txId# " << TxId;
 
-                    YDB_LOG_ERROR("HANDLE coordinator selected at resolve coordinator selected at propose",
+                    YDB_LOG_ERROR("Handle SnapshotPrepare",
                         {"logPrefix", LogPrefix},
-                        {"snapshotPrepare", error},
-                        {"keysState", SelectedCoordinator},
-                        {"resultState", privateCoordinator});
+                        {"error", error},
+                        {"selectedCoordinator", SelectedCoordinator},
+                        {"privateCoordinator", privateCoordinator});
 
                     IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::TX_DECLINED_IMPLICIT_COORDINATOR, error));
                     auto errorCode = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::DomainLocalityError;
@@ -1029,7 +1029,7 @@ private:
 
                 const TString error = TStringBuilder()
                     << "Unexpected COMPLETE result from shard " << shardId << " txId# " << TxId;
-                YDB_LOG_ERROR("",
+                YDB_LOG_ERROR("Error",
                     {"logPrefix", LogPrefix},
                     {"error", error});
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, error));
@@ -1110,7 +1110,7 @@ private:
             return;
         }
 
-        YDB_LOG_DEBUG("Delivery problem during CreateVolatileSnapshot at shard",
+        YDB_LOG_DEBUG("Delivery problem during CreateVolatileSnapshot",
             {"logPrefix", LogPrefix},
             {"shardId", shardId});
 
@@ -1152,7 +1152,7 @@ private:
                     state.State == EShardState::SnapshotProposeSent ||
                     state.State == EShardState::SnapshotPrepared))
             {
-                YDB_LOG_TRACE("Sending TEvCancelTransactionProposal to shard",
+                YDB_LOG_TRACE("Sending TEvCancelTransactionProposal",
                     {"logPrefix", LogPrefix},
                     {"shardId", shardId});
                 Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
@@ -1253,7 +1253,7 @@ private:
             TxProxyMon->MarkShardError->Inc();
             YDB_LOG_ERROR("Gathered all snapshot propose results",
                 {"logPrefix", LogPrefix},
-                {"tabletPrepareErrors", TabletPrepareErrors});
+                {"error", TabletPrepareErrors});
             return Die(ctx);
         }
     }
@@ -1478,7 +1478,7 @@ private:
     }
 
     void HandleReadTable(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev, const TActorContext& ctx) {
-        YDB_LOG_DEBUG("Allocated a new",
+        YDB_LOG_DEBUG("Allocated a new ReadTxId",
             {"logPrefix", LogPrefix},
             {"readTxId", ev->Get()->TxId});
 
@@ -1590,7 +1590,7 @@ private:
         const ui64 txFlags = NTxDataShard::TTxFlags::Immediate;
 
         TxProxyMon->ReadTableResolveSentToShard->Inc();
-        YDB_LOG_DEBUG("Sending TEvProposeTransaction (scan) to shard",
+        YDB_LOG_DEBUG("Sending TEvProposeTransaction (scan)",
             {"logPrefix", LogPrefix},
             {"shardId", shardId},
             {"readTxId", state.ReadTxId});
@@ -1733,7 +1733,7 @@ private:
 
             default:
                 // Ignore unexpected results
-                YDB_LOG_TRACE("Ignore propose result from",
+                YDB_LOG_TRACE("Ignore propose result",
                     {"logPrefix", LogPrefix},
                     {"shardId", shardId},
                     {"txId", msg->GetTxId()},
@@ -1851,7 +1851,7 @@ private:
             --Quota.Allocated;
             --state.QuotaReserved;
         } else {
-            YDB_LOG_ERROR("Response data from without a reserved quota",
+            YDB_LOG_ERROR("Response data without a reserved quota",
                 {"logPrefix", LogPrefix},
                 {"shardId", shardId});
         }
@@ -2299,7 +2299,7 @@ private:
         if (released > 0) {
             Y_ABORT_UNLESS(Quota.Reserved >= released);
             Quota.Reserved -= released;
-            YDB_LOG_DEBUG("Released quota reserved messages",
+            YDB_LOG_DEBUG("Released quota",
                 {"logPrefix", LogPrefix},
                 {"released", released},
                 {"shardId", shardId});
@@ -2361,7 +2361,7 @@ private:
             "Received TEvDeliveryProblem from unexpected shard " << shardId);
         auto& state = it->second;
 
-        YDB_LOG_DEBUG("Delivery problem with",
+        YDB_LOG_DEBUG("Delivery problem",
             {"logPrefix", LogPrefix},
             {"shardId", shardId});
 
@@ -2669,7 +2669,7 @@ private:
 
         auto* request = ev->Get()->Request.Get();
         if (request->ErrorCount > 0) {
-            YDB_LOG_ERROR("Resolve request failed for table",
+            YDB_LOG_ERROR("Resolve request failed",
                 {"logPrefix", LogPrefix},
                 {"tablePath", Settings.TablePath},
                 {"errorCount", request->ErrorCount});
@@ -2710,7 +2710,7 @@ private:
 
         if (KeyDesc->GetPartitions().empty()) {
             TString error = TStringBuilder() << "No partitions to read from '" << Settings.TablePath << "'";
-            YDB_LOG_ERROR("",
+            YDB_LOG_ERROR("Error",
                 {"logPrefix", LogPrefix},
                 {"error", error});
             return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, NKikimrIssues::TStatusIds::BAD_REQUEST, ctx);
@@ -2866,8 +2866,8 @@ private:
                     // New shard ends first, we need to split the original shard
                     YDB_LOG_TRACE("Adding new partially",
                         {"logPrefix", LogPrefix},
-                        {"rangeShardId", state.ShardId},
-                        {"consumesShardId", oldShard->ShardId});
+                        {"shardId", state.ShardId},
+                        {"oldShardId", oldShard->ShardId});
                     auto& newRange = state.Ranges.emplace_back();
                     newRange.From = oldShard->Ranges.front().From;
                     newRange.FromInclusive = oldShard->Ranges.front().FromInclusive;
@@ -2880,10 +2880,10 @@ private:
                     break;
                 } else {
                     // We consume the old shard range completely
-                    YDB_LOG_TRACE("Adding new fully",
+                    YDB_LOG_TRACE("Adding new range",
                         {"logPrefix", LogPrefix},
-                        {"rangeShardId", state.ShardId},
-                        {"consumesShardId", oldShard->ShardId});
+                        {"shardId", state.ShardId},
+                        {"oldShardId", oldShard->ShardId});
                     state.Ranges.emplace_back(std::move(oldShard->Ranges.front()));
                     oldShard->Ranges.pop_front();
 
@@ -3087,11 +3087,11 @@ private:
         TDuration totalTime = now - WallClockAccepted;
 
         auto fnLogStatus = [&](NActors::NLog::EPriority prio) {
-            YDB_LOG(prio, "RESPONSE",
+            YDB_LOG(prio, "Response",
                 {"logPrefix", LogPrefix},
                 {"status", TEvTxUserProxy::TResultStatus::Str(status)},
-                {"shard", (ComplainingDatashards ? ComplainingDatashards.front() : 0)},
-                {"table", Settings.TablePath});
+                {"shardId", (ComplainingDatashards ? ComplainingDatashards.front() : 0)},
+                {"tablePath", Settings.TablePath});
         };
 
         switch (status) {
@@ -3102,7 +3102,7 @@ private:
             case TEvTxUserProxy::TResultStatus::ExecComplete:
             case TEvTxUserProxy::TResultStatus::ExecAborted:
             case TEvTxUserProxy::TResultStatus::ExecAlready:
-                YDB_LOG_INFO("RESPONSE prepare execute total",
+                YDB_LOG_INFO("Response",
                     {"logPrefix", LogPrefix},
                     {"status", TEvTxUserProxy::TResultStatus::Str(status)},
                     {"prepareTime", prepareTime},

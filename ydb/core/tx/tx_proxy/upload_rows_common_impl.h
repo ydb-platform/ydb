@@ -981,7 +981,7 @@ private:
 
     void RollbackLongTx(const TActorContext& ctx) {
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Rolling back LongTx",
-            {"longTxId", LongTxId});
+            {"txId", LongTxId});
 
         TActorId longTxServiceId = NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId());
         ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvRollbackTx(LongTxId), 0, 0, Span.GetTraceId());
@@ -1143,7 +1143,7 @@ private:
             return JoinVectorIntoString(shards, ", ");
         };
 
-        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Range",
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Range shards",
             {"shards", getShardsString(GetKeyRange()->GetPartitions())});
 
         MakeShardRequests(ctx);
@@ -1273,10 +1273,10 @@ private:
         TBase::Become(&TThis::StateWaitResults);
         Span && Span.Event("WaitResults", {{"shardRequests", long(shardRequests.size())}});
 
-        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Uploading rows / shards",
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Uploading status",
             {"selfId", ctx.SelfID},
             {"rows", Rows->size()},
-            {"shardRequestCount", shardRequestCount});
+            {"shards", shardRequestCount});
 
         // Sanity check: don't break when we don't have any shards for some reason
         return ReplyIfDone(ctx);
@@ -1325,10 +1325,10 @@ private:
 
         Span && Span.Event("TEvUploadRowsResponse", {{"shardId", long(shardId)}});
 
-        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: got from shard",
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Uploading status",
             {"status", NKikimrTxDataShard::TError::EKind_Name((NKikimrTxDataShard::TError::EKind)shardResponse.GetStatus())},
             {"tabletId", shardResponse.GetTabletID()},
-            {"description", shardResponse.GetErrorDescription()});
+            {"error", shardResponse.GetErrorDescription()});
 
         if (shardResponse.GetStatus() == NKikimrTxDataShard::TError::OK) {
             ShardUploadRetryStates.erase(shardId);

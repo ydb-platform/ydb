@@ -946,8 +946,8 @@ public:
         // no tablets keys are found in requests keys
         // it take place when a transaction have only checks locks
         YDB_LOG_DEBUG_CTX(ctx, "SelectCoordinator unable to choose coordinator from resolved keys, will try to pick it from TEvProposeTransactionResult from datashard",
-            {"actor", ctx.SelfID},
-            {"txid", TxId});
+            {"selfId", ctx.SelfID},
+            {"txId", TxId});
         return 0;
     }
 
@@ -1333,8 +1333,8 @@ public:
                 const TString explanation = TStringBuilder()
                     << "Cannot refresh/discard snapshot for system tableId# "
                     << entry.KeyDescription->TableId;
-                YDB_LOG_ERROR_CTX(ctx, "",
-                    {"explanation", explanation});
+                YDB_LOG_ERROR_CTX(ctx, "Error",
+                    {"error", explanation});
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, explanation));
                 UnresolvedKeys.push_back(explanation);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx);

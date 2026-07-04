@@ -10,6 +10,7 @@
 
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
+#include <util/generic/yexception.h>
 
 #include <library/cpp/yson/parser.h>
 #include <library/cpp/yson/node/node_visitor.h>

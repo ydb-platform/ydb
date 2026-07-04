@@ -843,6 +843,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev, const TActorContext& ctx)
 {
+    Y_UNUSED(ctx);
     PQ_LOG_D("Handle TEvPQ::TEvMLPConsumerStatus " << ev->Get()->Record.ShortDebugString());
     MLPBalancer->Handle(ev);
 }
@@ -942,6 +943,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TP
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvTopicSqsActionMetrics::TPtr& ev, const TActorContext& ctx) {
+    Y_UNUSED(ctx);
     TopicMetricsHandler->AddSqsActionMetrics(ev->Get()->Record);
 }
 

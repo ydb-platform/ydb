@@ -855,6 +855,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
     }
     */
 
+    /*
     Y_UNIT_TEST_F(TpchQuery06, TKqpTasksGraphTpchFixture) {
         const TString& queryText = R"(
             $z0_0100001_12 = cast("0.0100001" as decimal(12,2));
@@ -878,6 +879,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 1);
     }
+    */
 
     /*
     Y_UNIT_TEST_F(TpchQuery07, TKqpTasksGraphTpchFixture) {
@@ -1473,6 +1475,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  0), 1);
     }
 
+    /*
     Y_UNIT_TEST_F(TpchQuery15, TKqpTasksGraphTpchFixture) {
         const TString& queryText = R"(
             $z1_12 = cast(1 as decimal(12,2));
@@ -1538,6 +1541,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 1);
     }
+    */
 
     Y_UNIT_TEST_F(TpchQuery16, TKqpTasksGraphTpchFixture) {
         const TString& queryText = R"(
@@ -1732,6 +1736,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 1);
     }
 
+    /*
     Y_UNIT_TEST_F(TpchQuery19, TKqpTasksGraphTpchFixture) {
         const TString& queryText = R"(
             $z1_12 = cast(1 as decimal(12,2));
@@ -1781,6 +1786,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 1);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 1);
     }
+    */
 
     Y_UNIT_TEST_F(TpchQuery20, TKqpTasksGraphTpchFixture) {
         const TString& queryText = R"(

@@ -3,22 +3,15 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 
 namespace NKikimr::NSQS {
 
 inline bool HasTopicSqsActionMetrics(const NKikimrPQ::TEvTopicSqsActionMetrics& metrics) {
-    return metrics.GetSendMessageCount()
-        || metrics.GetBytesWritten()
-        || metrics.GetDeduplicationCount()
-        || metrics.GetDeleteMessageCount()
-        || metrics.GetReceiveMessageCount()
-        || metrics.GetReceiveMessageBytesRead()
-        || metrics.GetReceiveMessageEmptyCount();
+    return metrics.GetActionCase() != NKikimrPQ::TEvTopicSqsActionMetrics::ACTION_NOT_SET;
 }
 
-template<typename TActor>
-void SendTopicSqsActionMetricsToPqrb(
-    [[maybe_unused]] TActor& actor,
+inline void SendTopicSqsActionMetricsToPqrb(
     ui64 balancerTabletId,
     const NKikimrPQ::TEvTopicSqsActionMetrics& metrics
 ) {
@@ -33,5 +26,28 @@ void SendTopicSqsActionMetricsToPqrb(
         std::unique_ptr<IEventBase>(new TEvPipeCache::TEvForward(ev.Release(), balancerTabletId, true, balancerTabletId))
     );
 }
+
+template<typename TActor>
+void SendTopicSqsActionMetricsToPqrb(
+    [[maybe_unused]] TActor& actor,
+    ui64 balancerTabletId,
+    const NKikimrPQ::TEvTopicSqsActionMetrics& metrics
+) {
+    Y_UNUSED(actor);
+    SendTopicSqsActionMetricsToPqrb(balancerTabletId, metrics);
+}
+
+NActors::IActor* CreateTopicPqrbMetricsSender(
+    TString databasePath,
+    TString topicPath,
+    NKikimrPQ::TEvTopicSqsActionMetrics metrics
+);
+
+void SendTopicPqrbMetrics(
+    ui64 balancerTabletId,
+    const TString& databasePath,
+    const TString& topicPath,
+    NKikimrPQ::TEvTopicSqsActionMetrics metrics
+);
 
 } // namespace NKikimr::NSQS

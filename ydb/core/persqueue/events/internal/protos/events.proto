@@ -184,11 +184,49 @@ message TEvMLPUpdateExternalLockedMessageGroupsId {
 
 // To PQRB from YMQ topic-path action actors.
 message TEvTopicSqsActionMetrics {
-    optional uint64 SendMessageCount = 1;
-    optional uint64 BytesWritten = 2;
-    optional uint64 DeduplicationCount = 3;
-    optional uint64 DeleteMessageCount = 4;
-    optional uint64 ReceiveMessageCount = 5;
-    optional uint64 ReceiveMessageBytesRead = 6;
-    optional uint64 ReceiveMessageEmptyCount = 7;
+    message TTopicSqsProxyActionMetrics {
+        optional uint32 ErrorsCount = 1;
+        optional uint64 DurationMs = 2;
+    }
+
+    message TTopicSqsSendMessageMetrics {
+        optional uint32 ErrorsCount = 1;
+        optional uint64 DurationMs = 2;
+        optional uint64 SendMessageCount = 3;
+        optional uint64 BytesWritten = 4;
+        optional uint64 DeduplicationCount = 5;
+    }
+
+    message TTopicSqsDeleteMessageMetrics {
+        optional uint32 ErrorsCount = 1;
+        optional uint64 DurationMs = 2;
+        optional uint64 DeleteMessageCount = 3;
+    }
+
+    message TTopicSqsReceiveMessageMetrics {
+        optional uint32 ErrorsCount = 1;
+        optional uint64 DurationMs = 2;
+        optional uint64 WorkingDurationMs = 3;
+        optional uint64 ReceiveMessageCount = 4;
+        optional uint64 ReceiveMessageBytesRead = 5;
+        optional uint64 ReceiveMessageEmptyCount = 6;
+    }
+
+    oneof Action {
+        TTopicSqsProxyActionMetrics ChangeMessageVisibility = 1;
+        TTopicSqsProxyActionMetrics ChangeMessageVisibilityBatch = 2;
+        TTopicSqsDeleteMessageMetrics DeleteMessage = 3;
+        TTopicSqsDeleteMessageMetrics DeleteMessageBatch = 4;
+        TTopicSqsProxyActionMetrics GetQueueAttributes = 5;
+        TTopicSqsProxyActionMetrics PurgeQueue = 6;
+        TTopicSqsReceiveMessageMetrics ReceiveMessage = 7;
+        TTopicSqsSendMessageMetrics SendMessage = 8;
+        TTopicSqsSendMessageMetrics SendMessageBatch = 9;
+        TTopicSqsProxyActionMetrics SetQueueAttributes = 10;
+        TTopicSqsProxyActionMetrics ListDeadLetterSourceQueues = 11;
+        TTopicSqsProxyActionMetrics ListQueueTags = 12;
+        TTopicSqsProxyActionMetrics TagQueue = 13;
+        TTopicSqsProxyActionMetrics UntagQueue = 14;
+        TTopicSqsProxyActionMetrics GetQueueUrl = 15;
+    }
 }

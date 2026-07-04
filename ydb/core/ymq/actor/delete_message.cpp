@@ -262,6 +262,7 @@ private:
         }
 
         ReportTopicDeleteMetricsToPqrb(ev->Get()->BalancerTabletId, deletedCount);
+        SetBalancerTabletId(ev->Get()->BalancerTabletId);
 
         --RequestsToLeader_;
         if (RequestsToLeader_ == 0) {
@@ -275,8 +276,9 @@ private:
         }
 
         NKikimrPQ::TEvTopicSqsActionMetrics metrics;
-        metrics.SetDeleteMessageCount(deletedCount);
-        SendTopicSqsActionMetricsToPqrb(*this, balancerTabletId, metrics);
+        auto* deleteMetrics = IsBatch_ ? metrics.MutableDeleteMessageBatch() : metrics.MutableDeleteMessage();
+        deleteMetrics->SetDeleteMessageCount(deletedCount);
+        SendTopicPqrbMetrics(balancerTabletId, GetDatabaseName(), GetTopicName(), metrics);
     }
 
     const TDeleteMessageRequest& Request() const {

@@ -369,14 +369,153 @@ void TTopicSqsMetricsHandler::Update(
     FlushPendingActionMetrics();
 }
 
+void TTopicSqsMetricsHandler::ApplyActionCounterMetrics(
+    const TString& actionName,
+    ui32 errorsCount,
+    ui64 durationMs,
+    ui64 workingDurationMs
+) {
+    if (actionName.empty()) {
+        return;
+    }
+
+    if (Backend_ == ETopicSqsCountersBackend::Sqs) {
+        auto it = Counters_.SqsActionCounters.find(actionName);
+        if (it == Counters_.SqsActionCounters.end()) {
+            return;
+        }
+
+        auto& actionCounters = it->second;
+        if (errorsCount > 0) {
+            if (actionCounters.Errors) {
+                actionCounters.Errors->Add(errorsCount);
+            }
+        } else if (actionCounters.Success) {
+            actionCounters.Success->Inc();
+        }
+        if (actionCounters.Duration && durationMs > 0) {
+            actionCounters.Duration->Collect(durationMs);
+        }
+        if (actionCounters.WorkingDuration && workingDurationMs > 0) {
+            actionCounters.WorkingDuration->Collect(workingDurationMs);
+        }
+        return;
+    }
+
+    auto it = Counters_.YmqActionCounters.find(actionName);
+    if (it == Counters_.YmqActionCounters.end()) {
+        return;
+    }
+
+    auto& actionCounters = it->second;
+    if (errorsCount > 0) {
+        if (actionCounters.Errors) {
+            actionCounters.Errors->Add(errorsCount);
+        }
+    } else if (actionCounters.Success) {
+        actionCounters.Success->Inc();
+    }
+    if (actionCounters.Duration && durationMs > 0) {
+        actionCounters.Duration->Collect(durationMs);
+    }
+}
+
 void TTopicSqsMetricsHandler::AddActionMetrics(const NKikimrPQ::TEvTopicSqsActionMetrics& metrics) {
-    PendingSendMessageCount_ += metrics.GetSendMessageCount();
-    PendingBytesWritten_ += metrics.GetBytesWritten();
-    PendingDeduplicationCount_ += metrics.GetDeduplicationCount();
-    PendingDeleteMessageCount_ += metrics.GetDeleteMessageCount();
-    PendingReceiveMessageCount_ += metrics.GetReceiveMessageCount();
-    PendingReceiveMessageBytesRead_ += metrics.GetReceiveMessageBytesRead();
-    PendingReceiveMessageEmptyCount_ += metrics.GetReceiveMessageEmptyCount();
+    switch (metrics.GetActionCase()) {
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kChangeMessageVisibility: {
+        const auto& action = metrics.GetChangeMessageVisibility();
+        ApplyActionCounterMetrics("ChangeMessageVisibility", action.GetErrorsCount(), action.GetDurationMs(), 0);
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kChangeMessageVisibilityBatch: {
+        const auto& action = metrics.GetChangeMessageVisibilityBatch();
+        ApplyActionCounterMetrics("ChangeMessageVisibilityBatch", action.GetErrorsCount(), action.GetDurationMs(), 0);
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kDeleteMessage: {
+        const auto& action = metrics.GetDeleteMessage();
+        ApplyActionCounterMetrics("DeleteMessage", action.GetErrorsCount(), action.GetDurationMs(), 0);
+        PendingDeleteMessageCount_ += action.GetDeleteMessageCount();
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kDeleteMessageBatch: {
+        const auto& action = metrics.GetDeleteMessageBatch();
+        ApplyActionCounterMetrics("DeleteMessageBatch", action.GetErrorsCount(), action.GetDurationMs(), 0);
+        PendingDeleteMessageCount_ += action.GetDeleteMessageCount();
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kGetQueueAttributes: {
+        const auto& action = metrics.GetGetQueueAttributes();
+        ApplyActionCounterMetrics("GetQueueAttributes", action.GetErrorsCount(), action.GetDurationMs(), 0);
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kGetQueueUrl: {
+        const auto& action = metrics.GetGetQueueUrl();
+        ApplyActionCounterMetrics("GetQueueUrl", action.GetErrorsCount(), action.GetDurationMs(), 0);
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kPurgeQueue: {
+        const auto& action = metrics.GetPurgeQueue();
+        ApplyActionCounterMetrics("PurgeQueue", action.GetErrorsCount(), action.GetDurationMs(), 0);
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kReceiveMessage: {
+        const auto& action = metrics.GetReceiveMessage();
+        ApplyActionCounterMetrics(
+            "ReceiveMessage",
+            action.GetErrorsCount(),
+            action.GetDurationMs(),
+            action.GetWorkingDurationMs()
+        );
+        PendingReceiveMessageCount_ += action.GetReceiveMessageCount();
+        PendingReceiveMessageBytesRead_ += action.GetReceiveMessageBytesRead();
+        PendingReceiveMessageEmptyCount_ += action.GetReceiveMessageEmptyCount();
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kSendMessage: {
+        const auto& action = metrics.GetSendMessage();
+        ApplyActionCounterMetrics("SendMessage", action.GetErrorsCount(), action.GetDurationMs(), 0);
+        PendingSendMessageCount_ += action.GetSendMessageCount();
+        PendingBytesWritten_ += action.GetBytesWritten();
+        PendingDeduplicationCount_ += action.GetDeduplicationCount();
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kSendMessageBatch: {
+        const auto& action = metrics.GetSendMessageBatch();
+        ApplyActionCounterMetrics("SendMessageBatch", action.GetErrorsCount(), action.GetDurationMs(), 0);
+        PendingSendMessageCount_ += action.GetSendMessageCount();
+        PendingBytesWritten_ += action.GetBytesWritten();
+        PendingDeduplicationCount_ += action.GetDeduplicationCount();
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kSetQueueAttributes: {
+        const auto& action = metrics.GetSetQueueAttributes();
+        ApplyActionCounterMetrics("SetQueueAttributes", action.GetErrorsCount(), action.GetDurationMs(), 0);
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kListDeadLetterSourceQueues: {
+        const auto& action = metrics.GetListDeadLetterSourceQueues();
+        ApplyActionCounterMetrics("ListDeadLetterSourceQueues", action.GetErrorsCount(), action.GetDurationMs(), 0);
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kListQueueTags: {
+        const auto& action = metrics.GetListQueueTags();
+        ApplyActionCounterMetrics("ListQueueTags", action.GetErrorsCount(), action.GetDurationMs(), 0);
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kTagQueue: {
+        const auto& action = metrics.GetTagQueue();
+        ApplyActionCounterMetrics("TagQueue", action.GetErrorsCount(), action.GetDurationMs(), 0);
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::kUntagQueue: {
+        const auto& action = metrics.GetUntagQueue();
+        ApplyActionCounterMetrics("UntagQueue", action.GetErrorsCount(), action.GetDurationMs(), 0);
+        break;
+    }
+    case NKikimrPQ::TEvTopicSqsActionMetrics::ACTION_NOT_SET:
+        break;
+    }
 }
 
 void TTopicSqsMetricsHandler::FlushPendingActionMetrics() {

@@ -80,6 +80,7 @@ public:
     void AddActionMetrics(const NKikimrPQ::TEvTopicSqsActionMetrics& metrics);
 
 private:
+    void ApplyActionCounterMetrics(const TString& actionName, ui32 errorsCount, ui64 durationMs, ui64 workingDurationMs);
     void FlushPendingActionMetrics();
 
     ETopicSqsCountersBackend Backend_;

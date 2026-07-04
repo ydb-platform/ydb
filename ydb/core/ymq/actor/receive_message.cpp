@@ -371,6 +371,7 @@ private:
                 ReportTopicReceiveMetricsToPqrb(ev->Get()->BalancerTabletId, messages.size(), bytesRead, 0);
             }
         }
+        SetBalancerTabletId(ev->Get()->BalancerTabletId);
         SendReplyAndDie();
     }
 
@@ -381,14 +382,15 @@ private:
         ui64 emptyCount
     ) {
         NKikimrPQ::TEvTopicSqsActionMetrics metrics;
+        auto* receive = metrics.MutableReceiveMessage();
         if (receivedCount > 0) {
-            metrics.SetReceiveMessageCount(receivedCount);
-            metrics.SetReceiveMessageBytesRead(bytesRead);
+            receive->SetReceiveMessageCount(receivedCount);
+            receive->SetReceiveMessageBytesRead(bytesRead);
         }
         if (emptyCount > 0) {
-            metrics.SetReceiveMessageEmptyCount(emptyCount);
+            receive->SetReceiveMessageEmptyCount(emptyCount);
         }
-        SendTopicSqsActionMetricsToPqrb(*this, balancerTabletId, metrics);
+        SendTopicPqrbMetrics(balancerTabletId, GetDatabaseName(), GetTopicName(), metrics);
     }
 
     bool HandleWakeup(TEvWakeup::TPtr& ev) override {

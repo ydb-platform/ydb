@@ -411,12 +411,13 @@ private:
         }
 
         NKikimrPQ::TEvTopicSqsActionMetrics metrics;
-        metrics.SetSendMessageCount(1);
-        metrics.SetBytesWritten(TopicSendBytesWritten_);
+        auto* send = IsBatch_ ? metrics.MutableSendMessageBatch() : metrics.MutableSendMessage();
+        send->SetSendMessageCount(1);
+        send->SetBytesWritten(TopicSendBytesWritten_);
         if (TopicSendHasDedup_) {
-            metrics.SetDeduplicationCount(1);
+            send->SetDeduplicationCount(1);
         }
-        SendTopicSqsActionMetricsToPqrb(*this, balancerTabletId, metrics);
+        SendTopicPqrbMetrics(balancerTabletId, GetDatabaseName(), GetTopicName(), metrics);
     }
 
     void Handle(NPQ::NMLP::TEvWriteResponse::TPtr& ev) {
@@ -455,6 +456,7 @@ private:
         }
 
         ReportTopicSendCounters();
+        SetBalancerTabletId(response->BalancerTabletId);
         ReportTopicSendMetricsToPqrb(response->BalancerTabletId);
         SendReplyAndDie();
     }

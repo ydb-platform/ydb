@@ -1,0 +1,33 @@
+items:
+- name: Обзор
+  href: index.md
+- name: PostgreSQL
+  href: from/postgresql/index.md
+  include:
+    mode: link
+    path: from/postgresql/toc-postgresql.yaml
+- name: Greenplum
+  href: from/greenplum/index.md
+  include:
+    mode: link
+    path: from/greenplum/toc-greenplum.yaml
+- name: MySQL / MariaDB
+  href: from/mysql/index.md
+  include:
+    mode: link
+    path: from/mysql/toc-mysql.yaml
+- name: Microsoft SQL Server
+  href: from/mssql/index.md
+  include:
+    mode: link
+    path: from/mssql/toc-mssql.yaml
+- name: ClickHouse
+  href: from/clickhouse/index.md
+  include:
+    mode: link
+    path: from/clickhouse/toc-clickhouse.yaml
+- name: Oracle Database
+  href: from/oracle/index.md
+  include:
+    mode: link
+    path: from/oracle/toc-oracle.yaml

@@ -4,6 +4,7 @@
 #include "read_balancer__mlp_balancing.h"
 #include "read_balancer__txpreinit.h"
 #include "read_balancer__txwrite.h"
+#include "read_balancer__txwrite_receive_attempt.h"
 #include "read_balancer_log.h"
 #include "mirror_describer_factory.h"
 
@@ -169,7 +170,7 @@ void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TA
         }
         default: {
             GetStat(ctx); //TODO: do it only on signals from outerspace right now
-            MLPBalancer->CleanupReceiveAttemptPartitions(TInstant::Now());
+            CleanupReceiveAttemptPartitions(ctx);
             auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
             ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
         }
@@ -926,11 +927,8 @@ void TPersQueueReadBalancer::BroadcastPartitionError(const TString& message, con
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) {
     PQ_LOG_D("Handle TEvPQ::TEvMLPGetPartitionRequest: " << ev->Get()->Record.ShortDebugString());
-    if (StatsRequestTracker.StatsReceived) {
-        return MLPBalancer->Handle(ev);
-    }
-
-    PendingMLPRequests.push_back(std::move(ev));
+    PendingMLPGetPartitionRequests.push_back(std::move(ev));
+    ProcessMLPGetPartitionRequests(ActorContext());
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr& ev) {
@@ -942,25 +940,144 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TP
     PendingMLPRequests.push_back(std::move(ev));
 }
 
-void TPersQueueReadBalancer::Handle(TEvPQ::TEvTopicSqsActionMetrics::TPtr& ev, const TActorContext& ctx) {
+void TPersQueueReadBalancer::SendMLPGetPartitionResponses(
+    const std::vector<TMLPGetPartitionPendingResponse>& responses,
+    const TActorContext& ctx
+) {
+    for (const auto& response : responses) {
+        if (response.IsError) {
+            Send(response.Sender, new TEvPQ::TEvMLPErrorResponse(response.ErrorStatus, TString(response.ErrorMessage)), 0, response.Cookie);
+        } else {
+            Send(response.Sender, new TEvPQ::TEvMLPGetPartitionResponse(response.PartitionId, response.TabletId), 0, response.Cookie);
+        }
+    }
     Y_UNUSED(ctx);
-    TopicMetricsHandler->AddSqsActionMetrics(ev->Get()->Record);
 }
 
-void TPersQueueReadBalancer::ProcessPendingMLPRequests(const TActorContext&) {
+namespace {
+
+void AppendPersistChanges(
+    TReceiveAttemptPartitionsWriteBatch& batch,
+    const NBalancing::TNextPartitionPersistChanges& changes
+) {
+    if (changes.Upsert) {
+        batch.Upserts.push_back(*changes.Upsert);
+    }
+    batch.Deletes.insert(batch.Deletes.end(), changes.Deletes.begin(), changes.Deletes.end());
+}
+
+} // namespace
+
+void TPersQueueReadBalancer::ProcessMLPGetPartitionRequests(const TActorContext& ctx) {
+    if (!StatsRequestTracker.StatsReceived || ReceiveAttemptPartitionsWriteInProgress) {
+        return;
+    }
+    if (PendingMLPGetPartitionRequests.empty()) {
+        return;
+    }
+
+    TReceiveAttemptPartitionsWriteBatch batch;
+    const auto now = TInstant::Now();
+
+    while (!PendingMLPGetPartitionRequests.empty()) {
+        auto ev = std::move(PendingMLPGetPartitionRequests.front());
+        PendingMLPGetPartitionRequests.pop_front();
+
+        TMLPGetPartitionPendingResponse response{
+            .Sender = ev->Sender,
+            .Cookie = ev->Cookie,
+        };
+
+        const auto prepared = MLPBalancer->PrepareGetPartitionResponse(
+            ev->Get()->GetConsumer(),
+            ev->Get()->GetReceiveAttemptId(),
+            now
+        );
+        if (prepared.IsError) {
+            response.IsError = true;
+            response.ErrorStatus = prepared.ErrorStatus;
+            response.ErrorMessage = prepared.ErrorMessage;
+        } else {
+            response.PartitionId = prepared.Node->Id;
+            response.TabletId = prepared.Node->TabletId;
+            AppendPersistChanges(batch, prepared.PersistChanges);
+        }
+
+        batch.Responses.push_back(std::move(response));
+    }
+
+    if (batch.Upserts.empty() && batch.Deletes.empty()) {
+        SendMLPGetPartitionResponses(batch.Responses, ctx);
+        if (!PendingMLPGetPartitionRequests.empty()) {
+            ProcessMLPGetPartitionRequests(ctx);
+        }
+        return;
+    }
+
+    PendingReceiveAttemptPartitionsWrites.push_back(std::move(batch));
+    TryStartNextReceiveAttemptPartitionsWrite(ctx);
+}
+
+void TPersQueueReadBalancer::TryStartNextReceiveAttemptPartitionsWrite(const TActorContext& ctx) {
+    if (ReceiveAttemptPartitionsWriteInProgress || PendingReceiveAttemptPartitionsWrites.empty()) {
+        return;
+    }
+
+    ReceiveAttemptPartitionsWriteInProgress = true;
+    Execute(new TTxWriteReceiveAttemptPartitions(this, std::move(PendingReceiveAttemptPartitionsWrites.front())), ctx);
+}
+
+void TPersQueueReadBalancer::OnReceiveAttemptPartitionsWriteComplete(
+    TReceiveAttemptPartitionsWriteBatch batch,
+    const TActorContext& ctx
+) {
+    AFL_ENSURE(ReceiveAttemptPartitionsWriteInProgress);
+    AFL_ENSURE(!PendingReceiveAttemptPartitionsWrites.empty());
+
+    PendingReceiveAttemptPartitionsWrites.pop_front();
+    ReceiveAttemptPartitionsWriteInProgress = false;
+
+    SendMLPGetPartitionResponses(batch.Responses, ctx);
+    ProcessMLPGetPartitionRequests(ctx);
+    TryStartNextReceiveAttemptPartitionsWrite(ctx);
+}
+
+void TPersQueueReadBalancer::CleanupReceiveAttemptPartitions(const TActorContext& ctx) {
+    if (!Inited) {
+        return;
+    }
+
+    const auto deletes = MLPBalancer->CollectExpiredReceiveAttemptPartitions(TInstant::Now());
+    if (deletes.empty()) {
+        return;
+    }
+
+    TReceiveAttemptPartitionsWriteBatch batch;
+    batch.Deletes = std::move(deletes);
+    PendingReceiveAttemptPartitionsWrites.push_back(std::move(batch));
+    TryStartNextReceiveAttemptPartitionsWrite(ctx);
+}
+
+void TPersQueueReadBalancer::ProcessPendingMLPRequests(const TActorContext& ctx) {
     if (!StatsRequestTracker.StatsReceived) {
         return;
     }
 
     while (!PendingMLPRequests.empty()) {
         auto ev = std::move(PendingMLPRequests.front());
-        std::visit([&](auto& ev) {
-            return MLPBalancer->Handle(ev);
+        std::visit([&](auto& request) {
+            return MLPBalancer->Handle(request);
         }, ev);
         PendingMLPRequests.pop_front();
     }
 
     std::exchange(PendingMLPRequests, {});
+    ProcessMLPGetPartitionRequests(ctx);
+}
+
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvTopicSqsActionMetrics::TPtr& ev, const TActorContext& ctx) {
+    Y_UNUSED(ctx);
+    TopicMetricsHandler->AddSqsActionMetrics(ev->Get()->Record);
 }
 
 STFUNC(TPersQueueReadBalancer::StateInit) {

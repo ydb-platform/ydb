@@ -1231,6 +1231,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
                         if (!Failed.exchange(true)) {
                             ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, error));
                         }
+                        jobInflightManager->ReleaseJob();
                     }
                 }
                 break;

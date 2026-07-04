@@ -1852,6 +1852,167 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakePrimaryHosts());
         UNIT_ASSERT_VALUES_EQUAL(200, *dirtyMap.GetSafeBarrierForErase());
     }
+
+    Y_UNIT_TEST(ShouldCleanupInflightWhenHostEvacuatedDuringFlush)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        const THostMask requested = MakePrimaryHosts();
+        const THostMask confirmed = MakePrimaryHosts();
+
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
+        dirtyMap.WriteFinished(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            requested,
+            confirmed);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap.GetInflightCount());
+
+        // Flush all hosts.
+        auto flushHint = dirtyMap.MakeFlushHint(1);
+        UNIT_ASSERT_EQUAL(false, flushHint.Empty());
+
+        // Confirm flush on hosts 0 and 2 only (leave host 1 pending).
+        dirtyMap.FlushFinished(
+            THostRoute{.SourceHostIndex = 0, .DestinationHostIndex = 0},
+            {123},
+            {});
+        dirtyMap.FlushFinished(
+            THostRoute{.SourceHostIndex = 2, .DestinationHostIndex = 2},
+            {123},
+            {});
+
+        // Host 1 bytes are still accounted.
+        UNIT_ASSERT_VALUES_EQUAL(
+            40960,
+            dirtyMap.GetPBufferCounters(THostIndex{1}).CurrentBytesCount);
+
+        // Evacuate host 1 — this promotes host 3 as replacement.
+        // DDisk set changes from {0,1,2} to {0,2,3}, making host 1 "removed".
+        vchunkConfig.EvacuateHost(1);
+        dirtyMap.UpdateConfig(vchunkConfig);
+
+        // Host 1 bytes should be released by RemoveHosts.
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            dirtyMap.GetPBufferCounters(THostIndex{1}).CurrentBytesCount);
+
+        // Flush should have completed (FlushDesired became {0,2} which equals
+        // FlushConfirmed), erase should now be possible.
+        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(false, eraseHints.Empty());
+
+        // Erase should only cover hosts that still have write data (0 and 2).
+        UNIT_ASSERT_VALUES_EQUAL("H0:0:123;H2:0:123;", eraseHints.DebugPrint());
+        for (const auto& [host, hint]: eraseHints.GetAllHints()) {
+            dirtyMap.EraseFinished(host, MakeLsnVector(hint.Segments), {});
+        }
+
+        // Inflight should be fully cleaned up.
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
+    }
+
+    Y_UNIT_TEST(ShouldCleanupInflightWhenHostEvacuatedDuringErase)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        const THostMask requested = MakePrimaryHosts();
+        const THostMask confirmed = MakePrimaryHosts();
+
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
+        dirtyMap.WriteFinished(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            requested,
+            confirmed);
+
+        // Flush all hosts.
+        auto flushHint = dirtyMap.MakeFlushHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0->H0:123[10..19];"
+            "H1->H1:123[10..19];"
+            "H2->H2:123[10..19];",
+            flushHint.DebugPrint());
+        for (const auto& [route, hint]: flushHint.GetAllHints()) {
+            dirtyMap.FlushFinished(route, MakeLsnVector(hint.Segments), {});
+        }
+
+        // Get erase hints and finish erase on hosts 0 and 2 only.
+        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0:0:123;"
+            "H1:0:123;"
+            "H2:0:123;",
+            eraseHints.DebugPrint());
+        dirtyMap.EraseFinished(THostIndex{0}, {123}, {});
+        dirtyMap.EraseFinished(THostIndex{2}, {123}, {});
+
+        // Inflight item still present — host 1 erase pending.
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap.GetInflightCount());
+
+        // Evacuate host 1 — RemoveHosts completes the erase.
+        vchunkConfig.EvacuateHost(1);
+        dirtyMap.UpdateConfig(vchunkConfig);
+
+        // The inflight item should be fully erased and removed from the map.
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
+    }
+
+    Y_UNIT_TEST(ShouldReleasePBufferCountersOnHostEvacuation)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        const THostMask requested = MakePrimaryHosts();
+        const THostMask confirmed = MakePrimaryHosts();
+
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
+        dirtyMap.WriteFinished(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            requested,
+            confirmed);
+
+        // Verify all 3 primary hosts have byte counters.
+        for (THostIndex h: MakePrimaryHosts()) {
+            auto counters = dirtyMap.GetPBufferCounters(h);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.CurrentBytesCount);
+        }
+
+        // Evacuate host 2 — host 3 gets promoted; DDisk set becomes {0,1,3}.
+        vchunkConfig.EvacuateHost(2);
+        dirtyMap.UpdateConfig(vchunkConfig);
+
+        // Host 2 byte counter should be released.
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            dirtyMap.GetPBufferCounters(THostIndex{2}).CurrentBytesCount);
+
+        // Hosts 0 and 1 should be unchanged.
+        UNIT_ASSERT_VALUES_EQUAL(
+            40960,
+            dirtyMap.GetPBufferCounters(THostIndex{0}).CurrentBytesCount);
+        UNIT_ASSERT_VALUES_EQUAL(
+            40960,
+            dirtyMap.GetPBufferCounters(THostIndex{1}).CurrentBytesCount);
+
+        // Total bytes should remain as historical record.
+        UNIT_ASSERT_VALUES_EQUAL(
+            40960,
+            dirtyMap.GetPBufferCounters(THostIndex{2}).TotalBytesCount);
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

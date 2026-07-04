@@ -294,6 +294,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestPurgeQueueInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestPurgeQueueNonExistentConsumerInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestPurgeQueueNonExisting
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestPurgeQueueWithAtSignInConsumerNameInFederation
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestPurgeQueueWithLeadingSlashInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessage
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageEmpty
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageGroup
@@ -441,6 +442,7 @@ ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery14
 ydb/core/kqp/executer_actor/ut unittest.sole chunk
 ydb/core/kqp/proxy_service/ut ScriptExecutionsTest.GetOperationDuringAtomicUploadFinalization
 ydb/core/kqp/ut/batch_operations KqpBatchDelete.TableNotExists
+ydb/core/kqp/ut/cost KqpCost.WriteRowInsertFails-isOlap
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.ReadFromLocalTopicsWithAuth
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateAndAlterStreamingQuery
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithMultipleWrites
@@ -601,7 +603,12 @@ ydb/core/tx/datashard/ut_validate_row_condition unittest.sole chunk
 ydb/core/tx/schemeshard/ut_full_backup unittest.sole chunk
 ydb/core/tx/schemeshard/ut_login TSchemeShardLoginTest.CheckThatLockedOutParametersIsRestoredFromLocalDb
 ydb/core/tx/schemeshard/ut_metrics unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.Create
+ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlter
+ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlterDropPqGroupWithReboots
+ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateMultiplePqTablets
 ydb/core/tx/schemeshard/ut_restore TRestoreTests.ShouldHandleOverloadedShard
+ydb/core/tx/schemeshard/ut_serverless TSchemeShardServerLess.StorageBilling
 ydb/core/tx/schemeshard/ut_serverless unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
@@ -797,13 +804,13 @@ ydb/tests/functional/kqp/kqp_indexes unittest.sole chunk
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/nbs py3test.sole chunk
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
+ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerWarnings.test_peer_scan_warnings_increment_on_dead_peer
 ydb/tests/functional/security test_mon_endpoints_auth.py.test_mon_endpoints_auth[enforce_user_token_disabled]
 ydb/tests/functional/security test_mon_endpoints_auth.py.test_mon_endpoints_auth[enforce_user_token_enabled]
 ydb/tests/functional/security test_mon_endpoints_auth.py.test_mon_endpoints_auth[require_counters_authentication]
 ydb/tests/functional/security test_mon_endpoints_auth.py.test_mon_endpoints_auth[require_healthcheck_authentication]
 ydb/tests/functional/serverless test_serverless.py.test_create_table_using_exclusive_nodes[enable_alter_database_create_hive_first--false-enable_pool_encryption--false]
 ydb/tests/functional/serverless test_serverless.py.test_create_table_with_quotas[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
-ydb/tests/functional/serverless test_serverless.py.test_discovery_exclusive_nodes[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_empty_access_key_id[tables_format_v0]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_empty_access_key_id[tables_format_v1]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_retryable_iam_error[tables_format_v0]
@@ -1023,6 +1030,7 @@ ydb/tests/stress/vector_workload/tests test_workload.py.TestYdbVectorWorkload.te
 ydb/tools/mnc/viewer/ut py3test.sole chunk
 ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_general_keeps_single_highlighted_card
 ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_selecting_agents_overview_card_opens_agents_tab
+ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_settings_save_deploy_flags_from_checkboxes
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_agents_tab_navigation_matches_state_machine
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_operation_tab_navigation_matches_state_machine
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_tab_navigation_matches_state_machine_for_core_command_sequences

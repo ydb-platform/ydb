@@ -263,6 +263,53 @@ void TInflightInfo::EraseFailed(THostIndex host)
     ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
 }
 
+THostMask TInflightInfo::GetEraseNeeded() const
+{
+    return WriteRequested.Exclude(EraseRequested).Exclude(EraseConfirmed);
+}
+
+void TInflightInfo::RemoveHosts(THostMask removed)
+{
+    const THostMask removedFromWrite = WriteRequested.LogicalAnd(removed);
+    if (removedFromWrite.Empty()) {
+        return;
+    }
+
+    // Release byte counters for removed hosts that had writes.
+    ApplyBytes(removedFromWrite, IReadyQueue::EPBufferCounter::Total, false);
+
+    if (PBuffersLockCount > 0) {
+        ApplyBytes(
+            WriteConfirmed.LogicalAnd(removed),
+            IReadyQueue::EPBufferCounter::Locked,
+            false);
+    }
+
+    // Remove hosts from all tracking masks.
+    WriteRequested = WriteRequested.Exclude(removed);
+    WriteConfirmed = WriteConfirmed.Exclude(removed);
+    FlushDesired = FlushDesired.Exclude(removed);
+    FlushRequested = FlushRequested.Exclude(removed);
+    FlushConfirmed = FlushConfirmed.Exclude(removed);
+    EraseRequested = EraseRequested.Exclude(removed);
+    EraseConfirmed = EraseConfirmed.Exclude(removed);
+
+    // Check if flush became complete after removing hosts.
+    if (State == EState::PBufferFlushing && FlushDesired == FlushConfirmed) {
+        SetState(EState::PBufferFlushed);
+    }
+
+    // Register for erase if flush is done and PBuffers are not locked.
+    if (State == EState::PBufferFlushed && PBuffersLockCount == 0) {
+        ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
+    }
+
+    // Check if erase became complete after removing hosts.
+    if (State == EState::PBufferErasing && EraseConfirmed == WriteRequested) {
+        SetState(EState::PBufferErased);
+    }
+}
+
 void TInflightInfo::LockPBuffer()
 {
     Y_ABORT_UNLESS(
@@ -295,11 +342,6 @@ void TInflightInfo::UnlockPBuffer()
             ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
         }
     }
-}
-
-THostMask TInflightInfo::GetEraseNeeded() const
-{
-    return WriteRequested.Exclude(EraseRequested).Exclude(EraseConfirmed);
 }
 
 TString TInflightInfo::DebugPrint(TInstant now) const

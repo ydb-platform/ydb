@@ -18,6 +18,7 @@ END()
 
 RECURSE(
     backends
+    benchmark
     plain_text_formatter
 )
 

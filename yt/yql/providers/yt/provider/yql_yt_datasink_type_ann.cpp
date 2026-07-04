@@ -118,6 +118,7 @@ public:
         AddHandler({TYtDqWideWrite::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleDqWrite<true>));
         AddHandler({TYtTryFirst::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleTryFirst));
         AddHandler({TYtMaterialize::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleMaterialize));
+        AddHandler({TYtPersist::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandlePersist));
         AddHandler({TYtQLFilter::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleQLFilter));
     }
 
@@ -2475,11 +2476,11 @@ private:
     }
 
     TStatus HandleYtDqProcessWrite(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!ValidateOutputOpBase(input, ctx, false)) {
+        if (!EnsureMinMaxArgsCount(*input, 4, 5, ctx)) {
             return TStatus::Error;
         }
 
-        if (!EnsureMinMaxArgsCount(*input, 4, 5, ctx)) {
+        if (!ValidateOutputOpBase(input, ctx, false)) {
             return TStatus::Error;
         }
 
@@ -2549,7 +2550,7 @@ private:
         }
 
         if (!IsSameAnnotation(*input.Ref().Child(TYtTryFirst::idx_First)->GetTypeAnn(), *input.Ref().Child(TYtTryFirst::idx_Second)->GetTypeAnn())) {
-            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Both argumensts must be same type."));
+            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Both arguments must be same type."));
             return TStatus::Error;
         }
 
@@ -2570,7 +2571,11 @@ private:
             return IGraphTransformer::TStatus::Error;
         }
         const auto& itemType = GetSeqItemType(*input.Ref().Child(TYtMaterialize::idx_Input)->GetTypeAnn());
-        if (!EnsurePersistableType(input.Ref().Head().Pos(), itemType, ctx)) {
+        if (!EnsurePersistableType(input.Ref().Child(TYtMaterialize::idx_Input)->Pos(), itemType, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureStructType(input.Ref().Child(TYtMaterialize::idx_Input)->Pos(), itemType, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -2579,11 +2584,100 @@ private:
             return TStatus::Error;
         }
 
-        if (!ValidateSettings(*input.Ref().Child(TYtMaterialize::idx_Settings), EYtSettingTypes{}, ctx)) {
+        if (!ValidateSettings(*input.Ref().Child(TYtMaterialize::idx_Settings), EYtSettingType::Unordered, ctx)) {
             return TStatus::Error;
         }
 
-        input.Ptr()->SetTypeAnn(ctx.MakeType<TListExprType>(&itemType));
+        input.Ptr()->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
+            input.Ptr()->Child(TYtMaterialize::idx_World)->GetTypeAnn(),
+            ctx.MakeType<TListExprType>(&itemType)
+        }));
+
+        return TStatus::Ok;
+    }
+
+    TStatus HandlePersist(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        if (!EnsureArgsCount(*input, 5, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto status = ValidateAndUpdateTransientOpBase(input, output, ctx, false, {});
+        if (status.Level != TStatus::Ok) {
+            return status;
+        }
+
+        // Basic Settings validation
+        if (!EnsureTuple(*input->Child(TYtPersist::idx_Settings), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateSettings(*input->Child(TYtPersist::idx_Settings), EYtSettingType::Unordered, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto persist = TYtPersist(input);
+        // YtPersist! has exactly one input table
+        if (!EnsureArgsCount(persist.Input().Item(0).Paths().Ref(), 1, ctx)) {
+            return TStatus::Error;
+        }
+        TYtPath path = persist.Input().Item(0).Paths().Item(0);
+
+        auto tableInfo = TYtTableBaseInfo::Parse(path.Table());
+        if (!tableInfo->IsTemp) {
+            ctx.AddError(TIssue(ctx.GetPosition(path.Pos()), TStringBuilder() << TYtPersist::CallableName() << " cannot be used with non-temporary tables"));
+            return TStatus::Error;
+        }
+
+        if (!path.Ranges().Maybe<TCoVoid>()) {
+            ctx.AddError(TIssue(ctx.GetPosition(path.Pos()), TStringBuilder() << TYtPersist::CallableName() << " cannot be used with range selection"));
+            return TStatus::Error;
+        }
+        if (!path.QLFilter().Maybe<TCoVoid>()) {
+            ctx.AddError(TIssue(ctx.GetPosition(path.Pos()), TStringBuilder() << TYtPersist::CallableName() << " cannot be used with QLFilter"));
+            return TStatus::Error;
+        }
+        if (!path.Columns().Maybe<TCoVoid>()) {
+            ctx.AddError(TIssue(ctx.GetPosition(path.Pos()), TStringBuilder() << TYtPersist::CallableName() << " cannot be used column selection"));
+            return TStatus::Error;
+        }
+
+        TYqlRowSpecInfo outRowSpec(persist.Output().Item(0).RowSpec());
+        if (tableInfo->RowSpec->GetNativeYtTypeFlags() != outRowSpec.GetNativeYtTypeFlags()) {
+            ctx.AddError(TIssue(ctx.GetPosition(persist.Output().Item(0).RowSpec().Pos()), TStringBuilder() << TYtPersist::CallableName()
+                << " has different input/output native YT types"));
+            return TStatus::Error;
+        }
+        if (!tableInfo->RowSpec->CompareSortness(outRowSpec)) {
+            ctx.AddError(TIssue(ctx.GetPosition(persist.Output().Item(0).Pos()), TStringBuilder()
+                << "Input/output tables have different sort order"));
+            return TStatus::Error;
+        }
+
+        if (NYql::HasSetting(persist.Output().Item(0).Settings().Ref(), EYtSettingType::ColumnGroups)) {
+            ctx.AddError(TIssue(ctx.GetPosition(persist.Output().Item(0).Settings().Pos()), TStringBuilder()
+                << TYtPersist::CallableName() << " output cannot have column groups"));
+            return TStatus::Error;
+        }
+
+        if (auto out = path.Table().Maybe<TYtOutput>()) {
+            if (NYql::HasSetting(GetOutputOp(out.Cast()).Output().Item(FromString<ui32>(out.Cast().OutIndex().Value())).Settings().Ref(), EYtSettingType::ColumnGroups)) {
+                ctx.AddError(TIssue(ctx.GetPosition(path.Table().Pos()), TStringBuilder()
+                    << TYtPersist::CallableName() << " input cannot have column groups"));
+                return TStatus::Error;
+            }
+        } else if (auto outTable = path.Table().Maybe<TYtOutTable>()) {
+            if (NYql::HasSetting(outTable.Cast().Settings().Ref(), EYtSettingType::ColumnGroups)) {
+                ctx.AddError(TIssue(ctx.GetPosition(path.Table().Pos()), TStringBuilder()
+                    << TYtPersist::CallableName() << " input cannot have column groups"));
+                return TStatus::Error;
+            }
+        }
+
+        if (!ValidateOutputType(path.Ref(), persist.Output(), ctx)) {
+            return TStatus::Error;
+        }
+
+        input->SetTypeAnn(MakeOutputOperationType(persist, ctx));
         return TStatus::Ok;
     }
 

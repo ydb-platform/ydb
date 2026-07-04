@@ -393,7 +393,7 @@ public:
 private:
 
     bool ValidateObjectRefs(const NKikimr::NMiniKQL::TType* type, const NYql::NUdf::TUnboxedValue& value, i32 expectedRefs = 1) {
-        if (value.RefCount() == -1) { // POD/Embedded String
+        if (value.RefCount() == -1) { // NULL/POD/Embedded String
             return true;
         }
         if (type->IsOptional()) {

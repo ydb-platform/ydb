@@ -6,11 +6,9 @@
 
 ## Источники данных
 
-| СУБД | Обзор рецептов |
-| --- | --- |
-| PostgreSQL | [from/postgresql/](from/postgresql/index.md) |
-| Greenplum | [from/greenplum/](from/greenplum/index.md) |
-| MySQL / MariaDB | [from/mysql/](from/mysql/index.md) |
-| Microsoft SQL Server | [from/mssql/](from/mssql/index.md) |
-| ClickHouse | [ClickHouse](from/clickhouse/index.md) |
-| Oracle Database | [from/oracle/](from/oracle/index.md) |
+- Обзор способов переноса данных из [PostgreSQL](from/postgresql/index.md)
+- Обзор способов переноса данных из [Greenplum](from/greenplum/index.md)
+- Обзор способов переноса данных из [MySQL / MariaDB](from/mysql/index.md)
+- Обзор способов переноса данных из [Microsoft SQL Server](from/mssql/index.md)
+- Обзор способов переноса данных из [ClickHouse](from/clickhouse/index.md)
+- Обзор способов переноса данных из [Oracle Database](from/oracle/index.md)

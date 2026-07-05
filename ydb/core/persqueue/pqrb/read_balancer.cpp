@@ -1047,7 +1047,7 @@ void TPersQueueReadBalancer::CleanupReceiveAttemptPartitions(const TActorContext
         return;
     }
 
-    const auto deletes = MLPBalancer->CollectExpiredReceiveAttemptPartitions(TInstant::Now());
+    auto deletes = MLPBalancer->CollectExpiredReceiveAttemptPartitions(TInstant::Now());
     if (deletes.empty()) {
         return;
     }

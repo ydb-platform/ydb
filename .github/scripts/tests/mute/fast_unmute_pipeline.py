@@ -97,13 +97,13 @@ def enter_fast_unmute_grace_for_unmuted_tests(ydb_wrapper, branch, build_type):
 
     create_fast_unmute_grace_table(ydb_wrapper, grace_table_path)
 
-    try:
-        active_rows = fetch_fast_unmute_active_rows(
-            ydb_wrapper, active_table_path, branch, build_type
-        )
-    except Exception as exc:
-        logging.warning('enter_fast_unmute_grace: failed to load fast_unmute_active: %s', exc)
-        return
+    # NB: intentionally do NOT swallow YDB/query errors below. This step guards the
+    # re-mute decision that runs later in the same job, so silently skipping grace on a
+    # transient failure would re-introduce the race (#45582) with no signal. Let it fail
+    # loudly so the scheduled job can be retried/investigated instead.
+    active_rows = fetch_fast_unmute_active_rows(
+        ydb_wrapper, active_table_path, branch, build_type
+    )
 
     if not active_rows:
         logging.info(
@@ -113,22 +113,19 @@ def enter_fast_unmute_grace_for_unmuted_tests(ydb_wrapper, branch, build_type):
         )
         return
 
-    try:
-        currently_muted = fetch_currently_muted(
-            ydb_wrapper, tests_monitor_path, branch, build_type
-        )
-        existing_grace = fetch_grace_full_names(
-            ydb_wrapper, grace_table_path, branch, build_type
-        )
-    except Exception as exc:
-        logging.warning('enter_fast_unmute_grace: failed to load monitor/grace state: %s', exc)
-        return
+    currently_muted = fetch_currently_muted(
+        ydb_wrapper, tests_monitor_path, branch, build_type
+    )
+    existing_grace = fetch_grace_full_names(
+        ydb_wrapper, grace_table_path, branch, build_type
+    )
 
     now = datetime.datetime.now(tz=datetime.timezone.utc)
     grace_ttl = grace_ttl_calendar_days(
         get_mute_window_days(), get_manual_unmute_window_days()
     )
     recorded = 0
+    failed = 0
 
     for row in active_rows:
         full_name = row.get('full_name')
@@ -157,6 +154,7 @@ def enter_fast_unmute_grace_for_unmuted_tests(ydb_wrapper, branch, build_type):
                 build_type,
             )
         except Exception as exc:
+            failed += 1
             logging.warning(
                 'enter_fast_unmute_grace: failed to upsert grace for %s: %s',
                 full_name,
@@ -169,6 +167,15 @@ def enter_fast_unmute_grace_for_unmuted_tests(ydb_wrapper, branch, build_type):
             recorded,
             branch,
             build_type,
+        )
+
+    # Fail the step if any grace write was lost: proceeding would let update_muted_ya
+    # make the re-mute decision with missing grace for these tests.
+    if failed:
+        raise RuntimeError(
+            'enter_fast_unmute_grace: failed to record grace for '
+            f'{failed} test(s) on branch={branch} build_type={build_type} '
+            '(see warnings above); failing the step to avoid a re-mute with missing grace'
         )
 
 

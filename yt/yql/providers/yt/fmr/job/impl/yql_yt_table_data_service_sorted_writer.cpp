@@ -56,7 +56,7 @@ NYT::TNode TFmrTableDataServiceSortedWriter::GetKeyRowByIndexes(TStringBuf curre
 
     for (size_t i = 0; i < KeyColumns_.Columns.size(); ++i) {
         const auto& index = indexes[i];
-        TString columnValue =  GetIndexValue(currentYsonContent, index);
+        TString columnValue = GetIndexValue(currentYsonContent, index);
         NYT::TNode columnValueNode = NYT::NodeFromYsonString(
             columnValue,
             NYT::NYson::EYsonType::Node

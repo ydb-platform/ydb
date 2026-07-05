@@ -1609,7 +1609,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DataShardBloomFilterIndex) {
-        TKikimrRunner kikimr;
+        auto serverSettings = TKikimrSettings();
+        serverSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
+        TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1751,7 +1753,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // engine keeps its length-only ByKeyFilterPrefix. From a single CREATE, verify every
         // observable of that mirror: schemeshard children, DescribeTable (no double-listing) and
         // SHOW CREATE rendering; then that DROP INDEX by name removes both the object and the prefix.
-        TKikimrRunner kikimr;
+        auto serverSettings = TKikimrSettings();
+        serverSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
+        TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1837,7 +1841,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // clears its config and the alter still reaches the datashard, which must drop its engine
         // filter (previously it kept a stale filter because an empty prefix list looked like
         // "no change"). The table must remain fully queryable, and a bloom index can be re-added.
-        TKikimrRunner kikimr;
+        auto serverSettings = TKikimrSettings();
+        serverSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
+        TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
@@ -1890,7 +1896,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(DataShardBloomFilterIndexCreateBadPrefix) {
         // CREATE-time validation: bloom filter columns must be a left prefix of the primary key,
         // because the named scheme object stores the columns while the engine prefix is length-only.
-        TKikimrRunner kikimr;
+        auto serverSettings = TKikimrSettings();
+        serverSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
+        TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

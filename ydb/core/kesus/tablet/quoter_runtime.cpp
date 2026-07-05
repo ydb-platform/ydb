@@ -124,7 +124,9 @@ void TKesusTablet::Handle(TEvKesus::TEvSubscribeOnResources::TPtr& ev) {
             TQuoterSession* session = QuoterResources.GetOrCreateSession(clientId, clientVersion, resourceTree);
             session->SetResourceSink(sink);
             const NActors::TActorId prevPipeServerId = session->SetPipeServerId(pipeServerId);
-            QuoterResources.SetPipeServerId(TQuoterSessionId(clientId, resourceTree->GetResourceId()), prevPipeServerId, pipeServerId);
+            if (prevPipeServerId != pipeServerId) {
+                QuoterResources.SetPipeServerId(TQuoterSessionId(clientId, resourceTree->GetResourceId()), prevPipeServerId, pipeServerId);
+            }
             session->UpdateConsumptionState(resource.GetStartConsuming(), resource.GetInitialAmount(), queue, now);
 
             result->MutableError()->SetStatus(Ydb::StatusIds::SUCCESS);

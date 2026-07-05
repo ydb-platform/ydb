@@ -838,9 +838,6 @@ message TColumnTableSchemaDiff {
     repeated uint32 DropIndexes = 6;
 
     optional TColumnTableSchemeOptions Options = 7;
-
-    repeated TMultiColumnStatisticsDescription UpsertMultiColumnStatistics = 8;
-    repeated string DropMultiColumnStatistics = 9;
 }
 
 message TColumnTableRequestedOptions {

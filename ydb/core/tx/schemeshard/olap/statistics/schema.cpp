@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
+#include <util/system/yassert.h>
+
 namespace NKikimr::NSchemeShard {
 
 void TOlapMultiColumnStatisticsSchema::SerializeToProto(NKikimrSchemeOp::TMultiColumnStatisticsDescription& proto) const {
@@ -19,6 +21,9 @@ void TOlapMultiColumnStatisticsSchema::SerializeToProto(NKikimrSchemeOp::TMultiC
 
 void TOlapMultiColumnStatisticsSchema::DeserializeFromProto(const NKikimrSchemeOp::TMultiColumnStatisticsDescription& proto) {
     Name = proto.GetName();
+    Y_ABORT_UNLESS(proto.ColumnIdsSize() == 0 || proto.ColumnIdsSize() == proto.ColumnNamesSize(),
+        "MultiColumnStatistics '%s' has inconsistent ColumnNames (%d) and ColumnIds (%d) sizes",
+        Name.c_str(), static_cast<int>(proto.ColumnNamesSize()), static_cast<int>(proto.ColumnIdsSize()));
     for (const auto& columnName : proto.GetColumnNames()) {
         ColumnNames.emplace_back(columnName);
     }
@@ -32,6 +37,10 @@ void TOlapMultiColumnStatisticsSchema::DeserializeFromProto(const NKikimrSchemeO
 
 bool TOlapMultiColumnStatisticsSchema::ApplyUpsert(const TOlapSchema& currentSchema, const TOlapMultiColumnStatisticsUpsert& upsert, IErrorCollector& errors) {
     Name = upsert.GetName();
+    if (Name.empty()) {
+        errors.AddError(NKikimrScheme::StatusInvalidParameter, "MultiColumnStatistics name must be specified");
+        return false;
+    }
     ColumnNames.clear();
     ColumnIds.clear();
     Types.clear();
@@ -75,15 +84,11 @@ bool TOlapMultiColumnStatisticsDescription::ApplyUpdate(const TOlapSchema& curre
     }
 
     for (const auto& upsert : schemaUpdate.GetUpsertMultiColumnStatistics()) {
-        if (MultiColumnStatisticsByName.contains(upsert.GetName())) {
-            errors.AddError(NKikimrScheme::StatusAlreadyExists, TStringBuilder() << "MultiColumnStatistics already exists: " << upsert.GetName());
-            return false;
-        }
         TOlapMultiColumnStatisticsSchema statistics;
         if (!statistics.ApplyUpsert(currentSchema, upsert, errors)) {
             return false;
         }
-        MultiColumnStatisticsByName.emplace(upsert.GetName(), std::move(statistics));
+        MultiColumnStatisticsByName[upsert.GetName()] = std::move(statistics);
     }
 
     return true;

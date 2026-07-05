@@ -254,7 +254,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
         .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
         .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
-        .EnableColumnStatistics = appData->FeatureFlags.GetEnableColumnStatistics(),
+        .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
     };
 
 

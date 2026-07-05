@@ -1088,21 +1088,24 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
 
         auto dist = BuildTasks(queryText);
 
-        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 14u);
+        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 17u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 720);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 1);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 6);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 1);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 10), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 11), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 12), 240);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 13), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 12), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 13), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 14), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 15), 240);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 16), 1);
     }
 
     /*
@@ -1333,18 +1336,20 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
 
         auto dist = BuildTasks(queryText);
 
-        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 11u);
+        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 13u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 1920);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 16);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 1);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 1);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  0), 1920);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  1), 16);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  2), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  2), 1);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  3), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  4), 240);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  5), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  4), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  5), 240);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  6), 1);
     }
 
     Y_UNIT_TEST_F(TpchQuery12, TKqpTasksGraphTpchFixture) {
@@ -1867,7 +1872,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
 
         auto dist = BuildTasks(queryText);
 
-        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 11u);
+        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 12u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 720);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 720);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
@@ -1877,8 +1882,9 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 720);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 6);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 10), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 10), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 11), 1);
     }
 
     /*

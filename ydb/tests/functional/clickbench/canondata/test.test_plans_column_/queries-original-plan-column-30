@@ -61,7 +61,7 @@
                                                 "Plans": [
                                                     {
                                                         "Blocks": "True",
-                                                        "HashFunc": "HashV2",
+                                                        "HashFunc": "HashV1",
                                                         "KeyColumns": [
                                                             "ClientIP",
                                                             "SearchEngineID"

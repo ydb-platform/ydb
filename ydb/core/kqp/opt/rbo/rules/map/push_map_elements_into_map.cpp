@@ -34,10 +34,16 @@ namespace NKqp {
 namespace {
 
 using TRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>;
+using TElementIndexes = TVector<size_t>;
+using TElementIndexMap = THashMap<TInfoUnit, TElementIndexes, TInfoUnit::THashFunction>;
 
-struct TBoundaryChanges {
-    TInfoUnitSet HiddenSources;
-    TInfoUnitSet ReboundOutputs;
+struct TPushIndexes {
+    TElementIndexMap ProducersByOutput;
+    TElementIndexMap RebindersByOutput;
+    TElementIndexMap PreserversByOutput;
+    TElementIndexMap HidersBySource;
+    TElementIndexMap RenameUsersBySource;
+    TElementIndexMap ExpressionUsersByInput;
 };
 
 // A top element evaluates against the bottom map's output; after the move it
@@ -72,63 +78,74 @@ bool CanMoveToBottomInput(const TMapElement& element, const TVector<TInfoUnit>& 
     return !ReferencesBottomElementOutput(element, bottomMap);
 }
 
-TBoundaryChanges GetBoundaryChanges(const TVector<TMapElement>& elements, const TVector<bool>& pushed) {
-    TBoundaryChanges changes;
-    TInfoUnitSet preservedOutputs;
+void AddIndex(TElementIndexMap& map, const TInfoUnit& iu, size_t idx) {
+    map[iu].push_back(idx);
+}
 
+TPushIndexes BuildPushIndexes(const TVector<TMapElement>& elements) {
+    TPushIndexes indexes;
     for (size_t idx = 0; idx < elements.size(); ++idx) {
-        if (!pushed[idx]) {
-            continue;
-        }
-
         const auto& element = elements[idx];
-        if (PreservesInputValue(element)) {
-            preservedOutputs.insert(element.GetElementName());
-        } else {
-            changes.ReboundOutputs.insert(element.GetElementName());
-        }
-    }
+        const auto output = element.GetElementName();
+        AddIndex(indexes.ProducersByOutput, output, idx);
+        AddIndex(PreservesInputValue(element) ? indexes.PreserversByOutput : indexes.RebindersByOutput, output, idx);
 
-    for (size_t idx = 0; idx < elements.size(); ++idx) {
-        if (!pushed[idx] || !elements[idx].IsRename()) {
+        if (element.IsRename()) {
+            const auto source = element.GetRename();
+            AddIndex(indexes.RenameUsersBySource, source, idx);
+            if (source != output) {
+                AddIndex(indexes.HidersBySource, source, idx);
+            }
             continue;
         }
 
-        const auto source = elements[idx].GetRename();
-        if (!preservedOutputs.contains(source)) {
-            changes.HiddenSources.insert(source);
+        for (const auto& input : element.GetExpression().GetInputIUs(false, true)) {
+            AddIndex(indexes.ExpressionUsersByInput, input, idx);
         }
     }
 
-    return changes;
+    return indexes;
 }
 
-bool DeselectProducers(
-    const TVector<TMapElement>& elements,
-    const TInfoUnit& output,
-    TVector<bool>& pushed)
-{
-    bool changed = false;
-    for (size_t idx = 0; idx < elements.size(); ++idx) {
-        if (pushed[idx] && elements[idx].GetElementName() == output) {
-            pushed[idx] = false;
-            changed = true;
+const TElementIndexes* FindIndexes(const TElementIndexMap& map, const TInfoUnit& iu) {
+    const auto it = map.find(iu);
+    return it == map.end() ? nullptr : &it->second;
+}
+
+bool HasActiveIndex(const TElementIndexes* indexes, const TVector<bool>& pushed) {
+    if (!indexes) {
+        return false;
+    }
+
+    for (const auto idx : *indexes) {
+        if (pushed[idx]) {
+            return true;
         }
     }
-    return changed;
+    return false;
 }
 
-bool DeselectHiders(
-    const TVector<TMapElement>& elements,
-    const TInfoUnit& source,
-    TVector<bool>& pushed)
-{
+bool HasResidualIndex(const TElementIndexes* indexes, const TVector<bool>& pushed) {
+    if (!indexes) {
+        return false;
+    }
+
+    for (const auto idx : *indexes) {
+        if (!pushed[idx]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool DeselectIndexes(const TElementIndexes* indexes, TVector<bool>& pushed) {
+    if (!indexes) {
+        return false;
+    }
+
     bool changed = false;
-    for (size_t idx = 0; idx < elements.size(); ++idx) {
-        if (pushed[idx] &&
-            elements[idx].IsRename() &&
-            elements[idx].GetRename() == source &&
-            elements[idx].GetRename() != elements[idx].GetElementName()) {
+    for (const auto idx : *indexes) {
+        if (pushed[idx]) {
             pushed[idx] = false;
             changed = true;
         }
@@ -170,7 +187,7 @@ TVector<TInfoUnit> BuildBottomOutputWithPushedElements(TOpMap& bottomMap, const 
     return result;
 }
 
-bool DeselectDuplicateOutputProducers(TOpMap& bottomMap, const TVector<TMapElement>& elements, TVector<bool>& pushed) {
+bool DeselectDuplicateOutputProducers(TOpMap& bottomMap, const TVector<TMapElement>& elements, const TPushIndexes& indexes, TVector<bool>& pushed) {
     THashMap<TInfoUnit, size_t, TInfoUnit::THashFunction> counts;
     for (const auto& output : BuildBottomOutputWithPushedElements(bottomMap, elements, pushed)) {
         ++counts[output];
@@ -179,43 +196,42 @@ bool DeselectDuplicateOutputProducers(TOpMap& bottomMap, const TVector<TMapEleme
     bool changed = false;
     for (const auto& [output, count] : counts) {
         if (count > 1) {
-            changed |= DeselectProducers(elements, output, pushed);
+            changed |= DeselectIndexes(FindIndexes(indexes.ProducersByOutput, output), pushed);
         }
     }
     return changed;
 }
 
 void ClosePushableElements(TOpMap& bottomMap, const TVector<TMapElement>& elements, TVector<bool>& pushed) {
+    const auto indexes = BuildPushIndexes(elements);
+
     bool changed = true;
     while (changed) {
         changed = false;
-        const auto boundaryChanges = GetBoundaryChanges(elements, pushed);
 
-        for (size_t idx = 0; idx < elements.size(); ++idx) {
-            if (pushed[idx]) {
+        for (const auto& [source, hiders] : indexes.HidersBySource) {
+            if (!HasActiveIndex(&hiders, pushed) ||
+                HasActiveIndex(FindIndexes(indexes.PreserversByOutput, source), pushed)) {
                 continue;
             }
 
-            const auto& element = elements[idx];
-            if (element.IsRename()) {
-                const auto source = element.GetRename();
-                if (boundaryChanges.HiddenSources.contains(source)) {
-                    changed |= DeselectHiders(elements, source, pushed);
-                }
-                if (boundaryChanges.ReboundOutputs.contains(source)) {
-                    changed |= DeselectProducers(elements, source, pushed);
-                }
-                continue;
-            }
-
-            for (const auto& input : element.GetExpression().GetInputIUs(false, true)) {
-                if (boundaryChanges.ReboundOutputs.contains(input)) {
-                    changed |= DeselectProducers(elements, input, pushed);
-                }
+            if (HasResidualIndex(FindIndexes(indexes.RenameUsersBySource, source), pushed)) {
+                changed |= DeselectIndexes(&hiders, pushed);
             }
         }
 
-        changed |= DeselectDuplicateOutputProducers(bottomMap, elements, pushed);
+        for (const auto& [output, rebinders] : indexes.RebindersByOutput) {
+            if (!HasActiveIndex(&rebinders, pushed)) {
+                continue;
+            }
+
+            if (HasResidualIndex(FindIndexes(indexes.RenameUsersBySource, output), pushed) ||
+                HasResidualIndex(FindIndexes(indexes.ExpressionUsersByInput, output), pushed)) {
+                changed |= DeselectIndexes(FindIndexes(indexes.ProducersByOutput, output), pushed);
+            }
+        }
+
+        changed |= DeselectDuplicateOutputProducers(bottomMap, elements, indexes, pushed);
     }
 }
 

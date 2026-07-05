@@ -24,7 +24,7 @@ inline void SendTopicSqsActionMetricsToPqrb(
     ev->Record = metrics;
     NActors::TActivationContext::Send(
         MakePipePerNodeCacheID(false),
-        std::unique_ptr<IEventBase>(new TEvPipeCache::TEvForward(ev.Release(), balancerTabletId, true, balancerTabletId))
+        std::unique_ptr<IEventBase>(new TEvPipeCache::TEvForward(ev.Release(), balancerTabletId, false))
     );
 }
 

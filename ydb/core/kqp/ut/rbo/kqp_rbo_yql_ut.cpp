@@ -3827,6 +3827,142 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(std::find(aggregateOutput.begin(), aggregateOutput.end(), TInfoUnit("sum_value")) == aggregateOutput.end());
     }
 
+    Y_UNIT_TEST(PushMapElementsRenamesAggregateResultTrait) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("key"), TInfoUnit("value")}, pos);
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{
+                TOpAggregationTraits(TInfoUnit("value"), "sum", TInfoUnit("sum_value")),
+            },
+            TVector<TInfoUnit>{TInfoUnit("key")},
+            EOpPhase::Final,
+            false,
+            pos
+        );
+        auto renameMap = MakeIntrusive<TOpMap>(aggregate, pos, TVector<TMapElement>{
+            MakeTestRename("total", "sum_value", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(renameMap, pos, {"key", "total"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughAggregateRule>());
+        TRuleBasedStage pushAggregateResult("Focused push aggregate result rename", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushAggregateResult.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Aggregate, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenAggregate = CastOperator<TOpAggregate>(root.GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenAggregate->AggregationTraitsList.size(), 1);
+        UNIT_ASSERT(rewrittenAggregate->AggregationTraitsList.front().OriginalColName == TInfoUnit("value"));
+        UNIT_ASSERT(rewrittenAggregate->AggregationTraitsList.front().ResultColName == TInfoUnit("total"));
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenAggregate->KeyColumns.size(), 1);
+        UNIT_ASSERT(rewrittenAggregate->KeyColumns.front() == TInfoUnit("key"));
+    }
+
+    Y_UNIT_TEST(PushMapElementsRenamesSharedAggregateResultWhenConsumersAgree) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("value")}, pos);
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{
+                TOpAggregationTraits(TInfoUnit("value"), "sum", TInfoUnit("sum_value")),
+            },
+            TVector<TInfoUnit>{},
+            EOpPhase::Final,
+            false,
+            pos
+        );
+        auto leftCommonMap = MakeIntrusive<TOpMap>(aggregate, pos, TVector<TMapElement>{
+            MakeTestRename("wswscs.sum_value", "sum_value", pos, testContext.ExprCtx, expressionProps),
+        });
+        auto rightCommonMap = MakeIntrusive<TOpMap>(aggregate, pos, TVector<TMapElement>{
+            MakeTestRename("wswscs.sum_value", "sum_value", pos, testContext.ExprCtx, expressionProps),
+        });
+        auto leftAliasMap = MakeIntrusive<TOpMap>(leftCommonMap, pos, TVector<TMapElement>{
+            MakeTestRename("left_sum", "wswscs.sum_value", pos, testContext.ExprCtx, expressionProps),
+        });
+        auto rightAliasMap = MakeIntrusive<TOpMap>(rightCommonMap, pos, TVector<TMapElement>{
+            MakeTestRename("right_sum", "wswscs.sum_value", pos, testContext.ExprCtx, expressionProps),
+        });
+        auto join = MakeIntrusive<TOpJoin>(
+            leftAliasMap,
+            rightAliasMap,
+            pos,
+            "Cross",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+        );
+        TOpRoot root(join, pos, {"left_sum", "right_sum"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughAggregateRule>());
+        TRuleBasedStage pushAggregateResult("Focused push shared aggregate result rename", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushAggregateResult.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(aggregate->AggregationTraitsList.size(), 1);
+        UNIT_ASSERT(aggregate->AggregationTraitsList.front().ResultColName == TInfoUnit("wswscs.sum_value"));
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Join, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenJoin = CastOperator<TOpJoin>(root.GetInput());
+        for (const auto& child : rewrittenJoin->Children) {
+            UNIT_ASSERT_C(child->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+            auto aliasMap = CastOperator<TOpMap>(child);
+            UNIT_ASSERT_VALUES_EQUAL(aliasMap->MapElements.size(), 1);
+            UNIT_ASSERT_C(aliasMap->GetInput() == aggregate, root.PlanToString(testContext.ExprCtx));
+        }
+    }
+
+    Y_UNIT_TEST(PushMapElementsKeepsSharedAggregateResultWhenConsumersDisagree) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("value")}, pos);
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{
+                TOpAggregationTraits(TInfoUnit("value"), "sum", TInfoUnit("sum_value")),
+            },
+            TVector<TInfoUnit>{},
+            EOpPhase::Final,
+            false,
+            pos
+        );
+        auto leftMap = MakeIntrusive<TOpMap>(aggregate, pos, TVector<TMapElement>{
+            MakeTestRename("left_sum", "sum_value", pos, testContext.ExprCtx, expressionProps),
+        });
+        auto rightMap = MakeIntrusive<TOpMap>(aggregate, pos, TVector<TMapElement>{
+            MakeTestRename("right_sum", "sum_value", pos, testContext.ExprCtx, expressionProps),
+        });
+        auto join = MakeIntrusive<TOpJoin>(
+            leftMap,
+            rightMap,
+            pos,
+            "Cross",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+        );
+        TOpRoot root(join, pos, {"left_sum", "right_sum"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughAggregateRule>());
+        TRuleBasedStage pushAggregateResult("Focused push shared aggregate result rename", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushAggregateResult.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(aggregate->AggregationTraitsList.size(), 1);
+        UNIT_ASSERT(aggregate->AggregationTraitsList.front().ResultColName == TInfoUnit("sum_value"));
+        UNIT_ASSERT_C(leftMap->GetInput() == aggregate, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(rightMap->GetInput() == aggregate, root.PlanToString(testContext.ExprCtx));
+    }
+
     Y_UNIT_TEST(PushRenamePushesAggregateKeyAppendAliasThroughSort) {
         TMapRuleTestContext testContext;
         TPlanProps expressionProps;

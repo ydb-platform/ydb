@@ -154,6 +154,8 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
     }
     RegisterEvents.clear();
 
+    GetStat(ctx);
+
     auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
     ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
 }
@@ -969,7 +971,7 @@ void AppendPersistChanges(
 } // namespace
 
 void TPersQueueReadBalancer::ProcessMLPGetPartitionRequests(const TActorContext& ctx) {
-    if (!StatsRequestTracker.StatsReceived || ReceiveAttemptPartitionsWriteInProgress) {
+    if (ReceiveAttemptPartitionsWriteInProgress) {
         return;
     }
     if (PendingMLPGetPartitionRequests.empty()) {

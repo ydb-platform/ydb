@@ -1,6 +1,6 @@
 # Перенос данных из MySQL / MariaDB в {{ ydb-short-name }} с помощью mysql2ydb
 
-Пошаговый рецепт: **MySQL / MariaDB** → {{ ydb-short-name }} через [mysql2ydb](../../../../integrations/data-migration/import-mysql.md).
+Пошаговый рецепт — перенос данных из **MySQL / MariaDB** в {{ ydb-short-name }} с помощью [mysql2ydb](../../../../integrations/data-migration/import-mysql.md).
 
 ## Подготовка {#prerequisites}
 

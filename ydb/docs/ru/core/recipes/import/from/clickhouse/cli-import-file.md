@@ -1,6 +1,6 @@
-# Перенос данных из ClickHouse в {{ ydb-short-name }} с помощью CLI import file
+# Перенос данных из ClickHouse в {{ ydb-short-name }} через промежуточный CSV с помощью YDB CLI
 
-Пошаговый рецепт: **ClickHouse** → {{ ydb-short-name }} через [CLI import file](../../../../reference/ydb-cli/export-import/import-file.md).
+Пошаговый рецепт — перенос данных из **ClickHouse** в {{ ydb-short-name }} через промежуточный CSV, используя [YDB CLI](../../../../reference/ydb-cli/export-import/import-file.md).
 
 ## Подготовка {#prerequisites}
 
@@ -15,7 +15,7 @@ clickhouse-client --host ch-host --query "SELECT 1"
 
 ## Пошаговая инструкция {#steps}
 
-Подробнее: [import file](../../../../reference/ydb-cli/export-import/import-file.md).
+Подробнее о команде: [import file в YDB CLI](../../../../reference/ydb-cli/export-import/import-file.md).
 
 ### Шаг 1. Таблица в {{ ydb-short-name }}
 

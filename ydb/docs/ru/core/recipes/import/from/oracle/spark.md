@@ -1,6 +1,6 @@
 # Перенос данных из Oracle Database в {{ ydb-short-name }} с помощью Spark
 
-Пошаговый рецепт: **Oracle Database** → {{ ydb-short-name }} через [Spark](../../../../integrations/query-engines/spark.md).
+Пошаговый рецепт — перенос данных из **Oracle Database** в {{ ydb-short-name }} с помощью [Spark](../../../../integrations/query-engines/spark.md).
 
 ## Подготовка {#prerequisites}
 

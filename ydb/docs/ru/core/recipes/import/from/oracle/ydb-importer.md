@@ -1,6 +1,6 @@
 # Перенос данных из Oracle Database в {{ ydb-short-name }} с помощью ydb-importer
 
-Пошаговый рецепт: **Oracle Database** → {{ ydb-short-name }} через [ydb-importer](../../../../integrations/data-migration/import-jdbc.md).
+Пошаговый рецепт — перенос данных из **Oracle Database** в {{ ydb-short-name }} с помощью [ydb-importer](../../../../integrations/data-migration/import-jdbc.md).
 
 ## Подготовка {#prerequisites}
 

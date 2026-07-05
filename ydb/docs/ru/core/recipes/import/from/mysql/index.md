@@ -4,7 +4,7 @@
 
 | Инструмент | Инструкция |
 | --- | --- |
-| [CLI import file](../../../../reference/ydb-cli/export-import/import-file.md) | [Инструкция](cli-import-file.md) |
+| [Через промежуточный CSV (YDB CLI)](../../../../reference/ydb-cli/export-import/import-file.md) | [Инструкция](cli-import-file.md) |
 | [dbt](../../../../integrations/migration/dbt.md) | [Инструкция](dbt.md) |
 | [Федеративные запросы](../../../../concepts/query_execution/federated_query/import_and_export.md) | [Инструкция](federated-queries.md) |
 | [mysql2ydb](../../../../integrations/data-migration/import-mysql.md) | [Инструкция](mysql2ydb.md) |

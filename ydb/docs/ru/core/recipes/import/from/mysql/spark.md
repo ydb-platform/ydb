@@ -1,6 +1,6 @@
 # Перенос данных из MySQL / MariaDB в {{ ydb-short-name }} с помощью Spark
 
-Пошаговый рецепт: **MySQL / MariaDB** → {{ ydb-short-name }} через [Spark](../../../../integrations/query-engines/spark.md).
+Пошаговый рецепт — перенос данных из **MySQL / MariaDB** в {{ ydb-short-name }} с помощью [Spark](../../../../integrations/query-engines/spark.md).
 
 ## Подготовка {#prerequisites}
 

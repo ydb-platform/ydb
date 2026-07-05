@@ -1,7 +1,7 @@
 items:
 - name: Обзор
   href: index.md
-- name: CLI import file
+- name: Через промежуточный CSV (YDB CLI)
   href: cli-import-file.md
 - name: dbt
   href: dbt.md

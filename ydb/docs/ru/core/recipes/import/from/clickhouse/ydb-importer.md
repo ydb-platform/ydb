@@ -1,6 +1,6 @@
 # Перенос данных из ClickHouse в {{ ydb-short-name }} с помощью ydb-importer
 
-Пошаговый рецепт: **ClickHouse** → {{ ydb-short-name }} через [ydb-importer](../../../../integrations/data-migration/import-jdbc.md).
+Пошаговый рецепт — перенос данных из **ClickHouse** в {{ ydb-short-name }} с помощью [ydb-importer](../../../../integrations/data-migration/import-jdbc.md).
 
 ## Подготовка {#prerequisites}
 
@@ -48,7 +48,7 @@ clickhouse-client --host ch-host --query "SELECT 1"
 
 {% note warning %}
 
-ClickHouse не входит в список СУБД, для которых импорт описан в [import-jdbc.md](../../../../integrations/data-migration/import-jdbc.md#limitations) как штатно протестированный. Перед production проверьте маппинг типов и ключей на ваших таблицах. Для очень больших объёмов часто удобнее [Spark](spark.md) или экспорт в Parquet → [CLI import file](cli-import-file.md).
+ClickHouse не входит в список СУБД, для которых импорт описан в [import-jdbc.md](../../../../integrations/data-migration/import-jdbc.md#limitations) как штатно протестированный. Перед production проверьте маппинг типов и ключей на ваших таблицах. Для очень больших объёмов часто удобнее [Spark](spark.md) или экспорт в Parquet и [импорт через промежуточный CSV с помощью YDB CLI](cli-import-file.md).
 
 {% endnote %}
 

@@ -1,6 +1,6 @@
 # Перенос данных из Microsoft SQL Server в {{ ydb-short-name }} с помощью Spark
 
-Пошаговый рецепт: **Microsoft SQL Server** → {{ ydb-short-name }} через [Spark](../../../../integrations/query-engines/spark.md).
+Пошаговый рецепт — перенос данных из **Microsoft SQL Server** в {{ ydb-short-name }} с помощью [Spark](../../../../integrations/query-engines/spark.md).
 
 ## Подготовка {#prerequisites}
 

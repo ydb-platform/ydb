@@ -1,6 +1,6 @@
 # Перенос данных из Greenplum в {{ ydb-short-name }} с помощью ydb-importer
 
-Пошаговый рецепт: **Greenplum** → {{ ydb-short-name }} через [ydb-importer](../../../../integrations/data-migration/import-jdbc.md).
+Пошаговый рецепт — перенос данных из **Greenplum** в {{ ydb-short-name }} с помощью [ydb-importer](../../../../integrations/data-migration/import-jdbc.md).
 
 ## Подготовка {#prerequisites}
 

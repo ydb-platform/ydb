@@ -1,6 +1,6 @@
 # Перенос данных из ClickHouse в {{ ydb-short-name }} с помощью Spark
 
-Пошаговый рецепт: **ClickHouse** → {{ ydb-short-name }} через [Spark](../../../../integrations/query-engines/spark.md).
+Пошаговый рецепт — перенос данных из **ClickHouse** в {{ ydb-short-name }} с помощью [Spark](../../../../integrations/query-engines/spark.md).
 
 ## Подготовка {#prerequisites}
 

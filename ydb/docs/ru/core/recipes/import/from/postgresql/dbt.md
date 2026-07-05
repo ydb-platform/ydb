@@ -1,6 +1,6 @@
 # Перенос данных из PostgreSQL в {{ ydb-short-name }} с помощью dbt
 
-Пошаговый рецепт: **PostgreSQL** → {{ ydb-short-name }} через [dbt](../../../../integrations/migration/dbt.md).
+Пошаговый рецепт — перенос данных из **PostgreSQL** в {{ ydb-short-name }} с помощью [dbt](../../../../integrations/migration/dbt.md).
 
 ## Подготовка {#prerequisites}
 

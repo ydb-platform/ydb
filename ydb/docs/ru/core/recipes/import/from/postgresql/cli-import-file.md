@@ -1,6 +1,6 @@
-# Перенос данных из PostgreSQL в {{ ydb-short-name }} с помощью CLI import file
+# Перенос данных из PostgreSQL в {{ ydb-short-name }} через промежуточный CSV с помощью YDB CLI
 
-Пошаговый рецепт: **PostgreSQL** → {{ ydb-short-name }} через [CLI import file](../../../../reference/ydb-cli/export-import/import-file.md).
+Пошаговый рецепт — перенос данных из **PostgreSQL** в {{ ydb-short-name }} через промежуточный CSV, используя [YDB CLI](../../../../reference/ydb-cli/export-import/import-file.md).
 
 ## Подготовка {#prerequisites}
 
@@ -17,7 +17,7 @@ psql "postgresql://user:password@pg-host:5432/mydb" -c "SELECT 1"
 
 Универсальный путь: выгрузить данные из PostgreSQL в файл и загрузить в **уже созданную** таблицу {{ ydb-short-name }}.
 
-Подробнее про команду: [import file](../../../../reference/ydb-cli/export-import/import-file.md).
+Подробнее о команде: [import file в YDB CLI](../../../../reference/ydb-cli/export-import/import-file.md).
 
 ### Шаг 1. Создайте таблицу в {{ ydb-short-name }}
 

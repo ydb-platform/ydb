@@ -1,6 +1,6 @@
-# Перенос данных из Oracle Database в {{ ydb-short-name }} с помощью CLI import file
+# Перенос данных из Oracle Database в {{ ydb-short-name }} через промежуточный CSV с помощью YDB CLI
 
-Пошаговый рецепт: **Oracle Database** → {{ ydb-short-name }} через [CLI import file](../../../../reference/ydb-cli/export-import/import-file.md).
+Пошаговый рецепт — перенос данных из **Oracle Database** в {{ ydb-short-name }} через промежуточный CSV, используя [YDB CLI](../../../../reference/ydb-cli/export-import/import-file.md).
 
 ## Подготовка {#prerequisites}
 
@@ -15,7 +15,7 @@
 
 ## Пошаговая инструкция {#steps}
 
-Подробнее: [import file](../../../../reference/ydb-cli/export-import/import-file.md).
+Подробнее о команде: [import file в YDB CLI](../../../../reference/ydb-cli/export-import/import-file.md).
 
 ### Шаг 1. Таблица в {{ ydb-short-name }}
 
@@ -39,7 +39,7 @@ SELECT emp_id, name FROM hr.employees;
 SPOOL OFF
 ```
 
-Или Data Pump / внешние таблицы Oracle → CSV/Parquet на общем хранилище.
+Или Data Pump / внешние таблицы Oracle: экспорт в CSV/Parquet на общем хранилище.
 
 ### Шаг 3. Импорт
 

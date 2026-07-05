@@ -1,6 +1,6 @@
 # Перенос данных из MySQL / MariaDB в {{ ydb-short-name }} с помощью dbt
 
-Пошаговый рецепт: **MySQL / MariaDB** → {{ ydb-short-name }} через [dbt](../../../../integrations/migration/dbt.md).
+Пошаговый рецепт — перенос данных из **MySQL / MariaDB** в {{ ydb-short-name }} с помощью [dbt](../../../../integrations/migration/dbt.md).
 
 ## Подготовка {#prerequisites}
 

@@ -1,6 +1,6 @@
 # Перенос данных из PostgreSQL в {{ ydb-short-name }} с помощью Spark
 
-Пошаговый рецепт: **PostgreSQL** → {{ ydb-short-name }} через [Spark](../../../../integrations/query-engines/spark.md).
+Пошаговый рецепт — перенос данных из **PostgreSQL** в {{ ydb-short-name }} с помощью [Spark](../../../../integrations/query-engines/spark.md).
 
 ## Подготовка {#prerequisites}
 

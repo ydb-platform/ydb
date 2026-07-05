@@ -1,6 +1,6 @@
-# Перенос данных из MySQL / MariaDB в {{ ydb-short-name }} с помощью CLI import file
+# Перенос данных из MySQL / MariaDB в {{ ydb-short-name }} через промежуточный CSV с помощью YDB CLI
 
-Пошаговый рецепт: **MySQL / MariaDB** → {{ ydb-short-name }} через [CLI import file](../../../../reference/ydb-cli/export-import/import-file.md).
+Пошаговый рецепт — перенос данных из **MySQL / MariaDB** в {{ ydb-short-name }} через промежуточный CSV, используя [YDB CLI](../../../../reference/ydb-cli/export-import/import-file.md).
 
 ## Подготовка {#prerequisites}
 
@@ -15,7 +15,7 @@ mysql -h mysql-host -u user -p mydb -e "SELECT 1"
 
 ## Пошаговая инструкция {#steps}
 
-Подробнее: [import file](../../../../reference/ydb-cli/export-import/import-file.md).
+Подробнее о команде: [import file в YDB CLI](../../../../reference/ydb-cli/export-import/import-file.md).
 
 ### Шаг 1. Создайте таблицу в {{ ydb-short-name }}
 

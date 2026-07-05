@@ -1,6 +1,6 @@
 # Перенос данных из PostgreSQL в {{ ydb-short-name }} с помощью ydb-pg-extension
 
-Пошаговый рецепт: **PostgreSQL** → {{ ydb-short-name }} через [ydb-pg-extension](https://github.com/ydb-platform/ydb-pg-extension/blob/main/docs/migration.md).
+Пошаговый рецепт — перенос данных из **PostgreSQL** в {{ ydb-short-name }} с помощью [ydb-pg-extension](https://github.com/ydb-platform/ydb-pg-extension/blob/main/docs/migration.md).
 
 ## Подготовка {#prerequisites}
 

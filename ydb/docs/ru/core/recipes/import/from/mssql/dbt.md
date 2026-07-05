@@ -1,6 +1,6 @@
 # Перенос данных из Microsoft SQL Server в {{ ydb-short-name }} с помощью dbt
 
-Пошаговый рецепт: **Microsoft SQL Server** → {{ ydb-short-name }} через [dbt](../../../../integrations/migration/dbt.md).
+Пошаговый рецепт — перенос данных из **Microsoft SQL Server** в {{ ydb-short-name }} с помощью [dbt](../../../../integrations/migration/dbt.md).
 
 ## Подготовка {#prerequisites}
 

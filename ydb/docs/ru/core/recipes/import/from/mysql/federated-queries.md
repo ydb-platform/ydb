@@ -1,6 +1,6 @@
 # Перенос данных из MySQL / MariaDB в {{ ydb-short-name }} с помощью Федеративные запросы
 
-Пошаговый рецепт: **MySQL / MariaDB** → {{ ydb-short-name }} через [Федеративные запросы](../../../../concepts/query_execution/federated_query/import_and_export.md).
+Пошаговый рецепт — перенос данных из **MySQL / MariaDB** в {{ ydb-short-name }} с помощью [Федеративные запросы](../../../../concepts/query_execution/federated_query/import_and_export.md).
 
 ## Подготовка {#prerequisites}
 

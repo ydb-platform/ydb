@@ -5,6 +5,8 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_VOLUME
+
 namespace NYdb::NBS::NStorage {
 
 using namespace NActors;
@@ -20,16 +22,13 @@ void TVolumeActor::Bootstrap(const TActorContext& ctx)
 {
     Become(&TThis::StateWork);
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_VOLUME,
-        "Started NBS volume: tablet id %s",
-        SelfId().ToString().data());
+    YDB_LOG_INFO_CTX(ctx, "Started NBS volume: tablet id",
+        {"#_SelfId", SelfId()});
 }
 
 void TVolumeActor::OnDetach(const TActorContext& ctx)
 {
-    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME, "OnDetach");
+    YDB_LOG_DEBUG_CTX(ctx, "OnDetach");
     Die(ctx);
 }
 
@@ -38,18 +37,15 @@ void TVolumeActor::OnTabletDead(
     const TActorContext& ctx)
 {
     Y_UNUSED(ev);
-    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME, "OnTabletDead");
+    YDB_LOG_DEBUG_CTX(ctx, "OnTabletDead");
     Die(ctx);
 }
 
 void TVolumeActor::OnActivateExecutor(const TActorContext& ctx)
 {
     // RunTxInitSchema(ctx);
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_VOLUME,
-        "OnActivateExecutor: tablet id %lu",
-        TabletID());
+    YDB_LOG_INFO_CTX(ctx, "OnActivateExecutor: tablet id",
+        {"tabletID", TabletID()});
 
     // allow pipes to connect
     SignalTabletActive(ctx);
@@ -59,7 +55,7 @@ void TVolumeActor::OnActivateExecutor(const TActorContext& ctx)
 
 void TVolumeActor::DefaultSignalTabletActive(const TActorContext& ctx)
 {
-    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME, "DefaultSignalTabletActive");
+    YDB_LOG_DEBUG_CTX(ctx, "DefaultSignalTabletActive");
 }
 
 void TVolumeActor::ReportTabletState(const TActorContext& ctx)
@@ -78,12 +74,9 @@ void TVolumeActor::ReportTabletState(const TActorContext& ctx)
 STFUNC(TVolumeActor::StateWork)
 {
     auto ctx = NActors::TActivationContext::AsActorContext();
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_VOLUME,
-        "Processing event: %s from sender: %lu",
-        ev->GetTypeName().data(),
-        ev->Sender.LocalId());
+    YDB_LOG_DEBUG_CTX(ctx, "Processing",
+        {"event", ev->GetTypeName().data()},
+        {"sender", ev->Sender.LocalId()});
 
     switch (ev->GetTypeRewrite()) {
         cFunc(TEvents::TEvPoison::EventType, PassAway);
@@ -101,11 +94,9 @@ STFUNC(TVolumeActor::StateWork)
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_DEBUG_S(
-                    ctx,
-                    NKikimrServices::NBS_VOLUME,
-                    "Unhandled event type: " << ev->GetTypeRewrite()
-                                             << " event: " << ev->ToString());
+                YDB_LOG_DEBUG_CTX(ctx, "Unhandled event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->ToString()});
             }
             break;
     }
@@ -117,12 +108,9 @@ void TVolumeActor::HandleServerConnected(
 {
     const auto* msg = ev->Get();
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_VOLUME,
-        "Pipe client %s server %s connected to volume",
-        ToString(msg->ClientId).c_str(),
-        ToString(msg->ServerId).c_str());
+    YDB_LOG_DEBUG_CTX(ctx, "Pipe client server connected to volume",
+        {"#_ToString(msg->ClientId).c_str", ToString(msg->ClientId)},
+        {"#_ToString(msg->ServerId).c_str", ToString(msg->ServerId)});
 }
 
 void TVolumeActor::HandleServerDisconnected(
@@ -131,12 +119,9 @@ void TVolumeActor::HandleServerDisconnected(
 {
     const auto* msg = ev->Get();
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_VOLUME,
-        "Pipe client %s server %s disconnected from volume",
-        ToString(msg->ClientId).c_str(),
-        ToString(msg->ServerId).c_str());
+    YDB_LOG_DEBUG_CTX(ctx, "Pipe client server disconnected from volume",
+        {"#_ToString(msg->ClientId).c_str", ToString(msg->ClientId)},
+        {"#_ToString(msg->ServerId).c_str", ToString(msg->ServerId)});
 }
 
 void TVolumeActor::HandleServerDestroyed(
@@ -145,12 +130,9 @@ void TVolumeActor::HandleServerDestroyed(
 {
     const auto* msg = ev->Get();
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_VOLUME,
-        "Pipe client %s server %s got destroyed for volume",
-        ToString(msg->ClientId).c_str(),
-        ToString(msg->ServerId).c_str());
+    YDB_LOG_INFO_CTX(ctx, "Pipe client server got destroyed for volume",
+        {"#_ToString(msg->ClientId).c_str", ToString(msg->ClientId)},
+        {"#_ToString(msg->ServerId).c_str", ToString(msg->ServerId)});
 }
 
 void TVolumeActor::HandleUpdateVolumeConfig(
@@ -160,14 +142,12 @@ void TVolumeActor::HandleUpdateVolumeConfig(
     auto* msg = ev->Get();
     const ui64 txId = msg->Record.GetTxId();
 
-    LOG_INFO_S(
-        ctx,
-        NKikimrServices::NBS_VOLUME,
-        "Handle UpdateVolumeConfig request"
-            << ", tabletId: " << TabletID() << ", txId: " << txId
-            << ", sender: " << ev->Sender
-            << ", partitions: " << msg->Record.PartitionsSize()
-            << ", version: " << msg->Record.GetVolumeConfig().GetVersion());
+    YDB_LOG_INFO_CTX(ctx, "Handle UpdateVolumeConfig request",
+        {"tabletId", TabletID()},
+        {"txId", txId},
+        {"sender", ev->Sender},
+        {"partitions", msg->Record.PartitionsSize()},
+        {"version", msg->Record.GetVolumeConfig().GetVersion()});
 
     // Store request info
     auto requestInfo = CreateRequestInfo(
@@ -185,12 +165,9 @@ void TVolumeActor::HandleUpdateVolumeConfig(
     for (const auto& partition: msg->Record.GetPartitions()) {
         ui64 partitionTabletId = partition.GetTabletId();
 
-        LOG_INFO_S(
-            ctx,
-            NKikimrServices::NBS_VOLUME,
-            "Forwarding UpdateVolumeConfig to partition"
-                << ", partitionId: " << partition.GetPartitionId()
-                << ", tabletId: " << partitionTabletId);
+        YDB_LOG_INFO_CTX(ctx, "Forwarding UpdateVolumeConfig to partition",
+            {"partitionId", partition.GetPartitionId()},
+            {"tabletId", partitionTabletId});
 
         auto forwardEvent =
             std::make_unique<NKikimr::TEvBlockStore::TEvUpdateVolumeConfig>();
@@ -219,21 +196,16 @@ void TVolumeActor::HandleUpdateVolumeConfigResponse(
     const ui64 txId = msg->Record.GetTxId();
     const ui64 partitionTabletId = msg->Record.GetOrigin();
 
-    LOG_INFO_S(
-        ctx,
-        NKikimrServices::NBS_VOLUME,
-        "Handle UpdateVolumeConfigResponse"
-            << ", tabletId: " << TabletID() << ", txId: " << txId
-            << ", partitionTabletId: " << partitionTabletId
-            << ", status: " << static_cast<int>(msg->Record.GetStatus()));
+    YDB_LOG_INFO_CTX(ctx, "Handle UpdateVolumeConfigResponse",
+        {"tabletId", TabletID()},
+        {"txId", txId},
+        {"partitionTabletId", partitionTabletId},
+        {"status", static_cast<int>(msg->Record.GetStatus())});
 
     auto it = UpdateVolumeConfigRequests.find(txId);
     if (it == UpdateVolumeConfigRequests.end()) {
-        LOG_WARN_S(
-            ctx,
-            NKikimrServices::NBS_VOLUME,
-            "Received UpdateVolumeConfigResponse for unknown txId" << ", txId: "
-                                                                   << txId);
+        YDB_LOG_WARN_CTX(ctx, "Received UpdateVolumeConfigResponse for unknown txId",
+            {"txId", txId});
         return;
     }
 
@@ -256,12 +228,10 @@ void TVolumeActor::HandleUpdateVolumeConfigResponse(
     response->Record.SetOrigin(TabletID());
     response->Record.SetStatus(msg->Record.GetStatus());
 
-    LOG_INFO_S(
-        ctx,
-        NKikimrServices::NBS_VOLUME,
-        "Sending UpdateVolumeConfig response"
-            << ", tabletId: " << TabletID() << ", txId: " << txId
-            << ", status: " << static_cast<int>(msg->Record.GetStatus()));
+    YDB_LOG_INFO_CTX(ctx, "Sending UpdateVolumeConfig response",
+        {"tabletId", TabletID()},
+        {"txId", txId},
+        {"status", static_cast<int>(msg->Record.GetStatus())});
 
     NYdb::NBS::Reply(ctx, *request.RequestInfo, std::move(response));
 

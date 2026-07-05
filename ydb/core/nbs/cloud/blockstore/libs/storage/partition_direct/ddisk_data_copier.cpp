@@ -9,6 +9,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NThreading;
@@ -193,12 +195,9 @@ void TDDiskDataCopier::OnRangeRead(
     copyRangeState->Span.Event("OnRangeRead");
 
     if (HasError(response.Error)) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TDDiskDataCopier. %s Read error: %s",
-            copyRangeState->Range.Print().c_str(),
-            FormatError(response.Error).c_str());
+        YDB_LOG_ERROR_CTX(*ActorSystem, "TDDiskDataCopier. Read",
+            {"#_copyRangeState->Range.Print().c_str", copyRangeState->Range.Print()},
+            {"error", FormatError(response.Error)});
 
         Complete.SetValue(EResult::Error);
         return;
@@ -228,12 +227,9 @@ void TDDiskDataCopier::OnRangeWritten(
     copyRangeState->Span.Event("OnRangeWritten");
 
     if (HasError(response.Error)) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TDDiskDataCopier. %s Write error: %s",
-            copyRangeState->Range.Print().c_str(),
-            FormatError(response.Error).c_str());
+        YDB_LOG_ERROR_CTX(*ActorSystem, "TDDiskDataCopier. Write",
+            {"#_copyRangeState->Range.Print().c_str", copyRangeState->Range.Print()},
+            {"error", FormatError(response.Error)});
 
         Complete.SetValue(EResult::Error);
         return;

@@ -4,6 +4,8 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_SS_PROXY
+
 namespace NYdb::NBS::NStorage {
 
 using namespace NActors;
@@ -89,28 +91,26 @@ void TModifySchemeActor::HandleStatus(
                       record.GetStatus();
     switch (status) {
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete:
-            LOG_DEBUG(
-                ctx,
-                NKikimrServices::NBS_SS_PROXY,
-                "Request %s with TxId# %lu completed immediately",
-                NKikimrSchemeOp::EOperationType_Name(
+            YDB_LOG_DEBUG_CTX(ctx, "Request with completed immediately",
+                {"#_NKikimrSchemeOp::EOperationType_Name(
                     ModifyScheme.GetOperationType())
-                    .data(),
-                TxId);
+                    .data", NKikimrSchemeOp::EOperationType_Name(
+                    ModifyScheme.GetOperationType())
+                    .data()},
+                {"txId", TxId});
 
             ReplyAndDie(ctx);
             break;
 
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::
             ExecInProgress:
-            LOG_DEBUG(
-                ctx,
-                NKikimrServices::NBS_SS_PROXY,
-                "Request %s with TxId# %lu in progress, waiting for completion",
-                NKikimrSchemeOp::EOperationType_Name(
+            YDB_LOG_DEBUG_CTX(ctx, "Request with in progress, waiting for completion",
+                {"#_NKikimrSchemeOp::EOperationType_Name(
                     ModifyScheme.GetOperationType())
-                    .data(),
-                TxId);
+                    .data", NKikimrSchemeOp::EOperationType_Name(
+                    ModifyScheme.GetOperationType())
+                    .data()},
+                {"txId", TxId});
 
             NYdb::NBS::Send<TEvSSProxy::TEvWaitSchemeTxRequest>(
                 ctx,
@@ -121,15 +121,14 @@ void TModifySchemeActor::HandleStatus(
             break;
 
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError: {
-            LOG_DEBUG(
-                ctx,
-                NKikimrServices::NBS_SS_PROXY,
-                "Request %s with TxId# %lu failed with status %s",
-                NKikimrSchemeOp::EOperationType_Name(
+            YDB_LOG_DEBUG_CTX(ctx, "Request with failed with status",
+                {"#_NKikimrSchemeOp::EOperationType_Name(
                     ModifyScheme.GetOperationType())
-                    .data(),
-                TxId,
-                NKikimrScheme::EStatus_Name(SchemeShardStatus).data());
+                    .data", NKikimrSchemeOp::EOperationType_Name(
+                    ModifyScheme.GetOperationType())
+                    .data()},
+                {"txId", TxId},
+                {"#_NKikimrScheme::EStatus_Name(SchemeShardStatus).data", NKikimrScheme::EStatus_Name(SchemeShardStatus).data()});
 
             if ((SchemeShardStatus ==
                  NKikimrScheme::StatusMultipleModifications) &&
@@ -139,11 +138,8 @@ void TModifySchemeActor::HandleStatus(
                 ui64 txId = record.GetPathCreateTxId() != 0
                                 ? record.GetPathCreateTxId()
                                 : record.GetPathDropTxId();
-                LOG_DEBUG(
-                    ctx,
-                    NKikimrServices::NBS_SS_PROXY,
-                    "Waiting for a different TxId# %lu",
-                    txId);
+                YDB_LOG_DEBUG_CTX(ctx, "Waiting for a different",
+                    {"txId", txId});
 
                 NYdb::NBS::Send<TEvSSProxy::TEvWaitSchemeTxRequest>(
                     ctx,
@@ -182,13 +178,12 @@ void TModifySchemeActor::HandleStatus(
 
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError:
             if (SchemeShardStatus == NKikimrScheme::StatusPathDoesNotExist) {
-                LOG_DEBUG(
-                    ctx,
-                    NKikimrServices::NBS_SS_PROXY,
-                    "Request %s failed to resolve parent path",
-                    NKikimrSchemeOp::EOperationType_Name(
+                YDB_LOG_DEBUG_CTX(ctx, "Request failed to resolve parent path",
+                    {"#_NKikimrSchemeOp::EOperationType_Name(
                         ModifyScheme.GetOperationType())
-                        .data());
+                        .data", NKikimrSchemeOp::EOperationType_Name(
+                        ModifyScheme.GetOperationType())
+                        .data()});
 
                 // TODO: return E_NOT_FOUND instead of StatusPathDoesNotExist
                 ReplyAndDie(
@@ -211,14 +206,13 @@ void TModifySchemeActor::HandleStatus(
             /* fall through */
 
         default:
-            LOG_DEBUG(
-                ctx,
-                NKikimrServices::NBS_SS_PROXY,
-                "Request %s to tx_proxy failed with code %u",
-                NKikimrSchemeOp::EOperationType_Name(
+            YDB_LOG_DEBUG_CTX(ctx, "Request to tx_proxy failed with code",
+                {"#_NKikimrSchemeOp::EOperationType_Name(
                     ModifyScheme.GetOperationType())
-                    .data(),
-                status);
+                    .data", NKikimrSchemeOp::EOperationType_Name(
+                    ModifyScheme.GetOperationType())
+                    .data()},
+                {"status", status});
 
             ReplyAndDie(
                 ctx,
@@ -235,10 +229,7 @@ void TModifySchemeActor::HandleTxDone(
 {
     const auto* msg = ev->Get();
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_SS_PROXY,
-        "TModifySchemeActor received TEvWaitSchemeTxResponse");
+    YDB_LOG_DEBUG_CTX(ctx, "TModifySchemeActor received TEvWaitSchemeTxResponse");
 
     ReplyAndDie(ctx, msg->GetError());
 }

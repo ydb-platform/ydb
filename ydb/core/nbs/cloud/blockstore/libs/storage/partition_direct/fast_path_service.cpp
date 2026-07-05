@@ -28,6 +28,8 @@
 #include <memory>
 #include <utility>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 using namespace NKikimr;
 using namespace NThreading;
 
@@ -174,20 +176,14 @@ TFastPathService::TFastPathService(
 
 TFastPathService::~TFastPathService()
 {
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "TFastPathService::Destroy %s",
-        DiskId.Quote().c_str());
+    YDB_LOG_INFO_CTX(*ActorSystem, "TFastPathService::Destroy",
+        {"diskId", DiskId});
 }
 
 NThreading::TFuture<void> TFastPathService::Run()
 {
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "TFastPathService::Run %s",
-        DiskId.Quote().c_str());
+    YDB_LOG_INFO_CTX(*ActorSystem, "TFastPathService::Run",
+        {"diskId", DiskId});
 
     TVector<NThreading::TFuture<void>> initialReadyFutures;
     initialReadyFutures.reserve(DirectBlockGroups.size());
@@ -204,11 +200,8 @@ NThreading::TFuture<void> TFastPathService::Run()
 
 NThreading::TFuture<void> TFastPathService::Stop()
 {
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "TFastPathService::Stop %s",
-        DiskId.Quote().c_str());
+    YDB_LOG_INFO_CTX(*ActorSystem, "TFastPathService::Stop",
+        {"diskId", DiskId});
 
     TVector<NThreading::TFuture<void>> stopFutures;
     for (const auto& region: Regions) {
@@ -503,11 +496,8 @@ void TFastPathService::OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump)
     try {
         DumpToFile(DiskId, DumpCount, std::move(DebugDumps));
     } catch (const std::exception& e) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "Dump error %s",
-            e.what());
+        YDB_LOG_ERROR_CTX(*ActorSystem, "Dump error",
+            {"#_e.what", e.what()});
     }
 
     ScheduleDirtyMapDebugPrint();

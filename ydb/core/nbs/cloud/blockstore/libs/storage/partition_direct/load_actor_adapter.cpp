@@ -13,6 +13,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 using namespace NThreading;
 using namespace NActors;
 
@@ -149,12 +151,9 @@ void TLoadActorAdapter::HandleReadBlocksRequest(
 
 STFUNC(TLoadActorAdapter::StateWork)
 {
-    LOG_DEBUG(
-        TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "Processing event: %s from sender: %lu",
-        ev->GetTypeName().data(),
-        ev->Sender.LocalId());
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Processing",
+        {"event", ev->GetTypeName().data()},
+        {"sender", ev->Sender.LocalId()});
 
     switch (ev->GetTypeRewrite()) {
         cFunc(TEvents::TEvPoison::EventType, PassAway);
@@ -163,11 +162,9 @@ STFUNC(TLoadActorAdapter::StateWork)
         HFunc(TEvService::TEvReadBlocksRequest, HandleReadBlocksRequest);
 
         default:
-            LOG_DEBUG_S(
-                TActivationContext::AsActorContext(),
-                NKikimrServices::NBS_PARTITION,
-                "Unhandled event type: " << ev->GetTypeRewrite()
-                                         << " event: " << ev->ToString());
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Unhandled event",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString()});
             break;
     }
 }

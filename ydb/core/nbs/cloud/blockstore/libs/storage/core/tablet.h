@@ -107,14 +107,11 @@ protected:
             Generation = tx.Generation;
             Step = tx.Step;
 
-            LOG_DEBUG(
-                ctx,
-                T::LogComponent,
-                "[%lu] Prepare %s (gen: %u, step: %u)",
-                Self->TabletID(),
-                TTx::Name,
-                Generation,
-                Step);
+            YDB_LOG_DEBUG_CTX_COMP(ctx, T::LogComponent, "Prepare",
+                {"#_Self->TabletID", Self->TabletID()},
+                {"#_TTx::Name", TTx::Name},
+                {"#_(gen", Generation},
+                {"step", Step});
 
             if (!TTx::Prepare(*Self, ctx, tx, Args)) {
                 Args.Clear();
@@ -123,14 +120,11 @@ protected:
 
             tx.DB.NoMoreReadsForTx();
 
-            LOG_DEBUG(
-                ctx,
-                T::LogComponent,
-                "[%lu] Execute %s (gen: %u, step: %u)",
-                Self->TabletID(),
-                TTx::Name,
-                Generation,
-                Step);
+            YDB_LOG_DEBUG_CTX_COMP(ctx, T::LogComponent, "Execute",
+                {"#_Self->TabletID", Self->TabletID()},
+                {"#_TTx::Name", TTx::Name},
+                {"#_(gen", Generation},
+                {"step", Step});
 
             TTx::Execute(*Self, ctx, tx, Args);
 
@@ -145,14 +139,11 @@ protected:
                     GetCycleCount());
             }
 
-            LOG_DEBUG(
-                ctx,
-                T::LogComponent,
-                "[%lu] Complete %s (gen: %u, step: %u)",
-                Self->TabletID(),
-                TTx::Name,
-                Generation,
-                Step);
+            YDB_LOG_DEBUG_CTX_COMP(ctx, T::LogComponent, "Complete",
+                {"#_Self->TabletID", Self->TabletID()},
+                {"#_TTx::Name", TTx::Name},
+                {"#_(gen", Generation},
+                {"step", Step});
 
             TTx::Complete(*Self, ctx, Args);
         }

@@ -26,6 +26,8 @@
 
 #include <unistd.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
@@ -42,21 +44,15 @@ TPartitionActor::TPartitionActor(
     , LogTitle{GetCycleCount(), TLogTitle::TPartitionDirect{.TabletId = TabletID()}}
     , StorageConfig(GetNbsService()->StorageConfig)
 {
-    LOG_INFO(
-        NActors::TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "%s TPartitionActor: initialization started",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(NActors::TActivationContext::AsActorContext(), "TPartitionActor: initialization started",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 }
 
 TPartitionActor::~TPartitionActor() = default;
 
 void TPartitionActor::PassAway()
 {
-    LOG_INFO(
-        NActors::TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "TPartitionActor: before detach");
+    YDB_LOG_INFO_CTX(NActors::TActivationContext::AsActorContext(), "TPartitionActor: before detach");
 }
 
 void TPartitionActor::OnDetach(const TActorContext& ctx)
@@ -76,19 +72,13 @@ void TPartitionActor::OnActivateExecutor(const TActorContext& ctx)
 {
     Become(&TThis::StateWork);
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Started NBS partition: actor id %s",
-        LogTitle.GetWithTime().c_str(),
-        SelfId().ToString().data());
+    YDB_LOG_INFO_CTX(ctx, "Started NBS partition: actor id",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_SelfId", SelfId()});
 
     if (!Executor()->GetStats().IsFollower()) {
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Executing InitSchema transaction",
-            LogTitle.GetWithTime().c_str());
+        YDB_LOG_INFO_CTX(ctx, "Executing InitSchema transaction",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
         ExecuteTx(ctx, CreateTx<TInitSchema>());
     }
 
@@ -120,13 +110,10 @@ void TPartitionActor::HandleServerConnected(
 {
     const auto* msg = ev->Get();
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Pipe client %s server %s connected to volume",
-        LogTitle.GetWithTime().c_str(),
-        ToString(msg->ClientId).c_str(),
-        ToString(msg->ServerId).c_str());
+    YDB_LOG_DEBUG_CTX(ctx, "Pipe client server connected to volume",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_ToString(msg->ClientId).c_str", ToString(msg->ClientId)},
+        {"#_ToString(msg->ServerId).c_str", ToString(msg->ServerId)});
 }
 
 void TPartitionActor::HandleServerDisconnected(
@@ -135,13 +122,10 @@ void TPartitionActor::HandleServerDisconnected(
 {
     const auto* msg = ev->Get();
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Pipe client %s server %s disconnected from volume",
-        LogTitle.GetWithTime().c_str(),
-        ToString(msg->ClientId).c_str(),
-        ToString(msg->ServerId).c_str());
+    YDB_LOG_DEBUG_CTX(ctx, "Pipe client server disconnected from volume",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_ToString(msg->ClientId).c_str", ToString(msg->ClientId)},
+        {"#_ToString(msg->ServerId).c_str", ToString(msg->ServerId)});
 }
 
 void TPartitionActor::HandleServerDestroyed(
@@ -150,13 +134,10 @@ void TPartitionActor::HandleServerDestroyed(
 {
     const auto* msg = ev->Get();
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Pipe client %s server %s got destroyed for volume",
-        LogTitle.GetWithTime().c_str(),
-        ToString(msg->ClientId).c_str(),
-        ToString(msg->ServerId).c_str());
+    YDB_LOG_INFO_CTX(ctx, "Pipe client server got destroyed for volume",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_ToString(msg->ClientId).c_str", ToString(msg->ClientId)},
+        {"#_ToString(msg->ServerId).c_str", ToString(msg->ServerId)});
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -251,11 +232,8 @@ void TPartitionActor::Start(
     LogTitle.SetDiskId(VolumeConfig.GetDiskId());
     LogTitle.SetGeneration(Executor()->Generation());
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Starting",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(ctx, "Starting",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
     auto nbsService = GetNbsService();
     Y_ABORT_UNLESS(nbsService);
@@ -304,11 +282,8 @@ void TPartitionActor::HandleFastPathServiceReady(
     const NActors::TActorContext& ctx)
 {
     Y_UNUSED(ev);
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s All DBGs reached initial locked quorum, opening endpoint",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(ctx, "All DBGs reached initial locked quorum, opening endpoint",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, FastPathService);
 
@@ -332,12 +307,9 @@ void TPartitionActor::HandleFastPathServiceReady(
             options);
     }
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Started NBS LoadActorAdapter: %s",
-        LogTitle.GetWithTime().c_str(),
-        LoadActorAdapter.ToString().c_str());
+    YDB_LOG_INFO_CTX(ctx, "Started NBS",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"loadActorAdapter", LoadActorAdapter});
 }
 
 void TPartitionActor::HandleFastPathServiceShutdown(
@@ -347,11 +319,8 @@ void TPartitionActor::HandleFastPathServiceShutdown(
     Y_UNUSED(ev);
 
     if (!FastPathService) {
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s FastPathService is not started",
-            LogTitle.GetWithTime().c_str());
+        YDB_LOG_INFO_CTX(ctx, "FastPathService is not started",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
         Send(
             ctx.SelfID,
             std::make_unique<
@@ -404,11 +373,8 @@ void TPartitionActor::HandleFastPathServiceStopped(
 {
     Y_UNUSED(ev);
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s FastPathService stopped",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(ctx, "FastPathService stopped",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 }
 
 void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
@@ -417,12 +383,9 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
 {
     const auto* msg = ev->Get();
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s HandleControllerAllocateDDiskBlockGroupResult record is: %s",
-        LogTitle.GetWithTime().c_str(),
-        msg->Record.DebugString().data());
+    YDB_LOG_INFO_CTX(ctx, "HandleControllerAllocateDDiskBlockGroupResult record",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"is", msg->Record.DebugString().data()});
 
     if (msg->Record.GetStatus() == NKikimrProto::EReplyStatus::OK) {
         Y_ABORT_UNLESS(
@@ -445,14 +408,10 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         DdiskBlockGroupAllocated = true;
         ExecuteTx(ctx, CreateTx<TStorePartitionIds>(std::move(ids)));
     } else {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s HandleControllerAllocateDDiskBlockGroupResult finished with "
-            "error: %d, reason: %s",
-            LogTitle.GetWithTime().c_str(),
-            msg->Record.GetStatus(),
-            msg->Record.GetErrorReason().data());
+        YDB_LOG_ERROR_CTX(ctx, "HandleControllerAllocateDDiskBlockGroupResult finished with",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"error", msg->Record.GetStatus()},
+            {"reason", msg->Record.GetErrorReason().data()});
     }
 
     NTabletPipe::CloseClient(ctx, BSControllerPipeClient);
@@ -476,19 +435,13 @@ void TPartitionActor::HandleUpdateVolumeConfig(
 {
     const auto* msg = ev->Get();
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Handle UpdateVolumeConfig request. Version: %d",
-        LogTitle.GetWithTime().c_str(),
-        msg->Record.GetVolumeConfig().GetVersion());
+    YDB_LOG_INFO_CTX(ctx, "Handle UpdateVolumeConfig request",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"version", msg->Record.GetVolumeConfig().GetVersion()});
 
     if (DdiskBlockGroupAllocated) {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Already has ddisk connections",
-            LogTitle.GetWithTime().c_str());
+        YDB_LOG_ERROR_CTX(ctx, "Already has ddisk connections",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
         auto response = std::make_unique<
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
@@ -500,12 +453,9 @@ void TPartitionActor::HandleUpdateVolumeConfig(
     const auto& volumeConfig = msg->Record.GetVolumeConfig();
     Y_ABORT_UNLESS(volumeConfig.PartitionsSize() == 1);
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Handle UpdateVolumeConfig request VolumeConfig: %s",
-        LogTitle.GetWithTime().c_str(),
-        volumeConfig.DebugString().c_str());
+    YDB_LOG_INFO_CTX(ctx, "Handle UpdateVolumeConfig request",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"volumeConfig", volumeConfig.DebugString()});
 
     ExecuteTx(ctx, CreateTx<TStoreVolumeConfig>(volumeConfig));
 
@@ -516,11 +466,8 @@ void TPartitionActor::HandleUpdateVolumeConfig(
     response->Record.SetOrigin(TabletID());
     response->Record.SetStatus(NKikimrBlockStore::OK);
 
-    LOG_INFO(
-        TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "%s Sending UpdateVolumeConfig response OK",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Sending UpdateVolumeConfig response OK",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
     ctx.Send(ev->Sender, response.release());
 }
@@ -531,12 +478,9 @@ void TPartitionActor::HandleUpdateVChunkConfig(
 {
     auto& cfg = ev->Get()->VChunkConfig;
 
-    LOG_DEBUG_S(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        LogTitle.GetWithTime().c_str()
-            << " Handle UpdateVChunkConfig, vChunkIndex: "
-            << cfg.GetVChunkIndex());
+    YDB_LOG_DEBUG_CTX(ctx, "Handle UpdateVChunkConfig",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"vChunkIndex", cfg.GetVChunkIndex()});
 
     ExecuteTx(ctx, CreateTx<TUpdateVChunkConfig>(std::move(cfg)));
 }
@@ -545,13 +489,10 @@ void TPartitionActor::HandleUpdateVChunkConfig(
 
 STFUNC(TPartitionActor::StateWork)
 {
-    LOG_DEBUG(
-        TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "%s Processing event: %s from sender: %lu",
-        LogTitle.GetWithTime().c_str(),
-        ev->GetTypeName().data(),
-        ev->Sender.LocalId());
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Processing",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"event", ev->GetTypeName().data()},
+        {"sender", ev->Sender.LocalId()});
 
     switch (ev->GetTypeRewrite()) {
         cFunc(TEvents::TEvPoison::EventType, PassAway);
@@ -583,11 +524,9 @@ STFUNC(TPartitionActor::StateWork)
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_DEBUG_S(
-                    TActivationContext::AsActorContext(),
-                    NKikimrServices::NBS_PARTITION,
-                    "Unhandled event type: " << ev->GetTypeRewrite()
-                                             << " event: " << ev->ToString());
+                YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Unhandled event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->ToString()});
             }
             break;
     }

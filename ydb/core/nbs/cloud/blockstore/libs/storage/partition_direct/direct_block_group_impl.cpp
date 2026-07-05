@@ -16,6 +16,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
@@ -612,14 +614,10 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
         const THostIndex* const hostIndex = PBufferIdToHostIndex.FindPtr(
             singlePBufferResponse.GetPersistentBufferId());
         if (!hostIndex) {
-            LOG_ERROR(
-                *ActorSystem,
-                NKikimrServices::NBS_PARTITION,
-                "TDBGWriteBlocksToManyPBuffersResponse: unexpected "
-                "pbufferDiskId: %s",
-                singlePBufferResponse.GetPersistentBufferId()
+            YDB_LOG_ERROR_CTX(*ActorSystem, "TDBGWriteBlocksToManyPBuffersResponse: unexpected",
+                {"pbufferDiskId", singlePBufferResponse.GetPersistentBufferId()
                     .ShortUtf8DebugString()
-                    .c_str());
+                    });
             continue;
         }
         Y_ABORT_UNLESS(
@@ -773,14 +771,11 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
                 ETranslateFlags::TreatOutdatedAsSuccess));
         }
     } else {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s SyncWithPBufferResult: Segment count: %d. Response %s %s",
-            LogTitle.GetWithTime().c_str(),
-            segmentCount,
-            response.ShortUtf8DebugString().c_str(),
-            FormatError(TranslateError(response)).c_str());
+        YDB_LOG_ERROR_CTX(*ActorSystem, "SyncWithPBufferResult: Segment Response",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"count", segmentCount},
+            {"#_response.ShortUtf8DebugString().c_str", response.ShortUtf8DebugString()},
+            {"#_FormatError(TranslateError(response)).c_str", FormatError(TranslateError(response))});
 
         for (size_t i = 0; i < segmentCount; ++i) {
             result.Errors.push_back(
@@ -869,13 +864,10 @@ void TDirectBlockGroup::BarrierEraseFromPBuffer(ui64 lsn)
             if (!self) {
                 return;
             }
-            LOG_DEBUG(
-                *self->ActorSystem,
-                NKikimrServices::NBS_PARTITION,
-                "%s barrier-erase lsn=%lu on %lu PBuffer hosts",
-                self->LogTitle.GetWithTime().c_str(),
-                lsn,
-                self->PBufferConnections.size());
+            YDB_LOG_DEBUG_CTX(*self->ActorSystem, "Barrier-erase on PBuffer hosts",
+                {"#_self->LogTitle.GetWithTime().c_str", self->LogTitle.GetWithTime()},
+                {"lsn", lsn},
+                {"#_self->PBufferConnections.size", self->PBufferConnections.size()});
 
             auto span = self->Service->CreteRootSpan(
                 "NbsPartition.BarrierEraseFromPBuffer");
@@ -1079,14 +1071,11 @@ void TDirectBlockGroup::SetHostState(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    LOG_WARN(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s %s state changed: %s -> %s",
-        LogTitle.GetWithTime().c_str(),
-        PrintHostIndex(hostIndex).c_str(),
-        ToString(oldState).c_str(),
-        ToString(newState).c_str());
+    YDB_LOG_WARN_CTX(*ActorSystem, "State ->",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_PrintHostIndex(hostIndex).c_str", PrintHostIndex(hostIndex)},
+        {"changed", ToString(oldState)},
+        {"#_ToString(newState).c_str", ToString(newState)});
 
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {
@@ -1141,13 +1130,10 @@ void TDirectBlockGroup::DoEstablishConnection(
     if (connectionType == EConnectionType::DDisk) {
         actualSeqNo++;
 
-        LOG_INFO(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s host[%zu] starting session: new seq_no: %lu ",
-            LogTitle.GetWithTime().c_str(),
-            index,
-            actualSeqNo);
+        YDB_LOG_INFO_CTX(*ActorSystem, "Host[%zu] starting session: new",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"seqNo", index},
+            {"actualSeqNo", actualSeqNo});
     }
 
     using TEvConnectResult = NKikimrBlobStorage::NDDisk::TEvConnectResult;
@@ -1199,15 +1185,11 @@ void TDirectBlockGroup::OnConnectionEstablished(
             result.GetDDiskInstanceGuid();
         if (connectionType == EConnectionType::DDisk) {
             if (seqNo <= connection.ConfirmedSessionSeqNo) {
-                LOG_WARN(
-                    *ActorSystem,
-                    NKikimrServices::NBS_PARTITION,
-                    "%s host[%zu] attempt to establish a session with an old "
-                    "seq_no: %lu while actual seq_no: %lu ",
-                    LogTitle.GetWithTime().c_str(),
-                    index,
-                    seqNo,
-                    connection.ConfirmedSessionSeqNo);
+                YDB_LOG_WARN_CTX(*ActorSystem, "Host[%zu] attempt to establish a session with an old while actual",
+                    {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                    {"seqNo", index},
+                    {"#_dup_seq_no", seqNo},
+                    {"#_connection.ConfirmedSessionSeqNo", connection.ConfirmedSessionSeqNo});
                 return;
             }
             connection.SessionState = EDDiskSessionState::Locked;
@@ -1229,12 +1211,9 @@ void TDirectBlockGroup::OnConnectionEstablished(
         HasPBufferQuorum())
     {
         InitialReadyPromise.SetValue();
-        LOG_INFO(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s DBG reached initial locked quorum (>= %zu sessions)",
-            LogTitle.GetWithTime().c_str(),
-            MinLockedDDiskSessionsToStart);
+        YDB_LOG_INFO_CTX(*ActorSystem, "DBG reached initial locked quorum (>= %zu sessions)",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"minLockedDDiskSessionsToStart", MinLockedDDiskSessionsToStart});
     }
 }
 
@@ -1333,14 +1312,11 @@ void TDirectBlockGroup::OnResponse(
     }
 
     if (HasError(error)) {
-        LOG_DEBUG(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s OnResponse %s %s %s",
-            LogTitle.GetWithTime().c_str(),
-            PrintHostIndex(hostIndex).c_str(),
-            ToString(operation).c_str(),
-            FormatError(error).c_str());
+        YDB_LOG_DEBUG_CTX(*ActorSystem, "OnResponse",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"#_PrintHostIndex(hostIndex).c_str", PrintHostIndex(hostIndex)},
+            {"#_ToString(operation).c_str", ToString(operation)},
+            {"#_FormatError(error).c_str", FormatError(error)});
 
         if (IsCancelledError(error)) {
             Oracle.OnRequestCancelled(hostIndex, operation, TInstant::Now());

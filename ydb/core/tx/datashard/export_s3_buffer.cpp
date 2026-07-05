@@ -59,10 +59,6 @@ public:
         return Buffer.Size();
     }
 
-    size_t GetUncompressedBytes() const {
-        return BytesAdded;
-    }
-
 private:
     enum ECompressionResult {
         CONTINUE,
@@ -263,10 +259,6 @@ void TS3Buffer::Clear() {
 bool TS3Buffer::IsFilled() const {
     size_t outputSize = Buffer.Size();
     if (Compression) {
-        size_t uncompressedSize = Compression->GetUncompressedBytes();
-        if (uncompressedSize >= MaxBytes) {
-            return true;
-        }
         outputSize = Compression->GetReadyOutputBytes();
     }
     // Some formats (e.g. Parquet) keep encoded output inside the format itself

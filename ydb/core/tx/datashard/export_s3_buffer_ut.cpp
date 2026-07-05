@@ -42,7 +42,7 @@ public:
     NExportScan::IBuffer* CreateBuffer(EDataFormat dataFormat) {
         TS3ExportBufferSettings settings = S3ExportBufferSettings;
         settings.WithColumns(Columns);
-        
+
         NExportScan::IBuffer* buffer = nullptr;
         switch (dataFormat) {
         case EDataFormat::YdbDump:

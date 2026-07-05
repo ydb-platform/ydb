@@ -39,6 +39,8 @@ inline bool HasTopicSqsProxyActionMetrics(const NKikimrPQ::TEvTopicSqsActionMetr
     }
     case NKikimrPQ::TEvTopicSqsActionMetrics::ACTION_NOT_SET:
         return false;
+    default:
+        return false;
     }
 }
 

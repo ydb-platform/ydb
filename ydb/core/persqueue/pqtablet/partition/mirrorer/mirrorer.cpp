@@ -593,7 +593,7 @@ enum class EStaleReadStatus {
     AllCommitted,  // all data has been read and commited offset points to the end of topic
 };
 
-EStaleReadStatus ReadSessionStaleStatus(const TActorContext& ctx, bool hasLastReadOffset, TInstant init, const NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent* streamStatus) {
+static EStaleReadStatus ReadSessionStaleStatus(const TActorContext& ctx, bool hasLastReadOffset, TInstant init, const NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent* streamStatus) {
     if (hasLastReadOffset) { /* seen some data in this read session */
         return EStaleReadStatus::NonStale;
     }

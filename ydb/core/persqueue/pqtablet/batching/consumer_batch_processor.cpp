@@ -143,7 +143,10 @@ STFUNC(TConsumerBatchProcessor::StateWork) {
             HFunc(NActors::TEvents::TEvWakeup, Handle);
             HFunc(NActors::TEvents::TEvPoisonPill, Handle);
         default:
-            LOG_W("Unexpected event in TConsumerBatchProcessor for user " << User << ": " << ev->GetTypeRewrite());
+            YDB_LOG_WARN("Unexpected event in TConsumerBatchProcessor",
+                {"logPrefix", GetLogPrefix()},
+                {"user", User},
+                {"eventType", ev->GetTypeRewrite()});
             break;
         }
     }

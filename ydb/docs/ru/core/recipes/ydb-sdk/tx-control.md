@@ -632,18 +632,17 @@
 - Rust
 
   ```rust
-  use ydb::{QueryTransactionOptions, QueryTxMode};
+  use ydb::TxMode;
 
-  let qc = client
+  client
       .query_client()
-      .clone_with_transaction_options(
-          QueryTransactionOptions::new().with_mode(QueryTxMode::SerializableReadWrite),
-      );
-  qc.retry_transaction(async |tx| {
-      tx.query_row("SELECT 1 AS one").await?;
-      Ok(())
-  })
-  .await?;
+      .retry_tx(async |tx| {
+          tx.query_row("SELECT 1 AS one").await?;
+          Ok(())
+      })
+      .isolation(TxMode::SerializableReadWrite)
+      .idempotent(true)
+      .await?;
   ```
 
 - PHP
@@ -962,20 +961,20 @@
 - Rust
 
   ```rust
-  use ydb::QueryTxMode;
+  use ydb::TxMode;
 
   let mut qc = client.query_client();
 
   // Online RO — согласованное чтение (allow_inconsistent_reads = false)
   let mut row = qc
       .query_row("SELECT 1 AS one")
-      .with_tx_mode(QueryTxMode::OnlineReadOnly)
+      .with_tx_mode(TxMode::OnlineReadOnly)
       .await?;
 
   // Online inconsistent RO — максимальная производительность (allow_inconsistent_reads = true)
   let mut row = qc
       .query_row("SELECT 1 AS one")
-      .with_tx_mode(QueryTxMode::OnlineReadOnlyInconsistent)
+      .with_tx_mode(TxMode::OnlineReadOnlyInconsistent)
       .await?;
   ```
 
@@ -1281,13 +1280,13 @@
 - Rust
 
   ```rust
-  use ydb::QueryTxMode;
+  use ydb::TxMode;
 
   let mut qc = client.query_client();
-  // Режим Stale Read-Only поддерживается только для таких вызовов на query-клиенте (не для retry_transaction).
+  // Режим Stale Read-Only поддерживается только для one-shot вызовов на query-клиенте (не для retry_tx).
   let mut row = qc
       .query_row("SELECT 1 AS one")
-      .with_tx_mode(QueryTxMode::StaleReadOnly)
+      .with_tx_mode(TxMode::StaleReadOnly)
       .await?;
   ```
 
@@ -1585,20 +1584,19 @@
 - Rust
 
   ```rust
-  use ydb::{QueryTransactionOptions, QueryTxMode};
+  use ydb::TxMode;
 
   let mut qc = client.query_client();
   qc.query_row("SELECT 1 AS one")
-      .with_tx_mode(QueryTxMode::SnapshotReadOnly)
+      .with_tx_mode(TxMode::SnapshotReadOnly)
       .await?;
 
-  let qc = qc.clone_with_transaction_options(
-      QueryTransactionOptions::new().with_mode(QueryTxMode::SnapshotReadOnly),
-  );
-  qc.retry_transaction(async |tx| {
+  qc.retry_tx(async |tx| {
       tx.query_row("SELECT 1 AS one").await?;
       Ok(())
   })
+  .isolation(TxMode::SnapshotReadOnly)
+  .idempotent(true)
   .await?;
   ```
 
@@ -1955,20 +1953,19 @@
 - Rust
 
   ```rust
-  use ydb::{QueryTransactionOptions, QueryTxMode};
+  use ydb::TxMode;
 
   let mut qc = client.query_client();
   qc.query_row("SELECT 1 AS one")
-      .with_tx_mode(QueryTxMode::SnapshotReadWrite)
+      .with_tx_mode(TxMode::SnapshotReadWrite)
       .await?;
 
-  let qc = qc.clone_with_transaction_options(
-      QueryTransactionOptions::new().with_mode(QueryTxMode::SnapshotReadWrite),
-  );
-  qc.retry_transaction(async |tx| {
+  qc.retry_tx(async |tx| {
       tx.query_row("SELECT 1 AS one").await?;
       Ok(())
   })
+  .isolation(TxMode::SnapshotReadWrite)
+  .idempotent(true)
   .await?;
   ```
 

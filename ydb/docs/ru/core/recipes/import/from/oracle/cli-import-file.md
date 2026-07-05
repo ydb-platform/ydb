@@ -39,7 +39,7 @@ SELECT emp_id, name FROM hr.employees;
 SPOOL OFF
 ```
 
-Или Data Pump / внешние таблицы Oracle: экспорт в CSV/Parquet на общем хранилище.
+Или Data Pump / внешние таблицы Oracle: экспорт в CSV на общем хранилище. Для Parquet см. [отдельный рецепт](cli-import-parquet.md).
 
 ### Шаг 3. Импорт
 

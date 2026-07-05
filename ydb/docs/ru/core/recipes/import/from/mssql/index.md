@@ -5,6 +5,7 @@
 | Инструмент | Инструкция |
 | --- | --- |
 | [Через промежуточный CSV (YDB CLI)](../../../../reference/ydb-cli/export-import/import-file.md) | [Инструкция](cli-import-file.md) |
+| [Через промежуточный Parquet (YDB CLI)](../../../../reference/ydb-cli/export-import/import-file.md) | [Инструкция](cli-import-parquet.md) |
 | [dbt](../../../../integrations/migration/dbt.md) | [Инструкция](dbt.md) |
 | [Федеративные запросы](../../../../concepts/query_execution/federated_query/import_and_export.md) | [Инструкция](federated-queries.md) |
 | [Spark](../../../../integrations/query-engines/spark.md) | [Инструкция](spark.md) |

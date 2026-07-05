@@ -28,9 +28,7 @@ CREATE TABLE `mydb/events` (
 );
 ```
 
-### Шаг 2. Экспорт из ClickHouse
-
-CSV:
+### Шаг 2. Экспорт из ClickHouse в CSV
 
 ```bash
 clickhouse-client --host ch-host --query \
@@ -38,27 +36,14 @@ clickhouse-client --host ch-host --query \
   > /tmp/events.csv
 ```
 
-Parquet (рекомендуется для больших объёмов):
-
-```bash
-clickhouse-client --host ch-host --query \
-  "SELECT event_date, user_id, value FROM mydb.events FORMAT Parquet" \
-  > /tmp/events.parquet
-```
+Для больших объёмов предпочтительнее [Parquet](cli-import-parquet.md).
 
 ### Шаг 3. Импорт в {{ ydb-short-name }}
 
 ```bash
-# CSV
 ydb -e grpc://localhost:2136 -d /local import file csv \
   --path mydb/events --header /tmp/events.csv
-
-# Parquet
-ydb -e grpc://localhost:2136 -d /local import file parquet \
-  --path mydb/events /tmp/events.parquet
 ```
-
-При импорте Parquet учитывайте [маппинг типов Arrow/YQL](../../../../concepts/query_execution/federated_query/s3/arrow_types_mapping.md).
 
 ## Проверка результата {#verify}
 

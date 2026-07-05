@@ -34,9 +34,6 @@ void TColumnElements::BuildPlainAccessor(const ui32 recordsCount) {
 }
 
 void TColumnElements::BuildDictionaryAccessor(const ui32 recordsCount) {
-    // Build the dense plain (binary) accessor first, then reuse the tested NDictionary
-    // encoder (dedup + narrow index type) to turn it into a TDictionaryArray. The
-    // serializer is required by TChunkConstructionData but not used by Construct().
     BuildPlainAccessor(recordsCount);
     const TChunkConstructionData cData(
         recordsCount, nullptr, arrow::binary(), NSerialization::TSerializerContainer::GetDefaultSerializer());

@@ -14,8 +14,7 @@ namespace NKikimr::NArrow::NAccessor {
 
 struct IAdditionalAccessorData {
     virtual ~IAdditionalAccessorData() = default;
-    // The proto to persist alongside the column, or nullopt when there is nothing to store. Both
-    // consumers (scalar TIndexColumnMeta and sub-columns TColumn) carry this same message.
+    // The proto to persist alongside the column, or nullopt when there is nothing to store.
     virtual std::optional<NKikimrArrowAccessorProto::TAdditionalAccessorData> SerializeToProto() const = 0;
 
     virtual NJson::TJsonValue DebugJson() const {
@@ -47,9 +46,6 @@ struct TDictionaryAccessorData : IAdditionalAccessorData {
     NJson::TJsonValue DebugJson() const override;
 };
 
-// Reconstruct additional accessor data from its serialized proto (inverse of SerializeToProto).
-// Returns the concrete type for a known oneof branch, or empty metadata otherwise. The abstract
-// entry point consumers use so they need not depend on the concrete accessor libraries.
 std::shared_ptr<IAdditionalAccessorData> BuildAdditionalAccessorData(const NKikimrArrowAccessorProto::TAdditionalAccessorData& proto);
 
 struct TBlobWithAdditionalAccessorData {

@@ -103,9 +103,7 @@ private:
 
     void Initialize();
 
-    // Decides (from the materialized values) whether a plain column should be dictionary-encoded.
-    // Returns the resulting accessor type and, when dictionary-encoded, replaces `accessor` in place.
-    NArrow::NAccessor::IChunkedArray::EType MaybeDictionaryEncode(
+    std::shared_ptr<NArrow::NAccessor::IChunkedArray> MaybeDictionaryEncode(
         std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor, const ui32 filledRecordsCount) const;
 
 public:

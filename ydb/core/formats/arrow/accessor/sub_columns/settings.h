@@ -85,9 +85,6 @@ public:
         return false;
     }
 
-    // A separated column is dictionary-encoded when its distinct values are few
-    // relative to how many records reference it (distinctCount * Kff <= recordsCount).
-    // DictionaryDetectorKff < 1 disables the feature (default 0 = off; Kff == 1 always encodes).
     bool IsDictionary(const ui32 distinctCount, const ui32 recordsCount) const {
         return DictionaryDetectorKff >= 1 && distinctCount && distinctCount * DictionaryDetectorKff <= recordsCount;
     }

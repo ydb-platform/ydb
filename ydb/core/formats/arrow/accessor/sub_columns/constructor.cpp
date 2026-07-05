@@ -33,8 +33,6 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
             std::shared_ptr<TColumnLoader> columnLoader = std::make_shared<TColumnLoader>(
                 externalInfo.GetDefaultSerializer(), headerConclusion->GetColumnStats().GetAccessorConstructor(i), schema->field(i), nullptr, 0);
             const TStringBuf columnBlob(originalData.data() + currentIndex, proto.GetKeyColumns(i).GetSize());
-            // The per-column proto is self-describing: the abstract factory rebuilds whatever metadata
-            // the accessor persisted (e.g. a dictionary column's blob split), or empty metadata.
             auto additionalData = NArrow::NAccessor::BuildAdditionalAccessorData(proto.GetKeyColumns(i).GetAdditionalAccessorData());
             columns.emplace_back(std::make_shared<TDeserializeChunkedArray>(
                 externalInfo.GetRecordsCount(), columnLoader, columnBlob, true, std::move(additionalData)));

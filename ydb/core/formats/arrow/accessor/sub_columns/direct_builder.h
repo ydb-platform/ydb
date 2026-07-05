@@ -191,14 +191,14 @@ public:
         const std::vector<TColumnElements*>& keys, const TSettings& settings, const ui32 recordsCount, const bool allowDictionary) const {
         auto builder = TDictStats::MakeBuilder();
         for (auto&& i : keys) {
-            const ui32 usageCount = i->GetRecordIndexes().size();
+            const ui32 presentCount = i->GetRecordIndexes().size();
             IChunkedArray::EType accessorType = IChunkedArray::EType::Array;
-            if (settings.IsSparsed(usageCount, recordsCount)) {
+            if (settings.IsSparsed(presentCount, recordsCount)) {
                 accessorType = IChunkedArray::EType::SparsedArray;
-            } else if (allowDictionary && settings.IsDictionary(i->GetDistinctCount(), usageCount)) {
+            } else if (allowDictionary && settings.IsDictionary(i->GetDistinctCount(), presentCount)) {
                 accessorType = IChunkedArray::EType::Dictionary;
             }
-            builder.Add(i->GetKeyName(), usageCount, i->GetDataSize(), accessorType);
+            builder.Add(i->GetKeyName(), presentCount, i->GetDataSize(), accessorType);
         }
         return builder.Finish();
     }

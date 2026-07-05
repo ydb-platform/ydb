@@ -29,18 +29,14 @@ ui32 CountDistinctNotNull(const std::shared_ptr<NArrow::NAccessor::IChunkedArray
 }
 }   // namespace
 
-NArrow::NAccessor::IChunkedArray::EType TMergedBuilder::MaybeDictionaryEncode(
+std::shared_ptr<NArrow::NAccessor::IChunkedArray> TMergedBuilder::MaybeDictionaryEncode(
     std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor, const ui32 filledRecordsCount) const {
-    if (!Settings.GetDictionaryDetectorKff()) {
-        return NArrow::NAccessor::IChunkedArray::EType::Array;
-    }
     if (!Settings.IsDictionary(CountDistinctNotNull(accessor), filledRecordsCount)) {
-        return NArrow::NAccessor::IChunkedArray::EType::Array;
+        return accessor;
     }
     const NArrow::NAccessor::TChunkConstructionData cData(
         accessor->GetRecordsCount(), nullptr, arrow::binary(), NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
-    accessor = NArrow::NAccessor::NDictionary::TConstructor().Construct(accessor, cData).DetachResult();
-    return NArrow::NAccessor::IChunkedArray::EType::Dictionary;
+    return NArrow::NAccessor::NDictionary::TConstructor().Construct(accessor, cData).DetachResult();
 }
 
 TColumnPortionResult TMergedBuilder::Finish(const TColumnMergeContext& cmContext) {
@@ -65,15 +61,9 @@ void TMergedBuilder::FlushData() {
     for (ui32 idx = 0; idx < ColumnBuilders.size(); ++idx) {
         if (ColumnBuilders[idx].GetFilledRecordsCount()) {
             auto accessor = ColumnBuilders[idx].Finish(RecordIndex);
-            auto accessorType = ResultColumnStats.GetAccessorType(idx);
-            // The merged stats can only classify columns as Array/Sparsed (no distinct count is
-            // carried across compaction), so dictionary encoding is decided here, per output chunk,
-            // from the materialized values -- mirroring the direct write path.
-            if (accessorType == NArrow::NAccessor::IChunkedArray::EType::Array) {
-                accessorType = MaybeDictionaryEncode(accessor, ColumnBuilders[idx].GetFilledRecordsCount());
-            }
+            accessor = MaybeDictionaryEncode(accessor, ColumnBuilders[idx].GetFilledRecordsCount());
             statsBuilder.Add(ResultColumnStats.GetColumnName(idx), ColumnBuilders[idx].GetFilledRecordsCount(),
-                ColumnBuilders[idx].GetFilledRecordsSize(), accessorType);
+                ColumnBuilders[idx].GetFilledRecordsSize(), accessor->GetType());
             arrays.emplace_back(std::move(accessor));
         }
     }

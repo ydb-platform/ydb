@@ -250,7 +250,8 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
                 {"selfId", SelfId()},
                 {"cookie", cookie},
                 {"userReqId", userRequestId},
-                {"txId", txid});
+                {"txId", txid},
+                {"sendTo", reqId});
             return;
         }
 

@@ -159,7 +159,6 @@ public:
                 } else {
                     return ParseJsonType(std::move(jsonValue), resultValue, status);
                 }
-                break;
             }
 
             case NKikimr::NMiniKQL::TTypeBase::EKind::Optional: {

@@ -217,10 +217,6 @@ void TTxController::OnTxCompleted(const ui64 txId) {
     Owner.Subscribers->OnEvent(std::make_shared<NColumnShard::NSubscriber::TEventTxCompleted>(txId));
 }
 
-void TTxController::OnTxAborted(const ui64 txId) {
-    Operators.erase(txId);
-}
-
 THashSet<ui64> TTxController::GetTxs() const {
     THashSet<ui64> result;
     for (const auto& [txId, _] : Operators) {

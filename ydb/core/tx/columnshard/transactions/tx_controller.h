@@ -530,8 +530,6 @@ public:
     bool ExecuteOnCancel(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     bool CompleteOnCancel(const ui64 txId, const TActorContext& ctx);
 
-    void OnTxAborted(const ui64 txId);
-
     std::optional<TTxInfo> GetFirstPlannedTx() const;
     std::optional<TTxInfo> PopFirstPlannedTx();
     void ProgressOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);

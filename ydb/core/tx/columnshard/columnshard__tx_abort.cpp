@@ -25,13 +25,18 @@ public:
         auto txOperator = Self->ProgressTxController->GetTxOperatorOptional(TxId);
         if (txOperator) {
             txOperator->CompleteOnAbort(*Self, ctx);
-            Self->ProgressTxController->OnTxAborted(TxId);
         }
 
         if (const auto* backupTx = Self->LastCompletedBackupTransactionsByTxId.FindPtr(TxId)) {
             auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(Self->TabletID(), TxId);
             auto& opResult = *event->Record.MutableOpResult();
             opResult = backupTx->GetOpResult();
+            ctx.Send(Subscriber, event.Release(), 0, 0);
+        } else {   // for backward compatibility (remove it after stable-26.3.1)
+            auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(Self->TabletID(), TxId);
+            auto& opResult = *event->Record.MutableOpResult();
+            opResult.SetSuccess(false);
+            opResult.SetExplain("Cancelled manually");
             ctx.Send(Subscriber, event.Release(), 0, 0);
         }
     }

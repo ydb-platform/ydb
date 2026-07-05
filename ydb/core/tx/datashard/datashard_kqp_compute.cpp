@@ -9,6 +9,8 @@
 
 #include <yql/essentials/minikql/mkql_node.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -240,13 +242,14 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
                                          key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward,
                                          GetMvccVersion()).Ready;
 
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Run precharge on table " << tableInfo->Name
-            << ", columns: [" << JoinSeq(", ", columnTags) << "]"
-            << ", range: " << DebugPrintRange(key.KeyColumnTypes, key.Range, *AppData()->TypeRegistry)
-            << ", itemsLimit: " << key.RangeLimits.ItemsLimit
-            << ", bytesLimit: " << key.RangeLimits.BytesLimit
-            << ", reverse: " << key.Reverse
-            << ", result: " << ready);
+        YDB_LOG_TRACE("Run precharge on table columns",
+            {"#_tableInfo->Name", tableInfo->Name},
+            {"#_num_0", JoinSeq(", ", columnTags)},
+            {"range", DebugPrintRange(key.KeyColumnTypes, key.Range, *AppData()->TypeRegistry)},
+            {"itemsLimit", key.RangeLimits.ItemsLimit},
+            {"bytesLimit", key.RangeLimits.BytesLimit},
+            {"reverse", key.Reverse},
+            {"result", ready});
 
         ret &= ready;
     }

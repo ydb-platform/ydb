@@ -2,6 +2,8 @@
 #include <ydb/core/formats/factory.h>
 #include <util/string/vector.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -140,14 +142,18 @@ public:
             Result->Record.SetLastKeyInclusive(ShardFinished ? ShardEnd.Inclusive : true);
             Result->Record.SetEndOfShard(ShardFinished);
 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, TabletId
-                        << " Read columns scan result for table [" << TableName << "]: "
-                        << Rows << " rows, " << Bytes << " bytes (event size "
-                        << Result->Record.GetBlocks().size() << ") shardFinished: " << ShardFinished);
+            YDB_LOG_DEBUG("Read columns scan result for table rows, bytes (event size",
+                {"tabletId", TabletId},
+                {"tableName", TableName},
+                {"#_]", Rows},
+                {"bytes", Bytes},
+                {"#_Result->Record.GetBlocks().size", Result->Record.GetBlocks().size()},
+                {"shardFinished", ShardFinished});
         } else {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, TabletId
-                        << " Read columns scan failed for table [" << TableName << "]"
-                        << ", status: " << status);
+            YDB_LOG_NOTICE("Read columns scan failed for table",
+                {"tabletId", TabletId},
+                {"tableName", TableName},
+                {"status", status});
 
             Result->Record.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
             Result->Record.SetErrorDescription(TStringBuilder() << "Scan finished unsuccessfully with status " << status);
@@ -221,7 +227,9 @@ public:
             return true;
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Read columns: " << Ev->Get()->Record);
+        YDB_LOG_DEBUG_CTX(ctx, "Read",
+            {"#_Self->TabletID", Self->TabletID()},
+            {"columns", Ev->Get()->Record});
 
         if (Self->State != TShardState::Ready &&
             Self->State != TShardState::Readonly)

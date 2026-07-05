@@ -5,6 +5,8 @@
 #include "ydb/core/tx/datashard/datashard_write_operation.h"
 #include <ydb/core/tablet/tablet_exception.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -118,7 +120,8 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
             op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
-            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+            YDB_LOG_NOTICE_CTX(ctx, "",
+                {"err", err});
 
             return EExecutionStatus::Executed;
         }
@@ -132,7 +135,9 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
                 DataShard.GetProcessingParams() ? DataShard.GetProcessingParams()->GetCoordinators() : google::protobuf::RepeatedField<ui64>{}
             }
             ));
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Prepared write transaction " << *op << " at tablet " << DataShard.TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "Prepared write transaction at tablet",
+            {"#_*op", *op},
+            {"#_DataShard.TabletID", DataShard.TabletID()});
     }
 
     return EExecutionStatus::Executed;

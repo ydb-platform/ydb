@@ -13,6 +13,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr::NDataShard {
 
 using namespace NActors;
@@ -120,11 +122,13 @@ public:
                 .SetReadAhead(readAheadLo, readAheadHi)
                 .SetReadPrio(TScanOptions::EReadPrio::Low));
 
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-                   "TIncrementalRestoreSrcActor[" << SelfId() << "] started scan task " << ScanTaskId
-                   << " SubOpTxId=" << SubOpTxId
-                   << " SrcPathId=" << SrcPathId << " DstPathId=" << DstPathId
-                   << " at tablet " << Self->TabletID());
+        YDB_LOG_INFO_CTX(ctx, "TIncrementalRestoreSrcActor[ started scan task at tablet",
+            {"selfId", SelfId()},
+            {"scanTaskId", ScanTaskId},
+            {"subOpTxId", SubOpTxId},
+            {"srcPathId", SrcPathId},
+            {"dstPathId", DstPathId},
+            {"#_Self->TabletID", Self->TabletID()});
     }
 
 private:
@@ -135,10 +139,11 @@ private:
             return;
         }
 
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-                   "TIncrementalRestoreSrcActor[" << SelfId() << "] scan finished"
-                   << " SubOpTxId=" << SubOpTxId << " success=" << msg->Success
-                   << " endStatus=" << static_cast<int>(msg->EndStatus));
+        YDB_LOG_INFO_CTX(ctx, "TIncrementalRestoreSrcActor[ scan finished",
+            {"selfId", SelfId()},
+            {"subOpTxId", SubOpTxId},
+            {"success", msg->Success},
+            {"endStatus", static_cast<int>(msg->EndStatus)});
 
         ReplyAndDie(ctx, msg->Success, msg->EndStatus, msg->Error);
     }
@@ -202,12 +207,12 @@ namespace NKikimr::NDataShard {
 void TDataShard::Handle(TEvDataShard::TEvIncrementalRestoreSrcCreateRequest::TPtr& ev,
                         const TActorContext& ctx) {
     const auto& rec = ev->Get()->Record;
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-               "TEvIncrementalRestoreSrcCreateRequest received at tablet " << TabletID()
-               << " OperationId=" << rec.GetOperationId()
-               << " SubOpTxId=" << rec.GetSubOpTxId()
-               << " ShardIdx=" << rec.GetShardIdx()
-               << " SchemeShardGeneration=" << rec.GetSchemeShardGeneration());
+    YDB_LOG_INFO_CTX(ctx, "TEvIncrementalRestoreSrcCreateRequest received at tablet",
+        {"tabletID", TabletID()},
+        {"operationId", rec.GetOperationId()},
+        {"subOpTxId", rec.GetSubOpTxId()},
+        {"shardIdx", rec.GetShardIdx()},
+        {"schemeShardGeneration", rec.GetSchemeShardGeneration()});
 
     CreateIncrementalRestoreSrcActor(this, rec);
 }

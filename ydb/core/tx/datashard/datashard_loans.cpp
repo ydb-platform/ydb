@@ -4,6 +4,8 @@
 
 #include <util/string/join.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -39,7 +41,10 @@ public:
 
         for (const auto& batch : perTabletParts) {
             // open a pipe to the part owner and send part metadata batch
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " initiating parts " << batch.second <<  " return to " << batch.first);
+            YDB_LOG_DEBUG_CTX(ctx, "Initiating parts return",
+                {"#_Self->TabletID", Self->TabletID()},
+                {"#_batch.second", batch.second},
+                {"#_batch.first", batch.first});
             Self->LoanReturnTracker.ReturnLoan(batch.first, batch.second, ctx);
         }
     }
@@ -50,7 +55,8 @@ NTabletFlatExecutor::ITransaction* TDataShard::CreateTxInitiateBorrowedPartsRetu
 }
 
 void TDataShard::CompletedLoansChanged(const TActorContext &ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " CompletedLoansChanged");
+    YDB_LOG_INFO_CTX(ctx, "CompletedLoansChanged",
+        {"tabletID", TabletID()});
     Y_ENSURE(Executor()->GetStats().CompactedPartLoans);
 
     CheckInitiateBorrowedPartsReturn(ctx);
@@ -77,7 +83,10 @@ public:
         for (ui32 i = 0; i < Ev->Get()->Record.PartMetadataSize(); ++i) {
             TLogoBlobID partMeta = LogoBlobIDFromLogoBlobID(Ev->Get()->Record.GetPartMetadata(i));
             PartMetaVec.push_back(partMeta);
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " got returned parts " << PartMetaVec <<  " from " << FromTabletId);
+            YDB_LOG_DEBUG_CTX(ctx, "Got returned parts",
+                {"#_Self->TabletID", Self->TabletID()},
+                {"partMetaVec", PartMetaVec},
+                {"fromTabletId", FromTabletId});
 
             txc.Env.CleanupLoan(partMeta, FromTabletId);
         }
@@ -88,7 +97,10 @@ public:
     void Complete(const TActorContext &ctx) override {
         // Send Ack
         TActorId ackTo = Ev->Sender;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack parts " << PartMetaVec << " return to tablet " << FromTabletId);
+        YDB_LOG_DEBUG_CTX(ctx, "Ack parts return to tablet",
+            {"#_Self->TabletID", Self->TabletID()},
+            {"partMetaVec", PartMetaVec},
+            {"fromTabletId", FromTabletId});
 
         ctx.Send(ackTo, new TEvDataShard::TEvReturnBorrowedPartAck(PartMetaVec), 0, Ev->Cookie);
         Self->CheckStateChange(ctx);
@@ -125,7 +137,9 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " parts " << PartMetaVec << " return ack processed");
+        YDB_LOG_DEBUG_CTX(ctx, "Parts return ack processed",
+            {"#_Self->TabletID", Self->TabletID()},
+            {"partMetaVec", PartMetaVec});
         for (const auto& partMeta : PartMetaVec) {
             Self->LoanReturnTracker.LoanDone(partMeta, ctx);
         }
@@ -173,8 +187,9 @@ public:
         Y_ENSURE(Self->OutReadSets.Empty(), "Cannot go offline while there is a non-Ack-ed readset at tablet " << Self->TabletID());
         Y_ENSURE(Self->TransQueue.GetSchemaOperations().empty(), "Cannot go offline while there is a schema Tx in flight at tablet " << Self->TabletID());
 
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Initiating switch from "
-                    << DatashardStateName(Self->State) << " to Offline state");
+        YDB_LOG_INFO_CTX(ctx, "Initiating switch from to Offline state",
+            {"#_Self->TabletID", Self->TabletID()},
+            {"#_DatashardStateName(Self->State)", DatashardStateName(Self->State)});
 
         Self->PurgeTxTables(txc);
 
@@ -210,14 +225,15 @@ void TDataShard::CheckStateChange(const TActorContext& ctx) {
             return str.Str();
         };
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " in PreOffline state"
-                    << " HasSharedBobs: " << HasSharedBlobs()
-                    << " SchemaOperations: " << fnListTxIds(TransQueue.GetSchemaOperations())
-                    << " OutReadSets count: " << OutReadSets.CountReadSets()
-                    << " ChangesQueue size: " << ChangesQueue.size()
-                    << " ChangeExchangeSplit: " << ChangeExchangeSplitter.Done()
-                    << " siblings to be activated: " << ChangeSenderActivator.Dump()
-                    << " wait to activation from: " << JoinSeq(", ", ReceiveActivationsFrom));
+        YDB_LOG_DEBUG_CTX(ctx, "In PreOffline state OutReadSets ChangesQueue siblings to be wait to activation",
+            {"tabletID", TabletID()},
+            {"hasSharedBobs", HasSharedBlobs()},
+            {"schemaOperations", fnListTxIds(TransQueue.GetSchemaOperations())},
+            {"count", OutReadSets.CountReadSets()},
+            {"size", ChangesQueue.size()},
+            {"changeExchangeSplit", ChangeExchangeSplitter.Done()},
+            {"activated", ChangeSenderActivator.Dump()},
+            {"from", JoinSeq(", ", ReceiveActivationsFrom)});
 
         const bool hasSharedBlobs = HasSharedBlobs();
         const bool hasSchemaOps = !TransQueue.GetSchemaOperations().empty();

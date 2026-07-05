@@ -2,6 +2,8 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -47,16 +49,14 @@ bool TPlanQueueUnit::IsReadyToExecute(TOperation::TPtr op) const
 TOperation::TPtr TPlanQueueUnit::FindReadyOperation() const
 {
     if (Pipeline.OutOfOrderLimits()) {
-        LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                    "TPlanQueueUnit at " << DataShard.TabletID()
-                    << " out-of-order limits exceeded");
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at out-of-order limits exceeded",
+            {"#_DataShard.TabletID", DataShard.TabletID()});
         return nullptr;
     }
 
     if (!OpsInFly.size()) {
-        LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                    "TPlanQueueUnit at " << DataShard.TabletID()
-                    << " has no attached operations");
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at has no attached operations",
+            {"#_DataShard.TabletID", DataShard.TabletID()});
         return nullptr;
     }
 
@@ -65,32 +65,32 @@ TOperation::TPtr TPlanQueueUnit::FindReadyOperation() const
     auto op = Pipeline.GetNextPlannedOp(step, txId);
 
     if (!op) {
-        LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                    "TPlanQueueUnit at " << DataShard.TabletID()
-                    << " couldn't find next planned operation after ["
-                    << step << ":" << txId << "]");
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at couldn't find next planned operation after",
+            {"#_DataShard.TabletID", DataShard.TabletID()},
+            {"step", step},
+            {"txId", txId});
         return nullptr;
     }
 
     if (op->IsInProgress()) {
-        LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                    "TPlanQueueUnit at " << DataShard.TabletID()
-                    << " found next planned operation " << *op << " which is already in progress");
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at found next planned operation which is already in progress",
+            {"#_DataShard.TabletID", DataShard.TabletID()},
+            {"#_*op", *op});
         return nullptr;
     }
 
     if (!Pipeline.CanRunOp(*op)) {
-        LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                    "TPlanQueueUnit at " << DataShard.TabletID()
-                    << " cannot run found next planned operation " << *op);
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at cannot run found next planned operation",
+            {"#_DataShard.TabletID", DataShard.TabletID()},
+            {"#_*op", *op});
         return nullptr;
     }
 
     if (op->GetCurrentUnit() != Kind) {
-        LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                    "TPlanQueueUnit at " << DataShard.TabletID()
-                    << " found next planned operation " << *op
-                    << " is executing on unit " << op->GetCurrentUnit());
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at found next planned operation is executing on unit",
+            {"#_DataShard.TabletID", DataShard.TabletID()},
+            {"#_*op", *op},
+            {"#_op->GetCurrentUnit", op->GetCurrentUnit()});
         return nullptr;
     }
 

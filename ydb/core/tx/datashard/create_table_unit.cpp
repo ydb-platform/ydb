@@ -2,6 +2,8 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -63,10 +65,10 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
 
     const ui64 schemaVersion = createTableTx.HasTableSchemaVersion() ? createTableTx.GetTableSchemaVersion() : 0u;
 
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-               "Trying to CREATE TABLE at " << DataShard.TabletID()
-               << " tableId# " << tableId
-               << " schema version# " << schemaVersion);
+    YDB_LOG_INFO_CTX(ctx, "Trying to CREATE TABLE at schema",
+        {"#_DataShard.TabletID", DataShard.TabletID()},
+        {"tableId", tableId},
+        {"version", schemaVersion});
 
     TUserTable::TPtr info = DataShard.CreateUserTable(txc, schemeTx.GetCreateTable());
     DataShard.AddUserTable(tableId, info);

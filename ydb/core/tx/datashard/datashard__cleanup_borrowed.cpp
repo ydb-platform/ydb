@@ -9,6 +9,8 @@
 
 #include <library/cpp/html/pcdata/pcdata.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -210,9 +212,9 @@ public:
     {}
 
     bool Execute(NTabletFlatExecutor::TTransactionContext &, const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                    "HTTP request at " << Self->TabletID() << " url="
-                    << Ev->Get()->PathInfo());
+        YDB_LOG_DEBUG_CTX(ctx, "HTTP request",
+            {"#_Self->TabletID", Self->TabletID()},
+            {"url", Ev->Get()->PathInfo()});
 
         auto cgi = Ev->Get()->Cgi();
 

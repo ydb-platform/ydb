@@ -1,5 +1,7 @@
 #include "datashard_txs.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 
 namespace NDataShard {
@@ -11,7 +13,8 @@ namespace NDataShard {
     }
 
     bool TDataShard::TTxProgressResendRS::Execute(TTransactionContext &txc, const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Start TTxProgressResendRS at tablet %" PRIu64, Self->TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "Start TTxProgressResendRS at tablet",
+            {"#_Self->TabletID", Self->TabletID()});
         return Self->OutReadSets.ResendRS(txc, ctx, Seqno);
     }
 

@@ -2,6 +2,8 @@
 
 #include <util/string/vector.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -55,18 +57,21 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
     }
 
     if (! IsAccepted) {
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Ignore old txIds [" << JoinStrings(txIds.begin(), txIds.end(), ", ")
-            << "] for step " << step << " outdated step " << Self->Pipeline.OutdatedCleanupStep()
-            << " at tablet " << Self->TabletID());
+        YDB_LOG_ERROR_CTX(ctx, "Ignore old txIds for step outdated step at tablet",
+            {"#_num_0", JoinStrings(txIds.begin(), txIds.end(), ", ")},
+            {"step", step},
+            {"#_Self->Pipeline.OutdatedCleanupStep", Self->Pipeline.OutdatedCleanupStep()},
+            {"#_Self->TabletID", Self->TabletID()});
         Self->IncCounter(COUNTER_PLAN_STEP_IGNORED);
         return true;
     }
 
     for (ui64 txId : txIds) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Planned transaction txId " << txId << " at step " << step
-                    << " at tablet " << Self->TabletID() << " " << Ev->Get()->Record);
+        YDB_LOG_DEBUG_CTX(ctx, "Planned transaction txId at step at tablet",
+            {"txId", txId},
+            {"step", step},
+            {"#_Self->TabletID", Self->TabletID()},
+            {"#_Ev->Get()->Record", Ev->Get()->Record});
     }
 
     // We already know that max observed step is at least this step, avoid
@@ -88,14 +93,16 @@ void TDataShard::TTxPlanStep::Complete(const TActorContext &ctx) {
     for (auto& kv : TxByAck) {
         THolder<TEvTxProcessing::TEvPlanStepAck> ack =
             MakeHolder<TEvTxProcessing::TEvPlanStepAck>(Self->TabletID(), step, kv.second.begin(), kv.second.end());
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Sending '" << ack->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Sending",
+            {"#_ack->ToString", ack->ToString()});
 
         ctx.Send(kv.first, ack.Release()); // Ack to Tx coordinator
     }
 
     THolder<TEvTxProcessing::TEvPlanStepAccepted> accepted =
         MakeHolder<TEvTxProcessing::TEvPlanStepAccepted>(Self->TabletID(), step);
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Sending '" << accepted->ToString());
+    YDB_LOG_DEBUG_CTX(ctx, "Sending",
+        {"#_accepted->ToString", accepted->ToString()});
 
     ctx.Send(Ev->Sender, accepted.Release()); // Reply to the mediator
 

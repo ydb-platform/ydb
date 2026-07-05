@@ -33,7 +33,8 @@ protected:
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, error);
+        YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "",
+            {"error", error});
 
         BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, error);
         ResetWaiting(op);
@@ -94,8 +95,9 @@ public:
         }
 
         if (!IsWaiting(op)) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Starting a " << GetKind() << " operation"
-                << " at " << DataShard.TabletID());
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Starting a operation",
+                {"kind", GetKind()},
+                {"#_DataShard.TabletID", DataShard.TabletID()});
 
             if (!Run(op, txc, ctx)) {
                 return EExecutionStatus::Executed;
@@ -106,8 +108,9 @@ public:
         }
 
         if (HasResult(op)) {
-            LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "" << GetKind() << " complete"
-                << " at " << DataShard.TabletID());
+            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Complete",
+                {"kind", GetKind()},
+                {"#_DataShard.TabletID", DataShard.TabletID()});
 
             ResetWaiting(op);
             if (ProcessResult(op, ctx)) {

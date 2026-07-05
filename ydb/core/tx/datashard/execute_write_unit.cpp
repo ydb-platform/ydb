@@ -126,15 +126,20 @@ public:
         HandleBreakerLocks(locksBrokenByTx, writeOp->GetTxId(), querySpanId,
             DataShard.SysLocksTable(), writeResult.Record, ctx,
             "Write transaction broke other locks", kqpLocks);
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "add locks to result: " << locks.size());
+        YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Add locks",
+            {"result", locks.size()});
         for (const auto& lock : locks) {
             if (lock.IsError()) {
-                LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Lock is not set for " << *writeOp << " at " << DataShard.TabletID() << " lock " << lock);
+                YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Lock is not set for at lock",
+                    {"#_*writeOp", *writeOp},
+                    {"#_DataShard.TabletID", DataShard.TabletID()},
+                    {"lock", lock});
             }
 
             writeResult.AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard, lock.PathId, lock.HasWrites);
 
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "add lock to result: " << writeResult.Record.GetTxLocks().rbegin()->ShortDebugString());
+            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Add lock",
+                {"result", writeResult.Record.GetTxLocks().rbegin()->ShortDebugString()});
         }
         DataShard.SubscribeNewLocks(ctx);
     }
@@ -149,7 +154,9 @@ public:
 
     bool CheckForVolatileReadDependencies(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
         if (!userDb.GetVolatileReadDependencies().empty()) {
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting because volatile read dependencies");
+            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Operation at aborting because volatile read dependencies",
+                {"writeOp", writeOp},
+                {"#_DataShard.TabletID", DataShard.TabletID()});
 
             for (ui64 txId : userDb.GetVolatileReadDependencies()) {
                 writeOp.AddVolatileDependency(txId);
@@ -201,7 +208,9 @@ public:
     };
 
     EExecutionStatus OnTabletNotReadyException(TDataShardUserDb& userDb, TWriteOperation& writeOp, size_t operationIndexToPrecharge, TTransactionContext& txc, const TActorContext& ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID() << " is not ready for " << writeOp << " execution");
+        YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Tablet is not ready for execution",
+            {"#_DataShard.TabletID", DataShard.TabletID()},
+            {"writeOp", writeOp});
 
         // Precharge
         if (operationIndexToPrecharge != SIZE_MAX) {
@@ -247,7 +256,9 @@ public:
         }
 
         if (userDb.GetSnapshotReadConflict()) {
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with another transaction.");
+            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Operation at aborting. Conflict with another transaction",
+                {"writeOp", writeOp},
+                {"#_DataShard.TabletID", DataShard.TabletID()});
             writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Read conflict with concurrent transaction.");
             writeOp.GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsVictim(1);
             NDataIntegrity::LogVictimDetected(ctx, DataShard.TabletID(), "Write transaction was a victim of broken locks",
@@ -257,7 +268,9 @@ public:
                 FillDeferredBreakerInfo(lockTxId, writeOp.GetWriteResult()->Record.MutableTxStats());
             }
         } else {
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with existing key.");
+            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Operation at aborting. Conflict with existing key",
+                {"writeOp", writeOp},
+                {"#_DataShard.TabletID", DataShard.TabletID()});
             writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Conflict with existing key.");
         }
 
@@ -362,7 +375,9 @@ public:
         TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
         const ui64 tabletId = DataShard.TabletID();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executing write operation for " << *op << " at " << tabletId);
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Executing write operation for",
+            {"#_*op", *op},
+            {"tabletId", tabletId});
 
         if (writeOp->GetWriteResult() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
             return EExecutionStatus::Executed;
@@ -473,7 +488,10 @@ public:
 
             ui64 consumedMemory = writeTx->GetTxSize();
             if (MaybeRequestMoreTxMemory(consumedMemory, txc)) {
-                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << tabletId << " requested " << txc.GetRequestedMemory() << " more memory");
+                YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Operation at requested more memory",
+                    {"#_*op", *op},
+                    {"tabletId", tabletId},
+                    {"#_txc.GetRequestedMemory", txc.GetRequestedMemory()});
 
                 DataShard.IncCounter(COUNTER_TX_WAIT_RESOURCE);
                 return EExecutionStatus::Restart;
@@ -481,7 +499,9 @@ public:
 
             if (guardLocks.LockTxId) {
                 auto abortLock = [&]() {
-                    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << tabletId << " aborting because it cannot acquire locks");
+                    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Operation at aborting because it cannot acquire locks",
+                        {"#_*op", *op},
+                        {"tabletId", tabletId});
                     writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Operation is aborting because it cannot acquire locks");
                     writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsVictim(1);
                     NDataIntegrity::LogVictimDetected(ctx, tabletId, "Write transaction was a victim of broken locks",
@@ -536,7 +556,9 @@ public:
                                                 : KqpValidateLocks(tabletId, sysLocks, kqpLocks, useGenericReadSets, inReadSets);
 
             if (!validated) {
-                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << tabletId << " aborting because locks are not valid");
+                YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Operation at aborting because locks are not valid",
+                    {"#_*op", *op},
+                    {"tabletId", tabletId});
                 writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Operation is aborting because locks are not valid");
                 writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsVictim(brokenLocks.size());
 
@@ -593,12 +615,17 @@ public:
                         }
                     }
                     DoUpdateToUserDb(userDb, validatedOperation, txc);
-                    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for " << *writeOp << " at " << DataShard.TabletID() << ", row count=" << validatedOperation.GetMatrix().GetRowCount());
+                    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for at row",
+                        {"#_*writeOp", *writeOp},
+                        {"#_DataShard.TabletID", DataShard.TabletID()},
+                        {"count", validatedOperation.GetMatrix().GetRowCount()});
                 }
                 validatedOperationIndex = SIZE_MAX;
                 DataShard.AddRecentWriteForTli(mvccVersion, guardLocks.QuerySpanId, writeOp->GetTarget().NodeId());
             } else {
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Skip empty write operation for " << *writeOp << " at " << DataShard.TabletID());
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Skip empty write operation for",
+                    {"#_*writeOp", *writeOp},
+                    {"#_DataShard.TabletID", DataShard.TabletID()});
             }
 
             if (CheckForVolatileReadDependencies(userDb, *writeOp, txc, ctx))
@@ -743,7 +770,9 @@ public:
                 return EExecutionStatus::Continue;
             }
 
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with another transaction.");
+            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Operation at aborting. Conflict with another transaction",
+                {"#_*writeOp", *writeOp},
+                {"#_DataShard.TabletID", DataShard.TabletID()});
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Write conflict with concurrent transaction.");
             writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsVictim(1);
             NDataIntegrity::LogVictimDetected(ctx, DataShard.TabletID(), "Write transaction was a victim of broken locks",
@@ -763,7 +792,9 @@ public:
         } catch (const TKeySizeConstraintException&) {
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, TStringBuilder() << "Size of key in secondary index is more than " << NLimits::MaxWriteKeySize);
             txc.DB.RollbackChanges();
-            LOG_ERROR_S(ctx, NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Operation " << *writeOp << " at " << DataShard.TabletID() << " aborting. Size of key of secondary index is too big.");
+            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Operation at aborting. Size of key of secondary index is too big",
+                {"#_*writeOp", *writeOp},
+                {"#_DataShard.TabletID", DataShard.TabletID()});
 
             if (auto status = ensureAbortOutReadSets()) {
                 return *status;

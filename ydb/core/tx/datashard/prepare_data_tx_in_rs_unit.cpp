@@ -2,6 +2,8 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -77,11 +79,11 @@ EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
                                              TVector<TRSData>()));
         }
     } catch (const TMemoryLimitExceededException &) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Operation " << *op << " at " << DataShard.TabletID()
-                    << " exceeded memory limit " << txc.GetMemoryLimit()
-                    << " and requests " << txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR
-                    << " more for the next try");
+        YDB_LOG_TRACE_CTX(ctx, "Operation at exceeded memory limit and requests more for the next try",
+            {"#_*op", *op},
+            {"#_DataShard.TabletID", DataShard.TabletID()},
+            {"#_txc.GetMemoryLimit", txc.GetMemoryLimit()},
+            {"#_txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR", txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR});
 
         engine->ReleaseUnusedMemory();
         txc.RequestMemory(txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR);
@@ -90,9 +92,9 @@ EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
 
         return EExecutionStatus::Restart;
     } catch (const TNotReadyTabletException&) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Tablet " << DataShard.TabletID() << " is not ready for " << *op
-                    << " execution");
+        YDB_LOG_TRACE_CTX(ctx, "Tablet is not ready for execution",
+            {"#_DataShard.TabletID", DataShard.TabletID()},
+            {"#_*op", *op});
 
         return EExecutionStatus::Restart;
     }

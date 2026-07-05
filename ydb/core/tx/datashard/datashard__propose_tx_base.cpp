@@ -7,6 +7,8 @@
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 LWTRACE_USING(DATASHARD_PROVIDER)
 
 namespace NKikimr {
@@ -32,8 +34,8 @@ TDataShard::TTxProposeTransactionBase::TTxProposeTransactionBase(TDataShard *sel
 bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransactionContext &txc,
                                                            const TActorContext &ctx)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TTxProposeTransactionBase::Execute at " << Self->TabletID());
+    YDB_LOG_DEBUG_CTX(ctx, "TTxProposeTransactionBase::Execute",
+        {"#_Self->TabletID", Self->TabletID()});
 
     if (!Acked) {
         // Ack event on the first execute (this will schedule the next event if any)
@@ -144,15 +146,17 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
         // Commit all side effects
         return true;
     } catch (const TNotReadyTabletException &) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "TX [" << 0 << " : " << TxId << "] can't prepare (tablet's not ready) at tablet " << Self->TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "TX can't prepare (tablet's not ready) at tablet",
+            {"0", 0},
+            {"txId", TxId},
+            {"#_Self->TabletID", Self->TabletID()});
         return false;
     }
 }
 
 void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TTxProposeTransactionBase::Complete at " << Self->TabletID());
+    YDB_LOG_DEBUG_CTX(ctx, "TTxProposeTransactionBase::Complete",
+        {"#_Self->TabletID", Self->TabletID()});
 
     if (Op) {
         Y_ENSURE(!Op->GetExecutionPlan().empty());

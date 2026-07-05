@@ -304,24 +304,6 @@ TInfoUnitSet TOpMap::GetRenameSources() const {
     return result;
 }
 
-bool TOpMap::IsExtractableAppend(const TMapElement& element) const {
-    bool found = false;
-    bool usedByRename = false;
-    const auto output = element.GetElementName();
-
-    for (const auto& mapElement : MapElements) {
-        if (&mapElement == &element) {
-            found = true;
-        }
-        if (mapElement.IsRename() && mapElement.GetRename() == output) {
-            usedByRename = true;
-        }
-    }
-
-    Y_ENSURE(found, "Map element does not belong to this map");
-    return !element.IsRename() && !usedByRename;
-}
-
 TVector<TInfoUnit> TOpMap::GetOutputIUs() {
     TVector<TInfoUnit> res = GetInput()->GetOutputIUs();
     const auto renameSources = GetRenameSources();

@@ -426,7 +426,6 @@ public:
     virtual TPlanAliases::TAliasMap ComputeAliases() override;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
     TInfoUnitSet GetRenameSources() const;
-    bool IsExtractableAppend(const TMapElement& element) const;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetPropertyPreservingMappings(TPlanProps& props) const;
     virtual void ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) override;
 

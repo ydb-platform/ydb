@@ -140,7 +140,7 @@ bool TRestoreTransactionOperator::ExecuteOnAbort(TColumnShard& owner, NTabletFla
     return TxAbort->Execute(txc, NActors::TActivationContext::AsActorContext());
 }
 
-bool TRestoreTransactionOperator::CompleteOnAbort(TColumnShard& owner, const TActorContext& ctx) {
+bool TRestoreTransactionOperator::CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& ctx) {
     if (TxAbort) {
         TxAbort->Complete(ctx);
     }

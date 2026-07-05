@@ -152,7 +152,7 @@ bool TBackupTransactionOperator::ExecuteOnAbort(TColumnShard& owner, NTabletFlat
     return TxAbort->Execute(txc, NActors::TActivationContext::AsActorContext());
 }
 
-bool TBackupTransactionOperator::CompleteOnAbort(TColumnShard& owner, const TActorContext& ctx) {
+bool TBackupTransactionOperator::CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& ctx) {
     if (TxAbort) {
         TxAbort->Complete(ctx);
     }

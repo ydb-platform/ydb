@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from inspect import signature
 from typing import TYPE_CHECKING, Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import clickhouse_connect.driver.ctypes  # noqa: F401 -- side-effect import
 from clickhouse_connect.driver.client import Client
@@ -34,6 +35,11 @@ def default_port(interface: str, secure: bool) -> int:
     raise ValueError("Unrecognized ClickHouse interface")
 
 
+def _unquote(value: str | None) -> str | None:
+    """Percent-decode a DSN component, passing through None/empty."""
+    return unquote(value) if value else value
+
+
 def _parse_connection_params(
     host: str | None,
     username: str | None,
@@ -48,12 +54,12 @@ def _parse_connection_params(
     """Parse and normalize connection parameters including DSN parsing."""
     if dsn:
         parsed = urlparse(dsn)
-        username = username or parsed.username
-        password = password or parsed.password
+        username = username or _unquote(parsed.username)
+        password = password or _unquote(parsed.password) or ""
         host = host or parsed.hostname
         port = port or parsed.port
         if parsed.path and (not database or database == "__default__"):
-            database = parsed.path[1:].split("/")[0]
+            database = unquote(parsed.path[1:].split("/")[0])
         database = database or parsed.path
         for k, v in parse_qs(parsed.query).items():
             kwargs[k] = v[0]
@@ -75,10 +81,26 @@ def _parse_connection_params(
     return host, username, password, port, database, interface
 
 
-def _validate_access_token(access_token: str | None, username: str | None, password: str) -> None:
-    """Validate that access_token and username/password are not both provided."""
-    if access_token and (username or password != ""):
-        raise ProgrammingError("Cannot use both access_token and username/password")
+def _validate_access_token(access_token: str | None, token_provider: Callable[[], str] | None, username: str | None, password: str) -> None:
+    """Validate that token-based and username/password auth are not mixed."""
+    if (access_token or token_provider) and (username or password):
+        raise ProgrammingError("Cannot use both token authentication and username/password")
+    if access_token and token_provider:
+        raise ProgrammingError("Cannot use both access_token and token_provider")
+
+
+def _pop_headers_arg(headers: Any | None, kwargs: dict[str, Any]) -> Any | None:
+    """Hoist headers parsed through generic kwargs while preserving explicit headers."""
+    if "headers" in kwargs:
+        kwargs_headers = kwargs.pop("headers")
+        if headers is None:
+            headers = kwargs_headers
+    return headers
+
+
+def _validate_headers(headers: Any | None) -> None:
+    if headers is not None and not isinstance(headers, dict):
+        raise ProgrammingError("headers must be a dictionary of HTTP header names and values")
 
 
 def create_client(
@@ -87,12 +109,14 @@ def create_client(
     username: str | None = None,
     password: str = "",
     access_token: str | None = None,
+    token_provider: Callable[[], str] | None = None,
     database: str = "__default__",
     interface: str | None = None,
     port: int = 0,
     secure: bool | str = False,
     dsn: str | None = None,
     settings: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
     generic_args: dict[str, Any] | None = None,
     **kwargs,
 ) -> Client:
@@ -106,6 +130,9 @@ def create_client(
       Should not be set if `access_token` is used.
     :param access_token: JWT access token (ClickHouse Cloud feature).
       Should not be set if `username`/`password` are used.
+    :param token_provider: A callable returning a JWT access token (ClickHouse Cloud feature). Called for the initial token and
+      again to refresh it whenever the server rejects the current one.
+      Should not be set if `access_token` or `username`/`password` are used.
     :param database:  The default database for the connection. If not set, ClickHouse Connect will use the
      default database for username.
     :param interface: Must be http or https.  Defaults to http, or to https if port is set to 8443 or 443
@@ -115,6 +142,9 @@ def create_client(
     :param dsn: A string in standard DSN (Data Source Name) format. Other connection values (such as host or user)
       will be extracted from this string if not set otherwise.
     :param settings: ClickHouse server settings to be used with the session/every request
+    :param headers: Additional HTTP headers to send with every request. This can be used for proxy or gateway
+      authentication, such as Cloudflare Access service token headers. These headers are applied after driver defaults,
+      so they can intentionally override headers such as Authorization or User-Agent.
     :param generic_args: Used internally to parse DBAPI connection strings into keyword arguments and ClickHouse settings.
       It is not recommended to use this parameter externally.
 
@@ -154,22 +184,27 @@ def create_client(
       match the server's column definition which means timezone-aware when the column defines a timezone and naive
       for bare DateTime columns.
     :param autogenerate_session_id  If set, this will override the 'autogenerate_session_id' common setting.
-    :param form_encode_query_params  If True, query parameters will be sent as form-encoded data in the request body
-      instead of as URL parameters. This is useful for queries with large parameter sets that might exceed URL length
-      limits. Only available for query operations (not inserts). Default: False
+    :param form_encode_query_params  If True, always send query parameters as form-encoded data in the request body
+      instead of as URL parameters. When False, large parameter payloads are still automatically sent as form data to
+      avoid exceeding URL length limits, except for queries using binary parameter binds, which are only form-encoded
+      when this is True. Only available for query operations (not inserts). Default: False
     :return: ClickHouse Connect Client instance
     """
     host, username, password, port, database, interface = _parse_connection_params(
         host, username, password, port, database, interface, secure, dsn, kwargs
     )
-    _validate_access_token(access_token, username, password)
+    headers = _pop_headers_arg(headers, kwargs)
+    _validate_access_token(access_token, token_provider, username, password)
 
     settings = settings or {}
     if interface.startswith("http"):
         if generic_args:
             client_params = signature(HttpClient).parameters
             for name, value in generic_args.items():
-                if name in client_params:
+                if name == "headers":
+                    if headers is None:
+                        headers = value
+                elif name in client_params:
                     kwargs[name] = value
                 elif name == "compression":
                     if "compress" not in kwargs:
@@ -178,7 +213,26 @@ def create_client(
                     if name.startswith("ch_"):
                         name = name[3:]
                     settings[name] = value
-        return HttpClient(interface, host, port, username, password, database, access_token, settings=settings, **kwargs)
+        # token auth may also arrive via generic_args (DB-API connect_args); pop both so neither is passed twice
+        generic_access = kwargs.pop("access_token", None)
+        generic_token = kwargs.pop("token_provider", None)
+        access_token = access_token or generic_access
+        token_provider = token_provider or generic_token
+        _validate_access_token(access_token, token_provider, username, password)
+        _validate_headers(headers)
+        return HttpClient(
+            interface,
+            host,
+            port,
+            username,
+            password,
+            database,
+            access_token,
+            token_provider=token_provider,
+            settings=settings,
+            headers=headers,
+            **kwargs,
+        )
     raise ProgrammingError(f"Unrecognized client type {interface}")
 
 
@@ -188,12 +242,14 @@ async def create_async_client(
     username: str | None = None,
     password: str = "",
     access_token: str | None = None,
+    token_provider: Callable[[], str | Awaitable[str]] | None = None,
     database: str = "__default__",
     interface: str | None = None,
     port: int = 0,
     secure: bool | str = False,
     dsn: str | None = None,
     settings: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
     generic_args: dict[str, Any] | None = None,
     connector_limit: int = 100,
     connector_limit_per_host: int = 20,
@@ -212,6 +268,9 @@ async def create_async_client(
     :param username: The ClickHouse username. If not set, the default ClickHouse user will be used.
     :param password: The password for username.
     :param access_token: JWT access token.
+    :param token_provider: A callable returning a JWT access token. Called for the initial token and
+      again to refresh it whenever the server rejects the current one. Because multiple in-flight requests
+      may each trigger a refresh concurrently, the callable must be safe to invoke in parallel.
     :param database:  The default database for the connection. If not set, ClickHouse Connect will use the
      default database for username.
     :param interface: Must be http or https.  Defaults to http, or to https if port is set to 8443 or 443
@@ -221,6 +280,9 @@ async def create_async_client(
     :param dsn: A string in standard DSN (Data Source Name) format. Other connection values (such as host or user)
       will be extracted from this string if not set otherwise.
     :param settings: ClickHouse server settings to be used with the session/every request
+    :param headers: Additional HTTP headers to send with every request. This can be used for proxy or gateway
+      authentication, such as Cloudflare Access service token headers. These headers are applied after driver defaults,
+      so they can intentionally override headers such as Authorization or User-Agent.
     :param generic_args: Used internally to parse DBAPI connection strings into keyword arguments and ClickHouse settings.
       It is not recommended to use this parameter externally
     :param connector_limit: Maximum number of allowable connections to the server
@@ -259,9 +321,10 @@ async def create_async_client(
       match the server's column definition which means timezone-aware when the column defines a timezone and naive
       for bare DateTime columns.
     :param autogenerate_session_id  If set, this will override the 'autogenerate_session_id' common setting.
-    :param form_encode_query_params  If True, query parameters will be sent as form-encoded data in the request body
-      instead of as URL parameters. This is useful for queries with large parameter sets that might exceed URL length
-      limits. Only available for query operations (not inserts). Default: False
+    :param form_encode_query_params  If True, always send query parameters as form-encoded data in the request body
+      instead of as URL parameters. When False, large parameter payloads are still automatically sent as form data to
+      avoid exceeding URL length limits, except for queries using binary parameter binds, which are only form-encoded
+      when this is True. Only available for query operations (not inserts). Default: False
     :return: ClickHouse Connect AsyncClient instance
     """
     try:
@@ -280,13 +343,17 @@ async def create_async_client(
     host, username, password, port, database, interface = _parse_connection_params(
         host, username, password, port, database, interface, secure, dsn, kwargs
     )
-    _validate_access_token(access_token, username, password)
+    headers = _pop_headers_arg(headers, kwargs)
+    _validate_access_token(access_token, token_provider, username, password)
 
     settings = settings or {}
     if generic_args:
         client_params = signature(_AsyncClient).parameters
         for name, value in generic_args.items():
-            if name in client_params:
+            if name == "headers":
+                if headers is None:
+                    headers = value
+            elif name in client_params:
                 kwargs[name] = value
             elif name == "compression":
                 if "compress" not in kwargs:
@@ -299,6 +366,13 @@ async def create_async_client(
     if "autogenerate_session_id" not in kwargs:
         kwargs["autogenerate_session_id"] = False
 
+    # token auth may also arrive via generic_args (DB-API connect_args); pop both so neither is passed twice
+    generic_access = kwargs.pop("access_token", None)
+    generic_token = kwargs.pop("token_provider", None)
+    access_token = access_token or generic_access
+    token_provider = token_provider or generic_token
+    _validate_access_token(access_token, token_provider, username, password)
+    _validate_headers(headers)
     client = _AsyncClient(
         interface=interface,
         host=host,
@@ -307,7 +381,9 @@ async def create_async_client(
         password=password,
         database=database,
         access_token=access_token,
+        token_provider=token_provider,
         settings=settings,
+        headers=headers,
         connector_limit=connector_limit,
         connector_limit_per_host=connector_limit_per_host,
         keepalive_timeout=keepalive_timeout,

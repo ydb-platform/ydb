@@ -359,6 +359,7 @@ bool TIndexBuildInfo::IsValidSubState(ESubState value)
         case ESubState::FulltextIndexStats:
         case ESubState::FulltextIndexDictionary:
         case ESubState::FulltextIndexBorders:
+        case ESubState::FulltextRowIdSrc:
             return true;
     }
     return false;

@@ -5,6 +5,7 @@
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/forced_compaction.pb.h>
+#include <ydb/core/protos/set_column_constraint.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -32,6 +33,8 @@ enum class EAlterOperationKind {
     RenameIndex,
     // compact table, possibly with indices
     Compact,
+    // set column constraint (not null)
+    SetColumnConstraint
 };
 
 struct TPathId;
@@ -64,6 +67,8 @@ bool BuildAlterTableBloomFilterModifyScheme(const Ydb::Table::AlterTableRequest*
     NKikimrSchemeOp::TModifyScheme* modifyScheme,
     Ydb::StatusIds::StatusCode& status, TString& error);
 
+bool BuildAlterTableSetColumnConstraintRequest(const Ydb::Table::AlterTableRequest* req, NKikimrSetColumnConstraint::TSetColumnConstraintSettings* settings,
+    Ydb::StatusIds::StatusCode& status, TString& error);
 bool BuildAlterTableCompactRequest(const Ydb::Table::AlterTableRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,
     Ydb::StatusIds::StatusCode& status, TString& error);
 

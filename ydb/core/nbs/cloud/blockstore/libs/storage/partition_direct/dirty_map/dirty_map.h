@@ -61,6 +61,8 @@ struct TReadHint
     [[nodiscard]] TString DebugPrint() const;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
 struct TPBufferSegment
 {
     ui64 Lsn = 0;
@@ -75,8 +77,6 @@ struct TPBufferSegment
 struct TFlushHint
 {
     TVector<TPBufferSegment> Segments;
-
-    [[nodiscard]] TVector<ui64> MakeLsnVector() const;
 
     [[nodiscard]] TString DebugPrint(bool brief) const;
 };
@@ -103,11 +103,20 @@ private:
     THints Hints;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+struct TEraseSegment
+{
+    ui32 Generation = 0;
+    ui64 Lsn = 0;
+
+    [[nodiscard]] TString DebugPrint(bool brief) const;
+};
+
+using TEraseSegments = TVector<TEraseSegment>;
+
 struct TEraseHint
 {
-    TVector<TPBufferSegment> Segments;
-
-    [[nodiscard]] TVector<ui64> MakeLsnVector() const;
+    TEraseSegments Segments;
 
     [[nodiscard]] TString DebugPrint(bool brief) const;
 };
@@ -117,7 +126,7 @@ class TEraseHints
 public:
     using THints = TMap<THostIndex, TEraseHint>;
 
-    void AddHint(THostIndex host, ui64 lsn, TBlockRange64 range);
+    void AddHint(THostIndex host, ui64 lsn);
 
     [[nodiscard]] bool Empty() const;
 
@@ -129,6 +138,8 @@ public:
 private:
     THints Hints;
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 class TDDiskState
 {
@@ -365,6 +376,11 @@ private:
     // PBuffers space usage counters.
     TVector<TPBufferCounters> PBufferCounters;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+TVector<ui64> MakeLsnVector(std::span<const TPBufferSegment> segments);
+TVector<ui64> MakeLsnVector(std::span<const TEraseSegment> segments);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,6 +1,6 @@
 import logging
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.driver import Client
@@ -94,10 +94,19 @@ class Cursor:
             op_columns = None
         if "VALUES" not in temp.upper():
             return False
-        col_names = list(data[0].keys())
-        if op_columns and {unescape_identifier(x) for x in op_columns} != set(col_names):
-            return False  # Data sent in doesn't match the columns in the insert statement
-        data_values = [list(row.values()) for row in data]
+        first_row = data[0]
+        if isinstance(first_row, Mapping):
+            col_names = list(first_row.keys())
+            if op_columns and {unescape_identifier(x) for x in op_columns} != set(col_names):
+                return False  # Data sent in doesn't match the columns in the insert statement
+            data_values = [list(row.values()) for row in data]
+        elif isinstance(first_row, Sequence) and not isinstance(first_row, (str, bytes)):
+            # PEP 249 also allows rows as sequences; take column names from the
+            # insert statement if present, otherwise insert into all columns
+            col_names = [unescape_identifier(x) for x in op_columns] if op_columns else "*"
+            data_values = data
+        else:
+            return False
         self.client.insert(table, data_values, col_names)
         self.data = []
         return True

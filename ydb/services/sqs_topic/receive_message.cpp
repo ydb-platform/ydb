@@ -1,5 +1,6 @@
 #include "receive_message.h"
 #include "actor.h"
+#include "config.h"
 #include "error.h"
 #include "request.h"
 #include "receipt.h"
@@ -76,7 +77,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
 
-            TMaybe readerSettings = MakeReaderSettings();
+            TMaybe readerSettings = MakeReaderSettings(ctx);
             if (!readerSettings.Defined()) {
                 return;
             }
@@ -86,7 +87,7 @@ namespace NKikimr::NSqsTopic::V1 {
             this->Become(&TReceiveMessageActor::StateWork);
         }
 
-        TMaybe<NKikimr::NPQ::NMLP::TReaderSettings> MakeReaderSettings() {
+        TMaybe<NKikimr::NPQ::NMLP::TReaderSettings> MakeReaderSettings(const NActors::TActorContext& ctx) {
             const Ydb::Ymq::V1::ReceiveMessageRequest& request = Request();
 
             const i32 maxNumberOfMessages = request.has_max_number_of_messages() ? request.max_number_of_messages() : 1;
@@ -124,7 +125,7 @@ namespace NKikimr::NSqsTopic::V1 {
             NKikimr::NPQ::NMLP::TReaderSettings settings{
                 .DatabasePath = this->QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
-                .Consumer = this->QueueUrl_->Consumer,
+                .Consumer = ResolveConsumerNameFromQueueUrl(this->QueueUrl_->Consumer, ctx),
                 .WaitTime = waitTime,
                 .ProcessingTimeout = visibilityTimeout,
                 .MaxNumberOfMessage = static_cast<ui32>(maxNumberOfMessages),

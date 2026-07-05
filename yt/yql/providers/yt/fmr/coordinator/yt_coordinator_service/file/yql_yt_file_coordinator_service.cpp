@@ -3,6 +3,7 @@
 #include <library/cpp/yson/parser.h>
 #include <util/stream/file.h>
 #include <util/system/fstat.h>
+#include <util/system/fs.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/interface/common.h>
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file_text_yson.h>
@@ -84,6 +85,54 @@ public:
 
         for (auto& ytTable: ytTables) {
             YQL_ENSURE(ytTable.FilePath);
+
+            // Check if the file was produced by a multi-job sorted upload (splitted=N in attr).
+            // Each part becomes its own partition; its number is encoded in FileName so MakeReader
+            // can open the specific part file and apply byte ranges.
+            {
+                const i64 numParts = NFile::ReadSplittedPartsCount(*ytTable.FilePath);
+                if (numParts > 0) {
+                    flushCurrent();
+                    for (i64 p = 0; p < numParts; ++p) {
+                        const TString partPath = *ytTable.FilePath + ".part." + ToString(p);
+                        const i64 partSize = GetFileLength(partPath);
+                        if (partSize == 0) {
+                            continue;
+                        }
+                        if (partSize <= maxDataWeightPerPart) {
+                            // One partition for the whole part file; encode part path in FileName.
+                            NYT::TRichYPath richPath = ytTable.RichPath;
+                            richPath.FileName(ToString(p));
+                            TYtTableTaskRef taskRef;
+                            taskRef.RichPaths.emplace_back(std::move(richPath));
+                            taskRef.FilePaths.emplace_back(*ytTable.FilePath);
+                            ytPartitions.emplace_back(std::move(taskRef));
+                        } else {
+                            // Part file is large — split into byte ranges.
+                            const auto byteRanges = ComputeByteRanges(partPath, partSize, maxDataWeightPerPart);
+                            for (auto [byteStart, byteEnd] : byteRanges) {
+                                NYT::TRichYPath richPath = ytTable.RichPath;
+                                richPath.FileName(ToString(p));
+                                richPath.AddRange(NYT::TReadRange()
+                                    .LowerLimit(NYT::TReadLimit().RowIndex(byteStart))
+                                    .UpperLimit(NYT::TReadLimit().RowIndex(byteEnd)));
+                                TYtTableTaskRef taskRef;
+                                taskRef.RichPaths.emplace_back(std::move(richPath));
+                                taskRef.FilePaths.emplace_back(*ytTable.FilePath);
+                                ytPartitions.emplace_back(std::move(taskRef));
+                                if (ytPartitions.size() > settings.MaxParts) {
+                                    return {{}, false};
+                                }
+                            }
+                        }
+                        if (ytPartitions.size() > settings.MaxParts) {
+                            return {{}, false};
+                        }
+                    }
+                    continue;
+                }
+            }
+
             const i64 fileLength = GetFileLength(*ytTable.FilePath);
 
             if (fileLength <= maxDataWeightPerPart) {

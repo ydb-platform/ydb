@@ -2,8 +2,6 @@ PY3_LIBRARY()
 
 LICENSE(Service-Py23-Proxy)
 
-SUBSCRIBER(g:python-contrib)
-
 VERSION(Service-Py23-Proxy)
 
 PEERDIR(

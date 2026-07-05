@@ -31,7 +31,7 @@ public:
             TMemoryUsageInfo* memInfo,
             NUdf::TUnboxedValue&& stream,
             const TSelf* self,
-            std::vector<NYql::NDq::TPartitionKey> partitionKeys,
+            const std::vector<NYql::NDq::TPartitionKey>& partitionKeys,
             TComputationContext& ctx
         )
             : TBase(memInfo)

@@ -3,7 +3,7 @@
 #include "codecs.h"
 #include "helpers.h"
 
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/services/metadata/manager/common.h>
 
 #include <ydb/library/persqueue/topic_parser/counters.h>
@@ -1461,6 +1461,16 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& e
     }
 
     const auto& writeRequest = ev->Get()->Request.write_request();
+
+    if constexpr (!UseMigrationProtocol) {
+        if (writeRequest.has_deferred_publish()) {
+            CloseSession(
+                "WriteRequest.deferred_publish (deferred topic publish) is not supported yet",
+                PersQueue::ErrorCode::BAD_REQUEST,
+                ctx);
+            return;
+        }
+    }
 
     if constexpr (UseMigrationProtocol) {
     if (!AllEqual(writeRequest.sequence_numbers_size(), writeRequest.created_at_ms_size(), writeRequest.sent_at_ms_size(), writeRequest.message_sizes_size())) {

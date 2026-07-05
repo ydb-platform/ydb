@@ -2704,6 +2704,201 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         UNIT_ASSERT_VALUES_EQUAL(response3.GetEntries(0).GetSettings().source_path(), "/MyRoot/Simple2");
     }
 
+    void CreateTablesForLimitTest(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, ui32 count) {
+        for (ui32 i = 0; i < count; ++i) {
+            const TString name = TStringBuilder() << "Simple" << (i + 1);
+            CreateTable(runtime, env, "/MyRoot", name.c_str(), 1, ++txId);
+            WriteData(runtime, name.c_str(), 0, 100, TTestTxConfig::FakeHiveTablets + i);
+        }
+    }
+
+    Y_UNIT_TEST(StoredOperationsLimitFailsCreate) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetStoredOperationsLimit(2);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetAutoForgetOperations(false);
+        Setup(runtime, env);
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); // apply config
+
+        ui64 txId = 1000;
+        CreateTablesForLimitTest(runtime, env, txId, 3);
+
+        // fill the limit with two finished operations
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple1");
+        ui64 firstId = txId;
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple2");
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        // the third operation must be rejected: the limit is reached and auto-forget is off
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple3", false, 1, Ydb::StatusIds::PRECONDITION_FAILED);
+
+        // free a slot manually, then the create succeeds
+        TestForgetCompaction(runtime, ++txId, "/MyRoot", firstId);
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple3");
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(TestListCompactions(runtime, "/MyRoot", 10, "").EntriesSize(), 2);
+        TestGetCompaction(runtime, firstId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(AutoForgetOperationsOnCreate) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetStoredOperationsLimit(2);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetAutoForgetOperations(true);
+        Setup(runtime, env);
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); // apply config
+
+        ui64 txId = 1000;
+        CreateTablesForLimitTest(runtime, env, txId, 3);
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple1");
+        ui64 firstId = txId;
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple2");
+        ui64 secondId = txId;
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        // third create exceeds the limit, but the oldest finished op is auto-forgotten to make room
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple3");
+        ui64 thirdId = txId;
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        TestGetCompaction(runtime, firstId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, secondId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, thirdId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
+
+        auto response = TestListCompactions(runtime, "/MyRoot", 10, "");
+        UNIT_ASSERT_VALUES_EQUAL(response.EntriesSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetEntries(0).GetSettings().source_path(), "/MyRoot/Simple3");
+        UNIT_ASSERT_VALUES_EQUAL(response.GetEntries(1).GetSettings().source_path(), "/MyRoot/Simple2");
+    }
+
+    Y_UNIT_TEST(AutoForgetOperationsFailsWhenAllInProgress) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetStoredOperationsLimit(2);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetAutoForgetOperations(true);
+        Setup(runtime, env);
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); // apply config
+
+        ui64 txId = 1000;
+        CreateTablesForLimitTest(runtime, env, txId, 3);
+
+        // keep both operations in progress (block their completion)
+        TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple1");
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple2");
+        runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 2; });
+
+        // limit reached and nothing finished to forget -> create must fail even with auto-forget
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple3", false, 1, Ydb::StatusIds::PRECONDITION_FAILED);
+
+        block.Stop().Unblock();
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(TestListCompactions(runtime, "/MyRoot", 10, "").EntriesSize(), 2);
+    }
+
+    Y_UNIT_TEST(StoredOperationsLimitFailsCreateAfterReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetStoredOperationsLimit(2);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetAutoForgetOperations(false);
+        Setup(runtime, env);
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); // apply config
+
+        ui64 txId = 1000;
+        CreateTablesForLimitTest(runtime, env, txId, 3);
+
+        // fill the limit with two finished operations
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple1");
+        ui64 firstId = txId;
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple2");
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        // restart: operations are reloaded from db and the limit is re-applied from config
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        UNIT_ASSERT_VALUES_EQUAL(TestListCompactions(runtime, "/MyRoot", 10, "").EntriesSize(), 2);
+
+        // the db-loaded operations count toward the limit, so a new create is still rejected
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple3", false, 1, Ydb::StatusIds::PRECONDITION_FAILED);
+
+        // free a slot manually, then the create succeeds
+        TestForgetCompaction(runtime, ++txId, "/MyRoot", firstId);
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple3");
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(TestListCompactions(runtime, "/MyRoot", 10, "").EntriesSize(), 2);
+        TestGetCompaction(runtime, firstId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(AutoForgetOperationsOnCreateAfterReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetStoredOperationsLimit(2);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetAutoForgetOperations(true);
+        Setup(runtime, env);
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); // apply config
+
+        ui64 txId = 1000;
+        CreateTablesForLimitTest(runtime, env, txId, 3);
+
+        // fill the limit with two finished operations
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple1");
+        ui64 firstId = txId;
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple2");
+        ui64 secondId = txId;
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        // restart: operations are reloaded from db and the auto-forget flag is re-applied from config
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // create exceeds the limit; the oldest db-loaded finished op is auto-forgotten to make room
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple3");
+        ui64 thirdId = txId;
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        TestGetCompaction(runtime, firstId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, secondId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, thirdId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
+
+        {
+            auto response = TestListCompactions(runtime, "/MyRoot", 10, "");
+            UNIT_ASSERT_VALUES_EQUAL(response.EntriesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetEntries(0).GetSettings().source_path(), "/MyRoot/Simple3");
+            UNIT_ASSERT_VALUES_EQUAL(response.GetEntries(1).GetSettings().source_path(), "/MyRoot/Simple2");
+        }
+
+        // the auto-forget persisted: the forgotten op stays gone after another restart
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        TestGetCompaction(runtime, firstId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(TestListCompactions(runtime, "/MyRoot", 10, "").EntriesSize(), 2);
+    }
+
     Y_UNIT_TEST(SchemeshardShouldCompactCascade) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

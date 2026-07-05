@@ -262,6 +262,10 @@ struct TEvYdbCompute {
     };
 
     struct TEvListDatabasesRequest : public NActors::TEventLocal<TEvListDatabasesRequest, EvListDatabasesRequest> {
+        explicit TEvListDatabasesRequest(const TString& database)
+            : Database(database)
+        {}
+        TString Database;
     };
 
     struct TEvListDatabasesResponse : public NActors::TEventLocal<TEvListDatabasesResponse, EvListDatabasesResponse> {

@@ -12,6 +12,7 @@ namespace NKikimr::NPQ::NBatching {
 
 struct TReadProcessingContext {
     TString User;
+    ui32 PartitionId = 0;
     ui64 Destination = 0;
     ui64 Offset = 0;
     ui32 Count = std::numeric_limits<ui32>::max();

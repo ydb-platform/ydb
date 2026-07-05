@@ -433,7 +433,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
         const auto& implTableColumns = indexes.at(indexDescription.GetName());
         const auto indexType = GetIndexType(indexDescription);
-        bool compact = false;
+
         switch (indexType) {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -485,8 +485,46 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             }
             case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
-                compact = true;
-                [[fallthrough]];
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
+                NKikimrSchemeOp::TTableDescription userIndexDesc, docsTableDesc, dictTableDesc, statsTableDesc;
+                if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
+                    if (indexDescription.IndexImplTableDescriptionsSize() == 4) {
+                        dictTableDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DictTablePosition);
+                        docsTableDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DocsTablePosition);
+                        statsTableDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::StatsTablePosition);
+                        userIndexDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition);
+                    }
+                } else if (indexDescription.IndexImplTableDescriptionsSize() == 1) {
+                    userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
+                }
+
+                result.push_back(createIndexImplTable(CalcFulltextCompactImplTableDesc(
+                    baseTableDescription, baseTableDescription.GetPartitionConfig(),
+                    userIndexDesc, &indexDescription.GetFulltextIndexDescription(), indexType,
+                        NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames()), false),
+                    THashSet<TString>{NTableIndex::NFulltext::GenSequence}));
+
+                // Create the sequence
+                auto outTx = TransactionTemplate(tx.GetWorkingDir() + "/" + baseTableDescription.GetName() + "/" +
+                    indexDescription.GetName() + "/" + NTableIndex::ImplTable,
+                    NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
+                outTx.MutableSequence()->SetName(NTableIndex::NFulltext::GenSequence);
+                outTx.MutableSequence()->SetStartValue(static_cast<i64>(Max<NTableIndex::NFulltext::TGen>() - 1));
+                outTx.MutableSequence()->SetIncrement(-1);
+                outTx.MutableSequence()->SetMaxValue(static_cast<i64>(Max<NTableIndex::NFulltext::TGen>() - 1));
+                outTx.SetFailOnExist(tx.GetFailOnExist());
+                outTx.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
+                outTx.SetInternal(tx.GetInternal());
+                result.push_back(CreateNewSequence(NextPartId(nextId, result), outTx));
+
+                if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
+                    const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                    result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc, indexDescription.GetFulltextIndexDescription())));
+                    result.push_back(createIndexImplTable(CalcFulltextDictImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), dictTableDesc, indexDescription.GetFulltextIndexDescription())));
+                    result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc)));
+                }
+                break;
+            }
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
                 NKikimrSchemeOp::TTableDescription userIndexDesc;
@@ -494,18 +532,11 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
                 }
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
-                result.push_back(createIndexImplTable(compact
-                    ? CalcFulltextCompactImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
-                        userIndexDesc, &indexDescription.GetFulltextIndexDescription(), indexType,
-                        NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames()))
-                    : CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
-                        indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType,
-                        NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames()))));
+                result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
+                    indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType,
+                    NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames()))));
                 break;
             }
-            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
-                compact = true;
-                [[fallthrough]];
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
                 NKikimrSchemeOp::TTableDescription userIndexDesc, docsTableDesc, dictTableDesc, statsTableDesc;
                 if (indexDescription.IndexImplTableDescriptionsSize() == 4) {
@@ -515,13 +546,9 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     userIndexDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition);
                 }
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
-                result.push_back(createIndexImplTable(compact
-                    ? CalcFulltextCompactImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
-                        userIndexDesc, &indexDescription.GetFulltextIndexDescription(), indexType,
-                        NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames()))
-                    : CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
-                        indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType,
-                        NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames()))));
+                result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
+                    indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType,
+                    NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames()))));
                 result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc, indexDescription.GetFulltextIndexDescription())));
                 result.push_back(createIndexImplTable(CalcFulltextDictImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), dictTableDesc, indexDescription.GetFulltextIndexDescription())));
                 result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc)));

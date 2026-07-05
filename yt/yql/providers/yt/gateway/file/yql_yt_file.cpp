@@ -2,6 +2,7 @@
 #include "yql_yt_file_mkql_compiler.h"
 #include "yql_yt_file_comp_nodes.h"
 #include "yql_yt_file_row_count.h"
+#include "yql_yt_file_text_yson.h"
 
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -370,7 +371,7 @@ public:
             for (const TTableReq& req: options.Tables()) {
 
                 auto path = Services_->GetTablePath(req.Cluster(), req.Table(), req.Anonymous());
-                const bool exists = NFs::Exists(path) && !ShouldEmulateOutputForMultirun(req);
+                const bool exists = (NFs::Exists(path) || NFs::Exists(path + ".part.0")) && !ShouldEmulateOutputForMultirun(req);
 
                 res.Data.emplace_back();
 
@@ -900,7 +901,27 @@ public:
             YQL_ENSURE(1 == outTableContent.size());
 
             ui64 publishedRowCount = 0;
-            {
+            TString srcFilePath = Services_->GetTmpTablePath(GetOutTable(publish.Input().Item(0)).Cast<TYtOutTable>().Name().Value());
+            const i64 numParts = NFile::ReadSplittedPartsCount(srcFilePath);
+
+            if (numParts > 0) {
+                // Part files are already formatted — hardlink or copy them directly.
+                for (i64 p = 0; p < numParts; ++p) {
+                    NFs::HardLinkOrCopy(
+                        srcFilePath + ".part." + ToString(p),
+                        destFilePath + ".part." + ToString(p));
+                }
+                if (Services_->GetWriteOutputRowCount()) {
+                    const TString srcAttrPath = srcFilePath + ".attr";
+                    if (NFs::Exists(srcAttrPath)) {
+                        TIFStream input(srcAttrPath);
+                        const auto srcAttrs = NYT::NodeFromYsonStream(&input);
+                        if (srcAttrs.HasKey("row_count")) {
+                            publishedRowCount = static_cast<ui64>(srcAttrs["row_count"].AsInt64());
+                        }
+                    }
+                }
+            } else {
                 TMemoryInput in(outTableContent.front());
                 TOFStream of(destFilePath);
                 TDoubleHighPrecisionYsonWriter writer(&of, ::NYson::EYsonType::ListFragment);
@@ -917,7 +938,6 @@ public:
             {
                 NYT::TNode attrs = NYT::TNode::CreateMap();
                 NYT::TNode destAttrs = NYT::TNode::CreateMap();
-                TString srcFilePath = Services_->GetTmpTablePath(GetOutTable(publish.Input().Item(0)).Cast<TYtOutTable>().Name().Value());
                 if (NFs::Exists(srcFilePath + ".attr")) {
                     TIFStream input(srcFilePath + ".attr");
                     attrs = NYT::NodeFromYsonStream(&input);
@@ -1292,22 +1312,54 @@ private:
 
     static void LoadTableStatInfo(const TString& path, TYtTableStatInfo& info) {
         NYT::TNode attrs = LoadTableAttrs(path);
+
+        const TMaybe<i64> numParts = attrs.HasKey("splitted")
+            ? TMaybe<i64>(attrs["splitted"].AsInt64())
+            : Nothing();
+
         if (attrs.HasKey("row_count")) {
             info.RecordsCount = attrs["row_count"].AsInt64();
         } else {
-            NYT::TNode inputList = LoadTableContent(path);
+            NYT::TNode inputList = LoadTableContent(path, numParts);
             info.RecordsCount = inputList.AsList().size();
         }
         if (!info.IsEmpty()) {
-            info.DataSize = TFileStat(path).Size;
-            info.ChunkCount = 1;
+            if (numParts.Defined()) {
+                i64 totalSize = 0;
+                for (i64 p = 0; p < *numParts; ++p) {
+                    totalSize += static_cast<i64>(TFileStat(path + ".part." + ToString(p)).Size);
+                }
+                info.DataSize = totalSize;
+                info.ChunkCount = *numParts;
+            } else {
+                info.DataSize = TFileStat(path).Size;
+                info.ChunkCount = 1;
+            }
         }
     }
 
 
-    static NYT::TNode LoadTableContent(const TString& path) {
+    // numParts: when Defined, use the provided count directly (caller already has attrs loaded);
+    // when Nothing, read the .attr file to detect splitted format.
+    static NYT::TNode LoadTableContent(const TString& path, TMaybe<i64> numParts = Nothing()) {
         NYT::TNode inputList = NYT::TNode::CreateList();
-        if (TFileStat(path).Size) {
+        if (!numParts.Defined()) {
+            const i64 n = NFile::ReadSplittedPartsCount(path);
+            if (n > 0) {
+                numParts = n;
+            }
+        }
+        if (numParts.Defined()) {
+            for (i64 p = 0; p < *numParts; ++p) {
+                const TString partPath = path + ".part." + ToString(p);
+                if (TFileStat(partPath).Size) {
+                    TIFStream input(partPath);
+                    NYT::TNodeBuilder builder(&inputList);
+                    NYson::TYsonParser parser(&builder, &input, ::NYson::EYsonType::ListFragment);
+                    parser.Parse();
+                }
+            }
+        } else if (TFileStat(path).Size) {
             TIFStream input(path);
             NYT::TNodeBuilder builder(&inputList);
             NYson::TYsonParser parser(&builder, &input, ::NYson::EYsonType::ListFragment);

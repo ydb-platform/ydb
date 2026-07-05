@@ -1,8 +1,13 @@
 #include "replication_card_serialization.h"
 
+#include <yt/yt/client/object_client/helpers.h>
+
 #include <yt/yt/client/table_client/unversioned_row.h>
+#include <yt/yt/client/table_client/schema.h>
 
 #include <yt/yt/client/tablet_client/config.h>
+
+#include <yt/yt/client/api/rpc_proxy/helpers.h>
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 #include <yt/yt/core/misc/collection_helpers.h>
@@ -15,6 +20,7 @@
 
 namespace NYT::NChaosClient {
 
+using namespace NObjectClient;
 using namespace NTransactionClient;
 using namespace NTableClient;
 using namespace NTabletClient;
@@ -317,7 +323,19 @@ void Serialize(
         .Item("table_path").Value(replicationCard.TablePath)
         .Item("table_cluster_name").Value(replicationCard.TableClusterName)
         .Item("current_timestamp").Value(replicationCard.CurrentTimestamp)
-        .Item("replication_card_collocation_id").Value(replicationCard.ReplicationCardCollocationId);
+        .Item("replication_card_collocation_id").Value(replicationCard.ReplicationCardCollocationId)
+        .DoIf(!replicationCard.SecondaryIndices.empty(), [&] (TFluentMap fluent) {
+            fluent
+                .Item("secondary_indices")
+                .DoMapFor(
+                    replicationCard.SecondaryIndices,
+                    [&] (TFluentMap fluent, const std::pair<TReplicationCardId, TIndexInfo>& pair) {
+                        fluent
+                            .Item(ToString(pair.first)).Do([&] (TFluentAny fluent) {
+                                Serialize(pair.second, fluent.GetConsumer());
+                            });
+                    });
+        });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -423,6 +441,11 @@ void ToProto(
     protoReplicationCard->set_table_cluster_name(ToProto(replicationCard.TableClusterName));
     protoReplicationCard->set_current_timestamp(replicationCard.CurrentTimestamp);
     ToProto(protoReplicationCard->mutable_replication_card_collocation_id(), replicationCard.ReplicationCardCollocationId);
+
+    for (auto it : GetSortedIterators(replicationCard.SecondaryIndices)) {
+        auto* protoIndexInfo = protoReplicationCard->add_secondary_indices();
+        ToProto(protoIndexInfo, it->second);
+    }
 }
 
 void FromProto(TReplicationCard* replicationCard, const NChaosClient::NProto::TReplicationCard& protoReplicationCard)
@@ -446,6 +469,19 @@ void FromProto(TReplicationCard* replicationCard, const NChaosClient::NProto::TR
 
     if (protoReplicationCard.has_replication_card_collocation_id()) {
         FromProto(&replicationCard->ReplicationCardCollocationId, protoReplicationCard.replication_card_collocation_id());
+    }
+
+    for (const auto& protoSecondaryIndexInfo : protoReplicationCard.secondary_indices()) {
+        auto indexReplicationCardId = FromProto<TReplicationCardId>(
+            protoSecondaryIndexInfo.index_object_id());
+        YT_ASSERT(TypeFromId(indexReplicationCardId) == EObjectType::ReplicationCard);
+
+        TIndexInfo indexInfo;
+        FromProto(&indexInfo, protoSecondaryIndexInfo);
+        EmplaceOrCrash(
+            replicationCard->SecondaryIndices,
+            indexReplicationCardId,
+            std::move(indexInfo));
     }
 }
 

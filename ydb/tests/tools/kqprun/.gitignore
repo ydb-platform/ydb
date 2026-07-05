@@ -7,9 +7,9 @@ udfs
 *.bin
 *.conf
 *.json
+*.jsonl
 *.log
 *.old
-*.sh
 *.sql
 *.svg
 *.txt

@@ -1246,7 +1246,7 @@ alter_sequence_action:
   | INCREMENT BY? integer
 ;
 
-show_create_table_stmt: SHOW CREATE (TABLE | VIEW) simple_table_ref;
+show_create_table_stmt: SHOW CREATE (TABLE | VIEW | EXTERNAL DATA SOURCE) simple_table_ref;
 
 create_secret_stmt: CREATE SECRET object_ref
     with_secret_settings

@@ -189,9 +189,13 @@ private:
             try {
                 RequestFiller_(req);
             } catch (...) {
+                const auto now = SysClock::now();
                 std::lock_guard guard(Lock_);
-                LastRequestError_ = TStringBuilder() << "Request failed: " << CurrentExceptionMessage();
+                LastRequestError_ = TStringBuilder()
+                    << "Last request error was at " << FormatSysTimeUtcIsoMicros(now)
+                    << ". Failed to prepare IAM request: " << CurrentExceptionMessage();
                 ResetContextImpl();
+                RescheduleOnFailure();
                 return;
             }
 
@@ -247,10 +251,22 @@ private:
                 if (Context_.has_value() || SysClock::now() < NextTicketUpdate_) {
                     return true;
                 }
-                FillContext(guard);
+                try {
+                    FillContext(guard);
+                } catch (...) {
+                    const auto now = SysClock::now();
+                    LastRequestError_ = TStringBuilder()
+                        << "Last request error was at " << FormatSysTimeUtcIsoMicros(now)
+                        << ". Failed to prepare IAM request context: " << CurrentExceptionMessage();
+                    ResetContextImpl();
+                }
                 if (NeedStop_) {
                     ResetContextImpl();
                     return false;
+                }
+                if (!Context_.has_value()) {
+                    RescheduleOnFailure();
+                    return true;
                 }
             }
             UpdateTicket();
@@ -267,29 +283,38 @@ private:
                     << " Message: \"" << status.error_message()
                     << "\" iam-endpoint: \"" << IamEndpoint_.Endpoint << "\"";
 
-                const auto now = SysClock::now();
-                const auto retryDelay = std::min(BackoffTimeout_, BACKOFF_MAX);
-                NextTicketUpdate_ = SafeAddSystemTime(now, ToBoundedSysDuration(retryDelay));
-                BackoffTimeout_ = std::min(BackoffTimeout_ * 2, BACKOFF_MAX);
+                RescheduleOnFailure();
             } else {
                 LastRequestError_ = "";
                 Ticket_ = result.iam_token();
-                BackoffTimeout_ = BACKOFF_START;
 
-                const auto now = SysClock::now();
-                const SysTimePoint refreshAt = SafeAddSystemTime(now, ToBoundedSysDuration(IamEndpoint_.RefreshPeriod));
                 const SysTimePoint expiresAt = SysClock::from_time_t(result.expires_at().seconds());
-                const SysDuration requestMargin = ToBoundedSysDuration(IamEndpoint_.RequestTimeout);
-
-                SysTimePoint nextUpdate = std::min(refreshAt, expiresAt);
-                nextUpdate = SafeAddSystemTime(nextUpdate, -requestMargin);
-                nextUpdate = std::max(nextUpdate, SafeAddSystemTime(now, ToBoundedSysDuration(MINIMUM_REFRESH_INTERVAL)));
-                NextTicketUpdate_ = nextUpdate;
+                RescheduleOnSuccess(expiresAt);
 
                 TokenReady_.notify_all();
             }
 
             ResetContextImpl();
+        }
+
+        void RescheduleOnFailure() { // call with Lock_
+            const auto now = SysClock::now();
+            const auto retryDelay = std::min(BackoffTimeout_, BACKOFF_MAX);
+            NextTicketUpdate_ = SafeAddSystemTime(now, ToBoundedSysDuration(retryDelay));
+            BackoffTimeout_ = std::min(BackoffTimeout_ * 2, BACKOFF_MAX);
+        }
+
+        void RescheduleOnSuccess(const SysTimePoint expiresAt) { // call with Lock_
+            BackoffTimeout_ = BACKOFF_START;
+
+            const auto now = SysClock::now();
+            const SysTimePoint refreshAt = SafeAddSystemTime(now, ToBoundedSysDuration(IamEndpoint_.RefreshPeriod));
+            const SysDuration requestMargin = ToBoundedSysDuration(IamEndpoint_.RequestTimeout);
+
+            SysTimePoint nextUpdate = std::min(refreshAt, expiresAt);
+            nextUpdate = SafeAddSystemTime(nextUpdate, -requestMargin);
+            nextUpdate = std::max(nextUpdate, SafeAddSystemTime(now, ToBoundedSysDuration(MINIMUM_REFRESH_INTERVAL)));
+            NextTicketUpdate_ = nextUpdate;
         }
 
     private:

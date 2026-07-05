@@ -474,14 +474,19 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
     for (branch, build_type), group_rows in grouped.items():
         currently_muted = fetch_currently_muted(ydb_wrapper, tests_monitor_path, branch, build_type)
         existing_grace = set()
+        # None ⇒ we could not read existing grace rows; in that case skip recording grace
+        # from Job 1 so we never overwrite an already-anchored grace_started_at (#45582).
+        grace_lookup_ok = True
         if grace_table_path:
             try:
                 existing_grace = fetch_grace_full_names(
                     ydb_wrapper, grace_table_path, branch, build_type
                 )
             except Exception as exc:
+                grace_lookup_ok = False
                 logging.warning(
-                    'manual_unmute_cleanup: failed to load grace names for %s/%s: %s',
+                    'manual_unmute_cleanup: failed to load grace names for %s/%s: %s '
+                    '(skipping grace recording this run to avoid resetting grace_started_at)',
                     branch,
                     build_type,
                     exc,
@@ -494,7 +499,7 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
             issue_number = row.get('github_issue_number')
 
             if full_name not in currently_muted:
-                if grace_table_path and full_name not in existing_grace:
+                if grace_table_path and grace_lookup_ok and full_name not in existing_grace:
                     try:
                         ft_at = requested_at or now
                         upsert_fast_unmute_grace_row(

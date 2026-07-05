@@ -762,6 +762,38 @@ TEST_F(TSslTest, BlackHole)
         .ThrowOnError();
 }
 
+TEST_F(TSslTest, IncorrectConfig)
+{
+    auto unknownCommand = TSslContextCommand::Create("UnknownCommand", "Argument");
+
+    auto serverConfig = TBusServerConfig::CreateTcp(Port);
+    serverConfig->EncryptionMode = EEncryptionMode::Required;
+    serverConfig->VerificationMode = EVerificationMode::None;
+    serverConfig->CertificateChain = CertificateChain;
+    serverConfig->PrivateKey = PrivateKey;
+    serverConfig->SslConfigurationCommands.push_back(unknownCommand);
+    auto server = CreateBusServer(serverConfig);
+    server->Start(New<TEmptyBusHandler>());
+
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
+    clientConfig->EncryptionMode = EEncryptionMode::Required;
+    clientConfig->VerificationMode = EVerificationMode::None;
+    clientConfig->SslConfigurationCommands.push_back(unknownCommand);
+    auto client = CreateBusClient(clientConfig);
+
+    auto bus = client->CreateBus(New<TEmptyBusHandler>());
+    auto error = WaitForFast(bus->GetReadyFuture());
+    EXPECT_FALSE(error.IsOK());
+    EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
+    EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+        error.ThrowOnError(),
+        NYT::TErrorException,
+        "Failed to load TLS/SSL certificates");
+
+    WaitForFast(server->Stop())
+        .ThrowOnError();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

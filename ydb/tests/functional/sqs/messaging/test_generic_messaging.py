@@ -418,7 +418,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             read_ids = set(extract_message_ids(read_result))
             assert_that(read_ids, not_(has_item(already_read_id)))
 
-        time.sleep(visibility_timeout + 0.1)
+        self._sleep_for_visibility_timeout(visibility_timeout)
         self._read_messages_and_assert(
             self.queue_url, messages_count=10, visibility_timeout=1000,
             matcher=ReadResponseMatcher().with_message_ids(self.message_ids).with_messages_data(msg_data)
@@ -491,7 +491,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
                 raise
 
         if changed:
-            time.sleep(receive_visibility_timeout + 0.1)
+            self._sleep_for_visibility_timeout(receive_visibility_timeout)
             self._read_messages_and_assert(
                 self.queue_url, messages_count=1, visibility_timeout=100, wait_timeout=0,
                 matcher=ReadResponseMatcher().with_n_messages(0)
@@ -835,7 +835,8 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             matcher=ReadResponseMatcher().with_these_or_more_message_ids(message_ids).with_n_or_more_messages(6),
         )
         remaining_time = visibility_timeout - (time.time() - begin_time)  # for first pack read
-        time.sleep(max(remaining_time + 0.1, visibility_timeout_2 + 0.1, 0))
+        grace = self._visibility_timeout_unlock_grace_sec()
+        time.sleep(max(remaining_time + 0.1 + grace, visibility_timeout_2 + 0.1 + grace, 0))
         self._read_messages_and_assert(
             self.queue_url, messages_count=10, visibility_timeout=1000, matcher=ReadResponseMatcher().with_message_ids(
                 first_pack_ids + second_pack_ids
@@ -856,7 +857,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             self._sqs_api.delete_message(self.queue_url, handle),
             not_none()
         )
-        time.sleep(6)
+        self._sleep_for_visibility_timeout(5, extra=1)
         self._read_messages_and_assert(
             self.queue_url, messages_count=10, visibility_timeout=1000,
             matcher=ReadResponseMatcher().with_message_ids(self.message_ids)

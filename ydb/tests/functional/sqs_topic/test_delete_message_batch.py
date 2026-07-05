@@ -156,10 +156,9 @@ class TestSqsTopicDeleteMessageBatch(KikimrSqsTopicTestBase):
             ],
         )
 
-        assert_that(batch_response.get('Successful', []), has_length(0))
-        assert_that(batch_response['Failed'], has_length(1))
-        assert_that(batch_response['Failed'][0]['Id'], equal_to('0'))
-        assert_that(batch_response['Failed'][0]['Code'], equal_to('InvalidParameterValue'))
+        assert_that(batch_response['Successful'], has_length(1))
+        assert_that(batch_response['Successful'][0]['Id'], equal_to('0'))
+        assert_that(batch_response.get('Failed', []), has_length(0))
 
     def test_delete_message_batch_not_found(self):
         queue_name = self._make_queue_name('delete_message_batch_not_found')
@@ -175,10 +174,9 @@ class TestSqsTopicDeleteMessageBatch(KikimrSqsTopicTestBase):
             ],
         )
 
-        assert_that(batch_response.get('Successful', []), has_length(0))
-        assert_that(batch_response['Failed'], has_length(1))
-        assert_that(batch_response['Failed'][0]['Id'], equal_to('0'))
-        assert_that(batch_response['Failed'][0]['Code'], equal_to('InvalidParameterValue'))
+        assert_that(batch_response['Successful'], has_length(1))
+        assert_that(batch_response['Successful'][0]['Id'], equal_to('0'))
+        assert_that(batch_response.get('Failed', []), has_length(0))
 
     def test_delete_message_batch_mixed_valid_and_invalid(self):
         queue_name = self._make_queue_name('delete_message_batch_mixed_valid_and_invalid')

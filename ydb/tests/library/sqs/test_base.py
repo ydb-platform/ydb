@@ -701,6 +701,12 @@ class KikimrSqsTestBase(object):
     def _retry_attempts(self, non_migration, migration):
         return migration if self._is_topic_migration_stage() else non_migration
 
+    def _visibility_timeout_unlock_grace_sec(self):
+        return 2 if self._is_topic_migration_stage() else 0
+
+    def _sleep_for_visibility_timeout(self, visibility_timeout, extra=0.1):
+        time.sleep(visibility_timeout + extra + self._visibility_timeout_unlock_grace_sec())
+
     def _get_queue_resource_id(self, queue_url, queue_name, cloud_id=None):
         cloud_id = cloud_id if cloud_id is not None else getattr(self, 'cloud_id', None)
         assert cloud_id is not None, 'cloud_id is required'

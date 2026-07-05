@@ -176,6 +176,9 @@ class TestSqsGettingCounters(KikimrSqsTestBase):
     def test_action_duration_being_not_immediate(self):
         queue_url = self._create_queue_and_assert(self.queue_name, False, True)
 
+        if self._is_topic_migration_stage():
+            self._sqs_api.receive_message(queue_url, wait_timeout=2, max_number_of_messages=1)
+
         for i in range(100):
             message_payload = "foobar" + str(i)
             self._sqs_api.send_message(queue_url, message_payload)

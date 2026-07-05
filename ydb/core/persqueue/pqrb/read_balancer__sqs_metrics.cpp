@@ -542,6 +542,7 @@ void TTopicSqsMetricsHandler::AddMessageMetrics(const NKikimrPQ::TEvTopicSqsActi
     default:
         break;
     }
+    FlushPendingActionMetrics();
 }
 
 void TTopicSqsMetricsHandler::FlushPendingActionMetrics() {

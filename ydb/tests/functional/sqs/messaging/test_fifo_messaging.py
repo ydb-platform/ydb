@@ -148,7 +148,7 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
         first_message_id = self._send_message_and_assert(
             queue_url, self._msg_body_template.format('0'), seq_no=1, group_id='group'
         )
-        time.sleep(5)
+        time.sleep(5 + self._visibility_timeout_unlock_grace_sec())
         self._send_message_and_assert(
             queue_url, self._msg_body_template.format('1'), seq_no=2, group_id='group'
         )
@@ -166,12 +166,12 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             queue_url, message_count=pack_size, msg_body_template=self._msg_body_template, is_fifo=True,
             group_id='1',
         )
-        time.sleep(5)
+        time.sleep(5 + self._visibility_timeout_unlock_grace_sec())
         second_pack_ids = self._send_messages(
             queue_url, message_count=pack_size, msg_body_template=self._msg_body_template, is_fifo=True,
             group_id='2'
         )
-        time.sleep(5)
+        time.sleep(5 + self._visibility_timeout_unlock_grace_sec())
         self._read_messages_and_assert(
             queue_url, messages_count=10, visibility_timeout=1000,
             matcher=ReadResponseMatcher().with_message_ids(
@@ -199,7 +199,7 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             self.queue_url, messages_count=5, matcher=ReadResponseMatcher().with_these_or_more_message_ids(second_pack_ids[:1]),
             visibility_timeout=10
         )
-        time.sleep(12)
+        self._sleep_for_visibility_timeout(10, extra=2)
         self._read_messages_and_assert(
             self.queue_url, messages_count=5, visibility_timeout=1000, matcher=ReadResponseMatcher().with_these_or_more_message_ids(
                 [self.message_ids[0], second_pack_ids[0]]
@@ -270,7 +270,7 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
                 )
                 message_ids[0] = message_ids[0][1:]
                 break
-        time.sleep(5)
+        self._sleep_for_visibility_timeout(5)
         matcher = ReadResponseMatcher().with_n_messages(10).with_message_ids(
             [i[0] for i in message_ids.values()]
         ).with_messages_data(

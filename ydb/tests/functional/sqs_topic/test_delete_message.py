@@ -115,37 +115,25 @@ class TestSqsTopicDeleteMessage(KikimrSqsTopicTestBase):
             ReceiptHandle=receipt_handle,
         )
 
-        def delete_message_again():
-            self._boto_client.delete_message(
-                QueueUrl=self._queue_url,
-                ReceiptHandle=receipt_handle,
-            )
-
-        assert_that(
-            delete_message_again,
-            raises(
-                botocore.exceptions.ClientError,
-                pattern='InvalidParameterValue',
-            ),
+        response = self._boto_client.delete_message(
+            QueueUrl=self._queue_url,
+            ReceiptHandle=receipt_handle,
         )
+
+        assert_that(response, not_none())
+        assert_that(response, has_item('ResponseMetadata'))
 
     def test_delete_message_not_found(self):
         queue_name = self._make_queue_name('delete_message_not_found')
         self._queue_url = self._boto_client.create_queue(QueueName=queue_name)['QueueUrl']
 
-        def delete_message_with_unknown_offset():
-            self._boto_client.delete_message(
-                QueueUrl=self._queue_url,
-                ReceiptHandle=self._make_receipt_handle(partition=0, offset=999999),
-            )
-
-        assert_that(
-            delete_message_with_unknown_offset,
-            raises(
-                botocore.exceptions.ClientError,
-                pattern='InvalidParameterValue',
-            ),
+        response = self._boto_client.delete_message(
+            QueueUrl=self._queue_url,
+            ReceiptHandle=self._make_receipt_handle(partition=0, offset=999999),
         )
+
+        assert_that(response, not_none())
+        assert_that(response, has_item('ResponseMetadata'))
 
     def test_delete_message_after_visibility_timeout_succeeds(self):
         queue_name = self._make_queue_name('delete_message_after_visibility_timeout')

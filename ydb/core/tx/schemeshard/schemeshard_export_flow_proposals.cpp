@@ -366,6 +366,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             auto& backupSettings = *task.MutableFSSettings();
             backupSettings.SetBasePath(exportSettings.base_path());
             backupSettings.SetPath(ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings));
+            
+            // TODO: Parquet format support for FS will be added after public API approval
 
             if (const auto compression = exportSettings.compression()) {
                 Y_ABORT_UNLESS(FillCompression(*task.MutableCompression(), compression));

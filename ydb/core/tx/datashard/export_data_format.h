@@ -32,7 +32,7 @@ public:
 }; 
 
 struct TYdbDumpExportSettings {
-    TYdbDumpExportSettings& WithColumns(const IExport::TTableColumns columns) {
+    TYdbDumpExportSettings& WithColumns(IExport::TTableColumns columns) {
         Columns = std::move(columns);
         return *this;
     }

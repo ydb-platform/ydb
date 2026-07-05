@@ -171,7 +171,7 @@ TMaybe<TBuffer> Collect(const NTable::IScan::TRow& row) override {
 
     BatchBuilder->AddRow(*row);
     if (BatchBuilder->Rows() >= RowGroupSize) {
-        if(!FlushRowGroup(false)) {
+        if (!FlushRowGroup(false)) {
             return Nothing();
         }
     }

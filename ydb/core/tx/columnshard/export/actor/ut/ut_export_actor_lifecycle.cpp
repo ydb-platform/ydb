@@ -480,6 +480,53 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
     }
 
+    Y_UNIT_TEST(PlanAfterDuplicateProposeDoesNotCrash) {
+        Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket("test", s3Client);
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        auto planStep = PrepareTablet(runtime, tableId, schema, 2);
+        ui64 txId = 111;
+
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        RunBackupExport(runtime, sender, csControllerGuard, txId, planStep, tableId, schema);
+        TestWaitCondition(runtime, "export", [&]() {
+            return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
+        });
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+
+        const ui64 backupTxId = txId;
+
+        std::vector<ui64> writeIds;
+        ui64 writeId = 100;
+        UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 5 }, schema), schema, true, &writeIds));
+        auto commitPlanStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, commitPlanStep, txId);
+
+        const NOlap::TSnapshot backupSnapshot(commitPlanStep.Val(), txId);
+        const auto txBody = MakeBackupTxBody(tableId, backupSnapshot);
+
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
+            new TEvColumnShard::TEvProposeTransaction(NKikimrTxColumnShard::TX_KIND_BACKUP, sender, backupTxId, txBody.SerializeAsString()));
+        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+        UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTxId(), backupTxId);
+        const TPlanStep dupPlanStep{ ev->Get()->Record.GetMinStep() };
+
+        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(dupPlanStep, backupTxId), false);
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+    }
+
     Y_UNIT_TEST(CancelAfterDuplicateProposeDoesNotCrash) {
         Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
         NTestUtils::CreateBucket("test", s3Client);

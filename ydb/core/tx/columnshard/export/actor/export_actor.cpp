@@ -89,7 +89,7 @@ void TActor::KillExporter() {
 }
 
 void TActor::PassAway() {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_pass_away")("self_id", SelfId())("tablet_id", TabletId);
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_pass_away")("self_id", SelfId())("tablet_id", TabletId);
     KillExporter();
     Counters.OnActorDead();
     TBase::PassAway();
@@ -121,7 +121,7 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev) {
 }
 
 void TActor::OnTxCompleted(const ui64 /*txId*/) {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_on_tx_completed")("self_id", SelfId())("tablet_id", TabletId);
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_on_tx_completed")("self_id", SelfId())("tablet_id", TabletId);
     Session->FinishActor();
 }
 
@@ -169,7 +169,7 @@ void TActor::HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportError::TPtr&
 }
 
 void TActor::OnBootstrap(const TActorContext& /*ctx*/) {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_bootstrap")("self_id", SelfId())("tablet_id", TabletId);
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_bootstrap")("self_id", SelfId())("tablet_id", TabletId);
     Counters.OnActorAlive();
     StageStartTime = TInstant::Now();
     ScheduleTimeoutCheck();
@@ -285,12 +285,12 @@ void TActor::OnSessionStateSaved() {
     AFL_VERIFY(ExportSession->IsFinished() || ExportSession->IsReadyForRemoveOnFinished());
     NYDBTest::TControllers::GetColumnShardController()->OnExportFinished();
     if (ExportSession->GetTxId()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_session_state_saved_with_tx")("self_id", SelfId())(
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_session_state_saved_with_tx")("self_id", SelfId())(
             "tablet_id", TabletId)("tx_id", *ExportSession->GetTxId());
         ExecuteTransaction(std::make_unique<TTxProposeFinish>(
             GetShardVerified<NColumnShard::TColumnShard>(), *ExportSession->GetTxId(), SelfId(), GetNextTxId()));
     } else {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_session_state_saved_no_tx")("self_id", SelfId())("tablet_id", TabletId);
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_session_state_saved_no_tx")("self_id", SelfId())("tablet_id", TabletId);
         Session->FinishActor();
     }
 }

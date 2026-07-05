@@ -72,6 +72,9 @@ void TBackupTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*
 
 bool TBackupTransactionOperator::ProgressOnExecute(
     TColumnShard& owner, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& txc) {
+    if (AlreadyCompleted) {
+        return true;
+    }
     AFL_VERIFY(!TxRemove);
     const auto schemeShardLocalPathId = ExportTask->GetIdentifier().GetSchemeShardLocalPathId();
     auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(schemeShardLocalPathId.GetRawValue()));
@@ -102,6 +105,9 @@ bool TBackupTransactionOperator::ProgressOnExecute(
 }
 
 bool TBackupTransactionOperator::ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) {
+    if (AlreadyCompleted) {
+        return true;
+    }
     auto status = owner.GetBackgroundSessionsManager()->GetStatus(
         ExportTask->GetClassName(), ::ToString(ExportTask->GetIdentifier().GetSchemeShardLocalPathId().GetRawValue()));
     for (TActorId subscriber : NotifySubscribers) {

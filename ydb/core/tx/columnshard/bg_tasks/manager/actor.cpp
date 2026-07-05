@@ -42,7 +42,7 @@ void TSessionActor::SaveSessionState() {
 }
 
 void TSessionActor::Handle(TEvLocalTransactionCompleted::TPtr& ev) {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "session_actor_local_tx_completed")("self_id", SelfId())("tablet_id", TabletId)(
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "session_actor_local_tx_completed")("self_id", SelfId())("tablet_id", TabletId)(
         "internal_tx_id", ev->Get()->GetInternalTxId())("save_progress_tx", SaveSessionProgressTx ? *SaveSessionProgressTx : 0)(
         "save_state_tx", SaveSessionStateTx ? *SaveSessionStateTx : 0);
     if (SaveSessionProgressTx && *SaveSessionProgressTx == ev->Get()->GetInternalTxId()) {
@@ -52,14 +52,14 @@ void TSessionActor::Handle(TEvLocalTransactionCompleted::TPtr& ev) {
         SaveSessionStateTx.reset();
         OnSessionStateSaved();
     } else {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "session_actor_on_tx_completed")("self_id", SelfId())("tablet_id", TabletId)(
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "session_actor_on_tx_completed")("self_id", SelfId())("tablet_id", TabletId)(
             "internal_tx_id", ev->Get()->GetInternalTxId());
         OnTxCompleted(ev->Get()->GetInternalTxId());
     }
 }
 
 void TSessionActor::Handle(TEvSessionControl::TPtr& ev) {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "session_actor_handle_control")("self_id", SelfId())("tablet_id", TabletId)(
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "session_actor_handle_control")("self_id", SelfId())("tablet_id", TabletId)(
         "save_state_tx", SaveSessionStateTx ? *SaveSessionStateTx : 0)("save_progress_tx", SaveSessionProgressTx ? *SaveSessionProgressTx : 0);
     TSessionControlContainer control;
     {
@@ -76,7 +76,7 @@ void TSessionActor::Handle(TEvSessionControl::TPtr& ev) {
             return;
         }
     }
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "session_actor_control_saving_state")("self_id", SelfId())("tablet_id", TabletId);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "session_actor_control_saving_state")("self_id", SelfId())("tablet_id", TabletId);
     SaveSessionState();
 }
 

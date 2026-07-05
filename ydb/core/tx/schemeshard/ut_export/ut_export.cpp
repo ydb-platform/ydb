@@ -4953,4 +4953,30 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         const auto& entry = response.GetResponse().GetEntry();
         UNIT_ASSERT_C(entry.IssuesSize() > 0, entry.ShortDebugString());
     }
+
+    Y_UNIT_TEST(ShouldRejectParquetExportWithTooLargeRowGroupSize) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableExportInParquet(true);
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              parquet { row_group_size: 20000000 }
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()), "", "", Ydb::StatusIds::BAD_REQUEST);
+    }
 }

@@ -7,6 +7,8 @@
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
+#include <ydb/core/tx/datashard/export_data_format.h>
+
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -192,6 +194,22 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                         Ydb::StatusIds::PRECONDITION_FAILED,
                         "Index materialization is not enabled"
                     );
+                }
+            }
+            if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToS3Settings>) {
+                if (settings.format_case() == Ydb::Export::ExportToS3Settings::kParquet) {
+                    const ui32 rowGroupSize = settings.parquet().row_group_size();
+                    if (rowGroupSize > 0) {
+                        const ui64 maxRowGroupSize = NDataShard::TParquetExportSettings::MaxRowGroupSize;
+                        if (rowGroupSize > maxRowGroupSize) {
+                            return Reply(
+                                std::move(response),
+                                Ydb::StatusIds::BAD_REQUEST,
+                                TStringBuilder() << "Parquet row_group_size " << rowGroupSize
+                                    << " exceeds the maximum allowed value " << maxRowGroupSize
+                            );
+                        }
+                    }
                 }
             }
             exportInfo = new TExportInfo(id, uid, kind, settings, domainPath.Base()->PathId, request.GetPeerName());

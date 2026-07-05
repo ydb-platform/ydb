@@ -125,6 +125,8 @@ TDataFormatParquet(TParquetExportSettings&& settings)
     , OutStream(std::make_shared<TCheckpointOutputStream>())
 {
     Y_ENSURE(RowGroupSize > 0);
+    Y_ENSURE(RowGroupSize <= TParquetExportSettings::MaxRowGroupSize,
+        "Parquet RowGroupSize " << RowGroupSize << " exceeds the maximum allowed value " << TParquetExportSettings::MaxRowGroupSize);
 }
 
 ~TDataFormatParquet() = default;

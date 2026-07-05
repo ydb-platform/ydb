@@ -41,6 +41,8 @@ struct TYdbDumpExportSettings {
 };
 
 struct TParquetExportSettings {
+    static constexpr ui64 MaxRowGroupSize = 10'000'000; // 10M rows
+
     struct TCompressionSettings {
         enum class EAlgorithm {
             Zstd,

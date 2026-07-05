@@ -1353,7 +1353,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 .PartitionId = messageId->PartitionId,
                 .Offset = messageId->Offset + 1,
             });
-            DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", middleReceiptHandle}});
+            DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", middleReceiptHandle}}, 400);
 
             ChangeMessageVisibility({
                 {"QueueUrl", path.QueueUrl},

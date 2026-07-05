@@ -38,12 +38,7 @@ from mute.constants import (
 from mute.naming import mute_file_line_to_tests_monitor_full_name
 from mute.mute_utils import dedicated_relative
 from mute.llm_debug_comment import post_llm_debug_comment
-from mute.fast_unmute_pipeline import grace_ttl_calendar_days
-from mute.fast_unmute_ydb import (
-    _coerce_dt,
-    create_fast_unmute_grace_table,
-    upsert_fast_unmute_grace_row,
-)
+from mute.fast_unmute_pipeline import enter_fast_unmute_grace_for_unmuted_tests
 from ydb_wrapper import YDBWrapper
 from github_issue_utils import DEFAULT_BUILD_TYPE, canonical_team_slug, make_profile_id
 
@@ -209,101 +204,6 @@ def delete_fast_unmute_grace_rows(ydb_wrapper, branch, build_type, test_strings)
                 full_name,
                 exc,
             )
-
-
-def load_fast_unmute_active_row_map(ydb_wrapper, branch, build_type):
-    """Map ``full_name`` -> fast_unmute_active row for this (branch, build_type)."""
-    try:
-        table_path = ydb_wrapper.get_table_path('fast_unmute_active')
-    except KeyError:
-        return {}
-
-    branch_esc = str(branch).replace("'", "''")
-    build_type_esc = str(build_type).replace("'", "''")
-    query = f"""
-    SELECT full_name, github_issue_number, requested_at
-    FROM `{table_path}`
-    WHERE branch = '{branch_esc}'
-        AND build_type = '{build_type_esc}'
-    """
-    try:
-        rows = ydb_wrapper.execute_scan_query(query, query_name='fast_unmute_active_load_rows')
-    except Exception as exc:
-        logging.warning('Failed to load fast_unmute_active rows: %s', exc)
-        return {}
-
-    out = {}
-    for row in rows:
-        fn = row.get('full_name')
-        if fn:
-            out[fn] = row
-    return out
-
-
-def record_fast_unmute_grace_for_unmute_lines(
-    ydb_wrapper,
-    branch,
-    build_type,
-    test_lines,
-    active_row_map,
-):
-    """Upsert ``fast_unmute_grace`` when fast-unmute decides to unmute.
-
-    Job 1 ``cleanup_manual_unmute`` only sees ``tests_monitor`` from the previous
-    workflow hour, so grace may be missing on the first run after unmute. Writing
-    grace here closes that gap before the next mute aggregation.
-    """
-    if not test_lines or not ydb_wrapper or not branch or not build_type:
-        return
-
-    try:
-        grace_table_path = ydb_wrapper.get_table_path('fast_unmute_grace')
-    except KeyError:
-        logging.info('fast_unmute_grace not registered — skip grace upsert on unmute')
-        return
-
-    create_fast_unmute_grace_table(ydb_wrapper, grace_table_path)
-    now = datetime.datetime.now(tz=datetime.timezone.utc)
-    grace_ttl = grace_ttl_calendar_days(get_mute_window_days(), get_manual_unmute_window_days())
-    recorded = 0
-
-    for line in test_lines:
-        if '*' in line or '?' in line:
-            continue
-        full_name = mute_file_line_to_tests_monitor_full_name(line)
-        active_row = active_row_map.get(full_name)
-        if not active_row:
-            logging.warning(
-                'fast-unmute grace: skip %r — no fast_unmute_active row for %s',
-                line,
-                full_name,
-            )
-            continue
-        requested_at = _coerce_dt(active_row.get('requested_at'))
-        fast_track_at = requested_at or now
-        try:
-            upsert_fast_unmute_grace_row(
-                ydb_wrapper,
-                grace_table_path,
-                full_name,
-                branch,
-                build_type,
-                int(active_row.get('github_issue_number') or 0),
-                fast_track_at,
-                now,
-                grace_ttl,
-            )
-            recorded += 1
-        except Exception as exc:
-            logging.warning('Failed to upsert fast-unmute grace for %s: %s', full_name, exc)
-
-    if recorded:
-        logging.info(
-            'Recorded fast-unmute grace for %d test(s) on branch=%s build_type=%s',
-            recorded,
-            branch,
-            build_type,
-        )
 
 
 def load_manual_unmute_full_names(ydb_wrapper, branch, build_type):
@@ -811,7 +711,6 @@ def apply_and_add_mutes(
     ydb_wrapper=None,
     branch=None,
     build_type=None,
-    fast_unmute_active_row_map=None,
 ):
     output_path = os.path.join(output_path, 'mute_update')
     logging.info(f"Creating mute files in directory: {output_path}")
@@ -937,13 +836,6 @@ def apply_and_add_mutes(
                 logging.info(
                     'Manual fast-unmute added %d test(s) to to_unmute [fast-unmute]',
                     len(to_unmute_manual_stable),
-                )
-                record_fast_unmute_grace_for_unmute_lines(
-                    ydb_wrapper,
-                    branch,
-                    build_type,
-                    to_unmute_manual_stable,
-                    fast_unmute_active_row_map or {},
                 )
             if manual_fast_delete_lines:
                 logging.info(
@@ -1573,6 +1465,17 @@ def mute_worker(args):
             return 1
 
         build_type = getattr(args, 'build_type', DEFAULT_BUILD_TYPE)
+
+        if args.mode == 'enter_fast_unmute_grace':
+            logging.info(
+                'Starting enter_fast_unmute_grace for branch=%s build_type=%s',
+                args.branch,
+                build_type,
+            )
+            enter_fast_unmute_grace_for_unmuted_tests(ydb_wrapper, args.branch, build_type)
+            logging.info('enter_fast_unmute_grace completed successfully')
+            return 0
+
         logging.info(f"Starting mute worker with mode: {args.mode}")
         logging.info(f"Branch: {args.branch}")
         logging.info(f"build_type: {build_type}")
@@ -1591,14 +1494,10 @@ def mute_worker(args):
 
         manual_unmute_window_days, manual_unmute_min_runs = load_manual_unmute_config()
         manual_unmute_full_names = set()
-        fast_unmute_active_row_map = {}
         aggregated_for_manual_unmute = None
         if manual_unmute_window_days and manual_unmute_min_runs:
             manual_unmute_full_names = load_manual_unmute_full_names(ydb_wrapper, args.branch, build_type)
             if manual_unmute_full_names:
-                fast_unmute_active_row_map = load_fast_unmute_active_row_map(
-                    ydb_wrapper, args.branch, build_type
-                )
                 aggregated_for_manual_unmute = aggregate_test_data(all_data, manual_unmute_window_days)
                 logging.info(
                     f"Manual fast-unmute: window={manual_unmute_window_days}d, min_runs={manual_unmute_min_runs}, "
@@ -1650,7 +1549,6 @@ def mute_worker(args):
                 ydb_wrapper=ydb_wrapper,
                 branch=args.branch,
                 build_type=build_type,
-                fast_unmute_active_row_map=fast_unmute_active_row_map,
             )
 
         elif args.mode == 'sync_fast_unmute_grace':
@@ -1721,6 +1619,18 @@ if __name__ == "__main__":
     )
     sync_fast_unmute_grace_parser.add_argument('--branch', default='main', help='Branch to get history')
     sync_fast_unmute_grace_parser.add_argument(
+        '--build-type',
+        default=DEFAULT_BUILD_TYPE,
+        dest='build_type',
+        help='tests_monitor build_type slice (default: relwithdebinfo)',
+    )
+
+    enter_fast_unmute_grace_parser = subparsers.add_parser(
+        'enter_fast_unmute_grace',
+        help='start fast_unmute_grace when tests left mute on branch (after tests_monitor refresh)',
+    )
+    enter_fast_unmute_grace_parser.add_argument('--branch', default='main', help='Branch to get history')
+    enter_fast_unmute_grace_parser.add_argument(
         '--build-type',
         default=DEFAULT_BUILD_TYPE,
         dest='build_type',

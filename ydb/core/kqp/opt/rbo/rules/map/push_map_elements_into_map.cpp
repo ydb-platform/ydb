@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/opt/rbo/rules/kqp_rules_include.h>
+#include <util/generic/bitmap.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -34,17 +35,8 @@ namespace NKqp {
 namespace {
 
 using TRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>;
-using TElementIndexes = TVector<size_t>;
-using TElementIndexMap = THashMap<TInfoUnit, TElementIndexes, TInfoUnit::THashFunction>;
-
-struct TPushIndexes {
-    TElementIndexMap ProducersByOutput;
-    TElementIndexMap RebindersByOutput;
-    TElementIndexMap PreserversByOutput;
-    TElementIndexMap HidersBySource;
-    TElementIndexMap RenameUsersBySource;
-    TElementIndexMap ExpressionUsersByInput;
-};
+using TElementMask = TDynBitMap;
+using TElementMaskMap = THashMap<TInfoUnit, TElementMask, TInfoUnit::THashFunction>;
 
 // A top element evaluates against the bottom map's output; after the move it
 // evaluates against the bottom map's input. The move preserves bindings only
@@ -78,87 +70,168 @@ bool CanMoveToBottomInput(const TMapElement& element, const TVector<TInfoUnit>& 
     return !ReferencesBottomElementOutput(element, bottomMap);
 }
 
-void AddIndex(TElementIndexMap& map, const TInfoUnit& iu, size_t idx) {
-    map[iu].push_back(idx);
+const TElementMask* FindMask(const TElementMaskMap& map, const TInfoUnit& iu) {
+    const auto it = map.find(iu);
+    return it == map.end() ? nullptr : &it->second;
 }
 
+TElementMask MakeElementMask(size_t elementCount) {
+    TElementMask mask;
+    mask.Reserve(elementCount);
+    return mask;
+}
+
+void AddIndex(TElementMaskMap& map, const TInfoUnit& iu, size_t idx, size_t elementCount) {
+    auto& mask = map[iu];
+    mask.Reserve(elementCount);
+    mask.Set(idx);
+}
+
+struct TPushIndexes {
+    explicit TPushIndexes(size_t elementCount)
+        : ElementCount(elementCount)
+    {}
+
+    const TElementMask* Produced(const TInfoUnit& iu) const {
+        return FindMask(ByProducedName, iu);
+    }
+
+    const TElementMask* Preserved(const TInfoUnit& iu) const {
+        return FindMask(ByPreservedName, iu);
+    }
+
+    const TElementMask* RenameUsers(const TInfoUnit& iu) const {
+        return FindMask(RenameUsersByInput, iu);
+    }
+
+    const TElementMask* ExpressionUsers(const TInfoUnit& iu) const {
+        return FindMask(ExpressionUsersByInput, iu);
+    }
+
+    void AddProduced(const TInfoUnit& iu, size_t idx) {
+        AddIndex(ByProducedName, iu, idx, ElementCount);
+    }
+
+    void AddRebound(const TInfoUnit& iu, size_t idx) {
+        AddIndex(ByReboundName, iu, idx, ElementCount);
+    }
+
+    void AddPreserved(const TInfoUnit& iu, size_t idx) {
+        AddIndex(ByPreservedName, iu, idx, ElementCount);
+    }
+
+    void AddHidden(const TInfoUnit& iu, size_t idx) {
+        AddIndex(ByHiddenName, iu, idx, ElementCount);
+    }
+
+    void AddRenameUser(const TInfoUnit& iu, size_t idx) {
+        AddIndex(RenameUsersByInput, iu, idx, ElementCount);
+    }
+
+    void AddExpressionUser(const TInfoUnit& iu, size_t idx) {
+        AddIndex(ExpressionUsersByInput, iu, idx, ElementCount);
+    }
+
+    size_t ElementCount;
+    TElementMaskMap ByProducedName;
+    TElementMaskMap ByReboundName;
+    TElementMaskMap ByPreservedName;
+    TElementMaskMap ByHiddenName;
+    TElementMaskMap RenameUsersByInput;
+    TElementMaskMap ExpressionUsersByInput;
+};
+
 TPushIndexes BuildPushIndexes(const TVector<TMapElement>& elements) {
-    TPushIndexes indexes;
+    TPushIndexes indexes(elements.size());
     for (size_t idx = 0; idx < elements.size(); ++idx) {
         const auto& element = elements[idx];
         const auto output = element.GetElementName();
-        AddIndex(indexes.ProducersByOutput, output, idx);
-        AddIndex(PreservesInputValue(element) ? indexes.PreserversByOutput : indexes.RebindersByOutput, output, idx);
+        indexes.AddProduced(output, idx);
+        if (PreservesInputValue(element)) {
+            indexes.AddPreserved(output, idx);
+        } else {
+            indexes.AddRebound(output, idx);
+        }
 
         if (element.IsRename()) {
             const auto source = element.GetRename();
-            AddIndex(indexes.RenameUsersBySource, source, idx);
+            indexes.AddRenameUser(source, idx);
             if (source != output) {
-                AddIndex(indexes.HidersBySource, source, idx);
+                indexes.AddHidden(source, idx);
             }
             continue;
         }
 
         for (const auto& input : element.GetExpression().GetInputIUs(false, true)) {
-            AddIndex(indexes.ExpressionUsersByInput, input, idx);
+            indexes.AddExpressionUser(input, idx);
         }
     }
 
     return indexes;
 }
 
-const TElementIndexes* FindIndexes(const TElementIndexMap& map, const TInfoUnit& iu) {
-    const auto it = map.find(iu);
-    return it == map.end() ? nullptr : &it->second;
+bool HasActive(const TElementMask* mask, const TElementMask& active) {
+    return mask && active.HasAny(*mask);
 }
 
-bool HasActiveIndex(const TElementIndexes* indexes, const TVector<bool>& pushed) {
-    if (!indexes) {
+bool HasResidual(const TElementMask* mask, const TElementMask& active) {
+    return mask && !active.HasAll(*mask);
+}
+
+bool Deselect(const TElementMask* mask, TElementMask& active) {
+    if (!mask) {
         return false;
     }
 
-    for (const auto idx : *indexes) {
-        if (pushed[idx]) {
-            return true;
-        }
-    }
-    return false;
+    const bool changed = active.HasAny(*mask);
+    active -= *mask;
+    return changed;
 }
 
-bool HasResidualIndex(const TElementIndexes* indexes, const TVector<bool>& pushed) {
-    if (!indexes) {
-        return false;
-    }
-
-    for (const auto idx : *indexes) {
-        if (!pushed[idx]) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool DeselectIndexes(const TElementIndexes* indexes, TVector<bool>& pushed) {
-    if (!indexes) {
-        return false;
-    }
-
+// Shape:
+//   Map [ x <- y, z <- y ]
+//   `- Map [...]
+// If x <- y moves and z <- y stays, y is hidden below the boundary.
+bool PruneSourceHidingRenamesWithResidualRenames(const TPushIndexes& indexes, TElementMask& active) {
     bool changed = false;
-    for (const auto idx : *indexes) {
-        if (pushed[idx]) {
-            pushed[idx] = false;
-            changed = true;
+    for (const auto& [name, hiders] : indexes.ByHiddenName) {
+        if (!HasActive(&hiders, active) ||
+            HasActive(indexes.Preserved(name), active)) {
+            continue;
+        }
+
+        if (HasResidual(indexes.RenameUsers(name), active)) {
+            changed |= Deselect(&hiders, active);
         }
     }
     return changed;
 }
 
-TVector<TInfoUnit> BuildBottomOutputWithPushedElements(TOpMap& bottomMap, const TVector<TMapElement>& elements, const TVector<bool>& pushed) {
+// Shape:
+//   Map [ x := f(a), z := g(x) ]
+//   `- Map [...]
+// If x := f(a) moves and z := g(x) stays, z binds to the new x.
+bool PruneReboundOutputsWithResidualUsers(const TPushIndexes& indexes, TElementMask& active) {
+    bool changed = false;
+    for (const auto& [name, rebinders] : indexes.ByReboundName) {
+        if (!HasActive(&rebinders, active)) {
+            continue;
+        }
+
+        if (HasResidual(indexes.RenameUsers(name), active) ||
+            HasResidual(indexes.ExpressionUsers(name), active)) {
+            changed |= Deselect(indexes.Produced(name), active);
+        }
+    }
+    return changed;
+}
+
+TVector<TInfoUnit> BuildBottomOutputWithPushedElements(TOpMap& bottomMap, const TVector<TMapElement>& elements, const TElementMask& active) {
     TVector<TInfoUnit> result = bottomMap.GetInput()->GetOutputIUs();
     TInfoUnitSet renameSources = bottomMap.GetRenameSources();
 
     for (size_t idx = 0; idx < elements.size(); ++idx) {
-        if (pushed[idx] && elements[idx].IsRename()) {
+        if (active.Get(idx) && elements[idx].IsRename()) {
             renameSources.insert(elements[idx].GetRename());
         }
     }
@@ -179,7 +252,7 @@ TVector<TInfoUnit> BuildBottomOutputWithPushedElements(TOpMap& bottomMap, const 
     }
 
     for (size_t idx = 0; idx < elements.size(); ++idx) {
-        if (pushed[idx]) {
+        if (active.Get(idx)) {
             result.push_back(elements[idx].GetElementName());
         }
     }
@@ -187,58 +260,40 @@ TVector<TInfoUnit> BuildBottomOutputWithPushedElements(TOpMap& bottomMap, const 
     return result;
 }
 
-bool DeselectDuplicateOutputProducers(TOpMap& bottomMap, const TVector<TMapElement>& elements, const TPushIndexes& indexes, TVector<bool>& pushed) {
+// Shape:
+//   Map [ x := f(a) ]
+//   `- Map [...]  // bottom output already has x
+// Pushing x must not leave duplicate x in bottom output.
+bool PruneDuplicateBottomOutputs(TOpMap& bottomMap, const TVector<TMapElement>& elements, const TPushIndexes& indexes, TElementMask& active) {
     THashMap<TInfoUnit, size_t, TInfoUnit::THashFunction> counts;
-    for (const auto& output : BuildBottomOutputWithPushedElements(bottomMap, elements, pushed)) {
+    for (const auto& output : BuildBottomOutputWithPushedElements(bottomMap, elements, active)) {
         ++counts[output];
     }
 
     bool changed = false;
     for (const auto& [output, count] : counts) {
         if (count > 1) {
-            changed |= DeselectIndexes(FindIndexes(indexes.ProducersByOutput, output), pushed);
+            changed |= Deselect(indexes.Produced(output), active);
         }
     }
     return changed;
 }
 
-void ClosePushableElements(TOpMap& bottomMap, const TVector<TMapElement>& elements, TVector<bool>& pushed) {
+void ClosePushableElements(TOpMap& bottomMap, const TVector<TMapElement>& elements, TElementMask& active) {
     const auto indexes = BuildPushIndexes(elements);
 
     bool changed = true;
     while (changed) {
-        changed = false;
-
-        for (const auto& [source, hiders] : indexes.HidersBySource) {
-            if (!HasActiveIndex(&hiders, pushed) ||
-                HasActiveIndex(FindIndexes(indexes.PreserversByOutput, source), pushed)) {
-                continue;
-            }
-
-            if (HasResidualIndex(FindIndexes(indexes.RenameUsersBySource, source), pushed)) {
-                changed |= DeselectIndexes(&hiders, pushed);
-            }
-        }
-
-        for (const auto& [output, rebinders] : indexes.RebindersByOutput) {
-            if (!HasActiveIndex(&rebinders, pushed)) {
-                continue;
-            }
-
-            if (HasResidualIndex(FindIndexes(indexes.RenameUsersBySource, output), pushed) ||
-                HasResidualIndex(FindIndexes(indexes.ExpressionUsersByInput, output), pushed)) {
-                changed |= DeselectIndexes(FindIndexes(indexes.ProducersByOutput, output), pushed);
-            }
-        }
-
-        changed |= DeselectDuplicateOutputProducers(bottomMap, elements, indexes, pushed);
+        changed = PruneSourceHidingRenamesWithResidualRenames(indexes, active);
+        changed |= PruneReboundOutputsWithResidualUsers(indexes, active);
+        changed |= PruneDuplicateBottomOutputs(bottomMap, elements, indexes, active);
     }
 }
 
-TRenameMap BuildRenameMap(const TVector<TMapElement>& elements, const TVector<bool>& pushed) {
+TRenameMap BuildRenameMap(const TVector<TMapElement>& elements, const TElementMask& active) {
     TRenameMap renameMap;
     for (size_t idx = 0; idx < elements.size(); ++idx) {
-        if (!pushed[idx] || !elements[idx].IsRename()) {
+        if (!active.Get(idx) || !elements[idx].IsRename()) {
             continue;
         }
 
@@ -266,11 +321,13 @@ TPushMapElementsIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
     const auto bottomInputIUs = bottomMap->GetInput()->GetOutputIUs();
     auto bottomElements = bottomMap->MapElements;
 
-    TVector<bool> pushed(topMap->MapElements.size(), false);
+    auto pushed = MakeElementMask(topMap->MapElements.size());
 
     for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
         const auto& mapElement = topMap->MapElements[idx];
-        pushed[idx] = CanMoveToBottomInput(mapElement, bottomInputIUs, *bottomMap);
+        if (CanMoveToBottomInput(mapElement, bottomInputIUs, *bottomMap)) {
+            pushed.Set(idx);
+        }
     }
     ClosePushableElements(*bottomMap, topMap->MapElements, pushed);
     const auto renameMap = BuildRenameMap(topMap->MapElements, pushed);
@@ -280,7 +337,7 @@ TPushMapElementsIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
     // Map(input, bottomElements + movable top elements), with non-movable top elements left above.
     for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
         const auto& mapElement = topMap->MapElements[idx];
-        if (pushed[idx]) {
+        if (pushed.Get(idx)) {
             bottomElements.push_back(mapElement);
             continue;
         }

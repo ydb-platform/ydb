@@ -57,9 +57,11 @@ public:
 
         TString serialized;
         if (!response.SerializeToString(&serialized)) {
-            LOG_ERROR_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "YdbOverFq::" << TDerived::RpcName << " actorId: " << TActorBootstrapped<TDerived>::SelfId().ToString() <<
-                " couldn't serialize response, status: " << Ydb::StatusIds::StatusCode_Name(status) << ", issues: " << issues.ToOneLineString()
-            );
+            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "Couldn't serialize response",
+                {"ydbOverFq", TDerived::RpcName},
+                {"actorId", TActorBootstrapped<TDerived>::SelfId()},
+                {"status", Ydb::StatusIds::StatusCode_Name(status)},
+                {"issues", issues.ToOneLineString()});
             FinishStream(Ydb::StatusIds::INTERNAL_ERROR, ctx);
             return;
         }

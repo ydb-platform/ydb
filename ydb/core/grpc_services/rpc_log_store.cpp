@@ -12,6 +12,8 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/public/api/grpc/draft/ydb_logstore_v1.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
+
 namespace NKikimr::NGRpcService {
 
 using namespace NActors;
@@ -210,7 +212,8 @@ private:
             auto* toSchemaPreset = create->AddSchemaPresets();
             toSchemaPreset->SetName(schemaPreset.name());
             if (!ConvertSchemaFromPublicToInternal(schemaPreset.schema(), *toSchemaPreset->MutableSchema(), status, error)) {
-                LOG_DEBUG(ctx, NKikimrServices::GRPC_SERVER, "LogStore schema error: %s", error.c_str());
+                YDB_LOG_DEBUG_CTX(ctx, "LogStore schema",
+                    {"error", error});
                 return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             }
         }
@@ -267,7 +270,8 @@ private:
                     Ydb::StatusIds::StatusCode status;
                     TString error;
                     if (!ConvertSchemaFromInternalToPublic(schemaPreset.GetSchema(), *toSchemaPreset->mutable_schema(), status, error)) {
-                        LOG_DEBUG(ctx, NKikimrServices::GRPC_SERVER, "LogStore schema error: %s", error.c_str());
+                        YDB_LOG_DEBUG_CTX(ctx, "LogStore schema",
+                            {"error", error});
                         return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                     }
                 }
@@ -426,7 +430,8 @@ private:
         }
         if (req->has_schema()) {
             if (!ConvertSchemaFromPublicToInternal(req->schema(), *create->MutableSchema(), status, error)) {
-                LOG_DEBUG(ctx, NKikimrServices::GRPC_SERVER, "LogTable schema error: %s", error.c_str());
+                YDB_LOG_DEBUG_CTX(ctx, "LogTable schema",
+                    {"error", error});
                 return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             }
         }
@@ -499,7 +504,8 @@ private:
                 Ydb::StatusIds::StatusCode status;
                 TString error;
                 if (!ConvertSchemaFromInternalToPublic(tableDescription.GetSchema(), *describeLogTableResult.mutable_schema(), status, error)) {
-                    LOG_DEBUG(ctx, NKikimrServices::GRPC_SERVER, "LogTable schema error: %s", error.c_str());
+                    YDB_LOG_DEBUG_CTX(ctx, "LogTable schema",
+                        {"error", error});
                     return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                 }
                 if (tableDescription.HasSchemaPresetName()) {

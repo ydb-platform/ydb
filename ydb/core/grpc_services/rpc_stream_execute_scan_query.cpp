@@ -19,6 +19,8 @@
 
 #include <ydb/core/protos/stream.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::RPC_REQUEST
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -268,11 +270,12 @@ private:
     }
 
     void Handle(TRpcServices::TEvGrpcNextReply::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " NextReply"
-            << ", left: " << ev->Get()->LeftInQueue
-            << ", queue: " << FlowControl_.QueueSize()
-            << ", inflight bytes: " << FlowControl_.InflightBytes()
-            << ", limit bytes: " << FlowControl_.InflightLimitBytes());
+        YDB_LOG_DEBUG_CTX(ctx, "NextReply",
+            {"#_this->SelfId", this->SelfId()},
+            {"left", ev->Get()->LeftInQueue},
+            {"queue", FlowControl_.QueueSize()},
+            {"inflightBytes", FlowControl_.InflightBytes()},
+            {"limitBytes", FlowControl_.InflightLimitBytes()});
 
         while (FlowControl_.QueueSize() > ev->Get()->LeftInQueue) {
             FlowControl_.PopResponse();
@@ -282,10 +285,11 @@ private:
 
         const i64 freeSpaceBytes = FlowControl_.FreeSpaceBytes();
         if (freeSpaceBytes > 0 && LastSeqNo_ && AckedFreeSpaceBytes_ <= 0) {
-            LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " Send stream data ack"
-                << ", seqNo: " << *LastSeqNo_
-                << ", freeSpace: " << freeSpaceBytes
-                << ", to: " << ExecuterActorId_);
+            YDB_LOG_DEBUG_CTX(ctx, "Send stream data ack",
+                {"#_this->SelfId", this->SelfId()},
+                {"seqNo", *LastSeqNo_},
+                {"freeSpace", freeSpaceBytes},
+                {"to", ExecuterActorId_});
 
             // scan query has single result set, so it's ok to put zero as channelId here.
             auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo_, 0);
@@ -346,9 +350,11 @@ private:
         auto& record = ev->Get()->Record;
         NYql::TIssues issues = ev->Get()->GetIssues();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " Got abort execution event, from: "
-            << ev->Sender << ", code: " << NYql::NDqProto::StatusIds::StatusCode_Name(record.GetStatusCode())
-            << ", message: " << issues.ToOneLineString());
+        YDB_LOG_DEBUG_CTX(ctx, "Got abort execution event",
+            {"#_this->SelfId", this->SelfId()},
+            {"from", ev->Sender},
+            {"code", NYql::NDqProto::StatusIds::StatusCode_Name(record.GetStatusCode())},
+            {"message", issues.ToOneLineString()});
 
         ReplyFinishStream(NYql::NDq::DqStatusToYdbStatus(record.GetStatusCode()), issues);
     }
@@ -385,11 +391,12 @@ private:
 
         Request_->SendSerializedResult(std::move(out), StatusIds::SUCCESS);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " Send stream data ack"
-            << ", seqNo: " << evRecord.GetSeqNo()
-            << ", freeSpace: " << freeSpaceBytes
-            << ", to: " << ev->Sender
-            << ", queue: " << FlowControl_.QueueSize());
+        YDB_LOG_DEBUG_CTX(ctx, "Send stream data ack",
+            {"#_this->SelfId", this->SelfId()},
+            {"seqNo", evRecord.GetSeqNo()},
+            {"freeSpace", freeSpaceBytes},
+            {"to", ev->Sender},
+            {"queue", FlowControl_.QueueSize()});
 
         auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(evRecord.GetSeqNo(), evRecord.GetChannelId());
         resp->Record.SetFreeSpace(freeSpaceBytes);
@@ -399,7 +406,9 @@ private:
 
 private:
     void SetTimeoutTimer(TDuration timeout, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " Set stream timeout timer for " << timeout);
+        YDB_LOG_DEBUG_CTX(ctx, "Set stream timeout timer",
+            {"#_this->SelfId", this->SelfId()},
+            {"timeout", timeout});
 
         auto *ev = new IEventHandle(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup(EWakeupTag::TimeoutTag));
         TimeoutTimerCookieHolder_.Reset(ISchedulerCookie::Make2Way());
@@ -407,7 +416,7 @@ private:
     }
 
     void HandleClientLost(const TActorContext& ctx) {
-        LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Client lost");
+        YDB_LOG_WARN_CTX(ctx, "Client lost");
 
         // We must try to finish stream otherwise grpc will not free allocated memory
         // If stream already scheduled to be finished (ReplyFinishStream already called)
@@ -420,15 +429,17 @@ private:
     void HandleTimeout(const TActorContext& ctx) {
         TInstant now = TAppData::TimeProvider->Now();
         TDuration timeout;
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Got timeout event, InactiveClientTimeout: " << InactiveClientTimeout_
-            << " GRpcResponsesSizeQueue: " << FlowControl_.QueueSize());
+        YDB_LOG_DEBUG_CTX(ctx, "Got timeout event",
+            {"inactiveClientTimeout", InactiveClientTimeout_},
+            {"GRpcResponsesSizeQueue", FlowControl_.QueueSize()});
 
         if (InactiveClientTimeout_ && FlowControl_.QueueSize() > 0) {
             TDuration processTime = now - LastDataStreamTimestamp_;
             if (processTime >= InactiveClientTimeout_) {
                 auto message = TStringBuilder() << this->SelfId() << " Client cannot process data in " << processTime
                    << " which exceeds client timeout " << InactiveClientTimeout_;
-                LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, message);
+                YDB_LOG_WARN_CTX(ctx, "",
+                    {"message", message});
 
                 if (ExecuterActorId_) {
                     auto timeoutEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Client timeout");
@@ -468,8 +479,8 @@ private:
     void ReplyFinishStream(Ydb::StatusIds::StatusCode status,
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message)
     {
-        ALOG_INFO(NKikimrServices::RPC_REQUEST, "Finish grpc stream, status: "
-            << Ydb::StatusIds::StatusCode_Name(status));
+        YDB_LOG_INFO("Finish grpc stream",
+            {"status", Ydb::StatusIds::StatusCode_Name(status)});
 
         // Skip sending empty result in case of success status - simplify client logic
         if (status != Ydb::StatusIds::SUCCESS) {

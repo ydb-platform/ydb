@@ -17,6 +17,8 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/table_profiles.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_PROXY
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -62,9 +64,7 @@ private:
 
     void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY,
-                   "TCreateTableRPC: cannot deliver config request to Configs Dispatcher"
-                   " (empty default profile is available only)");
+        YDB_LOG_CRIT_CTX(ctx, "");
         SendProposeRequest(ctx);
         Become(&TCreateTableRPC::StateWork);
     }
@@ -80,7 +80,7 @@ private:
     void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
         switch (ev->Get()->Tag) {
             case WakeupTagGetConfig: {
-                LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY, "TCreateTableRPC: cannot get table profiles (timeout)");
+                YDB_LOG_CRIT_CTX(ctx, "TCreateTableRPC: cannot get table profiles (timeout)");
                 NYql::TIssues issues;
                 issues.AddIssue(NYql::TIssue("Tables profiles config not available."));
                 return Reply(StatusIds::UNAVAILABLE, issues, ctx);
@@ -279,14 +279,16 @@ private:
                 }
                 case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
                     if (!AppData()->FeatureFlags.GetEnableLocalMinMaxIndex()) {
-                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage);
+                        YDB_LOG_ERROR("",
+                            {"#_NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage", NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage});
                         issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage));
                         code = StatusIds::BAD_REQUEST;
                         return false;
                     } 
 
                     if (!AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
-                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::SchemeObjectFeatureFlagDisabledErrorMessage);
+                        YDB_LOG_ERROR("",
+                            {"#_NKikimr::NOlap::NIndexes::NMinMax::SchemeObjectFeatureFlagDisabledErrorMessage", NKikimr::NOlap::NIndexes::NMinMax::SchemeObjectFeatureFlagDisabledErrorMessage});
                         issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::SchemeObjectFeatureFlagDisabledErrorMessage));
                         code = StatusIds::BAD_REQUEST;
                         return false;
@@ -295,7 +297,8 @@ private:
                     olapIndex->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
                     auto* min_max = olapIndex->MutableMinMaxIndex();
                     if (index.index_columns().size() != 1) {
-                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns()));
+                        YDB_LOG_ERROR("",
+                            {"#_NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns())", NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns())});
                         issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns())));
                         code = StatusIds::BAD_REQUEST;
                         return false;
@@ -314,7 +317,8 @@ private:
                         for (const auto& col: schema->GetColumns()) {
                             tableColumnNames.push_back(col.GetName());
                         }
-                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames));
+                        YDB_LOG_ERROR("",
+                            {"#_NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames)", NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames)});
                         issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames)));
                         code = StatusIds::BAD_REQUEST;
                         return false;

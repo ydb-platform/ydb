@@ -19,6 +19,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::RPC_REQUEST
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -522,8 +524,8 @@ private:
             return JoinVectorIntoString(shards, ", ");
         };
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Range shards: "
-            << getShardsString(KeyRange->GetPartitions()));
+        YDB_LOG_DEBUG_CTX(ctx, "Range",
+            {"shards", getShardsString(KeyRange->GetPartitions())});
 
         if (KeyRange->GetPartitions().size() > 0) {
             CurrentShardIdx = 0;
@@ -587,7 +589,8 @@ private:
             }
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Sending request to shards " << shardId);
+        YDB_LOG_DEBUG_CTX(ctx, "Sending request to shards",
+            {"shardId", shardId});
 
         ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.Release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
 
@@ -684,7 +687,8 @@ private:
 
         for (size_t i = 0; i < shardResponse.CommonPrefixesRowsSize(); ++i) {
             if (!CommonPrefixesRows.empty() && CommonPrefixesRows.back() == shardResponse.GetCommonPrefixesRows(i)) {
-                LOG_ERROR_S(ctx, NKikimrServices::RPC_REQUEST, "S3 listing got duplicate common prefix from shard " << shardResponse.GetTabletID());
+                YDB_LOG_ERROR_CTX(ctx, "S3 listing got duplicate common prefix from shard",
+                    {"#_shardResponse.GetTabletID", shardResponse.GetTabletID()});
             }
             CommonPrefixesRows.emplace_back(shardResponse.GetCommonPrefixesRows(i));
         }
@@ -754,7 +758,8 @@ private:
                 if (colMeta.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
                     const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.PType.GetPgTypeDesc());
                     if (pgResult.Error) {
-                        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "PgNativeTextFromNativeBinary error " << *pgResult.Error);
+                        YDB_LOG_DEBUG("PgNativeTextFromNativeBinary error",
+                            {"#_*pgResult.Error", *pgResult.Error});
                     }
                     const NYdb::TPgValue pgValue{cell.IsNull() ? NYdb::TPgValue::VK_NULL : NYdb::TPgValue::VK_TEXT, pgResult.Str, getPgTypeFromColMeta(colMeta)};
                     vb.Pg(pgValue);

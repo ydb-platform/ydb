@@ -7,6 +7,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/ydb_convert/table_description.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -65,7 +67,7 @@ private:
                 if (!FillSysViewDescription(describeSysViewResult, pathDescription, status, error)) {
                     switch (status) {
                     case Ydb::StatusIds::INTERNAL_ERROR:
-                        LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, error);
+                        YDB_LOG_ERROR_CTX(ctx, error);
                         [[fallthrough]];
                     case Ydb::StatusIds::SCHEME_ERROR:
                         [[fallthrough]];
@@ -109,7 +111,9 @@ private:
 
     void ReplyOnException(const std::exception& ex, const char* logPrefix) noexcept {
         auto& ctx = TlsActivationContext->AsActorContext();
-        LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, "%s: %s", logPrefix, ex.what());
+        YDB_LOG_ERROR_CTX(ctx, "",
+            {"logPrefix", logPrefix},
+            {"#_ex.what", ex.what()});
         Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
         return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
     }

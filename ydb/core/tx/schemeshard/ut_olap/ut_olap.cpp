@@ -641,6 +641,20 @@ Y_UNIT_TEST_SUITE(TOlap) {
             UNIT_ASSERT_VALUES_EQUAL(names, expectedNames);
         };
 
+        auto checkStatisticsColumns = [&](const TString& statName, const TVector<TString>& expectedColumns) {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/ColumnTable");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            for (const auto& stat : schema.GetMultiColumnStatistics()) {
+                if (stat.GetName() != statName) {
+                    continue;
+                }
+                TVector<TString> columns(stat.GetColumnNames().begin(), stat.GetColumnNames().end());
+                UNIT_ASSERT_VALUES_EQUAL(columns, expectedColumns);
+                return;
+            }
+            UNIT_FAIL("MultiColumnStatistics '" << statName << "' not found");
+        };
+
         TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTable"
             ColumnShardCount: 1
@@ -687,13 +701,17 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
 
-        // Validation: duplicate statistics name must fail.
+        // True upsert: re-adding an existing name overwrites its definition instead of failing.
+        checkStatisticsColumns("s1", {"key1", "data"});
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTable"
             AlterSchema {
                 UpsertMultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
             }
-        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusAlreadyExists});
+        )");
+        env.TestWaitNotification(runtime, txId);
+        checkMultiColumnStatistics({"s1"});
+        checkStatisticsColumns("s1", {"data"});
     }
 
     Y_UNIT_TEST(MultiColumnStatisticsWithoutTypesMeansAllTypes) {

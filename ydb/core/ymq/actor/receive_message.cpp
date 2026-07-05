@@ -289,7 +289,7 @@ private:
         } else {
             auto&& messages = ev->Get()->Messages;
             if (messages.empty()) {
-                if (QueueCounters_) {
+                if (QueueCounters_ && !ShouldReportTopicActionMetricsToPqrb()) {
                     INC_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_EmptyCount, empty_receive_attempts_count_per_second);
                 }
                 ReportTopicReceiveMetricsToPqrb(ev->Get()->BalancerTabletId, 0, 0, 1);

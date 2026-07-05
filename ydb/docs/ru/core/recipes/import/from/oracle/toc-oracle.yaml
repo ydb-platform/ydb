@@ -1,9 +1,9 @@
 items:
 - name: Обзор
   href: index.md
-- name: Через промежуточный CSV (YDB CLI)
+- name: Через промежуточный CSV
   href: cli-import-file.md
-- name: Через промежуточный Parquet (YDB CLI)
+- name: Через промежуточный Parquet
   href: cli-import-parquet.md
 - name: Spark
   href: spark.md

@@ -1,15 +1,15 @@
 items:
 - name: Обзор
   href: index.md
-- name: Через промежуточный CSV (YDB CLI)
+- name: Через промежуточный CSV
   href: cli-import-file.md
-- name: Через промежуточный Parquet (YDB CLI)
+- name: Через промежуточный Parquet
   href: cli-import-parquet.md
-- name: dbt
-  href: dbt.md
-- name: Федеративные запросы
-  href: federated-queries.md
 - name: Spark
   href: spark.md
 - name: ydb-importer
   href: ydb-importer.md
+- name: Федеративные запросы
+  href: federated-queries.md
+- name: dbt
+  href: dbt.md

@@ -386,10 +386,10 @@ private:
 
     void AccumulateTopicSendMetrics(Ydb::StatusIds::StatusCode status, size_t bodySize) {
         if (status == Ydb::StatusIds::SUCCESS) {
-            TopicSendHasWritten_ = true;
+            ++TopicSendWrittenCount_;
             TopicSendBytesWritten_ += bodySize;
         } else if (status == Ydb::StatusIds::ALREADY_EXISTS) {
-            TopicSendHasDedup_ = true;
+            ++TopicSendDedupCount_;
         }
     }
 
@@ -397,32 +397,32 @@ private:
         if (ShouldReportTopicActionMetricsToPqrb()) {
             return;
         }
-        if (!QueueCounters_ || (!TopicSendHasWritten_ && !TopicSendHasDedup_)) {
+        if (!QueueCounters_ || (TopicSendWrittenCount_ == 0 && TopicSendDedupCount_ == 0)) {
             return;
         }
 
-        INC_COUNTER_COUPLE(QueueCounters_, SendMessage_Count, sent_count_per_second);
-        if (TopicSendBytesWritten_ > 0) {
+        if (TopicSendWrittenCount_ > 0) {
+            ADD_COUNTER_COUPLE(QueueCounters_, SendMessage_Count, sent_count_per_second, TopicSendWrittenCount_);
             ADD_COUNTER_COUPLE(QueueCounters_, SendMessage_BytesWritten, sent_bytes_per_second, TopicSendBytesWritten_);
         }
-        if (TopicSendHasDedup_) {
-            INC_COUNTER_COUPLE(QueueCounters_, SendMessage_DeduplicationCount, deduplicated_count_per_second);
+        if (TopicSendDedupCount_ > 0) {
+            ADD_COUNTER_COUPLE(QueueCounters_, SendMessage_DeduplicationCount, deduplicated_count_per_second, TopicSendDedupCount_);
         }
     }
 
     void ReportTopicSendMetricsToPqrb(ui64 balancerTabletId) {
-        if (!TopicSendHasWritten_ && !TopicSendHasDedup_) {
+        if (TopicSendWrittenCount_ == 0 && TopicSendDedupCount_ == 0) {
             return;
         }
 
         NKikimrPQ::TEvTopicSqsActionMetrics metrics;
         auto* send = IsBatch_ ? metrics.MutableSendMessageBatch() : metrics.MutableSendMessage();
-        if (TopicSendHasWritten_) {
-            send->SetSendMessageCount(1);
+        if (TopicSendWrittenCount_ > 0) {
+            send->SetSendMessageCount(TopicSendWrittenCount_);
             send->SetBytesWritten(TopicSendBytesWritten_);
         }
-        if (TopicSendHasDedup_) {
-            send->SetDeduplicationCount(1);
+        if (TopicSendDedupCount_ > 0) {
+            send->SetDeduplicationCount(TopicSendDedupCount_);
         }
         SendTopicPqrbMetrics(balancerTabletId, GetDatabaseName(), GetTopicName(), metrics);
     }
@@ -527,9 +527,9 @@ private:
     const bool IsBatch_;
     // deduplication message id -> sequenceNumber
     std::unordered_map<TString, std::pair<TString, ui64>> BlockedDeduplicationMessageIds_;
-    bool TopicSendHasWritten_ = false;
+    ui64 TopicSendWrittenCount_ = 0;
     ui64 TopicSendBytesWritten_ = 0;
-    bool TopicSendHasDedup_ = false;
+    ui64 TopicSendDedupCount_ = 0;
 };
 
 IActor* CreateSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

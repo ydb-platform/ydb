@@ -4,9 +4,10 @@ namespace NKikimr::NColumnShard {
 
 class TTxTxAbort: public TTransactionBase<TColumnShard> {
 public:
-    TTxTxAbort(TColumnShard* self, ui64 txId)
+    TTxTxAbort(TColumnShard* self, ui64 txId, const TActorId& subscriber)
         : TBase(self)
         , TxId(txId)
+        , Subscriber(subscriber)
     {
     }
 
@@ -24,6 +25,14 @@ public:
         auto txOperator = Self->ProgressTxController->GetTxOperatorOptional(TxId);
         if (txOperator) {
             txOperator->CompleteOnAbort(*Self, ctx);
+            Self->ProgressTxController->OnTxAborted(TxId);
+        }
+
+        if (const auto* backupTx = Self->LastCompletedBackupTransactionsByTxId.FindPtr(TxId)) {
+            auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(Self->TabletID(), TxId);
+            auto& opResult = *event->Record.MutableOpResult();
+            opResult = backupTx->GetOpResult();
+            ctx.Send(Subscriber, event.Release(), 0, 0);
         }
     }
 
@@ -33,16 +42,17 @@ public:
 
 private:
     ui64 TxId = 0;
+    TActorId Subscriber;
 };
 
 void TColumnShard::Handle(TEvDataShard::TEvCancelBackup::TPtr& ev, const TActorContext& ctx) {
     const ui64 txId = ev->Get()->Record.GetBackupTxId();
-    Execute(new TTxTxAbort(this, txId), ctx);
+    Execute(new TTxTxAbort(this, txId, ev->Sender), ctx);
 }
 
 void TColumnShard::Handle(TEvDataShard::TEvCancelRestore::TPtr& ev, const TActorContext& ctx) {
     const ui64 txId = ev->Get()->Record.GetRestoreTxId();
-    Execute(new TTxTxAbort(this, txId), ctx);
+    Execute(new TTxTxAbort(this, txId, ev->Sender), ctx);
 }
 
 }   // namespace NKikimr::NColumnShard

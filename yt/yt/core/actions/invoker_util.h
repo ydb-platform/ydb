@@ -5,10 +5,6 @@
 
 #include <yt/yt/core/actions/bind.h>
 
-// TODO: Many TUs transitively relied on finally.h via the removed
-// invoker_util-inl.h; keep it reachable here until they include it directly.
-#include <yt/yt/core/misc/finally.h>
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////

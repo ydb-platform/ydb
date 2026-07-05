@@ -817,6 +817,9 @@ private:
 
         if (node.IsCallable("Member")) {
             if (&node.Head() == arg && src) {
+                if (node.Tail().Content().StartsWith(YqlSysPrefix)) {
+                    return it->second = TFieldsLineage(Allocator_.get());
+                }
                 return it->second = (*src->Fields).at(node.Tail().Content());
             }
 
@@ -838,6 +841,9 @@ private:
             }
 
             if (inner->StructItems) {
+                if (node.Tail().Content().StartsWith(YqlSysPrefix)) {
+                    return it->second = TFieldsLineage(Allocator_.get());
+                }
                 TFieldsLineage result(Allocator_.get());
                 result.Items = (*inner->StructItems).at(node.Tail().Content());
                 return it->second = result;
@@ -942,8 +948,9 @@ private:
                 }
             } else if (root->IsCallable("Member") && &root->Head() == &arg) {
                 auto fieldName = root->Tail().Content();
-                const auto& in = (*src.Fields).at(fieldName);
-                dst.StructItems = in.StructItems;
+                if (!fieldName.StartsWith(YqlSysPrefix)) {
+                    dst.StructItems = (*src.Fields).at(fieldName).StructItems;
+                }
             }
         }
 
@@ -954,18 +961,20 @@ private:
                            const TTypeAnnotationNode* extType, const TFieldsLineageMap& flattenColumns) {
         TMaybe<TStringBuf> oneField;
         if (value && value->IsCallable("Member") && &value->Head() == &arg) {
-            auto& f = innerLineage.Fields->at(value->Tail().Content());
-            if (f.StructItems) {
-                for (const auto& x : *f.StructItems) {
-                    auto& res = (*lineage.Fields).try_emplace(x.first, TFieldsLineage(Allocator_.get())).first->second;
-                    res.Items = x.second;
+            const auto fieldName = value->Tail().Content();
+            if (!fieldName.StartsWith(YqlSysPrefix)) {
+                auto& f = innerLineage.Fields->at(fieldName);
+                if (f.StructItems) {
+                    for (const auto& x : *f.StructItems) {
+                        auto& res = (*lineage.Fields).try_emplace(x.first, TFieldsLineage(Allocator_.get())).first->second;
+                        res.Items = x.second;
+                    }
+                    return;
                 }
-
-                return;
             }
 
             // fallback
-            oneField = value->Tail().Content();
+            oneField = fieldName;
         }
 
         if (value && value->IsCallable("If")) {

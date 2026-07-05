@@ -61,7 +61,7 @@
                                                 "Plans": [
                                                     {
                                                         "Blocks": "True",
-                                                        "HashFunc": "HashV2",
+                                                        "HashFunc": "HashV1",
                                                         "KeyColumns": [
                                                             "MobilePhoneModel"
                                                         ],
@@ -97,7 +97,7 @@
                                                                 "Plans": [
                                                                     {
                                                                         "Blocks": "True",
-                                                                        "HashFunc": "HashV2",
+                                                                        "HashFunc": "HashV1",
                                                                         "KeyColumns": [
                                                                             "MobilePhoneModel",
                                                                             "UserID"

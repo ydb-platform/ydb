@@ -131,7 +131,7 @@ def fetch_fast_unmute_active_rows(ydb_wrapper, table_path, branch, build_type):
     WHERE branch = '{br}'
         AND build_type = '{bt}'
     """
-    return ydb_wrapper.execute_scan_query(query, query_name='fast_unmute_active_fetch_profile')
+    return ydb_wrapper.execute_scan_query(query, query_name='fast_unmute_active_fetch')
 
 
 def fetch_grace_full_names(ydb_wrapper, table_path, branch, build_type):

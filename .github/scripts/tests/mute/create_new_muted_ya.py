@@ -1473,7 +1473,12 @@ def mute_worker(args):
                 build_type,
             )
             enter_fast_unmute_grace_for_unmuted_tests(ydb_wrapper, args.branch, build_type)
-            logging.info('enter_fast_unmute_grace completed successfully')
+            logging.info(
+                'enter_fast_unmute_grace step finished for branch=%s build_type=%s '
+                '(see log above for recorded/skipped rows and any warnings)',
+                args.branch,
+                build_type,
+            )
             return 0
 
         logging.info(f"Starting mute worker with mode: {args.mode}")

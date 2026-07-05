@@ -78,7 +78,6 @@
                                                 "PlanNodeId": 3,
                                                 "Plans": [
                                                     {
-                                                        "Blocks": "True",
                                                         "HashFunc": "HashV1",
                                                         "KeyColumns": [
                                                             "key"

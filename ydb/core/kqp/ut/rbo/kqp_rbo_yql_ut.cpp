@@ -4460,6 +4460,114 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(pushedMap->MapElements[1].GetRename() == TInfoUnit("a"));
     }
 
+    Y_UNIT_TEST(PushMapElementsIntoMapKeepsUnrelatedRenamePushWhenAnotherRenameConflicts) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("a"), TInfoUnit("b"), TInfoUnit("c")}, pos);
+        auto bottomMap = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestAppend("x", "c", pos, testContext.ExprCtx, expressionProps),
+        });
+        auto topMap = MakeIntrusive<TOpMap>(bottomMap, pos, TVector<TMapElement>{
+            MakeTestRename("x", "a", pos, testContext.ExprCtx, expressionProps),
+            MakeTestRename("y", "x", pos, testContext.ExprCtx, expressionProps),
+            MakeTestRename("q", "b", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(topMap, pos, {"x", "y", "q"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
+        TRuleBasedStage pushMapElements("Focused push map elements into map", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushMapElements.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        auto residualMap = CastOperator<TOpMap>(root.GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(residualMap->MapElements.size(), 2);
+        UNIT_ASSERT(residualMap->MapElements[0].IsRename());
+        UNIT_ASSERT(residualMap->MapElements[0].GetElementName() == TInfoUnit("x"));
+        UNIT_ASSERT(residualMap->MapElements[0].GetRename() == TInfoUnit("a"));
+        UNIT_ASSERT(residualMap->MapElements[1].IsRename());
+        UNIT_ASSERT(residualMap->MapElements[1].GetElementName() == TInfoUnit("y"));
+        UNIT_ASSERT(residualMap->MapElements[1].GetRename() == TInfoUnit("x"));
+
+        UNIT_ASSERT_C(residualMap->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        auto pushedMap = CastOperator<TOpMap>(residualMap->GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 2);
+        UNIT_ASSERT(pushedMap->MapElements[0].GetElementName() == TInfoUnit("x"));
+        UNIT_ASSERT(pushedMap->MapElements[1].IsRename());
+        UNIT_ASSERT(pushedMap->MapElements[1].GetElementName() == TInfoUnit("q"));
+        UNIT_ASSERT(pushedMap->MapElements[1].GetRename() == TInfoUnit("b"));
+    }
+
+    Y_UNIT_TEST(PushMapElementsIntoMapPushesAllRenamesHidingSameSource) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("a"), TInfoUnit("b")}, pos);
+        auto bottomMap = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestAppend("c", "b", pos, testContext.ExprCtx, expressionProps),
+        });
+        auto topMap = MakeIntrusive<TOpMap>(bottomMap, pos, TVector<TMapElement>{
+            MakeTestRename("x", "a", pos, testContext.ExprCtx, expressionProps),
+            MakeTestRename("y", "a", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(topMap, pos, {"x", "y"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
+        TRuleBasedStage pushMapElements("Focused push map elements into map", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushMapElements.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        auto pushedMap = CastOperator<TOpMap>(root.GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 3);
+        UNIT_ASSERT(pushedMap->MapElements[0].GetElementName() == TInfoUnit("c"));
+        UNIT_ASSERT(pushedMap->MapElements[1].IsRename());
+        UNIT_ASSERT(pushedMap->MapElements[1].GetElementName() == TInfoUnit("x"));
+        UNIT_ASSERT(pushedMap->MapElements[1].GetRename() == TInfoUnit("a"));
+        UNIT_ASSERT(pushedMap->MapElements[2].IsRename());
+        UNIT_ASSERT(pushedMap->MapElements[2].GetElementName() == TInfoUnit("y"));
+        UNIT_ASSERT(pushedMap->MapElements[2].GetRename() == TInfoUnit("a"));
+    }
+
+    Y_UNIT_TEST(PushMapElementsIntoMapPushesReboundAppendWhenOldNameIsHidden) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("a")}, pos);
+        auto bottomMap = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{});
+        auto increment = MakeBinaryPredicate(
+            "+",
+            MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps),
+            MakeConstant("Int32", "1", pos, &testContext.ExprCtx)
+        );
+        auto topMap = MakeIntrusive<TOpMap>(bottomMap, pos, TVector<TMapElement>{
+            TMapElement(TInfoUnit("a"), increment, false),
+            MakeTestRename("__kqp_rbo_ignore_arg_0", "a", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(topMap, pos, {"a"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
+        TRuleBasedStage pushMapElements("Focused push map elements into map", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushMapElements.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        auto pushedMap = CastOperator<TOpMap>(root.GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 2);
+        UNIT_ASSERT(!pushedMap->MapElements[0].IsRename());
+        UNIT_ASSERT(pushedMap->MapElements[0].GetElementName() == TInfoUnit("a"));
+        UNIT_ASSERT(pushedMap->MapElements[1].IsRename());
+        UNIT_ASSERT(pushedMap->MapElements[1].GetElementName() == TInfoUnit("__kqp_rbo_ignore_arg_0"));
+        UNIT_ASSERT(pushedMap->MapElements[1].GetRename() == TInfoUnit("a"));
+    }
+
     Y_UNIT_TEST(PushMapElementsBatchesRenamesThroughUnary) {
         TMapRuleTestContext testContext;
         TPlanProps expressionProps;

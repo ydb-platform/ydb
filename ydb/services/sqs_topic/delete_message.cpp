@@ -176,8 +176,9 @@ namespace NKikimr::NSqsTopic::V1 {
                         ++successCount;
                         break;
                     case NPQ::NMLP::EOperationResult::NotFound:
-                        Failed_[*id] = MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, {});
-                        ++failedCount;
+                        // Ignore missing/already-deleted handle, like AWS SQS and native YMQ do.
+                        Success_.insert(*id);
+                        ++successCount;
                         break;
                     case NPQ::NMLP::EOperationResult::NotInFlight:
                     case NPQ::NMLP::EOperationResult::Failed:

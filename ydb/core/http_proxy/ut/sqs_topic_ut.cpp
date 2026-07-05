@@ -1353,7 +1353,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 .PartitionId = messageId->PartitionId,
                 .Offset = messageId->Offset + 1,
             });
-            DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", middleReceiptHandle}}, 400);
+            DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", middleReceiptHandle}});
 
             ChangeMessageVisibility({
                 {"QueueUrl", path.QueueUrl},
@@ -1715,7 +1715,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT(!receiptHandle.empty());
 
         DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}});
-        DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}}, 400);
+        DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}});
     }
 
     Y_UNIT_TEST_F(TestDeleteMessageBatch, TFixture) {

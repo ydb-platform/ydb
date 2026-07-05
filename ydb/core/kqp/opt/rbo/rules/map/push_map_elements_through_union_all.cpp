@@ -17,9 +17,11 @@ namespace NKqp {
 // E:                                                 `- Map [ x <- a ]
 // F:                                                    `- right
 //
-// The rule intentionally pushes only semantic renames. Append aliases and other
-// expressions stay above UnionAll; moving them below sequence extension can
-// change type alignment between branches.
+// The rule pushes semantic renames, including column-access appends whose
+// source is dead above the map — such appends are renames in disguise, since
+// hiding the dead source changes nothing for consumers. Appends with a live
+// source and other expressions stay above UnionAll; moving computation below
+// sequence extension can change type alignment between branches.
 
 namespace {
 
@@ -226,9 +228,25 @@ TPushMapElementsThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOp
     }
 
     const auto originalUnionColumns = unionAll->Columns;
-    TVector<bool> pushed(topMap->MapElements.size(), false);
-    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
-        const auto& mapElement = topMap->MapElements[idx];
+    const auto& liveOut = GetLiveOut(topMap.get());
+
+    // A column-access append whose source is dead above the map is a semantic
+    // rename in disguise: hiding the source changes nothing for consumers.
+    // Normalize such appends to renames so one push covers both spellings.
+    auto mapElements = topMap->MapElements;
+    for (auto& mapElement : mapElements) {
+        if (!mapElement.IsRename() &&
+            mapElement.IsColumnAccess() &&
+            mapElement.GetColumnAccess() != mapElement.GetElementName() &&
+            !liveOut.contains(mapElement.GetColumnAccess()) &&
+            liveOut.contains(mapElement.GetElementName())) {
+            mapElement.SetIsRename(true);
+        }
+    }
+
+    TVector<bool> pushed(mapElements.size(), false);
+    for (size_t idx = 0; idx < mapElements.size(); ++idx) {
+        const auto& mapElement = mapElements[idx];
         if (!mapElement.IsRename()) {
             continue;
         }
@@ -239,17 +257,17 @@ TPushMapElementsThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOp
         }
     }
 
-    RemoveCandidatesReferencedByResidualRenames(topMap->MapElements, pushed);
+    RemoveCandidatesReferencedByResidualRenames(mapElements, pushed);
 
     TVector<TMapElement> pushedElements;
     TVector<TMapElement> residualElements;
-    pushedElements.reserve(topMap->MapElements.size());
-    residualElements.reserve(topMap->MapElements.size());
+    pushedElements.reserve(mapElements.size());
+    residualElements.reserve(mapElements.size());
     TInfoUnitSet pushedRenameSources;
     TRenameMap renameMap;
 
-    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
-        const auto& mapElement = topMap->MapElements[idx];
+    for (size_t idx = 0; idx < mapElements.size(); ++idx) {
+        const auto& mapElement = mapElements[idx];
         if (!pushed[idx]) {
             residualElements.push_back(mapElement);
             continue;

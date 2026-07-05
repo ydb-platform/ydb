@@ -8,21 +8,70 @@ namespace {
 using TCandidates = TPlanAliases::TCandidates;
 using TRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>;
 
-// Prefer the oldest alias in the class: it is defined lowest in the plan, so its
+// Pinned names are forced to stay alive by contracts this rule can never
+// rewrite: root output names (hard), aggregate keys and UnionAll columns
+// (soft; only their dedicated push rules may rename them). An unpinned class
+// member can always lose all its uses and fold into its producer, so uses
+// must converge onto the pinned name — converging onto an unpinned one keeps
+// two names of the same class alive forever.
+enum class EPinRank : ui8 {
+    Hard = 0,
+    Soft = 1,
+    None = 2,
+};
+
+// Hard pins apply only in the root alias region: below an alias-class cut a
+// coinciding name is a different incarnation of the class and root does not
+// consume it directly.
+EPinRank GetPinRank(const TPinnedNames& pinned, const TInfoUnit& iu, bool inRootRegion) {
+    if (inRootRegion && pinned.Hard.contains(iu)) {
+        return EPinRank::Hard;
+    }
+    if (pinned.Soft.contains(iu)) {
+        return EPinRank::Soft;
+    }
+    return EPinRank::None;
+}
+
+// Preference order inside a class: hard pins, then soft pins, then free names.
+//
+// Among free names prefer the oldest: it is defined lowest in the plan, so its
 // scope dominates every use site and all uses can converge to it, letting the
-// newer aliases lose their uses and get pruned. It is also stable under rewrites
-// (appending new aliases never changes which candidate is oldest), which makes
-// the rewrite terminate. Newer aliases have the smallest visibility region and
-// keep their defining chain alive, so preferring them leaves Maps stuck.
-std::optional<TInfoUnit> ChoosePreferredAlias(const TCandidates& candidates) {
+// newer aliases lose their uses and get pruned. It is also stable under
+// rewrites (appending new aliases never changes which candidate is oldest),
+// which makes the rewrite terminate.
+//
+// Among soft pins prefer the newest: alias classes are cut at aggregates and
+// unions, so within one class a newer soft pin belongs to the consumer that
+// terminates the region above (an aggregate key), while an older one belongs
+// to the producer that starts it below (a UnionAll column). Converging uses
+// onto the consumer's name lets the producer-side binding fold downward; the
+// reverse leaves both names alive.
+bool IsBetterCandidate(const TAliasCandidate& candidate, const TAliasCandidate& best, const TPinnedNames& pinned, bool inRootRegion) {
+    const auto candidateRank = GetPinRank(pinned, candidate.IU, inRootRegion);
+    const auto bestRank = GetPinRank(pinned, best.IU, inRootRegion);
+    if (candidateRank != bestRank) {
+        return candidateRank < bestRank;
+    }
+
+    if (candidate.Priority != best.Priority) {
+        if (candidateRank == EPinRank::Soft) {
+            return candidate.Priority > best.Priority;
+        }
+        return candidate.Priority < best.Priority;
+    }
+
+    return candidate.IU.GetFullName() < best.IU.GetFullName();
+}
+
+std::optional<TInfoUnit> ChoosePreferredAlias(const TCandidates& candidates, const TPinnedNames& pinned, bool inRootRegion) {
     const TAliasCandidate* best = nullptr;
     for (const auto& candidate : candidates) {
         if (IsGeneratedIgnoreIU(candidate.IU)) {
             continue;
         }
 
-        if (!best || candidate.Priority < best->Priority ||
-            (candidate.Priority == best->Priority && candidate.IU.GetFullName() < best->IU.GetFullName())) {
+        if (!best || IsBetterCandidate(candidate, *best, pinned, inRootRegion)) {
             best = &candidate;
         }
     }
@@ -114,14 +163,15 @@ void AddPreferredAliasRename(
     TRenameMap& renameMap,
     IOperator& op,
     const TIntrusivePtr<IOperator>& aliasesAt,
-    const TInfoUnit& iu)
+    const TInfoUnit& iu,
+    const TPinnedNames& pinned)
 {
     const auto* candidates = GetAliases(aliasesAt.get(), iu);
     if (!candidates) {
         return;
     }
 
-    const auto preferred = ChoosePreferredAlias(*candidates);
+    const auto preferred = ChoosePreferredAlias(*candidates, pinned, aliasesAt->Props.Analysis.InRootAliasRegion);
     if (!preferred || *preferred == iu || !ContainsInfoUnit(aliasesAt->GetOutputIUs(), *preferred)) {
         return;
     }
@@ -135,7 +185,7 @@ void AddPreferredAliasRename(
     }
 }
 
-TRenameMap BuildPreferredAliasRenameMap(IOperator& op, const TVector<TInfoUnit>& usedIUs) {
+TRenameMap BuildPreferredAliasRenameMap(IOperator& op, const TVector<TInfoUnit>& usedIUs, const TPinnedNames& pinned) {
     TRenameMap renameMap;
     for (const auto& iu : usedIUs) {
         auto aliasesAt = FindUsedIUOwner(op, iu);
@@ -143,7 +193,7 @@ TRenameMap BuildPreferredAliasRenameMap(IOperator& op, const TVector<TInfoUnit>&
             continue;
         }
 
-        AddPreferredAliasRename(renameMap, op, aliasesAt, iu);
+        AddPreferredAliasRename(renameMap, op, aliasesAt, iu, pinned);
     }
     return renameMap;
 }
@@ -158,7 +208,8 @@ bool TRewriteExpressionsToPreferredAliasesRule::MatchAndApply(TIntrusivePtr<IOpe
         return droppedRedundantAppends;
     }
 
-    const auto renameMap = BuildPreferredAliasRenameMap(*input, usedIUs);
+    Y_ENSURE(props.PinnedNames.has_value(), "Pinned names requested before plan aliases were computed");
+    const auto renameMap = BuildPreferredAliasRenameMap(*input, usedIUs, *props.PinnedNames);
     if (renameMap.empty()) {
         return droppedRedundantAppends;
     }

@@ -13,6 +13,11 @@ namespace NKqp {
 // A: Map [ a := b ]         -- move prevented, because map A
 // B: `- Map [ b := a ]         can't be evaluated at point B (no "b")
 //
+// 1b.
+// A: Map [ a := f(x) ]      -- move prevented, because "x" at point A is the
+// B: `- Map [ x := g(x) ]      output of B's element; moving f(x) into B would
+//                              rebind it to B's input "x" and change its value.
+//
 // 2.
 // A: Map [ a := b, e <- a ] -- move prevented, because "a := b" produces
 // B: `- Map [ c := d ]         "a", which would be removed from output by
@@ -28,6 +33,18 @@ namespace NKqp {
 namespace {
 
 using TRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>;
+
+// A top element evaluates against the bottom map's output; after the move it
+// evaluates against the bottom map's input. The move preserves bindings only
+// when no referenced name is (re)defined by a bottom element.
+bool ReferencesBottomElementOutput(const TMapElement& element, const TOpMap& bottomMap) {
+    for (const auto& iu : element.GetExpression().GetInputIUs(false, true)) {
+        if (bottomMap.HasOutputElement(iu)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 bool HasResidualRenameFromChangedName(
     const TVector<TMapElement>& elements,
@@ -99,7 +116,9 @@ TPushMapElementsIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
             continue;
         }
 
-        if (!topMap->IsExtractableAppend(mapElement) || !mapElement.DependsOnlyOn(bottomInputIUs)) {
+        if (!topMap->IsExtractableAppend(mapElement) ||
+            !mapElement.DependsOnlyOn(bottomInputIUs) ||
+            ReferencesBottomElementOutput(mapElement, *bottomMap)) {
             topElements.push_back(mapElement);
             continue;
         }

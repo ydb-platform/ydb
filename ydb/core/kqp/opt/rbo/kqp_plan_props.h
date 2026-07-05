@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 
+#include <optional>
 #include <utility>
 
 namespace NKikimr {
@@ -115,6 +116,16 @@ struct TAliasCandidate {
     i32 Priority = 0;
 };
 
+// Names required to exist by a contract that alias rewriting must not touch.
+// Hard: the root output contract; these names can never be renamed away.
+// Soft: produced-name contracts inside the plan (aggregate keys, UnionAll
+//       columns) that only their dedicated push rules may rename.
+// Recomputed together with plan aliases; valid only while aliases are.
+struct TPinnedNames {
+    TInfoUnitSet Hard;
+    TInfoUnitSet Soft;
+};
+
 struct TPlanAliases {
     using TCandidates = TVector<TAliasCandidate>;
     using TAliasMap = THashMap<TInfoUnit, TCandidates, TInfoUnit::THashFunction>;
@@ -128,6 +139,7 @@ struct TPlanProps {
     int InternalVarIdx = 1;
     TSubplans Subplans;
     bool PgSyntax = false;
+    std::optional<TPinnedNames> PinnedNames;
 };
 
 }

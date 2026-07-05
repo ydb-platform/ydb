@@ -20,6 +20,14 @@ namespace NKqp {
 // B: `- Aggregate [ key ]                       `- Map [ alias_key <- key ]
 // C:    `- input                                    `- input
 //
+// When the target name already exists in the aggregate input as a member of
+// the key's alias class (same value by construction), the key switches to the
+// existing column directly and no rename is pushed below:
+//
+// A: Map [ x := key ]          == becomes ==>  Aggregate [ x ]
+// B: `- Aggregate [ key ]                       `- input [ x, key := x ]
+// C:    `- input [ x, key := x ]
+//
 // Caveats:
 // 1.
 // A: Map [ alias_key := key ] -- append aliases are pushed only when "key" is
@@ -143,6 +151,26 @@ bool CanPushToAggregateInput(
 {
     return ContainsInfoUnit(aggregate.KeyColumns, from) &&
         (from == to || !ContainsInfoUnit(aggregateInputIUs, to));
+}
+
+// "to" already exists in the aggregate input and provably carries the same
+// value as key "from" (one alias class at the input): the key can switch to
+// the existing column directly, with no compensating rename below. The old
+// key column then loses its last consumer and gets pruned.
+bool CanRewriteKeyToInputAlias(
+    const TOpAggregate& aggregate,
+    IOperator* aggregateInput,
+    const TInfoUnit& from,
+    const TInfoUnit& to)
+{
+    if (from == to || !ContainsInfoUnit(aggregate.KeyColumns, from)) {
+        return false;
+    }
+
+    const auto* candidates = GetAliases(aggregateInput, from);
+    return candidates && AnyOf(*candidates, [&](const auto& candidate) {
+        return candidate.IU == to;
+    });
 }
 
 bool IsAggregateResult(const TOpAggregate& aggregate, const TInfoUnit& iu) {
@@ -288,7 +316,6 @@ TPushMapElementsThroughAggregateRule::SimpleMatchAndApply(const TIntrusivePtr<IO
                 topElements.push_back(std::move(mapElement));
                 continue;
             }
-            mapElement.SetIsRename(true);
         } else {
             topElements.push_back(std::move(mapElement));
             continue;
@@ -296,11 +323,22 @@ TPushMapElementsThroughAggregateRule::SimpleMatchAndApply(const TIntrusivePtr<IO
 
         if (CanPushToAggregateInput(*aggregate, aggregateInputIUs, from, to) &&
             !producedRenameMap.contains(from)) {
+            // A dead-source append pushes as a rename; an element left in the
+            // residual map keeps its append form so a second alias of the same
+            // key can stay above as "to2 := to".
+            mapElement.SetIsRename(true);
             pushedElements.push_back(std::move(mapElement));
             if (from != to) {
                 keyRenameMap.emplace(from, to);
                 producedRenameMap.emplace(from, to);
             }
+            continue;
+        }
+
+        if (CanRewriteKeyToInputAlias(*aggregate, aggregateInput.get(), from, to) &&
+            !producedRenameMap.contains(from)) {
+            keyRenameMap.emplace(from, to);
+            producedRenameMap.emplace(from, to);
             continue;
         }
 

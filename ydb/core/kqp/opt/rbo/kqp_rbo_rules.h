@@ -151,7 +151,9 @@ class TPushMapElementsThroughInputRule : public ISimplifiedRule {
 class TPushMapElementsThroughAggregateRule : public ISimplifiedRule {
   public:
     TPushMapElementsThroughAggregateRule()
-        : ISimplifiedRule("Push map elements through aggregate", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
+        : ISimplifiedRule("Push map elements through aggregate",
+                          ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints |
+                              ERuleProperties::RequireAliases) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -159,7 +161,7 @@ class TPushMapElementsThroughAggregateRule : public ISimplifiedRule {
 class TPushMapElementsThroughUnionAllRule : public ISimplifiedRule {
   public:
     TPushMapElementsThroughUnionAllRule()
-        : ISimplifiedRule("Push map elements through UnionAll", ERuleProperties::RequireParents) {}
+        : ISimplifiedRule("Push map elements through UnionAll", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };
@@ -184,8 +186,10 @@ class TPushRenameIntoProducerRule : public IRule {
 };
 
 /**
- * Rewrites local expressions to the oldest visible non-generated alias, so uses
- * converge on one name per equivalence class and newer aliases die out.
+ * Rewrites local expressions to one preferred visible alias per equivalence
+ * class, so all uses converge on it and the other aliases die out. Names
+ * pinned by contracts the rewrite cannot touch (root output names, aggregate
+ * keys, UnionAll columns) win over free names, where the oldest wins.
  */
 class TRewriteExpressionsToPreferredAliasesRule : public IRule {
   public:

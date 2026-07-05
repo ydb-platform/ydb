@@ -70,11 +70,16 @@ struct TOperatorAnalysisProps {
         LiveOut.reset();
         Aliases.reset();
         NameConstraints.reset();
+        InRootAliasRegion = false;
     }
 
     std::optional<TInfoUnitSet> LiveOut;
     std::optional<TPlanAliases::TAliasMap> Aliases;
     std::optional<TPlanNameConstraints> NameConstraints;
+    // True when no alias-class cut (Aggregate, UnionAll) separates this
+    // operator's output from the root: only there do root output names pin
+    // their alias class. Computed together with plan aliases.
+    bool InRootAliasRegion = false;
 };
 
 /**

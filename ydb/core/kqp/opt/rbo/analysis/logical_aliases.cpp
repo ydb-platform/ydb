@@ -219,6 +219,47 @@ TAliasMap BuildJoinAliases(TOpJoin& join) {
     return aliases;
 }
 
+// Root output names pin their alias class only while the class itself can
+// reach the root: classes are cut at aggregates and unions, so the flag stops
+// there. The cutting operator's own output is still root-visible.
+void MarkRootAliasRegion(const TIntrusivePtr<IOperator>& op) {
+    if (!op || op->Props.Analysis.InRootAliasRegion) {
+        return;
+    }
+
+    op->Props.Analysis.InRootAliasRegion = true;
+    if (op->Kind == EOperator::Aggregate || op->Kind == EOperator::UnionAll) {
+        return;
+    }
+
+    for (const auto& child : op->Children) {
+        MarkRootAliasRegion(child);
+    }
+}
+
+TPinnedNames ComputePinnedNames(TOpRoot& root) {
+    TPinnedNames pinned;
+
+    for (const auto& column : root.ColumnOrder) {
+        AddInfoUnit(pinned.Hard, TInfoUnit(column));
+    }
+
+    for (const auto& iter : root) {
+        switch (iter.Current->Kind) {
+            case EOperator::Aggregate:
+                AddInfoUnits(pinned.Soft, CastOperator<TOpAggregate>(iter.Current)->KeyColumns);
+                break;
+            case EOperator::UnionAll:
+                AddInfoUnits(pinned.Soft, CastOperator<TOpUnionAll>(iter.Current)->Columns);
+                break;
+            default:
+                break;
+        }
+    }
+
+    return pinned;
+}
+
 } // anonymous namespace
 
 TPlanAliases::TAliasMap IOperator::ComputeAliases() {
@@ -252,6 +293,7 @@ TPlanAliases::TAliasMap TOpSort::ComputeAliases() {
 void ComputePlanAliases(TOpRoot& root) {
     for (const auto& iter : root) {
         iter.Current->Props.Analysis.Aliases.reset();
+        iter.Current->Props.Analysis.InRootAliasRegion = false;
     }
 
     THashSet<IOperator*> visited;
@@ -271,6 +313,9 @@ void ComputePlanAliases(TOpRoot& root) {
     for (const auto& subPlan : root.PlanProps.Subplans.Get()) {
         compute(CastOperator<IOperator>(subPlan.Plan));
     }
+
+    MarkRootAliasRegion(root.GetInput());
+    root.PlanProps.PinnedNames = ComputePinnedNames(root);
 }
 
 const TPlanAliases::TCandidates* GetAliases(IOperator* op, const TInfoUnit& iu) {

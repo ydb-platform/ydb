@@ -1216,23 +1216,21 @@ TOpIterator::TOpIterator(TOpRoot* ptr) {
         return;
     }
 
-    PlanProps = &ptr->PlanProps;
     std::unordered_set<IOperator*> visited;
     auto child = ptr->GetInput();
-    BuildDfsList(child, {}, size_t(0), visited, nullptr, true);
+    BuildDfsList(DfsList, child, {}, size_t(0), visited, &ptr->PlanProps, nullptr, true);
     CurrElement = 0;
 }
 
 TOpIterator::TOpIterator(TIntrusivePtr<IOperator> op, TIntrusivePtr<IOperator> parent) {
     std::unordered_set<IOperator*> visited;
-    BuildDfsList(op, parent, size_t(0), visited, nullptr);
+    BuildDfsList(DfsList, op, parent, size_t(0), visited, nullptr, nullptr);
     CurrElement = 0;
 }
 
 TOpIterator::TOpIterator(TIntrusivePtr<IOperator> op, TIntrusivePtr<IOperator> parent, TPlanProps* props) {
-    PlanProps = props;
     std::unordered_set<IOperator*> visited;
-    BuildDfsList(op, parent, size_t(0), visited, nullptr, true);
+    BuildDfsList(DfsList, op, parent, size_t(0), visited, props, nullptr, true);
     CurrElement = 0;
 }
 
@@ -1256,25 +1254,35 @@ TOpIterator TOpIterator::operator++(int) {
     return tmp;
 }
 
-void TOpIterator::BuildDfsList(TIntrusivePtr<IOperator> current, TIntrusivePtr<IOperator> parent, size_t childIdx, std::unordered_set<IOperator*>& visited,
-                          std::shared_ptr<TInfoUnit> subplanIU, bool recurseIntoSubplans) {
+void TOpIterator::BuildDfsList(TVector<TIteratorItem>& dfsList, TIntrusivePtr<IOperator> current, TIntrusivePtr<IOperator> parent, size_t childIdx,
+                          std::unordered_set<IOperator*>& visited, TPlanProps* planProps, std::shared_ptr<TInfoUnit> subplanIU, bool recurseIntoSubplans) {
 
     if(recurseIntoSubplans) {
-        auto subplanIUs = current->GetSubplanIUs(*PlanProps);
+        Y_ENSURE(planProps);
+        auto subplanIUs = current->GetSubplanIUs(*planProps);
         for (const auto & iu : subplanIUs) {
-            const auto & subplan = PlanProps->Subplans.PlanMap.at(iu);
-            BuildDfsList(CastOperator<IOperator>(subplan.Plan), nullptr, 0, visited, std::make_shared<TInfoUnit>(iu), true);
+            const auto & subplan = planProps->Subplans.PlanMap.at(iu);
+            BuildDfsList(dfsList, CastOperator<IOperator>(subplan.Plan), nullptr, 0, visited, planProps, std::make_shared<TInfoUnit>(iu), true);
         }
     }
 
     const auto& children = current->GetChildren();
     for (size_t idx = 0, e = children.size(); idx < e; ++idx) {
-        BuildDfsList(children[idx], current, idx, visited, subplanIU, recurseIntoSubplans);
+        BuildDfsList(dfsList, children[idx], current, idx, visited, planProps, subplanIU, recurseIntoSubplans);
     }
     if (!visited.contains(current.get())) {
-        DfsList.push_back(TOpIterator::TIteratorItem(current, parent, childIdx, subplanIU));
+        dfsList.push_back(TOpIterator::TIteratorItem(current, parent, childIdx, subplanIU));
     }
     visited.insert(current.get());
+}
+
+TOpTraversal::TOpTraversal(TOpRoot* root) {
+    if (!root) {
+        return;
+    }
+
+    std::unordered_set<IOperator*> visited;
+    TOpIterator::BuildDfsList(Items, root->GetInput(), {}, size_t(0), visited, &root->PlanProps, nullptr, true);
 }
 
 TString ToStringPhase(EOpPhase phase) {

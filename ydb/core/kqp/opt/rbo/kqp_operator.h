@@ -771,12 +771,84 @@ struct TOpIterator {
     };
 
 private:
-    void BuildDfsList(TIntrusivePtr<IOperator> current, TIntrusivePtr<IOperator> parent, size_t childIdx, std::unordered_set<IOperator*>& visited,
-                        std::shared_ptr<TInfoUnit> subplanIU, bool recurseIntoSubplans = false);
+    friend class TOpTraversal;
+
+    static void BuildDfsList(TVector<TIteratorItem>& dfsList, TIntrusivePtr<IOperator> current, TIntrusivePtr<IOperator> parent, size_t childIdx,
+        std::unordered_set<IOperator*>& visited, TPlanProps* planProps, std::shared_ptr<TInfoUnit> subplanIU, bool recurseIntoSubplans = false);
 
     TVector<TIteratorItem> DfsList;
     size_t CurrElement;
-    TPlanProps* PlanProps;
+};
+
+class TOpTraversal {
+public:
+    class TIterator {
+    public:
+        using iterator_category = std::forward_iterator_tag;
+        using difference_type = std::ptrdiff_t;
+        using value_type = TOpIterator::TIteratorItem;
+        using reference = const value_type&;
+        using pointer = const value_type*;
+
+        TIterator(const TVector<TOpIterator::TIteratorItem>* items, size_t index)
+            : Items(items)
+            , Index(index) {
+        }
+
+        reference operator*() const {
+            return (*Items)[Index];
+        }
+
+        pointer operator->() const {
+            return &(*Items)[Index];
+        }
+
+        TIterator& operator++() {
+            ++Index;
+            return *this;
+        }
+
+        TIterator operator++(int) {
+            TIterator tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        friend bool operator==(const TIterator& lhs, const TIterator& rhs) {
+            return lhs.Items == rhs.Items && lhs.Index == rhs.Index;
+        }
+
+        friend bool operator!=(const TIterator& lhs, const TIterator& rhs) {
+            return !(lhs == rhs);
+        }
+
+    private:
+        const TVector<TOpIterator::TIteratorItem>* Items;
+        size_t Index;
+    };
+
+    using TReverseIterator = TVector<TOpIterator::TIteratorItem>::const_reverse_iterator;
+
+    explicit TOpTraversal(TOpRoot* root);
+
+    TIterator begin() const {
+        return TIterator(&Items, 0);
+    }
+
+    TIterator end() const {
+        return TIterator(&Items, Items.size());
+    }
+
+    TReverseIterator rbegin() const {
+        return Items.rbegin();
+    }
+
+    TReverseIterator rend() const {
+        return Items.rend();
+    }
+
+private:
+    TVector<TOpIterator::TIteratorItem> Items;
 };
 
 class TOpRoot: public IUnaryOperator {
@@ -801,6 +873,10 @@ public:
 
     TOpIterator end() {
         return TOpIterator(nullptr);
+    }
+
+    TOpTraversal PostOrder() {
+        return TOpTraversal(this);
     }
 
     NJson::TJsonValue GetExecutionJson(ui64 & nodeCounter, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags = 0x00);

@@ -664,6 +664,43 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
     }
 
+    // A late erase response for a record that already left the inflight map
+    // must be a no-op, not a crash of the tablet. The path is reachable:
+    // disabling a host drops its records from tracking while genuine erase
+    // responses are still in flight.
+    Y_UNIT_TEST(ShouldIgnoreLateEraseAckForForgottenLsn)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        const auto range = TBlockRange64::WithLength(10, 10);
+        dirtyMap.RegisterInflightWrite(100, range);
+        dirtyMap
+            .WriteFinished(100, range, MakePrimaryHosts(), MakePrimaryHosts());
+
+        auto flushHint = dirtyMap.MakeFlushHint(1);
+        UNIT_ASSERT(!flushHint.Empty());
+        for (const auto& [route, hint]: flushHint.GetAllHints()) {
+            dirtyMap.FlushFinished(route, MakeLsnVector(hint.Segments), {});
+        }
+
+        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        UNIT_ASSERT(!eraseHints.Empty());
+        dirtyMap.EraseFinished(THostIndex{0}, {100}, {});
+        dirtyMap.EraseFinished(THostIndex{1}, {100}, {});
+        dirtyMap.EraseFinished(THostIndex{2}, {100}, {});
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
+
+        // A late success and a late failure for the forgotten lsn: the
+        // record is long gone, both must be no-ops.
+        dirtyMap.EraseFinished(THostIndex{2}, {100}, {});
+        dirtyMap.EraseFinished(THostIndex{2}, {}, {100});
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
+    }
+
     Y_UNIT_TEST(ShouldWriteAndFlushAndEraseWhenAdditionalHandOffDesired)
     {
         auto vchunkConfig = MakeTestVChunkConfig();

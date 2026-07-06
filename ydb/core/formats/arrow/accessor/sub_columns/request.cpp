@@ -23,7 +23,7 @@ TConclusionStatus TRequestedConstuctor::DoDeserializeFromRequest(NYql::TFeatures
     }
     if (auto kff = features.Extract<double>("DICTIONARY_DETECTOR_KFF")) {
         if (*kff < 1) {
-            return TConclusionStatus::Fail("DICTIONARY_DETECTOR_KFF have to be greater than or equal to 1");
+            return TConclusionStatus::Fail("DICTIONARY_DETECTOR_KFF must be greater than or equal to 1");
         }
         Settings.SetDictionaryDetectorKff(*kff);
     }

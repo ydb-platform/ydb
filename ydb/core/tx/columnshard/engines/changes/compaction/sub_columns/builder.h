@@ -104,7 +104,7 @@ private:
     void Initialize();
 
     std::shared_ptr<NArrow::NAccessor::IChunkedArray> MaybeDictionaryEncode(
-        std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor, const ui32 filledRecordsCount) const;
+        const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor, const ui32 filledRecordsCount) const;
 
 public:
     TMergedBuilder(const NArrow::NAccessor::NSubColumns::TDictStats& columnStats, const TChunkMergeContext& context, const TSettings& settings,

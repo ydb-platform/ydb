@@ -28,7 +28,6 @@ private:
     YDB_READONLY_DEF(std::vector<ui32>, RecordIndexes);
     YDB_READONLY(ui32, DataSize, 0);
     std::shared_ptr<IChunkedArray> Accessor;
-    mutable std::optional<ui32> DistinctCount;
 
 public:
     const std::shared_ptr<IChunkedArray>& GetAccessorVerified() const {
@@ -40,17 +39,13 @@ public:
     void BuildPlainAccessor(const ui32 recordsCount);
     void BuildDictionaryAccessor(const ui32 recordsCount);
 
-    // Distinct count over the stored (BinaryJson) values; used to decide dictionary encoding.
     ui32 GetDistinctCount() const {
-        if (!DistinctCount) {
-            THashSet<std::string_view> seen;
-            seen.reserve(Values.size());
-            for (const auto& v : Values) {
-                seen.emplace(std::string_view(v.data(), v.size()));
-            }
-            DistinctCount = seen.size();
+        THashSet<std::string_view> seen;
+        seen.reserve(Values.size());
+        for (const auto& v : Values) {
+            seen.emplace(std::string_view(v.data(), v.size()));
         }
-        return *DistinctCount;
+        return seen.size();
     }
 
     TColumnElements(const TStringBuf key)

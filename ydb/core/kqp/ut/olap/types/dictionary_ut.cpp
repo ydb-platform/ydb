@@ -1,3 +1,5 @@
+#include "sub_columns_scenarios.h"
+
 #include <ydb/core/kqp/ut/olap/combinatory/variator.h>
 
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
@@ -49,23 +51,9 @@ TString DictionaryTableSetup(const bool withCompactionPlanner = false) {
     return script;
 }
 
-// primary_index_stats assertion that every Col2 chunk's separated sub-column was serialized with
-// `expectedType` (compared against the IChunkedArray::EType enum value, not a magic number).
-// `minChunks` lets a caller additionally require more than N chunks (e.g. multi-chunk coverage).
-TString SubColumnsColumnAccessorCheck(const NArrow::NAccessor::IChunkedArray::EType expectedType, const ui32 minChunks = 0) {
-    return TString(std::format(R"(READ: $All = SELECT COUNT(*) AS cnt FROM `/Root/ColumnTable/.sys/primary_index_stats`
-                  WHERE Activity == 1 AND EntityName = 'Col2';
-              $Ok = SELECT SUM(CASE
-                    WHEN CAST(JSON_VALUE(CAST(ChunkDetails AS JsonDocument), "$.columns.accessor[0]") AS Uint64) == {}u
-                    THEN 1 ELSE 0 END) AS ok
-                  FROM `/Root/ColumnTable/.sys/primary_index_stats`
-                  WHERE Activity == 1 AND EntityName = 'Col2';
-              SELECT ($All > {}u) AND ($All == $Ok);
-        EXPECTED: [[[%true]]])",
-        (ui32)expectedType, minChunks));
-}
-
 }   // namespace
+
+using NSubColumnsScenarios::AccessorTypeCheck;
 
 Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
 
@@ -90,7 +78,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
         READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
         EXPECTED: [[1u;["{\"a\":\"x\"}"]];[2u;["{\"a\":\"y\"}"]];[3u;["{\"a\":\"x\"}"]];[4u;["{\"a\":\"y\"}"]];[5u;["{\"a\":\"x\"}"]];[6u;["{\"a\":\"y\"}"]];[7u;["{\"a\":\"x\"}"]];[8u;["{\"a\":\"y\"}"]]]
         ------
-        )" << SubColumnsColumnAccessorCheck(NArrow::NAccessor::IChunkedArray::EType::Dictionary);
+        )" << AccessorTypeCheck(NArrow::NAccessor::IChunkedArray::EType::Dictionary);
         Variator::ToExecutor(Variator::SingleScript(script)).Execute();
     }
 
@@ -110,7 +98,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
         READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
         EXPECTED: [[1u;["{\"a\":\"x\"}"]];[2u;["{\"a\":\"y\"}"]];[3u;["{\"a\":\"x\"}"]];[4u;["{\"a\":\"y\"}"]];[5u;["{\"a\":\"x\"}"]];[6u;["{\"a\":\"y\"}"]]]
         ------
-        )" << SubColumnsColumnAccessorCheck(NArrow::NAccessor::IChunkedArray::EType::Dictionary);
+        )" << AccessorTypeCheck(NArrow::NAccessor::IChunkedArray::EType::Dictionary);
         Variator::ToExecutor(Variator::SingleScript(script)).Execute();
     }
 
@@ -153,7 +141,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
         ------
         )",
             batch1.c_str(), batch2.c_str()))
-            + SubColumnsColumnAccessorCheck(NArrow::NAccessor::IChunkedArray::EType::Dictionary, /*minChunks=*/1);
+            + AccessorTypeCheck(NArrow::NAccessor::IChunkedArray::EType::Dictionary, /*minChunks=*/1);
         Variator::ToExecutor(Variator::SingleScript(script)).Execute();
     }
 
@@ -179,6 +167,30 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
     )";
     Y_UNIT_TEST_STRING_VARIATOR(AllValueTypes, scriptAllValueTypes) {
         Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
+
+    // Read-path scenarios generated (with isDictionary=true) from the same source as json_ut's
+    // *Variants (isDictionary=false, see sub_columns_scenarios.h): identical data/queries/expected, the
+    // only difference being DICTIONARY_DETECTOR_KFF=1 and the "all sub-columns Dictionary" assertion the
+    // generator appends. Reads must return the same results as the non-dictionary path.
+    Y_UNIT_TEST(RestoreFullJson) {
+        Variator::ToExecutor(Variator::SingleScript(NSubColumnsScenarios::RestoreFullJson(/*isDictionary=*/true))).Execute();
+    }
+
+    Y_UNIT_TEST(RestoreFirstLevel) {
+        Variator::ToExecutor(Variator::SingleScript(NSubColumnsScenarios::RestoreFirstLevel(/*isDictionary=*/true))).Execute();
+    }
+
+    Y_UNIT_TEST(Filter) {
+        Variator::ToExecutor(Variator::SingleScript(NSubColumnsScenarios::Filter(/*isDictionary=*/true))).Execute();
+    }
+
+    Y_UNIT_TEST(Simple) {
+        Variator::ToExecutor(Variator::SingleScript(NSubColumnsScenarios::Simple(/*isDictionary=*/true))).Execute();
+    }
+
+    Y_UNIT_TEST(SimpleExists) {
+        Variator::ToExecutor(Variator::SingleScript(NSubColumnsScenarios::SimpleExists(/*isDictionary=*/true))).Execute();
     }
 }
 

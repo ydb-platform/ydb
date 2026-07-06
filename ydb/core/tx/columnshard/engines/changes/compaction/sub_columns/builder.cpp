@@ -12,25 +12,30 @@
 namespace NKikimr::NOlap::NCompaction::NSubColumns {
 
 namespace {
+
 ui32 CountDistinctNotNull(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor) {
     THashSet<std::string_view> seen;
     auto chunked = accessor->GetChunkedArray();
-    for (ui32 c = 0; c < (ui32)chunked->num_chunks(); ++c) {
-        const auto* arr = static_cast<const arrow::BinaryArray*>(chunked->chunk(c).get());
-        for (ui32 i = 0; i < (ui32)arr->length(); ++i) {
-            if (arr->IsNull(i)) {
+    for (int c = 0; c < chunked->num_chunks(); ++c) {
+        const auto* binary = dynamic_cast<const arrow::BinaryArray*>(chunked->chunk(c).get());
+        if (!binary) {
+            continue;
+        }
+        for (int64_t i = 0; i < binary->length(); ++i) {
+            if (binary->IsNull(i)) {
                 continue;
             }
-            auto view = arr->GetView(i);
+            auto view = binary->GetView(i);
             seen.emplace(std::string_view(view.data(), view.size()));
         }
     }
     return seen.size();
 }
+
 }   // namespace
 
 std::shared_ptr<NArrow::NAccessor::IChunkedArray> TMergedBuilder::MaybeDictionaryEncode(
-    std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor, const ui32 filledRecordsCount) const {
+    const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor, const ui32 filledRecordsCount) const {
     if (!Settings.IsDictionary(CountDistinctNotNull(accessor), filledRecordsCount)) {
         return accessor;
     }
@@ -90,6 +95,8 @@ void TMergedBuilder::Initialize() {
             case NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray:
             case NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray:
             case NArrow::NAccessor::IChunkedArray::EType::ChunkedArray:
+            // Dictionary is never planned here by construction: GetAccessorType() defers it to
+            // MaybeDictionaryEncode after materialization, so the plan only yields Array/Sparsed.
             case NArrow::NAccessor::IChunkedArray::EType::Dictionary:
                 AFL_VERIFY(false);
         }

@@ -24,6 +24,9 @@ protected:
     virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const override {
         return GetLocalChunkedArray(std::nullopt, 0).GetArray()->VisitValues(visitor);
     }
+    virtual void DoVisitDistinctValues(const TValuesSimpleVisitor& visitor) const override {
+        return GetLocalChunkedArray(std::nullopt, 0).GetArray()->VisitDistinctValues(visitor);
+    }
     virtual ui32 DoGetNullsCount() const override {
         AFL_VERIFY(false);
         return 0;

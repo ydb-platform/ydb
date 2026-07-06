@@ -261,7 +261,7 @@ namespace NKikimr::NStorage {
                 }
                 if (Cfg->PBufferConfig->HasPreallocateChunksFreeSpace()) {
                     pbufferFormat.PreallocateChunksFreeSpace = Cfg->PBufferConfig->GetPreallocateChunksFreeSpace();
-                    Y_ABORT_UNLESS(pbufferFormat.PreallocateChunksFreeSpace >= 0 && pbufferFormat.PreallocateChunksFreeSpace < 100);
+                    Y_ABORT_UNLESS(pbufferFormat.PreallocateChunksFreeSpace < 100);
 
                 }
             }

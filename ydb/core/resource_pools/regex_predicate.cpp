@@ -9,6 +9,10 @@
 namespace NKikimr::NResourcePool {
 
 TRegexPredicate TRegexPredicate::Compile(TStringBuf pattern) {
+    if (pattern.empty()) {
+        throw yexception() << "TRegexPredicate::Compile called with empty pattern; "
+                           << "caller must treat empty as nullopt (no filter)";
+    }
     TString anchored = TStringBuilder() << "^(?:" << pattern << ")$";
     try {
         auto compiled = std::make_shared<TRegExMatch>(anchored, REG_EXTENDED | REG_NOSUB);

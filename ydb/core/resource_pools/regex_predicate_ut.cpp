@@ -38,10 +38,8 @@ Y_UNIT_TEST_SUITE(TRegexPredicateTest) {
         UNIT_ASSERT(!pred.Match(""));
     }
 
-    Y_UNIT_TEST(EmptyPatternMatchesOnlyEmpty) {
-        auto pred = TRegexPredicate::Compile("");
-        UNIT_ASSERT(pred.Match(""));
-        UNIT_ASSERT(!pred.Match("x"));
+    Y_UNIT_TEST(EmptyPatternThrows) {
+        UNIT_ASSERT_EXCEPTION(TRegexPredicate::Compile(""), yexception);
     }
 
     Y_UNIT_TEST(AdminProvidedAnchorsAreHarmless) {

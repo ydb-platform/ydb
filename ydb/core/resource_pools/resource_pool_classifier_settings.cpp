@@ -25,7 +25,11 @@ void TClassifierSettings::TParser::operator()(std::optional<TString>* setting) c
 }
 
 void TClassifierSettings::TParser::operator()(std::optional<TRegexPredicate>* setting) const {
-    *setting = TRegexPredicate::Compile(Value);
+    if (Value.empty()) {
+        setting->reset();
+    } else {
+        *setting = TRegexPredicate::Compile(Value);
+    }
 }
 
 //// TClassifierSettings::TExtractor

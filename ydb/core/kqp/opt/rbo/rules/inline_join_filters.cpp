@@ -1,74 +1,11 @@
 #include "kqp_rules_include.h"
 
+#include <ydb/core/kqp/opt/rbo/map_renames.h>
+
 namespace {
 
 using namespace NKikimr::NKqp;
-
-void AddUsedIUs(THashSet<TInfoUnit, TInfoUnit::THashFunction>& usedIUs, const TVector<TInfoUnit>& ius) {
-    usedIUs.insert(ius.begin(), ius.end());
-}
-
-TInfoUnit MakeUniqueInternalIU(int& varIdx, THashSet<TInfoUnit, TInfoUnit::THashFunction>& usedIUs) {
-    for (;;) {
-        auto iu = TInfoUnit("_rbo_arg_" + std::to_string(varIdx++));
-        if (usedIUs.insert(iu).second) {
-            return iu;
-        }
-    }
-}
-
-// Create a mapping from a list of IUs to new synthetic variables
-THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> MakeRenameMap(
-    const TVector<TInfoUnit>& IUs,
-    int& varIdx,
-    THashSet<TInfoUnit, TInfoUnit::THashFunction>& usedIUs)
-{
-    THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> result;
-    for (const auto& iu: IUs) {
-        result[iu] = MakeUniqueInternalIU(varIdx, usedIUs);
-    }
-    return result;
-}
-
-// Rename join keys of the right side of the join using a specified rename map
-TVector<std::pair<TInfoUnit, TInfoUnit>> RemapJoinKeysRightSide(const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys, 
-    const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap) {
-
-        TVector<std::pair<TInfoUnit, TInfoUnit>> newJoinKeys;
-
-        for (const auto& [leftKey, rightKey] : joinKeys) {
-            if (renameMap.contains(rightKey)) {
-                newJoinKeys.push_back(std::make_pair(leftKey, renameMap.at(rightKey)));
-            } else {
-                newJoinKeys.push_back(std::make_pair(leftKey, rightKey));
-            }
-    }
-    return newJoinKeys;
-
-}
-
-// Build a projecting map operator that renames output columns wrt the rename map, or copies them in
-// the ouput if they're not in the map
-TIntrusivePtr<TOpMap> MakeMapFromRenames(TIntrusivePtr<IOperator> input,
-    const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, 
-    TPositionHandle pos, 
-    TExprContext *ctx, 
-    TPlanProps *props) {
-
-    TVector<TMapElement> mapElements;
-    for (const auto& iu : input->GetOutputIUs()) {
-        auto fromIU = iu;
-        auto toIU = iu;
-
-        if (renameMap.contains(iu)) {
-            toIU = renameMap.at(iu);
-        }
-
-        mapElements.push_back(TMapElement(toIU, iu, pos, ctx, props));
-    }
-
-    return MakeIntrusive<TOpMap>(input, pos, mapElements);
-}
+using namespace NKikimr::NKqp::NMapRenames;
 
 bool CheckNonNullKeys(const TIntrusivePtr<IOperator> &input, const TVector<TInfoUnit>& columns) {
     auto itemType = input->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
@@ -140,16 +77,9 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
     // Build an inner join, but in case of LeftSemi and LeftOnly, the right side may contain duplicate IUs
     // which will break the plan. So we rename them
     auto commonIUs = IUSetIntersect(join->GetLeftInput()->GetOutputIUs(), join->GetRightInput()->GetOutputIUs());
-    TIntrusivePtr<IOperator> rightInput = join->GetRightInput();
-
     auto rightRenameMap = MakeRenameMap(commonIUs, props.InternalVarIdx, usedIUs);
-    auto newInnerJoinKeys = RemapJoinKeysRightSide(join->JoinKeys, rightRenameMap);
-
-    if (rightRenameMap.size()) {
-        rightInput = MakeMapFromRenames(join->GetRightInput(), rightRenameMap, join->Pos, &ctx.ExprCtx, &props);
-    }
-
-    auto innerJoin = MakeIntrusive<TOpJoin>(join->GetLeftInput(), rightInput, join->Pos, "Inner", newInnerJoinKeys);
+    auto innerJoin = MakeJoinWithRightRenames(
+        join->GetLeftInput(), join->GetRightInput(), join->Pos, "Inner", join->JoinKeys, {}, rightRenameMap, ctx.ExprCtx, props);
     auto filterExpr = MakeConjunction(join->JoinFilters);
 
     auto newFilter = MakeIntrusive<TOpFilter>(innerJoin, input->Pos, filterExpr);
@@ -160,7 +90,6 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
     auto topCommonIUs = IUSetIntersect(join->GetLeftInput()->GetOutputIUs(), innerJoin->GetOutputIUs());
 
     auto renameMap = MakeRenameMap(topCommonIUs, props.InternalVarIdx, usedIUs);
-    auto map = MakeMapFromRenames(newFilter, renameMap, join->Pos, &ctx.ExprCtx, &props);
 
     // The join will be on the keys of lhs, we just need to check that all the keys are non-null
     // We don't support nullable keys at this stage
@@ -178,8 +107,7 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         newJoinKeys.push_back(std::make_pair(column, column));
     }
 
-    newJoinKeys = RemapJoinKeysRightSide(newJoinKeys, renameMap);
-    auto result = MakeIntrusive<TOpJoin>(join->GetLeftInput(), map, join->Pos, join->JoinKind, newJoinKeys);
+    auto result = MakeJoinWithRightRenames(join->GetLeftInput(), newFilter, join->Pos, join->JoinKind, newJoinKeys, {}, renameMap, ctx.ExprCtx, props);
     
     return result;
 }

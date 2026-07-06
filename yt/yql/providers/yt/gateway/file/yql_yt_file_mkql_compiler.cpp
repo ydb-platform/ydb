@@ -716,7 +716,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             return ctx.ProgramBuilder.ListToBlocks(values);
         });
 
-    compiler.AddCallable({TYtSort::CallableName(), TYtCopy::CallableName(), TYtMerge::CallableName()},
+    compiler.AddCallable({TYtSort::CallableName(), TYtCopy::CallableName(), TYtMerge::CallableName(), TYtPersist::CallableName()},
         [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
 
             TYtTransientOpBase ytOp(&node);

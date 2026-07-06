@@ -272,6 +272,7 @@ class TDataShard
     void HandleMonVolatileTxs(NMon::TEvRemoteHttpInfo::TPtr& ev, ui64 txId);
     void HandleMonCleanupBorrowedParts(NMon::TEvRemoteHttpInfo::TPtr& ev);
     void HandleMonResetSchemaVersion(NMon::TEvRemoteHttpInfo::TPtr& ev);
+    void HandleMonSendReadSetToSelf(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx);
 
     friend class TDataShardInMemoryRestoreActor;
     friend class TDataShardInMemoryStateActor;

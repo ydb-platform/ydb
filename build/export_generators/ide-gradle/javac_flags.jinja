@@ -1,4 +1,4 @@
-{%- macro JavacFlags(task, target_javac_flags, has_errorprone, require_dis_errorprone) -%}
+{%- macro JavacFlags(task, target_javac_flags, has_errorprone, require_dis_errorprone, jdk_version) -%}
 {%-     set target_javac_flags = target_javac_flags -%}
 {%-     set javac_flags = [] -%}
 {%-     set compiler_jvm_flags = [] -%}
@@ -30,6 +30,10 @@ tasks.{{ task }}.configure {
 {%          endif -%}
 
 {%-         if has_errorprone -%}
+{#-             Error Prone on JDK 21 requires this javac flag (JDK-8225377), see https://github.com/google/error-prone/issues/5426. Not needed on JDK 22+. -#}
+{%-             if jdk_version == '21' %}
+    options.compilerArgs.add("-XDaddTypeAnnotationsToSymbol=true")
+{%-             endif -%}
 {%-             set ep_checks = target_javac_flags|select('startsWith', '-Xep:') -%}
 {%-             set ep_checkopts = target_javac_flags|select('startsWith', '-XepOpt:') -%}
 {%-             set ep_props = target_javac_flags|reject('startsWith', '-Xep:')|reject('startsWith', '-XepOpt:')|select('startsWith', '-Xep') -%}
@@ -80,7 +84,19 @@ tasks.{{ task }}.configure {
 }
 {%      endif -%}
 {%  endmacro -%}
-{#- glue -#}
-{{ JavacFlags("compileJava", target.javac.flags, with_errorprone, with_test_errorprones|length) }}
-{#- glue -#}
-{{ JavacFlags("compileTestJava", all_targets|selectattr('javac')|map(attribute='javac')|selectattr('flags')|map(attribute='flags')|sum, with_test_errorprones|length, with_errorprone) }}
+{{ JavacFlags("compileJava", target.javac.flags, with_errorprone, with_test_errorprones|length, jdk_version) }}
+{%- if extra_targets|length -%}
+{%-     if named_tests -%}
+{%-         for extra_target in extra_targets -%}
+{%-             set testname = SourceSetName(extra_target) -%}
+{%-             if testname == NS_TEST -%}
+{%-                 set javaCompile = 'compileTestJava' -%}
+{%-             else -%}
+{%-                 set javaCompile = 'named<JavaCompile>("compile' + testname|title + 'Java")' %}
+{%-             endif -%}
+{{ JavacFlags(javaCompile, extra_target.javac.flags, extra_target.use_errorprone, with_errorprone or with_test_errorprones|length, jdk_version) }}
+{%-         endfor -%}
+{%-     else -%}
+{{ JavacFlags('compileTestJava', extra_targets|selectattr('javac')|map(attribute='javac')|selectattr('flags')|map(attribute='flags')|sum, with_test_errorprones|length, with_errorprone or with_test_errorprones|length, jdk_version) }}
+{%-     endif -%}
+{%- endif -%}

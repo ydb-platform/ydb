@@ -3,19 +3,23 @@
 namespace NKikimr {
 namespace NPDisk {
 
+static_assert((FlightControlMaxIdxDistance & (FlightControlMaxIdxDistance - 1)) == 0,
+        "FlightControlMaxIdxDistance must be a power of two");
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TFlightControl
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 TFlightControl::TFlightControl(ui64 maxInFlightRequests, ui64 inFlightBytesLimit)
     : BeginIdx(1)
     , MaxInFlightIdx(0)
+    , InFlight(0)
     , EndIdx(1)
     , MaxSize(maxInFlightRequests)
-    , Mask(maxInFlightRequests - 1)
-    , IsCompleteLoop(maxInFlightRequests)
+    , Mask(FlightControlMaxIdxDistance - 1)
+    , IsCompleteLoop(FlightControlMaxIdxDistance)
 {
     Y_UNUSED(inFlightBytesLimit);
-    Y_VERIFY(maxInFlightRequests > 0 && maxInFlightRequests < (1ull << 16));
+    Y_VERIFY(maxInFlightRequests > 0 && maxInFlightRequests < FlightControlMaxIdxDistance);
     Y_VERIFY((maxInFlightRequests & (maxInFlightRequests - 1)) == 0);
 }
 
@@ -29,14 +33,26 @@ void TFlightControl::Initialize(const TString& logPrefix) {
 ui64 TFlightControl::TrySchedule(ui64 size) {
     Y_UNUSED(size);
 
+    ui64 inFlight = AtomicGet(InFlight);
+    while (true) {
+        if (inFlight >= MaxSize) {
+            return 0;
+        }
+        if (AtomicCas(&InFlight, inFlight + 1, inFlight)) {
+            break;
+        }
+        inFlight = AtomicGet(InFlight);
+    }
+
     ui64 newMaxInFlightIdx = 0;
     bool isDone = false;
     while (!isDone) {
         ui64 beginIdx = AtomicGet(BeginIdx);
         ui64 prevMaxInFlightIdx = AtomicGet(MaxInFlightIdx);
         if (prevMaxInFlightIdx >= beginIdx) {
-            bool isFull = (prevMaxInFlightIdx - beginIdx + 1 >= MaxSize);
+            bool isFull = (prevMaxInFlightIdx - beginIdx + 1 >= FlightControlMaxIdxDistance);
             if (isFull) {
+                AtomicDecrement(InFlight);
                 return 0;
             }
         }
@@ -78,7 +94,9 @@ void TFlightControl::MarkComplete(ui64 idx, ui64 size) {
 
     ui64 beginIdx = AtomicGet(BeginIdx);
     Y_VERIFY_S(idx >= beginIdx, PDiskLogPrefix);
-    Y_VERIFY_S(idx < beginIdx + MaxSize, PDiskLogPrefix);
+    Y_VERIFY_S(idx < beginIdx + FlightControlMaxIdxDistance, PDiskLogPrefix);
+    Y_VERIFY_S(AtomicGet(InFlight) > 0, PDiskLogPrefix);
+    AtomicDecrement(InFlight);
     if (idx == beginIdx) {
         // It's the first item we are waiting for
         if (beginIdx == EndIdx) {
@@ -105,6 +123,7 @@ void TFlightControl::MarkComplete(ui64 idx, ui64 size) {
         EndIdx = idx + 1;
     }
     IsCompleteLoop[idx & Mask] = true;
+    WakeUp();
 }
 
 ui64 TFlightControl::FirstIncompleteIdx() {
@@ -124,6 +143,7 @@ TBytesFlightControl::TBytesFlightControl(ui64 inFlightRequestsLimit, ui64 inFlig
     , FirstIncompleteIdxValue(1)
 {
     Y_VERIFY(inFlightRequestsLimit > 0);
+    Y_VERIFY(inFlightRequestsLimit < FlightControlMaxIdxDistance);
     Y_VERIFY(inFlightBytesLimit > 0);
 }
 
@@ -132,6 +152,10 @@ void TBytesFlightControl::Initialize(const TString& logPrefix) {
 }
 
 ui64 TBytesFlightControl::TryScheduleLocked(ui64 size) {
+    if (NextScheduleIdx - FirstIncompleteIdxValue >= FlightControlMaxIdxDistance) {
+        return 0;
+    }
+
     if (InFlightRequests >= InFlightRequestsLimit) {
         return 0;
     }
@@ -178,6 +202,8 @@ void TBytesFlightControl::MarkComplete(ui64 idx, ui64 size) {
     size = std::min(size, InFlightBytesLimit);
 
     Y_VERIFY_S(idx >= FirstIncompleteIdxValue, PDiskLogPrefix << " idx# " << idx
+            << " FirstIncompleteIdxValue# " << FirstIncompleteIdxValue);
+    Y_VERIFY_S(idx < FirstIncompleteIdxValue + FlightControlMaxIdxDistance, PDiskLogPrefix << " idx# " << idx
             << " FirstIncompleteIdxValue# " << FirstIncompleteIdxValue);
     Y_VERIFY_S(InFlightRequests > 0, PDiskLogPrefix);
     Y_VERIFY_S(InFlightBytes >= size, PDiskLogPrefix << " InFlightBytes# " << InFlightBytes

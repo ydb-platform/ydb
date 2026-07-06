@@ -108,6 +108,20 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         UNIT_ASSERT_EQUAL(flightControl.FirstIncompleteIdx(), 6);
     }
 
+    Y_UNIT_TEST(FlightControlOutOfOrderCompletionFreesSlot) {
+        TFlightControl flightControl(4);
+        flightControl.Initialize("ut");
+
+        for (ui64 expectedIdx = 1; expectedIdx <= 4; ++expectedIdx) {
+            UNIT_ASSERT_EQUAL(flightControl.TrySchedule(1), expectedIdx);
+        }
+
+        flightControl.MarkComplete(2, 1);
+
+        UNIT_ASSERT_EQUAL(flightControl.FirstIncompleteIdx(), 1);
+        UNIT_ASSERT_EQUAL(flightControl.TrySchedule(1), 5);
+    }
+
     Y_UNIT_TEST(Light) {
         TLight l;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());

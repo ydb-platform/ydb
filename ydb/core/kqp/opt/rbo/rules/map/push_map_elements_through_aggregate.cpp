@@ -3,259 +3,157 @@
 namespace NKikimr {
 namespace NKqp {
 
-// Main shape this handles:
-// A: Map [ alias_key <- key ]  == becomes ==>  Aggregate [ key: alias_key ]
-// B: `- Aggregate [ key ]                       `- Map [ alias_key <- key ]
-// C:    `- input                                    `- input
+// A rename of an aggregate output commutes with the aggregate. Keys keep
+// their value below the aggregate, so a key rename crosses it downwards:
 //
-// Aggregate result aliases use a direct result-trait rename:
-//
-// A: Map [ alias_sum <- sum ]  == becomes ==>  Aggregate [ alias_sum: sum(...) ]
-// B: `- Aggregate [ sum: sum(...) ]
-//
-// Append aliases of aggregate keys use the same shape when the original key is
-// dead above the map:
-//
-// A: Map [ alias_key := key ]  == becomes ==>  Aggregate [ key: alias_key ]
-// B: `- Aggregate [ key ]                       `- Map [ alias_key <- key ]
-// C:    `- input                                    `- input
+// A: Map [ x <- key ]      == becomes ==>  Aggregate [ x ]
+// B: `- Aggregate [ key ]                   `- Map [ x <- key ]
+// C:    `- input                                `- input
 //
 // When the target name already exists in the aggregate input as a member of
 // the key's alias class (same value by construction), the key switches to the
-// existing column directly and no rename is pushed below:
+// existing column directly and nothing is pushed below:
 //
-// A: Map [ x := key ]          == becomes ==>  Aggregate [ x ]
+// A: Map [ x <- key ]          == becomes ==>  Aggregate [ x ]
 // B: `- Aggregate [ key ]                       `- input [ x, key := x ]
 // C:    `- input [ x, key := x ]
 //
+// Result traits exist only above the aggregate, so their renames apply in
+// place:
+//
+// A: Map [ x <- sum ]               == becomes ==>  Aggregate [ x: sum(...) ]
+// B: `- Aggregate [ sum: sum(...) ]                  `- input
+//
+// A column-access append whose source is dead above its map is a rename in
+// disguise and crosses the same way. Every shape changes the aggregate's
+// output names, which all consumers see: each consumer must be a Map carrying
+// the same rename, and the rename is consumed from all of them at once. The
+// matched map decides usefulness; a sole consumer agrees trivially.
+//
 // Caveats:
 // 1.
-// A: Map [ alias_key := key ] -- append aliases are pushed only when "key" is
-// B: `- Aggregate [ key ]        not needed above A; the rewrite makes the
-// C:    `- input                 aggregate output "alias_key" instead of "key".
-//
+// A: Map [ x <- key, y <- key ]  -- a name crosses under one new name only;
+// B: `- Aggregate [ key ]           a second rename of the same source would
+//                                   lose its source, so both stay put.
 // 2.
-// A: Map [ alias_key <- key ] -- move prevented if Aggregate B has multiple
-// B: `- Aggregate B             consumers; otherwise changing B's output metadata
-// C:    `- input                would also affect Parent2.
-// D: Parent2
-// E: `- Aggregate B
-//
+// A: Map [ x := key, y := key ]  -- with "key" dead above A the first append
+// B: `- Aggregate [ key ]           crosses as the rename it is, and the
+//                                   second stays above rewritten to "y := x".
 // 3.
-// A: Map [ alias_key <- key, copy <- alias_key ]
-// B: `- Aggregate [ key ]      -- move left alone; pushing only alias_key below
-// C:    `- input                  the aggregate would make copy hide alias_key.
+// A: Map [ sum <- key ]                -- a rename may not target a name that
+// B: `- Aggregate [ key, sum: ... ]       another aggregate output keeps.
 
 namespace {
 
 using TRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>;
 
-struct TCommonResultRenamePlan {
-    TRenameMap RenameMap;
-    THashMap<TOpMap*, TVector<TMapElement>> Residuals;
+// How a rename crosses the aggregate.
+enum class ECrossing {
+    RenameResult,          // "from" is a result trait: rename it in place
+    PushKeyRename,         // "from" is a key: push the rename below the aggregate
+    SwitchKeyToInputAlias, // "from" is a key and "to" already carries its value at the input
 };
 
-bool AddOutputColumn(TVector<TInfoUnit>& output, TInfoUnitSet& outputSet, const TInfoUnit& column) {
-    if (outputSet.contains(column)) {
-        return false;
-    }
+struct TCandidate {
+    TInfoUnit From;
+    TInfoUnit To;
+    ECrossing Crossing;
+};
 
-    output.push_back(column);
-    outputSet.insert(column);
-    return true;
+// A column-access append whose source is dead above the map is a semantic
+// rename in disguise: hiding the dead source changes nothing for consumers.
+bool IsRenameEquivalent(const TMapElement& element, TOpMap* map) {
+    if (element.IsRename()) {
+        return true;
+    }
+    return element.IsColumnAccess() && !GetLiveOut(map).contains(element.GetColumnAccess());
 }
 
-TInfoUnit RenameInfoUnit(const TInfoUnit& iu, const TRenameMap& renameMap) {
-    const auto it = renameMap.find(iu);
-    if (it == renameMap.end()) {
-        return iu;
-    }
-    return it->second;
+TInfoUnit GetRenameSource(const TMapElement& element) {
+    return element.IsRename() ? element.GetRename() : element.GetColumnAccess();
 }
 
-bool BuildAggregateOutputAfterRename(
+// Key columns keep their value below the aggregate: a key rename crosses as a
+// compensating rename below it, or — when the target already carries the
+// key's value at the aggregate input (one alias class) — the key switches to
+// that column and the old one dies. Result renames apply in place.
+std::optional<ECrossing> ClassifyCrossing(
     const TOpAggregate& aggregate,
-    const TRenameMap& renameMap,
-    TVector<TInfoUnit>& output)
-{
-    output.clear();
-    TInfoUnitSet outputSet;
-
-    if (!aggregate.DistinctAll) {
-        output.reserve(aggregate.KeyColumns.size() + aggregate.AggregationTraitsList.size());
-        for (const auto& key : aggregate.KeyColumns) {
-            if (!AddOutputColumn(output, outputSet, RenameInfoUnit(key, renameMap))) {
-                return false;
-            }
-        }
-    } else {
-        output.reserve(aggregate.AggregationTraitsList.size());
-    }
-
-    for (const auto& trait : aggregate.AggregationTraitsList) {
-        if (!AddOutputColumn(output, outputSet, RenameInfoUnit(trait.ResultColName, renameMap))) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool ValidateAndRewriteResidualMap(
-    TVector<TMapElement>& residualElements,
-    const TVector<TInfoUnit>& inputColumns,
-    const TRenameMap& renameMap)
-{
-    TInfoUnitSet changedNames;
-    for (const auto& [from, to] : renameMap) {
-        changedNames.insert(from);
-        changedNames.insert(to);
-    }
-
-    TInfoUnitSet renameSources;
-    for (auto& element : residualElements) {
-        if (element.IsRename()) {
-            const auto from = element.GetRename();
-            if (changedNames.contains(from)) {
-                return false;
-            }
-            renameSources.insert(from);
-        } else {
-            element.SetExpression(element.GetExpression().ApplyRenames(renameMap));
-        }
-    }
-
-    TInfoUnitSet outputSet;
-    for (const auto& inputColumn : inputColumns) {
-        if (!renameSources.contains(inputColumn)) {
-            if (outputSet.contains(inputColumn)) {
-                return false;
-            }
-            outputSet.insert(inputColumn);
-        }
-    }
-
-    for (const auto& element : residualElements) {
-        if (outputSet.contains(element.GetElementName())) {
-            return false;
-        }
-        outputSet.insert(element.GetElementName());
-    }
-    return true;
-}
-
-bool CanPushToAggregateInput(
-    const TOpAggregate& aggregate,
+    IOperator* aggregateInput,
     const TVector<TInfoUnit>& aggregateInputIUs,
     const TInfoUnit& from,
     const TInfoUnit& to)
 {
-    return ContainsInfoUnit(aggregate.KeyColumns, from) &&
-        (from == to || !ContainsInfoUnit(aggregateInputIUs, to));
-}
-
-// "to" already exists in the aggregate input and provably carries the same
-// value as key "from" (one alias class at the input): the key can switch to
-// the existing column directly, with no compensating rename below. The old
-// key column then loses its last consumer and gets pruned.
-bool CanRewriteKeyToInputAlias(
-    const TOpAggregate& aggregate,
-    IOperator* aggregateInput,
-    const TInfoUnit& from,
-    const TInfoUnit& to)
-{
-    if (from == to || !ContainsInfoUnit(aggregate.KeyColumns, from)) {
-        return false;
+    if (!ContainsInfoUnit(aggregate.KeyColumns, from)) {
+        const bool isResult = AnyOf(aggregate.AggregationTraitsList, [&](const auto& trait) {
+            return trait.ResultColName == from;
+        });
+        // A column access can also reference a subplan variable rather than
+        // an aggregate output; those are not this rule's business.
+        return isResult ? std::make_optional(ECrossing::RenameResult) : std::nullopt;
     }
 
-    const auto* candidates = GetAliases(aggregateInput, from);
-    return candidates && AnyOf(*candidates, [&](const auto& candidate) {
-        return candidate.IU == to;
+    const auto* aliases = GetAliases(aggregateInput, from);
+    if (aliases && AnyOf(*aliases, [&](const auto& alias) { return alias.IU == to; })) {
+        return ECrossing::SwitchKeyToInputAlias;
+    }
+
+    if (!ContainsInfoUnit(aggregateInputIUs, to)) {
+        return ECrossing::PushKeyRename;
+    }
+
+    // "to" is occupied at the aggregate input by an unrelated value.
+    return std::nullopt;
+}
+
+// The consumers agree on a rename when each of them consumes "from" under the
+// name "to"; only then does consuming it change nothing above any of them.
+bool AllParentsCarryRename(const TVector<TOpMap*>& parents, const TInfoUnit& from, const TInfoUnit& to) {
+    return AllOf(parents, [&](TOpMap* parent) {
+        const auto* element = parent->FindOutputElement(to);
+        return element && IsRenameEquivalent(*element, parent) && GetRenameSource(*element) == from;
     });
 }
 
-bool IsAggregateResult(const TOpAggregate& aggregate, const TInfoUnit& iu) {
-    return AnyOf(aggregate.AggregationTraitsList, [&](const auto& trait) {
-        return trait.ResultColName == iu;
+// A second rename of the same source stays behind and would lose its source
+// once the first one crosses; such splits keep everything in place.
+bool SomeParentSplitsRename(const TVector<TOpMap*>& parents, const TInfoUnit& from, const TInfoUnit& to) {
+    return AnyOf(parents, [&](TOpMap* parent) {
+        return AnyOf(parent->MapElements, [&](const TMapElement& element) {
+            return element.IsRename() && element.GetRename() == from && element.GetElementName() != to;
+        });
     });
 }
 
-bool ShouldPushKeyRename(
-    const TIntrusivePtr<TOpMap>& topMap,
-    const TMapElement& element,
-    const TInfoUnitSet& liveOut)
-{
-    return liveOut.contains(element.GetElementName()) ||
-        GetForbidden(topMap.get()).contains(element.GetRename());
-}
+// The aggregate's output names must stay unique after the renames: drop a
+// candidate whose target another output keeps, or an earlier candidate took.
+// Dropping one keeps its source name in the output, which can invalidate a
+// candidate targeting that name, so iterate to a fixpoint.
+void PruneCollidingTargets(const TVector<TInfoUnit>& aggregateOutput, TVector<TCandidate>& candidates) {
+    bool changed = true;
+    while (changed) {
+        changed = false;
 
-bool ShouldPushKeyAppend(
-    const TMapElement& element,
-    const TInfoUnitSet& liveOut)
-{
-    return liveOut.contains(element.GetElementName()) &&
-        !liveOut.contains(element.GetColumnAccess());
-}
-
-bool TryBuildCommonResultRenamePlan(
-    const TIntrusivePtr<TOpMap>& topMap,
-    const TIntrusivePtr<TOpAggregate>& aggregate,
-    TCommonResultRenamePlan& plan)
-{
-    plan.RenameMap.clear();
-    plan.Residuals.clear();
-
-    for (const auto& element : topMap->MapElements) {
-        if (!element.IsRename()) {
-            continue;
+        TInfoUnitSet renamedAway;
+        for (const auto& candidate : candidates) {
+            renamedAway.insert(candidate.From);
         }
 
-        const auto from = element.GetRename();
-        const auto to = element.GetElementName();
-        if (from != to &&
-            !ContainsInfoUnit(aggregate->KeyColumns, from) &&
-            IsAggregateResult(*aggregate, from) &&
-            !plan.RenameMap.contains(from)) {
-            plan.RenameMap.emplace(from, to);
-        }
-    }
-
-    TVector<TInfoUnit> renamedAggregateOutput;
-    if (plan.RenameMap.empty() ||
-        !BuildAggregateOutputAfterRename(*aggregate, plan.RenameMap, renamedAggregateOutput)) {
-        return false;
-    }
-
-    for (const auto& [parent, parentIdx] : aggregate->Parents) {
-        if (parent->Kind != EOperator::Map ||
-            parentIdx >= parent->Children.size() ||
-            parent->Children[parentIdx].Get() != aggregate.Get()) {
-            return false;
-        }
-
-        auto* map = static_cast<TOpMap*>(parent);
-        TVector<TMapElement> residualElements;
-        residualElements.reserve(map->MapElements.size());
-        TInfoUnitSet matchedSources;
-        for (auto element : map->MapElements) {
-            if (element.IsRename()) {
-                const auto it = plan.RenameMap.find(element.GetRename());
-                if (it != plan.RenameMap.end() && it->second == element.GetElementName()) {
-                    matchedSources.insert(element.GetRename());
-                    continue;
-                }
+        TInfoUnitSet takenTargets;
+        TVector<TCandidate> kept;
+        kept.reserve(candidates.size());
+        for (const auto& candidate : candidates) {
+            if (takenTargets.contains(candidate.To) ||
+                (ContainsInfoUnit(aggregateOutput, candidate.To) && !renamedAway.contains(candidate.To))) {
+                changed = true;
+                continue;
             }
-            residualElements.push_back(std::move(element));
-        }
 
-        if (matchedSources.size() != plan.RenameMap.size() ||
-            !ValidateAndRewriteResidualMap(residualElements, renamedAggregateOutput, plan.RenameMap)) {
-            return false;
+            takenTargets.insert(candidate.To);
+            kept.push_back(candidate);
         }
-
-        plan.Residuals.emplace(map, std::move(residualElements));
+        candidates = std::move(kept);
     }
-
-    return plan.Residuals.size() == aggregate->Parents.size();
 }
 
 } // anonymous namespace
@@ -270,109 +168,98 @@ TPushMapElementsThroughAggregateRule::SimpleMatchAndApply(const TIntrusivePtr<IO
     if (topMap->GetInput()->Kind != EOperator::Aggregate) {
         return input;
     }
-
     auto aggregate = CastOperator<TOpAggregate>(topMap->GetInput());
-    if (!aggregate->IsSingleConsumer()) {
-        TCommonResultRenamePlan plan;
-        if (!TryBuildCommonResultRenamePlan(topMap, aggregate, plan)) {
+
+    TVector<TOpMap*> parents;
+    parents.reserve(aggregate->Parents.size());
+    for (const auto& [parent, parentIdx] : aggregate->Parents) {
+        if (parent->Kind != EOperator::Map) {
             return input;
         }
-
-        aggregate->RenameProducedIUs(plan.RenameMap, ctx.ExprCtx);
-        auto currentResidual = std::move(plan.Residuals.at(topMap.Get()));
-        for (auto& [map, residualElements] : plan.Residuals) {
-            map->MapElements = std::move(residualElements);
-        }
-        props.Subplans.RenameReferences(plan.RenameMap, ctx.ExprCtx);
-
-        if (currentResidual.empty()) {
-            return aggregate;
-        }
-        return MakeIntrusive<TOpMap>(aggregate, topMap->Pos, currentResidual, topMap->Ordered);
+        parents.push_back(static_cast<TOpMap*>(parent));
     }
 
     const auto aggregateInput = aggregate->GetInput();
     const auto aggregateInputIUs = aggregateInput->GetOutputIUs();
     const auto& liveOut = GetLiveOut(topMap.get());
+    const auto& forbidden = GetForbidden(topMap.get());
 
-    TVector<TMapElement> pushedElements;
-    TVector<TMapElement> topElements;
-    TRenameMap keyRenameMap;
-    TRenameMap producedRenameMap;
-
-    for (auto mapElement : topMap->MapElements) {
-        TInfoUnit from;
-        const auto to = mapElement.GetElementName();
-
-        if (mapElement.IsRename()) {
-            from = mapElement.GetRename();
-            if (!ShouldPushKeyRename(topMap, mapElement, liveOut)) {
-                topElements.push_back(std::move(mapElement));
-                continue;
-            }
-        } else if (mapElement.IsColumnAccess()) {
-            from = mapElement.GetColumnAccess();
-            if (!ShouldPushKeyAppend(mapElement, liveOut)) {
-                topElements.push_back(std::move(mapElement));
-                continue;
-            }
-        } else {
-            topElements.push_back(std::move(mapElement));
+    TVector<TCandidate> candidates;
+    TInfoUnitSet claimedSources;
+    for (const auto& element : topMap->MapElements) {
+        if (!IsRenameEquivalent(element, topMap.get())) {
             continue;
         }
 
-        if (CanPushToAggregateInput(*aggregate, aggregateInputIUs, from, to) &&
-            !producedRenameMap.contains(from)) {
-            // A dead-source append pushes as a rename; an element left in the
-            // residual map keeps its append form so a second alias of the same
-            // key can stay above as "to2 := to".
-            mapElement.SetIsRename(true);
-            pushedElements.push_back(std::move(mapElement));
-            if (from != to) {
-                keyRenameMap.emplace(from, to);
-                producedRenameMap.emplace(from, to);
-            }
+        const auto from = GetRenameSource(element);
+        const auto to = element.GetElementName();
+        if (from == to || claimedSources.contains(from)) {
             continue;
         }
 
-        if (CanRewriteKeyToInputAlias(*aggregate, aggregateInput.get(), from, to) &&
-            !producedRenameMap.contains(from)) {
-            keyRenameMap.emplace(from, to);
-            producedRenameMap.emplace(from, to);
+        // Move only renames someone needs: a live target, or a source name
+        // this region must stop exposing. Dead renames are pruning's job.
+        if (!liveOut.contains(to) && !forbidden.contains(from)) {
             continue;
         }
 
-        if (!ContainsInfoUnit(aggregate->KeyColumns, from) &&
-            IsAggregateResult(*aggregate, from) &&
-            from != to &&
-            !producedRenameMap.contains(from)) {
-            producedRenameMap.emplace(from, to);
+        const auto crossing = ClassifyCrossing(*aggregate, aggregateInput.get(), aggregateInputIUs, from, to);
+        if (!crossing ||
+            !AllParentsCarryRename(parents, from, to) ||
+            SomeParentSplitsRename(parents, from, to)) {
             continue;
         }
 
-        topElements.push_back(std::move(mapElement));
+        claimedSources.insert(from);
+        candidates.push_back({from, to, *crossing});
     }
 
-    TVector<TInfoUnit> renamedAggregateOutput;
-    if (producedRenameMap.empty() ||
-        !BuildAggregateOutputAfterRename(*aggregate, producedRenameMap, renamedAggregateOutput) ||
-        !ValidateAndRewriteResidualMap(topElements, renamedAggregateOutput, producedRenameMap)) {
+    PruneCollidingTargets(aggregate->GetOutputIUs(), candidates);
+    if (candidates.empty()) {
         return input;
     }
 
-    if (!pushedElements.empty()) {
-        auto pushedMap = MakeIntrusive<TOpMap>(aggregateInput, topMap->Pos, pushedElements);
-        aggregate->SetInput(pushedMap);
+    TRenameMap renames;
+    TRenameMap keyRenames;
+    TInfoUnitSet consumedTargets;
+    TVector<TMapElement> pushedElements;
+    for (const auto& candidate : candidates) {
+        renames.emplace(candidate.From, candidate.To);
+        consumedTargets.insert(candidate.To);
+        if (candidate.Crossing != ECrossing::RenameResult) {
+            keyRenames.emplace(candidate.From, candidate.To);
+        }
+        if (candidate.Crossing == ECrossing::PushKeyRename) {
+            auto pushed = *topMap->FindOutputElement(candidate.To);
+            pushed.SetIsRename(true);
+            pushedElements.push_back(std::move(pushed));
+        }
     }
-    aggregate->RenameProducedIUs(producedRenameMap, ctx.ExprCtx);
-    aggregate->RenameUsedIUs(keyRenameMap, ctx.ExprCtx);
-    props.Subplans.RenameReferences(producedRenameMap, ctx.ExprCtx);
 
-    if (topElements.empty()) {
+    if (!pushedElements.empty()) {
+        aggregate->SetInput(MakeIntrusive<TOpMap>(aggregateInput, topMap->Pos, pushedElements));
+    }
+    aggregate->RenameProducedIUs(renames, ctx.ExprCtx);
+    aggregate->RenameUsedIUs(keyRenames, ctx.ExprCtx);
+    props.Subplans.RenameReferences(renames, ctx.ExprCtx);
+
+    // Consume the renames from every consumer map and rebind what stays above
+    // to the new output names.
+    for (TOpMap* parent : parents) {
+        EraseIf(parent->MapElements, [&](const TMapElement& element) {
+            return consumedTargets.contains(element.GetElementName());
+        });
+        for (auto& element : parent->MapElements) {
+            if (!element.IsRename()) {
+                element.SetExpression(element.GetExpression().ApplyRenames(renames));
+            }
+        }
+    }
+
+    if (topMap->MapElements.empty()) {
         return aggregate;
     }
-
-    return MakeIntrusive<TOpMap>(aggregate, topMap->Pos, topElements, topMap->Ordered);
+    return MakeIntrusive<TOpMap>(aggregate, topMap->Pos, topMap->MapElements, topMap->Ordered);
 }
 
 } // namespace NKqp

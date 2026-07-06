@@ -190,6 +190,11 @@ const TStructExprType* PrepareSchemeType(const TOpRead& read, const TStructExprT
 
 } // anonymous namespace
 
+bool TPushRangesRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Filter &&
+        input->Children.front()->Kind == EOperator::Source;
+}
+
 TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& rboCtx, TPlanProps& props) {
     Y_UNUSED(props);
     auto& kqpCtx = rboCtx.KqpCtx;

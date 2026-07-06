@@ -210,6 +210,11 @@ TRenameMap BuildRenameMap(const TVector<TMapElement>& elements, const TElementMa
 
 } // anonymous namespace
 
+bool TPushMapElementsIntoMapRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Map &&
+        input->Children.front()->Kind == EOperator::Map;
+}
+
 TIntrusivePtr<IOperator>
 TPushMapElementsIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     if (input->Kind != EOperator::Map) {

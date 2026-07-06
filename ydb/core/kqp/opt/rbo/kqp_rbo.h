@@ -32,6 +32,9 @@ class IRule {
     IRule(TString name) : RuleName(name) {}
     IRule(TString name, ui32 props, bool logRule = true) : RuleName(name), Props(props), LogRule(logRule) {}
 
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>&) const {
+        return true;
+    }
     virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
     virtual ~IRule() = default;

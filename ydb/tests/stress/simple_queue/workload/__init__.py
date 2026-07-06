@@ -230,13 +230,8 @@ class WorkloadStats(object):
 
 
 class YdbQueue(object):
-<<<<<<< HEAD
-    def __init__(self, idx, database, stats, driver, pool, mode, in_memory):
-        self.working_dir = os.path.join(database, socket.gethostname().split('.')[0].replace('-', '_') + "_" + str(idx))
-=======
     def __init__(self, idx, database, stats, driver, pool, mode, in_memory, blob_min_size=BLOB_MIN_SIZE):
         self.working_dir = os.path.join(database, socket.gethostname().split('.')[0].replace('-', '_') + f"_{mode}_" + str(idx))
->>>>>>> 0bea54be87d (Do not start scans with MAX snapshot! (#45223))
         self.copies_dir = os.path.join(self.working_dir, 'copies')
         self.table_name = self.table_name_with_timestamp()
         self.queries = {}
@@ -486,15 +481,11 @@ class Workload:
     def __init__(self, endpoint, database, duration, mode, blob_min_size=BLOB_MIN_SIZE):
         self.database = database
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
-<<<<<<< HEAD
-        self.pool = InstrumentedQuerySessionPool(self.driver, size=200)
-=======
         # Wait for the driver to connect before issuing any requests; otherwise the
         # very first scheme call races the connection setup and fails with
         # ConnectionLost, which is easy to hit when many workloads start at once.
         self.driver.wait(timeout=30, fail_fast=True)
         self.pool = InstrumentedQuerySessionPool(self.driver, size=10)
->>>>>>> 0bea54be87d (Do not start scans with MAX snapshot! (#45223))
         self.round_size = 1000
         self.duration = duration
         self.delayed_events = queue.Queue()
@@ -507,14 +498,9 @@ class Workload:
             for idx in range(2)
         ]
         if self.mode == "row":
-<<<<<<< HEAD
-            self.ydb_queues.append(YdbQueue(len(self.ydb_queues), database, self.workload_stats, self.driver, self.pool, self.mode, True))
-        self.pool_semaphore = threading.BoundedSemaphore(value=100)
-=======
             self.ydb_queues.append(
                 YdbQueue(len(self.ydb_queues), database, self.workload_stats, self.driver, self.pool, self.mode, True, self.blob_min_size))
         self.pool_semaphore = threading.BoundedSemaphore(value=1)
->>>>>>> 0bea54be87d (Do not start scans with MAX snapshot! (#45223))
         self.worker_exception = []
 
     def random_points(self, size=1):

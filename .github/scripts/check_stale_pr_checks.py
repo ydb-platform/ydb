@@ -232,7 +232,10 @@ def build_comment(reason: str) -> str:
         f"{COMMENT_HEADER}"
         ":red_circle: **PR-check results are stale and cannot be used for merge.**\n\n"
         f"{reason}\n\n"
-        "Please re-run checks by pushing a commit or adding the `rebase-and-check` label."
+        "Please re-run PR-check by one of:\n"
+        "- adding the `rebase-user-branch` label (maintainer rebase via workflow)\n"
+        "- rebasing onto the current base branch and pushing\n"
+        "- pushing an empty commit: `git commit --allow-empty -m \"retrigger ci\" && git push`"
     )
 
 

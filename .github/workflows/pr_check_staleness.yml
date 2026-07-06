@@ -1,8 +1,9 @@
 name: PR-check staleness guard
 
 on:
-  schedule:
-    - cron: '15 * * * *'
+  # Hourly cron disabled until manual dry-run validation on production PRs.
+  # schedule:
+  #   - cron: '15 * * * *'
   push:
     branches:
       - main

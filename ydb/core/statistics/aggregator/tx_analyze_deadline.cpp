@@ -62,7 +62,7 @@ struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {
         for (const auto& operationId : toDelete) {
             YDB_LOG_DEBUG("TTxAnalyzeDeadline: deleting expired history",
                 {"tabletId", Self->TabletID()},
-                {"operationId", operationId});
+                {"operationId", operationId.Quote()});
             Self->DeleteForceTraversalOperation(operationId, db);
         }
 
@@ -76,7 +76,7 @@ struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {
         for (const auto& entry : DeadlineExceeded) {
             YDB_LOG_ERROR("TTxAnalyzeDeadline: deadline exceeded",
                 {"tabletId", Self->TabletID()},
-                {"operationId", entry.OperationId});
+                {"operationId", entry.OperationId.Quote()});
             if (entry.ReplyToActorId) {
                 auto response = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
                 response->Record.SetOperationId(entry.OperationId);
@@ -90,7 +90,7 @@ struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {
         if (ActiveDeadlineExceeded) {
             YDB_LOG_ERROR("TTxAnalyzeDeadline: active deadline exceeded",
                 {"tabletId", Self->TabletID()},
-                {"operationId", Self->ForceTraversalOperationId});
+                {"operationId", Self->ForceTraversalOperationId.Quote()});
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue("ANALYZE deadline exceeded"));
             Self->DispatchFinishTraversalTx(

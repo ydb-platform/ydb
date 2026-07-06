@@ -23,9 +23,9 @@ struct TStatisticsAggregator::TTxAnalyzeOpGet : public TTxBase {
         const TString& operationId = record.GetOperationId();
         const TString& dbName = record.GetDatabaseName();
 
-        YDB_LOG_NOTICE("][AnalyzeOp] TTxAnalyzeOpGet::Complete",
+        YDB_LOG_NOTICE("[AnalyzeOp] TTxAnalyzeOpGet::Complete",
             {"tabletId", Self->TabletID()},
-            {"opId", operationId});
+            {"opId", operationId.Quote()});
 
         auto response = MakeHolder<TEvStatistics::TEvAnalyzeOpGetResponse>();
         auto& rec = response->Record;

@@ -41,9 +41,9 @@ struct TStatisticsAggregator::TTxAnalyzeOpForget : public TTxBase {
 
     void Complete(const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
-        YDB_LOG_NOTICE("][AnalyzeOp] TTxAnalyzeOpForget::Complete",
+        YDB_LOG_NOTICE("[AnalyzeOp] TTxAnalyzeOpForget::Complete",
             {"tabletId", Self->TabletID()},
-            {"opId", record.GetOperationId()});
+            {"opId", record.GetOperationId().Quote()});
 
         auto response = MakeHolder<TEvStatistics::TEvAnalyzeOpForgetResponse>();
         auto& rec = response->Record;

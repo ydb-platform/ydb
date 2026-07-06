@@ -96,17 +96,17 @@ void TStatisticsAggregator::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
 void TStatisticsAggregator::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev) {
     auto pipeServerId = ev->Get()->ServerId;
 
-    YDB_LOG_DEBUG("EvServerConnected pipe server",
+    YDB_LOG_DEBUG("EvServerConnected",
         {"tabletId", TabletID()},
-        {"id", pipeServerId});
+        {"pipeServerId", pipeServerId});
 }
 
 void TStatisticsAggregator::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev) {
     auto pipeServerId = ev->Get()->ServerId;
 
-    YDB_LOG_DEBUG("EvServerDisconnected pipe server",
+    YDB_LOG_DEBUG("EvServerDisconnected",
         {"tabletId", TabletID()},
-        {"id", pipeServerId});
+        {"pipeServerId", pipeServerId});
 
     auto itNodeServer = NodePipes.find(pipeServerId);
     if (itNodeServer != NodePipes.end()) {
@@ -142,11 +142,11 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvConnectNode::TPtr& ev) {
     const TNodeId nodeId = record.GetNodeId();
     auto pipeServerId = ev->Recipient;
 
-    YDB_LOG_DEBUG("EvConnectNode pipe server node have schemeshards need schemeshards",
+    YDB_LOG_DEBUG("EvConnectNode",
         {"tabletId", TabletID()},
-        {"id", pipeServerId},
+        {"pipeServerId", pipeServerId},
         {"nodeId", nodeId},
-        {"count", record.HaveSchemeShardsSize()},
+        {"haveSchemeShardsCount", record.HaveSchemeShardsSize()},
         {"needSchemeShardsCount", record.NeedSchemeShardsSize()});
 
     if (NodePipes.find(pipeServerId) == NodePipes.end()) {
@@ -182,10 +182,10 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvRequestStats::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     const auto nodeId = record.GetNodeId();
 
-    YDB_LOG_DEBUG("EvRequestStats node schemeshard",
+    YDB_LOG_DEBUG("EvRequestStats",
         {"tabletId", TabletID()},
-        {"id", nodeId},
-        {"count", record.NeedSchemeShardsSize()},
+        {"nodeId", nodeId},
+        {"schemeShardsCount", record.NeedSchemeShardsSize()},
         {"urgent", record.GetUrgent()});
 
     if (!EnableStatistics) {
@@ -226,9 +226,9 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvConnectSchemeShard::TPtr& e
         ++SchemeShards[schemeShardId];
     }
 
-    YDB_LOG_DEBUG("EvConnectSchemeShard pipe server schemeshard",
+    YDB_LOG_DEBUG("EvConnectSchemeShard",
         {"tabletId", TabletID()},
-        {"id", pipeServerId},
+        {"pipeServerId", pipeServerId},
         {"schemeShardId", schemeShardId});
 }
 
@@ -342,10 +342,10 @@ void TStatisticsAggregator::ProcessRequests(TNodeId nodeId, const std::vector<TS
 }
 
 void TStatisticsAggregator::SendStatisticsToNode(TNodeId nodeId, const std::vector<TSSId>& ssIds) {
-    YDB_LOG_DEBUG("SendStatisticsToNode() node schemeshard",
+    YDB_LOG_DEBUG("SendStatisticsToNode()",
         {"tabletId", TabletID()},
-        {"id", nodeId},
-        {"count", ssIds.size()});
+        {"nodeId", nodeId},
+        {"schemeShardsCount", ssIds.size()});
 
     std::vector<TNodeId> nodeIds;
     nodeIds.push_back(nodeId);
@@ -360,10 +360,10 @@ void TStatisticsAggregator::PropagateStatistics() {
         return;
     }
 
-    YDB_LOG_DEBUG("PropagateStatistics() node schemeshard",
+    YDB_LOG_DEBUG("PropagateStatistics()",
         {"tabletId", TabletID()},
-        {"count", Nodes.size()},
-        {"requestedSchemeShardsCount", RequestedSchemeShards.size()});
+        {"nodesCount", Nodes.size()},
+        {"schemeShardsCount", RequestedSchemeShards.size()});
 
     std::vector<TNodeId> nodeIds;
     nodeIds.reserve(Nodes.size());
@@ -390,10 +390,10 @@ void TStatisticsAggregator::PropagateStatistics() {
 }
 
 void TStatisticsAggregator::PropagateFastStatistics() {
-    YDB_LOG_DEBUG("PropagateFastStatistics() node schemeshard",
+    YDB_LOG_DEBUG("PropagateFastStatistics()",
         {"tabletId", TabletID()},
-        {"count", FastNodes.size()},
-        {"fastSchemeShardsCount", FastSchemeShards.size()});
+        {"nodesCount", FastNodes.size()},
+        {"schemeShardsCount", FastSchemeShards.size()});
 
     if (FastNodes.empty() || FastSchemeShards.empty()) {
         return;
@@ -467,7 +467,7 @@ void TStatisticsAggregator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     auto tabletId = ev->Get()->TabletId;
     if (TraversalIsColumnTable) {
         if (tabletId == HiveId) {
-            YDB_LOG_ERROR("TEvDeliveryProblem with",
+            YDB_LOG_ERROR("TEvDeliveryProblem to Hive",
                 {"tabletId", TabletID()},
                 {"hiveId", tabletId});
             Schedule(HiveRetryInterval, new TEvPrivate::TEvRequestDistribution);
@@ -476,23 +476,27 @@ void TStatisticsAggregator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
                 for (TForceTraversalTable& operationTable : operation.Tables) {
                     for (TAnalyzedShard& shard : operationTable.AnalyzedShards) {
                         if (shard.ShardTabletId == tabletId) {
-                            YDB_LOG_ERROR("TEvDeliveryProblem with",
+                            YDB_LOG_ERROR("TEvDeliveryProblem to ColumnShard",
                                 {"tabletId", TabletID()},
-                                {"columnShard", tabletId});
+                                {"columnShardId", tabletId});
                             shard.Status = TAnalyzedShard::EStatus::DeliveryProblem;
                             return;
                         }
                     }
                 }
             }
-            YDB_LOG_CRIT("TEvDeliveryProblem with unexpected tablet",
+            YDB_LOG_CRIT("TEvDeliveryProblem to unexpected tablet",
                 {"tabletId", TabletID()},
+<<<<<<< HEAD
                 {"unexpectedTabletId", tabletId});
+=======
+                {"destinationTabletId", tabletId});
+>>>>>>> e8bbce79a1b8f3cb01b4c1205a473fb9549a3fe6
         }
     } else {
-        YDB_LOG_ERROR("TEvDeliveryProblem with",
+        YDB_LOG_ERROR("TEvDeliveryProblem to DataShard",
             {"tabletId", TabletID()},
-            {"dataShard", tabletId});
+            {"dataShardId", tabletId});
         if (DatashardRanges.empty()) {
             return;
         }
@@ -538,7 +542,7 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev) {
         }
     }
 
-    YDB_LOG_DEBUG("Send TEvStatistics::TEvAnalyzeStatusResponse. Status",
+    YDB_LOG_DEBUG("Send TEvStatistics::TEvAnalyzeStatusResponse",
         {"tabletId", TabletID()},
         {"status", outRecord.GetStatus()});
 
@@ -635,14 +639,14 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeActorResult::TPtr& e
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeCancel::TPtr& ev) {
     const auto& operationId = ev->Get()->Record.GetOperationId();
     if (operationId != ForceTraversalOperationId) {
-        YDB_LOG_NOTICE("Got unexpected TEvAnalyzeCancel with ignoring",
-            {"operationId", operationId},
-            {"expected", ForceTraversalOperationId});
+        YDB_LOG_NOTICE("Got unexpected TEvAnalyzeCancel, ignoring",
+            {"operationId", operationId.Quote()},
+            {"expected", ForceTraversalOperationId.Quote()});
         return;
     }
 
     YDB_LOG_DEBUG("Got TEvAnalyzeCancel,",
-        {"operationId", operationId});
+        {"operationId", operationId.Quote()});
     DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED);
 }
 
@@ -765,12 +769,12 @@ void TStatisticsAggregator::SaveStatisticsToTable() {
 
     SaveQueryActorId = Register(
         CreateSaveStatisticsQuery(SelfId(), Database, TraversalPathId, std::move(items)));
-    YDB_LOG_DEBUG("Dispatched SaveStatisticsQuery actor items data items",
+    YDB_LOG_DEBUG("Dispatched SaveStatisticsQuery",
         {"tabletId", TabletID()},
-        {"id", SaveQueryActorId},
-        {"size", itemsSize},
-        {"humanReadableDataSize", HumanReadableSize(dataSize, ESizeFormat::SF_BYTES)},
-        {"left", StatisticsToSave.size()});
+        {"actorId", SaveQueryActorId},
+        {"itemsSize", itemsSize},
+        {"dataSize", HumanReadableSize(dataSize, ESizeFormat::SF_BYTES)},
+        {"itemsLeft", StatisticsToSave.size()});
 }
 
 void TStatisticsAggregator::DeleteStatisticsFromTable() {
@@ -841,10 +845,10 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
                 AnalyzeActorId = ctx.Register(new TAnalyzeActor(
                     SelfId(), operation.OperationId, operation.DatabaseName, operationTable.PathId,
                     operationTable.ColumnTags, analyzeActorConfig));
-                YDB_LOG_DEBUG("ScheduleNextAnalyze. started analyzing",
+                YDB_LOG_DEBUG("ScheduleNextAnalyze. started analyzing table",
                     {"tabletId", TabletID()},
-                    {"operationId", operation.OperationId},
-                    {"table", operationTable.PathId},
+                    {"operationId", operation.OperationId.Quote()},
+                    {"pathId", operationTable.PathId},
                     {"analyzeActorId", AnalyzeActorId});
 
                 return;
@@ -853,7 +857,7 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
 
         YDB_LOG_DEBUG("ScheduleNextAnalyze. All the force traversal tables sent the requests",
             {"tabletId", TabletID()},
-            {"operationId", operation.OperationId});
+            {"operationId", operation.OperationId.Quote()});
         continue;
     }
 
@@ -1006,7 +1010,7 @@ std::optional<bool> TStatisticsAggregator::IsColumnTable(const TPathId& pathId) 
     auto itPath = ScheduleTraversals.find(pathId);
     if (itPath != ScheduleTraversals.end()) {
         bool ret = itPath->second.IsColumnTable;
-        YDB_LOG_DEBUG("IsColumnTable. Path is table",
+        YDB_LOG_DEBUG("IsColumnTable",
             {"tabletId", TabletID()},
             {"pathId", pathId},
             {"tableType", (ret ? "column" : "datashard")});

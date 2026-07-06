@@ -16,7 +16,7 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
 
         if (!Self->EnableColumnStatistics) {
-            YDB_LOG_TRACE("Column statistics disabled won't schedule traversals",
+            YDB_LOG_TRACE("Column statistics disabled, won't schedule traversals",
                 {"tabletId", Self->TabletID()});
             return true;
         }
@@ -24,9 +24,9 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
         Self->RecalcForceTraversalInflightMaxTimeCounter(ctx.Now());
 
         if (Self->TraversalPathId) {
-            YDB_LOG_TRACE("TTxScheduleTraversal::Execute. Traverse is in progress. PathId",
+            YDB_LOG_TRACE("TTxScheduleTraversal::Execute. Traverse is in progress.",
                 {"tabletId", Self->TabletID()},
-                {"traversalPathId", Self->TraversalPathId});
+                {"pathId", Self->TraversalPathId});
             return true;
         }
 

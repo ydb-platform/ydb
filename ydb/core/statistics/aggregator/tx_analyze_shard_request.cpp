@@ -54,7 +54,7 @@ struct TStatisticsAggregator::TTxAnalyzeShardRequest : public TTxBase {
 
     void Complete(const TActorContext& ctx) override {
         if (Events.size()) {
-            YDB_LOG_DEBUG("TTxAnalyzeShardRequest::Complete. Send events",
+            YDB_LOG_DEBUG("TTxAnalyzeShardRequest::Complete",
                 {"tabletId", Self->TabletID()},
                 {"eventsCount", Events.size()});
         }

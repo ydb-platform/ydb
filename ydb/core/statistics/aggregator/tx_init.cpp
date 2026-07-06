@@ -55,7 +55,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 switch (id) {
                     case Schema::SysParam_Database:
                         Self->Database = value;
-                        YDB_LOG_DEBUG("Loaded",
+                        YDB_LOG_DEBUG("Loaded database",
                             {"tabletId", Self->TabletID()},
                             {"database", Self->Database});
                         break;
@@ -66,7 +66,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         break;
                     case Schema::SysParam_TraversalTableDatabase:
                         Self->TraversalDatabase = value;
-                        YDB_LOG_DEBUG("Loaded traversal table",
+                        YDB_LOG_DEBUG("Loaded traversal table database",
                             {"tabletId", Self->TabletID()},
                             {"database", Self->TraversalDatabase});
                         break;
@@ -85,28 +85,28 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                     case Schema::SysParam_TraversalStartTime: {
                         auto us = FromString<ui64>(value);
                         Self->TraversalStartTime = TInstant::MicroSeconds(us);
-                        YDB_LOG_DEBUG("Loaded traversal start",
+                        YDB_LOG_DEBUG("Loaded traversal start time",
                             {"tabletId", Self->TabletID()},
                             {"time", us});
                         break;
                     }
                     case Schema::SysParam_TraversalIsColumnTable: {
                         Self->TraversalIsColumnTable = FromString<bool>(value);
-                        YDB_LOG_DEBUG("Loaded traversal",
+                        YDB_LOG_DEBUG("Loaded traversal IsColumnTable",
                             {"tabletId", Self->TabletID()},
                             {"isColumnTable", value});
                         break;
                     }
                     case Schema::SysParam_GlobalTraversalRound: {
                         Self->GlobalTraversalRound = FromString<ui64>(value);
-                        YDB_LOG_DEBUG("Loaded global traversal",
+                        YDB_LOG_DEBUG("Loaded global traversal round",
                             {"tabletId", Self->TabletID()},
                             {"round", value});
                         break;
                     }
                     case Schema::SysParam_ForceTraversalOperationId:
                         Self->ForceTraversalOperationId = value;
-                        YDB_LOG_DEBUG("Loaded force traversal operation",
+                        YDB_LOG_DEBUG("Loaded force traversal operation id",
                             {"tabletId", Self->TabletID()},
                             {"id", value});
                         break;
@@ -143,9 +143,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 }
             }
 
-            YDB_LOG_DEBUG("Loaded BaseStatistics: schemeshard",
+            YDB_LOG_DEBUG("Loaded BaseStatistics",
                 {"tabletId", Self->TabletID()},
-                {"count", Self->BaseStatistics.size()});
+                {"schemeShardsCount", Self->BaseStatistics.size()});
         }
 
         // ColumnStatistics
@@ -169,9 +169,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 }
             }
 
-            YDB_LOG_DEBUG("Loaded ColumnStatistics: column",
+            YDB_LOG_DEBUG("Loaded ColumnStatistics",
                 {"tabletId", Self->TabletID()},
-                {"count", Self->CountMinSketches.size()});
+                {"columnCount", Self->CountMinSketches.size()});
         }
 
         // ScheduleTraversals
@@ -209,9 +209,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 }
             }
 
-            YDB_LOG_DEBUG("Loaded ScheduleTraversals: table",
+            YDB_LOG_DEBUG("Loaded ScheduleTraversals",
                 {"tabletId", Self->TabletID()},
-                {"count", Self->ScheduleTraversals.size()});
+                {"tablesCount", Self->ScheduleTraversals.size()});
         }
 
         // ForceTraversalOperations
@@ -237,10 +237,10 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 if (Ydb::Table::AnalyzeState::State_IsValid(static_cast<int>(stateVal))) {
                     state = static_cast<Ydb::Table::AnalyzeState::State>(stateVal);
                 } else {
-                    YDB_LOG_WARN("For clamping to STATE_UNSPECIFIED",
+                    YDB_LOG_WARN("tx_init: invalid persisted AnalyzeState, clamping to STATE_UNSPECIFIED",
                         {"tabletId", Self->TabletID()},
                         {"analyzeState", stateVal},
-                        {"operationId", operationId});
+                        {"operationId", operationId.Quote()});
                 }
 
                 TForceTraversalOperation operation {
@@ -263,9 +263,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
             Self->RecalcForceTraversalsInflightSizeCounter();
 
-            YDB_LOG_DEBUG("Loaded ForceTraversalOperations: table",
+            YDB_LOG_DEBUG("Loaded ForceTraversalOperations",
                 {"tabletId", Self->TabletID()},
-                {"count", Self->ForceTraversals.size()});
+                {"tableCount", Self->ForceTraversals.size()});
         }
 
         // ForceTraversalTables
@@ -299,9 +299,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 if (forceTraversalOperation) {
                     forceTraversalOperation->Tables.emplace_back(operationTable);
                 } else {
-                    YDB_LOG_ERROR("ForceTraversalTables contains unknown",
+                    YDB_LOG_ERROR("ForceTraversalTables contains unknown operationId",
                         {"tabletId", Self->TabletID()},
-                        {"operationId", operationId});
+                        {"operationId", operationId.Quote()});
                 }
 
                 if (!rowset.Next()) {
@@ -309,9 +309,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 }
             }
 
-            YDB_LOG_DEBUG("Loaded ForceTraversalTables: table",
+            YDB_LOG_DEBUG("Loaded ForceTraversalTables",
                 {"tabletId", Self->TabletID()},
-                {"count", size});
+                {"tablesCount", size});
         }
 
         return true;
@@ -344,7 +344,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         }
 
         if (Self->TraversalPathId && Self->TraversalStartKey) {
-            YDB_LOG_DEBUG("TTxInit::Complete. Start navigate. PathId",
+            YDB_LOG_DEBUG("TTxInit::Complete. Start navigate.",
                 {"tabletId", Self->TabletID()},
                 {"traversalPathId", Self->TraversalPathId});
             Self->NavigateDatabase = Self->TraversalDatabase;

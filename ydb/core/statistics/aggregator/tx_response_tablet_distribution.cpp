@@ -55,9 +55,9 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("TTxResponseTabletDistribution::Execute. Node",
+        YDB_LOG_DEBUG("TTxResponseTabletDistribution::Execute",
             {"tabletId", Self->TabletID()},
-            {"count", HiveRecord.NodesSize()});
+            {"nodeCount", HiveRecord.NodesSize()});
 
         auto distribution = Self->TabletsForReqDistribution;
         for (auto& inNode : HiveRecord.GetNodes()) {
@@ -80,9 +80,9 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
         }
 
         if (!distribution.empty() && Self->ResolveRound < Self->MaxResolveRoundCount) {
-            YDB_LOG_WARN("TTxResponseTabletDistribution::Execute. Some tablets do not exist in Hive anymore; tablet",
+            YDB_LOG_WARN("TTxResponseTabletDistribution::Execute. Some tablets do not exist in Hive anymore",
                 {"tabletId", Self->TabletID()},
-                {"count", distribution.size()});
+                {"tabletCount", distribution.size()});
             // these tablets do not exist in Hive anymore
             Self->NavigateDatabase = Self->TraversalDatabase;
             Self->NavigatePathId = Self->TraversalPathId;

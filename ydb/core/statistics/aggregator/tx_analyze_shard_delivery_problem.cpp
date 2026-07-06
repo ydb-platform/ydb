@@ -24,7 +24,7 @@ struct TStatisticsAggregator::TTxAnalyzeShardDeliveryProblem : public TTxBase {
                     if (analyzedShard.Status == TAnalyzedShard::EStatus::DeliveryProblem) {
                         YDB_LOG_DEBUG("Reset DeliveryProblem",
                             {"tabletId", Self->TabletID()},
-                            {"toColumnShard", analyzedShard.ShardTabletId});
+                            {"columnShard", analyzedShard.ShardTabletId});
                         analyzedShard.Status = TAnalyzedShard::EStatus::None;
                     }
                 }

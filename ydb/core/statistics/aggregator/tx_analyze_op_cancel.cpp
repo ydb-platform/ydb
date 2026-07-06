@@ -47,9 +47,9 @@ struct TStatisticsAggregator::TTxAnalyzeOpCancel : public TTxBase {
         const TString& operationId = record.GetOperationId();
         const TString& dbName = record.GetDatabaseName();
 
-        YDB_LOG_NOTICE("][AnalyzeOp] TTxAnalyzeOpCancel::Complete",
+        YDB_LOG_NOTICE("[AnalyzeOp] TTxAnalyzeOpCancel::Complete",
             {"tabletId", Self->TabletID()},
-            {"opId", operationId});
+            {"opId", operationId.Quote()});
 
         auto response = MakeHolder<TEvStatistics::TEvAnalyzeOpCancelResponse>();
         auto& rec = response->Record;

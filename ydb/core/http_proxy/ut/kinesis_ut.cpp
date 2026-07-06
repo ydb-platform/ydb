@@ -214,6 +214,12 @@ Y_UNIT_TEST_SUITE(TestKinesisHttpProxy) {
         }
     }
 
+    Y_UNIT_TEST_F(CreateStreamWithNonSqsApiVersion, THttpProxyTestMock) {
+        auto res = SendHttpRequest("/Root", "legacyApi.CreateStream", CreateCreateStreamRequest(),
+                                   FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+    }
+
     Y_UNIT_TEST_F(CreateStreamWithDifferentRetentions, THttpProxyTestMock) {
         {
             auto request = CreateCreateStreamRequest();

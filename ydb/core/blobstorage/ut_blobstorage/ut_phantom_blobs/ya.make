@@ -4,6 +4,10 @@ FORK_SUBTESTS()
 
 SIZE(MEDIUM)
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:4)
+ENDIF()
+
 SRCS(
     phantom_blobs.cpp
 )

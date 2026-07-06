@@ -76,6 +76,49 @@ END()
     assert san_attrs["effective_split_factor"] == 30
 
 
+def test_sanitizer_branch_falls_back_to_default_cpu():
+    content = """UNITTEST()
+
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+ELSE()
+    SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
+ENDIF()
+
+END()
+"""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        suite = root / "ydb/tests/example"
+        suite.mkdir(parents=True)
+        (suite / "ya.make").write_text(content, encoding="utf-8")
+        san = get_requirements_for_suite(root, "ydb/tests/example", sanitizer="address")
+        rel = get_requirements_for_suite(root, "ydb/tests/example", sanitizer=None)
+    assert san == {"size": "LARGE", "cpu_cores": 2}
+    assert rel == {"size": "MEDIUM", "cpu_cores": 2}
+
+
+def test_top_level_cpu_visible_in_sanitizer_branch():
+    content = """PY3TEST()
+
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:10)
+ENDIF()
+
+SIZE(MEDIUM)
+END()
+"""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        suite = root / "ydb/tests/example"
+        suite.mkdir(parents=True)
+        (suite / "ya.make").write_text(content, encoding="utf-8")
+        san = get_requirements_for_suite(root, "ydb/tests/example", sanitizer="address")
+    assert san == {"cpu_cores": 2, "ram_gb": 10, "size": "MEDIUM"}
+
+
 def test_get_requirements_normalizes_partitioned_suite_path():
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -104,6 +147,8 @@ END()
 
 if __name__ == "__main__":
     test_sanitizer_conditional_requirements()
+    test_sanitizer_branch_falls_back_to_default_cpu()
+    test_top_level_cpu_visible_in_sanitizer_branch()
     test_fork_test_files_effective_split_counts_active_test_srcs_only()
     test_get_requirements_normalizes_partitioned_suite_path()
     print("OK")

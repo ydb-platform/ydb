@@ -1,7 +1,12 @@
 PY3TEST()
 
+IF (SANITIZER_TYPE)
+    TIMEOUT(600)
+ELSE()
+    TIMEOUT(120)
+ENDIF()
+
 SIZE(MEDIUM)
-TIMEOUT(120)
 
 TEST_SRCS(
     test_cluster_config_validation.py

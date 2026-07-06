@@ -245,7 +245,13 @@ def get_requirements_for_suite(repo_root: Path, suite_path: str, sanitizer: Opti
         text = ya_make.read_text(encoding="utf-8", errors="replace")
     except Exception:
         return None
-    attrs = _parse_active_attrs(text, sanitizer)
+    attrs = _parse_active_attrs(text, sanitizer) or {}
+    # Active sanitizer branch may set SIZE/RAM but omit cpu (e.g. cpu only in ELSE()).
+    # Fall back to REQUIREMENTS(cpu) from the default (non-sanitizer) evaluation.
+    if _has_sanitizer(sanitizer) and "cpu_cores" not in attrs:
+        default_attrs = _parse_active_attrs(text, None) or {}
+        if "cpu_cores" in default_attrs:
+            attrs["cpu_cores"] = default_attrs["cpu_cores"]
     return attrs or None
 
 

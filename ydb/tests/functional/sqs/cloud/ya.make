@@ -10,6 +10,9 @@ TEST_SRCS(
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:4)
+ENDIF()
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

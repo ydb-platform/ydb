@@ -1,5 +1,8 @@
 PY3TEST()
 
+FORK_TEST_FILES()
+SPLIT_FACTOR(2)
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 ENV(YDB_DSTOOL_BINARY="ydb/apps/dstool/ydb-dstool")

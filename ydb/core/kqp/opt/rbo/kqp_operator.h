@@ -267,16 +267,19 @@ public:
         return Kind;
     }
 
-    // make protected in the future
-    virtual void ComputeOutputIUs() = 0;
-    virtual void ComputeOutputIUsSubtree();
-
     const EOperator Kind;
     TPositionHandle Pos;
     TPhysicalOpProps Props;
     const TTypeAnnotationNode* Type = nullptr;
     TVector<TIntrusivePtr<IOperator>> Children;
     TVector<std::pair<IOperator*, ui32>> Parents;
+
+protected:
+    virtual void ComputeOutputIUs() = 0;
+    virtual void ComputeOutputIUsSubtree();
+
+    friend class TOpRoot;
+    friend void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString stageName);
 };
 
 template <class K>
@@ -356,8 +359,8 @@ public:
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
-    // make protected in the future
-    virtual void ComputeOutputIUs() override;
+protected:
+    void ComputeOutputIUs() override;
 };
 
 class TOpRead: public IOperator {
@@ -393,9 +396,6 @@ public:
     TExprNode::TPtr GetRanges() const { return RangeInfo ? RangeInfo->ComputeNode : nullptr; }
     TExprNode::TPtr GetTable() const { return TableCallable; }
 
-    // make protected in the future
-    virtual void ComputeOutputIUs() override;
-
     // TODO: make it private members, we should not access it directly
     TString Alias;
     TVector<TString> Columns;
@@ -409,6 +409,9 @@ public:
     std::optional<TExpression> OriginalPredicate;
     ESortDir SortDir{ESortDir::None};
     std::optional<TRangeInfo> RangeInfo;
+
+protected:
+    void ComputeOutputIUs() override;
 };
 
 class TMapElement {
@@ -473,11 +476,11 @@ public:
     bool HasOutputElement(const TInfoUnit& output) const;
     bool HasRenames() const;
 
-    // make protected in the future
-    virtual void ComputeOutputIUs() override;
-
     TVector<TMapElement> MapElements;
     bool Ordered = false;
+
+protected:
+    void ComputeOutputIUs() override;
 };
 
 /**
@@ -497,11 +500,11 @@ public:
     virtual TString ToString(TExprContext& ctx) override;
     virtual TString GetExplainName() const override { return "AddDependencies"; }
     
-    // make protected in the future
-    virtual void ComputeOutputIUs() override;
-
     TVector<TInfoUnit> Dependencies;
     TVector<const TTypeAnnotationNode*> Types;
+
+protected:
+    void ComputeOutputIUs() override;
 };
 
 struct TOpAggregationTraits {
@@ -553,13 +556,13 @@ public:
     TVector<TInfoUnit>& GetKeyColumns() { return KeyColumns; }
     bool IsDistinctAll() const { return DistinctAll; }
 
-    // make protected in the future
-    virtual void ComputeOutputIUs() override;
-
     TVector<TOpAggregationTraits> AggregationTraitsList;
     TVector<TInfoUnit> KeyColumns;
     EOpPhase AggregationPhase;
     bool DistinctAll;
+
+protected:
+    void ComputeOutputIUs() override;
 };
 
 class TOpFilter: public IUnaryOperator {
@@ -585,10 +588,10 @@ public:
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
     TExpression GetFilterExpression() const { return FilterExpr; }
 
-    // make protected in the future
-    virtual void ComputeOutputIUs() override;
-
     TExpression FilterExpr;
+
+protected:
+    void ComputeOutputIUs() override;
 };
 
 bool TestAndExtractEqualityPredicate(TExprNode::TPtr pred, TExprNode::TPtr& leftArg, TExprNode::TPtr& rightArg);
@@ -618,12 +621,12 @@ public:
     TVector<TInfoUnit> GetLHSKeys() const;
     TVector<TInfoUnit> GetRHSKeys() const;
 
-    // make protected in the future
-    virtual void ComputeOutputIUs() override;
-
     TString JoinKind;
     TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
     TVector<TExpression> JoinFilters;
+
+protected:
+    void ComputeOutputIUs() override;
 };
 
 class TOpUnionAll: public IBinaryOperator {
@@ -640,11 +643,11 @@ public:
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
-    // make protected in the future
-    virtual void ComputeOutputIUs() override;
-
     TVector<TInfoUnit> Columns;
     bool Ordered;
+
+protected:
+    void ComputeOutputIUs() override;
 };
 
 class TOpLimit: public IUnaryOperator {
@@ -673,11 +676,11 @@ public:
     bool HasOffset() const { return OffsetCond.has_value(); }
     std::optional<TExpression> GetOffsetCond() const { return OffsetCond; }
 
-    // make protected in the future
-    virtual void ComputeOutputIUs() override;
-
     // Make private.
     TExpression LimitCond;
+
+protected:
+    void ComputeOutputIUs() override;
 
 private:
     std::optional<TExpression> OffsetCond;
@@ -710,14 +713,14 @@ public:
         return SortElements;
     }
     bool IsTopSort() const { return LimitCond.has_value(); }
-    
+
     virtual TString GetExplainName() const override { return IsTopSort() ? "TopSort" : "Sort"; }
 
     TVector<TSortElement> SortElements;
     std::optional<TExpression> LimitCond;
 
-    // make protected in the future
-    virtual void ComputeOutputIUs() override;
+protected:
+    void ComputeOutputIUs() override;
 
 private:
     EOpPhase SortPhase{EOpPhase::Undefined};
@@ -758,11 +761,11 @@ public:
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
-    // make protected in the future
-    virtual void ComputeOutputIUs() override;
-
     TIntrusivePtr<IOperator> TreeRoot;
     TVector<TIntrusivePtr<IOperator>> TreeNodes;
+
+protected:
+    void ComputeOutputIUs() override;
 
 private:
     void RebuildChildren();
@@ -920,16 +923,18 @@ public:
         return TOpTraversal(this);
     }
 
-    // make protected in the future
-    virtual void ComputeOutputIUs() override;
-    virtual void ComputeOutputIUsSubtree() override;
-
     NJson::TJsonValue GetExecutionJson(ui64 & nodeCounter, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags = 0x00);
     NJson::TJsonValue GetExplainJson(ui64 & nodeCounter, const THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags = 0x00);
 
     TPlanProps PlanProps;
     TExprNode::TPtr Node;
     TVector<TString> ColumnOrder;
+
+protected:
+    void ComputeOutputIUs() override;
+    void ComputeOutputIUsSubtree() override;
+
+    friend void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString stageName);
 
 private:
     void ClearParentsRec(TIntrusivePtr<IOperator> op, std::unordered_set<IOperator*>& visited) const;

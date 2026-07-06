@@ -23,6 +23,19 @@ TOKENS = [
 DATABASE = '/Root'
 TENANT_DATABASE = '/Root/Tenant'
 
+_DEFAULT_QUERIES = [
+    {},
+    {'database': DATABASE},
+    {'database': TENANT_DATABASE},
+]
+
+# Demo counter handlers stream ~10s by default; keep requests short like viewer unit tests.
+_COUNTER_ENDPOINT_QUERIES = [
+    {'max_counter': '1', 'period': '1'},
+    {'max_counter': '1', 'period': '1', 'database': DATABASE},
+    {'max_counter': '1', 'period': '1', 'database': TENANT_DATABASE},
+]
+
 ENDPOINT_SPECS = [
     {'path': '/actors/'},
     {'path': '/actors/blobstorageproxies'},
@@ -151,7 +164,7 @@ ENDPOINT_SPECS = [
     {'path': '/viewer/hotkeys'},
     {'path': '/viewer/labeledcounters'},
     {'path': '/viewer/metainfo'},
-    {'path': '/viewer/multipart_counter'},
+    {'path': '/viewer/multipart_counter', 'queries': _COUNTER_ENDPOINT_QUERIES},
     {'path': '/viewer/netinfo'},
     {'path': '/viewer/nodeinfo'},
     {'path': '/viewer/nodelist'},
@@ -163,8 +176,8 @@ ENDPOINT_SPECS = [
     {'path': '/viewer/put_record'},
     {'path': '/viewer/query'},
     {'path': '/viewer/render'},
-    {'path': '/viewer/simple_counter'},
-    {'path': '/viewer/sse_counter'},
+    {'path': '/viewer/simple_counter', 'queries': _COUNTER_ENDPOINT_QUERIES},
+    {'path': '/viewer/sse_counter', 'queries': _COUNTER_ENDPOINT_QUERIES},
     {'path': '/viewer/storage'},
     {'path': '/viewer/storage_stats'},
     {'path': '/viewer/storage_usage'},
@@ -191,13 +204,6 @@ ENDPOINT_SPECS = [
 _DEFAULT_METHODS = ('GET', 'POST')
 _REQUEST_TIMEOUT = 5
 _MAX_PARALLEL_REQUESTS = 32
-
-_DEFAULT_QUERIES = [
-    {},
-    {'database': DATABASE},
-    {'database': TENANT_DATABASE},
-]
-
 
 _thread_local = threading.local()
 

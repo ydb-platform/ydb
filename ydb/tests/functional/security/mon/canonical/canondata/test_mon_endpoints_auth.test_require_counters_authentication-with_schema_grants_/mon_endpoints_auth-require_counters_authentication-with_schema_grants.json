@@ -3015,7 +3015,7 @@
       }
     },
     "/viewer/multipart_counter": {
-      "": {
+      "?max_counter=1&period=1": {
         "__none__": 401,
         "user@builtin": 403,
         "database@builtin": 403,
@@ -3023,7 +3023,7 @@
         "monitoring@builtin": 200,
         "root@builtin": 200
       },
-      "?database=/Root": {
+      "?max_counter=1&period=1&database=/Root": {
         "__none__": 401,
         "user@builtin": 403,
         "database@builtin": 403,
@@ -3031,7 +3031,7 @@
         "monitoring@builtin": 400,
         "root@builtin": 200
       },
-      "?database=/Root/Tenant": {
+      "?max_counter=1&period=1&database=/Root/Tenant": {
         "__none__": 401,
         "user@builtin": 403,
         "database@builtin": 403,
@@ -3327,7 +3327,7 @@
       }
     },
     "/viewer/simple_counter": {
-      "": {
+      "?max_counter=1&period=1": {
         "__none__": 401,
         "user@builtin": 403,
         "database@builtin": 403,
@@ -3335,7 +3335,7 @@
         "monitoring@builtin": 200,
         "root@builtin": 200
       },
-      "?database=/Root": {
+      "?max_counter=1&period=1&database=/Root": {
         "__none__": 401,
         "user@builtin": 403,
         "database@builtin": 403,
@@ -3343,7 +3343,7 @@
         "monitoring@builtin": 400,
         "root@builtin": 200
       },
-      "?database=/Root/Tenant": {
+      "?max_counter=1&period=1&database=/Root/Tenant": {
         "__none__": 401,
         "user@builtin": 403,
         "database@builtin": 403,
@@ -3353,7 +3353,7 @@
       }
     },
     "/viewer/sse_counter": {
-      "": {
+      "?max_counter=1&period=1": {
         "__none__": 401,
         "user@builtin": 403,
         "database@builtin": 403,
@@ -3361,7 +3361,7 @@
         "monitoring@builtin": 200,
         "root@builtin": 200
       },
-      "?database=/Root": {
+      "?max_counter=1&period=1&database=/Root": {
         "__none__": 401,
         "user@builtin": 403,
         "database@builtin": 403,
@@ -3369,7 +3369,7 @@
         "monitoring@builtin": 400,
         "root@builtin": 200
       },
-      "?database=/Root/Tenant": {
+      "?max_counter=1&period=1&database=/Root/Tenant": {
         "__none__": 401,
         "user@builtin": 403,
         "database@builtin": 403,
@@ -6941,7 +6941,7 @@
       }
     },
     "/viewer/multipart_counter": {
-      "": {
+      "?max_counter=1&period=1": {
         "__none__": 401,
         "user@builtin": 403,
         "database@builtin": 403,
@@ -6949,7 +6949,7 @@
         "monitoring@builtin": 200,
         "root@builtin": 200
       },
-      "?database=/Root": {
+      "?max_counter=1&period=1&database=/Root": {
         "__none__": 401,
         "user@builtin": 403,
         "database@builtin": 403,
@@ -6957,7 +6957,7 @@
         "monitoring@builtin": 400,
         "root@builtin": 200
       },
-      "?database=/Root/Tenant": {
+      "?max_counter=1&period=1&database=/Root/Tenant": {
         "__none__": 401,
         "user@builtin": 403,
         "database@builtin": 403,
@@ -7253,7 +7253,7 @@
       }
     },
     "/viewer/simple_counter": {
-      "": {
+      "?max_counter=1&period=1": {
         "__none__": 401,
         "user@builtin": 403,
         "database@builtin": 403,
@@ -7261,7 +7261,7 @@
         "monitoring@builtin": 200,
         "root@builtin": 200
       },
-      "?database=/Root": {
+      "?max_counter=1&period=1&database=/Root": {
         "__none__": 401,
         "user@builtin": 403,
         "database@builtin": 403,
@@ -7269,7 +7269,7 @@
         "monitoring@builtin": 400,
         "root@builtin": 200
       },
-      "?database=/Root/Tenant": {
+      "?max_counter=1&period=1&database=/Root/Tenant": {
         "__none__": 401,
         "user@builtin": 403,
         "database@builtin": 403,
@@ -7279,7 +7279,7 @@
       }
     },
     "/viewer/sse_counter": {
-      "": {
+      "?max_counter=1&period=1": {
         "__none__": 401,
         "user@builtin": 403,
         "database@builtin": 403,
@@ -7287,7 +7287,7 @@
         "monitoring@builtin": 200,
         "root@builtin": 200
       },
-      "?database=/Root": {
+      "?max_counter=1&period=1&database=/Root": {
         "__none__": 401,
         "user@builtin": 403,
         "database@builtin": 403,
@@ -7295,7 +7295,7 @@
         "monitoring@builtin": 400,
         "root@builtin": 200
       },
-      "?database=/Root/Tenant": {
+      "?max_counter=1&period=1&database=/Root/Tenant": {
         "__none__": 401,
         "user@builtin": 403,
         "database@builtin": 403,

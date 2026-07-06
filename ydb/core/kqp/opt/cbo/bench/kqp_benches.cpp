@@ -1,5 +1,6 @@
 #include "kqp_benches.h"
 
+#include <library/cpp/json/writer/json.h>
 #include <util/generic/array_size.h>
 #include <util/system/yassert.h>
 
@@ -14,6 +15,19 @@ void TComputedStatistics::ToCSV(IOutputStream& os) const {
         << "," << Q1 << "," << Q3 << "," << IQR
         << "," << Mean << "," << Stdev
         << "," << N << "," << Min << "," << Max;
+}
+
+NJson::TJsonValue TComputedStatistics::ToJson() const {
+    NJson::TJsonValue stats;
+    stats.InsertValue("Median", NJson::TJsonValue(Median));
+    stats.InsertValue("MAD", NJson::TJsonValue(MAD));
+    stats.InsertValue("Q1", NJson::TJsonValue(Q1));
+    stats.InsertValue("Q3", NJson::TJsonValue(Q3));
+    stats.InsertValue("IQR", NJson::TJsonValue(IQR));
+    stats.InsertValue("N", NJson::TJsonValue(N));
+    stats.InsertValue("Min", NJson::TJsonValue(Max));
+
+    return stats;
 }
 
 double CalculatePercentile(std::vector<double>& data, double percentile) {
@@ -221,7 +235,7 @@ static std::pair<std::string, double> SelectUnit(ui64 nanoseconds) {
     } else if (nanoseconds >= 1'000'000) {
         return {"ms", 1e6};
     } else if (nanoseconds >= 1'000) {
-        return {"μs", 1e3};
+        return {"mcs", 1e3};
     } else {
         return {"ns", 1.0};
     }
@@ -268,7 +282,7 @@ static int GetDecimalPlacesForValue(double scaledValue) {
     }
 }
 
-std::string TimeFormatter::Format(ui64 valueNs, ui64 uncertaintyNs) {
+std::string TimeFormatter::Format(ui64 valueNs, ui64 uncertaintyNs, const char* uncertaintySymbol) {
     auto [unit, scale] = SelectUnit(valueNs);
 
     double scaledValue = valueNs / scale;
@@ -278,7 +292,7 @@ std::string TimeFormatter::Format(ui64 valueNs, ui64 uncertaintyNs) {
 
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(decimalPlaces);
-    oss << scaledValue << " " << unit << " ± " << scaledUncertainty << " " << unit;
+    oss << scaledValue << " " << unit << " " << uncertaintySymbol << " " << scaledUncertainty << " " << unit;
 
     return oss.str();
 }

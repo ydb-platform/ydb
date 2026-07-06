@@ -10,6 +10,9 @@ namespace NKikimr {
 namespace NKqp {
 
 bool ISimplifiedRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+    if (!QuickMatch(input)) {
+        return false;
+    }
 
     auto output = SimpleMatchAndApply(input, ctx, props);
     if (input != output) {
@@ -100,9 +103,12 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
 
         for (auto iter : root) {
             for (const auto& rule : Rules) {
-                EnsureRequiredProps(root, rule->Props, computedProps, ctx, StageName);
-
                 auto op = iter.Current;
+                if (!rule->QuickMatch(op)) {
+                    continue;
+                }
+
+                EnsureRequiredProps(root, rule->Props, computedProps, ctx, StageName);
 
                 TRuleTraceAttempt traceAttempt(ctx, rule->RuleName);
                 const bool ruleApplied = rule->MatchAndApply(op, ctx, root.PlanProps);

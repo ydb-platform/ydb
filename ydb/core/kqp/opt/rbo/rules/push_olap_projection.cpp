@@ -25,6 +25,11 @@ bool IsSuitableToPushProjectionToColumnTables(const TIntrusivePtr<IOperator>& in
 
 } // anonymous namespace
 
+bool TPushOlapProjectionRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Map &&
+        input->Children.front()->Kind == EOperator::Source;
+}
+
 TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(props);
     if (!(ctx.KqpCtx.Config->HasOptEnableOlapPushdown() && ctx.KqpCtx.Config->GetEnableOlapPushdownProjections())) {

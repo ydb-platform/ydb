@@ -100,6 +100,10 @@ bool CanPushAppendToChild(
 
 } // anonymous namespace
 
+bool TPushMapElementsThroughInputRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Map;
+}
+
 TIntrusivePtr<IOperator>
 TPushMapElementsThroughInputRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     if (input->Kind != EOperator::Map) {

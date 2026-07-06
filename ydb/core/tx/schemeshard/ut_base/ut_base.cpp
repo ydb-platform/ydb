@@ -5006,7 +5006,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::CheckColumns("Table", {"key_new", "value0_new", "value1_new"}, {}, {"key_new"})});
     }
 
-    Y_UNIT_TEST(AlterTableRenameColumnWithCdcStreamIsRejected) { //+
+    Y_UNIT_TEST(AlterTableRenameColumnWithJsonCdcStreamIsRejectedUnlessOverridden) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -5029,10 +5029,50 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        Cdbg << "AlterTable: rename any column is rejected while a changefeed is active" << Endl;
+        Cdbg << "AlterTable: rename is rejected by default while a JSON-family changefeed is active" << Endl;
         TestAlterTable(runtime, ++txId, "/MyRoot",
                 R"(Name: "Table" Columns { Name: "value_new" RenameFrom: "value" })",
                 {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusPreconditionFailed});
+
+        Cdbg << "AlterTable: rename succeeds with the explicit override" << Endl;
+        TestAlterTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table" Columns { Name: "value_new" RenameFrom: "value" } AllowRenameWithJsonCdc: true)");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::CheckColumns("Table", {"key", "value_new"}, {}, {"key"})});
+    }
+
+    Y_UNIT_TEST(AlterTableRenameColumnWithProtoCdcStreamIsAllowed) { //+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table"
+                    Columns { Name: "key"   Type: "Uint64"}
+                    Columns { Name: "value" Type: "Utf8"}
+                    KeyColumnNames: ["key"]
+                )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        Cdbg << "AlterTable: rename needs no override for a Proto-format changefeed (immune by construction)" << Endl;
+        TestAlterTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table" Columns { Name: "value_new" RenameFrom: "value" })");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::CheckColumns("Table", {"key", "value_new"}, {}, {"key"})});
     }
 
     Y_UNIT_TEST(AlterTableDropColumnReCreateSplit) {

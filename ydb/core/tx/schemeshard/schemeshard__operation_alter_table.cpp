@@ -441,12 +441,50 @@ bool CheckRenamingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableD
         }
 
         if (childPath->IsCdcStream() && !childPath->Dropped()) {
-            errStr = TStringBuilder ()
-                << "Impossible rename column: table has an active changefeed"
-                << ", table name: " << tablePath.PathString()
-                << ", changefeed name: " << childName
-                << ". Its wire format is keyed by column name; drop the changefeed before renaming a column";
-            return false;
+            // Only the JSON-family formats embed column names as JSON keys in the emitted
+            // change record (every column, not just the renamed one) -- a rename silently
+            // changes that wire contract for existing consumers. The raw Proto format is
+            // immune (field-number based), so it doesn't block rename.
+            bool isJsonFamily = false;
+            if (ss->CdcStreams.contains(childPathId)) {
+                switch (ss->CdcStreams.at(childPathId)->Format) {
+                    case NKikimrSchemeOp::ECdcStreamFormatJson:
+                    case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
+                    case NKikimrSchemeOp::ECdcStreamFormatDebeziumJson:
+                        isJsonFamily = true;
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            if (isJsonFamily && childPath->AsyncReplication.IsDefined()) {
+                // This CDC stream feeds an async replication target. The replication reader
+                // (ydb/core/tx/replication/service/json_change_record.cpp) still hard-crashes
+                // on an unrecognized column name instead of gracefully re-resolving the
+                // target schema, so this case is unconditionally rejected -- there is no
+                // override, because allowing it would trade a clear DDL error for a later
+                // process crash on the replication side.
+                errStr = TStringBuilder ()
+                    << "Impossible rename column: table feeds an active async replication via changefeed"
+                    << ", table name: " << tablePath.PathString()
+                    << ", changefeed name: " << childName
+                    << ". The replication reader does not yet handle a renamed column gracefully;"
+                    << " stop or drop the replication target first";
+                return false;
+            }
+
+            if (isJsonFamily && !alter.GetAllowRenameWithJsonCdc()) {
+                errStr = TStringBuilder ()
+                    << "Impossible rename column: table has an active JSON-family changefeed"
+                    << ", table name: " << tablePath.PathString()
+                    << ", changefeed name: " << childName
+                    << ". Its wire format is keyed by column name for every column, which would silently"
+                    << " change the on-wire contract for existing consumers. Drop or recreate the changefeed"
+                    << " after renaming, or set AllowRenameWithJsonCdc if you have already coordinated the"
+                    << " consumer-side change";
+                return false;
+            }
         }
     }
 

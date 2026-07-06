@@ -477,6 +477,11 @@ message TTableDescription {
     optional TTableDetailedMetricsSettings DetailedMetricsSettings = 51;
 
     reserved 52;
+
+    // Explicit acknowledgement that a RENAME COLUMN in this request may change the on-wire
+    // JSON key for an active JSON-family changefeed (Json/DynamoDBStreamsJson/DebeziumJson);
+    // without it such a rename is rejected. Ignored (no effect) for any other alter kind.
+    optional bool AllowRenameWithJsonCdc = 53 [default = false];
 }
 
 message TCompressionOptions {

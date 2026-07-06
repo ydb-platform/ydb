@@ -364,8 +364,9 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
     def start(self):
         try:
-            self.__port_allocator.release_port_bindings()
+            self.__port_allocator.hold_port_bindings()
             self.update_command(self.__make_run_command())
+            self.__port_allocator.release_port_bindings()
             super(KiKiMRNode, self).start()
         finally:
             logger.info("Started node %s", self)

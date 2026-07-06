@@ -162,7 +162,17 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
         return self.__ext_port
 
     def release_port_bindings(self):
-        for port in (
+        for port in self._allocated_ports():
+            if port is not None:
+                self.__port_manager.unbind_port(port)
+
+    def hold_port_bindings(self):
+        for port in self._allocated_ports():
+            if port is not None:
+                self.__port_manager.bind_port(port)
+
+    def _allocated_ports(self):
+        return (
             self.__mon_port,
             self.__grpc_port,
             self.__mbus_port,
@@ -174,9 +184,7 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
             self.__public_http_port,
             self.__pgwire_port,
             self.__kafka_api_port,
-        ):
-            if port is not None:
-                self.__port_manager.unbind_port(port)
+        )
 
 
 class KikimrPortManagerPortAllocator(KikimrPortAllocatorInterface):
@@ -252,6 +260,9 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
         self.__kafka_api_port = int(os.getenv('YDB_KAFKA_PROXY_PORT', kafka_api_port))
 
     def release_port_bindings(self):
+        pass
+
+    def hold_port_bindings(self):
         pass
 
     @property

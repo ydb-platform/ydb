@@ -62,7 +62,7 @@ void ITask::AddData(const TString& storageIdExt, const TBlobRange& range, const 
             {"finishedWithError", TaskFinishedWithError});
         return;
     } else {
-        YDB_LOG_TRACE_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump event, storageId, range, externalTaskId",
+        YDB_LOG_TRACE_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
             {"event", "NewData"},
             {"storageId", storageId},
             {"range", range},
@@ -83,7 +83,7 @@ void ITask::AddData(const TString& storageIdExt, const TBlobRange& range, const 
 }
 
 void ITask::StartBlobsFetching(const THashSet<TBlobRange>& rangesInProgress) {
-    YDB_LOG_TRACE_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump taskId, event",
+    YDB_LOG_TRACE_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
         {"taskId", ExternalTaskId},
         {"event", "start"});
     Y_ABORT_UNLESS(!BlobsFetchingStarted);

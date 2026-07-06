@@ -18,7 +18,7 @@ void TActor::HandleRetryTimer() {
     for (auto&& pending : ready) {
         auto action = Task->GetAgents().FindByStorageId(pending.StorageId);
         if (action) {
-            YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump event, blobRange, storageId",
+            YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
                 {"event", "RetryS3Read"},
                 {"blobRange", pending.Range},
                 {"storageId", pending.StorageId});

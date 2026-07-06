@@ -331,6 +331,54 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         );
     }
 
+    Y_UNIT_TEST(RenameTtlColumnShouldSucceedAndCarryThroughTtlSettings) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLEnabledTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "modified_at" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLEnabledTable"
+            TTLSettings {
+              Enabled {
+                ColumnName: "modified_at"
+                ExpireAfterSeconds: 3600
+                Tiers: {
+                  ApplyAfterSeconds: 3600
+                  Delete: {}
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        CheckTtlSettings(runtime, OltpTtlChecker);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLEnabledTable"
+            Columns { Name: "modified_at_new" RenameFrom: "modified_at" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/TTLEnabledTable"), {
+                NLs::PathExist,
+                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& table = record.GetPathDescription().GetTable();
+                    UNIT_ASSERT(table.HasTTLSettings());
+                    UNIT_ASSERT(table.GetTTLSettings().HasEnabled());
+                    UNIT_ASSERT_VALUES_EQUAL(table.GetTTLSettings().GetEnabled().GetColumnName(), "modified_at_new");
+                }
+            }
+        );
+    }
+
     Y_UNIT_TEST(AlterTableShouldSuccessOnSimultaneousAddColumnAndEnableTTL) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

@@ -416,13 +416,13 @@ namespace NActors {
             if (!SerializeToArcadiaStreamImpl(chunker, TBase::GetPayload())) {
                 return false;
             }
-            
+
             if (PreSerializedData && !chunker->WriteString(&PreSerializedData)) {
                 return false;
             }
 
             return Record.SerializeToZeroCopyStream(chunker);
-            
+
         }
 
         ui32 CalculateSerializedSize() const override {

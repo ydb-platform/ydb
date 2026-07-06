@@ -592,7 +592,7 @@ namespace {
                         }
                         break;
                     }
-                    case EXdcCommand::PUSH_DATA: 
+                    case EXdcCommand::PUSH_DATA:
                     case EXdcCommand::PUSH_DATA_NO_CHECKSUMS: {
                         const size_t cmdLen = sizeof(ui16) + (cmd == EXdcCommand::PUSH_DATA ? sizeof(ui32) : 0);
                         UNIT_ASSERT_C(static_cast<size_t>(partEnd - ptr) >= cmdLen, "invalid PUSH_DATA");
@@ -600,7 +600,7 @@ namespace {
                         ++counters.PushData;
                         break;
                     }
-                    case EXdcCommand::RDMA_READ: 
+                    case EXdcCommand::RDMA_READ:
                     case EXdcCommand::RDMA_READ_NO_CHECKSUMS: {
                         UNIT_ASSERT_C(static_cast<size_t>(partEnd - ptr) >= sizeof(ui16), "invalid RDMA_READ");
                         const ui16 credsSerializedSize = ReadUnaligned<ui16>(ptr);
@@ -719,7 +719,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaUsesIteratorOffsetInsideChunk) {
                         ptr += cmdLen;
                         break;
                     }
-                    case EXdcCommand::RDMA_READ: 
+                    case EXdcCommand::RDMA_READ:
                     case EXdcCommand::RDMA_READ_NO_CHECKSUMS: {
                         UNIT_ASSERT_C(static_cast<size_t>(partEnd - ptr) >= sizeof(ui16), "invalid RDMA_READ");
                         const ui16 credsSerializedSize = ReadUnaligned<ui16>(ptr);
@@ -1051,6 +1051,37 @@ TEST_F(XdcRdmaTest, SendRdma) {
     auto senderPtr = new TSendActor(receiver, std::move(ev));
     cluster.RegisterActor(senderPtr, 2);
     UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
+}
+
+TEST_F(XdcRdmaTest, SendRdmaEmptyProtoRecordWithPayload) {
+    TTestICCluster cluster(2);
+    auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+
+    auto buf = memPool->AllocRcBuf(5000, 0).value();
+    std::fill(buf.GetDataMut(), buf.GetDataMut() + 5000, 'X');
+
+    auto ev = std::make_unique<TEvTestSerialization>();
+    ev->AddPayload(TRope(std::move(buf)));
+    UNIT_ASSERT_VALUES_EQUAL(ev->Record.ByteSize(), 0);
+    UNIT_ASSERT(ev->AllowExternalDataChannel());
+
+    auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.ByteSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), 5000u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), TString(5000, 'X'));
+    });
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
+
+    Sleep(TDuration::MilliSeconds(1000));
+
+    auto senderPtr = new TSendActor(receiver, std::move(ev));
+    cluster.RegisterActor(senderPtr, 2);
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
+
+    TString lastRdmaStatus;
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, "On | SoftwareChecksum", 20, lastRdmaStatus),
+        "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
 }
 
 TEST_F(XdcRdmaTest, SendRdmaWithShuffledPayload) {

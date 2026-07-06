@@ -1,3 +1,4 @@
+#include <ydb/core/testlib/actors/wait_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
@@ -1179,29 +1180,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             // Split partition #2 into 2
             const auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
             UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
-            const ui64 splitSrcTabletId = shards[1];
-            const TString splitRequest = Sprintf(R"(
+
+            TWaitForFirstEvent<TEvDataShard::TEvSplit> startSplit(runtime);
+            AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table",
+                            Sprintf(R"(
                                 SourceTabletId: %lu
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Text: "Marla" } }
                                     }
                                 }
-                            )", splitSrcTabletId);
-            AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", splitRequest);
+                            )", shards[1]));
 
-            // Wait for split to reach src DS. Check shard state instead of EvSplit:
-            // after a reboot EvSplit may have already been delivered.
-            const ui64 splitReachedSrcState = static_cast<ui64>(NKikimrTxDataShard::SplitSrcWaitForNoTxInFlight);
+            // Wait for split to reach src DS
             int retries = 3;
             while (retries--) {
-                {
-                    TDispatchOptions opts;
-                    opts.CustomFinalCondition = [&]() {
-                        return GetDatashardState(runtime, splitSrcTabletId) >= splitReachedSrcState;
-                    };
-                    runtime.DispatchEvents(opts);
-                }
+                startSplit.Wait();
 
                 ++dataTxId;
                 TFakeDataReq req2(runtime, dataTxId, "/MyRoot/Table",

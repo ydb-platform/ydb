@@ -49,7 +49,7 @@ private:
         const TDBGReadBlocksResponse& response);
     void Reply(NProto::TError error);
 
-    void ScheduleHedging();
+    void ScheduleHedging(TDuration hedgingDelay);
     void ScheduleRequestTimeout();
     void OnHedgingTimeout();
     void OnRequestTimeout();
@@ -61,7 +61,6 @@ private:
     const TCallContextPtr CallContext;
     const std::shared_ptr<TReadBlocksLocalRequest> Request;
     const NWilson::TTraceId TraceId;
-    const TDuration HedgingDelay;
     const TDuration RequestTimeout;
 
     TReadRangeHint ReadHint;

@@ -3,13 +3,19 @@
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
+
 #include <util/generic/size_literals.h>
 #include <util/random/random.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
+
+constexpr TDuration MinReconnectDelay = TDuration::MilliSeconds(20);
+constexpr TDuration MaxReconnectDelay = TDuration::Seconds(10);
 
 TDuration GetFromConfig(ui64 milliseconds, TDuration defaultValue)
 {
@@ -39,8 +45,9 @@ EHostState HealthToState(EHostHealth health)
     }
 }
 
-constexpr TDuration MinReconnectDelay = TDuration::MilliSeconds(20);
-constexpr TDuration MaxReconnectDelay = TDuration::Seconds(10);
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
 
 class TOracleConfig
 {
@@ -87,11 +94,23 @@ public:
             100_MB);
     }
 
+    [[nodiscard]] ui32 GetTimePredictionHistorySize() const
+    {
+        return GetFromConfig(
+            StorageConfig->GetOracleConfig().GetTimePredictionHistorySize(),
+            0);
+    }
+
+    [[nodiscard]] ui32 GetTimePredictionNthFromEnd() const
+    {
+        return GetFromConfig(
+            StorageConfig->GetOracleConfig().GetTimePredictionNthFromEnd(),
+            0);
+    }
+
 private:
     TStorageConfigPtr StorageConfig;
 };
-
-}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -99,6 +118,7 @@ TOracle::TOracle(
     TStorageConfigPtr storageConfig,
     IHostStateController* hostStateController)
     : StorageConfig(std::move(storageConfig))
+    , OracleConfig(std::make_shared<TOracleConfig>(StorageConfig))
     , HostStateController(hostStateController)
     , DefaultReadHedgingDelay(StorageConfig->GetReadHedgingDelay())
     , DefaultReadRequestTimeout(StorageConfig->GetReadRequestTimeout())
@@ -112,12 +132,19 @@ TOracle::TOracle(
     , HostStatistics(DirectBlockGroupHostCount)
     , HostStates(DirectBlockGroupHostCount)
     , HostsReconnectDelays(DirectBlockGroupHostCount, MinReconnectDelay)
+    , TimePredictors(
+          OperationCount,
+          TTimePredictor(
+              OracleConfig->GetTimePredictionHistorySize(),
+              OracleConfig->GetTimePredictionNthFromEnd()))
 {
     HostsHealths.resize(HostStates.size());
     for (auto& healths: HostsHealths) {
         healths = EHostHealth::Online;
     }
 }
+
+TOracle::~TOracle() = default;
 
 void TOracle::Think(TInstant now)
 {
@@ -133,14 +160,15 @@ void TOracle::Think(TInstant now)
     for (size_t i = 0; i < HostStatistics.size(); ++i) {
         auto errorsInfo = HostStatistics[i].GetErrorsInfo(now);
 
-        const bool hasSufferingSymptom = (errorsInfo.ErrorCount != 0);
+        const bool hasSufferingSymptom =
+            (errorsInfo.ConsecutiveErrorCount != 0);
         const bool hasTemporaryOfflineSymptom =
             hasSufferingSymptom &&
-            ((errorsInfo.ErrorCount >=
+            ((errorsInfo.ConsecutiveErrorCount >=
                   config.GetMinErrorsCountBeforeGoingOffline() &&
               errorsInfo.FromFirstError >
                   config.GetMaxDurationBeforeGoingTemporaryOffline()) ||
-             (errorsInfo.ErrorCount >=
+             (errorsInfo.ConsecutiveErrorCount >=
               config.GetErrorsCountForGoingOffline()) ||
              (HostStateController->GetHostPBufferUsedSize(i) >=
               config.GetErrorsTotalSizeForGoingOffline()));
@@ -188,6 +216,7 @@ void TOracle::OnRequestSucceeded(
     TInstant now,
     TDuration executionTime)
 {
+    AccessTimePredictor(operation).Add(hostIndex, executionTime);
     HostStatistics[hostIndex].OnSuccess(now, executionTime, operation);
 }
 
@@ -262,9 +291,24 @@ THostIndex TOracle::SelectBestPBufferHost(
     return bestHostIndex;
 }
 
-TDuration TOracle::GetReadHedgingDelay() const
+TDuration TOracle::GetReadHedgingDelay(
+    THostIndex host,
+    EDataLocation dataLocation) const
 {
-    return DefaultReadHedgingDelay;
+    TDuration result;
+
+    switch (dataLocation) {
+        case EDataLocation::DDisk: {
+            result = GetTimePredictor(EOperation::ReadFromDDisk).Predict(host);
+            break;
+        }
+        case EDataLocation::PBuffer: {
+            result =
+                GetTimePredictor(EOperation::ReadFromPBuffer).Predict(host);
+            break;
+        }
+    }
+    return result != TDuration::Zero() ? result : DefaultReadHedgingDelay;
 }
 
 TDuration TOracle::GetReadRequestTimeout() const
@@ -272,9 +316,13 @@ TDuration TOracle::GetReadRequestTimeout() const
     return DefaultReadRequestTimeout;
 }
 
-TDuration TOracle::GetWriteHedgingDelay() const
+TDuration TOracle::GetWriteHedgingDelay(THostMask hosts, bool indirect) const
 {
-    return DefaultWriteHedgingDelay;
+    TDuration result = GetTimePredictor(
+                           indirect ? EOperation::WriteToManyPBuffers
+                                    : EOperation::WriteToPBuffer)
+                           .Predict(hosts);
+    return result != TDuration::Zero() ? result : DefaultWriteHedgingDelay;
 }
 
 TDuration TOracle::GetWriteRequestTimeout() const
@@ -314,7 +362,26 @@ TString TOracle::Dump() const
         sb << " H" << i << ": " << HostStates[i].DebugPrint() << " "
            << HostStatistics[i].DebugPrint() << "\n";
     }
+
+    for (size_t i = 0; i < OperationCount; ++i) {
+        auto op = static_cast<EOperation>(i);
+        sb << " " << ToString(op) << ": ";
+        for (THostIndex h = 0; h < HostStates.size(); ++h) {
+            sb << FormatDuration(GetTimePredictor(op).Predict(h)) << " ";
+        }
+        sb << "\n";
+    }
     return sb;
+}
+
+TTimePredictor& TOracle::AccessTimePredictor(EOperation operation)
+{
+    return TimePredictors[static_cast<size_t>(operation)];
+}
+
+const TTimePredictor& TOracle::GetTimePredictor(EOperation operation) const
+{
+    return TimePredictors[static_cast<size_t>(operation)];
 }
 
 ////////////////////////////////////////////////////////////////////////////////

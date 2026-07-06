@@ -34,6 +34,7 @@
 
 #include <library/cpp/yt/misc/cast.h>
 
+#include <library/cpp/yt/string/stream.h>
 #include <library/cpp/yt/string/string.h>
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
@@ -1352,14 +1353,12 @@ private:
     std::vector<TNestedMessageEntry> NestedMessages_;
 
     std::string AttributeKey_;
-    // TODO(babenko): migrate to std::string
-    TString AttributeValue_;
-    TStringOutput AttributeValueStream_;
+    std::string AttributeValue_;
+    TStdStringOutput AttributeValueStream_;
     TBufferedBinaryYsonWriter AttributeValueWriter_;
 
-    // TODO(babenko): migrate to std::string
-    TString YsonString_;
-    TStringOutput YsonStringStream_;
+    std::string YsonString_;
+    TStdStringOutput YsonStringStream_;
     TBufferedBinaryYsonWriter YsonStringWriter_;
 
     TProtobufString SerializedMessage_;
@@ -1367,9 +1366,8 @@ private:
     TString BytesString_;
 
     std::string UnknownYsonFieldKey_;
-    // TODO(babenko): migrate to std::string
-    TString UnknownYsonFieldValueString_;
-    TStringOutput UnknownYsonFieldValueStringStream_;
+    std::string UnknownYsonFieldValueString_;
+    TStdStringOutput UnknownYsonFieldValueStringStream_;
     TBufferedBinaryYsonWriter UnknownYsonFieldValueStringWriter_;
     TForwardingUnknownYsonFieldValueWriter ForwardingUnknownYsonFieldValueWriter_;
 
@@ -1706,7 +1704,7 @@ private:
 
                 WriteScalar([this] {
                     BodyCodedStream_.WriteVarint64(YsonString_.length());
-                    BodyCodedStream_.WriteRaw(YsonString_.begin(), static_cast<int>(YsonString_.length()));
+                    BodyCodedStream_.WriteRaw(YsonString_.data(), static_cast<int>(YsonString_.length()));
                 });
             });
         } else {

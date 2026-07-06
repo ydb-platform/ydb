@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     CAST(date('1970-01-02') - date('1970-01-01') AS string)
 ;

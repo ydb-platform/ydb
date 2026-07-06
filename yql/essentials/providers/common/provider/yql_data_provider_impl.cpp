@@ -323,7 +323,7 @@ bool TDataProviderBase::ValidateExecution(const TExprNode& node, TExprContext& c
 }
 
 void TDataProviderBase::GetRequiredChildren(const TExprNode& node, TExprNode::TListType& children) {
-    GetDependencies(node, children, false);
+    GetDependencies(node, children, /*compact=*/false);
 }
 
 IGraphTransformer& TDataProviderBase::GetCallableExecutionTransformer() {

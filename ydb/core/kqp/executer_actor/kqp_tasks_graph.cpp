@@ -462,8 +462,8 @@ void AppendMKQLValueToToken(TString& token, NKikimr::NMiniKQL::TType* type, NUdf
             break;
 
         case NUdf::EDataSlot::Bool:
-            NJsonIndex::AppendJsonIndexLiteral(token,
-                value.Get<bool>() ? NBinaryJson::EEntryType::BoolTrue : NBinaryJson::EEntryType::BoolFalse);
+            NJsonIndex::AppendJsonIndexLiteral(
+                token, value.Get<bool>() ? NBinaryJson::EEntryType::BoolTrue : NBinaryJson::EEntryType::BoolFalse);
             break;
 
         case NUdf::EDataSlot::Int8: {
@@ -539,9 +539,7 @@ void AppendMKQLValueToToken(TString& token, NKikimr::NMiniKQL::TType* type, NUdf
     }
 }
 
-TString ResolveFullTextQueryToken(const NKqpProto::TKqpFullTextSource::TKqpQuerySettings::TQueryToken& token,
-    const TStageInfo& stageInfo)
-{
+TString ResolveFullTextQueryToken(const NKqpProto::TKqpFullTextSource::TKqpQuerySettings::TQueryToken& token, const TStageInfo& stageInfo) {
     TString fullToken = token.GetToken();
     if (token.GetParamName().empty()) {
         return fullToken;
@@ -558,18 +556,17 @@ TString ResolveFullTextQueryToken(const NKqpProto::TKqpFullTextSource::TKqpQuery
     return fullToken;
 }
 
-TVector<TString> ResolveFullTextQueryTokenExpanded(const NKqpProto::TKqpFullTextSource::TKqpQuerySettings::TQueryToken& token,
-    const TStageInfo& stageInfo)
-{
+TVector<TString> ResolveFullTextQueryTokenExpanded(
+    const NKqpProto::TKqpFullTextSource::TKqpQuerySettings::TQueryToken& token, const TStageInfo& stageInfo) {
     const TString baseToken = token.GetToken();
     if (token.GetParamName().empty()) {
-        return {baseToken};
+        return { baseToken };
     }
 
     auto* paramPtr = stageInfo.Meta.Tx.Params->GetParameterUnboxedValuePtr(token.GetParamName());
     if (!paramPtr) {
         LOG_W("Failed to get parameter value for token: " << token.GetParamName());
-        return {baseToken};
+        return { baseToken };
     }
 
     auto [type, value] = *paramPtr;
@@ -602,10 +599,10 @@ TVector<TString> ResolveFullTextQueryTokenExpanded(const NKqpProto::TKqpFullText
             result.emplace_back(std::move(currentToken));
         }
     } else {
-        return {ResolveFullTextQueryToken(token, stageInfo)};
+        return { ResolveFullTextQueryToken(token, stageInfo) };
     }
 
-    return result.empty() ? TVector<TString>{baseToken} : result;
+    return result.empty() ? TVector<TString>{ baseToken } : result;
 }
 
 void AddQueryPathParam(TKqpTasksGraph::TTaskType& task, const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext) {
@@ -977,6 +974,7 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
 
     settings->SetLookupStrategy(streamLookup.GetLookupStrategy());
     settings->SetKeepRowsOrder(streamLookup.GetKeepRowsOrder());
+    settings->SetCookieFormatVersion(streamLookup.GetCookieFormatVersion());
     settings->SetAllowNullKeysPrefixSize(streamLookup.GetAllowNullKeysPrefixSize());
     settings->SetIsolationLevel(GetMeta().RequestIsolationLevel);
 
@@ -1595,7 +1593,7 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                 input.Meta.StreamLookupSettings->MutableSnapshot()->SetStep(snapshot.Step);
                 input.Meta.StreamLookupSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
                 if (input.Meta.StreamLookupSettings->GetLookupStrategy() == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP) {
-                    input.Meta.StreamLookupSettings->SetAllowInconsistentReads(true);    
+                    input.Meta.StreamLookupSettings->SetAllowInconsistentReads(true);
                 }
             } else {
                 YQL_ENSURE(GetMeta().AllowInconsistentReads || isTableImmutable, "Expected valid snapshot or enabled inconsistent read mode");
@@ -1750,6 +1748,7 @@ void TKqpTasksGraph::PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& resu
 
         taskInfo->ClearProgram();
         taskInfo->ClearSecureParams();
+        taskInfo->ClearParameters();    // clear parameters to avoid bloating the saved cell
     }
 }
 

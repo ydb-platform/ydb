@@ -66,7 +66,7 @@ private:
                const std::vector<arrow::ValueDescr>& argsValuesDescr,
                TComputationContext& ctx)
             : TComputationValue(memInfo)
-            , ExecContext(&ctx.ArrowMemoryPool, nullptr, nullptr)
+            , ExecContext(&ctx.ArrowMemoryPool, /*executor=*/nullptr, /*func_registry=*/nullptr)
             , KernelContext(&ExecContext)
         {
             if (kernel.init) {

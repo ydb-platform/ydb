@@ -267,6 +267,38 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
     swap(ready, NotReady);
 }
 
+template<bool UseMigrationProtocol>
+void TRawPartitionStreamEventQueue<UseMigrationProtocol>::Cleanup(TDeferredActions<UseMigrationProtocol>& deferred)
+{
+    std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>> infos;
+    TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol> accumulator;
+
+    auto cleanupEvent = [&](TRawPartitionStreamEvent<UseMigrationProtocol>& event) {
+        if (!event.IsDataEvent()) {
+            return;
+        }
+
+        auto& dataEvent = event.GetDataEvent();
+        if (event.IsReady() || !dataEvent.SetAbandoned()) {
+            accumulator.Add(dataEvent.GetParent(), dataEvent.GetDataSize(), dataEvent.GetMessageCount());
+        } else {
+            infos.push_back(dataEvent.GetParent());
+        }
+    };
+
+    for (auto& event : Ready) {
+        cleanupEvent(event);
+    }
+    for (auto& event : NotReady) {
+        cleanupEvent(event);
+    }
+
+    deferred.DeferDestroyDecompressionInfos(std::move(infos));
+    deferred.DeferOnUserRetrievedEvent(std::move(accumulator));
+    Ready.clear();
+    NotReady.clear();
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TDecompressionQueueItem
 
@@ -462,6 +494,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::BreakConnectionAndReco
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext) {
+    TDeferredActions<UseMigrationProtocol> deferred;
     {
         std::lock_guard guard(Lock);
         if (ConnectTimeoutContext == connectTimeoutContext) {
@@ -471,7 +504,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnectTimeout(const
             ConnectDelayContext = nullptr;
 
             if (Closing || Aborting) {
-                CallCloseCallbackImpl();
+                CallCloseCallbackImpl(&deferred);
                 return;
             }
         } else {
@@ -500,7 +533,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnect(
             ConnectDelayContext = nullptr;
 
             if (Closing || Aborting) {
-                CallCloseCallbackImpl();
+                CallCloseCallbackImpl(&deferred);
                 return;
             }
 
@@ -788,7 +821,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
                                 deferred);
     }
     if (!pushRes) {
-        AbortImpl();
+        AbortImpl(&deferred);
         return;
     }
     TClientMessage<UseMigrationProtocol> req;
@@ -938,7 +971,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ReadFromProcessorImpl(
     }
     if (Closing && !HasCommitsInflightImpl()) {
         Processor->Cancel();
-        CallCloseCallbackImpl();
+        CallCloseCallbackImpl(&deferred);
         return;
     }
 
@@ -1158,8 +1191,11 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
                                                                                 Settings.Decompress_);
         Y_ABORT_UNLESS(decompressionInfo);
 
-        decompressionInfo->PlanDecompressionTasks(AverageCompressionRatio,
-                                                  partitionStream);
+        if (!decompressionInfo->PlanDecompressionTasks(AverageCompressionRatio,
+                                                       partitionStream,
+                                                       deferred)) {
+            return;
+        }
 
         DecompressionQueue.emplace_back(decompressionInfo, partitionStream);
         StartDecompressionTasksImpl(deferred);
@@ -1196,7 +1232,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
                  currentPartitionStream, NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent::EReason::Lost),
             deferred);
         if (!pushRes) {
-            AbortImpl();
+            AbortImpl(&deferred);
             return;
         }
         currentPartitionStream = partitionStream;
@@ -1208,7 +1244,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
         NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent(partitionStream, msg.read_offset(), msg.end_offset()),
         deferred);
     if (!pushRes) {
-        AbortImpl();
+        AbortImpl(&deferred);
         return;
     }
 }
@@ -1242,7 +1278,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     }
 
     if (!pushRes) {
-        AbortImpl();
+        AbortImpl(&deferred);
         return;
     }
 
@@ -1271,7 +1307,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
                                                   partitionStream, partitionStream->GetMaxCommittedOffset()),
                                               deferred);
         if (!pushRes) {
-            AbortImpl();
+            AbortImpl(&deferred);
             return;
         }
     }
@@ -1286,7 +1322,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
                 NPersQueue::TReadSessionEvent::TCommitAcknowledgementEvent(partitionStream, rangeProto.end_offset()),
                 deferred);
             if (!pushRes) {
-                AbortImpl();
+                AbortImpl(&deferred);
                 return;
             }
         }
@@ -1311,7 +1347,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
                                               msg.end_offset(), TInstant::MilliSeconds(msg.write_watermark_ms())),
                                           deferred);
     if (!pushRes) {
-        AbortImpl();
+        AbortImpl(&deferred);
         return;
     }
 }
@@ -1408,8 +1444,11 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         serverBytesSize = 0;
         Y_ABORT_UNLESS(decompressionInfo);
 
-        decompressionInfo->PlanDecompressionTasks(AverageCompressionRatio,
-                                                  partitionStream);
+        if (!decompressionInfo->PlanDecompressionTasks(AverageCompressionRatio,
+                                                       partitionStream,
+                                                       deferred)) {
+            return;
+        }
         DecompressionQueue.emplace_back(decompressionInfo, partitionStream);
         StartDecompressionTasksImpl(deferred);
     }
@@ -1453,7 +1492,7 @@ inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
     }
 
     if (!pushRes) {
-        AbortImpl();
+        AbortImpl(&deferred);
     }
 }
 
@@ -1589,7 +1628,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
             deferred);
 
         if (!pushRes) {
-            AbortImpl();
+            AbortImpl(&deferred);
             return;
         }
     }
@@ -1615,7 +1654,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         deferred);
 
     if (!pushRes) {
-        AbortImpl();
+        AbortImpl(&deferred);
         return;
     }
 }
@@ -1728,7 +1767,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
             TReadSessionEvent::TEndPartitionSessionEvent(std::move(partitionStream), std::move(adjacentPartitionIds), std::move(childPartitionIds)),
             deferred);
     if (!pushRes) {
-        AbortImpl();
+        AbortImpl(&deferred);
         return;
     }
 }
@@ -1752,7 +1791,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
                                         partitionStream, rangeProto.committed_offset()),
                                    deferred);
             if (!pushRes) {
-                AbortImpl();
+                AbortImpl(&deferred);
                 return;
             }
         }
@@ -1780,7 +1819,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
                                     msg.write_time_high_watermark()))),
                            deferred);
     if (!pushRes) {
-        AbortImpl();
+        AbortImpl(&deferred);
         return;
     }
 }
@@ -1843,12 +1882,30 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::DestroyAllPartitionStr
                                 TClosedEvent(std::move(partitionStream), TClosedEvent::EReason::ConnectionLost),
                                deferred);
         if (!pushRes) {
-            AbortImpl();
+            AbortImpl(&deferred);
             return;
         }
     }
     PartitionStreams.clear();
     CookieMapping.ClearMapping();
+}
+
+template<bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CleanupDecompressionQueueImpl(TDeferredActions<UseMigrationProtocol>& deferred) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    if (DecompressionQueue.empty()) {
+        return;
+    }
+
+    std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>> infos;
+    infos.reserve(DecompressionQueue.size());
+    for (auto& item : DecompressionQueue) {
+        infos.push_back(item.BatchInfo);
+    }
+    DecompressionQueue.clear();
+
+    deferred.DeferDestroyDecompressionInfos(std::move(infos));
 }
 
 template<bool UseMigrationProtocol>
@@ -1948,8 +2005,9 @@ template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Abort() {
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Abort session to cluster");
 
+    TDeferredActions<UseMigrationProtocol> deferred;
     std::lock_guard guard(Lock);
-    AbortImpl();
+    AbortImpl(&deferred);
 }
 
 template<bool UseMigrationProtocol>
@@ -1962,12 +2020,12 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortSession(TASession
 
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl() {
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl(TDeferredActions<UseMigrationProtocol>* deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (!Aborting) {
         Aborting = true;
-        CallCloseCallbackImpl();
+        CallCloseCallbackImpl(deferred);
 
         // Cancel(ClientContext); // Don't cancel, because this is used only as factory for other contexts.
         Cancel(ConnectContext);
@@ -1985,13 +2043,19 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl() {
             }
         }
     }
+
+    if (deferred) {
+        CleanupDecompressionQueueImpl(*deferred);
+    }
 }
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Close(std::function<void()> callback) {
+    TDeferredActions<UseMigrationProtocol> deferred;
     std::lock_guard guard(Lock);
     if (Aborting) {
         callback();
+        return;
     }
 
     if (!Closing) {
@@ -2004,27 +2068,31 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Close(std::function<vo
         Cancel(ConnectDelayContext);
 
         if (!Processor) {
-            CallCloseCallbackImpl();
+            CallCloseCallbackImpl(&deferred);
         } else {
             if (!HasCommitsInflightImpl()) {
                 Processor->Cancel();
-                CallCloseCallbackImpl();
+                CallCloseCallbackImpl(&deferred);
             }
         }
     }
 
-    AbortImpl();
+    AbortImpl(&deferred);
 }
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CallCloseCallbackImpl() {
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CallCloseCallbackImpl(TDeferredActions<UseMigrationProtocol>* deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (CloseCallback) {
         CloseCallback();
         CloseCallback = {};
     }
-    AbortImpl();
+    if (!Aborting) {
+        AbortImpl(deferred);
+    } else if (deferred) {
+        CleanupDecompressionQueueImpl(*deferred);
+    }
 }
 
 template<bool UseMigrationProtocol>
@@ -2875,14 +2943,24 @@ void TReadSessionEventsQueue<UseMigrationProtocol>::GetDataEventCallbackSettings
 
 template<bool UseMigrationProtocol>
 void TReadSessionEventsQueue<UseMigrationProtocol>::ClearAllEvents() {
-    std::lock_guard<std::mutex> guard(TParent::Mutex);
-    while (!TParent::Events.empty()) {
-        auto& event = TParent::Events.front();
-        if (event.PartitionStream && event.PartitionStream->HasEvents()) {
-            event.PartitionStream->PopEvent();
+    TDeferredActions<UseMigrationProtocol> deferred;
+    std::vector<TRawPartitionStreamEventQueue<UseMigrationProtocol>> deferredDelete;
+    {
+        std::lock_guard<std::mutex> guard(TParent::Mutex);
+        deferredDelete.reserve(TParent::Events.size());
+        while (!TParent::Events.empty()) {
+            auto& event = TParent::Events.front();
+            if (!event.IsEmpty()) {
+                deferredDelete.push_back(event.PartitionStream->ExtractQueue());
+            }
+            TParent::Events.pop();
         }
-        TParent::Events.pop();
     }
+
+    for (auto& queue : deferredDelete) {
+        queue.Cleanup(deferred);
+    }
+    deferredDelete.clear();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -3042,8 +3120,9 @@ i64 TDataDecompressionInfo<UseMigrationProtocol>::StartDecompressionTasks(
 }
 
 template<bool UseMigrationProtocol>
-void TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double averageCompressionRatio,
-                                                                          TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream) {
+bool TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double averageCompressionRatio,
+                                                                          TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                                                                          TDeferredActions<UseMigrationProtocol>& deferred) {
     constexpr size_t TASK_LIMIT = 512_KB;
     Y_ABORT_UNLESS(partitionStream);
 
@@ -3074,8 +3153,9 @@ void TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double
                                                      ReadyThresholds.back().Ready,
                                                      ReadyThresholds.back().Abandoned);
             if (!pushRes) {
-                session->AbortImpl();
-                return;
+                deferred.DeferDestroyDecompressionInfos({TDataDecompressionInfo::shared_from_this()});
+                session->AbortImpl(&deferred);
+                return false;
             }
         }
 
@@ -3099,6 +3179,8 @@ void TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double
     } else {
         ReadyThresholds.pop_back(); // Revert.
     }
+
+    return true;
 }
 
 template <bool UseMigrationProtocol>

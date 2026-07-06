@@ -221,7 +221,7 @@ arrow::Datum ConvertScalar(TType* type, const NUdf::TBlockItem& value, arrow::Me
 arrow::Datum MakeArrayFromScalar(const arrow::Scalar& scalar, size_t len, TType* type, arrow::MemoryPool& pool) {
     MKQL_ENSURE(len > 0, "Invalid block size");
     auto reader = MakeBlockReader(TTypeInfoHelper(), type);
-    auto builder = MakeArrayBuilder(TTypeInfoHelper(), type, pool, len, nullptr);
+    auto builder = MakeArrayBuilder(TTypeInfoHelper(), type, pool, len, /*pgBuilder=*/nullptr);
 
     auto scalarItem = reader->GetScalarItem(scalar);
     builder->Add(scalarItem, len);

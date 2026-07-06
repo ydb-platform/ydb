@@ -58,7 +58,7 @@ Y_UNIT_TEST(TestEmbeddedResourceBuilder) {
 
 Y_UNIT_TEST(TestTaggedTypeBuilder) {
     TArrayBuilderTestData data;
-    const auto intType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int32, false);
+    const auto intType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int32, /*optional=*/false);
     const auto taggedType = data.PgmBuilder.NewTaggedType(intType, "tag");
 
     const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), taggedType, *data.ArrowPool, MAX_BLOCK_SIZE, /*pgBuilder=*/nullptr);
@@ -79,7 +79,7 @@ Y_UNIT_TEST(TestTaggedTypeBuilder) {
 
 Y_UNIT_TEST(TestTaggedTypeReader) {
     TArrayBuilderTestData data;
-    const auto intType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int32, false);
+    const auto intType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int32, /*optional=*/false);
     const auto taggedType = data.PgmBuilder.NewTaggedType(intType, "tag");
 
     const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), taggedType, *data.ArrowPool, MAX_BLOCK_SIZE, /*pgBuilder=*/nullptr);
@@ -322,8 +322,8 @@ Y_UNIT_TEST(TestSingularTypeValueBuilderReader) {
 
 Y_UNIT_TEST(TestBuilderAllocatedSize) {
     TArrayBuilderTestData data;
-    const auto optStringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, true);
-    const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
+    const auto optStringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, /*optional=*/true);
+    const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, /*optional=*/false);
     const auto structType = data.PgmBuilder.NewStructType({{"a", optStringType}, {"b", int64Type}});
     const auto optStructType = data.PgmBuilder.NewOptionalType(structType);
     const auto doubleOptStructType = data.PgmBuilder.NewOptionalType(optStructType);
@@ -361,7 +361,7 @@ Y_UNIT_TEST(TestBuilderAllocatedSize) {
         2 * arrow::BitUtil::RoundUpToMultipleOf64(blockLen + 1);    // Double Optional
 
     size_t totalAllocated = 0;
-    auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), doubleOptStructType, *data.ArrowPool, blockLen, nullptr, &totalAllocated);
+    auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), doubleOptStructType, *data.ArrowPool, blockLen, /*pgBuilder=*/nullptr, &totalAllocated);
     UNIT_ASSERT_VALUES_EQUAL(totalAllocated, initialAllocated);
 
     for (ui32 i = 0; i < 8; ++i) {

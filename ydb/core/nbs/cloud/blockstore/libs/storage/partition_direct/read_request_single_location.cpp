@@ -35,7 +35,6 @@ TReadSingleLocationRequestExecutor::TReadSingleLocationRequestExecutor(
     , CallContext(std::move(callContext))
     , Request(std::move(request))
     , TraceId(std::move(traceId))
-    , HedgingDelay(DirectBlockGroup->GetOracle()->GetReadHedgingDelay())
     , RequestTimeout(DirectBlockGroup->GetOracle()->GetReadRequestTimeout())
     , ReadHint(std::move(readHint))
 {
@@ -110,15 +109,22 @@ void TReadSingleLocationRequestExecutor::StartReading()
 
     const bool fromDDisk = ReadHint.Lsn == 0;
 
+    const size_t tryCount = Requested.Count();
+    NActors::NLog::EPriority printPriority =
+        tryCount == 1 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_TRACE;
+    if (!Failed.Empty()) {
+        printPriority = NActors::NLog::PRI_INFO;
+    }
+
     LOG_LOG(
         *ActorSystem,
-        Requested.Count() == 1 ? NActors::NLog::PRI_DEBUG
-                               : NActors::NLog::PRI_INFO,
+        printPriority,
         NKikimrServices::NBS_PARTITION,
-        "%s Will read from %s of %s",
+        "%s Will read from %s of %s, try %lu",
         LogTitle.GetWithTime().c_str(),
         fromDDisk ? "DDisk" : "PBuffer",
-        PrintHostIndex(*host).c_str());
+        PrintHostIndex(*host).c_str(),
+        tryCount);
 
     auto onReadResponse = [self = shared_from_this(), host = *host]   //
         (const NThreading::TFuture<TDBGReadBlocksResponse>& f)
@@ -141,7 +147,9 @@ void TReadSingleLocationRequestExecutor::StartReading()
                                   TraceId);
     future.Subscribe(std::move(onReadResponse));
 
-    ScheduleHedging();
+    ScheduleHedging(DirectBlockGroup->GetOracle()->GetReadHedgingDelay(
+        *host,
+        ReadHint.Lsn == 0 ? EDataLocation::DDisk : EDataLocation::PBuffer));
 }
 
 void TReadSingleLocationRequestExecutor::OnReadResponse(
@@ -194,9 +202,9 @@ void TReadSingleLocationRequestExecutor::Reply(NProto::TError error)
     Promise.TrySetValue(TResponse{.Error = std::move(error)});
 }
 
-void TReadSingleLocationRequestExecutor::ScheduleHedging()
+void TReadSingleLocationRequestExecutor::ScheduleHedging(TDuration hedgingDelay)
 {
-    if (!HedgingDelay) {
+    if (!hedgingDelay) {
         return;
     }
 
@@ -205,10 +213,10 @@ void TReadSingleLocationRequestExecutor::ScheduleHedging()
         NKikimrServices::NBS_PARTITION,
         "%s Schedule OnHedgingTimeout %s",
         LogTitle.GetWithTime().c_str(),
-        FormatDuration(HedgingDelay).c_str());
+        FormatDuration(hedgingDelay).c_str());
 
     DirectBlockGroup->Schedule(
-        HedgingDelay,
+        hedgingDelay,
         [weakSelf = weak_from_this()]()
         {
             if (auto self = weakSelf.lock()) {

@@ -32,6 +32,13 @@ def add_stage_start_to_environ(stage_name):
 RETRIES = 5
 HASH_PREFIX = 10
 
+# Matches devtools/ya/core/error/__init__.py ExitCodes.INFRASTRUCTURE_ERROR
+YA_BIN_DOWNLOAD_ERROR_EXIT_CODE = 12
+
+
+class YaBinDownloadError(Exception):
+    """Network-related failure while downloading ya-bin (DNS, connection, timeout, HTTP error, corrupted transfer)."""
+
 REGISTRY_ENDPOINT = os.environ.get("YA_REGISTRY_ENDPOINT", "https://devtools-registry.s3.yandex.net")
 
 # Please do not change this dict, it is updated automatically
@@ -180,13 +187,19 @@ def _fetch(url, into):
     md5 = hashlib.md5()
     sys.stderr.write('Downloading %s ' % url)
     sys.stderr.flush()
-    conn = urlopen(request, timeout=10)
+    try:
+        conn = urlopen(request, timeout=10)
+    except Exception as e:
+        raise YaBinDownloadError('Failed to connect to {}: {}'.format(url, e))
     sys.stderr.write('[')
     sys.stderr.flush()
     try:
         with open(into, 'wb') as f:
             while True:
-                block = conn.read(1024 * 1024)
+                try:
+                    block = conn.read(1024 * 1024)
+                except Exception as e:
+                    raise YaBinDownloadError('Failed to download {}: {}'.format(url, e))
                 sys.stderr.write('.')
                 sys.stderr.flush()
                 if block:
@@ -206,7 +219,8 @@ def _atomic_fetch(url, into, md5):
     try:
         real_md5 = _fetch(url, tmp_dest)
         if real_md5 != md5:
-            raise Exception('MD5 mismatched: %s differs from %s' % (real_md5, md5))
+            # Treat checksum mismatch as a network problem: it means the transfer was corrupted or truncated
+            raise YaBinDownloadError('MD5 mismatched: %s differs from %s' % (real_md5, md5))
         os.rename(tmp_dest, into)
         sys.stderr.write('OK\n')
     except Exception as e:
@@ -375,6 +389,9 @@ def main():
 if __name__ == '__main__':
     try:
         main()
+    except YaBinDownloadError as e:
+        sys.stderr.write('ERROR: ' + str(e) + '\n')
+        sys.exit(YA_BIN_DOWNLOAD_ERROR_EXIT_CODE)
     except Exception as e:
         sys.stderr.write('ERROR: ' + str(e) + '\n')
         from traceback import format_exc

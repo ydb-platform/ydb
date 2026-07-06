@@ -62,8 +62,8 @@ public:
         YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "CheckState",
             {"nodeId", NodeId},
             {"sender", ev->Sender},
-            {"expectedState", msg.State},
-            {"currentState", CurrentState});
+            {"expectedState", static_cast<unsigned>(msg.State)},
+            {"currentState", static_cast<unsigned>(CurrentState)});
         if (CurrentState == msg.State) {
             YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "Sending Done",
                 {"nodeId", NodeId},
@@ -77,8 +77,8 @@ public:
     void SwitchToState(EState state) {
         YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "State switched",
             {"nodeId", NodeId},
-            {"currentState", CurrentState},
-            {"state", state});
+            {"currentState", static_cast<unsigned>(CurrentState)},
+            {"newState", static_cast<unsigned>(state)});
         CurrentState = state;
         auto r = Queue.equal_range(CurrentState);
         for (auto it = r.first; it != r.second; ++it) {

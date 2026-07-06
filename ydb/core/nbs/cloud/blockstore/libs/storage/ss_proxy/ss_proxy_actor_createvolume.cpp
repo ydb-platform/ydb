@@ -10,6 +10,8 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_SS_PROXY
+
 namespace NYdb::NBS::NStorage {
 
 using namespace NActors;
@@ -135,12 +137,9 @@ void TCreateVolumeActor::DescribeVolumeBeforeCreate(const TActorContext& ctx)
 
     const auto& diskId = VolumeConfig.GetDiskId();
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_SS_PROXY,
-        "Sending describe request before create, for volume %s and diskId %s",
-        diskId.Quote().data(),
-        diskId.data());
+    YDB_LOG_DEBUG_CTX(ctx, "Sending describe request before create, for volume and diskId",
+        {"#_diskId.Quote().data", diskId.Quote().data()},
+        {"#_diskId.data", diskId.data()});
 
     auto request =
         std::make_unique<TEvSSProxy::TEvDescribeSchemeRequest>(diskId.data());
@@ -170,12 +169,9 @@ void TCreateVolumeActor::CreateVolume(const TActorContext& ctx)
     auto request =
         std::make_unique<TEvSSProxy::TEvModifySchemeRequest>(modifyScheme);
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_SS_PROXY,
-        "Sending create request for %s in directory %s",
-        VolumeName.Quote().data(),
-        VolumeDir.Quote().data());
+    YDB_LOG_DEBUG_CTX(ctx, "Sending create request for in directory",
+        {"#_VolumeName.Quote().data", VolumeName.Quote().data()},
+        {"#_VolumeDir.Quote().data", VolumeDir.Quote().data()});
 
     NYdb::NBS::Send(ctx, MakeSSProxyServiceId(), std::move(request));
 }
@@ -196,12 +192,9 @@ void TCreateVolumeActor::CreateNextDir(const TActorContext& ctx)
     TString parentDir = ParentDirs[NextItemToCreate];
     TString itemName = VolumePathItems[NextItemToCreate];
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_SS_PROXY,
-        "Sending mkdir request for %s in directory %s",
-        itemName.Quote().data(),
-        parentDir.Quote().data());
+    YDB_LOG_DEBUG_CTX(ctx, "Sending mkdir request for in directory",
+        {"#_itemName.Quote().data", itemName.Quote().data()},
+        {"#_parentDir.Quote().data", parentDir.Quote().data()});
 
     NKikimrSchemeOp::TModifyScheme modifyScheme;
     modifyScheme.SetWorkingDir(parentDir);
@@ -224,11 +217,8 @@ void TCreateVolumeActor::DescribeVolumeAfterCreate(const TActorContext& ctx)
 {
     Become(&TThis::StateDescribeVolumeAfterCreate);
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_SS_PROXY,
-        "Volume %s: sending describe request after create",
-        VolumeConfig.GetDiskId().Quote().data());
+    YDB_LOG_DEBUG_CTX(ctx, "Volume sending describe request after create",
+        {"#_VolumeConfig.GetDiskId().Quote().data", VolumeConfig.GetDiskId().Quote().data()});
 
     auto request = std::make_unique<TEvSSProxy::TEvDescribeSchemeRequest>(
         VolumeConfig.GetDiskId());
@@ -249,106 +239,74 @@ bool TCreateVolumeActor::VerifyVolume(
     // See NBS-1250.
 
     if (VolumeConfig.GetDiskId() != actual.GetDiskId()) {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Created volume DiskId mismatch: expected=%s, actual=%s",
-            VolumeConfig.GetDiskId().Quote().data(),
-            actual.GetDiskId().Quote().data());
+        YDB_LOG_ERROR_CTX(ctx, "Created volume DiskId mismatch",
+            {"expected", VolumeConfig.GetDiskId().Quote().data()},
+            {"actual", actual.GetDiskId().Quote().data()});
         return false;
     }
 
     if (VolumeConfig.GetProjectId() != actual.GetProjectId()) {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Created volume ProjectId mismatch: expected=%s, actual=%s",
-            VolumeConfig.GetProjectId().Quote().data(),
-            actual.GetProjectId().Quote().data());
+        YDB_LOG_ERROR_CTX(ctx, "Created volume ProjectId mismatch",
+            {"expected", VolumeConfig.GetProjectId().Quote().data()},
+            {"actual", actual.GetProjectId().Quote().data()});
         return false;
     }
 
     if (VolumeConfig.GetBlockSize() != actual.GetBlockSize()) {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Created volume BlockSize mismatch: expected=%lu, actual=%lu",
-            VolumeConfig.GetBlockSize(),
-            actual.GetBlockSize());
+        YDB_LOG_ERROR_CTX(ctx, "Created volume BlockSize mismatch",
+            {"expected", VolumeConfig.GetBlockSize()},
+            {"actual", actual.GetBlockSize()});
         return false;
     }
 
     if (GetBlocksCount(VolumeConfig) != GetBlocksCount(actual)) {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Created volume BlocksCount mismatch: expected=%lu, actual=%lu",
-            GetBlocksCount(VolumeConfig),
-            GetBlocksCount(actual));
+        YDB_LOG_ERROR_CTX(ctx, "Created volume BlocksCount mismatch",
+            {"expected", GetBlocksCount(VolumeConfig)},
+            {"actual", GetBlocksCount(actual)});
         return false;
     }
 
     if (VolumeConfig.GetStorageMediaKind() != actual.GetStorageMediaKind()) {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Created volume StorageMediaKind mismatch: expected=%lu, "
-            "actual=%lu",
-            VolumeConfig.GetStorageMediaKind(),
-            actual.GetStorageMediaKind());
+        YDB_LOG_ERROR_CTX(ctx, "Created volume StorageMediaKind mismatch",
+            {"expected", VolumeConfig.GetStorageMediaKind()},
+            {"actual", actual.GetStorageMediaKind()});
         return false;
     }
 
     if (VolumeConfig.GetFolderId() != actual.GetFolderId()) {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Created volume FolderId mismatch: expected=%s, actual=%s",
-            VolumeConfig.GetFolderId().Quote().data(),
-            actual.GetFolderId().Quote().data());
+        YDB_LOG_ERROR_CTX(ctx, "Created volume FolderId mismatch",
+            {"expected", VolumeConfig.GetFolderId().Quote().data()},
+            {"actual", actual.GetFolderId().Quote().data()});
         return false;
     }
 
     if (VolumeConfig.GetCloudId() != actual.GetCloudId()) {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Created volume CloudId mismatch: expected=%s, actual=%s",
-            VolumeConfig.GetCloudId().Quote().data(),
-            actual.GetCloudId().Quote().data());
+        YDB_LOG_ERROR_CTX(ctx, "Created volume CloudId mismatch",
+            {"expected", VolumeConfig.GetCloudId().Quote().data()},
+            {"actual", actual.GetCloudId().Quote().data()});
         return false;
     }
 
     if (VolumeConfig.GetTabletVersion() != actual.GetTabletVersion()) {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Created volume TabletVersion mismatch: expected=%lu, actual=%lu",
-            VolumeConfig.GetTabletVersion(),
-            actual.GetTabletVersion());
+        YDB_LOG_ERROR_CTX(ctx, "Created volume TabletVersion mismatch",
+            {"expected", VolumeConfig.GetTabletVersion()},
+            {"actual", actual.GetTabletVersion()});
         return false;
     }
 
     if (VolumeConfig.GetBaseDiskCheckpointId() !=
         actual.GetBaseDiskCheckpointId())
     {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Created volume BaseDiskCheckpointId mismatch: expected=%s, "
-            "actual=%s",
-            VolumeConfig.GetBaseDiskCheckpointId().Quote().data(),
-            actual.GetBaseDiskCheckpointId().Quote().data());
+        YDB_LOG_ERROR_CTX(ctx, "Created volume BaseDiskCheckpointId mismatch",
+            {"expected", VolumeConfig.GetBaseDiskCheckpointId().Quote().data()},
+            {"actual", actual.GetBaseDiskCheckpointId().Quote().data()});
         return false;
     }
 
     if (VolumeConfig.GetFillGeneration() != actual.GetFillGeneration()) {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Created volume FillGeneration mismatch: expected=%lu, actual=%lu",
-            VolumeConfig.GetFillGeneration(),
-            actual.GetFillGeneration());
+        YDB_LOG_ERROR_CTX(ctx, "Created volume FillGeneration mismatch",
+            {"expected", VolumeConfig.GetFillGeneration()},
+            {"actual", actual.GetFillGeneration()});
         return false;
     }
 
@@ -374,12 +332,9 @@ void TCreateVolumeActor::HandleDescribeVolumeBeforeCreateResponse(
             }
         }
 
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Volume %s: describe before create failed: %s",
-            VolumeConfig.GetDiskId().Quote().data(),
-            FormatError(error).data());
+        YDB_LOG_ERROR_CTX(ctx, "Volume describe before create",
+            {"#_VolumeConfig.GetDiskId().Quote().data", VolumeConfig.GetDiskId().Quote().data()},
+            {"failed", FormatError(error).data()});
 
         ReplyAndDie(
             ctx,
@@ -391,12 +346,9 @@ void TCreateVolumeActor::HandleDescribeVolumeBeforeCreateResponse(
     const auto pathType = pathDescription.GetSelf().GetPathType();
 
     if (pathType != NKikimrSchemeOp::EPathTypeBlockStoreVolume) {
-        LOG_DEBUG(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Volume %s: described path %s is not a BlockStoreVolume",
-            VolumeConfig.GetDiskId().Quote().data(),
-            msg->Path.data());
+        YDB_LOG_DEBUG_CTX(ctx, "Volume described path is not a BlockStoreVolume",
+            {"#_VolumeConfig.GetDiskId().Quote().data", VolumeConfig.GetDiskId().Quote().data()},
+            {"#_msg->Path.data", msg->Path.data()});
 
         CreateVolume(ctx);
         return;
@@ -412,7 +364,7 @@ void TCreateVolumeActor::HandleDescribeVolumeBeforeCreateResponse(
             TStringBuilder()
             << "Volume " << diskId.Quote()
             << " with different config already exists at path " << msg->Path;
-        LOG_ERROR(ctx, NKikimrServices::NBS_SS_PROXY, errorMsg);
+        YDB_LOG_ERROR_CTX(ctx, errorMsg);
 
         ReplyAndDie(
             ctx,
@@ -450,12 +402,9 @@ void TCreateVolumeActor::HandleCreateVolumeResponse(
             }
         }
 
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Volume %s: create failed: %s",
-            diskId.Quote().data(),
-            FormatError(error).data());
+        YDB_LOG_ERROR_CTX(ctx, "Volume create",
+            {"#_diskId.Quote().data", diskId.Quote().data()},
+            {"failed", FormatError(error).data()});
 
         ReplyAndDie(
             ctx,
@@ -463,11 +412,8 @@ void TCreateVolumeActor::HandleCreateVolumeResponse(
         return;
     }
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_SS_PROXY,
-        "Volume %s created successfully",
-        diskId.Quote().data());
+    YDB_LOG_INFO_CTX(ctx, "Volume created successfully",
+        {"#_diskId.Quote().data", diskId.Quote().data()});
 
     DescribeVolumeAfterCreate(ctx);
 }
@@ -480,14 +426,11 @@ void TCreateVolumeActor::HandleMkDirResponse(
 
     const auto& error = msg->GetError();
     if (FAILED(error.GetCode())) {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Volume %s: mkdir parentDir %s itemName %s failed: %s",
-            VolumeConfig.GetDiskId().Quote().data(),
-            ParentDirs[NextItemToCreate].Quote().data(),
-            VolumePathItems[NextItemToCreate].Quote().data(),
-            FormatError(error).data());
+        YDB_LOG_ERROR_CTX(ctx, "Volume mkdir parentDir itemName",
+            {"#_VolumeConfig.GetDiskId().Quote().data", VolumeConfig.GetDiskId().Quote().data()},
+            {"#_ParentDirs[NextItemToCreate].Quote().data", ParentDirs[NextItemToCreate].Quote().data()},
+            {"#_VolumePathItems[NextItemToCreate].Quote().data", VolumePathItems[NextItemToCreate].Quote().data()},
+            {"failed", FormatError(error).data()});
 
         ReplyAndDie(
             ctx,
@@ -509,12 +452,9 @@ void TCreateVolumeActor::HandleDescribeVolumeAfterCreateResponse(
 
     auto error = msg->GetError();
     if (FAILED(error.GetCode())) {
-        LOG_WARN(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Volume %s: describe after create failed: %s",
-            diskId.Quote().data(),
-            FormatError(error).data());
+        YDB_LOG_WARN_CTX(ctx, "Volume describe after create",
+            {"#_diskId.Quote().data", diskId.Quote().data()},
+            {"failed", FormatError(error).data()});
 
         ReplyAndDie(
             ctx,
@@ -527,13 +467,9 @@ void TCreateVolumeActor::HandleDescribeVolumeAfterCreateResponse(
     const auto pathType = pathDescription.GetSelf().GetPathType();
 
     if (pathType != NKikimrSchemeOp::EPathTypeBlockStoreVolume) {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Volume %s: describe after create failed: described path %s is not "
-            "a BlockStoreVolume",
-            diskId.Quote().data(),
-            msg->Path.data());
+        YDB_LOG_ERROR_CTX(ctx, "Volume describe after create failed: described path is not a BlockStoreVolume",
+            {"#_diskId.Quote().data", diskId.Quote().data()},
+            {"#_msg->Path.data", msg->Path.data()});
 
         ReplyAndDie(
             ctx,
@@ -555,7 +491,7 @@ void TCreateVolumeActor::HandleDescribeVolumeAfterCreateResponse(
         const TString errorMsg = TStringBuilder()
                                  << "Volume " << diskId.Quote()
                                  << " has outdated FillGeneration";
-        LOG_ERROR(ctx, NKikimrServices::NBS_SS_PROXY, errorMsg);
+        YDB_LOG_ERROR_CTX(ctx, errorMsg);
 
         ReplyAndDie(
             ctx,
@@ -565,12 +501,8 @@ void TCreateVolumeActor::HandleDescribeVolumeAfterCreateResponse(
     }
 
     if (!VerifyVolume(ctx, describedVolumeConfig)) {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Volume %s: describe after create failed: described volume config "
-            "mismatch",
-            diskId.Quote().data());
+        YDB_LOG_ERROR_CTX(ctx, "Volume describe after create failed: described volume config mismatch",
+            {"#_diskId.Quote().data", diskId.Quote().data()});
 
         ReplyAndDie(
             ctx,
@@ -667,21 +599,15 @@ void TSSProxyActor::HandleCreateVolume(
     NKikimrBlockStore::TVolumeConfig volumeConfig;
     volumeConfig.CopyFrom(msg->VolumeConfig);
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_SS_PROXY,
-        "Volume %s: volumeConfig before ResizeVolume: %s",
-        volumeConfig.GetDiskId().Quote().data(),
-        volumeConfig.DebugString().data());
+    YDB_LOG_DEBUG_CTX(ctx, "Volume volumeConfig before",
+        {"#_volumeConfig.GetDiskId().Quote().data", volumeConfig.GetDiskId().Quote().data()},
+        {"resizeVolume", volumeConfig.DebugString().data()});
 
     ResizeVolume(NbsStorageConfig, volumeConfig);
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_SS_PROXY,
-        "Volume %s: volumeConfig after ResizeVolume: %s",
-        volumeConfig.GetDiskId().Quote().data(),
-        volumeConfig.DebugString().data());
+    YDB_LOG_DEBUG_CTX(ctx, "Volume volumeConfig after",
+        {"#_volumeConfig.GetDiskId().Quote().data", volumeConfig.GetDiskId().Quote().data()},
+        {"resizeVolume", volumeConfig.DebugString().data()});
 
     NYdb::NBS::Register<TCreateVolumeActor>(
         ctx,

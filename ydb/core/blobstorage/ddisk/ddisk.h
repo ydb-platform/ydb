@@ -267,6 +267,7 @@ struct TPersistentBufferFormat {
     // when the free sector count drops below this threshold. Defaults to 256
     // (= default disk operations max inflight size).
     ui32 MinFreeSectorsReserve = 256;
+    ui32 PreallocateChunksFreeSpace = 10;
 };
 
 #define DECLARE_DDISK_EVENT(NAME) \

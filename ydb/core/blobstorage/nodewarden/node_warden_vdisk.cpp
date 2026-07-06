@@ -259,6 +259,11 @@ namespace NKikimr::NStorage {
                 if (Cfg->PBufferConfig->HasMinFreeSectorsReserve()) {
                     pbufferFormat.MinFreeSectorsReserve = Cfg->PBufferConfig->GetMinFreeSectorsReserve();
                 }
+                if (Cfg->PBufferConfig->HasPreallocateChunksFreeSpace()) {
+                    pbufferFormat.PreallocateChunksFreeSpace = Cfg->PBufferConfig->GetPreallocateChunksFreeSpace();
+                    Y_ABORT_UNLESS(pbufferFormat.PreallocateChunksFreeSpace >= 0 && pbufferFormat.PreallocateChunksFreeSpace < 100);
+
+                }
             }
             actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbufferFormat),
                 std::move(ddiskConfig), AppData()->Counters));

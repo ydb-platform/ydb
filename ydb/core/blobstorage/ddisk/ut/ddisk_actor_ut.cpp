@@ -1953,7 +1953,20 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     Y_UNIT_TEST(PersistentBufferPendingQueueOverfill) {
         TTestContext ctx;
-        const TDiskHandle disk = ctx.CreateDDisk(6, 1);
+        // Disable proactive chunk preallocation (PreallocateChunksFreeSpace = 0):
+        // this test exercises the reactive allocation path that fires only when
+        // the buffer is completely exhausted.  With the default threshold the
+        // proactive path would allocate a chunk around write 916 and break the
+        // strict event sequence expected below.
+        NDDisk::TPersistentBufferFormat fmt;
+        fmt.MaxChunks = 256;
+        fmt.InitChunks = PersistentBufferInitChunks;
+        fmt.MaxInMemoryCache = BlockSize * 128;
+        fmt.MaxChunkRestoreInflight = 8;
+        fmt.UpdateFreeSpaceInfoMilliseconds = 5000;
+        fmt.PerTabletStorageLimit = 512 * 1024;
+        fmt.PreallocateChunksFreeSpace = 0;
+        const TDiskHandle disk = ctx.CreateDDisk(6, 1, fmt);
         std::unique_ptr<TEventHandle<NPDisk::TEvLog>> log;
 
         for (ui32 i : xrange(1015 + 1024 + 15)) {
@@ -3083,6 +3096,189 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
             AssertStatus(writeResult, TReplyStatus::OK);
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Tests for proactive chunk preallocation
+    // (TPersistentBufferFormat::PreallocateChunksFreeSpace).
+    //
+    // PreprocessPersistentBufferWrite issues a chunk allocation in advance when
+    //   freeSpace * 100 < PreallocateChunksFreeSpace * ownedChunks * SectorInChunk
+    //   && ownedChunks < MaxChunks
+    // i.e. when free space drops below PreallocateChunksFreeSpace percent of the
+    // currently owned capacity, a new chunk is allocated before the buffer runs
+    // out of space.
+    //
+    // Shared math (4 init chunks, 128 MB chunks, 4 KB sectors):
+    //   SectorsPerChunk = 32768, TotalSectors = 4 x 32768 = 131072.
+    //   Each 128-block write occupies 129 sectors (128 data + 1 header).
+    //   With PreallocateChunksFreeSpace = 99 the trigger threshold is
+    //   free < 99 x 4 x 32768 / 100 = 129761.28:
+    //     before write 11: free = 131072 - 10*129 = 129782 -> no trigger;
+    //     before write 12: free = 131072 - 11*129 = 129653 -> trigger.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    NDDisk::TPersistentBufferFormat MakeProactiveAllocationFormat(ui32 maxChunks, ui32 preallocateChunksFreeSpace) {
+        NDDisk::TPersistentBufferFormat fmt;
+        fmt.MaxChunks = maxChunks;
+        fmt.InitChunks = PersistentBufferInitChunks;
+        fmt.MaxInMemoryCache = BlockSize * 128;
+        fmt.MaxChunkRestoreInflight = 8;
+        fmt.UpdateFreeSpaceInfoMilliseconds = 5000;
+        fmt.PerTabletStorageLimit = 4096_MB; // large enough to never hit the per-tablet limit
+        fmt.MinFreeSectorsReserve = 256;
+        fmt.PreallocateChunksFreeSpace = preallocateChunksFreeSpace;
+        return fmt;
+    }
+
+    // Helper: one 128-block write with a full PDisk round-trip, must succeed.
+    void DoPBWriteRoundTrip(TTestContext& ctx, const TDiskHandle& disk,
+            const NDDisk::TQueryCredentials& creds, ui64 lsn, char fill) {
+        const ui32 writeSize = BlockSize * 128;
+        const NDDisk::TBlockSelector selector{3, 0, writeSize};
+        auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
+            creds, selector, lsn, NDDisk::TWriteInstruction(0));
+        write->AddPayload(TRope(MakeData(fill, writeSize)));
+        SendToDDisk(ctx, disk.PBServiceId, write.release());
+
+        auto pbWriteRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        UNIT_ASSERT(pbWriteRaw->Get()->Data.size() > 0);
+        ctx.SendPDiskResponse(disk, *pbWriteRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+
+        auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
+        AssertStatus(writeResult, TReplyStatus::OK);
+    }
+
+    // Helper: query AllocatedChunks from the PB actor.
+    ui32 GetPBAllocatedChunks(TTestContext& ctx, const TDiskHandle& disk) {
+        SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvGetPersistentBufferInfo(false, false));
+        auto info = WaitFromDDisk<NDDisk::TEvPersistentBufferInfo>(ctx);
+        return info->Get()->AllocatedChunks;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test: when free space drops below PreallocateChunksFreeSpace percent, a
+    // new chunk is allocated in advance, while there is still plenty of free
+    // space (long before OVERFILL would fire).
+    //
+    // Covers: PreprocessPersistentBufferWrite -> proactive
+    //         IssuePersistentBufferChunkAllocation() branch.
+    // ─────────────────────────────────────────────────────────────────────────
+    Y_UNIT_TEST(PersistentBufferProactiveChunkAllocation) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(33, 1,
+            MakeProactiveAllocationFormat(256 /*maxChunks*/, 99 /*preallocateChunksFreeSpace*/));
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.PBServiceId, 80, 1);
+
+        // ── Writes 1..11: free space stays above the 99% threshold, so no
+        //    preallocation happens; each write is a plain PDisk round-trip. ────
+        for (ui32 i = 0; i < 11; ++i) {
+            DoPBWriteRoundTrip(ctx, disk, creds, /*lsn=*/10 + i, 'A' + i);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(GetPBAllocatedChunks(ctx, disk), PersistentBufferInitChunks);
+
+        // ── Write 12: before the write free = 129653 < 129761.28, so the
+        //    preprocess step proactively issues a chunk allocation.  The write
+        //    itself still proceeds normally (there is plenty of space). ────────
+        {
+            const ui32 writeSize = BlockSize * 128;
+            const NDDisk::TBlockSelector selector{3, 0, writeSize};
+            auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
+                creds, selector, /*lsn=*/21, NDDisk::TWriteInstruction(0));
+            write->AddPayload(TRope(MakeData('M', writeSize)));
+            SendToDDisk(ctx, disk.PBServiceId, write.release());
+
+            // The data write goes out first (sent by the PB actor before the
+            // DDisk actor processes the allocation request).
+            auto pbWriteRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+            UNIT_ASSERT(pbWriteRaw->Get()->Data.size() > 0);
+            ctx.SendPDiskResponse(disk, *pbWriteRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+
+            // The DDisk actor takes a chunk from its bootstrap reserve and logs
+            // the updated PB chunk map.
+            auto log = ctx.WaitPDiskRequest<NPDisk::TEvLog>(disk);
+            auto logReply = std::make_unique<NPDisk::TEvLogResult>(NKikimrProto::OK, 0, "", 0);
+            logReply->Results.emplace_back(log->Get()->Lsn, log->Get()->Cookie);
+            ctx.SendPDiskResponse(disk, *log, logReply.release());
+
+            // Consuming a reserved chunk drops the reserve below
+            // MinChunksReserved, so the DDisk actor refills it.
+            auto reserve = ctx.WaitPDiskRequest<NPDisk::TEvChunkReserve>(disk);
+            UNIT_ASSERT_VALUES_EQUAL(reserve->Get()->SizeChunks, 1u);
+            auto reserveReply = std::make_unique<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, 0);
+            reserveReply->ChunkIds.push_back(disk.FirstChunkId + PersistentBufferInitChunks + MinChunksReserved);
+            ctx.SendPDiskResponse(disk, *reserve, reserveReply.release());
+
+            // The write itself must have completed successfully.
+            auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
+            AssertStatus(writeResult, TReplyStatus::OK);
+        }
+
+        // ── The PB actor must now own one extra chunk, allocated proactively
+        //    while ~129k of 131k sectors were still free. ──────────────────────
+        UNIT_ASSERT_VALUES_EQUAL(GetPBAllocatedChunks(ctx, disk), PersistentBufferInitChunks + 1);
+
+        // Free space must account for 12 writes and the extra chunk:
+        // 5 x 32768 - 12 x 129 = 162292.
+        constexpr ui32 SectorsPerChunk = TTestContext::ChunkSize / BlockSize;
+        UNIT_ASSERT_VALUES_EQUAL(GetPBFreeSectors(ctx, disk),
+            (PersistentBufferInitChunks + 1) * SectorsPerChunk - 12 * 129);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test: proactive preallocation must NOT fire when the buffer already owns
+    // MaxChunks chunks, even though free space is below the threshold.
+    //
+    // Covers: PreprocessPersistentBufferWrite -> "ownedChunks < MaxChunks"
+    //         sub-condition of the proactive allocation check.
+    // ─────────────────────────────────────────────────────────────────────────
+    Y_UNIT_TEST(PersistentBufferProactiveAllocationSkippedAtMaxChunks) {
+        TTestContext ctx;
+        // MaxChunks == InitChunks: the buffer cannot grow.
+        const TDiskHandle disk = ctx.CreateDDisk(34, 1,
+            MakeProactiveAllocationFormat(PersistentBufferInitChunks, 99));
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.PBServiceId, 81, 1);
+
+        // 12 writes: from write 12 on, free space is below the 99% threshold,
+        // but ownedChunks == MaxChunks so no allocation may be issued.  Every
+        // write is a plain round-trip; if the actor issued an allocation, the
+        // TEvLog would arrive at the PDisk edge ahead of the next write's
+        // TEvChunkWriteRaw and DoPBWriteRoundTrip would fail on the event type.
+        for (ui32 i = 0; i < 12; ++i) {
+            DoPBWriteRoundTrip(ctx, disk, creds, /*lsn=*/10 + i, 'A' + i);
+        }
+
+        // Still exactly InitChunks chunks; free space is below the threshold.
+        UNIT_ASSERT_VALUES_EQUAL(GetPBAllocatedChunks(ctx, disk), PersistentBufferInitChunks);
+        constexpr ui32 SectorsPerChunk = TTestContext::ChunkSize / BlockSize;
+        const ui32 free = GetPBFreeSectors(ctx, disk);
+        UNIT_ASSERT_VALUES_EQUAL(free, PersistentBufferInitChunks * SectorsPerChunk - 12 * 129);
+        UNIT_ASSERT_C(ui64(free) * 100 < ui64(99) * PersistentBufferInitChunks * SectorsPerChunk,
+            "free space must be below the preallocation threshold for the test to be meaningful");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test: PreallocateChunksFreeSpace = 0 disables proactive allocation
+    // completely (freeSpace * 100 < 0 is never true), even when the buffer is
+    // allowed to grow (MaxChunks > InitChunks).
+    //
+    // Covers: PreprocessPersistentBufferWrite -> threshold sub-condition of the
+    //         proactive allocation check.
+    // ─────────────────────────────────────────────────────────────────────────
+    Y_UNIT_TEST(PersistentBufferProactiveAllocationDisabledByZeroThreshold) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(35, 1,
+            MakeProactiveAllocationFormat(256 /*maxChunks*/, 0 /*preallocateChunksFreeSpace*/));
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.PBServiceId, 82, 1);
+
+        // Same 12 writes as in PersistentBufferProactiveChunkAllocation, where
+        // write 12 would have triggered preallocation with threshold 99.  With
+        // threshold 0 nothing may be allocated.
+        for (ui32 i = 0; i < 12; ++i) {
+            DoPBWriteRoundTrip(ctx, disk, creds, /*lsn=*/10 + i, 'A' + i);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPBAllocatedChunks(ctx, disk), PersistentBufferInitChunks);
     }
 
 } // Y_UNIT_TEST_SUITE

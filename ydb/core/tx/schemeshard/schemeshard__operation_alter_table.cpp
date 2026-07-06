@@ -63,7 +63,20 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     const TAppData* appData = AppData(context.Ctx);
 
     if (!path.IsCommonSensePath()) {
-        if (alter.ColumnsSize() != 0 || alter.DropColumnsSize() != 0) {
+        // A pure column rename (every Columns[i] entry has RenameFrom set, no adds) is the
+        // one exception: AppendIndexRenameCascade sends exactly this to an index's impl
+        // table to keep it in sync with a base-table RENAME COLUMN. Real adds/drops (or a
+        // rename mixed with anything else, already rejected earlier by ParseParams) still
+        // aren't supported here.
+        bool onlyRenames = alter.DropColumnsSize() == 0;
+        for (const auto& col : alter.GetColumns()) {
+            if (!col.HasRenameFrom()) {
+                onlyRenames = false;
+                break;
+            }
+        }
+
+        if (!onlyRenames) {
             errStr = "Adding or dropping columns in index table is not supported";
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;

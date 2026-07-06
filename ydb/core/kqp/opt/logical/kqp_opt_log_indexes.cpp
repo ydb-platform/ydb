@@ -2103,8 +2103,7 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
 
     THashSet<TString> jsonIndexedColumns;
     for (const auto& indexInfo : mainTableDesc.Metadata->Indexes) {
-        if (indexInfo.Type != TIndexDescription::EType::GlobalJson &&
-            indexInfo.Type != TIndexDescription::EType::GlobalJsonCompact) {
+        if (indexInfo.Type != TIndexDescription::EType::GlobalJson && indexInfo.Type != TIndexDescription::EType::GlobalJsonCompact) {
             continue;
         }
 
@@ -2125,8 +2124,7 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
 
     std::optional<TString> selectedIndex;
     for (const auto& indexInfo : mainTableDesc.Metadata->Indexes) {
-        if (indexInfo.Type != TIndexDescription::EType::GlobalJson &&
-            indexInfo.Type != TIndexDescription::EType::GlobalJsonCompact) {
+        if (indexInfo.Type != TIndexDescription::EType::GlobalJson && indexInfo.Type != TIndexDescription::EType::GlobalJsonCompact) {
             continue;
         }
 
@@ -2148,6 +2146,8 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
     }
 
     const auto& jsonIndexSettings = expectedSettings.value();
+
+    // clang-format off
     auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
         .Add(Build<TCoAtom>(ctx, node.Pos()).Value(jsonIndexSettings.ColumnName).Done())
         .Done();
@@ -2165,9 +2165,11 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
         .Input(newInput)
         .Lambda(flatMap.Lambda())
         .Done();
+    // clang-format on
 }
 
-TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(
+    const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TCoFlatMap>()) {
         return node;
     }
@@ -2182,8 +2184,7 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
     YQL_ENSURE(tableDesc.Metadata);
 
     auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
-    if (indexDesc->Type != TIndexDescription::EType::GlobalJson &&
-        indexDesc->Type != TIndexDescription::EType::GlobalJsonCompact) {
+    if (indexDesc->Type != TIndexDescription::EType::GlobalJson && indexDesc->Type != TIndexDescription::EType::GlobalJsonCompact) {
         return {};
     }
 
@@ -2197,10 +2198,11 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
 
     auto expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx, jsonIndexedColumns);
     if (!expectedSettings.has_value()) {
-        ctx.AddError(std::move(expectedSettings.error()));
+        ctx.AddError(expectedSettings.error());
         return {};
     }
 
+    // clang-format off
     const auto& jsonIndexSettings = expectedSettings.value();
     auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
         .Add(Build<TCoAtom>(ctx, node.Pos()).Value(jsonIndexSettings.ColumnName).Done())
@@ -2219,6 +2221,7 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
         .Input(newInput)
         .Lambda(flatMap.Lambda())
         .Done();
+    // clang-format on
 }
 
 // Parse-once accessor over a HybridRank node's arguments.

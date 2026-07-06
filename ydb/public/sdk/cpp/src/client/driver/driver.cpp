@@ -23,6 +23,7 @@ using NYdbGrpc::TGRpcClientConfig;
 using NYdbGrpc::TResponseCallback;
 using NYdbGrpc::TGrpcStatus;
 using NYdbGrpc::TTcpKeepAliveSettings;
+using NYdbGrpc::IsGRpcCompletionThread;
 
 using Ydb::StatusIds;
 
@@ -362,10 +363,16 @@ TDriver::TDriver(const TDriverConfig& config) {
     }
 
     Impl_ = std::shared_ptr<TGRpcConnectionsImpl>(new TGRpcConnectionsImpl(config.Impl_), [] (TGRpcConnectionsImpl* impl) {
-        std::thread([impl] {
+        auto destroyImpl = [impl] {
             impl->Stop(true);
             delete impl;
-        }).detach();
+        };
+
+        if (IsGRpcCompletionThread()) {
+            std::thread(std::move(destroyImpl)).detach();
+        } else {
+            destroyImpl();
+        }
     });
 }
 

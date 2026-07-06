@@ -11,6 +11,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
+#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
@@ -412,6 +413,10 @@ public:
             }
 
             case NKqpProto::TKqpSchemeOperation::kBuildOperation: {
+                return StartAlterOperation();
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kSetColumnConstraint: {
                 return StartAlterOperation();
             }
 
@@ -836,10 +841,12 @@ public:
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
                 hFunc(NSchemeShard::TEvIndexBuilder::TEvCreateResponse, Handle);
                 hFunc(NSchemeShard::TEvForcedCompaction::TEvCreateResponse, Handle);
+                hFunc(NSchemeShard::TEvSetColumnConstraint::TEvCreateResponse, Handle);
                 hFunc(TEvTabletPipe::TEvClientConnected, Handle);
                 hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
                 hFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
                 hFunc(NSchemeShard::TEvForcedCompaction::TEvGetResponse, Handle);
+                hFunc(NSchemeShard::TEvSetColumnConstraint::TEvGetResponse, Handle);
                 hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
                 hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
                 default:
@@ -911,6 +918,10 @@ public:
             case NKqpProto::TKqpSchemeOperation::kCompactTable: {
                 const auto& compactOp = schemeOp.GetCompactTable();
                 path = compactOp.source_path();
+                break;
+            }
+            case NKqpProto::TKqpSchemeOperation::kSetColumnConstraint: {
+                path = schemeOp.GetSetColumnConstraint().GetTablePath();
                 break;
             }
             default:
@@ -1010,6 +1021,15 @@ public:
                 ForwardToSchemeShard(std::move(req));
                 break;
             }
+            case NKqpProto::TKqpSchemeOperation::kSetColumnConstraint: {
+                const auto& constraintSettings = schemeOp.GetSetColumnConstraint();
+                auto req = std::make_unique<NSchemeShard::TEvSetColumnConstraint::TEvCreateRequest>(TxId, Database, constraintSettings);
+                if (UserToken) {
+                    req->Record.SetUserSID(UserToken->GetUserSID());
+                }
+                ForwardToSchemeShard(std::move(req));
+                break;
+            }
             default:
                 InternalError(TStringBuilder() << "Unexpected scheme operation when handle TEvNavigateKeySetResult: "
                     << (ui32) schemeOp.GetOperationCase());
@@ -1063,6 +1083,21 @@ public:
         }
     }
 
+    void Handle(NSchemeShard::TEvSetColumnConstraint::TEvCreateResponse::TPtr& ev) {
+        const auto& response = ev->Get()->Record;
+        const auto status = response.GetStatus();
+        auto issuesProto = response.GetIssues();
+
+        KQP_STLOG_D(KQPSCHEME, "Handle TEvSetColumnConstraint::TEvCreateResponse",
+            (response, response.ShortUtf8DebugString()));
+
+        if (status == Ydb::StatusIds::SUCCESS) {
+            DoSubscribe();
+        } else {
+            ReplyErrorAndDie(status, &issuesProto);
+        }
+    }
+
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
             NYql::TIssues issues;
@@ -1089,6 +1124,11 @@ public:
         ForwardToSchemeShard(std::move(request));
     }
 
+    void GetSetColumnConstraintStatus() {
+        auto request = std::make_unique<NSchemeShard::TEvSetColumnConstraint::TEvGetRequest>(Database, TxId);
+        ForwardToSchemeShard(std::move(request));
+    }
+
     void DoSubscribe() {
         auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(TxId);
         ForwardToSchemeShard(std::move(request));
@@ -1102,6 +1142,9 @@ public:
             }
             case NKqpProto::TKqpSchemeOperation::kCompactTable: {
                 return GetCompactionStatus();
+            }
+            case NKqpProto::TKqpSchemeOperation::kSetColumnConstraint: {
+                return GetSetColumnConstraintStatus();
             }
             default: {
                 return InternalError(TStringBuilder() << "Unexpected scheme operation when handle TEvNotifyTxCompletionResult: "
@@ -1164,6 +1207,36 @@ public:
             return ReplyErrorAndDie(Ydb::StatusIds::SUCCESS, NYql::TIssues{});
         } else {
             return ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder() << "Unexpected state: " << state);
+        }
+    }
+
+    void Handle(NSchemeShard::TEvSetColumnConstraint::TEvGetResponse::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        KQP_STLOG_D(KQPSCHEME, "Handle TEvSetColumnConstraint::TEvGetResponse",
+            (record, record.ShortDebugString()));
+        if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            NYql::TIssues responseIssues;
+            NYql::IssuesFromMessage(record.GetIssues(), responseIssues);
+
+            NYql::TIssue issue(TStringBuilder() << "Failed to get set column constraint status. Status: " << record.GetStatus());
+            for (const NYql::TIssue& i : responseIssues) {
+                issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
+            }
+
+            NYql::TIssues issues;
+            issues.AddIssue(std::move(issue));
+            return InternalError(issues);
+        }
+
+        auto& constraintResult = *record.MutableSetColumnConstraint();
+        const Ydb::Table::SetNotNullState::State state = constraintResult.GetState();
+
+        if (state == Ydb::Table::SetNotNullState::STATE_DONE) {
+            return ReplyErrorAndDie(Ydb::StatusIds::SUCCESS, record.MutableIssues());
+        } else if (state == Ydb::Table::SetNotNullState::STATE_CANCELLED) {
+            return ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, record.MutableIssues());
+        } else {
+            return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, record.MutableIssues());
         }
     }
 

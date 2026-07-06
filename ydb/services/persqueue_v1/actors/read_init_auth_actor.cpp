@@ -213,7 +213,8 @@ bool TReadInitAndAuthActor::CheckTopicACL(
     }
     if (!SkipReadRuleCheck && (Token || AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen())) {
         //TODO : add here checking of client-service-type password. Provide it via API-call.
-        if (!NPQ::HasConsumer(pqDescr.GetPQTabletConfig(), ClientId)) {
+        const auto* consumer = NPQ::GetConsumer(pqDescr.GetPQTabletConfig(), ClientId);
+        if (!consumer || consumer->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
             CloseSession(
                     TStringBuilder() << "no read rule provided for consumer '" << ClientPath << "' in topic '" << topic << "' in current cluster '" << LocalCluster << "'",
                     PersQueue::ErrorCode::UNKNOWN_READ_RULE, ctx

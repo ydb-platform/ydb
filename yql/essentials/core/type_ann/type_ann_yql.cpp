@@ -1,5 +1,8 @@
 #include "type_ann_yql.h"
 
+#include "type_ann_columnorder.h"
+#include "type_ann_list.h"
+
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_module_helpers.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -450,6 +453,38 @@ IGraphTransformer::TStatus InferYqlImplicitUsingJoinColumns(
     }
 
     return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus InferYqlInferUnionType(
+    TPositionHandle pos,
+    const TExprNode::TListType& children,
+    TColumnOrder& resultColumnOrder,
+    const TStructExprType*& resultStructType,
+    TExtContext& ctx,
+    bool& areColumnsOrdered,
+    bool& isUniversal)
+{
+    YQL_ENSURE(resultColumnOrder.Size() == 0);
+    areColumnsOrdered = false;
+
+    auto status = InferUnionType(
+        pos, children, resultStructType, ctx, /* areHashesChecked = */ false, isUniversal);
+
+    if (status != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+
+    if (isUniversal) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    auto order = InferOrderForUnionAll(resultStructType, children, ctx.Types);
+    if (order) {
+        resultColumnOrder = *order;
+        areColumnsOrdered = true;
+    }
+
+    return status;
 }
 
 IGraphTransformer::TStatus YqlAggFactoryWrapper(
@@ -931,7 +966,7 @@ IGraphTransformer::TStatus YqlWinWrapper(
         TExprNode::TPtr body = input->Child(4);
 
         TExprNode::TPtr resultType =
-            ExpandResultType(std::move(traits), std::move(body), ctx.Expr);
+            ExpandResultType(traits, body, ctx.Expr);
 
         // clang-format off
         resultExpr = ctx.Expr.Builder(input->Pos())

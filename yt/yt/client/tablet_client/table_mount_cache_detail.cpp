@@ -237,7 +237,10 @@ TTabletInfoPtr TTableMountCacheBase::FindTabletInfo(TTabletId tabletId)
 
         for (const auto& tabletInfo : owner->Tablets) {
             if (tabletInfo->TabletId == tabletId) {
-                if (!result || tabletInfo->MountRevision > result->MountRevision) {
+                if (!result ||
+                    tabletInfo->MountRevision > result->MountRevision ||
+                    tabletInfo->MountRevision == result->MountRevision && tabletInfo->UpdateTime > result->UpdateTime)
+                {
                     result = tabletInfo;
                     break;
                 }

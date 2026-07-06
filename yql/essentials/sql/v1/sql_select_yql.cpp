@@ -92,7 +92,7 @@ private:
         }
 
         for (auto& binding : *bindings) {
-            auto result = Build(std::move(binding));
+            auto result = Build(binding);
             if (!result) {
                 return std::unexpected(result.error());
             }
@@ -143,16 +143,16 @@ private:
             return std::unexpected(ESQLError::Basic);
         }
 
+        TVector<TString> columns;
         if (rule.HasBlock2()) {
-            Token(rule.GetBlock2().GetRule_pure_column_list1().GetToken1());
-            Ctx_.Error() << "CTE columns are not implemented yet";
-            return std::unexpected(ESQLError::Basic);
+            columns = TableColumns(rule.GetBlock2().GetRule_pure_column_list1());
         }
 
         return TYqlSourceAlias{
             .Position = Ctx_.Pos(),
             .Name = std::move(id),
-            .Columns = {},
+            .Columns = std::move(columns),
+            .Kind = TYqlSourceAlias::EKind::CTE,
         };
     }
 
@@ -194,7 +194,7 @@ private:
         }
 
         TReadyCTE cte = {
-            .Alias = std::move(binding.Alias),
+            .Alias = binding.Alias,
             .Node = std::move(*result),
         };
 
@@ -1446,7 +1446,7 @@ private:
             YQL_ENSURE(false, "Unexpected ORDER BY direction " << direction);
         }
 
-        return new TSortSpecification(std::move(*expr), isAscending);
+        return new TSortSpecification(*expr, isAscending);
     }
 
     template <class TRule>

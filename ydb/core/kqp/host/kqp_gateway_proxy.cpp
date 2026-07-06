@@ -7,6 +7,7 @@
 #include <ydb/core/grpc_services/table_settings.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/metrics_config.pb.h>
+#include <ydb/core/protos/set_column_constraint.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -446,6 +447,7 @@ bool FillSerializer(
 
         const auto level = *from->Level;
         if (!from->Algorithm) {
+            code = Ydb::StatusIds::BAD_REQUEST;
             error = TStringBuilder() << "Compression level " << level <<" for a column `" << name << "` specified without an algorithm";
             return false;
         }
@@ -453,6 +455,7 @@ bool FillSerializer(
         const auto codec = NArrow::CompressionFromProto(arrowCompression->GetCodec());
 
         if (!NArrow::SupportsCompressionLevel(codec.value())) {
+            code = Ydb::StatusIds::BAD_REQUEST;
             error = TStringBuilder()
                 << "Column `" << name << "`: algorithm `" << algoName
                 << "` does not support compression level";
@@ -879,12 +882,6 @@ public:
         TLoadTableMetadataSettings settings) override
     {
         return Gateway->LoadTableMetadata(cluster, table, settings);
-    }
-
-    // TODO: flown4qqqq. Need to remove.
-    TFuture<TGenericResult> SetConstraint(const TString&, TVector<TSetColumnConstraintSettings>&&) override {
-        TString error = "NotImplemented";
-        return MakeFuture<TGenericResult>(ResultFromError<TGenericResult>(error));
     }
 
     TGenericResult PrepareAlterDatabase(const TAlterDatabaseSettings& settings, NKikimrSchemeOp::TModifyScheme& modifyScheme) {
@@ -1329,6 +1326,26 @@ public:
                 tablePromise.SetValue(errResult);
                 return tablePromise.GetFuture();
             }
+            TGenericResult result;
+            result.SetSuccess();
+            tablePromise.SetValue(result);
+            return tablePromise.GetFuture();
+        } else if (opType == EAlterOperationKind::SetColumnConstraint) {
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+            auto* setColumnConstraintOp = phyTx.MutableSchemeOperation()->MutableSetColumnConstraint();
+
+            Ydb::StatusIds::StatusCode code;
+            TString error;
+            if (!BuildAlterTableSetColumnConstraintRequest(&req, setColumnConstraintOp, code, error)) {
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue(error));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                tablePromise.SetValue(errResult);
+                return tablePromise.GetFuture();
+            }
+
             TGenericResult result;
             result.SetSuccess();
             tablePromise.SetValue(result);

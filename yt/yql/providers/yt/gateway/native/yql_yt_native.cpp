@@ -725,6 +725,8 @@ public:
                 future = DoCopy(op.Cast(), execCtx);
             } else if (auto op = opBase.Maybe<TYtMerge>()) {
                 future = DoMerge(op.Cast(), execCtx);
+            } else if (auto op = opBase.Maybe<TYtPersist>()) {
+                future = DoPersist(op.Cast(), execCtx);
             } else if (auto op = opBase.Maybe<TYtMap>()) {
                 future = DoMap(op.Cast(), execCtx, ctx);
             } else if (auto op = opBase.Maybe<TYtReduce>()) {
@@ -3677,14 +3679,17 @@ private:
 
         return execCtx->Session_->Async([execCtx]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+            execCtx->SetNodeExecProgress("Preparing");
             auto entry = execCtx->GetEntry();
             execCtx->QueryCacheItem.Destroy(); // Don't use cache for YtCopy
             TOutputInfo& out = execCtx->OutTables_.front();
 
             entry->DeleteAtFinalize(out.Path);
 
+            execCtx->PrepareSecureTmpFolder();
             entry->CreateDefaultTmpFolder();
             CreateParents({out.Path}, entry->CacheTx);
+            execCtx->SetNodeExecProgress("Running");
             entry->Tx->Copy(execCtx->InputTables_.front().Name, out.Path, TCopyOptions().Force(true));
 
         });
@@ -3813,6 +3818,61 @@ private:
                     YQL_ENSURE(inputDataWeight == outputDataWeight, "YtMerge with ReplaceParentCache produced data_weight mismatch: " << "input=" << inputDataWeight << " output=" << outputDataWeight);
                 });
             });
+        });
+    }
+
+    TFuture<void> DoPersist(TYtPersist /*persist*/, const TExecContext<TRunOptions>::TPtr& execCtx) {
+        YQL_ENSURE(execCtx->InputTables_.size() == 1);
+        YQL_ENSURE(execCtx->InputTables_.front().Temp);
+        YQL_ENSURE(execCtx->OutTables_.size() == 1);
+
+        return execCtx->Session_->Async([execCtx]() {
+            YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+            execCtx->SetNodeExecProgress("Preparing");
+            auto entry = execCtx->GetEntry();
+            execCtx->QueryCacheItem.Destroy(); // Don't use cache for YtPersist
+            TOutputInfo& out = execCtx->OutTables_.front();
+
+            const bool remote = entry->Cluster != execCtx->InputTables_.front().Cluster;
+
+            if (remote) {
+                TVector<TRichYPath> outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, true);
+
+                TMergeOperationSpec mergeOpSpec;
+                for (const auto& table: execCtx->InputTables_) {
+                    YQL_ENSURE(table.Strict);
+                    mergeOpSpec.AddInput(table.Path);
+                }
+
+                if (execCtx->OutTables_.front().SortedBy.Parts_.empty()) {
+                    mergeOpSpec.Mode(EMergeMode::MM_ORDERED);
+                } else {
+                    mergeOpSpec.Mode(EMergeMode::MM_SORTED);
+                    mergeOpSpec.MergeBy(execCtx->OutTables_.front().SortedBy);
+                }
+
+                mergeOpSpec.Output(outYPaths.front());
+                mergeOpSpec.SchemaInferenceMode(ESchemaInferenceMode::FromOutput);
+                FillOperationSpec(mergeOpSpec, execCtx);
+
+                NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
+                FillSpec(spec, *execCtx, entry, 0., Nothing(), {});
+
+                CheckSpecForSecrets(spec, execCtx);
+
+                return execCtx->RunOperation([entry, mergeOpSpec = std::move(mergeOpSpec), spec = std::move(spec)]() {
+                    return entry->Tx->Merge(mergeOpSpec, TOperationOptions().StartOperationMode(TOperationOptions::EStartOperationMode::AsyncPrepare).Spec(spec));
+                });
+            } else {
+                entry->DeleteAtFinalize(out.Path);
+                entry->CreateDefaultTmpFolder();
+                CreateParents({out.Path}, entry->CacheTx);
+
+                execCtx->SetNodeExecProgress("Running");
+                entry->Tx->Copy(execCtx->InputTables_.front().Name, out.Path, TCopyOptions().Force(true));
+
+                return MakeFuture();
+            }
         });
     }
 
@@ -6002,6 +6062,8 @@ private:
         } else if (op.Maybe<TYtSort>()) {
             return TOperationProgress::EOpBlockStatus::None;
         } else if (op.Maybe<TYtCopy>()) {
+            return TOperationProgress::EOpBlockStatus::None;
+        } else if (op.Maybe<TYtPersist>()) {
             return TOperationProgress::EOpBlockStatus::None;
         } else if (op.Maybe<TYtMerge>()) {
             return TOperationProgress::EOpBlockStatus::None;

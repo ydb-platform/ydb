@@ -685,7 +685,16 @@ public:
                     if (!ExtractSettingValue(setting.Tail(), "compression"sv, format, {}, ctx, compression)) {
                         return false;
                     }
-                    return NCommon::ValidateCompressionForInput(format, compression, ctx);
+                    if (!NCommon::ValidateCompressionForInput(format, compression, ctx)) {
+                        return false;
+                    }
+                    if (compression == "lz4"sv && (format == "raw"sv || format == "json_list"sv)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
+                            TStringBuilder() << "Compression '" << compression << "' is not supported for format '" << format
+                                             << "'. Use one of: gzip, zstd, brotli, bzip2, xz"));
+                        return false;
+                    }
+                    return true;
                 }
 
                 if (name == "partitionedby"sv) {

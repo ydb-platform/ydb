@@ -251,6 +251,10 @@ namespace NActors {
                    " SessionVirtualId: %s RemoteSessionVirtualId: %s)", ev->Sender.ToString().data(),
                   ev->Get()->Peer.ToString().data(), ev->Get()->Self.ToString().data(), SessionVirtualId.ToString().data(),
                   RemoteSessionVirtualId.ToString().data());
+        } else if (Session->HasRdmaState()) {
+            LOG_NOTICE_IC("ICRDMA", "(actor %s) rejecting graceful reconnect for RDMA session Self# %s Peer# %s",
+                ev->Sender.ToString().data(), msg->Self.ToString().data(), msg->Peer.ToString().data());
+            IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::Terminate, TDisconnectReason::NewSession());
         } else {
             // if we already have incoming handshake, then terminate existing one
             DropIncomingHandshake();

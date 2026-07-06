@@ -430,6 +430,37 @@ namespace NKikimr::NDDisk {
             it->second.emplace_back(opCookie, 0u);
             return false;
         }
+
+        // Reject new writes early when the persistent buffer has reached its
+        // maximum chunk count AND the free sector count has dropped below
+        // MinFreeSectorsReserve. Barrier movement (BarrierErasePersistentBuffer)
+        // and fast erases (FastErasePersistentBuffer) first allocate a new sector
+        // for their write record and only afterwards release the old sector, so
+        // they need headroom in the free pool. Refusing plain writes here ensures
+        // that headroom is always preserved for those higher-priority operations.
+        // This guard only fires when no new chunks can be allocated; when growth
+        // is still possible the normal pending-queue / chunk-allocation path
+        // handles writes instead.
+        // Duplicate requests (both committed and in-flight) are exempt because
+        // they reuse already-allocated sectors and do not consume additional space.
+        if (PersistentBufferSpaceAllocator.OwnedChunks.size() >= PersistentBufferFormat.MaxChunks
+                && PersistentBufferSpaceAllocator.GetFreeSpace() < PersistentBufferFormat.MinFreeSectorsReserve) {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::BS_PERSISTENT_BUFFER, "TDDiskActor::PreprocessPersistentBufferWrite not enough reserved free sectors",
+                {"marker", "BSPB"},
+                {"PBufferId", SelfId()},
+                {"tabletId", creds.TabletId},
+                {"generation", creds.Generation},
+                {"lsn", lsn},
+                {"freeSpace", PersistentBufferSpaceAllocator.GetFreeSpace()},
+                {"minFreeSectorsReserve", PersistentBufferFormat.MinFreeSectorsReserve});
+            SendReply(ev, std::make_unique<TEvWritePersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::OVERFILL,
+                TStringBuilder() << "persistent buffer low free space: "
+                    << PersistentBufferSpaceAllocator.GetFreeSpace() << " free sectors, "
+                    << PersistentBufferFormat.MinFreeSectorsReserve << " required as reserve"));
+            return false;
+        }
+
         return true;
     }
 

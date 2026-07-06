@@ -166,7 +166,7 @@ The speed of renaming is determined by the type of data transactions currently r
 
 ### Bloom Filter {#bloom-filter}
 
-Using a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) lets you more efficiently determine if some keys are missing in a table when making multiple point queries by primary key. This reduces the number of required disk I/O operations but increases the amount of memory consumed.
+Using a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) allows more efficiently determining the absence of keys in a table during multiple point lookups by primary key, reducing the number of required disk I/O operations at the cost of increased memory consumption.
 
 | Parameter name | Type | Acceptable values | Update<br/>capability | Reset<br/>capability |
 | ------------- | --- | ------------------- | --------------------- | ------------------ |
@@ -256,14 +256,9 @@ CREATE TABLE article_column_table (
 WITH (STORE = COLUMN);
 ```
 
-At the moment, not all functionality of column-oriented tables is implemented. The following features are not currently supported:
+### Local Bloom skip indexes {#local-bloom-indexes}
 
-* Reading from replicas.
-* Secondary indexes.
-* Vector indexes.
-* Bloom filters.
-* Change Data Capture.
-* Custom table attributes.
+In column-oriented and row-oriented tables you can define [local Bloom skip indexes](../../glossary.md#local-bloom-skip-index) on columns with `LOCAL USING bloom_filter` or `LOCAL USING bloom_ngram_filter`, either during [table creation](../../../yql/reference/syntax/create_table/bloom_skip_index.md) or with [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-bloom). See [local indexes](../../query_execution/local_indexes.md) and [Bloom skip indexes](../../../dev/bloom-skip-indexes.md).
 
 ### Partitioning Column-Oriented Tables {#olap-tables-partitioning}
 
@@ -282,3 +277,14 @@ Type: `Uint64`.
 Default value: 64.
 
 Because other partitioning parameters are ignored, this value also defines the upper limit on the number of partitions.
+
+### Column-oriented table limitations
+
+At the moment, not all functionality of column-oriented tables is implemented. The following features are not currently supported:
+
+* Reading from replicas.
+* Global secondary indexes.
+* Vector and fulltext indexes.
+* Bloom filter for the primary key (`KEY_BLOOM_FILTER`; see [Bloom filter](#bloom-filter) for row-oriented tables).
+* Change Data Capture.
+* Custom table attributes.

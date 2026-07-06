@@ -53,6 +53,8 @@ struct TJoinTestData {
     std::optional<ui64> JoinMemoryConstraint = std::nullopt;
     int BlockSize = 128;
     bool SliceBlocks = false;
+    TVector<int> ScalarizeLeftColumns;
+    TVector<int> ScalarizeRightColumns;
     TBlockHashJoinSettings JoinSettings;
 };
 
@@ -938,6 +940,31 @@ TJoinTestData OutputBufferBoundedTestData() {
     return td;
 }
 
+TJoinTestData ScalarPayloadInnerJoinTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1, 2, 3, 4, 5};
+    TVector<ui64> leftValues = {100, 100, 100, 100, 100};
+
+    TVector<ui64> rightKeys = {2, 3, 4, 5, 6};
+    TVector<ui64> rightValues = {20, 30, 40, 50, 60};
+
+    TVector<ui64> expectedKeysLeft = {2, 3, 4, 5};
+    TVector<ui64> expectedValuesLeft = {100, 100, 100, 100};
+    TVector<ui64> expectedKeysRight = {2, 3, 4, 5};
+    TVector<ui64> expectedValuesRight = {20, 30, 40, 50};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+
+    td.Kind = EJoinKind::Inner;
+    td.ScalarizeLeftColumns = {1};
+    return td;
+}
+
 TJoinDescription MakeJoinDescription(TJoinTestData& td) {
     FilterRenamesForSemiAndOnlyJoins(td);
     TJoinDescription descr;
@@ -953,6 +980,8 @@ TJoinDescription MakeJoinDescription(TJoinTestData& td) {
     descr.RightSource.ValuesList = td.Right.Value;
     descr.BlockSize = td.BlockSize;
     descr.SliceBlocks = td.SliceBlocks;
+    descr.ScalarizeLeftColumns = td.ScalarizeLeftColumns;
+    descr.ScalarizeRightColumns = td.ScalarizeRightColumns;
     return descr;
 }
 
@@ -1118,6 +1147,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST(TestSwappedKeyColumnsLeftSemi) {
         Test(SwappedKeyColumnsLeftSemiTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestBlockJoinScalarColumn) {
+        Test(ScalarPayloadInnerJoinTestData(), true);
     }
 
     Y_UNIT_TEST(TestBlockSpilling) { 

@@ -31,6 +31,11 @@ items:
   href: fulltext-indexes.md
 - name: Hybrid search
   href: hybrid-search.md
+- name: Local indexes
+  href: local-indexes/index.md
+  include:
+    mode: link
+    path: local-indexes/toc_p.yaml
 - name: Query execution optimization
   href: query-execution-optimization/index.md
   include:

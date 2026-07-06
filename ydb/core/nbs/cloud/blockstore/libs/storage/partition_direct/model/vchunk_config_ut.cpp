@@ -49,6 +49,36 @@ Y_UNIT_TEST_SUITE(TVChunkConfigTest)
             TVChunkConfig::Make(0, THostRoles(), THostRoles(), THostMask(), {});
         UNIT_ASSERT(!cfg.IsValid());
     }
+
+    Y_UNIT_TEST(ShouldAddHandOffToDesiredWhenPrimaryDisabled)
+    {
+        THostMask hostMask = THostMask::MakeAll(5);
+        hostMask.Reset(0);
+
+        auto cfg = TVChunkConfig::MakeDefault(0, 5, 3);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[H0,H1,H2]",
+            cfg.GetDesiredPBuffers().Print());
+        UNIT_ASSERT_VALUES_EQUAL("[H3,H4]", cfg.GetSecondaryPBuffers().Print());
+        UNIT_ASSERT_VALUES_EQUAL("[H0,H1,H2]", cfg.GetHealthyDDisks().Print());
+
+        cfg.DisableHost(0);
+        UNIT_ASSERT(cfg.IsValid());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[H1,H2,H3]",
+            cfg.GetDesiredPBuffers().Print());
+        UNIT_ASSERT_VALUES_EQUAL("[H3,H4]", cfg.GetSecondaryPBuffers().Print());
+        UNIT_ASSERT_VALUES_EQUAL("[H1,H2]", cfg.GetHealthyDDisks().Print());
+
+        cfg.EnableHost(0);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[H0,H1,H2]",
+            cfg.GetDesiredPBuffers().Print());
+        UNIT_ASSERT_VALUES_EQUAL("[H3,H4]", cfg.GetSecondaryPBuffers().Print());
+        UNIT_ASSERT_VALUES_EQUAL("[H0,H1,H2]", cfg.GetHealthyDDisks().Print());
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

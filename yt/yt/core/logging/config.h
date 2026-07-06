@@ -5,6 +5,8 @@
 #include <yt/yt/core/json/public.h>
 #include <yt/yt/core/json/config.h>
 
+#include <library/cpp/yt/yson_string/public.h>
+
 #include <yt/yt/core/ytree/public.h>
 #include <yt/yt/core/ytree/yson_struct.h>
 
@@ -37,6 +39,7 @@ struct TLogWriterConfig
     bool EnableHostField;
     THashMap<std::string, NYTree::INodePtr> CommonFields;
     NJson::TJsonFormatConfigPtr JsonFormat;
+    NYson::EYsonFormat YsonFormat;
 
     bool AreSystemMessagesEnabled() const;
     ELogFamily GetSystemMessageFamily() const;

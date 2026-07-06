@@ -17,8 +17,9 @@ bool IsSimpleConstant(const TExprBase& input) {
     return false;
 }
 
-bool IsValidComparator(TExprNode::TPtr input) {
-    return input->IsCallable({"==", "<=", ">=", "<", ">", "!="});
+bool IsAllowedComparator(TExprNode::TPtr input) {
+    return input->IsCallable({"==", "<=", ">=", "<", ">", "!=", "StringContains", "StartsWith", "EndsWith", "StringContainsIgnoreCase", "StartsWithIgnoreCase",
+                              "EndsWithIgnoreCase"});
 }
 
 bool IsSimpleColumnAccess(const TExprBase& colAccess, const TExprBase& columnArg) {
@@ -28,15 +29,28 @@ bool IsSimpleColumnAccess(const TExprBase& colAccess, const TExprBase& columnArg
     return false;
 }
 
+template <typename T>
+bool IsNullRejecting(const TExprBase& input, const TExprBase& lambdaArg) {
+    auto compare = input.Cast<T>();
+    auto leftArg = compare.Left();
+    auto rightArg = compare.Right();
+    return (IsSimpleColumnAccess(leftArg, lambdaArg) && IsSimpleConstant(rightArg)) || (IsSimpleColumnAccess(rightArg, lambdaArg) && IsSimpleConstant(leftArg));
+}
+
+TExprBase PruneNot(const TExprBase& node) {
+    if (auto maybeNot = node.Maybe<TCoNot>()) {
+        return maybeNot.Cast().Value();
+    }
+    return node;
+}
+
 bool IsNullRejectingPredicate(const TExpression& filter) {
     auto lambda = TCoLambda(filter.GetLambda());
     auto arg = lambda.Args().Arg(0);
-    auto body = lambda.Body();
-    if (IsValidComparator(body.Ptr())) {
-        auto compare = body.Cast<TCoCompare>();
-        auto leftArg = compare.Left();
-        auto rightArg = compare.Right();
-        return (IsSimpleColumnAccess(leftArg, arg) && IsSimpleConstant(rightArg)) || (IsSimpleColumnAccess(rightArg, arg) && IsSimpleConstant(leftArg));
+
+    auto predicate = PruneNot(lambda.Body());
+    if (IsAllowedComparator(predicate.Ptr())) {
+        return IsNullRejecting<TCoCompare>(predicate, arg);
     }
     return false;
 }
@@ -145,7 +159,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
                 }
             }
             if (!predicatesForRightSide.empty()) {
-                auto rightExpr = MakeConjunction(pushRight, props.PgSyntax);
+                auto rightExpr = MakeConjunction(predicatesForRightSide, props.PgSyntax);
                 rightInput = MakeIntrusive<TOpFilter>(rightInput, input->Pos, rightExpr);
                 join->JoinKind = "Inner";
             } else if (!pushLeft.size()) {

@@ -365,7 +365,6 @@ message TSpytClusterConfig {
     optional string Name = 1; // Short cluster name
     optional string YtCluster = 2; // Name of the corresponding YT cluster.
     optional string DiscoveryPath = 3; // SPYT discovery path on YT.
-    optional string NetworkProject = 4; // YT MTN network project (spark.ytsaurus.network.project).
 }
 
 message TSpytGatewayConfig {

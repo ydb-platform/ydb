@@ -28,7 +28,7 @@ def _init_stress_utils():
         },
         'Kafka': {
             'args': ["--endpoint", "grpc://{node_host}:2135",
-                     "--bootstrap", "http://{node_host}:11223",
+                     "--bootstrap", "http://{node_host}:31430",
                      "--source-path", "workload_source_kafka_{node_host}_iter_{iteration_num}_{uuid}",
                      "--target-path", "workload_target_kafka_{node_host}_iter_{iteration_num}_{uuid}",
                      "--consumer", "workload-consumer-{iteration_num}-{uuid}",
@@ -76,7 +76,6 @@ def _init_stress_utils():
             'args': [
                 "--endpoint", "grpc://{node_host}:2135",
                 "--topic_prefix", "workload_source_topic_kafka_{node_host}_iter_{iteration_num}_{uuid}",
-                "--duration", "120",
                 "--consumers", "2",
                 "--consumer-threads", "2",
                 "--restart-interval", "15s",
@@ -131,6 +130,21 @@ def _init_stress_utils():
                 "--sqs-endpoint", "http://{node_host}:8433/{database}",
             ],
             'local_path': 'ydb/tests/stress/topic_sqs/topic_sqs'
+        },
+        'MinMax': {
+            'args': ["--endpoint", "grpc://{node_host}:2135",
+                     "--path", "min_max_workload_{node_host}_iter_{iteration_num}_{uuid}"],
+            'local_path': 'ydb/tests/stress/min_max_workload/min_max_workload'
+        },
+        'ResultSetFormat': {
+            'args': ["--endpoint", "grpc://{node_host}:2135",
+                     "--path", "result_set_format_{node_host}_iter_{iteration_num}_{uuid}"],
+            'local_path': 'ydb/tests/stress/result_set_format/result_set_format'
+        },
+        'SystemTabletBackup': {
+            'args': ["--endpoint", "grpc://{node_host}:2135",
+                     "--mon-endpoint", "http://{node_host}:8765"],
+            'local_path': 'ydb/tests/stress/system_tablet_backup/system_tablet_backup'
         },
     }
 

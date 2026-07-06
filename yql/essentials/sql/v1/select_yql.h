@@ -5,9 +5,15 @@
 namespace NSQLTranslationV1 {
 
 struct TYqlSourceAlias {
+    enum class EKind {
+        Subquery,
+        CTE,
+    };
+
     TPosition Position;
     TString Name;
     TVector<TString> Columns;
+    EKind Kind = EKind::Subquery;
 };
 
 struct TYqlSource {

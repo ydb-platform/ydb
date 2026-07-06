@@ -11,6 +11,8 @@ items:
     href: vector_search.md
   - name: Fulltext search
     href: fulltext_search.md
+  - name: Local indexes
+    href: local_indexes.md
   - name: Hybrid search
     href: hybrid_search.md
   - name: Federated query

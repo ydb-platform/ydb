@@ -383,6 +383,7 @@ message TSessionInfo {
     optional string WmState = 18;
     optional int64 WmEnterTime = 19;
     optional int64 WmExitTime = 20;
+    optional string TraceId = 21;
 }
 
 message TEvListSessionsRequest {
@@ -932,6 +933,10 @@ message TKqpStreamLookupSettings {
     optional string PoolId = 21;
     optional TReadVectorTopK VectorTopK = 19;
     optional uint64 QuerySpanId = 20;
+    // RowSeqNo cookie wire format version (0 = legacy, 1 = fixed bit budget).
+    // Gated by the EnableStreamLookupJoinCookieV2 feature flag so the new format
+    // is only emitted once every node in the cluster understands it.
+    optional uint32 CookieFormatVersion = 23 [default = 0];
 }
 
 message TKqpFullTextSourceSettings {
@@ -1025,6 +1030,8 @@ message TEvCancelScriptExecutionRequest {
 message TEvCancelScriptExecutionResponse {
     optional Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional bool AlreadyFinished = 3;
+    optional bool ExecutionEntryExists = 4 [default = true];
 }
 
 // Request that is sent to run script actor to check his existence.

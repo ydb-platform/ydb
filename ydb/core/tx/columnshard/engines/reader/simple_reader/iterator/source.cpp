@@ -487,8 +487,7 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
     auto allocation = std::make_shared<NCommon::TAllocateMemoryStep::TFetchingStepAllocation>(
         source, sizeToReserve, GetExecutionContext().GetCursorStep(), policy->GetStage(), false);
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, AddEvent("mr"));
-    NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(GetContext()->GetProcessMemoryControlId(),
-        GetContext()->GetCommonContext()->GetScanId(), GetMemoryGroupId(), { allocation }, (ui32)policy->GetStage());
+    GetContext()->SendToGroupedMemoryAllocation(GetMemoryGroupId(), { allocation }, (ui32)policy->GetStage());
     return true;
 }
 

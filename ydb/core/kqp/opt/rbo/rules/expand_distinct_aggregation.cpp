@@ -74,7 +74,7 @@ const TTypeAnnotationNode* GetAggregationType(const TTypeAnnotationNode* inputTy
         std::vector<const TTypeAnnotationNode*> tupleTypes;
         if (IsDecimalType(inputType)) {
             auto decimalType = inputType->Cast<TDataExprParamsType>();
-            const auto precision = "35"; //TString(decimalType->GetParamOne());
+            const auto precision = "35";
             const auto scale = TString(decimalType->GetParamTwo());
             tupleTypes = {ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, precision, scale), ctx.MakeType<TDataExprType>(EDataSlot::Uint64)};
         } else {

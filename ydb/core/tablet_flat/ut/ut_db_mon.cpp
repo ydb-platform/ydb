@@ -29,8 +29,8 @@ struct TDbMonRowsModel {
             TCompactionPolicy policy;
             txc.DB.Alter()
                 .AddTable("dbmon_test", TableId)
-                .AddColumn(TableId, "key", ColumnKeyId, NScheme::TInt64::TypeId, false, false)
-                .AddColumn(TableId, "value", ColumnValueId, NScheme::TString::TypeId, false, false)
+                .AddColumn(TableId, "key", ColumnKeyId, NScheme::TInt64::TypeId, false)
+                .AddColumn(TableId, "value", ColumnValueId, NScheme::TString::TypeId, false)
                 .AddColumnToKey(TableId, ColumnKeyId)
                 .SetCompactionPolicy(TableId, policy);
 
@@ -97,11 +97,8 @@ private:
 
     void Handle(NFake::TEvExecute::TPtr& ev, const TActorContext& ctx)
     {
-        for (auto& tx : ev->Get()->Txs) {
+        for (auto& tx : ev->Get()->Funcs) {
             Execute(tx.Release(), ctx);
-        }
-        for (auto& lambda : ev->Get()->Lambdas) {
-            std::move(lambda)(Executor(), ctx);
         }
     }
 
@@ -123,7 +120,7 @@ private:
     void Handle(TEvents::TEvPoison::TPtr&, const TActorContext& ctx)
     {
         Become(&TThis::StateBroken);
-        Executor()->DetachTablet();
+        Executor()->DetachTablet(ctx);
         Detach(ctx);
         ctx.Send(Sender, new TEvents::TEvGone);
     }

@@ -6,6 +6,7 @@
 #include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <util/stream/hex.h>
+#include <util/string/ascii.h>
 #include <util/string/escape.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 
@@ -17,8 +18,19 @@ namespace {
 static constexpr TDuration DbMonRequestTimeout = TDuration::Seconds(60);
 static constexpr TStringBuf DbMonRequestDeadlineHeader = "x-ydb-monitoring-deadline-us";
 
+TStringBuf GetDbMonRequestHeader(const NMon::TEvRemoteHttpInfo& request, TStringBuf name) {
+    if (request.ExtendedQuery) {
+        for (const auto& header : request.ExtendedQuery->GetHeaders()) {
+            if (AsciiEqualsIgnoreCase(header.GetName(), name)) {
+                return header.GetValue();
+            }
+        }
+    }
+    return {};
+}
+
 TInstant GetDbMonRequestDeadline(const NMon::TEvRemoteHttpInfo::TPtr& event) {
-    const TString deadlineUs = event->Get()->GetHeader(DbMonRequestDeadlineHeader);
+    const TString deadlineUs = GetDbMonRequestHeader(*event->Get(), DbMonRequestDeadlineHeader);
     const ui64 deadlineValue = FromStringWithDefault<ui64>(deadlineUs);
     if (deadlineValue) {
         return TInstant::MicroSeconds(deadlineValue);
@@ -193,8 +205,8 @@ public:
                         // LastSeenKey is captured from iterator GetKey() after a successful step.
                         // It must always be a full primary key for the same table.
                         // Better stop here in this case.
-                        Y_TABLET_ERROR("Cannot resume offset scan because key size changed: "
-                            << LastSeenKey->GetCells().size() << " vs " << tableInfo->KeyColumns.size());
+                        Y_ABORT("Cannot resume offset scan because key size changed: %" PRISZT " vs %" PRISZT,
+                            LastSeenKey->GetCells().size(), tableInfo->KeyColumns.size());
                     }
                     if (LastSeenKey && !canResumeByKey) {
                         LastSeenKey.reset();

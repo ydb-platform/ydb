@@ -31,7 +31,7 @@ public:
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
         if (!database.IsResolved()) {
             return Reply(
-                Ydb::StatusIds::BAD_REQUEST,
+                Ydb::StatusIds::NOT_FOUND,
                 TStringBuilder() << "Database <" << record.GetDatabaseName() << "> not found"
             );
         }

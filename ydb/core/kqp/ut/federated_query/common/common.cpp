@@ -107,6 +107,10 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
 
     appConfig->MutableQueryServiceConfig()->MutableS3()->SetAllowLocalFiles(true);
 
+    auto& tableServiceConfig = *appConfig->MutableTableServiceConfig();
+    tableServiceConfig.SetEnableCreateTableAs(true);
+    tableServiceConfig.SetEnableDataShardCreateTableAs(true);
+
     auto settings = TKikimrSettings(*appConfig);
 
     NYql::IHTTPGateway::TPtr httpGateway;

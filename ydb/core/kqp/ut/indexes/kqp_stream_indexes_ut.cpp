@@ -1517,6 +1517,7 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
     Y_UNIT_TEST_TWIN(ConditionalUpdateConcurrentDelete, StreamIndex) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableSnapshotIsolationRW(true);
 
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();

@@ -4277,10 +4277,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
             CompareYson(R"([
-                [[5];["default_value"];#];
-                [[6];["default_value"];#];
+                [[8];["default_value"];#];
                 [[7];["default_value"];#];
-                [[8];["default_value"];#]
+                [[6];["default_value"];#];
+                [[5];["default_value"];#]
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             validateTable(R"([

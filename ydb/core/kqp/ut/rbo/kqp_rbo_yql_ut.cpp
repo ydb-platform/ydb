@@ -4,7 +4,9 @@
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
 #include <ydb/core/kqp/ut/olap/helpers/aggregation.h>
 #include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/query_id.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/common/simple/settings.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 #include <ydb/core/kqp/opt/rbo/kqp_plan_conversion_utils.h>
@@ -17,11 +19,14 @@
 #include <ydb/core/kqp/opt/rbo/traces/kqp_rbo_trace_output.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <yql/essentials/core/pg_settings/guc_settings.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
@@ -5753,6 +5758,68 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(readLiveOut.contains(TInfoUnit("c")));
     }
 
+    Y_UNIT_TEST(AggregateShuffleEliminationUsesAndPreservesMapConnection) {
+        struct TCase {
+            bool Enabled;
+            TVector<TInfoUnit> ShuffledBy;
+            TVector<TInfoUnit> GroupBy;
+            bool EliminateShuffle;
+        };
+
+        const TVector<TCase> cases = {
+            {false, {TInfoUnit("id")}, {TInfoUnit("id"), TInfoUnit("k")}, false},
+            {true, {TInfoUnit("id")}, {TInfoUnit("id"), TInfoUnit("k")}, true},
+            {true, {TInfoUnit("id"), TInfoUnit("k")}, {TInfoUnit("id")}, false},
+        };
+
+        for (const auto& testCase : cases) {
+            TMapRuleTestContext testContext;
+            testContext.Config->OptShuffleEliminationForAggregation = testCase.Enabled;
+            TPlanProps planProps;
+            const auto pos = NYql::TPositionHandle();
+
+            auto read = MakeTestRead({TInfoUnit("id"), TInfoUnit("k"), TInfoUnit("payload")}, pos);
+            read->Props.StageId = planProps.StageGraph.AddSourceStage(NYql::EStorageType::ColumnStorage);
+            read->Props.Metadata = TRBOMetadata();
+            read->Props.Metadata->ShuffledByColumns = testCase.ShuffledBy;
+            read->StorageType = NYql::EStorageType::ColumnStorage;
+
+            auto aggregate = MakeIntrusive<TOpAggregate>(
+                read,
+                TVector<TOpAggregationTraits>{TOpAggregationTraits(TInfoUnit("payload"), "sum", TInfoUnit("sum_payload"))},
+                testCase.GroupBy,
+                EOpPhase::Intermediate,
+                false,
+                pos
+            );
+            aggregate->ComputeMetadata(testContext.RboCtx, planProps);
+
+            TAssignStagesRule assignStages;
+            TIntrusivePtr<IOperator> op = aggregate;
+            UNIT_ASSERT(assignStages.MatchAndApply(op, testContext.RboCtx, planProps));
+
+            const auto inputStageId = *read->Props.StageId;
+            const auto aggregateStageId = *aggregate->Props.StageId;
+            const auto& connections = planProps.StageGraph.GetConnections(inputStageId, aggregateStageId);
+            UNIT_ASSERT_VALUES_EQUAL(connections.size(), 1);
+            if (testCase.EliminateShuffle) {
+                UNIT_ASSERT_VALUES_EQUAL(aggregate->Props.Metadata->ShuffledByColumns.size(), 1);
+                UNIT_ASSERT(aggregate->Props.Metadata->ShuffledByColumns.front() == TInfoUnit("id"));
+                UNIT_ASSERT(IsConnection<TMapConnection>(connections.front()));
+
+                TPropagateAggregateThroughStageRule propagateAggregate;
+                UNIT_ASSERT(propagateAggregate.MatchAndApply(op, testContext.RboCtx, planProps));
+                UNIT_ASSERT_VALUES_EQUAL(*op->Props.StageId, inputStageId);
+                const auto& propagatedConnections = planProps.StageGraph.GetConnections(inputStageId, aggregateStageId);
+                UNIT_ASSERT_VALUES_EQUAL(propagatedConnections.size(), 1);
+                UNIT_ASSERT(IsConnection<TMapConnection>(propagatedConnections.front()));
+            } else {
+                UNIT_ASSERT(aggregate->Props.Metadata->ShuffledByColumns.empty());
+                UNIT_ASSERT(IsConnection<TShuffleConnection>(connections.front()));
+            }
+        }
+    }
+
     Y_UNIT_TEST(NarrowByLivenessPrunesReadColumnsAfterDeadAggregateTraits) {
         TMapRuleTestContext testContext;
         const auto pos = NYql::TPositionHandle();
@@ -10077,6 +10144,54 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    TPreparedQueryHolder::TConstPtr CompilePreparedQuery(TKikimrRunner& kikimr, const TString& query) {
+        // The KQP proxy registers the compile service during bootstrap; session creation is the readiness barrier.
+        const auto sessionResult = kikimr.GetQueryClient().GetSession().GetValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+
+        const ui32 nodeIdx = 0;
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor(nodeIdx);
+
+        TKqpQuerySettings querySettings(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+        TKqpQueryId queryId(
+            TString(DefaultKikimrPublicClusterName),
+            "/Root",
+            /*databaseId*/ "",
+            /*userSid*/ "root@builtin",
+            query,
+            querySettings,
+            /*paramTypes*/ nullptr,
+            TGUCSettings{});
+
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken = new NACLib::TUserToken("root@builtin", {});
+        runtime.Send(new IEventHandle(
+            MakeKqpCompileServiceID(runtime.GetNodeId(nodeIdx)),
+            edgeActor,
+            new TEvKqp::TEvCompileRequest(
+                userToken,
+                /*clientAddress*/ "",
+                /*uid*/ Nothing(),
+                TMaybe<TKqpQueryId>(std::move(queryId)),
+                /*keepInCache*/ false,
+                /*isQueryActionPrepare*/ false,
+                /*perStatementResult*/ false,
+                /*deadline*/ TInstant::Max(),
+                /*dbCounters*/ nullptr,
+                std::make_shared<TGUCSettings>(),
+                /*applicationName*/ Nothing(),
+                std::make_shared<std::atomic<bool>>(true),
+                MakeIntrusive<TUserRequestContext>("shuffle-elimination-ut", "/Root", "compile-session"))));
+
+        const auto response = runtime.GrabEdgeEvent<TEvKqp::TEvCompileResponse>(edgeActor, TDuration::Seconds(30));
+        UNIT_ASSERT_C(response, "Compile request timed out");
+        UNIT_ASSERT_C(response->Get()->CompileResult, "Compile result is missing");
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS,
+            response->Get()->CompileResult->Issues.ToString());
+        UNIT_ASSERT_C(response->Get()->CompileResult->PreparedQuery, "Prepared query is missing");
+        return response->Get()->CompileResult->PreparedQuery;
+    }
+
     std::pair<TString, TString> ExplainHashCompatibilityQueryWithAst(const TVector<TString>& tables, const TString& query, bool blockChannelsAuto = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -10115,6 +10230,22 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     TString ExplainHashCompatibilityQuery(const TVector<TString>& tables, const TString& query) {
         return ExplainHashCompatibilityQueryWithAst(tables, query).first;
+    }
+
+    Y_UNIT_TEST(AggregationShuffleEliminationSettingEnablesTransactionLayout) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        const auto preparedQuery = CompilePreparedQuery(kikimr, R"(
+            PRAGMA ydb.OptShuffleElimination = "false";
+            PRAGMA ydb.OptShuffleEliminationForAggregation = "true";
+
+            SELECT 1;
+        )");
+
+        const auto& transactions = preparedQuery->GetTransactions();
+        UNIT_ASSERT(!transactions.empty());
+        for (const auto& transaction : transactions) {
+            UNIT_ASSERT(transaction->EnableShuffleElimination());
+        }
     }
 
     // A flat 3-way join on TPCH tables with overridden statistics and fixed

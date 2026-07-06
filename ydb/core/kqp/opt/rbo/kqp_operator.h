@@ -314,6 +314,9 @@ public:
     TIntrusivePtr<IOperator>& GetInput() {
         return Children[0];
     }
+    const TIntrusivePtr<IOperator>& GetInput() const {
+        return Children[0];
+    }
     void SetInput(TIntrusivePtr<IOperator> newInput) {
         Children[0] = newInput;
     }

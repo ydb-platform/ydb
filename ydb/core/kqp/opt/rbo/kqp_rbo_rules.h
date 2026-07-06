@@ -392,7 +392,7 @@ class TInlineCBOTreeRule : public ISimplifiedRule {
  */
 class TAssignStagesRule : public IRule {
   public:
-    TAssignStagesRule() : IRule("Assign stages", ERuleProperties::RequireParents) {}
+    TAssignStagesRule() : IRule("Assign stages", ERuleProperties::RequireParents | ERuleProperties::RequireMetadata) {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -490,7 +490,7 @@ class TPropagateHashFuncStage : public IRBOStage {
 class TPropagateAggregateThroughStageRule: public ISimplifiedRule {
 public:
     TPropagateAggregateThroughStageRule()
-        : ISimplifiedRule("Propagate aggregate operator through stages", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {
+        : ISimplifiedRule("Propagate aggregate operator through stages", ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireMetadata) {
     }
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;

@@ -1208,7 +1208,10 @@ private:
             i.MutableProgram()->MutableSettings()->SetLevelDataPrediction(rPredictor.GetLevelDataVolume(i.GetProgram().GetSettings().GetStageLevel()));
         }
 
-        txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(Config->GetDefaultEnableShuffleElimination()));
+        // Map connections produced by either optimization need partition-preserving task layout.
+        const bool enableShuffleElimination = Config->OptShuffleElimination.Get().GetOrElse(Config->GetDefaultEnableShuffleElimination())
+            || Config->OptShuffleEliminationForAggregation.Get().GetOrElse(Config->GetDefaultEnableShuffleEliminationForAggregation());
+        txProto.SetEnableShuffleElimination(enableShuffleElimination);
         txProto.SetHasEffects(hasEffectStage);
         txProto.SetDqChannelVersion(Config->DqChannelVersion.Get().GetOrElse(Config->GetDqChannelVersion()));
         for (const auto& paramBinding : tx.ParamBindings()) {

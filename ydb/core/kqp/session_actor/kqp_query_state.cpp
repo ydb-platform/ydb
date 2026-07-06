@@ -465,6 +465,31 @@ bool TKqpQueryState::PrepareNextStatementPart() {
     return true;
 }
 
+void TKqpQueryState::FillDeferredPublicationOperations() {
+    YQL_ENSURE(HasDeferredPublication());
+
+    const auto& request = GetDeferredPublicationFromRequest();
+    YQL_ENSURE(request.HasOp());
+    YQL_ENSURE(request.HasIntPublicationId());
+
+    TopicOperations = NTopic::TTopicOperations();
+
+    for (const auto& destination : request.GetDestinations()) {
+        YQL_ENSURE(destination.HasPath());
+        YQL_ENSURE(destination.HasPartitionId());
+        YQL_ENSURE(destination.HasTabletId());
+
+        auto path = CanonizePath(NPersQueue::GetFullTopicPath(GetDatabase(), destination.GetPath()));
+        TopicOperations.AddDeferredPublicationOperation(
+            path,
+            destination.GetPartitionId(),
+            destination.GetTabletId(),
+            request.GetOp(),
+            request.GetIntPublicationId(),
+            request.GetExtPublicationId());
+    }
+}
+
 void TKqpQueryState::FillTopicOperations() {
     YQL_ENSURE(HasTopicOperations() || HasKafkaApiOperations());
 

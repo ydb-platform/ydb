@@ -37,6 +37,55 @@ static void UpdateKafkaProducerInstanceId(TMaybe<NKafka::TProducerInstanceId>& l
     }
 }
 
+template <class T>
+static void UpdateMatchingMaybe(TMaybe<T>& lhs, const TMaybe<T>& rhs)
+{
+    if (rhs.Empty()) {
+        return;
+    }
+    if (lhs.Empty()) {
+        lhs = rhs;
+        return;
+    }
+    Y_ENSURE(*lhs == *rhs);
+}
+
+template <class T>
+static void UpdateMatchingMaybe(TMaybe<T>& lhs, const T& rhs)
+{
+    UpdateMatchingMaybe(lhs, TMaybe<T>{rhs});
+}
+
+static void UpdateDeferredPublicationOp(
+    TMaybe<NKikimrKqp::TTopicDeferredPublicationRequest::EOp>& lhs,
+    const TMaybe<NKikimrKqp::TTopicDeferredPublicationRequest::EOp>& rhs)
+{
+    UpdateMatchingMaybe(lhs, rhs);
+}
+
+static void UpdateDeferredPublicationIntId(TMaybe<ui64>& lhs, const TMaybe<ui64>& rhs)
+{
+    UpdateMatchingMaybe(lhs, rhs);
+}
+
+static void UpdateDeferredPublicationExtId(TMaybe<TString>& lhs, const TMaybe<TString>& rhs)
+{
+    UpdateMatchingMaybe(lhs, rhs);
+}
+
+static NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp MapDeferredPublicationOp(
+    NKikimrKqp::TTopicDeferredPublicationRequest::EOp op)
+{
+    switch (op) {
+        case NKikimrKqp::TTopicDeferredPublicationRequest::Publish:
+            return NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::Publish;
+        case NKikimrKqp::TTopicDeferredPublicationRequest::Cancel:
+            return NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::Cancel;
+        default:
+            return NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::Unspecified;
+    }
+}
+
 //
 // TConsumerOperations
 //
@@ -224,6 +273,24 @@ void TTopicPartitionOperations::AddKafkaApiReadOperation(const TString& topic, u
     Operations_[consumerName].AddKafkaApiOffsetCommit(consumerName, offset);
 }
 
+void TTopicPartitionOperations::AddDeferredPublicationOperation(
+    const TString& topic,
+    ui32 partition,
+    ui64 tabletId,
+    NKikimrKqp::TTopicDeferredPublicationRequest::EOp op)
+{
+    Y_ENSURE(Topic_.Empty() || Topic_ == topic);
+    Y_ENSURE(Partition_.Empty() || Partition_ == partition);
+
+    if (Topic_.Empty()) {
+        Topic_ = topic;
+        Partition_ = partition;
+    }
+
+    SetTabletId(tabletId);
+    UpdateDeferredPublicationOp(DeferredPublicationOp_, op);
+}
+
 void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs, bool skipConflictCheck)
 {
     Y_ENSURE(TabletId_.Defined());
@@ -253,7 +320,16 @@ void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs, 
         NPQ::DowngradeToLegacy(*o);
     }
 
-    if (HasWriteOperations_) {
+    if (DeferredPublicationOp_.Defined()) {
+        NKikimrPQ::TPartitionOperation* o = t.tx.MutableOperations()->Add();
+        o->SetPartitionId(*Partition_);
+        o->SetPath(*Topic_);
+
+        auto* write = o->MutableWrite();
+        write->SetSkipConflictCheck(skipConflictCheck);
+        write->MutableDeferredPublication()->SetOp(MapDeferredPublicationOp(*DeferredPublicationOp_));
+        t.hasWrite = true;
+    } else if (HasWriteOperations_) {
         NKikimrPQ::TPartitionOperation* o = t.tx.MutableOperations()->Add();
         o->SetPartitionId(*Partition_);
         o->SetPath(*Topic_);
@@ -293,6 +369,12 @@ void TTopicPartitionOperations::Merge(const TTopicPartitionOperations& rhs)
     }
 
     HasWriteOperations_ |= rhs.HasWriteOperations_;
+    UpdateDeferredPublicationOp(DeferredPublicationOp_, rhs.DeferredPublicationOp_);
+}
+
+bool TTopicPartitionOperations::HasDeferredPublicationOperations() const
+{
+    return DeferredPublicationOp_.Defined();
 }
 
 ui64 TTopicPartitionOperations::GetTabletId() const
@@ -364,7 +446,7 @@ bool TTopicOperations::IsValid() const
 
 bool TTopicOperations::HasOperations() const
 {
-    return HasReadOperations() || HasWriteOperations();
+    return HasReadOperations() || HasWriteOperations() || HasDeferredPublicationOperations();
 }
 
 bool TTopicOperations::HasReadOperations() const
@@ -380,6 +462,11 @@ bool TTopicOperations::HasWriteOperations() const
 bool TTopicOperations::HasKafkaOperations() const
 {
     return HasKafkaOperations_;
+}
+
+bool TTopicOperations::HasDeferredPublicationOperations() const
+{
+    return DeferredPublicationIntId_.Defined();
 }
 
 bool TTopicOperations::HasWriteId() const
@@ -403,6 +490,22 @@ NKafka::TProducerInstanceId TTopicOperations::GetKafkaProducerInstanceId() const
     Y_ENSURE(KafkaProducerInstanceId_.Defined());
 
     return *KafkaProducerInstanceId_;
+}
+
+ui64 TTopicOperations::GetDeferredPublicationIntId() const
+{
+    Y_ENSURE(HasDeferredPublicationOperations_);
+    Y_ENSURE(DeferredPublicationIntId_.Defined());
+
+    return *DeferredPublicationIntId_;
+}
+
+const TString& TTopicOperations::GetDeferredPublicationExtId() const
+{
+    Y_ENSURE(HasDeferredPublicationOperations_);
+    Y_ENSURE(DeferredPublicationExtId_.Defined());
+
+    return *DeferredPublicationExtId_;
 }
 
 bool TTopicOperations::TabletHasReadOperations(ui64 tabletId) const
@@ -466,6 +569,22 @@ void TTopicOperations::AddKafkaApiReadOperation(const TString& topic, ui32 parti
     Operations_[key].AddKafkaApiReadOperation(topic, partition, consumerName, offset);
     HasReadOperations_ = true;
     HasKafkaOperations_ = true;
+}
+
+void TTopicOperations::AddDeferredPublicationOperation(
+    const TString& topic,
+    ui32 partition,
+    ui64 tabletId,
+    NKikimrKqp::TTopicDeferredPublicationRequest::EOp op,
+    ui64 intPublicationId,
+    const TString& extPublicationId)
+{
+    UpdateDeferredPublicationIntId(DeferredPublicationIntId_, intPublicationId);
+    UpdateDeferredPublicationExtId(DeferredPublicationExtId_, extPublicationId);
+
+    TTopicPartition key{topic, partition};
+    Operations_[key].AddDeferredPublicationOperation(topic, partition, tabletId, op);
+    HasWriteOperations_ = true;
 }
 
 void TTopicOperations::FillSchemeCacheNavigate(NSchemeCache::TSchemeCacheNavigate& navigate,
@@ -636,6 +755,9 @@ void TTopicOperations::Merge(const TTopicOperations& rhs)
     HasWriteOperations_ |= rhs.HasWriteOperations_;
     HasKafkaOperations_ |= rhs.HasKafkaOperations_;
 
+    UpdateDeferredPublicationIntId(DeferredPublicationIntId_, rhs.DeferredPublicationIntId_);
+    UpdateDeferredPublicationExtId(DeferredPublicationExtId_, rhs.DeferredPublicationExtId_);
+
     MergeSkipConflictCheck(rhs.SkipConflictCheck_);
     MergeTrackProducerId(rhs.TrackProducerId_);
 }
@@ -654,7 +776,8 @@ TSet<ui64> TTopicOperations::GetSendingTabletIds() const
     TSet<ui64> ids;
     for (auto& [_, operations] : Operations_) {
         if (!operations.HasReadOperations() &&
-            operations.HasWriteOperations() && CalcSkipConflictCheck()) {
+            operations.HasWriteOperations() && CalcSkipConflictCheck() &&
+            !operations.HasDeferredPublicationOperations()) {
             continue;
         }
 

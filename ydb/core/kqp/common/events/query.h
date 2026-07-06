@@ -135,6 +135,14 @@ public:
         return Record.GetRequest().HasKafkaApiOperations();
     }
 
+    bool HasDeferredPublication() const {
+        return Record.GetRequest().HasDeferredPublication();
+    }
+
+    const ::NKikimrKqp::TTopicDeferredPublicationRequest& GetDeferredPublication() const {
+        return Record.GetRequest().GetDeferredPublication();
+    }
+
     bool GetKeepSession() const {
         return RequestCtx ? QuerySettings.KeepSession : Record.GetRequest().GetKeepSession();
     }

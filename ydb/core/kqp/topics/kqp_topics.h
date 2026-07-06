@@ -96,6 +96,11 @@ public:
 
     void AddKafkaApiReadOperation(const TString& topic, ui32 partition, const TString& consumerName, ui64 offset);
 
+    void AddDeferredPublicationOperation(const TString& topic,
+                                         ui32 partition,
+                                         ui64 tabletId,
+                                         NKikimrKqp::TTopicDeferredPublicationRequest::EOp op);
+
     void BuildTopicTxs(TTopicOperationTransactions &txs, bool skipConflictCheck);
 
     void Merge(const TTopicPartitionOperations& rhs);
@@ -108,12 +113,14 @@ public:
 
     bool HasReadOperations() const;
     bool HasWriteOperations() const;
+    bool HasDeferredPublicationOperations() const;
 
 private:
     TMaybe<TString> Topic_;
     TMaybe<ui32> Partition_;
     THashMap<TString, TConsumerOperations> Operations_;
     bool HasWriteOperations_ = false;
+    TMaybe<NKikimrKqp::TTopicDeferredPublicationRequest::EOp> DeferredPublicationOp_;
     TMaybe<ui64> TabletId_;
     TMaybe<ui32> SupportivePartition_;
     TMaybe<NKafka::TProducerInstanceId> KafkaProducerInstanceId_;
@@ -140,10 +147,13 @@ public:
     bool HasReadOperations() const;
     bool HasWriteOperations() const;
     bool HasKafkaOperations() const;
+    bool HasDeferredPublicationOperations() const;
     bool HasWriteId() const;
     ui64 GetWriteId() const;
     void SetWriteId(NLongTxService::TLockHandle handle);
     NKafka::TProducerInstanceId GetKafkaProducerInstanceId() const;
+    ui64 GetDeferredPublicationIntId() const;
+    const TString& GetDeferredPublicationExtId() const;
 
     bool TabletHasReadOperations(ui64 tabletId) const;
 
@@ -160,6 +170,13 @@ public:
     void AddKafkaApiWriteOperation(const TString& topic, ui32 partition, const NKafka::TProducerInstanceId& producerInstanceId);
 
     void AddKafkaApiReadOperation(const TString& topic, ui32 partition, const TString& consumerName, ui64 offset);
+
+    void AddDeferredPublicationOperation(const TString& topic,
+                                         ui32 partition,
+                                         ui64 tabletId,
+                                         NKikimrKqp::TTopicDeferredPublicationRequest::EOp op,
+                                         ui64 intPublicationId,
+                                         const TString& extPublicationId);
 
     void FillSchemeCacheNavigate(NSchemeCache::TSchemeCacheNavigate& navigate,
                                  TMaybe<TString> consumer);
@@ -208,6 +225,8 @@ private:
     TMaybe<TString> Consumer_;
     NLongTxService::TLockHandle WriteId_;
     TMaybe<NKafka::TProducerInstanceId> KafkaProducerInstanceId_;
+    TMaybe<ui64> DeferredPublicationIntId_;
+    TMaybe<TString> DeferredPublicationExtId_;
 
     THashMap<TString, NSchemeCache::TSchemeCacheNavigate::TEntry> CachedNavigateResult_;
     bool SkipConflictCheck_ = true;

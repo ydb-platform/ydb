@@ -464,11 +464,6 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites I", std::move(logicalStage_I_Rules)));
 
-    // Logical stage II.
-    TVector<std::unique_ptr<IRule>> mapAliasRulesII;
-    addMapAliasRules(mapAliasRulesII);
-    RBO.AddStage(std::make_unique<TRuleBasedStage>("Normalize maps and aliases II", std::move(mapAliasRulesII)));
-
     TVector<std::unique_ptr<IRule>> logicalStage_II_Rules;
     logicalStage_II_Rules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TFuseFiltersRule>());

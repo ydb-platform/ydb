@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 from concurrent.futures import ThreadPoolExecutor
 import json
+import threading
 from urllib.parse import urlencode
 
+import pytest
 import requests
 import yatest.common
-
 
 requests.packages.urllib3.disable_warnings()
 
@@ -20,6 +21,19 @@ TOKENS = [
 
 DATABASE = '/Root'
 TENANT_DATABASE = '/Root/Tenant'
+
+_DEFAULT_QUERIES = [
+    {},
+    {'database': DATABASE},
+    {'database': TENANT_DATABASE},
+]
+
+# Change counter handlers defaults (max_counter=10, period=1000ms which causes ~10s per stream).
+_COUNTER_ENDPOINT_QUERIES = [
+    {'max_counter': '1', 'period': '1'},
+    {'max_counter': '1', 'period': '1', 'database': DATABASE},
+    {'max_counter': '1', 'period': '1', 'database': TENANT_DATABASE},
+]
 
 ENDPOINT_SPECS = [
     {'path': '/actors/'},
@@ -149,7 +163,7 @@ ENDPOINT_SPECS = [
     {'path': '/viewer/hotkeys'},
     {'path': '/viewer/labeledcounters'},
     {'path': '/viewer/metainfo'},
-    {'path': '/viewer/multipart_counter'},
+    {'path': '/viewer/multipart_counter', 'queries': _COUNTER_ENDPOINT_QUERIES},
     {'path': '/viewer/netinfo'},
     {'path': '/viewer/nodeinfo'},
     {'path': '/viewer/nodelist'},
@@ -161,8 +175,8 @@ ENDPOINT_SPECS = [
     {'path': '/viewer/put_record'},
     {'path': '/viewer/query'},
     {'path': '/viewer/render'},
-    {'path': '/viewer/simple_counter'},
-    {'path': '/viewer/sse_counter'},
+    {'path': '/viewer/simple_counter', 'queries': _COUNTER_ENDPOINT_QUERIES},
+    {'path': '/viewer/sse_counter', 'queries': _COUNTER_ENDPOINT_QUERIES},
     {'path': '/viewer/storage'},
     {'path': '/viewer/storage_stats'},
     {'path': '/viewer/storage_usage'},
@@ -190,11 +204,7 @@ _DEFAULT_METHODS = ('GET', 'POST')
 _REQUEST_TIMEOUT = 5
 _MAX_PARALLEL_REQUESTS = 8
 
-_DEFAULT_QUERIES = [
-    {},
-    {'database': DATABASE},
-    {'database': TENANT_DATABASE},
-]
+_thread_local = threading.local()
 
 
 def _methods_for_spec(spec):
@@ -225,21 +235,26 @@ def _full_path(base_path, query):
 
 def _requests_for_spec(cluster, spec):
     base_path = _base_path(cluster, spec)
-    return [
-        (base_path, _query_string(query), _full_path(base_path, query))
-        for query in _queries_for_spec(spec)
-    ]
+    return [(base_path, _query_string(query), _full_path(base_path, query)) for query in _queries_for_spec(spec)]
+
+
+def _get_http_session():
+    session = getattr(_thread_local, 'session', None)
+    if session is None:
+        session = requests.Session()
+        session.verify = False
+        _thread_local.session = session
+    return session
 
 
 def _request_status(method, base_url, path, token):
     headers = {}
     if token is not None:
         headers['Authorization'] = token
-    response = requests.request(
+    response = _get_http_session().request(
         method,
         base_url + path,
         headers=headers,
-        verify=False,
         timeout=_REQUEST_TIMEOUT,
     )
     return response.status_code
@@ -284,9 +299,35 @@ def _canonize(name, results):
     return yatest.common.canonical_file(out_path, local=True, universal_lines=True)
 
 
-def test_mon_endpoints_auth(ydb_cluster_for_mon_endpoints_auth):
-    case_name, cluster = ydb_cluster_for_mon_endpoints_auth
+def _run_mon_endpoints_auth_test(canon_case_id, cluster):
     return _canonize(
-        f'mon_endpoints_auth-{case_name}',
+        f'mon_endpoints_auth-{canon_case_id}',
         _collect_endpoints(cluster),
     )
+
+
+_MON_ENDPOINTS_AUTH_CASES = (
+    pytest.param('enforce_user_token_enabled_no_schema_grants', id='enforce_user_token_enabled-no_schema_grants'),
+    pytest.param('enforce_user_token_enabled_with_schema_grants', id='enforce_user_token_enabled-with_schema_grants'),
+    pytest.param('enforce_user_token_disabled_no_schema_grants', id='enforce_user_token_disabled-no_schema_grants'),
+    pytest.param('enforce_user_token_disabled_with_schema_grants', id='enforce_user_token_disabled-with_schema_grants'),
+    pytest.param(
+        'require_counters_authentication_no_schema_grants', id='require_counters_authentication-no_schema_grants'
+    ),
+    pytest.param(
+        'require_counters_authentication_with_schema_grants', id='require_counters_authentication-with_schema_grants'
+    ),
+    pytest.param(
+        'require_healthcheck_authentication_no_schema_grants', id='require_healthcheck_authentication-no_schema_grants'
+    ),
+    pytest.param(
+        'require_healthcheck_authentication_with_schema_grants',
+        id='require_healthcheck_authentication-with_schema_grants',
+    ),
+)
+
+
+@pytest.mark.parametrize('case_name', _MON_ENDPOINTS_AUTH_CASES)
+def test(case_name, request):
+    cluster = request.getfixturevalue(f'ydb_cluster_mon_endpoints_auth_{case_name}')
+    return _run_mon_endpoints_auth_test(request.node.callspec.id, cluster)

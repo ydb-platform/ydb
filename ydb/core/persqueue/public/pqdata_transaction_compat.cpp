@@ -189,6 +189,9 @@ void DowngradeToLegacy(NKikimrPQ::TWriteId& writeId)
         case NKikimrPQ::TWriteId::kKafkaApi:
             DowngradeKafkaApiToLegacy(writeId.GetKafkaApi(), writeId);
             break;
+        case NKikimrPQ::TWriteId::kDeferredPublicationApi:
+            // Legacy wire format has no deferred representation.
+            break;
         case NKikimrPQ::TWriteId::ID_NOT_SET:
             break;
     }

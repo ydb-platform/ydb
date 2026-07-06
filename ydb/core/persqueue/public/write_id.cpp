@@ -44,6 +44,14 @@ int CompareWriteIdProto(const NKikimrPQ::TWriteId& lhs, const NKikimrPQ::TWriteI
             }
             return CompareScalars(l.GetEpoch(), r.GetEpoch());
         }
+        case NKikimrPQ::TWriteId::kDeferredPublicationApi: {
+            const auto& l = lhs.GetDeferredPublicationApi();
+            const auto& r = rhs.GetDeferredPublicationApi();
+            if (auto cmp = CompareScalars(l.GetIntPublicationId(), r.GetIntPublicationId()); cmp != 0) {
+                return cmp;
+            }
+            return l.GetExtPublicationId().compare(r.GetExtPublicationId());
+        }
         case NKikimrPQ::TWriteId::ID_NOT_SET:
             return 0;
     }
@@ -103,6 +111,10 @@ size_t TWriteId::GetHash() const
             return MultiHash(Proto.GetTopicApi().GetNodeId(), Proto.GetTopicApi().GetKeyId());
         case NKikimrPQ::TWriteId::kKafkaApi:
             return MultiHash(KafkaProducerInstanceId.Id, KafkaProducerInstanceId.Epoch);
+        case NKikimrPQ::TWriteId::kDeferredPublicationApi: {
+            const auto& deferredPublicationApi = Proto.GetDeferredPublicationApi();
+            return MultiHash(deferredPublicationApi.GetIntPublicationId(), deferredPublicationApi.GetExtPublicationId());
+        }
         case NKikimrPQ::TWriteId::ID_NOT_SET:
             return 0;
     }
@@ -119,6 +131,12 @@ void TWriteId::ToStream(IOutputStream& s) const
         case NKikimrPQ::TWriteId::kTopicApi:
             s << '{' << GetNodeId() << ", " << GetKeyId() << '}';
             break;
+        case NKikimrPQ::TWriteId::kDeferredPublicationApi: {
+            const auto& deferredPublicationApi = Proto.GetDeferredPublicationApi();
+            s << "DeferredPublicationWriteId{" << deferredPublicationApi.GetIntPublicationId()
+                << ", " << deferredPublicationApi.GetExtPublicationId() << '}';
+            break;
+        }
         case NKikimrPQ::TWriteId::ID_NOT_SET:
             s << "{}";
             break;

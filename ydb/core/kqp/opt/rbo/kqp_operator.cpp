@@ -1,6 +1,7 @@
 #include "kqp_operator.h"
 #include "kqp_expression.h"
 #include "kqp_rbo_utils.h"
+#include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
 #include <algorithm>
@@ -87,7 +88,7 @@ TOpRead::TOpRead(TExprNode::TPtr node)
 }
 
 TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
-                 const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TExprNode::TPtr& ranges,
+                 const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, std::optional<TRangeInfo> ranges,
                  const std::optional<TExpression>& originalPredicate, const ESortDir sortDir, const TPhysicalOpProps& props, TPositionHandle pos)
     : IOperator(EOperator::Source, pos, props)
     , Alias(alias)
@@ -97,9 +98,9 @@ TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TV
     , TableCallable(tableCallable)
     , OlapFilterLambda(olapFilterLambda)
     , Limit(limit)
-    , Ranges(ranges)
     , OriginalPredicate(originalPredicate)
-    , SortDir(sortDir) {
+    , SortDir(sortDir)
+    , RangeInfo(std::move(ranges)) {
 }
 
 TVector<TInfoUnit> TOpRead::GetOutputIUs() {
@@ -131,6 +132,11 @@ static std::optional<TString> GetUint64Literal(const TExprNode::TPtr& node) {
     return std::nullopt;
 }
 
+TString StripAliasPrefix(const TString& column) {
+    const auto dot = column.rfind('.');
+    return (dot != TString::npos) ? column.substr(dot + 1) : column;
+}
+
 NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
     auto res = IOperator::ToJson(explainFlags);
 
@@ -141,11 +147,6 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
     auto slash = path.rfind('/');
     res["Table"] = (slash == TString::npos) ? path : path.substr(slash + 1);
 
-    NJson::TJsonValue readColumns(NJson::EJsonValueType::JSON_ARRAY);
-    for (const auto& column : Columns) {
-        readColumns.AppendValue(column);
-    }
-    res["ReadColumns"] = readColumns;
     res["Storage"] = StorageType == NYql::EStorageType::RowStorage ? "Row" : "Column";
 
     if (SortDir != ESortDir::None) {
@@ -155,9 +156,44 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
         res["Limit"] = *limit;
     }
 
-    if (OriginalPredicate) {
+    if (OriginalPredicate && !RangeInfo) {
         res["Predicate"] = OriginalPredicate->ToExplainString();
     }
+
+    // Build ReadColumns: for range scans, list ranged key columns first, then remaining columns.
+    // This mirrors the old RBO which embeds key range descriptions into ReadColumns.
+    NJson::TJsonValue readColumns(NJson::EJsonValueType::JSON_ARRAY);
+    THashSet<TString> addedColumns;
+    if (RangeInfo) {
+        const size_t usedLen = Min(RangeInfo->UsedPrefixLen, RangeInfo->KeyColumns.size());
+        TVector<TString> rangedKeys;
+        rangedKeys.reserve(usedLen);
+        for (size_t i = 0; i < usedLen; ++i) {
+            rangedKeys.push_back(StripAliasPrefix(RangeInfo->KeyColumns[i]));
+        }
+
+        const auto descriptions = NOpt::BuildReadRangeDescriptions(RangeInfo->ComputeNode, RangeInfo->KeyColumns, usedLen);
+        for (const auto& label : descriptions.empty() ? rangedKeys : descriptions) {
+            readColumns.AppendValue(label);
+        }
+
+        NJson::TJsonValue rangeKeys(NJson::EJsonValueType::JSON_ARRAY);
+        for (const auto& key : rangedKeys) {
+            addedColumns.insert(key);
+            rangeKeys.AppendValue(key);
+        }
+        res["ReadRangesKeys"] = std::move(rangeKeys);
+
+        if (RangeInfo->ExpectedMaxRanges) {
+            res["ReadRangesExpectedSize"] = ::ToString(*RangeInfo->ExpectedMaxRanges);
+        }
+    }
+    for (const auto& column : Columns) {
+        if (!addedColumns.contains(column)) {
+            readColumns.AppendValue(column);
+        }
+    }
+    res["ReadColumns"] = std::move(readColumns);
 
     return res;
 }
@@ -179,8 +215,8 @@ TString TOpRead::ToString(TExprContext& ctx) {
     if (OlapFilterLambda) {
         res << " OlapFilter: (" << PrintRBOExpression(OlapFilterLambda, ctx) << ")";
     }
-    if (Ranges) {
-        res << " Ranges: (" << PrintRBOExpression(Ranges, ctx) << ")";
+    if (const auto ranges = GetRanges()) {
+        res << " Ranges: (" << PrintRBOExpression(ranges, ctx) << ")";
     }
     if (SortDir != ESortDir::None) {
         res << " Sort direction: (" << ((SortDir == ESortDir::Asc) ? "ASC" : "DESC");

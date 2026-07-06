@@ -1,4 +1,4 @@
-#include <ydb/core/kqp/opt/physical/kqp_olap_filter_inspection.h>
+#include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_olap_filter.h>
 #include <ydb/core/kqp/opt/physical/predicate_collector.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
@@ -144,7 +144,7 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
     YQL_CLOG(TRACE, ProviderKqp) << "Pushed OLAP projection: " << KqpExprToPrettyString(TExprBase(newLambda), ctx.ExprCtx);
 
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, newLambda, read->Limit,
-                                          read->Ranges, read->OriginalPredicate, read->SortDir, read->Props, read->Pos);
+                                          read->RangeInfo, read->OriginalPredicate, read->SortDir, read->Props, read->Pos);
     return MakeIntrusive<TOpMap>(newRead, map->Pos, newMapElements, map->Ordered);
 }
 

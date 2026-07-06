@@ -626,22 +626,30 @@ public:
     }
 
     // Walks an expression tree and invokes `processTable` for every table referenced by a
-    // YtTableContent (either via YtReadTable paths or via YtOutput) and by Right!(YtReadTable).
-    // The traversal does not descend into already-handled YtTableContent / TCoRight nodes.
+    // YtTableContent/YtBlockTableContent (either via YtReadTable paths or via YtOutput) and by Right!(YtReadTable).
+    // The traversal does not descend into already-handled table content / TCoRight nodes.
     template <typename TProcessTable>
     static void ScanYtTableContentTables(const TExprNode::TPtr& root, TProcessTable processTable) {
-        VisitExpr(root, [&](const TExprNode::TPtr& exprNode) {
-            if (auto maybeContent = TMaybeNode<TYtTableContent>(exprNode)) {
-                auto content = maybeContent.Cast();
-                if (auto maybeRead = content.Input().Maybe<TYtReadTable>()) {
-                    for (auto section : maybeRead.Cast().Input()) {
-                        for (auto path : section.Paths()) {
-                            processTable(TYtTableBaseInfo::Parse(path.Table()));
-                        }
+        auto handleTableContent = [&](const TYtTableContentBase& content) {
+            if (auto maybeRead = content.Input().Maybe<TYtReadTable>()) {
+                for (auto section : maybeRead.Cast().Input()) {
+                    for (auto path : section.Paths()) {
+                        processTable(TYtTableBaseInfo::Parse(path.Table()));
                     }
-                } else if (auto maybeOutput = content.Input().Maybe<TYtOutput>()) {
-                    processTable(TYtTableBaseInfo::Parse(maybeOutput.Cast()));
                 }
+            } else if (auto maybeOutput = content.Input().Maybe<TYtOutput>()) {
+                processTable(TYtTableBaseInfo::Parse(maybeOutput.Cast()));
+            }
+        };
+        VisitExpr(root, [&](const TExprNode::TPtr& exprNode) {
+            // PRAGMA yt.JobBlockTableContent switches table reads between YtTableContent
+            // and YtBlockTableContent, so both must be recognized here.
+            if (auto maybeContent = TMaybeNode<TYtTableContent>(exprNode)) {
+                handleTableContent(maybeContent.Cast());
+                return false;
+            }
+            if (auto maybeBlockContent = TMaybeNode<TYtBlockTableContent>(exprNode)) {
+                handleTableContent(maybeBlockContent.Cast());
                 return false;
             }
             if (auto maybeRead = TMaybeNode<TCoRight>(exprNode).Input().Maybe<TYtReadTable>()) {
@@ -813,8 +821,7 @@ public:
 
         if (auto transientOp = opBase.Maybe<TYtTransientOpBase>()) {
             THashSet<TString> extraSysColumns;
-            if (NYql::HasSetting(transientOp.Settings().Ref(), EYtSettingType::KeySwitch)
-                && !transientOp.Maybe<TYtMapReduce>().Mapper().Maybe<TCoLambda>().IsValid()) {
+            if (NYql::HasSetting(transientOp.Settings().Ref(), EYtSettingType::KeySwitch)) {
                 extraSysColumns.insert("keyswitch");
             }
 
@@ -3587,6 +3594,9 @@ private:
                 : GetSequenceItemType(mapReduce.Mapper(), true);
             NYT::TNode tableSpec = NYT::TNode::CreateMap();
             tableSpec[YqlRowSpecAttribute][TString{RowSpecAttrType}] = NCommon::TypeToYsonNode(mapResultItem);
+            if (!execCtx->InputTables_.empty() && execCtx->InputTables_[0].Spec.HasKey(TString{YqlSysColumnPrefix})) {
+                tableSpec[TString{YqlSysColumnPrefix}] = execCtx->InputTables_[0].Spec[TString{YqlSysColumnPrefix}];
+            }
             NYT::TNode intermediateInputSpec = NYT::TNode::CreateMap();
             intermediateInputSpec[TString{YqlIOSpecTables}] = NYT::TNode::CreateList().Add(tableSpec);
             reduceJob->SetInputSpec(NYT::NodeToYsonString(intermediateInputSpec));

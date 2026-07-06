@@ -112,6 +112,10 @@ public:
         IsMapReduceReducer_ = value;
     }
 
+    void SetIsMapReduceMap(bool value) {
+        IsMapReduceMap_ = value;
+    }
+
     void Save(IOutputStream& s) const override;
     void Load(IInputStream& s) override;
 
@@ -136,7 +140,7 @@ private:
     void FillQueueFromInputTablesOrdered();
     void FillQueueFromReduceInput();
 
-    void InitializeFmrUserJob();
+    void InitializeFmrUserJob(TVector<TString>* mapperBlobs = nullptr);
 
     TStatistics GetStatistics(const TFmrUserJobOptions& options);
 
@@ -152,6 +156,7 @@ private:
     TMaybe<TVanillaInfo> VanillaInfo_ = Nothing();
     TMaybe<TReduceOperationSpec> ReduceOperationSpec_;
     bool IsMapReduceReducer_ = false;
+    bool IsMapReduceMap_ = false;
     // End of serializable part
 
     // Non-serialized: set only for in-process execution via SetTableDataServiceDiscovery.

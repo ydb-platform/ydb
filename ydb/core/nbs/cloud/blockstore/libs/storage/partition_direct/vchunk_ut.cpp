@@ -191,6 +191,69 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         vchunk->Stop().GetValue(TDuration::Seconds(10));
     }
 
+    // Until the vchunk finishes restoring its dirty map from the PBuffers,
+    // its pre-flush records exist only in the PBuffers and are not inflight.
+    // Reporting "no constraint" (nullopt) in that window is indistinguishable
+    // from an idle vchunk, so FinishPBufferCleanup would skip it and a
+    // tablet-wide barrier erase could wipe the very records the restore is
+    // about to return. An un-restored vchunk must report the blocking bound
+    // (0) instead; cleanup skips its tick on it.
+    Y_UNIT_TEST_F(
+        ShouldConstrainCleanupBarrierUntilRestoreCompletes,
+        TBaseFixture)
+    {
+        Init();
+
+        // Keep the restore pending: the vchunk stays not-ready.
+        auto neverResolvePromise =
+            NThreading::NewPromise<TDBGRestoreResponse>();
+        DirectBlockGroup->RestoreDBGPBuffersHandler =
+            [neverResolvePromise](const auto& vChunkIndex) mutable
+        {
+            Y_UNUSED(vChunkIndex);
+            return neverResolvePromise.GetFuture();
+        };
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            PartitionDirectService.get(),
+            VChunkConfig,
+            DirectBlockGroup,
+            3,   // syncRequestsBatchSize
+            DefaultVChunkSize,
+            Counters);
+        vchunk->Start();
+
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+        UNIT_ASSERT_EQUAL(false, IsDirtyMapReady(*vchunk));
+
+        const auto barrierWhileRestoring =
+            GetSafeBarrierOnExecutor(DirectBlockGroup->GetExecutor(), *vchunk);
+
+        // Resolve the restore; with an empty dirty map and restore complete
+        // the vchunk stops constraining the cleanup.
+        RunOnExecutor(
+            DirectBlockGroup->GetExecutor(),
+            [&]() -> bool
+            {
+                InvokeUpdateDirtyMap(
+                    *vchunk,
+                    TDBGRestoreResponse{.Error = MakeError(S_OK)});
+                return true;
+            });
+        const auto barrierAfterRestore =
+            GetSafeBarrierOnExecutor(DirectBlockGroup->GetExecutor(), *vchunk);
+
+        vchunk->Stop().GetValue(TDuration::Seconds(10));
+
+        UNIT_ASSERT_C(
+            barrierWhileRestoring.has_value(),
+            "vchunk with a pending restore reported 'no constraint' to the "
+            "cleanup barrier gather");
+        UNIT_ASSERT_VALUES_EQUAL(0, *barrierWhileRestoring);
+        UNIT_ASSERT(!barrierAfterRestore.has_value());
+    }
+
     Y_UNIT_TEST_F(ShouldSwitchHostToTemporaryOfflineAndBack, TBaseFixture)
     {
         Init();

@@ -24,7 +24,6 @@ TICStorageTransport::TICStorageTransport(
 IStorageTransport::TConnectResultFutures TICStorageTransport::Connect(
     const THostConnection& connection)
 {
-    // Cerr << "TICStorageTransport::Connect" << Endl;
     auto request = std::make_unique<TEvTransportPrivate::TEvConnect>(
         connection.GetServiceId(),
         connection.Credentials);

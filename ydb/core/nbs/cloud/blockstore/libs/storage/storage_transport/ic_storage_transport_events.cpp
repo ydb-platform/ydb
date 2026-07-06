@@ -6,7 +6,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 TEvTransportPrivate::TConnect::~TConnect()
 {
-    Y_ABORT_UNLESS(ConnectPromise.IsReady());
+    Y_ABORT_UNLESS(ConnectPromise.IsReady() || DisconnectPromise.IsReady());
 }
 
 TEvTransportPrivate::TWriteToPBuffer::~TWriteToPBuffer()

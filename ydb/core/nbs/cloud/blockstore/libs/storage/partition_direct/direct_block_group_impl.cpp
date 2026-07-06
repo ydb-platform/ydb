@@ -1251,6 +1251,7 @@ void TDirectBlockGroup::OnConnectionEstablished(
     } else {
         // TODO (future phase): handle the error code/BLOCKED, transition to
         // Broken/suicide.
+        Y_ABORT("Unhandled branch of connect error");
     }
 
     // ConnectPromise resolves both "connection ready" and "session ready" in

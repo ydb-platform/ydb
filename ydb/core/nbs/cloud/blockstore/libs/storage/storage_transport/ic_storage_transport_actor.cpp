@@ -103,6 +103,24 @@ void RejectRequestsForNode(TMap& map, ui32 nodeId)
     }
 }
 
+void RejectRequestsForNode(
+    THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvConnect>>& map,
+    ui32 nodeId)
+{
+    for (auto it = map.begin(); it != map.end();) {
+        auto& request = it->second;
+        if (request->ServiceId.NodeId() == nodeId) {
+            NKikimrBlobStorage::NDDisk::TEvConnectResult record;
+            SetSessionBrokenError(record);
+            request->DisconnectPromise.SetValue(nodeId);
+
+            map.erase(it++);
+        } else {
+            ++it;
+        }
+    }
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -170,9 +188,6 @@ void TICStorageTransportActor::HandleConnect(
     Y_ABORT_UNLESS(inserted);
 
     const auto& request = *it->second;
-    // TODO точно нужен вектор?
-    ICSubscribedNodes[request.ServiceId.NodeId()].push_back(
-        request.DisconnectPromise);
 
     SendWithUndeliveryTracking(
         ctx,
@@ -226,6 +241,8 @@ void TICStorageTransportActor::HandleConnectResult(
         auto& request = **r;
         request.ConnectPromise.SetValue(std::move(ev->Get()->Record));
 
+        ICSubscribedNodes[request.ServiceId.NodeId()].push_back(
+            request.DisconnectPromise);
         ConnectRequests.erase(requestId);
     } else {
         // That means that request is already completed
@@ -1121,12 +1138,17 @@ void TICStorageTransportActor::HandleListPersistentBufferResult(
 
 void TICStorageTransportActor::PassAway()
 {
-    for (const auto& [nodeId, _]: ICSubscribedNodes) {
+    for (auto& [nodeId, promises]: ICSubscribedNodes) {
+        for (auto& promise: promises) {
+            if (!promise.HasValue()) {
+                promise.SetValue(nodeId);
+            }
+        }
+
         if (nodeId != SelfId().NodeId()) {
-            auto request = std::make_unique<TEvents::TEvUnsubscribe>();
             Send(
                 TActivationContext::InterconnectProxy(nodeId),
-                request.release());
+                std::make_unique<TEvents::TEvUnsubscribe>().release());
         }
     }
     ICSubscribedNodes.clear();
@@ -1140,9 +1162,10 @@ void TICStorageTransportActor::RejectAllSessionRequestsForNode(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "All session's requests for node #%lu were rejected",
+        "All session's requests for node #%u were rejected",
         nodeId);
 
+    RejectRequestsForNode(ConnectRequests, nodeId);
     RejectRequestsForNode<NDDisk::TEvReadResult>(ReadFromDDiskRequests, nodeId);
     RejectRequestsForNode<NDDisk::TEvWriteResult>(WriteToDDiskRequests, nodeId);
     RejectRequestsForNode<NDDisk::TEvSyncResult>(
@@ -1159,7 +1182,7 @@ void TICStorageTransportActor::HandleICNodeDisconnected(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Node #%lu disconnected",
+        "Node #%u disconnected",
         nodeId);
 
     auto it = ICSubscribedNodes.find(nodeId);

@@ -15,9 +15,8 @@ TTimePredictor::THistory::THistory(size_t capacity)
 void TTimePredictor::THistory::Add(TDuration time)
 {
     Durations.insert(time);
-    auto extractred = History.PushBack(time);
-    if (extractred) {
-        Durations.erase(Durations.find(*extractred));
+    if (auto extracted = History.PushBack(time)) {
+        Durations.erase(Durations.find(*extracted));
     }
 }
 

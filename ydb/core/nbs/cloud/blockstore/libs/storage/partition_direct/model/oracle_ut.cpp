@@ -422,7 +422,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         TOracle oracle(storageConfig, nullptr);
 
-        // No read requests recorded → predictor returns zero → fallback to
+        // No read requests recorded -> predictor returns zero -> fallback to
         // default. Default ReadHedgingDelay is 1ms when not set in config.
         const auto defaultDelay = storageConfig->GetReadHedgingDelay();
 
@@ -463,7 +463,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         // Feed PBuffer reads with 400ms, 500ms on host 1.
         for (auto duration: {400, 500}) {
-            oracle.OnRequestStarted(0, EOperation::ReadFromPBuffer, now);
+            oracle.OnRequestStarted(1, EOperation::ReadFromPBuffer, now);
             oracle.OnRequestSucceeded(
                 1,
                 EOperation::ReadFromPBuffer,
@@ -471,17 +471,17 @@ Y_UNIT_TEST_SUITE(TOracle)
                 TDuration::MilliSeconds(duration));
         }
 
-        // H0 DDisk predictor: [100, 200] → predict 100.
+        // H0 DDisk predictor: [100, 200] -> predict 100.
         UNIT_ASSERT_VALUES_EQUAL(
             TDuration::MilliSeconds(100),
             oracle.GetReadHedgingDelay(0, EDataLocation::DDisk));
 
-        // H0: PBuffer predictor: [300, 400] → predict 300.
+        // H0: PBuffer predictor: [300, 400] -> predict 300.
         UNIT_ASSERT_VALUES_EQUAL(
             TDuration::MilliSeconds(300),
             oracle.GetReadHedgingDelay(0, EDataLocation::PBuffer));
 
-        // H1: PBuffer predictor: [500, 500] → predict 400.
+        // H1: PBuffer predictor: [400, 500] -> predict 400.
         UNIT_ASSERT_VALUES_EQUAL(
             TDuration::MilliSeconds(400),
             oracle.GetReadHedgingDelay(1, EDataLocation::PBuffer));
@@ -493,7 +493,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         TOracle oracle(storageConfig, nullptr);
 
-        // No write requests recorded → predictor returns zero → fallback to
+        // No write requests recorded -> predictor returns zero -> fallback to
         // default. Default WriteHedgingDelay is 1ms when not set in config.
         const auto defaultDelay = storageConfig->GetWriteHedgingDelay();
 
@@ -512,7 +512,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         TOracle oracle(storageConfig, nullptr);
         auto now = TInstant::Now();
 
-        // WriteToPBuffer (direct): [100, 200] → predict 100ms.
+        // WriteToPBuffer (direct): [100, 200] -> predict 100ms.
         for (auto duration: {100, 200}) {
             oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
             oracle.OnRequestSucceeded(
@@ -522,7 +522,7 @@ Y_UNIT_TEST_SUITE(TOracle)
                 TDuration::MilliSeconds(duration));
         }
 
-        // WriteToManyPBuffers (indirect): [300, 400] → predict 300ms.
+        // WriteToManyPBuffers (indirect): [300, 400] -> predict 300ms.
         for (auto duration: {300, 400}) {
             oracle.OnRequestStarted(0, EOperation::WriteToManyPBuffers, now);
             oracle.OnRequestSucceeded(

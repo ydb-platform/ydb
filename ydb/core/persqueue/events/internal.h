@@ -244,6 +244,8 @@ struct TEvPQ {
         EvProcessBatchRead,
         EvProcessBatchReadResult,
         EvTopicSqsActionMetrics,
+        EvProcessBatchKeys,
+        EvProcessBatchKeysResult,
         EvEnd,
     };
 

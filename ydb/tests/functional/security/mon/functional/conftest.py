@@ -4,8 +4,7 @@ import time
 import pytest
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
-
-from cluster_config import create_ydb_configurator, generate_certificates
+from ydb.tests.functional.security.lib.cluster_config import create_ydb_configurator, generate_certificates
 
 pytest_plugins = ['ydb.tests.library.fixtures', 'ydb.tests.library.flavours']
 
@@ -25,58 +24,6 @@ def ydb_cluster_with_enforce_user_token(certificates):
     cluster = KiKiMR(configurator)
     cluster.start()
     yield cluster
-    cluster.stop()
-
-
-_MON_ENDPOINTS_AUTH_CLUSTER_PARAMS = (
-    pytest.param(
-        {
-            'case_name': 'enforce_user_token_enabled',
-            'enforce_user_token_requirement': True,
-            'extra_feature_flags': ['enable_extra_sids_control_for_http_viewer'],
-        },
-        id='enforce_user_token_enabled',
-    ),
-    pytest.param(
-        {
-            'case_name': 'enforce_user_token_disabled',
-            'enforce_user_token_requirement': False,
-            'extra_feature_flags': ['enable_extra_sids_control_for_http_viewer'],
-        },
-        id='enforce_user_token_disabled',
-    ),
-    pytest.param(
-        {
-            'case_name': 'require_counters_authentication',
-            'enforce_user_token_requirement': True,
-            'require_counters_authentication': True,
-            'extra_feature_flags': ['enable_extra_sids_control_for_http_viewer'],
-        },
-        id='require_counters_authentication',
-    ),
-    pytest.param(
-        {
-            'case_name': 'require_healthcheck_authentication',
-            'enforce_user_token_requirement': True,
-            'require_healthcheck_authentication': True,
-            'extra_feature_flags': ['enable_extra_sids_control_for_http_viewer'],
-        },
-        id='require_healthcheck_authentication',
-    ),
-)
-
-
-@pytest.fixture(scope='module', params=_MON_ENDPOINTS_AUTH_CLUSTER_PARAMS)
-def ydb_cluster_for_mon_endpoints_auth(request, certificates):
-    params = request.param.copy()
-    case_name = params.pop('case_name')
-    configurator = create_ydb_configurator(
-        certificates,
-        **params,
-    )
-    cluster = KiKiMR(configurator)
-    cluster.start()
-    yield case_name, cluster
     cluster.stop()
 
 

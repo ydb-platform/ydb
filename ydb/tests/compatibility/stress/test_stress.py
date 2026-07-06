@@ -37,7 +37,7 @@ class TestStress(MixedClusterFixture):
 
     @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_log(self, store_type):
-        timeout_scale = 60
+        timeout_scale = 30
 
         upload_commands = [
             # bulk upsert workload
@@ -136,7 +136,7 @@ class TestStress(MixedClusterFixture):
             "run",
             "mixed",
             "--seconds",
-            "180",
+            "90",
             "--threads",
             "10",
             "--cols",

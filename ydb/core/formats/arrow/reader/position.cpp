@@ -26,6 +26,8 @@ TString TSortableBatchPosition::DebugString() const {
     return valueWriter.Str();
 }
 
+
+
 std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindBound(TRWSortableBatchPosition& position,
     const ui64 posStartExt, const ui64 posFinishExt, const TSortableBatchPosition& forFound, const bool upper) {
     ui64 posStart = posStartExt;

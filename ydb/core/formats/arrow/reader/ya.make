@@ -1,3 +1,5 @@
+RECURSE_FOR_TESTS(benchmark)
+
 LIBRARY()
 
 PEERDIR(

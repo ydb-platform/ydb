@@ -2,10 +2,14 @@ LIBRARY()
 
 SRCS(
     merger.cpp
+    sort_merger.cpp
 )
 
 PEERDIR(
     ydb/core/formats/arrow/filter
+    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
+    ydb/core/formats/arrow
     ydb/core/tx/tiering
     ydb/core/tx/columnshard/engines/changes/compaction/abstract
     ydb/core/tx/columnshard/engines/changes/compaction/common

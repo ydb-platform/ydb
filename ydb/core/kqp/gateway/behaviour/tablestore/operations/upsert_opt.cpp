@@ -16,6 +16,15 @@ TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsIm
             return TConclusionStatus::Fail("SCAN_READER_POLICY_NAME have to be in ['PLAIN', 'SIMPLE', 'TRIVIAL']");
         }
     }
+    if (const auto algo = features.Extract<TString>("COMPACTION.MERGE_ALGORITHM")) {
+        if (*algo == "STREAM") {
+            CompactionMergeAlgorithm = NKikimrSchemeOp::MERGE_ALGORITHM_STREAM;
+        } else if (*algo == "SORT_INDICES") {
+            CompactionMergeAlgorithm = NKikimrSchemeOp::MERGE_ALGORITHM_SORT_INDICES;
+        } else {
+            return TConclusionStatus::Fail("COMPACTION.MERGE_ALGORITHM have to be in ['STREAM', 'SORT_INDICES']");
+        }
+    }
     if (const auto className = features.Extract<TString>("COMPACTION_PLANNER.CLASS_NAME")) {
         if (!CompactionPlannerConstructor.Initialize(*className)) {
             return TConclusionStatus::Fail("incorrect class name for compaction planner:" + *className);
@@ -59,6 +68,9 @@ void TUpsertOptionsOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTab
     schemaData.MutableOptions()->SetSchemeNeedActualization(SchemeNeedActualization);
     if (ScanReaderPolicyName) {
         schemaData.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
+    }
+    if (CompactionMergeAlgorithm) {
+        schemaData.MutableOptions()->SetCompactionMergeAlgorithm(*CompactionMergeAlgorithm);
     }
     if (CompactionPlannerConstructor.HasObject()) {
         CompactionPlannerConstructor.SerializeToProto(*schemaData.MutableOptions()->MutableCompactionPlannerConstructor());

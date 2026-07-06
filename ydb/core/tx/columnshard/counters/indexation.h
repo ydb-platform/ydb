@@ -50,7 +50,18 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr CompactionExceptions;
     NMonitoring::TDynamicCounters::TCounterPtr CompactionFails;
 
+    NMonitoring::TDynamicCounters::TCounterPtr SortIndicesCompactionMerge;
+    NMonitoring::TDynamicCounters::TCounterPtr StreamCompactionMerge;
+
     TIndexationCounters(const TString& module);
+
+    void OnSortIndicesCompactionMerge() const {
+        SortIndicesCompactionMerge->Add(1);
+    }
+
+    void OnStreamCompactionMerge() const {
+        StreamCompactionMerge->Add(1);
+    }
 
     void CompactionInputSize(const ui64 size) const {
         HistogramCompactionInputBytes->Collect(size);

@@ -91,6 +91,7 @@ private:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
     std::shared_ptr<NDataAccessorControl::IManagerConstructor> MetadataManagerConstructor;
     std::optional<TString> ScanReaderPolicyName;
+    NKikimrSchemeOp::EColumnTableMergeAlgorithm CompactionMergeAlgorithm = NKikimrSchemeOp::MERGE_ALGORITHM_UNSPECIFIED;
 
     TPresetId PresetId;
     ui64 Version = 0;
@@ -229,6 +230,10 @@ public:
 
     const std::optional<TString>& GetScanReaderPolicyName() const {
         return ScanReaderPolicyName;
+    }
+
+    NKikimrSchemeOp::EColumnTableMergeAlgorithm GetCompactionMergeAlgorithm() const {
+        return CompactionMergeAlgorithm;
     }
 
     const TColumnFeatures& GetColumnFeaturesVerified(const ui32 columnId) const {

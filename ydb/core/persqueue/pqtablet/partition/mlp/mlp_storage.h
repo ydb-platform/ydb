@@ -3,10 +3,8 @@
 #include "mlp.h"
 #include "mlp_common.h"
 
-#include <ydb/core/persqueue/public/mlp/mlp.h>
-
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
 #include <library/cpp/iterator/iterate_keys.h>
 #include <ydb/core/protos/pqconfig.pb.h>

@@ -5,7 +5,7 @@
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/library/actors/core/actorid.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
 namespace NKikimr::NPQ::NMLP {
 

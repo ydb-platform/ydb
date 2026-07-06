@@ -69,10 +69,19 @@ IF (NOT PYTHON3)
     )
 ENDIF()
 
+IF (OPENSOURCE)
+    PEERDIR(
+        contrib/python/cryptography/py3
+    )
+ELSE()
+    PEERDIR(
+        contrib/python/cryptography
+    )
+ENDIF()
+
 PEERDIR(
     contrib/python/PyHamcrest
     contrib/python/PyYAML
-    contrib/python/cryptography
     contrib/python/importlib-resources
     contrib/python/protobuf
     contrib/python/pytest
@@ -94,7 +103,6 @@ PEERDIR(
     ydb/tests/oss/canonical
     ydb/tests/oss/ydb_sdk_import
 )
-
 END()
 
 RECURSE(
@@ -106,5 +114,6 @@ RECURSE(
     test_meta
     wardens
     sqs
+    sqs_topic
 )
 RECURSE_FOR_TESTS(ut)

@@ -14,7 +14,10 @@
 
 #include <yt/yt/core/rpc/grpc/dispatcher.h>
 
+#include <yt/yt/core/crypto/config.h>
 #include <yt/yt/core/crypto/tls.h>
+
+#include <util/system/env.h>
 
 namespace NYT {
 namespace {
@@ -49,9 +52,46 @@ public:
         Poller->Shutdown();
     }
 
+    void PingPong()
+    {
+        auto localhost = TNetworkAddress::CreateIPv6Loopback(0);
+        Listener = Context->CreateListener(localhost, Poller, Poller);
+
+        auto config = New<TDialerConfig>();
+        config->SetDefaults();
+        Dialer = Context->CreateDialer(config, Poller, NetLogger());
+
+        auto context = New<TDialerContext>();
+        context->Host = "localhost";
+
+        auto asyncFirstSide = Dialer->Dial(Listener->GetAddress(), context);
+        auto asyncSecondSide = Listener->Accept();
+
+        auto firstSide = WaitForFast(asyncFirstSide).ValueOrThrow();
+        auto secondSide = WaitForFast(asyncSecondSide).ValueOrThrow();
+
+        auto buffer = TSharedRef::FromString(std::string("ping"));
+        auto outputBuffer = TSharedMutableRef::Allocate(4);
+
+        auto result = WaitForFast(firstSide->Write(buffer));
+        ASSERT_EQ(WaitForFast(secondSide->Read(outputBuffer)).ValueOrThrow(), 4u);
+        result.ThrowOnError();
+        ASSERT_EQ(ToString(outputBuffer), ToString(buffer));
+
+        WaitForFast(secondSide->Write(buffer)).ThrowOnError();
+        ASSERT_EQ(WaitForFast(firstSide->Read(outputBuffer)).ValueOrThrow(), 4u);
+        ASSERT_EQ(ToString(outputBuffer), ToString(buffer));
+
+        WaitFor(firstSide->Close())
+            .ThrowOnError();
+        ASSERT_EQ(WaitForFast(secondSide->Read(outputBuffer)).ValueOrThrow(), 0u);
+    }
+
     NRpc::NGrpc::TGrpcLibraryLockPtr GrpcLock;
     TSslContextPtr Context;
     IPollerPtr Poller;
+    IListenerPtr Listener;
+    IDialerPtr Dialer;
 };
 
 TEST_F(TTlsTest, CreateContext)
@@ -79,37 +119,81 @@ TEST_F(TTlsTest, CreateDialer)
 
 TEST_F(TTlsTest, SimplePingPong)
 {
-    auto localhost = TNetworkAddress::CreateIPv6Loopback(0);
-    auto listener = Context->CreateListener(localhost, Poller, Poller);
+    PingPong();
+}
 
-    auto config = New<TDialerConfig>();
-    config->SetDefaults();
-    auto dialer = Context->CreateDialer(config, Poller, NetLogger());
+TEST_F(TTlsTest, LoadCertificatesFromValues)
+{
+    auto config = New<TSslContextConfig>();
+    config->CertificateAuthority = CreateTestKeyBlob("ca.pem");
+    config->CertificateChain = CreateTestKeyBlob("cert.pem");
+    config->PrivateKey = CreateTestKeyBlob("key.pem");
+    Context->Reset();
+    Context->ApplyConfig(config);
+    Context->Commit();
+    PingPong();
+}
 
-    auto context = New<TDialerContext>();
-    context->Host = "localhost";
+TEST_F(TTlsTest, LoadCertificatesFromFiles)
+{
+    auto config = New<TSslContextConfig>();
+    config->CertificateAuthority = CreateTestKeyFile("ca.pem");
+    config->CertificateChain = CreateTestKeyFile("cert.pem");
+    config->PrivateKey = CreateTestKeyFile("key.pem");
+    Context->Reset();
+    Context->ApplyConfig(config);
+    Context->Commit();
+    PingPong();
+}
 
-    auto asyncFirstSide = dialer->Dial(listener->GetAddress(), context);
-    auto asyncSecondSide = listener->Accept();
+TEST_F(TTlsTest, LoadBuiltInCertificateAuthorityForEmptyConfig)
+{
+    UnsetEnv("SSL_CERT_FILE");
+    Context->Reset();
+    Context->ApplyConfig(nullptr);
+    Context->AddCertificate(GetTestKeyContent("cert.pem"));
+    Context->AddPrivateKey(GetTestKeyContent("key.pem"));
+    Context->Commit();
+    EXPECT_THROW_WITH_SUBSTRING(PingPong(), "SSL_do_handshake failed");
+}
 
-    auto firstSide = WaitForFast(asyncFirstSide).ValueOrThrow();
-    auto secondSide = WaitForFast(asyncSecondSide).ValueOrThrow();
+TEST_F(TTlsTest, LoadBuiltInCertificateAuthorityAsDefault)
+{
+    UnsetEnv("SSL_CERT_FILE");
+    auto config = New<TSslContextConfig>();
+    config->CertificateChain = CreateTestKeyFile("cert.pem");
+    config->PrivateKey = CreateTestKeyFile("key.pem");
+    Context->Reset();
+    Context->ApplyConfig(config);
+    Context->Commit();
+    EXPECT_THROW_WITH_SUBSTRING(PingPong(), "SSL_do_handshake failed");
+}
 
-    auto buffer = TSharedRef::FromString(std::string("ping"));
-    auto outputBuffer = TSharedMutableRef::Allocate(4);
+TEST_F(TTlsTest, LoadEnvironmentCertificateAuthorityForEmptyConfig)
+{
+    auto ca = CreateTestKeyFile("ca.pem");
+    SetEnv("SSL_CERT_FILE", TString(*ca->FileName));
+    Context->Reset();
+    Context->ApplyConfig(nullptr);
+    Context->AddCertificate(GetTestKeyContent("cert.pem"));
+    Context->AddPrivateKey(GetTestKeyContent("key.pem"));
+    Context->Commit();
+    PingPong();
+    UnsetEnv("SSL_CERT_FILE");
+}
 
-    auto result = WaitForFast(firstSide->Write(buffer));
-    ASSERT_EQ(WaitForFast(secondSide->Read(outputBuffer)).ValueOrThrow(), 4u);
-    result.ThrowOnError();
-    ASSERT_EQ(ToString(outputBuffer), ToString(buffer));
-
-    WaitForFast(secondSide->Write(buffer)).ThrowOnError();
-    ASSERT_EQ(WaitForFast(firstSide->Read(outputBuffer)).ValueOrThrow(), 4u);
-    ASSERT_EQ(ToString(outputBuffer), ToString(buffer));
-
-    WaitFor(firstSide->Close())
-        .ThrowOnError();
-    ASSERT_EQ(WaitForFast(secondSide->Read(outputBuffer)).ValueOrThrow(), 0u);
+TEST_F(TTlsTest, LoadEnvironmentCertificateAuthorityAsDefault)
+{
+    auto ca = CreateTestKeyFile("ca.pem");
+    SetEnv("SSL_CERT_FILE", TString(*ca->FileName));
+    auto config = New<TSslContextConfig>();
+    config->CertificateChain = CreateTestKeyFile("cert.pem");
+    config->PrivateKey = CreateTestKeyFile("key.pem");
+    Context->Reset();
+    Context->ApplyConfig(config);
+    Context->Commit();
+    PingPong();
+    UnsetEnv("SSL_CERT_FILE");
 }
 
 TEST(TTlsTestWithoutFixtureTest, LoadCertificateChain)

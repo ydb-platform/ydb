@@ -284,7 +284,7 @@ int BuildAST(int argc, char** argv) {
         }
         TVector<NYql::NPg::TExtensionDesc> extensions;
         NYql::PgExtensionsFromProto(*pgExtConfig, extensions);
-        NYql::NPg::RegisterExtensions(extensions, true,
+        NYql::NPg::RegisterExtensions(extensions, /*typesOnly=*/true,
                                       *NSQLTranslationPG::CreateExtensionSqlParser(),
                                       NKikimr::NMiniKQL::CreateExtensionLoader().get());
     });

@@ -243,6 +243,8 @@ struct TEvPQ {
         EvConsumerBatchProcessorMetrics,
         EvProcessBatchRead,
         EvProcessBatchReadResult,
+        EvProcessBatchKeys,
+        EvProcessBatchKeysResult,
         EvEnd,
     };
 

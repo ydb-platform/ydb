@@ -29,8 +29,8 @@ void THostStat::OnSuccess(
     LastSuccessAt = now;
     FirstErrorAt = TInstant();
     LastErrorAt = TInstant();
-    ErrorCount = 0;
-    ++SuccessCount;
+    ConsecutiveErrorCount = 0;
+    ++ConsecutiveSuccessCount;
 }
 
 void THostStat::OnError(TInstant now, EOperation operation)
@@ -45,8 +45,8 @@ void THostStat::OnError(TInstant now, EOperation operation)
         FirstErrorAt = now;
     }
     LastErrorAt = now;
-    ++ErrorCount;
-    SuccessCount = 0;
+    ++ConsecutiveErrorCount;
+    ConsecutiveSuccessCount = 0;
 }
 
 void THostStat::OnCancelled(TInstant now, EOperation operation)
@@ -68,14 +68,14 @@ THostStat::TErrorsInfo THostStat::GetErrorsInfo(TInstant now) const
     if (LastErrorAt) {
         result.FromLastError = now - LastErrorAt;
     }
-    result.ErrorCount = ErrorCount;
-    result.SuccessCount = SuccessCount;
+    result.ConsecutiveErrorCount = ConsecutiveErrorCount;
+    result.ConsecutiveSuccessCount = ConsecutiveSuccessCount;
     return result;
 }
 
-size_t THostStat::GetSuccessCount() const
+size_t THostStat::GetConsecutiveSuccessCount() const
 {
-    return SuccessCount;
+    return ConsecutiveSuccessCount;
 }
 
 size_t THostStat::InflightCount(EOperation operation) const
@@ -110,7 +110,8 @@ TString THostStat::DebugPrint() const
         sb << "LastError: " << FormatDuration(now - LastErrorAt) << ", ";
     }
 
-    sb << "ErrorCount: " << ErrorCount << ", SuccessCount: " << SuccessCount
+    sb << "ErrorCount: " << ConsecutiveErrorCount
+       << ", SuccessCount: " << ConsecutiveSuccessCount
        << ", InflightByOperation: [" << inflight << "]";
 
     return sb;

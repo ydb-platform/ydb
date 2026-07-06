@@ -315,8 +315,29 @@ void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
             watermark ? *watermark / BlockSize : BlockCount);
     }
 
+    if (removed.Empty()) {
+        return;
+    }
+
     for (auto indx: removed) {
         DDiskStates[indx].SwitchOffline();
+    }
+
+    TVector<ui64> erased;
+    Inflight.Enumerate(
+        [&](TInflightMap::TFindItem& item)
+        {
+            TInflightInfo& inflightItem = item.Value;
+            inflightItem.RemoveHosts(removed);
+            if (inflightItem.GetState() == TInflightInfo::EState::PBufferErased)
+            {
+                erased.push_back(item.Key);
+            }
+            return TInflightMap::EEnumerateContinuation::Continue;
+        });
+
+    for (auto lsn: erased) {
+        Inflight.RemoveRange(lsn);
     }
 }
 

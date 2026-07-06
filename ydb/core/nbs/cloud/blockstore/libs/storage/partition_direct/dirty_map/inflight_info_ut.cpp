@@ -65,6 +65,11 @@ struct TTestReadyQueue: public IReadyQueue
         return PBufferCounters[host][EPBufferCounter::Total];
     }
 
+    size_t GetLockedBytes(THostIndex host)
+    {
+        return PBufferCounters[host][EPBufferCounter::Locked];
+    }
+
     THashSet<ui64> ReadyToClone;
     THashSet<ui64> ReadyToFlush;
     THashSet<ui64> ReadyToErase;
@@ -497,6 +502,219 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{1}));
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{2}));
+    }
+
+    Y_UNIT_TEST(ShouldRemoveHostsNoOpWhenNoOverlap)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+
+        // Hosts 3 and 4 were never written to — RemoveHosts should be a no-op.
+        THostMask removed;
+        removed.Set(THostIndex{3});
+        removed.Set(THostIndex{4});
+        inflightInfo.RemoveHosts(removed);
+
+        // State stays PBufferWritten; bytes unchanged.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferWritten,
+            inflightInfo.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(4096, readyQueue.GetTotalBytes(THostIndex{0}));
+        UNIT_ASSERT_VALUES_EQUAL(4096, readyQueue.GetTotalBytes(THostIndex{1}));
+        UNIT_ASSERT_VALUES_EQUAL(4096, readyQueue.GetTotalBytes(THostIndex{2}));
+    }
+
+    Y_UNIT_TEST(ShouldRemoveHostsReleaseBytesInWrittenState)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+
+        // All 3 hosts have 4096 bytes in Total.
+        UNIT_ASSERT_VALUES_EQUAL(4096, readyQueue.GetTotalBytes(THostIndex{0}));
+        UNIT_ASSERT_VALUES_EQUAL(4096, readyQueue.GetTotalBytes(THostIndex{1}));
+        UNIT_ASSERT_VALUES_EQUAL(4096, readyQueue.GetTotalBytes(THostIndex{2}));
+
+        // Remove host 2.
+        THostMask removed;
+        removed.Set(THostIndex{2});
+        inflightInfo.RemoveHosts(removed);
+
+        // State stays PBufferWritten; host 2 bytes released.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferWritten,
+            inflightInfo.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(4096, readyQueue.GetTotalBytes(THostIndex{0}));
+        UNIT_ASSERT_VALUES_EQUAL(4096, readyQueue.GetTotalBytes(THostIndex{1}));
+        UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{2}));
+    }
+
+    Y_UNIT_TEST(ShouldRemoveHostsCompleteFlush)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+
+        // Request flush for all 3 hosts.
+        auto l = inflightInfo.RequestFlush(THostIndex{0}, THostMask());
+        l = inflightInfo.RequestFlush(THostIndex{1}, THostMask());
+        l = inflightInfo.RequestFlush(THostIndex{2}, THostMask());
+        Y_UNUSED(l);
+
+        // Confirm flush for hosts 0 and 1 only.
+        inflightInfo.ConfirmFlush(THostRoute{
+            .SourceHostIndex = THostIndex{0},
+            .DestinationHostIndex = THostIndex{0}});
+        inflightInfo.ConfirmFlush(THostRoute{
+            .SourceHostIndex = THostIndex{1},
+            .DestinationHostIndex = THostIndex{1}});
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushing,
+            inflightInfo.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
+
+        // Remove host 2 — flush should now be complete.
+        THostMask removed;
+        removed.Set(THostIndex{2});
+        inflightInfo.RemoveHosts(removed);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushed,
+            inflightInfo.GetState());
+        // Erase should be registered.
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
+        // Host 2 bytes released.
+        UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{2}));
+    }
+
+    Y_UNIT_TEST(ShouldRemoveHostsCompleteErase)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+
+        // Flush all hosts.
+        auto l = inflightInfo.RequestFlush(THostIndex{0}, THostMask());
+        l = inflightInfo.RequestFlush(THostIndex{1}, THostMask());
+        l = inflightInfo.RequestFlush(THostIndex{2}, THostMask());
+        Y_UNUSED(l);
+        inflightInfo.ConfirmFlush(THostRoute{
+            .SourceHostIndex = THostIndex{0},
+            .DestinationHostIndex = THostIndex{0}});
+        inflightInfo.ConfirmFlush(THostRoute{
+            .SourceHostIndex = THostIndex{1},
+            .DestinationHostIndex = THostIndex{1}});
+        inflightInfo.ConfirmFlush(THostRoute{
+            .SourceHostIndex = THostIndex{2},
+            .DestinationHostIndex = THostIndex{2}});
+
+        // Start erasing hosts 0 and 1, confirm both.
+        inflightInfo.RequestErase(THostIndex{0});
+        inflightInfo.RequestErase(THostIndex{1});
+        inflightInfo.RequestErase(THostIndex{2});
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            inflightInfo.ConfirmErase(THostIndex{0}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            inflightInfo.ConfirmErase(THostIndex{1}));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferErasing,
+            inflightInfo.GetState());
+
+        // Remove host 2 — erase should now be complete.
+        THostMask removed;
+        removed.Set(THostIndex{2});
+        inflightInfo.RemoveHosts(removed);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferErased,
+            inflightInfo.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{2}));
+    }
+
+    Y_UNIT_TEST(ShouldRemoveHostsReleaseLockBytesWhenLocked)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+
+        // Lock PBuffer — this should track locked bytes.
+        inflightInfo.LockPBuffer();
+        UNIT_ASSERT_VALUES_EQUAL(
+            4096,
+            readyQueue.GetLockedBytes(THostIndex{0}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            4096,
+            readyQueue.GetLockedBytes(THostIndex{1}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            4096,
+            readyQueue.GetLockedBytes(THostIndex{2}));
+
+        // Remove host 2 while locked.
+        THostMask removed;
+        removed.Set(THostIndex{2});
+        inflightInfo.RemoveHosts(removed);
+
+        // Both Total and Locked bytes for host 2 should be released.
+        UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{2}));
+        UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetLockedBytes(THostIndex{2}));
+
+        // Hosts 0 and 1 should be unaffected.
+        UNIT_ASSERT_VALUES_EQUAL(4096, readyQueue.GetTotalBytes(THostIndex{0}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            4096,
+            readyQueue.GetLockedBytes(THostIndex{0}));
+        UNIT_ASSERT_VALUES_EQUAL(4096, readyQueue.GetTotalBytes(THostIndex{1}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            4096,
+            readyQueue.GetLockedBytes(THostIndex{1}));
+
+        // Unlock so destructor doesn't assert.
+        inflightInfo.UnlockPBuffer();
+    }
+
+    Y_UNIT_TEST(ShouldRemoveHostsNotRegisterEraseWhenLocked)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+
+        // Request and confirm flush for hosts 0 and 1.
+        auto l = inflightInfo.RequestFlush(THostIndex{0}, THostMask());
+        l = inflightInfo.RequestFlush(THostIndex{1}, THostMask());
+        l = inflightInfo.RequestFlush(THostIndex{2}, THostMask());
+        Y_UNUSED(l);
+        inflightInfo.ConfirmFlush(THostRoute{
+            .SourceHostIndex = THostIndex{0},
+            .DestinationHostIndex = THostIndex{0}});
+        inflightInfo.ConfirmFlush(THostRoute{
+            .SourceHostIndex = THostIndex{1},
+            .DestinationHostIndex = THostIndex{1}});
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushing,
+            inflightInfo.GetState());
+
+        // Lock PBuffer before completing flush.
+        inflightInfo.LockPBuffer();
+
+        // Remove host 2 — flush completes, but erase should NOT register
+        // because PBuffer is locked.
+        THostMask removed;
+        removed.Set(THostIndex{2});
+        inflightInfo.RemoveHosts(removed);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushed,
+            inflightInfo.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
+
+        // After unlock, erase should be registered.
+        inflightInfo.UnlockPBuffer();
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
     }
 }
 

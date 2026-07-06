@@ -16,8 +16,8 @@
 #include <ydb/core/util/btree_cow.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <util/generic/vector.h>

@@ -1655,7 +1655,7 @@ message TImmediateControlsConfig {
             Description: "Allow cutting large TEvLocalSyncLogData messages into smaller chunks",
             MinValue: 0,
             MaxValue: 1,
-            DefaultValue: 0 }];
+            DefaultValue: 1 }];
         optional uint64 EnableSyncLogChunkCompressionHDD = 2 [(ControlOptions) = {
             Description: "Compress SyncLog chunks before writing to log, setting for HDD",
             MinValue: 0,
@@ -2773,6 +2773,23 @@ message TColumnShardConfig {
     }
 
     optional TReadRetryPolicy ReadRetryPolicy = 70;
+    
+}
+
+// Cluster config for the database-wide small-blobs quota. Per-database limits are derived from
+// data_size_hard_quota; a 0 hard quota disables it. Kept at the top level (rather than under a specific
+// tablet's config) because the quota applies to any database tablet that stores small blobs.
+message TSmallBlobsQuotaConfig {
+    optional uint64 VolumeBytesPer10TiB = 1 [default = 1073741824]; // 1 GiB per 10 TiB
+    optional uint64 CountPer10TiB = 2 [default = 5000000];          // 5M per 10 TiB
+    optional double SoftRatio = 3 [default = 0.95];                 // soft = ratio * hard
+
+    // Base "small" threshold; scaled per-erasure dynamically (block-4-2 x4).
+    optional uint64 SmallBlobSizeThresholdBytes = 4 [default = 65536]; // 64 KiB
+
+    // Reported count per blob = BlobSubgroupSize() / coef (mirror-3-dc 9/3, block-4-2 8/2).
+    optional uint32 Mirror3dcStorageHardQuotaCoef = 5 [default = 3];
+    optional uint32 Block42StorageHardQuotaCoef = 6 [default = 2];
 }
 
 // TSchemeShardConfig has been moved to ydb/core/protos/schemeshard_config.proto
@@ -3356,6 +3373,7 @@ message TAppConfig {
     optional TTliConfig TliConfig = 120;
 
     optional TLongTxServiceConfig LongTxServiceConfig = 121;
+    optional TSmallBlobsQuotaConfig SmallBlobsQuotaConfig = 122;
 }
 
 message TYdbVersion {

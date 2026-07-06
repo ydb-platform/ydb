@@ -26,6 +26,39 @@ DEFINE_REFCOUNTED_TYPE(TShardConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TSolomonRegistryConfig
+    : public NYTree::TYsonStruct
+{
+    //! Enables the lock-free rseq fast path for hot sensors. Off by default; even when on, a
+    //! hot sensor uses it only if a runtime safety probe passes (see
+    //! TSolomonRegistry::IsRseqEnabled). The choice is read when a hot sensor is constructed.
+    bool EnableRseq;
+
+    TSolomonRegistryConfigPtr ApplyDynamic(const TSolomonRegistryDynamicConfigPtr& dynamicConfig) const;
+
+    REGISTER_YSON_STRUCT(TSolomonRegistryConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TSolomonRegistryConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TSolomonRegistryDynamicConfig
+    : public NYTree::TYsonStruct
+{
+    std::optional<bool> EnableRseq;
+
+    REGISTER_YSON_STRUCT(TSolomonRegistryDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TSolomonRegistryDynamicConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TSolomonExporterConfig
     : public NYTree::TYsonStruct
 {

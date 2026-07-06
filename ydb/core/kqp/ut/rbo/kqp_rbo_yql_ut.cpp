@@ -7,8 +7,10 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
+#include <ydb/core/kqp/opt/rbo/kqp_plan_conversion_utils.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 #include <ydb/core/kqp/opt/rbo/analysis/logical_name_constraints.h>
 #include <ydb/core/kqp/opt/rbo/traces/kqp_rbo_trace_output.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
@@ -44,6 +46,7 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 using namespace NYdb;
 using namespace NYdb::NTable;
+using namespace NYql::NNodes;
 using namespace NStat;
 
 TString FormatBenchmarkTraceTitle(TStringBuf suiteName, TStringBuf benchmarkName, ui32 queryId) {
@@ -972,6 +975,149 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT(root.PlanProps.NameConstraints.GetForbiddenOut(join.get(), 0).contains(TInfoUnit("a")));
         UNIT_ASSERT(root.PlanProps.NameConstraints.GetForbiddenOut(leftMap.get(), 0).contains(TInfoUnit("a")));
+    }
+
+    Y_UNIT_TEST(ProjectedKqpOpMapAddsIgnoreRenamesForInputColumns) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        auto inputNode = testContext.ExprCtx.NewCallable(pos, "TestInput", {});
+        auto output = testContext.ExprCtx.NewAtom(pos, "projected");
+        auto source = testContext.ExprCtx.NewAtom(pos, "a");
+        auto mapElement = testContext.ExprCtx.NewCallable(pos, "KqpOpMapElementRename", {inputNode, output, source});
+        auto mapElements = testContext.ExprCtx.NewList(pos, {mapElement});
+        auto project = testContext.ExprCtx.NewAtom(pos, "true");
+        auto mapNode = testContext.ExprCtx.NewCallable(pos, "KqpOpMap", {inputNode, mapElements, project});
+
+        PlanConverter converter(testContext.TypeCtx, testContext.ExprCtx);
+        converter.Converted[inputNode.Get()] = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+
+        auto converted = CastOperator<TOpMap>(converter.ConvertTKqpOpMap(mapNode));
+        for (auto exprRef : converted->GetExpressions()) {
+            exprRef.get().PlanProps = &converter.PlanProps;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(converted->MapElements.size(), 2);
+        UNIT_ASSERT(converted->MapElements[0].GetElementName() == TInfoUnit("projected"));
+        UNIT_ASSERT(converted->MapElements[0].IsRename());
+        UNIT_ASSERT(converted->MapElements[0].IsColumnAccess());
+        UNIT_ASSERT(converted->MapElements[0].GetColumnAccess() == TInfoUnit("a"));
+
+        UNIT_ASSERT(converted->MapElements[1].IsRename());
+        UNIT_ASSERT(converted->MapElements[1].GetRename() == TInfoUnit("payload"));
+        UNIT_ASSERT(IsGeneratedIgnoreIU(converted->MapElements[1].GetElementName()));
+
+        const auto convertedOutput = converted->GetOutputIUs();
+        UNIT_ASSERT_VALUES_EQUAL(convertedOutput.size(), 2);
+        UNIT_ASSERT(convertedOutput[0] == TInfoUnit("projected"));
+        UNIT_ASSERT(IsGeneratedIgnoreIU(convertedOutput[1]));
+    }
+
+    Y_UNIT_TEST(ProjectedKqpOpMapKeepsVisibleDependenciesAcrossNestedMap) {
+        TMapRuleTestContext testContext;
+        TPlanProps planProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("payload")}, pos);
+        auto addDeps = MakeIntrusive<TOpAddDependencies>(
+            read,
+            pos,
+            TVector<TInfoUnit>{TInfoUnit("dep")},
+            TVector<const TTypeAnnotationNode*>{nullptr}
+        );
+        auto innerMap = MakeIntrusive<TOpMap>(addDeps, pos, TVector<TMapElement>{
+            MakeTestRename("projected", "payload", pos, testContext.ExprCtx, planProps),
+        });
+        auto sort = MakeIntrusive<TOpSort>(
+            innerMap,
+            pos,
+            TVector<TSortElement>{TSortElement(TInfoUnit("projected"), true, true)}
+        );
+
+        auto inputNode = testContext.ExprCtx.NewCallable(pos, "TestInput", {});
+        auto output = testContext.ExprCtx.NewAtom(pos, "out");
+        auto source = testContext.ExprCtx.NewAtom(pos, "projected");
+        auto mapElement = testContext.ExprCtx.NewCallable(pos, "KqpOpMapElementRename", {inputNode, output, source});
+        auto mapElements = testContext.ExprCtx.NewList(pos, {mapElement});
+        auto project = testContext.ExprCtx.NewAtom(pos, "true");
+        auto mapNode = testContext.ExprCtx.NewCallable(pos, "KqpOpMap", {inputNode, mapElements, project});
+
+        PlanConverter converter(testContext.TypeCtx, testContext.ExprCtx);
+        converter.Converted[inputNode.Get()] = sort;
+
+        auto converted = CastOperator<TOpMap>(converter.ConvertTKqpOpMap(mapNode));
+
+        UNIT_ASSERT_VALUES_EQUAL(converted->MapElements.size(), 1);
+        UNIT_ASSERT(converted->MapElements.front().GetElementName() == TInfoUnit("out"));
+
+        const auto convertedOutput = converted->GetOutputIUs();
+        UNIT_ASSERT_VALUES_EQUAL(convertedOutput.size(), 2);
+        UNIT_ASSERT(std::find(convertedOutput.begin(), convertedOutput.end(), TInfoUnit("dep")) != convertedOutput.end());
+        UNIT_ASSERT(std::find(convertedOutput.begin(), convertedOutput.end(), TInfoUnit("out")) != convertedOutput.end());
+        for (const auto& iu : convertedOutput) {
+            UNIT_ASSERT(!IsGeneratedIgnoreIU(iu));
+        }
+    }
+
+    Y_UNIT_TEST(KqpOpJoinRenamesNonGeneratedRightOutputConflicts) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftNode = testContext.ExprCtx.NewCallable(pos, "LeftInput", {});
+        auto rightNode = testContext.ExprCtx.NewCallable(pos, "RightInput", {});
+        auto joinNode = Build<TKqpOpJoin>(testContext.ExprCtx, pos)
+            .LeftInput(leftNode)
+            .RightInput(rightNode)
+            .JoinKind()
+                .Value("Inner")
+            .Build()
+            .JoinKeys<TDqJoinKeyTupleList>()
+                .Add<TDqJoinKeyTuple>()
+                    .LeftLabel()
+                        .Value("")
+                    .Build()
+                    .LeftColumn()
+                        .Value("a")
+                    .Build()
+                    .RightLabel()
+                        .Value("")
+                    .Build()
+                    .RightColumn()
+                        .Value("a")
+                    .Build()
+                .Build()
+            .Build()
+            .JoinFilters()
+            .Build()
+        .Done().Ptr();
+
+        PlanConverter converter(testContext.TypeCtx, testContext.ExprCtx);
+        converter.Converted[leftNode.Get()] = MakeTestRead({TInfoUnit("a"), TInfoUnit("left_payload")}, pos);
+        converter.Converted[rightNode.Get()] = MakeTestRead({TInfoUnit("a"), TInfoUnit("right_payload")}, pos);
+
+        auto converted = CastOperator<TOpJoin>(converter.ConvertTKqpOpJoin(joinNode));
+
+        UNIT_ASSERT_C(converted->GetRightInput()->Kind == EOperator::Map, converted->ToString(testContext.ExprCtx));
+        auto rightMap = CastOperator<TOpMap>(converted->GetRightInput());
+        const auto conflictRename = std::find_if(
+            rightMap->MapElements.begin(),
+            rightMap->MapElements.end(),
+            [](const TMapElement& element) {
+                return element.IsRename() && element.GetRename() == TInfoUnit("a");
+            });
+        UNIT_ASSERT(conflictRename != rightMap->MapElements.end());
+
+        const auto replacement = conflictRename->GetElementName();
+        UNIT_ASSERT(replacement != TInfoUnit("a"));
+        UNIT_ASSERT(!IsGeneratedIgnoreIU(replacement));
+        UNIT_ASSERT_VALUES_EQUAL(converted->JoinKeys.size(), 1);
+        UNIT_ASSERT(converted->JoinKeys.front().first == TInfoUnit("a"));
+        UNIT_ASSERT(converted->JoinKeys.front().second == replacement);
+
+        const auto output = converted->GetOutputIUs();
+        UNIT_ASSERT_VALUES_EQUAL(MakeInfoUnitSet(output).size(), output.size());
+        UNIT_ASSERT_VALUES_EQUAL(std::count(output.begin(), output.end(), TInfoUnit("a")), 1);
+        UNIT_ASSERT(std::find(output.begin(), output.end(), replacement) != output.end());
     }
 
     Y_UNIT_TEST(ReplaceAliasSubqueryDoesNotDuplicateVisibleColumns) {
@@ -2683,11 +2829,44 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    /* For debug purpose, just uncomment and run.
-    Y_UNIT_TEST(TPCDS_Q1) {
-        RunTPC_YqlTest(EBenchType::TPCDS, 1, true, true);
+    void AnalyzeTPC_YqlTest(const EBenchType type, ui32 queryId, const bool columnStore, const bool newRbo) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        auto kikimrSettings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+
+        kikimrSettings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::EPriority::PRI_TRACE);
+        kikimrSettings.LogSettings->DefaultLogPriority = NActors::NLog::EPriority::PRI_CRIT;
+
+        TKikimrRunner kikimr(kikimrSettings);
+        
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
+
+        {
+            TString q = GetFullPath(BenchmarkQueryPath[type], ToString(queryId) + ".yql");
+            const TString toDecimal =  R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
+            const TString toDecimalMax =  R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+            const TString round = R"($round = ($x,$y) -> {return $x;};)";
+
+            q = round + "\n" + toDecimal + "\n" + toDecimalMax + "\n" + q;
+
+            TScopedRboTraceTitleOverride traceTitle(
+                FormatBenchmarkTraceTitle(BenchmarkTraceSuiteName, BenchmarkTraceName[type], queryId),
+                q);
+            auto queryClient = kikimr.GetQueryClient();
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result = ExecuteExplainAnalyze(session, q); 
+        }
     }
-    */
+
+    Y_UNIT_TEST(ANALYZE_TPCН_11) {
+        AnalyzeTPC_YqlTest(EBenchType::TPCH, 11, true, true);
+    }
 
     NKikimrKqp::TKqpSetting MakeTPCHStatsSetting() {
         NKikimrKqp::TKqpSetting statsSetting;

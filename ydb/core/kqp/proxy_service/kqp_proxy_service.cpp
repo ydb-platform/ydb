@@ -27,6 +27,7 @@
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/kqp/workload_service/kqp_query_classifier.h>
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
@@ -157,9 +158,12 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
             EvCollectPeerProxyData = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvOnRequestTimeout,
             EvCloseIdleSessions,
+            EvWarmupGateFallback,
         };
 
         struct TEvCollectPeerProxyData: public TEventLocal<TEvCollectPeerProxyData, EEv::EvCollectPeerProxyData> {};
+
+        struct TEvWarmupGateFallback : public TEventLocal<TEvWarmupGateFallback, EEv::EvWarmupGateFallback> {};
 
         struct TEvOnRequestTimeout: public TEventLocal<TEvOnRequestTimeout, EEv::EvOnRequestTimeout> {
             ui64 RequestId;
@@ -234,6 +238,14 @@ public:
             VectorIndexLevelsCache, GetKqpResourceManager(), TableServiceConfig.GetResourceManager()));
         FeatureFlags = AppData()->FeatureFlags;
         WorkloadManagerConfig = AppData()->WorkloadManagerConfig;
+        WarmupApplicable = IsCompileCacheWarmupEnabled(TableServiceConfig, AppData()->TenantName,
+            AppData()->DomainsInfo->Domain ? AppData()->DomainsInfo->Domain->Name : TString());
+        WarmupGateOpen = !WarmupApplicable;
+        if (WarmupApplicable) {
+            const auto warmupHardDeadline = NKqp::ImportWarmupConfigFromProto(
+                TableServiceConfig.GetCompileCacheWarmupConfig()).HardDeadline;
+            Schedule(warmupHardDeadline, new TEvPrivate::TEvWarmupGateFallback());
+        }
         // NOTE: some important actors are constructed within next call
         FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
         AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory, VectorIndexLevelsCache);
@@ -720,6 +732,16 @@ public:
         const auto queryAction = ev->Get()->GetAction();
         TKqpRequestInfo requestInfo(traceId);
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
+        // Hold external client queries until warmup finishes; warmup's own traffic (PREPARE compilations, internal calls, the Metadata-system-user sysview fetch) must pass or it self-deadlocks.
+        if (!WarmupGateOpen && !ev->Get()->GetIsWarmupCompilation() && !ev->Get()->IsInternalCall()) {
+            const auto& userToken = ev->Get()->GetUserToken();
+            if (!userToken || !userToken->IsSystemUser()) {
+                ReplyProcessError(Ydb::StatusIds::UNAVAILABLE,
+                    "Node is warming up the compile cache, retry shortly", requestId);
+                return;
+            }
+        }
+
         bool explicitSession = true;
         if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;
@@ -793,9 +815,7 @@ public:
             ev->Get()->SetWmSessionUpdater(sessionInfo->WmState);
         }
 
-        if (!TryFillPoolInfoFromCache(ev, requestId)) {
-            return;
-        }
+        SetupWorkloadManagerQueryClassifier(ev, sessionInfo, requestId);
 
         TActorId targetId;
         if (sessionInfo) {
@@ -1026,11 +1046,10 @@ public:
     void Handle(TEvPrivate::TEvCollectPeerProxyData::TPtr&) {
         if (!ShutdownRequested) {
             TDuration d;
-            // Board convergence alone mustn't stop fast-poll: the warmup actor blocks
-            // on TEvStartWarmup, which we only send once peer resources are gathered.
+            // Keep fast-polling until we've actually sent TEvStartWarmup (after peer resources gather), not just until the board converges.
             bool fastPoll = false;
             if (!WarmupStarted
-                && TableServiceConfig.GetEnableCompileCacheWarmup()
+                && WarmupApplicable
                 && PeerProxyNodeResources.size() <= 1)
             {
                 auto rm = TryGetKqpResourceManager(SelfId().NodeId());
@@ -1095,7 +1114,7 @@ public:
             return;
         }
 
-        if (!TableServiceConfig.GetEnableCompileCacheWarmup()) {
+        if (!WarmupApplicable) {
             return;
         }
 
@@ -1111,10 +1130,17 @@ public:
             Send(MakeKqpWarmupActorId(SelfId().NodeId()), new TEvStartWarmup(PeerProxyNodeResources.size(), std::move(nodeIds)));
         }
     }
-
-    // Warmup done (often a skip) — stop fast-polling and don't send to a dead actor.
+    // Warmup done (compiled/skipped/gave up): clear pending state so fast-poll winds down and we don't send TEvStartWarmup to a dead actor.
     void Handle(NKqp::TEvKqpWarmupComplete::TPtr&) {
+        WarmupGateOpen = true;
         WarmupStarted = true;
+    }
+
+    void Handle(TEvPrivate::TEvWarmupGateFallback::TPtr&) {
+        if (!WarmupGateOpen) {
+            KQP_PROXY_LOG_W("Warmup gate fallback fired: opening gate (no TEvKqpWarmupComplete received, warmup actor likely died)");
+            WarmupGateOpen = true;
+        }
     }
 
     bool ShouldStartBalancing(const TSimpleResourceStats& stats, const double minResourceThreshold, const double currentResourceUsage) const {
@@ -1390,6 +1416,7 @@ public:
             hFunc(NMon::TEvHttpInfo, Handle);
             hFunc(TEvPrivate::TEvCollectPeerProxyData, Handle);
             hFunc(NKqp::TEvKqpWarmupComplete, Handle);
+            hFunc(TEvPrivate::TEvWarmupGateFallback, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
@@ -1624,50 +1651,34 @@ private:
         }
     }
 
-    bool TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 requestId) {
+    void SetupWorkloadManagerQueryClassifier(TEvKqp::TEvQueryRequest::TPtr& ev, const TKqpSessionInfo* sessionInfo, ui64 /*requestId*/) {
         ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
-
         const auto& databaseId = ev->Get()->GetDatabaseId();
-        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId) || ev->Get()->IsInternalCall() || ev->Get()->GetIsWarmupCompilation()) {
-            ev->Get()->SetPoolId("");
-            return true;
+
+        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId)
+            || ev->Get()->IsInternalCall()
+            || ev->Get()->GetIsWarmupCompilation()) {
+            return;
         }
 
-        const auto& userToken = ev->Get()->GetUserToken();
-        if (!ev->Get()->GetPoolId()) {
-            ev->Get()->SetPoolId(ResourcePoolsCache.GetPoolId(databaseId, userToken, ActorContext()));
-        }
+        auto poolId = ev->Get()->GetPoolId();
+        ResourcePoolsCache.GetPoolInfo(databaseId, poolId ? poolId : NResourcePool::DEFAULT_POOL_ID, ActorContext());
 
-        const auto& poolId = ev->Get()->GetPoolId();
-        const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(databaseId, poolId, ActorContext());
+        auto context = TClassifyContext{
+            // This parameter is set when user creates a request with an explicit PoolId
+            .PoolId = poolId,
+            .AppName = sessionInfo ? sessionInfo->ClientApplicationName : "",
+            .UserToken = ev->Get()->GetUserToken()
+        };
 
-        if (!poolInfo) {
-            Y_ASSERT(!poolId.empty());
-            Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId));
-            return true;
-        }
+        auto classifier = NWorkload::CreateQueryClassifier(
+            ResourcePoolsCache.GetLastResourcePoolMapSnapshot(),
+            ResourcePoolsCache.GetClassifierViewFor(databaseId),
+            databaseId,
+            std::move(context)
+        );
 
-        const auto& securityObject = poolInfo->SecurityObject;
-        if (securityObject && userToken && !userToken->GetSerializedToken().empty()) {
-            if (!securityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *userToken)) {
-                ReplyProcessError(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Resource pool " << poolId << " not found or you don't have access permissions", requestId);
-                return false;
-            }
-            if (!securityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *userToken)) {
-                ReplyProcessError(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "You don't have access permissions for resource pool " << poolId, requestId);
-                return false;
-            }
-        }
-
-        const auto& poolConfig = poolInfo->Config;
-        if (!NWorkload::IsWorkloadServiceRequired(poolConfig)) {
-            ev->Get()->SetPoolConfig(poolConfig);
-        }
-
-        Y_ASSERT(!poolId.empty());
-        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId, poolConfig));
-
-        return true;
+        ev->Get()->SetWmQueryClassifier(classifier);
     }
 
     void UpdateYqlLogLevels() {
@@ -1803,19 +1814,19 @@ private:
 
     void Handle(NKqp::TEvForgetScriptExecutionOperation::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::ForgetScriptExecutionOperation)) {
-            Register(CreateForgetScriptExecutionOperationActor(std::move(ev), QueryServiceConfig, Counters), TMailboxType::HTSwap, AppData()->SystemPoolId);
+            Register(CreateForgetScriptExecutionOperationActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 
     void Handle(NKqp::TEvGetScriptExecutionOperation::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::GetScriptExecutionOperation)) {
-            Register(CreateGetScriptExecutionOperationActor(std::move(ev), QueryServiceConfig, Counters), TMailboxType::HTSwap, AppData()->SystemPoolId);
+            Register(CreateGetScriptExecutionOperationActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 
     void Handle(NKqp::TEvListScriptExecutionOperations::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::ListScriptExecutionOperations)) {
-            Register(CreateListScriptExecutionOperationsActor(std::move(ev), QueryServiceConfig, Counters), TMailboxType::HTSwap, AppData()->SystemPoolId);
+            Register(CreateListScriptExecutionOperationsActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 
@@ -1948,7 +1959,7 @@ private:
     }
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-        ResourcePoolsCache.UpdateResourcePoolClassifiersInfo(ev->Get()->GetSnapshotAs<TResourcePoolClassifierSnapshot>(), ActorContext());
+        ResourcePoolsCache.UpdateResourcePoolClassifiersInfo(ev->Get()->GetValidatedSnapshotAs<TResourcePoolClassifierSnapshot>(), ActorContext());
     }
 
     void InitSharedReading() {
@@ -2054,6 +2065,8 @@ private:
 
     bool ServerWorkerBalancerComplete = false;
     bool WarmupStarted = false;
+    bool WarmupGateOpen = true;
+    bool WarmupApplicable = false;  // warmup runs on this node (tenant DB with warmup enabled; not the root domain)
     std::optional<TString> SelfDataCenterId;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     std::vector<ui64> LocalDatacenterProxies;

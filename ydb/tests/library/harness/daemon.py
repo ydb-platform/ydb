@@ -99,11 +99,15 @@ class Daemon(object):
             self.__aux_file = open(self.__aux_file_name, mode='w+b')
 
     def __close_output_files(self):
-        self.__stdout_file.close()
-        self.__stdout_file = None
-        self.__stderr_file.close()
-        self.__stderr_file = None
-        if self.__aux_file_name is not None:
+        if self.__stdout_file is not None:
+            self.__stdout_file.close()
+            self.__stdout_file = None
+
+        if self.__stderr_file is not None:
+            self.__stderr_file.close()
+            self.__stderr_file = None
+
+        if self.__aux_file is not None:
             self.__aux_file.close()
             self.__aux_file = None
 

@@ -1,11 +1,10 @@
 #include "direct_block_group_impl.h"
 
-#include "storage_transport_mock.h"
-
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport_mock.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_ut.h>
@@ -330,6 +329,309 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         // Now every DBG is ready -> the aggregate gate resolves.
         allReady.Wait(WaitTimeout);
         UNIT_ASSERT(allReady.HasValue());
+    }
+
+    Y_UNIT_TEST_F(ShouldSeqNo1OnInitialConnectToDDisk, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+
+        auto transport = std::make_unique<TStorageTransportMock>();
+        auto* transportPtr = transport.get();
+
+        const auto ddisks = MakeDDiskIds(100);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+
+        TPartitionDirectServiceMock service(true);
+        auto initialReady = dbg->Run(&service);
+
+        initialReady.Wait(WaitTimeout);
+        UNIT_ASSERT(initialReady.HasValue());
+        DrainExecutor(executor);
+
+        for (const auto& ddiskId: ddisks) {
+            const auto credentials = transportPtr->GetConnectCredentials(
+                EConnectionType::DDisk,
+                ddiskId);
+            UNIT_ASSERT_VALUES_EQUAL(1, credentials.size());
+            UNIT_ASSERT_VALUES_EQUAL(1, credentials[0].DDiskSessionSeqNo);
+        }
+    }
+
+    Y_UNIT_TEST_F(ShouldSeqNo0OnInitialConnectToPBuffer, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+
+        auto transport = std::make_unique<TStorageTransportMock>();
+        auto* transportPtr = transport.get();
+
+        const auto pbuffers = MakeDDiskIds(100 + DirectBlockGroupHostCount);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+
+        TPartitionDirectServiceMock service(true);
+        auto initialReady = dbg->Run(&service);
+
+        initialReady.Wait(WaitTimeout);
+        UNIT_ASSERT(initialReady.HasValue());
+        DrainExecutor(executor);
+
+        for (const auto& pbufferId: pbuffers) {
+            const auto credentials = transportPtr->GetConnectCredentials(
+                EConnectionType::PBuffer,
+                pbufferId);
+            UNIT_ASSERT_VALUES_EQUAL(1, credentials.size());
+            UNIT_ASSERT_VALUES_EQUAL(0, credentials[0].DDiskSessionSeqNo);
+        }
+    }
+
+    Y_UNIT_TEST_F(OracleShouldIgnoreCancelledError, TDBGFixture)
+    {
+        const auto ddiskHost = THostIndex(3);
+
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_unique<TStorageTransportMock>(),
+            100);
+
+        TPartitionDirectServiceMock service(true);
+        auto initialReady = dbg->Run(&service);
+        initialReady.Wait(WaitTimeout);
+        UNIT_ASSERT(initialReady.HasValue());
+
+        TString pendingBuffer(DefaultBlockSize, 'p');
+        TGuardedSgList guardedSglist = MakeSgList(pendingBuffer);
+        guardedSglist.Close();
+
+        auto pendingRead = RunOnExecutor(
+            executor,
+            [&]
+            {
+                return dbg->ReadBlocksFromDDisk(
+                    0,           // VChunkIndex
+                    ddiskHost,   // host
+                    TBlockRange64::WithLength(0, 3),
+                    guardedSglist,
+                    NWilson::TTraceId());
+            });
+        auto readyReadResponse =
+            pendingRead.GetValue(WaitTimeout).GetValue(WaitTimeout);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            E_CANCELLED,
+            readyReadResponse.Error.GetCode());
+
+        const auto& hostStat = dbg->GetOracle()->GetHostStatistics(ddiskHost);
+        const auto& errorsInfo = hostStat.GetErrorsInfo(TInstant::Now());
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            hostStat.InflightCount(EOperation::ReadFromDDisk));
+        UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveErrorCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveSuccessCount);
+    }
+
+    Y_UNIT_TEST_F(
+        OracleShouldUpdateErrorCountersForAllPBuffersHosts,
+        TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport = std::make_unique<TStorageTransportMock>();
+        transport->WriteToManyPBufferStatus =
+            NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
+
+        TPartitionDirectServiceMock service(true);
+        auto initialReady = dbg->Run(&service);
+        initialReady.Wait(WaitTimeout);
+        UNIT_ASSERT(initialReady.HasValue());
+
+        TString pendingBuffer(DefaultBlockSize, 'p');
+        TGuardedSgList guardedSglist = MakeSgList(pendingBuffer);
+        THostMask hosts;
+        hosts.Set(1);
+        hosts.Set(2);
+        hosts.Set(3);
+
+        auto pendingIndirectWrite = RunOnExecutor(
+            executor,
+            [&]
+            {
+                NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse>
+                    promise = NThreading::NewPromise<
+                        TDBGWriteBlocksToManyPBuffersResponse>();
+                auto future = promise.GetFuture();
+                TDirectBlockGroup::TWriteBlocksToManyPBuffersCallback cb =
+                    [promise = std::move(promise)]   //
+                    (TDBGWriteBlocksToManyPBuffersResponse r) mutable
+                {
+                    promise.SetValue(std::move(r));
+                };
+
+                dbg->WriteBlocksToManyPBuffers(
+                    0,   // VChunkIndex
+                    2,   // Coordinator
+                    hosts,
+                    100,   // lsn
+                    TBlockRange64::WithLength(0, 3),
+                    TDuration::Seconds(1),
+                    guardedSglist,
+                    NWilson::TTraceId(),
+                    cb);
+                return future;
+            });
+        auto writeResponse =
+            pendingIndirectWrite.GetValue(WaitTimeout).GetValue(WaitTimeout);
+
+        UNIT_ASSERT_VALUES_EQUAL(3, writeResponse.Responses.size());
+        for (const auto& response: writeResponse.Responses) {
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                E_FAIL,
+                response.Error.GetCode(),
+                FormatError(response.Error));
+        }
+
+        auto checkHostStat = [&](ui32 hostIndex)
+        {
+            const auto& hostStat =
+                dbg->GetOracle()->GetHostStatistics(hostIndex);
+            const auto& errorsInfo = hostStat.GetErrorsInfo(TInstant::Now());
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                hostStat.InflightCount(EOperation::WriteToPBuffer));
+            UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ConsecutiveErrorCount);
+            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveSuccessCount);
+        };
+        checkHostStat(1);
+        checkHostStat(2);
+        checkHostStat(3);
+    }
+
+    Y_UNIT_TEST_F(
+        ShouldUpdatePBufferHostStatForCrossNodeFlushWhenError,
+        TDBGFixture)
+    {
+        const auto pbufferHost = THostIndex(1);
+        const auto ddiskHost = THostIndex(2);
+
+        auto transport = std::make_unique<TStorageTransportMock>();
+        transport->SyncWithPBufferStatus =
+            NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
+
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
+
+        TPartitionDirectServiceMock service(true);
+        auto initialReady = dbg->Run(&service);
+        initialReady.Wait(WaitTimeout);
+        UNIT_ASSERT(initialReady.HasValue());
+
+        auto pendingFlush = RunOnExecutor(
+            executor,
+            [&]
+            {
+                TVector<TPBufferSegment> segments;
+                segments.push_back(
+                    TPBufferSegment(100, TBlockRange64::WithLength(0, 3)));
+
+                return dbg->SyncWithPBuffer(
+                    10,   // VChunkIndex
+                    pbufferHost,
+                    ddiskHost,
+                    segments,
+                    NWilson::TTraceId());
+            });
+        auto flushResponse =
+            pendingFlush.GetValue(WaitTimeout).GetValue(WaitTimeout);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, flushResponse.Errors.size());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            E_FAIL,
+            flushResponse.Errors[0].GetCode(),
+            FormatError(flushResponse.Errors[0]));
+
+        {   // Should not count an error for the pbuffer host
+            const auto& hostStat =
+                dbg->GetOracle()->GetHostStatistics(pbufferHost);
+            const auto& errorsInfo = hostStat.GetErrorsInfo(TInstant::Now());
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                hostStat.InflightCount(EOperation::FlushCrossNode));
+            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveErrorCount);
+            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveSuccessCount);
+        }
+        {   // Should count an error for the ddisk host
+            const auto& hostStat =
+                dbg->GetOracle()->GetHostStatistics(ddiskHost);
+            const auto& errorsInfo = hostStat.GetErrorsInfo(TInstant::Now());
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                hostStat.InflightCount(EOperation::FlushCrossNode));
+            UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ConsecutiveErrorCount);
+            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveSuccessCount);
+        }
+    }
+
+    Y_UNIT_TEST_F(
+        ShouldUpdateBothHostsStatForCrossNodeFlushWhenSuccess,
+        TDBGFixture)
+    {
+        const auto pbufferHost = THostIndex(1);
+        const auto ddiskHost = THostIndex(2);
+
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_unique<TStorageTransportMock>(),
+            100);
+
+        TPartitionDirectServiceMock service(true);
+        auto initialReady = dbg->Run(&service);
+        initialReady.Wait(WaitTimeout);
+        UNIT_ASSERT(initialReady.HasValue());
+
+        auto pendingFlush = RunOnExecutor(
+            executor,
+            [&]
+            {
+                TVector<TPBufferSegment> segments;
+                segments.push_back(
+                    TPBufferSegment(100, TBlockRange64::WithLength(0, 3)));
+
+                return dbg->SyncWithPBuffer(
+                    10,   // VChunkIndex
+                    pbufferHost,
+                    ddiskHost,
+                    segments,
+                    NWilson::TTraceId());
+            });
+        auto flushResponse =
+            pendingFlush.GetValue(WaitTimeout).GetValue(WaitTimeout);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, flushResponse.Errors.size());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            S_OK,
+            flushResponse.Errors[0].GetCode(),
+            FormatError(flushResponse.Errors[0]));
+
+        {   // Should count a success for the pbuffer host
+            const auto& hostStat =
+                dbg->GetOracle()->GetHostStatistics(pbufferHost);
+            const auto& errorsInfo = hostStat.GetErrorsInfo(TInstant::Now());
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                hostStat.InflightCount(EOperation::FlushCrossNode));
+            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveErrorCount);
+            UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ConsecutiveSuccessCount);
+        }
+        {   // Should count a success for the ddisk host
+            const auto& hostStat =
+                dbg->GetOracle()->GetHostStatistics(ddiskHost);
+            const auto& errorsInfo = hostStat.GetErrorsInfo(TInstant::Now());
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                hostStat.InflightCount(EOperation::FlushCrossNode));
+            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveErrorCount);
+            UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ConsecutiveSuccessCount);
+        }
     }
 }
 

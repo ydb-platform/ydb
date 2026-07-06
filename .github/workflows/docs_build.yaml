@@ -1,9 +1,17 @@
 name: Build documentation
 
+# SECURITY: triggered by `pull_request` (not `pull_request_target`).
+# This means the workflow runs in fork-isolated context with a read-only
+# GITHUB_TOKEN and no access to base-repo secrets. PR-controlled documentation
+# code (including any JS extensions loaded by Diplodoc/YFM via `require()`)
+# cannot escalate to the privileged base context. The `workflow_dispatch`
+# entry point is used by `docs_build_rebuild.yaml` (and by maintainers) to
+# rebuild a specific PR; it runs with the same read-only permissions.
+
 on:
-  pull_request_target:
-    paths: 
-    - 'ydb/docs/**'
+  pull_request:
+    paths:
+      - 'ydb/docs/**'
   workflow_dispatch:
     inputs:
       pull_number:
@@ -12,39 +20,22 @@ on:
         type: string
 
 jobs:
-  add-label:
-    if: github.event_name == 'pull_request_target'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - name: Add documentation label
-        uses: actions/github-script@v8
-        with:
-          script: |
-            github.rest.issues.addLabels({
-              issue_number: context.payload.pull_request.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              labels: ['documentation']
-            })
-            
   build-docs:
     if: |
-      github.event_name == 'workflow_dispatch' || 
-      (github.event_name == 'pull_request_target' && 
-       github.event.pull_request.state == 'open')
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.state == 'open'
     concurrency:
       group: docs-build-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pull_number) || github.event.pull_request.head.sha }}
-          
+
       - name: Get commit SHA
         id: sha
         run: echo "value=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT

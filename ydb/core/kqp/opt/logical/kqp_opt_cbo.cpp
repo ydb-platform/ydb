@@ -118,6 +118,11 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<TRelOptimizerNode>& no
         return true;
     }
 
+    // Secondary-index lookup
+    if (!ctx.KqpCtx.Config->IsAutoIndexSelectionForIndexLookupJoinEnabled()) {
+        return false;
+    }
+
     // Check indexes
     THashSet<TString> rightJoinKeys;
     for (const auto& col : joinColumns) {

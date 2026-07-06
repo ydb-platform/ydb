@@ -65,11 +65,11 @@ void UuidToString(ui16 dw[8], IOutputStream& out) {
     out << '-';
     WriteHex(dw[3], out);
     out << '-';
-    WriteHex(dw[4], out, true);
+    WriteHex(dw[4], out, /*reverseBytes=*/true);
     out << '-';
-    WriteHex(dw[5], out, true);
-    WriteHex(dw[6], out, true);
-    WriteHex(dw[7], out, true);
+    WriteHex(dw[5], out, /*reverseBytes=*/true);
+    WriteHex(dw[6], out, /*reverseBytes=*/true);
+    WriteHex(dw[7], out, /*reverseBytes=*/true);
 }
 
 void UuidHalfsToByteString(ui64 low, ui64 hi, IOutputStream& out) {

@@ -271,10 +271,8 @@ public:
                     {"/viewer/json/render", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/cluster", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/json/cluster", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/sysinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/config", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/json/config", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/sysinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/compute", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/json/compute", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/netinfo", {EViewerEndpointAccessType::Viewer}},
@@ -293,6 +291,8 @@ public:
                     {"/viewer/json/topic_data", {EViewerEndpointAccessType::Administration}},
 
                     // Database-level endpoints that require explicit database parameter for strict database tokens.
+                    {"/viewer/sysinfo", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/json/sysinfo", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/autocomplete", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/json/autocomplete", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/nodelist", {EViewerEndpointAccessType::Database, true}},

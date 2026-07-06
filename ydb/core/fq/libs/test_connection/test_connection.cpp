@@ -19,6 +19,8 @@
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_TEST_CONNECTION
+
 namespace NFq {
 
 LWTRACE_USING(YQ_TEST_CONNECTION_PROVIDER);
@@ -139,7 +141,8 @@ public:
     static constexpr char ActorName[] = "YQ_TEST_CONNECTION";
 
     void Bootstrap() {
-        TC_LOG_D("Starting yandex query test connection. Actor id: " << SelfId());
+        YDB_LOG_DEBUG("Starting yandex query test connection",
+            {"selfId", SelfId()});
 
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_TEST_CONNECTION_PROVIDER));
 
@@ -168,12 +171,20 @@ public:
         TTestConnectionRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, request.setting().connection_case());
         if (issues) {
             requestCounters->Error->Inc();
-            TC_LOG_D("TestConnectionRequest: validation failed " << scope << " " << user << " " << NKikimr::MaskTicket(token) << issues.ToOneLineString());
+            YDB_LOG_DEBUG("TestConnectionRequest: validation failed",
+                {"scope", scope},
+                {"user", user},
+                {"ticket", NKikimr::MaskTicket(token)},
+                {"issues", issues.ToOneLineString()});
             Send(ev->Sender, new TEvTestConnection::TEvTestConnectionResponse(issues), 0, ev->Cookie);
             return;
         }
 
-        TC_LOG_T("TestConnectionRequest: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << request.DebugString());
+        YDB_LOG_TRACE("TestConnectionRequest",
+            {"scope", scope},
+            {"user", user},
+            {"ticket", NKikimr::MaskTicket(token)},
+            {"request", request.DebugString()});
         switch (request.setting().connection_case()) {
             case FederatedQuery::ConnectionSetting::kDataStreams: {
                 Register(CreateTestDataStreamsConnectionActor(
@@ -206,7 +217,11 @@ public:
             default: {
                 LWPROBE(TestUnsupportedConnectionRequest, scope, user);
                 requestCounters->Error->Inc();
-                TC_LOG_E("TestConnectionRequest: unimplemented " << scope << " " << user << " " << NKikimr::MaskTicket(token) << request.DebugString());
+                YDB_LOG_ERROR("TestConnectionRequest: unimplemented",
+                    {"scope", scope},
+                    {"user", user},
+                    {"ticket", NKikimr::MaskTicket(token)},
+                    {"request", request.DebugString()});
                 Send(ev->Sender, new TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, "Unimplemented yet")}), 0, ev->Cookie);
             }
         }

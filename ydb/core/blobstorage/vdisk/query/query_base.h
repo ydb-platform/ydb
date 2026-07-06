@@ -100,7 +100,7 @@ namespace NKikimr {
                             "TEvVGetResult: Result message is too large; size# %" PRIu64 " orig# %s;"
                             " VDISK CAN NOT REPLY ON TEvVGet REQUEST",
                             ResultSize.GetSize(), BatcherCtx->OrigEv->Get()->ToString().data());
-                LOG_CRIT(ctx, NKikimrServices::BS_VDISK_GET, msg);
+                YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::BS_VDISK_GET, msg);
 
                 if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
                     wilsonSpan->EndError(std::move(msg));
@@ -114,9 +114,7 @@ namespace NKikimr {
                     hasNotYet = hasNotYet || result.GetStatus() == NKikimrProto::NOT_YET;
                 }
                 QueryCtx->MonGroup.GetTotalBytes() += total;
-                LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_GET,
-                        VDISKP(QueryCtx->HullCtx->VCtx->VDiskLogPrefix,
-                            "TEvVGetResult: %s", Result->ToString().data()));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_GET, VDISKP(QueryCtx->HullCtx->VCtx->VDiskLogPrefix, "TEvVGetResult: %s", Result->ToString().data()));
 
                 Span.EndOk();
             }

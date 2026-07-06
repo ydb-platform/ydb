@@ -33,6 +33,7 @@ struct THttpMonTestEnvOptions {
     TVector<TString> ActorAllowedSIDs;
     TVector<TString> TicketParserGroupSIDs = DEFAULT_TICKET_PARSER_GROUPS;
     TMon::EAuthMode AuthMode = TMon::EAuthMode::Enforce;
+    TVector<TString> DisabledAuthenticationPaths;
 };
 
 class THttpMonTestEnv {
@@ -54,6 +55,10 @@ public:
         auto& securityConfig = *Settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
         securityConfig.SetEnforceUserTokenCheckRequirement(true);
         securityConfig.MutableMonitoringAllowedSIDs()->Add("ydb.clusters.monitor@as");
+
+        for (const auto& path : Options.DisabledAuthenticationPaths) {
+            Settings.AppConfig->MutableMonitoringConfig()->AddDisabledAuthenticationPaths(path);
+        }
 
         Settings.CreateTicketParser = [&](const TTicketParserSettings&) -> NActors::IActor* {
             return TicketParser = new TFakeTicketParserActor(Options.TicketParserGroupSIDs);
@@ -424,6 +429,65 @@ Y_UNIT_TEST_SUITE(Other) {
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketSuccesses, 0);
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketFails, 1);
+    }
+}
+
+Y_UNIT_TEST_SUITE(DisabledAuthenticationPaths) {
+    // Exact path in DisabledAuthenticationPaths bypasses auth — no token needed
+    Y_UNIT_TEST(ExactPathNoAuthRequired) {
+        THttpMonTestEnv env({
+            .RegKind = THttpMonTestEnvOptions::ERegKind::MonPage,
+            .DisabledAuthenticationPaths = {"/test_mon_path"},
+        });
+
+        TStringStream responseStream;
+        // No auth headers — should succeed because path is in DisabledAuthenticationPaths
+        const auto status = env.GetHttpClient().DoGet("/test_mon_path", &responseStream);
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
+
+        TFakeTicketParserActor* ticketParser = env.GetTicketParser();
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 0);
+    }
+
+    // A path that has the disabled path as a PREFIX must still require auth
+    Y_UNIT_TEST(PrefixSubpathStillRequiresAuth) {
+        THttpMonTestEnv env({
+            .RegKind = THttpMonTestEnvOptions::ERegKind::MonPage,
+            .DisabledAuthenticationPaths = {"/test_mon_path"},
+        });
+
+        TStringStream responseStream;
+        THttpHeaders outHeaders;
+        // /test_mon_path/subpath is NOT in DisabledAuthenticationPaths — must get 401/403
+        const auto status = env.GetHttpClient().DoGet("/test_mon_path/subpath", &responseStream, {}, &outHeaders);
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_UNAUTHORIZED);
+    }
+
+    // A path that has the disabled path as a SUFFIX must still require auth
+    Y_UNIT_TEST(SuffixPathStillRequiresAuth) {
+        THttpMonTestEnv env({
+            .RegKind = THttpMonTestEnvOptions::ERegKind::MonPage,
+            .DisabledAuthenticationPaths = {"/test_mon_path"},
+        });
+
+        TStringStream responseStream;
+        THttpHeaders outHeaders;
+        // /prefix/test_mon_path is NOT in DisabledAuthenticationPaths — must get 401/403
+        const auto status = env.GetHttpClient().DoGet("/prefix/test_mon_path", &responseStream, {}, &outHeaders);
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_UNAUTHORIZED);
+    }
+
+    // A path not listed at all still requires auth
+    Y_UNIT_TEST(UnlistedPathRequiresAuth) {
+        THttpMonTestEnv env({
+            .RegKind = THttpMonTestEnvOptions::ERegKind::MonPage,
+            .DisabledAuthenticationPaths = {"/test_mon_path"},
+        });
+
+        TStringStream responseStream;
+        THttpHeaders outHeaders;
+        const auto status = env.GetHttpClient().DoGet("/other_path", &responseStream, {}, &outHeaders);
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_UNAUTHORIZED);
     }
 }
 

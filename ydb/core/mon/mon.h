@@ -68,6 +68,7 @@ public:
         };
         bool RequireCountersAuthentication = false;
         bool RequireHealthcheckAuthentication = false;
+        TVector<TString> DisabledAuthenticationPaths;
     };
 
     TMon(TConfig config);

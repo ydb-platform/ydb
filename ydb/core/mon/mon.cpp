@@ -1582,7 +1582,8 @@ THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring:
 class THttpMonIndexService : public TActor<THttpMonIndexService> {
 public:
     THttpMonIndexService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring::TIndexMonPage> indexMonPage,
-                         TVector<TString> allowedSIDs, TMon::TRequestAuthorizer authorizer, const TString& redirectRoot = {}, bool needMonLegacyAudit = true)
+                         TVector<TString> allowedSIDs, TMon::TRequestAuthorizer authorizer, const TString& redirectRoot = {}, bool needMonLegacyAudit = true,
+                         TVector<TString> disabledAuthenticationPaths = {})
         : TActor(&THttpMonIndexService::StateWork)
         , HttpProxyActorId(httpProxyActorId)
         , IndexMonPage(std::move(indexMonPage))
@@ -1590,6 +1591,7 @@ public:
         , Authorizer(std::move(authorizer))
         , RedirectRoot(redirectRoot)
         , NeedMonLegacyAudit(needMonLegacyAudit)
+        , DisabledAuthenticationPaths(disabledAuthenticationPaths.begin(), disabledAuthenticationPaths.end())
     {
     }
 
@@ -1687,7 +1689,11 @@ public:
             }
         }
 
-        Register(new THttpMonAuthorizedPageRequest(std::move(ev), IndexMonPage.Get(), AllowedSIDs, Authorizer, NeedMonLegacyAudit));
+        TStringBuf requestUrl = ev->Get()->Request->URL.Before('?');
+        TMon::EAuthMode authMode = DisabledAuthenticationPaths.contains(TString(requestUrl))
+            ? TMon::EAuthMode::Disabled
+            : TMon::EAuthMode::Enforce;
+        Register(new THttpMonAuthorizedPageRequest(std::move(ev), IndexMonPage.Get(), AllowedSIDs, Authorizer, NeedMonLegacyAudit, authMode));
     }
 
     void Handle(TEvMon::TEvRegisterHandler::TPtr& ev) {
@@ -1695,10 +1701,15 @@ public:
         Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler(ev->Get()->Fields.Path, SelfId()));
     }
 
+    void Handle(TEvMon::TEvAddDisabledAuthenticationPath::TPtr& ev) {
+        DisabledAuthenticationPaths.insert(ev->Get()->Path);
+    }
+
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
             hFunc(TEvMon::TEvRegisterHandler, Handle);
+            hFunc(TEvMon::TEvAddDisabledAuthenticationPath, Handle);
             cFunc(TEvents::TSystem::Poison, PassAway);
         }
     }
@@ -1711,6 +1722,7 @@ public:
     TMon::TRequestAuthorizer Authorizer;
     TString RedirectRoot;
     bool NeedMonLegacyAudit;
+    THashSet<TString> DisabledAuthenticationPaths;
 };
 
 class THttpMonPingService : public TActor<THttpMonPingService> {
@@ -1799,11 +1811,11 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
         TMailboxType::ReadAsFilled,
         executorPool);
     HttpMonServiceActorId = ActorSystem->Register(
-        new THttpMonIndexService(HttpProxyActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, Config.RedirectMainPageTo),
+        new THttpMonIndexService(HttpProxyActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, Config.RedirectMainPageTo, true, Config.DisabledAuthenticationPaths),
         TMailboxType::ReadAsFilled,
         executorPool);
     HttpAuthMonServiceActorId = ActorSystem->Register(
-        new THttpMonIndexService(HttpMonServiceActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, Config.RedirectMainPageTo, false),
+        new THttpMonIndexService(HttpMonServiceActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, Config.RedirectMainPageTo, false, Config.DisabledAuthenticationPaths),
         TMailboxType::ReadAsFilled,
         executorPool);
     RegisterLwtrace();

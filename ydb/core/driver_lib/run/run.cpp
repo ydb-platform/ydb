@@ -670,6 +670,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         monConfig.CaFile = appConfig.GetMonitoringConfig().GetMonitoringCaFile();
         monConfig.RedirectMainPageTo = appConfig.GetMonitoringConfig().GetRedirectMainPageTo();
         monConfig.RequireCountersAuthentication = appConfig.GetMonitoringConfig().GetRequireCountersAuthentication();
+        monConfig.DisabledAuthenticationPaths.assign(appConfig.GetMonitoringConfig().GetDisabledAuthenticationPaths().begin(), appConfig.GetMonitoringConfig().GetDisabledAuthenticationPaths().end());
         if (appConfig.GetMonitoringConfig().CompressContentTypesSize() > 0) {
             monConfig.CompressContentTypes.clear();
             std::ranges::copy(appConfig.GetMonitoringConfig().GetCompressContentTypes(), std::back_inserter(monConfig.CompressContentTypes));

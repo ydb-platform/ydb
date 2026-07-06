@@ -1,4 +1,5 @@
 #include "base_table_writer.h"
+#include "json_change_record.h"
 #include "logging.h"
 #include "service.h"
 #include "worker.h"

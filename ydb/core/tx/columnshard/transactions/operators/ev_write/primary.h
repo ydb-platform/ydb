@@ -83,8 +83,9 @@ private:
         const ui64 TxId;
 
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {
-            auto& lock = Self->GetOperationsManager().GetLockVerified(Self->GetOperationsManager().GetLockForTxVerified(TxId));
-            auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId);
+            auto& txController = Self->GetProgressTxController();
+            auto& lock = Self->GetOperationsManager().GetLockFeaturesForTxVerified(TxId);
+            auto op = txController.GetTxOperatorAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, ETxOperatorStatus::InProgress);
             if (op->WaitShardsBrokenFlags.contains(Self->TabletID())) {
                 // TxStartPreparation may be executed AFTER some ReadSets from the secondary.
                 // So, TxBroken may already be set, we must not ignore that.
@@ -94,7 +95,7 @@ private:
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "remove_tablet_id")(
                     "wait_broken_flags", JoinSeq(",", op->WaitShardsBrokenFlags))("wait_result_ack", JoinSeq(",", op->WaitShardsResultAck))(
                     "receive", Self->TabletID());
-                Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
+                txController.WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
             } else {
                 op->SelfBrokenFlagPersisted = true;
                 op->InitializeRequests(*Self);
@@ -103,7 +104,8 @@ private:
         }
 
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
-            auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, true);
+            auto op = Self->GetProgressTxController().GetTxOperatorAs<TEvWriteCommitPrimaryTransactionOperator>(
+                TxId, ETxOperatorStatus::InProgress, /*optional*/ true);
             if (op) {
                 if (!op->SelfBrokenFlagPersisted) {
                     op->SelfBrokenFlagPersisted = true;
@@ -130,7 +132,8 @@ private:
         std::unique_ptr<TEvTxProcessing::TEvReadSetAck> BrokenFlagAck;
 
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {
-            auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, true);
+            auto& txController = Self->GetProgressTxController();
+            auto op = txController.GetTxOperatorAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, ETxOperatorStatus::Any, /*optional*/ true);
             if (!op) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "repeated shard broken_flag info, operator not found")(
                     "shard_id", TabletId);
@@ -140,9 +143,14 @@ private:
             }
 
             BrokenFlagAck = TEvWriteCommitSyncTransactionOperator::MakeBrokenFlagAck(op->GetStep(), op->GetTxId(), Self->TabletID(), TabletId);
+            if (txController.IsTxCompleting(TxId)) {
+                return true;
+            }
+
+            // op is still in progress
             if (op->WaitShardsBrokenFlags.erase(TabletId)) {
                 op->TxBroken = op->TxBroken.value_or(false) || BrokenFlag;
-                Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
+                txController.WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
                 // we cannot send the ack right away, we must make sure that we have stored the TxBroken value
                 // but we can proceed right away if we have collected all the broken flags from the secondary
                 op->InitializeRequests(*Self);
@@ -177,14 +185,16 @@ private:
         const ui64 TabletId;
 
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {
-            auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, true);
+            auto& txController = Self->GetProgressTxController();
+            auto op =
+                txController.GetTxOperatorAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, ETxOperatorStatus::InProgress, /*optional*/ true);
             if (!op) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "ack_tablet_duplication")("receive", TabletId)(
                     "reason", "operation absent");
             } else if (op->WaitShardsResultAck.erase(TabletId)) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "ack_tablet")("wait", JoinSeq(",", op->WaitShardsResultAck))(
                     "receive", TabletId);
-                Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
+                txController.WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
                 op->CheckFinished(*Self);
             } else {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "ack_tablet_duplication")("wait", JoinSeq(",", op->WaitShardsResultAck))(

@@ -69,7 +69,8 @@ private:
         const ui64 TxId;
 
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {
-            auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId);
+            auto& txController = Self->GetProgressTxController();
+            auto op = txController.GetTxOperatorAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, ETxOperatorStatus::InProgress);
             if (op->SelfBroken.has_value()) {
                 op->SelfBrokenFlagPersisted = true;
                 if (!op->ReceiveAck) {
@@ -77,15 +78,16 @@ private:
                     op->SendResult(*Self);
                 }
             } else {
-                auto& lock = Self->GetOperationsManager().GetLockVerified(Self->GetOperationsManager().GetLockForTxVerified(TxId));
+                auto& lock = Self->GetOperationsManager().GetLockFeaturesForTxVerified(TxId);
                 op->SelfBroken = lock.IsBroken();
-                Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
+                txController.WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
             }
             return true;
         }
 
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
-            auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, true);
+            auto op = Self->GetProgressTxController().GetTxOperatorAs<TEvWriteCommitSecondaryTransactionOperator>(
+                TxId, ETxOperatorStatus::InProgress, /*optional*/ true);
             if (op) {
                 if (!op->SelfBrokenFlagPersisted) {
                     op->SelfBrokenFlagPersisted = true;
@@ -110,7 +112,8 @@ private:
         const ui64 TxId;
 
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& ctx) override {
-            auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, true);
+            auto op = Self->GetProgressTxController().GetTxOperatorAs<TEvWriteCommitSecondaryTransactionOperator>(
+                TxId, ETxOperatorStatus::InProgress, /*optional*/ true);
             if (!op || op->ReceiveAck) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_ack_flag")("txId", TxId);
             } else {
@@ -147,7 +150,8 @@ private:
         std::unique_ptr<TEvTxProcessing::TEvReadSetAck> BrokenFlagAck;
 
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& ctx) override {
-            auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, true);
+            auto& txController = Self->GetProgressTxController();
+            auto op = txController.GetTxOperatorAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, ETxOperatorStatus::Any, /*optional*/ true);
             if (!op) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_broken_flag")("txId", TxId);
                 // send the ack anyway, so that the primary waits less time to progress
@@ -157,12 +161,17 @@ private:
 
             BrokenFlagAck =
                 TEvWriteCommitSyncTransactionOperator::MakeBrokenFlagAck(op->GetStep(), op->GetTxId(), Self->TabletID(), ArbiterTabletId);
+            if (txController.IsTxCompleting(TxId)) {
+                return true;
+            }
+
+            // op is still in progress
             if (op->TxBroken.has_value()) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_broken_flag")("txId", TxId);
                 // we cannot send the ack here, because the previous transaction (that successfully set TxBroken) may be not completed yet
             } else {
                 op->TxBroken = BrokenFlag;
-                Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
+                txController.WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
 
                 // me must check IsInProgress, because the ReadSet and the Ack from the primary may come in any order,
                 // and we do not want to enqueue the progress tx twice

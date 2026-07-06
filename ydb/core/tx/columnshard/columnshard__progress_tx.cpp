@@ -50,7 +50,7 @@ public:
             const ui64 step = plannedItem->PlanStep;
             const ui64 txId = plannedItem->TxId;
             NActors::TLogContextGuard logGuardTx = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("tx_id", txId);
-            TxOperator = Self->ProgressTxController->GetTxOperatorVerified(txId);
+            TxOperator = Self->ProgressTxController->GetTxOperator(txId, ETxOperatorStatus::InProgress);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "PlannedItemStart")("op_type", TxOperator->GetOpType());
             if (auto txPrepare = TxOperator->BuildTxPrepareForProgress(Self)) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "PlannedItemStart")("details", "BuildTxPrepareForProgress")(

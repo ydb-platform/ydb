@@ -1177,22 +1177,29 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             UNIT_ASSERT(req1.GetErrors().empty());
 
             // Split partition #2 into 2
-            AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table",
-                            R"(
-                                SourceTabletId: 72075186233409547
+            const auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
+            UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+            const ui64 splitSrcTabletId = shards[1];
+            const TString splitRequest = Sprintf(R"(
+                                SourceTabletId: %lu
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Text: "Marla" } }
                                     }
                                 }
-                            )");
+                            )", splitSrcTabletId);
+            AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", splitRequest);
 
-            // Wait for split to reach src DS
+            // Wait for split to reach src DS. Check shard state instead of EvSplit:
+            // after a reboot EvSplit may have already been delivered.
+            const ui64 splitReachedSrcState = static_cast<ui64>(NKikimrTxDataShard::SplitSrcWaitForNoTxInFlight);
             int retries = 3;
             while (retries--) {
                 {
                     TDispatchOptions opts;
-                    opts.FinalEvents.emplace_back(TEvDataShard::EvSplit);
+                    opts.CustomFinalCondition = [&]() {
+                        return GetDatashardState(runtime, splitSrcTabletId) >= splitReachedSrcState;
+                    };
                     runtime.DispatchEvents(opts);
                 }
 

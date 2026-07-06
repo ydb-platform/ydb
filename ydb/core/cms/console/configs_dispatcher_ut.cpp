@@ -1,3 +1,4 @@
+#include "configs_dispatcher.h"
 #include "console.h"
 #include "ut_helpers.h"
 
@@ -2311,13 +2312,10 @@ config:
         TActorId opaqueSubscriberId = runtime.Register(opaqueSubscriber);
         runtime.EnableScheduleForActor(opaqueSubscriberId, true);
 
-        Cerr << ">>>>> LINE " << __LINE__ << Endl;
         CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, mainConfig);
-        Cerr << ">>>>> LINE " << __LINE__ << Endl;
         // Let subscribers receive initial config
         DrainAllEvents<TEvPrivate::TEvGotNotification,
                        TEvPrivate::TEvParsedPrivateDatabaseConfig>(runtime);
-        Cerr << ">>>>> LINE " << __LINE__ << Endl;
 
         const TString dbConfigTemplate = R"(
 ---
@@ -2358,8 +2356,6 @@ selector_config:
         SubstGlobal(dbConfigWithSelectors, "VALUE", "3");
         CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
             PermissiveTenantAttribute, "true");
-
-        Cerr << ">>>>> LINE " << __LINE__ << Endl;
 
         opaqueSubscriber->parsedCnt = 0;
         opaqueSubscriber->resetCnt = 0;

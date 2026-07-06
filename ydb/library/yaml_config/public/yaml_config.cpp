@@ -401,6 +401,26 @@ void ApplySelectors(
     }
 }
 
+void DeepCopyTags(NFyaml::TNodeRef node) {
+    if (auto tag = node.Tag()) {
+        node.SetTag(*tag);
+    }
+    switch (node.Type()) {
+        case NFyaml::ENodeType::Mapping:
+            for (auto& pair : node.Map()) {
+                DeepCopyTags(pair.Value());
+            }
+            break;
+        case NFyaml::ENodeType::Sequence:
+            for (auto& item : node.Sequence()) {
+                DeepCopyTags(item);
+            }
+            break;
+        default:
+            break;
+    }
+}
+
 TDocumentConfig Resolve(
     const NFyaml::TDocument& doc,
     const TSet<TNamedLabel>& labels)
@@ -1319,6 +1339,7 @@ description: Implicit DatabaseConfig node
 selector: {}
 )"));
     auto node = databaseConfigRoot.Map()["config"].Copy(config);
+    DeepCopyTags(node.Ref());
     selectors.at(selectors.size() - 1).Map().Append(config.Buildf("config"), node);
 }
 

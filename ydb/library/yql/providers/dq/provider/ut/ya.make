@@ -8,7 +8,7 @@ PEERDIR(
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/transform
-    ydb/library/yql/providers/dq/local_gateway
+    yt/yql/providers/dq/local_gateway
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/dq/provider/exec
     library/cpp/lwtrace

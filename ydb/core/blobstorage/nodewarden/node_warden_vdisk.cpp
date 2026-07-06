@@ -262,7 +262,6 @@ namespace NKikimr::NStorage {
                 if (Cfg->PBufferConfig->HasPreallocateChunksFreeSpace()) {
                     pbufferFormat.PreallocateChunksFreeSpace = Cfg->PBufferConfig->GetPreallocateChunksFreeSpace();
                     Y_ABORT_UNLESS(pbufferFormat.PreallocateChunksFreeSpace < 100);
-
                 }
             }
             actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbufferFormat),

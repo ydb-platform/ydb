@@ -1303,7 +1303,6 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         TString tablePath1 = root + "/Table1";
         TString tablePath2 = root + "/Table2";
 
-        // Create test tables
         TestCreateTable(runtime, ++txId, root, R"(
               Name: "Table1"
               Columns { Name: "key"    Type: "Uint32" }
@@ -1408,7 +1407,6 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         TString root = "/MyRoot";
 
-        // Test list operations when no operations exist
         auto listResponse = TestListSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, root);
 
         UNIT_ASSERT_VALUES_EQUAL(listResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
@@ -1472,7 +1470,6 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             
             UNIT_ASSERT_LE(static_cast<ui64>(listResponse.GetEntries().size()), pageSize);
 
-            // Collect operation IDs from this page
             for (const auto& entry : listResponse.GetEntries()) {
                 foundOperationIds.push_back(entry.GetId());
                 UNIT_ASSERT_VALUES_EQUAL(entry.GetSettings().GetNotNullColumns().size(), 1);

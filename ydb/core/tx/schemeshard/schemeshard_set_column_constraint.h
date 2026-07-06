@@ -7,7 +7,6 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-// Forward declarations
 class TSchemeShard;
 struct TSetColumnConstraintOperationInfo;
 

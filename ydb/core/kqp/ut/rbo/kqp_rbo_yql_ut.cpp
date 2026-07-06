@@ -2993,9 +2993,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
             q = round + "\n" + toDecimal + "\n" + toDecimalMax + "\n" + q;
 
-            //TScopedRboTraceTitleOverride traceTitle(
-            //    FormatBenchmarkTraceTitle(BenchmarkTraceSuiteName, BenchmarkTraceName[type], queryId),
-            //    q);
+            TScopedRboTraceTitleOverride traceTitle(
+                FormatBenchmarkTraceTitle(BenchmarkTraceSuiteName, BenchmarkTraceName[type], queryId),
+                q);
             auto queryClient = kikimr.GetQueryClient();
             auto session = queryClient.GetSession().GetValueSync().GetSession();
             auto result = session.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))

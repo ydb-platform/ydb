@@ -154,6 +154,18 @@ def download_file(url: str, dest: Path, timeout: int = 300) -> None:
     dest.write_bytes(data)
 
 
+def build_preset_from_config_segment(config_segment: str) -> str:
+    """Map CI artifact path segment (ya-main-x86-64[-asan|tsan|msan]) to BUILD_PRESET."""
+    seg = (config_segment or "").lower()
+    if "asan" in seg:
+        return "release-asan"
+    if "tsan" in seg:
+        return "release-tsan"
+    if "msan" in seg:
+        return "release-msan"
+    return "relwithdebinfo"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="Fetch CI Run-tests artifacts by index URL and build tests resource dashboard.",
@@ -197,6 +209,12 @@ def main() -> None:
         help="SANITIZER_TYPE for ya.make (e.g. address, thread). Auto-detected from URL (asan/tsan/msan in path) or report if omitted.",
     )
     ap.add_argument(
+        "--build-preset",
+        type=str,
+        default=None,
+        help="ya make build preset for runner footprint (e.g. relwithdebinfo, release-asan). Auto-detected from URL if omitted.",
+    )
+    ap.add_argument(
         "--top-n",
         type=int,
         default=500,
@@ -233,15 +251,19 @@ def main() -> None:
     if not run_id:
         run_id = "unknown_run"
 
+    config_segment = ""
     sanitizer_from_url = None
+    build_preset_from_url = None
     if run_id_index is not None and run_id_index + 1 < len(path_parts):
-        config_segment = path_parts[run_id_index + 1].lower()
-        if "asan" in config_segment:
+        config_segment = path_parts[run_id_index + 1]
+        config_lower = config_segment.lower()
+        if "asan" in config_lower:
             sanitizer_from_url = "address"
-        elif "tsan" in config_segment:
+        elif "tsan" in config_lower:
             sanitizer_from_url = "thread"
-        elif "msan" in config_segment:
+        elif "msan" in config_lower:
             sanitizer_from_url = "memory"
+        build_preset_from_url = build_preset_from_config_segment(config_segment)
 
     base_url = url.rsplit("/", 1)[0]
 
@@ -250,12 +272,15 @@ def main() -> None:
     out_base = out_base.resolve()
 
     effective_sanitizer = args.sanitizer or sanitizer_from_url
+    effective_build_preset = args.build_preset or build_preset_from_url
     if args.dry_run:
         print(f"URL: {url}")
         print(f"Job type: {job_type}")
         print(f"Run ID: {run_id}")
         if sanitizer_from_url:
             print(f"Sanitizer (from URL): {sanitizer_from_url}")
+        if effective_build_preset:
+            print(f"Build preset: {effective_build_preset}")
         print(f"Base URL: {base_url}")
         print(f"Output base: {out_base}")
         print(f"Repo root: {repo_root}")
@@ -329,6 +354,8 @@ def main() -> None:
             cmd += ["--resources-jsonl", str(resources_path)]
         if effective_sanitizer:
             cmd += ["--sanitizer", effective_sanitizer]
+        if effective_build_preset:
+            cmd += ["--build-preset", effective_build_preset]
 
         print(f"Running dashboard for {try_name} ...")
         rc = subprocess.run(cmd, cwd=repo_root)

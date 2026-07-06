@@ -185,7 +185,7 @@ public:
             Self->EraseKnownDrivesOnDisconnected(&nodeInfo);
             YDB_LOG_ERROR("Error during UpdateDevicesInfo after receiving TEvControllerRegisterNode",
                 {"marker", "BSCTXRN00"},
-                {"TExError", e.what()});
+                {"errorReason", e.what()});
         }
 
         bool validated = true;

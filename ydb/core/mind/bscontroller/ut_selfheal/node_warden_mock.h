@@ -59,15 +59,15 @@ public:
 
     void Handle(TEvCheckState::TPtr ev) {
         auto& msg = *ev->Get();
-        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "CheckState from expected current",
+        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "CheckState",
             {"nodeId", NodeId},
             {"sender", ev->Sender},
-            {"state", msg.State},
+            {"expectedState", msg.State},
             {"currentState", CurrentState});
         if (CurrentState == msg.State) {
             YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "Sending Done",
                 {"nodeId", NodeId},
-                {"sender", ev->Sender});
+                {"recipient", ev->Sender});
             Send(ev->Sender, new TEvDone);
         } else {
             Queue.emplace(msg.State, ev->Sender);
@@ -84,7 +84,7 @@ public:
         for (auto it = r.first; it != r.second; ++it) {
             YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "Sending Done",
                 {"nodeId", NodeId},
-                {"value", it->second});
+                {"recipient", it->second});
             Send(it->second, new TEvDone);
         }
         Queue.erase(r.first, r.second);

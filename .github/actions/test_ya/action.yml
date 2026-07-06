@@ -151,7 +151,6 @@ runs:
       run: |
         ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
         echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
-        echo "GITHUB_WORKFLOW=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
 
     - name: Setup cache
       shell: bash

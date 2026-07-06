@@ -463,7 +463,7 @@ namespace NKikimr::NDDisk {
         ui64 freeSpace = PersistentBufferSpaceAllocator.GetFreeSpace();
         ui64 ownedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
 
-        if (freeSpace * 100 < ownedChunks * SectorInChunk * PersistentBufferFormat.PreallocateChunksFreeSpace
+        if (freeSpace * 100 < ownedChunks * SectorInChunk * PersistentBufferFormat.PreallocateFreeSpaceThresholdPercent
             && ownedChunks < PersistentBufferFormat.MaxChunks) {
             IssuePersistentBufferChunkAllocation();
         }

@@ -1953,7 +1953,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     Y_UNIT_TEST(PersistentBufferPendingQueueOverfill) {
         TTestContext ctx;
-        // Disable proactive chunk preallocation (PreallocateChunksFreeSpace = 0):
+        // Disable proactive chunk preallocation (PreallocateFreeSpaceThresholdPercent = 0):
         // this test exercises the reactive allocation path that fires only when
         // the buffer is completely exhausted.  With the default threshold the
         // proactive path would allocate a chunk around write 916 and break the
@@ -1965,7 +1965,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         fmt.MaxChunkRestoreInflight = 8;
         fmt.UpdateFreeSpaceInfoMilliseconds = 5000;
         fmt.PerTabletStorageLimit = 512 * 1024;
-        fmt.PreallocateChunksFreeSpace = 0;
+        fmt.PreallocateFreeSpaceThresholdPercent = 0;
         const TDiskHandle disk = ctx.CreateDDisk(6, 1, fmt);
         std::unique_ptr<TEventHandle<NPDisk::TEvLog>> log;
 
@@ -3100,25 +3100,25 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     // ─────────────────────────────────────────────────────────────────────────
     // Tests for proactive chunk preallocation
-    // (TPersistentBufferFormat::PreallocateChunksFreeSpace).
+    // (TPersistentBufferFormat::PreallocateFreeSpaceThresholdPercent).
     //
     // PreprocessPersistentBufferWrite issues a chunk allocation in advance when
-    //   freeSpace * 100 < PreallocateChunksFreeSpace * ownedChunks * SectorInChunk
+    //   freeSpace * 100 < PreallocateFreeSpaceThresholdPercent * ownedChunks * SectorInChunk
     //   && ownedChunks < MaxChunks
-    // i.e. when free space drops below PreallocateChunksFreeSpace percent of the
+    // i.e. when free space drops below PreallocateFreeSpaceThresholdPercent percent of the
     // currently owned capacity, a new chunk is allocated before the buffer runs
     // out of space.
     //
     // Shared math (4 init chunks, 128 MB chunks, 4 KB sectors):
     //   SectorsPerChunk = 32768, TotalSectors = 4 x 32768 = 131072.
     //   Each 128-block write occupies 129 sectors (128 data + 1 header).
-    //   With PreallocateChunksFreeSpace = 99 the trigger threshold is
+    //   With PreallocateFreeSpaceThresholdPercent = 99 the trigger threshold is
     //   free < 99 x 4 x 32768 / 100 = 129761.28:
     //     before write 11: free = 131072 - 10*129 = 129782 -> no trigger;
     //     before write 12: free = 131072 - 11*129 = 129653 -> trigger.
     // ─────────────────────────────────────────────────────────────────────────
 
-    NDDisk::TPersistentBufferFormat MakeProactiveAllocationFormat(ui32 maxChunks, ui32 preallocateChunksFreeSpace) {
+    NDDisk::TPersistentBufferFormat MakeProactiveAllocationFormat(ui32 maxChunks, ui32 preallocateFreeSpaceThresholdPercent) {
         NDDisk::TPersistentBufferFormat fmt;
         fmt.MaxChunks = maxChunks;
         fmt.InitChunks = PersistentBufferInitChunks;
@@ -3127,7 +3127,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         fmt.UpdateFreeSpaceInfoMilliseconds = 5000;
         fmt.PerTabletStorageLimit = 4096_MB; // large enough to never hit the per-tablet limit
         fmt.MinFreeSectorsReserve = 256;
-        fmt.PreallocateChunksFreeSpace = preallocateChunksFreeSpace;
+        fmt.PreallocateFreeSpaceThresholdPercent = preallocateFreeSpaceThresholdPercent;
         return fmt;
     }
 
@@ -3157,7 +3157,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Test: when free space drops below PreallocateChunksFreeSpace percent, a
+    // Test: when free space drops below PreallocateFreeSpaceThresholdPercent percent, a
     // new chunk is allocated in advance, while there is still plenty of free
     // space (long before OVERFILL would fire).
     //
@@ -3167,7 +3167,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
     Y_UNIT_TEST(PersistentBufferProactiveChunkAllocation) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(33, 1,
-            MakeProactiveAllocationFormat(256 /*maxChunks*/, 99 /*preallocateChunksFreeSpace*/));
+            MakeProactiveAllocationFormat(256 /*maxChunks*/, 99 /*preallocateFreeSpaceThresholdPercent*/));
         NDDisk::TQueryCredentials creds = Connect(ctx, disk.PBServiceId, 80, 1);
 
         // ── Writes 1..11: free space stays above the 99% threshold, so no
@@ -3258,7 +3258,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Test: PreallocateChunksFreeSpace = 0 disables proactive allocation
+    // Test: PreallocateFreeSpaceThresholdPercent = 0 disables proactive allocation
     // completely (freeSpace * 100 < 0 is never true), even when the buffer is
     // allowed to grow (MaxChunks > InitChunks).
     //
@@ -3268,7 +3268,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
     Y_UNIT_TEST(PersistentBufferProactiveAllocationDisabledByZeroThreshold) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(35, 1,
-            MakeProactiveAllocationFormat(256 /*maxChunks*/, 0 /*preallocateChunksFreeSpace*/));
+            MakeProactiveAllocationFormat(256 /*maxChunks*/, 0 /*PreallocateFreeSpaceThresholdPercent*/));
         NDDisk::TQueryCredentials creds = Connect(ctx, disk.PBServiceId, 82, 1);
 
         // Same 12 writes as in PersistentBufferProactiveChunkAllocation, where

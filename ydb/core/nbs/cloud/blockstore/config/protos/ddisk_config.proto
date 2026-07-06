@@ -52,5 +52,5 @@ message TPBufferConfig
 
     // Allocate a new chunk proactively when free space drops below this percentage
     // of the currently owned capacity. 0 disables proactive allocation. Default 10%.
-    optional uint32 PreallocateChunksFreeSpace = 13;
+    optional uint32 PreallocateFreeSpaceThresholdPercent = 13;
 }

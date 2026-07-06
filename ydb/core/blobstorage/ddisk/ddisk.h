@@ -269,7 +269,7 @@ struct TPersistentBufferFormat {
     ui32 MinFreeSectorsReserve = 256;
     // Allocate a new chunk proactively when free space drops below this percentage
     // of the currently owned capacity. 0 disables proactive allocation.
-    ui32 PreallocateChunksFreeSpace = 10;
+    ui32 PreallocateFreeSpaceThresholdPercent = 10;
 };
 
 #define DECLARE_DDISK_EVENT(NAME) \

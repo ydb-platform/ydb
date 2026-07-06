@@ -88,7 +88,7 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
     } else if (currentTierName != IStoragesManager::DefaultStorageId) {
         //        if (currentTierName == "deploy_logs_s3") {
         //            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
-                          {"pathId", PathId});
+        //                  {"pathId", PathId});
         //            AFL_VERIFY(false)("pathId", PathId);
         //        }
         auto storagesWrite = targetSchema->GetIndexInfo().GetUsedStorageIds(IStoragesManager::DefaultStorageId);

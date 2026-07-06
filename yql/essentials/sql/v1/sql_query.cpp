@@ -2489,6 +2489,12 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         return false;
     }
 
+    if (params.RenameColumn) {
+        // rename column action is followed by some other actions
+        Error() << "RENAME COLUMN can not be used together with another table action";
+        return false;
+    }
+
     switch (node.Alt_case()) {
         case TRule_alter_table_action::kAltAlterTableAction1: {
             // ADD COLUMN

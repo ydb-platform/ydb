@@ -59,7 +59,7 @@ std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow::Re
         auto c = batch->GetColumnByName(Fields[i].GetFieldId());
         auto f = schema->GetFieldByName(Fields[i].GetFieldId());
         if (!c || !f) {
-            YDB_LOG_ERROR("Incorrect field name",
+            YDB_LOG_ERROR("Incorrect field name in batch",
                 {"fieldId", Fields[i].GetFieldId()});
             return {};
         }
@@ -68,7 +68,7 @@ std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow::Re
             columns.emplace_back(c);
             fieldIds.emplace_back(f->name());
         } else if (c->type()->id() == arrow::Type::STRING) {
-            YDB_LOG_ERROR("Json have not been simple string. it must be JsonDocument",
+            YDB_LOG_ERROR("Json have not been simple string. It must be JsonDocument",
                 {"fieldId", Fields[i].GetFieldId()});
             return {};
         } else if (c->type()->id() == arrow::Type::BINARY) {
@@ -85,14 +85,14 @@ std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow::Re
                 NYql::TIssues issues;
                 const NYql::NJsonPath::TJsonPathPtr jsonPath = NYql::NJsonPath::ParseJsonPath(Fields[i].GetJsonPath(), issues, 100);
                 if (!issues.Empty()) {
-                    YDB_LOG_ERROR("Cannot parse path for json",
-                        {"issues", issues});
+                    YDB_LOG_ERROR("Cannot parse path for json extraction",
+                        {"error", issues});
                     return {};
                 }
 
                 const auto result = NYql::NJsonPath::ExecuteJsonPath(jsonPath, binaryJsonRoot, NYql::NJsonPath::TVariablesMap{}, nullptr);
                 if (result.IsError()) {
-                    YDB_LOG_ERROR("Runtime errors found on json path",
+                    YDB_LOG_ERROR("Runtime errors found on json path usage",
                         {"error", result.GetError()});
                     return {};
                 }
@@ -125,7 +125,7 @@ std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow::Re
             fields.emplace_back(std::make_shared<arrow::Field>(Fields[i].GetFullId(), std::make_shared<arrow::StringType>()));
             columns.emplace_back(fetcher->BuildColumn());
         } else {
-            YDB_LOG_ERROR("Incorrect column type for json",
+            YDB_LOG_ERROR("Incorrect column type for json extraction",
                 {"fieldId", Fields[i].GetFieldId()});
             return {};
         }
@@ -143,8 +143,8 @@ std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow::Re
         AFL_VERIFY(result);
         return *result;
     } else {
-        YDB_LOG_ERROR("Undefined hash",
-            {"type", HashType});
+        YDB_LOG_ERROR("Undefined hash type",
+            {"hashType", HashType});
         return {};
     }
 }

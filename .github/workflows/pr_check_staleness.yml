@@ -1,0 +1,61 @@
+name: PR-check staleness guard
+
+on:
+  schedule:
+    - cron: '15 * * * *'
+  push:
+    branches:
+      - main
+      - 'stable-*'
+      - 'prestable-*'
+      - 'stream-nb-*'
+      - 'dev-*'
+      - 'rc-*'
+      - 'q-stable-*'
+  workflow_dispatch:
+    inputs:
+      pull_number:
+        description: 'Optional PR number to check (empty = all open PRs)'
+        required: false
+        type: string
+      dry_run:
+        description: 'Print actions without updating statuses/comments'
+        type: boolean
+        default: false
+
+concurrency:
+  group: pr-check-staleness
+  cancel-in-progress: false
+
+jobs:
+  check-stale-pr-checks:
+    if: vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).pr_check == true
+    runs-on: [self-hosted, tiny-worker]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip requests
+
+      - name: Mark stale PR-check results
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          args=()
+          if [ -n "${{ github.event.inputs.pull_number }}" ]; then
+            args+=(--pull-number "${{ github.event.inputs.pull_number }}")
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            args+=(--base-branch "${{ github.ref_name }}")
+          fi
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          python3 ./.github/scripts/check_stale_pr_checks.py "${args[@]}"

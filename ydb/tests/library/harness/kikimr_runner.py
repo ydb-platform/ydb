@@ -363,14 +363,16 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         return self.kafka_api_port
 
     def start(self):
+        self.__port_allocator.hold_port_bindings()
         try:
-            self.__port_allocator.hold_port_bindings()
             self.update_command(self.__make_run_command())
             self.__port_allocator.release_port_bindings()
             super(KiKiMRNode, self).start()
-        finally:
-            logger.info("Started node %s", self)
-            logger.info("Node %s version:\n%s", self.node_id, self.get_node_binary_version())
+        except Exception:
+            self.__port_allocator.hold_port_bindings()
+            raise
+        logger.info("Started node %s", self)
+        logger.info("Node %s version:\n%s", self.node_id, self.get_node_binary_version())
 
     def read_node_config(self):
         config_file = os.path.join(self.__config_path, "config.yaml")

@@ -144,6 +144,9 @@ class PortManager(object):
                 _, reservation = self._filelocks.popitem()
                 self._close_reservation(reservation)
 
+    def _reserved_ports(self):
+        return sorted(self._filelocks.keys())
+
     def get_port_range(self, start_port, count, random_start=True):
         assert count > 0
         if start_port and self._no_random_ports():
@@ -179,7 +182,7 @@ class PortManager(object):
 
             raise PortManagerException(
                 "Failed to find valid port range (start_port: {} count: {}) (range: {} used: {})".format(
-                    start_port, count, self._valid_range, self._filelocks
+                    start_port, count, self._valid_range, self._reserved_ports()
                 )
             )
 
@@ -195,7 +198,9 @@ class PortManager(object):
             return port
 
         if len(self._filelocks) >= self._valid_port_count:
-            raise PortManagerException("All valid ports are taken ({}): {}".format(self._valid_range, self._filelocks))
+            raise PortManagerException("All valid ports are taken ({}): {}".format(
+                self._valid_range, self._reserved_ports()
+            ))
 
         salt = random.randint(0, UI16MAXVAL)
         for attempt in six.moves.range(self._valid_port_count):
@@ -212,7 +217,9 @@ class PortManager(object):
             return probe_port
 
         raise PortManagerException(
-            "Failed to find valid port (range: {} used: {})".format(self._valid_range, self._filelocks)
+            "Failed to find valid port (range: {} used: {})".format(
+                self._valid_range, self._reserved_ports()
+            )
         )
 
     def _capture_port(self, port, sock_type, hold_socket=False):
@@ -227,6 +234,8 @@ class PortManager(object):
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
         else:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if hasattr(sock, 'set_inheritable'):
+            sock.set_inheritable(False)
 
     def _try_bind_port(self, port, sock_type):
         sock = self._make_socket(sock_type)

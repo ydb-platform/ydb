@@ -541,7 +541,7 @@ public:
     void Handle(TEvDeleteObjectsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         YDB_LOG_WARN("DeleteObjects: not implemented",
-            {"objectsCount", request.GetDelete().GetObjects().size()});
+            {"objectCount", request.GetDelete().GetObjects().size()});
         ReplyError<TEvDeleteObjectsResponse>(ev->Sender, {.ErrorMessage = "Not implemented"});
     }
 

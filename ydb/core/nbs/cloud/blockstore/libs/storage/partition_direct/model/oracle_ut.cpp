@@ -41,6 +41,14 @@ struct THostStateControllerMock: public IHostStateController
     }
 };
 
+TStorageConfigPtr MakeStorageConfig()
+{
+    NProto::TStorageServiceConfig rawConfig;
+    rawConfig.MutableOracleConfig()->SetTimePredictionHistorySize(10);
+    rawConfig.MutableOracleConfig()->SetTimePredictionNthFromEnd(1);
+    return std::make_shared<TStorageConfig>(rawConfig);
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -428,8 +436,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
     Y_UNIT_TEST(GetReadHedgingDelayDDiskAndPBufferAreIndependent)
     {
-        NProto::TStorageServiceConfig rawConfig;
-        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+        auto storageConfig = MakeStorageConfig();
 
         TOracle oracle(storageConfig, nullptr);
         auto now = TInstant::Now();
@@ -482,8 +489,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
     Y_UNIT_TEST(GetWriteHedgingDelayReturnsDefaultWhenNoHistory)
     {
-        NProto::TStorageServiceConfig rawConfig;
-        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+        auto storageConfig = MakeStorageConfig();
 
         TOracle oracle(storageConfig, nullptr);
 
@@ -501,8 +507,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
     Y_UNIT_TEST(GetWriteHedgingDelayDirectAndIndirectAreIndependent)
     {
-        NProto::TStorageServiceConfig rawConfig;
-        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+        auto storageConfig = MakeStorageConfig();
 
         TOracle oracle(storageConfig, nullptr);
         auto now = TInstant::Now();

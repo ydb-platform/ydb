@@ -95,14 +95,14 @@ public:
     {
         return GetFromConfig(
             StorageConfig->GetOracleConfig().GetTimePredictionHistorySize(),
-            100);
+            0);
     }
 
     [[nodiscard]] ui32 GetTimePredictionNthFromEnd() const
     {
         return GetFromConfig(
             StorageConfig->GetOracleConfig().GetTimePredictionNthFromEnd(),
-            1);
+            0);
     }
 
 private:

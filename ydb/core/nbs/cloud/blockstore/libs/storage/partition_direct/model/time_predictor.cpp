@@ -14,11 +14,11 @@ TTimePredictor::THistory::THistory(size_t capacity)
 
 void TTimePredictor::THistory::Add(TDuration time)
 {
+    Durations.insert(time);
     auto extractred = History.PushBack(time);
     if (extractred) {
         Durations.erase(Durations.find(*extractred));
     }
-    Durations.insert(time);
 }
 
 TDuration TTimePredictor::THistory::Predict(size_t nthFromEnd) const
@@ -39,10 +39,7 @@ TTimePredictor::TTimePredictor(size_t capacity, size_t nthFromEnd)
     : Capacity(capacity)
     , NthFromEnd(nthFromEnd)
     , History(DirectBlockGroupHostCount, THistory(capacity))
-{
-    Y_ABORT_UNLESS(Capacity > 0);
-    Y_ABORT_UNLESS(NthFromEnd < Capacity);
-}
+{}
 
 void TTimePredictor::Add(THostIndex host, TDuration time)
 {
@@ -69,6 +66,10 @@ TDuration TTimePredictor::Predict(THostIndex host) const
 
 TDuration TTimePredictor::Predict(THostMask hostMask) const
 {
+    if (NthFromEnd >= Capacity) {
+        return {};
+    }
+
     TDuration result;
     for (auto host: hostMask) {
         result = Max(result, Predict(host));

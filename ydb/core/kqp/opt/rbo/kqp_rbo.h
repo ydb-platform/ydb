@@ -64,8 +64,19 @@ class ISimplifiedRule : public IRule {
 class IRBOStage : public NNonCopyable::TNonCopyable {
   public:
     IRBOStage(TString&& stageName) : StageName(std::move(stageName)) {}
-    
+
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) = 0;
+
+    // If you return true here, then runtime will make sure that all the properties
+    // you set in "Props" are up to date when your stage runs.
+
+    // Some stages might want to control this manually instead. For example,
+    // TRuleBasedStage recomputes properties lazily, only when a particular rule
+    // actually expects them, so it opts out of this system and handles it internally.
+    virtual bool NeedsInitialProps() const {
+        return true;
+    }
+
     virtual ~IRBOStage() = default;
     ui32 Props = 0x00;
 
@@ -79,6 +90,9 @@ class TRuleBasedStage : public IRBOStage {
   public:
     TRuleBasedStage(TString&& stageName, TVector<std::unique_ptr<IRule>>&& rules);
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
+    virtual bool NeedsInitialProps() const override {
+        return false;
+    }
 
     TVector<std::unique_ptr<IRule>> Rules;
 };

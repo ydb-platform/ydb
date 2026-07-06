@@ -668,7 +668,7 @@ private:
 
         auto it = InFlight.find(requestId);
         if (it == InFlight.end()) {
-            YDB_LOG_ERROR("[TStatService::QueryStatistics] RequestId[ Not found",
+            YDB_LOG_ERROR("[TStatService::QueryStatistics] RequestId not found",
                 {"requestId", requestId});
             ReplyFailed(requestId, true);
             return;
@@ -735,7 +735,7 @@ private:
         std::unique_ptr<TNavigate> navigate(ev->Get()->Request.Release());
 
         auto requestId = ev->Cookie == 0 ? navigate->Cookie : ev->Cookie;
-        YDB_LOG_DEBUG("[TStatService::TEvNavigateKeySetResult] RequestId[",
+        YDB_LOG_DEBUG("[TStatService::TEvNavigateKeySetResult] TEvNavigateKeySetResult",
             {"requestId", requestId});
 
         // Search for the database to query to the statistics table.
@@ -745,7 +745,7 @@ private:
             });
 
             if (entry == navigate->ResultSet.end()) {
-                YDB_LOG_ERROR("[TStatService::TEvNavigateKeySetResult] RequestId[ Navigate failed",
+                YDB_LOG_ERROR("[TStatService::TEvNavigateKeySetResult] Navigate failed",
                     {"requestId", requestId});
                 ReplyFailed(requestId, true);
                 return;
@@ -760,7 +760,7 @@ private:
             const auto domainInfo = entry->DomainInfo;
             const auto& pathId = domainInfo->IsServerless() ? domainInfo->ResourcesDomainKey : domainInfo->DomainKey;
 
-            YDB_LOG_DEBUG("[TStatService::TEvNavigateKeySetResult] RequestId[ resolve DatabasePath[",
+            YDB_LOG_DEBUG("[TStatService::TEvNavigateKeySetResult] resolve DatabasePath",
                 {"requestId", requestId},
                 {"pathId", pathId});
             auto navigateRequest = std::make_unique<TNavigate>();

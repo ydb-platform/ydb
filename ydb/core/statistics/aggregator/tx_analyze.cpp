@@ -49,11 +49,11 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
         // opId-only lookup (Current*, MarkFinished, etc.).
         auto* existingOperation = Self->ForceTraversalOperation(operationId);
         if (existingOperation && existingOperation->DatabaseName != Record().GetDatabase()) {
-            YDB_LOG_WARN("now",
+            YDB_LOG_WARN("TTxAnalyze::Execute. Replacing force traversal with same OperationId from different database",
                 {"tabletId", Self->TabletID()},
                 {"operationId", operationId},
-                {"#_existingOperation->DatabaseName", existingOperation->DatabaseName},
-                {"#_Record().GetDatabase", Record().GetDatabase()});
+                {"existingDatabase", existingOperation->DatabaseName},
+                {"newDatabase", Record().GetDatabase()});
             Self->DeleteForceTraversalOperation(operationId, db);
             existingOperation = nullptr;
         }

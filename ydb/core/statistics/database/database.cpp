@@ -216,7 +216,7 @@ NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId
 void DispatchLoadStatisticsQuery(
         const TActorId& replyToActor, ui64 queryId,
         const TString& database, const TPathId& pathId, EStatType statType, std::optional<ui32> columnTag) {
-    YDB_LOG_DEBUG("[DispatchLoadStatisticsQuery] QueryId[ PathId[ StatType[ ColumnTag[",
+    YDB_LOG_DEBUG("[DispatchLoadStatisticsQuery] Dump queryId, pathId, statType, columnTag",
         {"queryId", queryId},
         {"pathId", pathId},
         {"statType", static_cast<ui32>(statType)},
@@ -259,7 +259,7 @@ void DispatchLoadStatisticsQuery(
             Y_ABORT_UNLESS(rowsCount < 2);
 
             if (rowsCount == 0) {
-                YDB_LOG_WARN("[ReadRowsResponse] QueryId[ RowsCount[ 0",
+                YDB_LOG_WARN("[ReadRowsResponse] ReadRowsResponse returned zero rows",
                     {"queryId", queryId});
             }
 

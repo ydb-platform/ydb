@@ -487,7 +487,7 @@ void TStatisticsAggregator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
             }
             YDB_LOG_CRIT("TEvDeliveryProblem with unexpected tablet",
                 {"tabletId", TabletID()},
-                {"tabletId", tabletId});
+                {"unexpectedTabletId", tabletId});
         }
     } else {
         YDB_LOG_ERROR("TEvDeliveryProblem with",

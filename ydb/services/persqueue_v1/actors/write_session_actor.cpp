@@ -591,6 +591,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
         CloseSession(processResult.Reason, processResult.ErrorCode, ctx);
         return;
     }
+<<<<<<< HEAD
     Y_ABORT_UNLESS(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
     Config = std::move(entry.PQGroupInfo->Description);
     Chooser = entry.PQGroupInfo->PartitionChooser;
@@ -601,12 +602,25 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
     Y_ABORT_UNLESS(Config.PartitionsSize() > 0);
     Y_ABORT_UNLESS(Config.HasPQTabletConfig());
     InitialPQTabletConfig = Config.GetPQTabletConfig();
+=======
+    AFL_ENSURE(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
+    PQGroupInfo = entry.PQGroupInfo;
+    const auto& config = PQGroupInfo->Description;
+    Chooser = PQGroupInfo->PartitionChooser;
+    AFL_ENSURE(Chooser);
+    PartitionGraph = PQGroupInfo->PartitionGraph;
+    AFL_ENSURE(PartitionGraph);
+
+    AFL_ENSURE(config.PartitionsSize() > 0);
+    AFL_ENSURE(config.HasPQTabletConfig());
+    InitialPQTabletConfig = config.GetPQTabletConfig();
+>>>>>>> 2d3ae783350 (KIKIMR-25902 Remove extra copy instead of move (#45642))
     if (!DiscoveryConverter->IsValid()) {
         errorReason = Sprintf("Internal server error with topic '%s', Marker# PQ503", DiscoveryConverter->GetPrintableString().c_str());
         CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
         return;
     }
-    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() && !Config.GetPQTabletConfig().GetLocalDC()) {
+    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() && !config.GetPQTabletConfig().GetLocalDC()) {
         errorReason = Sprintf("Write to mirrored topic '%s' is forbidden", DiscoveryConverter->GetPrintableString().c_str());
         CloseSession(errorReason, PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
@@ -619,7 +633,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
     }
 
     if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        const auto& tabletConfig = Config.GetPQTabletConfig();
+        const auto& tabletConfig = config.GetPQTabletConfig();
         SetupCounters(tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
                         tabletConfig.GetYdbDatabasePath(), entry.DomainInfo->IsServerless(),
                       tabletConfig.GetYcFolderId());
@@ -631,7 +645,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
     ACL.Reset(new TAclWrapper(entry.SecurityObject));
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " describe result for acl check");
 
-    const auto meteringMode = Config.GetPQTabletConfig().GetMeteringMode();
+    const auto meteringMode = config.GetPQTabletConfig().GetMeteringMode();
     if (meteringMode != GetMeteringMode().GetOrElse(meteringMode)) {
         return CloseSession("Metering mode has been changed", PersQueue::ErrorCode::OVERLOAD, ctx);
     }
@@ -669,7 +683,16 @@ void TWriteSessionActor<UseMigrationProtocol>::DiscoverPartition(const NActors::
     }
 
     std::optional<ui32> preferedPartition = PreferedPartition == Max<ui32>() ? std::nullopt : std::optional(PreferedPartition);
-    PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID, Config, Chooser, PartitionGraph, FullConverter, SourceId, preferedPartition, InitSpan.GetTraceId()));
+    AFL_ENSURE(PQGroupInfo);
+    const auto& config = PQGroupInfo->Description;
+    PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID,
+                                                                                    config,
+                                                                                    Chooser,
+                                                                                    PartitionGraph,
+                                                                                    FullConverter,
+                                                                                    SourceId,
+                                                                                    preferedPartition,
+                                                                                    InitSpan.GetTraceId()));
 }
 
 template<bool UseMigrationProtocol>

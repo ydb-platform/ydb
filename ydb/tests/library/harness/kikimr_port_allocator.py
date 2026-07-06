@@ -168,8 +168,10 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
 
     def hold_port_bindings(self):
         for port in self._allocated_ports():
-            if port is not None:
-                self.__port_manager.bind_port(port)
+            if port is not None and not self.__port_manager.bind_port(port):
+                raise RuntimeError(
+                    "Failed to re-hold port {} (port may have been taken externally)".format(port)
+                )
 
     def _allocated_ports(self):
         return (

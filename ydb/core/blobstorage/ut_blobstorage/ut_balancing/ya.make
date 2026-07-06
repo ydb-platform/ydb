@@ -1,14 +1,14 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
+FORK_SUBTESTS()
+SPLIT_FACTOR(12)
+
 SIZE(MEDIUM)
 REQUIREMENTS(cpu:1)
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(cpu:4)
-    SPLIT_FACTOR(12)
 ENDIF()
-
-FORK_SUBTESTS()
 
 SRCS(
     balancing.cpp

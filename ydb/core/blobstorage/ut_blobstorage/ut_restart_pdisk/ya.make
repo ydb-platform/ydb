@@ -1,12 +1,9 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(12)
 
 SIZE(MEDIUM)
-
-IF (SANITIZER_TYPE)
-    SPLIT_FACTOR(12)
-ENDIF()
 
 SRCS(
     restart_pdisk.cpp

@@ -1,12 +1,12 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(20)
 
 SIZE(MEDIUM)
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(cpu:4)
-    SPLIT_FACTOR(20)
 ENDIF()
 
 SRCS(

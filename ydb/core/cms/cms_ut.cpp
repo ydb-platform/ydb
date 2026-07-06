@@ -2078,6 +2078,9 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     Y_UNIT_TEST(VDisksEvictionShouldFailOnUnsupportedAction)
     {
         TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        auto cmsConfig = env.GetCmsConfig();
+        cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
+        env.SetCmsConfig(cmsConfig);
         env.CheckPermissionRequest(
             MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
                 MakeAction(TAction::REPLACE_DEVICES, env.GetNodeId(0), 60000000, env.PDiskName(0))
@@ -2089,6 +2092,9 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     Y_UNIT_TEST(VDisksEvictionShouldFailOnMultipleActions)
     {
         TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        auto cmsConfig = env.GetCmsConfig();
+        cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
+        env.SetCmsConfig(cmsConfig);
         env.CheckPermissionRequest(
             MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
                 MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000),
@@ -2103,6 +2109,10 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         auto opts = TTestEnvOpts(8).WithSentinel();
         TCmsTestEnv env(opts);
         env.SetLogPriority(NKikimrServices::CMS, NLog::PRI_DEBUG);
+
+        auto cmsConfig = env.GetCmsConfig();
+        cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
+        env.SetCmsConfig(cmsConfig);
 
         // ok
         auto request1 = env.CheckPermissionRequest(
@@ -2180,6 +2190,10 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         TCmsTestEnv env(opts);
         env.SetLogPriority(NKikimrServices::CMS, NLog::PRI_DEBUG);
 
+        auto cmsConfig = env.GetCmsConfig();
+        cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
+        env.SetCmsConfig(cmsConfig);
+
         // Evict all VDisks from rack 1
         auto request1 = env.CheckPermissionRequest(
             MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
@@ -2221,6 +2235,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // Make transition faster for tests purposes
         auto cmsConfig = env.GetCmsConfig();
         cmsConfig.MutableSentinelConfig()->SetDefaultStateLimit(1);
+        cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
         env.SetCmsConfig(cmsConfig);
 
         // Evict VDisks

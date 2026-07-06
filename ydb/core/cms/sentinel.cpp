@@ -264,6 +264,7 @@ TPDiskStatus::TPDiskStatus(
         const TDuration& initialDeploymentGracePeriod)
     : TPDiskStatusComputer(defaultStateLimit, goodStateLimit, stateLimits, cmsFirstBootTimestamp, initialDeploymentGracePeriod)
     , Current(initialStatus)
+    , CurrentMaintenanceStatus(EMaintenanceStatus::NOT_SET)
     , ChangingAllowed(true)
 {
 }

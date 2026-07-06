@@ -36,6 +36,14 @@ const EMaintenanceStatus = {
     0: "NOT_SET",
     1: "NO_REQUEST",
     2: "LONG_TERM_MAINTENANCE_PLANNED",
+    3: "NO_NEW_VDISKS",
+};
+
+const EMaintenanceStatusColor = {
+    0: "red",    // NOT_SET
+    1: "green",  // NO_REQUEST
+    2: "yellow", // LONG_TERM_MAINTENANCE_PLANNED
+    3: "yellow", // NO_NEW_VDISKS
 };
 
 
@@ -143,7 +151,13 @@ class CmsSentinelState {
     }
 
     maintenanceStatus(arg) {
-        return { "value": arg === undefined ? "nil" : arg + ":" + EMaintenanceStatus[arg], "class": arg === undefined ? undefined : "green" };
+        if (arg === undefined) {
+            return { "value": "nil" };
+        }
+        return {
+            "value": arg + ":" + EMaintenanceStatus[arg],
+            "class": EMaintenanceStatusColor[arg] ?? "red",
+        };
     }
 
     bool(arg) {

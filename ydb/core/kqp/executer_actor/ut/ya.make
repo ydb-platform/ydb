@@ -1,7 +1,13 @@
 UNITTEST_FOR(ydb/core/kqp/executer_actor)
 
+FORK_SUBTESTS()
+
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:4)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:4)
+ELSE()
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 SRCS(
     kqp_executer_ut.cpp

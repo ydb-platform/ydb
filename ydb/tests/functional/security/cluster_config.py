@@ -137,6 +137,10 @@ def create_ydb_configurator(
         'administration_allowed_sids' in security_config and len(security_config['administration_allowed_sids']) > 0
     ), 'administration_allowed_sids was supposed to be set due to default_clusteradmin'
 
+    if enforce_user_token_requirement:
+        config_generator.yaml_config.setdefault('auth_config', {})
+        config_generator.yaml_config['auth_config']['staff_api_user_token'] = cluster_config['default_clusteradmin']
+
     if require_counters_authentication is not None or require_healthcheck_authentication is not None:
         if 'monitoring_config' not in config_generator.yaml_config:
             config_generator.yaml_config['monitoring_config'] = {}

@@ -82,10 +82,10 @@ struct TOptionalValue<T, Value>
     static constexpr std::optional<T> OptionalValue = Value;
 };
 
-template <class TEnum, class TDefaultEnumValue, class TBase, class... TLeafTags>
+template <const char TypeFieldNameValue[], class TEnum, class TDefaultEnumValue, class TBase, class... TLeafTags>
 struct TPolymorphicMapping;
 
-template <class TEnum, TEnum... DefaultValue, CYsonStructDerived TBase, TEnum... Values, class... TDerived>
+template <const char TypeFieldNameValue[], class TEnum, TEnum... DefaultValue, CYsonStructDerived TBase, TEnum... Values, class... TDerived>
     requires (
         CHierarchy<TBase, TDerived...> &&
         // This check is needed to avoid compiling code for an enum that doesn't have a mapping.
@@ -93,11 +93,13 @@ template <class TEnum, TEnum... DefaultValue, CYsonStructDerived TBase, TEnum...
             !TOptionalValue<TEnum, DefaultValue...>::OptionalValue.has_value() ||
             CIsThereDefaultInMapping<TEnum, DefaultValue..., Values...>)
         )
-struct TPolymorphicMapping<TEnum, TOptionalValue<TEnum, DefaultValue...>, TBase, TLeafTag<Values, TDerived>...>
+struct TPolymorphicMapping<TypeFieldNameValue, TEnum, TOptionalValue<TEnum, DefaultValue...>, TBase, TLeafTag<Values, TDerived>...>
     : public TMappingLeaf<TEnum, Values, TBase, TDerived>...
 {
     // NB(apachee): Chose to do as static_assert rather than template requirement as it provided better error message.
     static_assert(AllDifferentValues<TEnum>(Values...), "All values in the mapping must be different");
+
+    static constexpr std::string_view TypeFieldName = TypeFieldNameValue;
 
     static constexpr TEnumIndexedArray<TEnum, bool> ValueMap = {{Values, true}...};
 
@@ -119,7 +121,7 @@ struct TPolymorphicMapping<TEnum, TOptionalValue<TEnum, DefaultValue...>, TBase,
 
 template <class T>
 constexpr bool IsMapping = requires (T t) {
-    [] <class TEnum, class TDefaultEnumValue, class TBase, class... TLeafTags> (TPolymorphicMapping<TEnum, TDefaultEnumValue, TBase, TLeafTags...>) {
+    [] <const char TypeFieldNameValue[], class TEnum, class TDefaultEnumValue, class TBase, class... TLeafTags> (TPolymorphicMapping<TypeFieldNameValue, TEnum, TDefaultEnumValue, TBase, TLeafTags...>) {
     } (t);
 };
 
@@ -132,11 +134,15 @@ constexpr bool IsMapping = requires (T t) {
 template <class TBase, class... TDerived>
 concept CHierarchy = NDetail::CHierarchy<TBase, TDerived...>;
 
-template <class TEnum, class TDefaultEnumValue, class TBase, class... TLeafTags>
-using TPolymorphicEnumMapping = NDetail::TPolymorphicMapping<TEnum, TDefaultEnumValue, TBase, TLeafTags...>;
+template <const char TypeFieldNameValue[], class TEnum, class TDefaultEnumValue, class TBase, class... TLeafTags>
+using TPolymorphicEnumMapping = NDetail::TPolymorphicMapping<TypeFieldNameValue, TEnum, TDefaultEnumValue, TBase, TLeafTags...>;
 
 template <class T>
 concept CPolymorphicEnumMapping = NDetail::IsMapping<T>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+inline constexpr const char DefaultPolymorphicYsonStructTypeFieldName[] = "type";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -157,11 +163,9 @@ concept CPolymorphicEnumMapping = NDetail::IsMapping<T>;
     "field1" = ...;
     "field2" = ...;
 */
-// NB(arkady-e1ppa): Word "type" is reserved
+// NB(arkady-e1ppa): The discriminator field name (default "type") is reserved
 // and must not be used as a field name of any
 // class in the hierarchy.
-// TODO(arkady-e1ppa): Add customisation for reserved name.
-// Would require constexpr strings and thus certain limitations.
 template <CPolymorphicEnumMapping TMapping>
 class TPolymorphicYsonStruct
 {
@@ -173,6 +177,7 @@ public:
     // with some enum indexed tuple (But one has to implement it first)
     // TODO(arkady-e1ppa): Support ctor from anyone from the
     // hierarchy.
+    static constexpr std::string_view TypeFieldName = TMapping::TypeFieldName;
     using TKey = typename TMapping::TKey;
     using TBase = typename TMapping::TBaseClass;
     template <TKey key>
@@ -264,8 +269,8 @@ void Deserialize(TPolymorphicYsonStruct<TMapping>& value, TSource source);
     2) EStructType -- enum which holds short names for
     hierarchy members. They are keys in serialization.
 */
-#define DEFINE_POLYMORPHIC_YSON_STRUCT(name, seq)
-#define DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(name, default, seq)
+#define DEFINE_POLYMORPHIC_YSON_STRUCT(name, base, seq)
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(name, default, base, seq)
 
 //! Usage:
 /*
@@ -293,8 +298,25 @@ void Deserialize(TPolymorphicYsonStruct<TMapping>& value, TSource source);
 
     Will not compile
 */
-#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(name, enum, seq)
-#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(name, enum, default, seq)
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(name, enum, base, seq)
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(name, enum, default, base, seq)
+
+//! Copies of the macros above, but with custom discriminator, i.e. use any field name instead of "type".
+//! Example usage:
+//! \code
+//! constexpr const char CustomDiscriminator[] = "custom_type";
+//!
+//! DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_CUSTOM_DISCRIMINATOR(Struct, CustomDiscriminator, TBaseStruct,
+//!     ((Base)     (TBaseStruct))
+//!     ((Derived1) (TDerivedStruct1))
+//!     ((Derived2) (TDerivedStruct2))
+//! );
+//! \endcode
+//! This struct's field containing the type is "custom_type", rather than "type", which is the default.
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_CUSTOM_DISCRIMINATOR(name, discriminator, base, seq)
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_CUSTOM_DISCRIMINATOR_AND_DEFAULT(name, discriminator, default, base, seq)
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_CUSTOM_DISCRIMINATOR(name, discriminator, enum, base, seq)
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_CUSTOM_DISCRIMINATOR_AND_DEFAULT(name, discriminator, enum, default, base, seq)
 
 ////////////////////////////////////////////////////////////////////////////////
 

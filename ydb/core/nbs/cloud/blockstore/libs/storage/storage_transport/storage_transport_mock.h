@@ -7,7 +7,6 @@
 #include <library/cpp/threading/future/future.h>
 
 #include <util/generic/map.h>
-#include <util/generic/yexception.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
@@ -39,6 +38,8 @@ public:
     TReplyStatusE WriteToDDiskStatus = TReplyStatus::OK;
     TReplyStatusE ReadFromPBufferStatus = TReplyStatus::OK;
     TReplyStatusE WriteToPBufferStatus = TReplyStatus::OK;
+    TReplyStatusE WriteToManyPBufferStatus = TReplyStatus::OK;
+    TReplyStatusE SyncWithPBufferStatus = TReplyStatus::OK;
 
     // DDiskInstanceGuid reported in an immediate successful connect.
     ui64 DefaultDDiskInstanceGuid = 1;

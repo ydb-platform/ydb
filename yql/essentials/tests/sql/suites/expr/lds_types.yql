@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 select
     FormatType(EmptyList), TypeKind(TypeHandle(EmptyList)), 
     FormatType(ParseType("EmptyList")), EmptyList(),

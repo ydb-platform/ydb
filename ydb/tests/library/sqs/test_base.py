@@ -366,7 +366,7 @@ class KikimrSqsTestBase(object):
                 return
         raise RuntimeError("Failed to create SQS user")
 
-    def _create_api_for_user(self, user_name, raise_on_error=True, security_token=None, force_private=False, iam_token=None, folder_id=None):
+    def _create_api_for_user(self, user_name, raise_on_error=True, security_token=None, force_private=False, iam_token=None, folder_id=None, extra_headers=None):
         api = SqsHttpApi(self.cluster.nodes[1].host,
                          self.cluster_nodes[0].sqs_port,
                          user_name,
@@ -375,7 +375,8 @@ class KikimrSqsTestBase(object):
                          security_token=security_token,
                          force_private=force_private,
                          iam_token=iam_token,
-                         folder_id=folder_id
+                         folder_id=folder_id,
+                         extra_headers=extra_headers
                          )
         return api
 

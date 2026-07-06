@@ -1,0 +1,9 @@
+/* dqfile can not - missing langver support */
+/* hybridfile can not - missing langver support */
+USE plato;
+
+PRAGMA YqlSelect = 'force';
+PRAGMA TablePathPrefix = '//';
+
+SELECT * FROM Input ORDER BY subkey;
+SELECT * FROM `Input` ORDER BY subkey;

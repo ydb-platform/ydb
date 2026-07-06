@@ -9,6 +9,8 @@
 
 #include <yt/yt/core/utilex/random.h>
 
+#include <algorithm>
+
 namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -27,7 +29,7 @@ void TDefaultInvocationTimePolicy::ProcessResult()
 
 TInstant TDefaultInvocationTimePolicy::GenerateKickstartDeadline()
 {
-    return TInstant::Now() + RandomDuration(Splay);
+    return LastDeadline_ = TInstant::Now() + RandomDuration(Splay);
 }
 
 bool TDefaultInvocationTimePolicy::IsEnabled()
@@ -54,12 +56,18 @@ void TDefaultInvocationTimePolicy::SetOptions(std::optional<TDuration> period)
 {
     Period = period;
 }
+
 TInstant TDefaultInvocationTimePolicy::GenerateNextDeadline()
 {
-    return TInstant::Now() + GenerateDelay();
+    switch (DelayMode) {
+        case EPeriodicExecutorDelayMode::FromPreviousStart:
+            // Keep a fixed start-to-start period; never schedule into the past.
+            return LastDeadline_ = std::max(LastDeadline_ + GenerateDelay(), TInstant::Now());
+        case EPeriodicExecutorDelayMode::FromPreviousEnd:
+            return LastDeadline_ = TInstant::Now() + GenerateDelay();
+    }
+    YT_ABORT();
 }
-
-
 
 bool TDefaultInvocationTimePolicy::IsOutOfBandProhibited()
 {

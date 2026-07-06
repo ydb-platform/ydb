@@ -19,6 +19,7 @@ struct TBusTraits
 
     IBusServerPtr StartServer(IMessageHandlerPtr handler);
     IBusClientPtr CreateClient();
+    IBusClientPtr CreateClient(std::string address);
     IBusClientPtr CreateUnreachableClient();
 };
 

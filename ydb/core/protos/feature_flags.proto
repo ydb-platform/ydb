@@ -153,7 +153,7 @@ message TFeatureFlags {
     optional bool EnableDbMetadataCache = 127 [default = false];
     optional bool EnableTableDatetime64 = 128 [default = true];
     optional bool EnableResourcePools = 129 [default = true];
-    optional bool EnableColumnStatistics = 130 [default = true];
+    optional bool EnableColumnStatistics = 130 [default = false];
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
     optional bool EnableResourcePoolsOnServerless = 132 [default = false];
     optional bool EnableVectorIndex = 133 [default = true];
@@ -294,7 +294,7 @@ message TFeatureFlags {
     optional bool UseRealUserIpForBlackbox = 256 [default = false];
     optional bool EnableNodeShutdownHints = 257 [default = false];
     optional bool EnableTopicPartitionSplitBasedOnMessages = 258 [default = false];
-    optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
+    reserved 259; // ForbidDiscoveryInnerDbPaths
     optional bool EnableStreamingQueryDisposition = 260 [default = false];
     // Skip persisting partition rows that are not affected by a split/merge operation.
     optional bool EnableSplitMergePartialPersistence = 261 [default = true];
@@ -306,7 +306,7 @@ message TFeatureFlags {
     optional bool EnableJsonIndexAutoSelect = 267 [default = false];
     optional bool ForbidRequestsToStaticNodesWithoutDatabase = 268 [default = true];
     optional bool EnableTabletDevUiSecurePath = 269 [default = false];
-    optional bool EnableExtraSidsControlForHttpViewer = 270 [default = true];
+    optional bool EnableExtraSidsControlForHttpViewer = 270 [default = false];
     // Use TablePartitionsByShardIdx (keyed by ShardIdx) instead of TablePartitions
     // (keyed by positional index) for local tables.  When ON, split/merge writes only
     // O(k) rows (src+dst shards) instead of O(N) rows (all partitions after srcFirstIdx).
@@ -317,12 +317,19 @@ message TFeatureFlags {
     optional bool EnableTopicWriteOffsetDeltaInKeys = 275 [default = false];
     optional bool EnableTablePartitionsConsistencyCheck = 276 [default = true];
     optional bool EnableKqpConstraintsTransformer = 277 [default = true];
-    optional bool EnableLocalIndexAsSchemeObject = 278 [default = true];
+    optional bool EnableLocalIndexAsSchemeObject = 278 [default = false];
     optional bool EnableDataShardDetailedMetrics = 279 [default = false];
     optional bool EnableCompactFulltextIndex = 280 [default = false];
     optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
     optional bool EnableFulltextIndexPrefix = 282 [default = false];
-    optional bool EnableAccessServiceV2Interface = 283 [default = true, (RequireRestart) = true];
-    optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
+    optional bool EnableAccessServiceV2Interface = 283 [default = false, (RequireRestart) = true];
+    optional bool EnableAnalyzeLongRunningOperation = 284 [default = false];
     optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
+    optional bool EnableTopicDeferredPublish = 286 [default = false];
+    optional bool EnableConfiguredBootstrapper = 287 [default = false, (RequireRestart) = true];
+    optional bool EnableSmallBlobsQuotaEnforcement = 288 [default = false];
+    // Guards using the synthetic __ydb_row_id column as doc_id for fulltext/JSON indexes over tables
+    // whose primary key is not a single integer. When OFF, no __ydb_row_id column or its unique index
+    // is used or auto-provisioned, and such indexes fall back to requiring a single integer primary key.
+    optional bool EnableFulltextIndexRowId = 289 [default = true];
 }

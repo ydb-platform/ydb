@@ -248,14 +248,4 @@ void TTabletRedirectionHint::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TUnfoldedColumns::Persist(const TStreamPersistenceContext& context)
-{
-    using NYT::Persist;
-
-    Persist(context, TableColumn);
-    Persist(context, IndexColumn);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NYT::NTabletClient

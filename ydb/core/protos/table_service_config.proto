@@ -307,7 +307,7 @@ message TTableServiceConfig {
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 3, (InvalidateCompileCache) = true];
     reserved 59; //optional bool OldLookupJoinBehaviour = 59 [default = false];
 
-    optional bool EnableOltpSink = 60 [default = true, (InvalidateCompileCache) = true];
+    reserved 60; // EnableOltpSink
 
     enum EBlockChannelsMode {
         BLOCK_CHANNELS_SCALAR = 0;
@@ -382,7 +382,7 @@ message TTableServiceConfig {
     optional bool EnableStreamWrite = 77 [default = false, (InvalidateCompileCache) = true];
     optional bool EnableBatchUpdates = 78 [default = true, deprecated = true];
 
-    optional bool AllowMultiBroadcasts = 79 [default = true, (InvalidateCompileCache) = true];
+    optional bool AllowMultiBroadcasts = 79 [default = false, (InvalidateCompileCache) = true];
 
     optional bool DefaultEnableShuffleElimination = 80 [default = true, (InvalidateCompileCache) = true];
 
@@ -411,7 +411,7 @@ message TTableServiceConfig {
 
     optional uint64 BufferPageAllocSize = 90  [ default = 4096 ];
 
-    optional bool EnableOlapPushdownProjections = 91  [ default = true, (InvalidateCompileCache) = true ];
+    optional bool EnableOlapPushdownProjections = 91  [ default = false, (InvalidateCompileCache) = true ];
 
     optional uint32 DefaultLangVer = 92 [default = 202501, (InvalidateCompileCache) = true];
 
@@ -420,7 +420,7 @@ message TTableServiceConfig {
         HASH_V2 = 1;
     }
 
-    optional EHashKind DefaultHashShuffleFuncType = 93 [ default = HASH_V2 , (InvalidateCompileCache) = true];
+    optional EHashKind DefaultHashShuffleFuncType = 93 [ default = HASH_V1 , (InvalidateCompileCache) = true];
 
     optional bool EnableParallelUnionAllConnectionsForExtend = 94  [ default = true, (InvalidateCompileCache) = true];
 
@@ -443,9 +443,9 @@ message TTableServiceConfig {
 
     optional bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = 104 [default = false, (InvalidateCompileCache) = true];
 
-    optional bool EnableDqHashCombineByDefault = 105 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableDqHashCombineByDefault = 105 [default = false, (InvalidateCompileCache) = true];
 
-    optional bool EnableBuildAggregationResultStages = 106 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableBuildAggregationResultStages = 106 [default = false, (InvalidateCompileCache) = true];
 
     optional bool EnforceSqlVersionV1 = 107 [default = true, (InvalidateCompileCache) = true];
 
@@ -478,15 +478,21 @@ message TTableServiceConfig {
 
     optional ETxMode DefaultTxMode = 116 [default = SerializableRW];
 
-    optional bool EnableDqHashAggregateByDefault = 117 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableDqHashAggregateByDefault = 117 [default = false, (InvalidateCompileCache) = true];
 
     optional bool DefaultEnableShuffleEliminationForAggregation = 118 [default = false, (InvalidateCompileCache) = true];
 
     optional bool Antlr4ParserIsAmbiguityError = 119 [default = false, (InvalidateCompileCache) = true];
 
-    optional bool DqHashOperatorsUseBlocks = 120 [default = true, (InvalidateCompileCache) = true];
+    optional bool DqHashOperatorsUseBlocks = 120 [default = false, (InvalidateCompileCache) = true];
 
     optional bool EnableDqSourceStreamLookupJoin = 121 [default = false, (InvalidateCompileCache) = true];
+
+    // Emit the fixed (v1) stream lookup join RowSeqNo cookie format. Keep disabled
+    // until every node in the cluster is upgraded, then enable to fix RowSeqNo
+    // collisions across distributed tasks (taskId >= 16). InvalidateCompileCache
+    // ensures cached query plans are recompiled with the new format when toggled.
+    optional bool EnableStreamLookupJoinCookieV2 = 138 [default = false, (InvalidateCompileCache) = true];
 
     message TCompileCacheWarmupConfig {
         optional uint32 SoftDeadlineSeconds = 1 [default = 10];        // Soft deadline: stops new compilations, waits for in-flight ones to finish
@@ -539,4 +545,11 @@ message TTableServiceConfig {
     optional bool EnableHybridSearch = 135 [default = true, (InvalidateCompileCache) = true];
 
     optional bool EnableStrictSerializableIsolation = 136 [default = false, (InvalidateCompileCache) = true];
+
+    // Remove KqpSequencer from query plan for tables with DEFAULT columns during write operations.
+    optional bool EnableCompileTimeDefaults = 137 [default = false, (InvalidateCompileCache) = true];
+
+    // Cluster default for automatic secondary-index selection in index lookup joins.
+    // Overridable per session via PRAGMA ydb.EnableAutoIndexSelectionForIndexLookupJoin.
+    optional bool EnableAutoIndexSelectionForIndexLookupJoin = 139 [default = false, (InvalidateCompileCache) = true];
 };

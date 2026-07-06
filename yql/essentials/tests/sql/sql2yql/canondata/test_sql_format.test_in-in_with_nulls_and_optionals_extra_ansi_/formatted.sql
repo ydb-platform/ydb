@@ -1,4 +1,3 @@
-/* postgres can not */
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
 SELECT

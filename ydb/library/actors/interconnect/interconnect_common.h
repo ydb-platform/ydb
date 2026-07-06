@@ -60,7 +60,7 @@ namespace NActors {
         ui32 MaxSerializedEventSize = NActors::EventMaxByteSize;
         ui32 PreallocatedBufferSize = 8 << 10; // 8 KB
         ui32 NumPreallocatedBuffers = 16;
-        bool EnableExternalDataChannel = true;
+        bool EnableExternalDataChannel = false;
         bool EnableKernelLiveness = false;
         TDuration KernelKeepAliveIdle = TDuration::Seconds(5);
         TDuration KernelKeepAliveInterval = TDuration::Seconds(1);

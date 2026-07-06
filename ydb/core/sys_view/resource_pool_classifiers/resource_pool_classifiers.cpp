@@ -96,8 +96,8 @@ private:
                     return TCell(memberName.data(), memberName.size());
                 }});
                 insert({TSchema::ResourcePool::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
-                    const auto& memberName = config.GetConfigJson()["resource_pool"].GetString();
-                    return TCell(memberName.data(), memberName.size());
+                    const auto& resourcePool = config.GetConfigJson()["resource_pool"].GetString();
+                    return TCell(resourcePool.data(), resourcePool.size());
                 }});
             }
         };
@@ -114,7 +114,7 @@ private:
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         batch->Finished = true;
         // It's a mandatory condition to keep sorted PK here
-        for (const auto& [name, config] : std::map(resourcePoolsIt->second.begin(), resourcePoolsIt->second.end())) {
+        for (const auto& [name, config] : std::map(resourcePoolsIt->second.ByName.begin(), resourcePoolsIt->second.ByName.end())) {
             if (!StringKeyIsInTableRange({name})) {
                 continue;
             }

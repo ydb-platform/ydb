@@ -16,6 +16,8 @@
 
 #include <util/stream/file.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HTTP_PROXY
+
 namespace NKikimr::NHttpProxy {
     NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config, bool enableV2Interface)
     {
@@ -135,7 +137,8 @@ namespace NKikimr::NHttpProxy {
             }
             ctx.Send(Sender, new TEvServerlessProxy::TEvToken(userToken.GetUserSID(), "", userToken.GetSerializedToken(), {"", DatabaseId, DatabasePath, CloudId, FolderId}));
 
-            LOG_SP_DEBUG_S(ctx, NKikimrServices::HTTP_PROXY, "Authorized successfully");
+            YDB_LOG_DEBUG_CTX(ctx, "Authorized successfully",
+                {"logPrefix", LogPrefix()});
 
             TBase::Die(ctx);
         }
@@ -243,7 +246,10 @@ namespace NKikimr::NHttpProxy {
         void HandleAuthenticationResultImpl(typename TEvResponse::TPtr& ev, const TActorContext& ctx) {
             if (!ev->Get()->Status.Ok()) {
                 RetryCounter.Click();
-                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "retry #" << RetryCounter.AttempN() << "; " << "can not authenticate service account user: " << ev->Get()->Status.Msg);
+                YDB_LOG_INFO_CTX(ctx, "Retry can not authenticate service account",
+                    {"logPrefix", LogPrefix()},
+                    {"attempN", RetryCounter.AttempN()},
+                    {"user", ev->Get()->Status.Msg});
                 if (RetryCounter.HasAttemps()) {
                     SendAuthenticationRequest(ctx);
                     return;
@@ -259,7 +265,9 @@ namespace NKikimr::NHttpProxy {
             RetryCounter.Void();
 
             ServiceAccountId = ev->Get()->Response.subject().service_account().id();
-            LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "authenticated to " << ServiceAccountId);
+            YDB_LOG_INFO_CTX(ctx, "Authenticated",
+                {"logPrefix", LogPrefix()},
+                {"serviceAccountId", ServiceAccountId});
             SendIamTokenRequest(ctx);
         }
 
@@ -292,7 +300,10 @@ namespace NKikimr::NHttpProxy {
                                           const TActorContext& ctx) {
             if (!ev->Get()->Status.Ok()) {
                 RetryCounter.Click();
-                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "retry #" << RetryCounter.AttempN() << "; " << "IAM token issue error: " << ev->Get()->Status.Msg);
+                YDB_LOG_INFO_CTX(ctx, "Retry IAM token issue",
+                    {"logPrefix", LogPrefix()},
+                    {"attempN", RetryCounter.AttempN()},
+                    {"error", ev->Get()->Status.Msg});
 
                 if (RetryCounter.HasAttemps()) {
                     SendIamTokenRequest(ctx);
@@ -308,7 +319,8 @@ namespace NKikimr::NHttpProxy {
             ctx.Send(Sender,
                      new TEvServerlessProxy::TEvToken(ServiceAccountId, ev->Get()->Response.iam_token(), "", {}));
 
-            LOG_SP_DEBUG_S(ctx, NKikimrServices::HTTP_PROXY, "IAM token generated");
+            YDB_LOG_DEBUG_CTX(ctx, "IAM token generated",
+                {"logPrefix", LogPrefix()});
 
             TBase::Die(ctx);
         }

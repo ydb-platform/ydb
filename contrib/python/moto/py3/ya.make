@@ -12,7 +12,7 @@ PEERDIR(
     contrib/python/Werkzeug
     contrib/python/boto3
     contrib/python/botocore
-    contrib/python/cryptography
+    contrib/python/cryptography/py3
     contrib/python/python-dateutil
     contrib/python/requests
     contrib/python/responses

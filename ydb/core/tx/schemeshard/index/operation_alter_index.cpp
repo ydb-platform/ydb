@@ -203,6 +203,17 @@ public:
             newIndexData->SpecializedIndexDescription = tableIndexAlter.GetVectorIndexKmeansTreeDescription();
         }
 
+        // Cascade of a base-table RENAME COLUMN: the caller populates both lists in full
+        // (renamed entries replaced, everything else carried over unchanged) only when this
+        // index is actually affected; any other TAlterTableIndex caller (e.g. marking an index
+        // Ready) never sets these, so CreateNextVersion()'s copy-forward is left untouched.
+        if (tableIndexAlter.KeyColumnNamesSize() > 0) {
+            newIndexData->IndexKeys.assign(tableIndexAlter.GetKeyColumnNames().begin(), tableIndexAlter.GetKeyColumnNames().end());
+        }
+        if (tableIndexAlter.DataColumnNamesSize() > 0) {
+            newIndexData->IndexDataColumns.assign(tableIndexAlter.GetDataColumnNames().begin(), tableIndexAlter.GetDataColumnNames().end());
+        }
+
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterTableIndex, indexPath->PathId);
         txState.State = TTxState::Propose;

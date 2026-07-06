@@ -4939,7 +4939,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
     }
 
-    Y_UNIT_TEST(AlterTableRenameColumnWithIndexIsRejected) { //+
+    Y_UNIT_TEST(AlterTableRenameIndexedColumnCascades) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -4963,15 +4963,39 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        Cdbg << "AlterTable: rename index key column is rejected" << Endl;
+        Cdbg << "AlterTable: rename index key column cascades into the index and its impl table" << Endl;
         TestAlterTable(runtime, ++txId, "/MyRoot/DirA",
-                R"(Name: "Table" Columns { Name: "value0_new" RenameFrom: "value0" })",
-                {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusPreconditionFailed});
+                R"(Name: "Table" Columns { Name: "value0_new" RenameFrom: "value0" })");
+        env.TestWaitNotification(runtime, txId);
 
-        Cdbg << "AlterTable: rename index data column is rejected" << Endl;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/Table"),
+                           {NLs::CheckColumns("Table", {"key", "value0_new", "value1"}, {}, {"key"}),
+                            NLs::Finished, [] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                                const auto& indexes = record.GetPathDescription().GetTable().GetTableIndexes();
+                                UNIT_ASSERT_VALUES_EQUAL(indexes.size(), 1);
+                                UNIT_ASSERT_VALUES_EQUAL(indexes[0].GetKeyColumnNames(0), "value0_new");
+                                UNIT_ASSERT_VALUES_EQUAL(indexes[0].GetDataColumnNames(0), "value1");
+                            }});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/Table/ByValue0/indexImplTable"),
+                           {NLs::CheckColumns("indexImplTable", {"value0_new", "value1", "key"}, {}, {"value0_new", "key"})});
+
+        Cdbg << "AlterTable: rename index data column cascades too" << Endl;
         TestAlterTable(runtime, ++txId, "/MyRoot/DirA",
-                R"(Name: "Table" Columns { Name: "value1_new" RenameFrom: "value1" })",
-                {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusPreconditionFailed});
+                R"(Name: "Table" Columns { Name: "value1_new" RenameFrom: "value1" })");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/Table"),
+                           {NLs::CheckColumns("Table", {"key", "value0_new", "value1_new"}, {}, {"key"}),
+                            NLs::Finished, [] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                                const auto& indexes = record.GetPathDescription().GetTable().GetTableIndexes();
+                                UNIT_ASSERT_VALUES_EQUAL(indexes.size(), 1);
+                                UNIT_ASSERT_VALUES_EQUAL(indexes[0].GetKeyColumnNames(0), "value0_new");
+                                UNIT_ASSERT_VALUES_EQUAL(indexes[0].GetDataColumnNames(0), "value1_new");
+                            }});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/Table/ByValue0/indexImplTable"),
+                           {NLs::CheckColumns("indexImplTable", {"value0_new", "value1_new", "key"}, {}, {"value0_new", "key"})});
 
         Cdbg << "AlterTable: rename a PK column not referenced by the index still works" << Endl;
         TestAlterTable(runtime, ++txId, "/MyRoot/DirA",
@@ -4979,7 +5003,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/Table"),
-                           {NLs::CheckColumns("Table", {"key_new", "value0", "value1"}, {}, {"key_new"})});
+                           {NLs::CheckColumns("Table", {"key_new", "value0_new", "value1_new"}, {}, {"key_new"})});
     }
 
     Y_UNIT_TEST(AlterTableRenameColumnWithCdcStreamIsRejected) { //+

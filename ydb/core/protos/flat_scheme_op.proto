@@ -1439,6 +1439,10 @@ message TIndexAlteringConfig {
         TBloomNGrammFilter BloomNGrammFilterDescription = 9;
     }
     optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 3;
+    // Only set (non-empty) when a base-table column rename cascades into this index;
+    // when set, both KeyColumnNames and this field carry the FULL updated column list
+    // (renamed entries replaced, everything else unchanged).
+    repeated string DataColumnNames = 10;
 }
 
 message TIndexedTableCreationConfig {

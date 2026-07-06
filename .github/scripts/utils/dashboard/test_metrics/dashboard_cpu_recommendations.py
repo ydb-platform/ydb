@@ -56,6 +56,39 @@ def _window_percentiles(
     return round(median, 1), round(p95, 1)
 
 
+def _marker_suite_start_us(
+    starts_us: list[float],
+    *,
+    min_gap_sec: float = 900.0,
+    straggler_frac: float = 0.05,
+) -> Optional[float]:
+    """Pick a suite start time for chart markers that ignores early straggler chunks.
+
+    High SPLIT_FACTOR suites (e.g. ut_blobstorage with 300 chunks) can run a few
+    isolated chunks an hour before the main wave. min(start) then marks "start"
+    on an empty chart region. When a large idle gap precedes a small prefix of
+    starts, use the first start after that gap instead.
+    """
+    if not starts_us:
+        return None
+    if len(starts_us) == 1:
+        return starts_us[0]
+    sorted_starts = sorted(starts_us)
+    best_gap = 0.0
+    best_idx = -1
+    for i in range(len(sorted_starts) - 1):
+        gap = (sorted_starts[i + 1] - sorted_starts[i]) / 1_000_000.0
+        if gap > best_gap:
+            best_gap = gap
+            best_idx = i
+    if best_idx >= 0 and best_gap >= min_gap_sec:
+        before = best_idx + 1
+        max_prefix = max(5, int(len(sorted_starts) * straggler_frac))
+        if before <= max_prefix:
+            return sorted_starts[best_idx + 1]
+    return sorted_starts[0]
+
+
 # When SPLIT_FACTOR is not set in ya.make, runner may pick 1..10. No need to suggest "set" if recommended is in that range.
 DEFAULT_SPLIT_FACTOR_MAX = 10
 
@@ -259,6 +292,7 @@ def build_cpu_recommendations(
     }
     suite_start_us_all: dict[str, float] = {}
     suite_end_us_all: dict[str, float] = {}
+    marker_starts_by_suite: dict[str, list[float]] = defaultdict(list)
     for r in runs:
         suite = str(r.get("suite_path", ""))
         if not suite:
@@ -273,10 +307,13 @@ def build_cpu_recommendations(
         end = float(r.get("end_us", 0) or 0)
         if end <= start:
             continue
-        if suite not in suite_start_us_all or start < suite_start_us_all[suite]:
-            suite_start_us_all[suite] = start
+        marker_starts_by_suite[suite].append(start)
         if suite not in suite_end_us_all or end > suite_end_us_all[suite]:
             suite_end_us_all[suite] = end
+    for suite, starts in marker_starts_by_suite.items():
+        effective = _marker_suite_start_us(starts)
+        if effective is not None:
+            suite_start_us_all[suite] = effective
 
     by_suite: dict[str, list[float]] = defaultdict(list)
     by_suite_runs_all: dict[str, int] = defaultdict(int)

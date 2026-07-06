@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import sys
 
-from dashboard_cpu_recommendations import build_cpu_recommendations
+from dashboard_cpu_recommendations import _marker_suite_start_us, build_cpu_recommendations
 
 try:
     import pytest
@@ -264,8 +264,48 @@ def test_light_suite_no_memory_cpu_bump():
     assert r["recommended_cpu"] == 2
 
 
+def test_marker_suite_start_ignores_straggler_prefix():
+    """Early isolated chunks must not shift the suite start marker before the main wave."""
+    t0 = 1_000_000_000_000_000  # us
+    gap_us = int(66 * 60 * 1_000_000)
+    starts = [
+        t0,
+        t0 + 4_000_000,
+        t0 + 8_000_000,
+        t0 + gap_us,
+        t0 + gap_us + 60_000_000,
+    ]
+    assert _marker_suite_start_us(starts) == t0 + gap_us
+
+    # Continuous run: keep earliest start.
+    continuous = [t0 + i * 60_000_000 for i in range(20)]
+    assert _marker_suite_start_us(continuous) == continuous[0]
+
+
+def test_build_cpu_recommendations_straggler_suite_start():
+    suite = "ydb/core/blobstorage/ut_blobstorage"
+    t0 = 1000.0
+    gap = 66 * 60
+    runs = [
+        _run(suite, 46, t0, 4.0, 1.0),
+        _run(suite, 69, t0, 8.0, 1.0),
+        _run(suite, 266, t0 + 4, 1.0, 1.0),
+        _run(suite, 3, t0 + gap, 6.0, 1.0),
+        _run(suite, 4, t0 + gap + 60, 5.0, 1.0),
+    ]
+    recs = build_cpu_recommendations(
+        runs,
+        requirements_cache={suite: {"cpu_cores": 4, "ram_gb": 32, "size": "MEDIUM", "split_factor": 300}},
+        report_status_by_suite={suite: {"tests": _status(), "chunks": _status()}},
+    )
+    by_suite = {r["suite_path"]: r for r in recs}
+    assert by_suite[suite]["suite_start_sec"] == round(t0 + gap, 1)
+
+
 def _all_tests():
     return [
+        test_marker_suite_start_ignores_straggler_prefix,
+        test_build_cpu_recommendations_straggler_suite_start,
         test_cpu_is_p95_only_no_duration_boost,
         test_split_raised_proactively_without_timeout,
         test_single_test_blocks_split,

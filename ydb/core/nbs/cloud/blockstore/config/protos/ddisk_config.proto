@@ -50,6 +50,7 @@ message TPBufferConfig
     // default 256, equal to the default disk operations max inflight size
     optional uint32 MinFreeSectorsReserve = 12;
 
-    // Allocate new chunk if free space is less than. Default 10%
+    // Allocate a new chunk proactively when free space drops below this percentage
+    // of the currently owned capacity. 0 disables proactive allocation. Default 10%.
     optional uint32 PreallocateChunksFreeSpace = 13;
 }

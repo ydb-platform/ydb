@@ -1334,7 +1334,6 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // Start first set column constraint operation
         ui64 setConstraintTxId1 = ++txId;
         auto response1 = TestSetColumnConstraint(
             runtime, setConstraintTxId1,
@@ -1346,7 +1345,6 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         UNIT_ASSERT_VALUES_EQUAL(response1.GetStatus(), Ydb::StatusIds::SUCCESS);
         env.TestWaitNotification(runtime, setConstraintTxId1, TTestTxConfig::SchemeShard);
 
-        // Start first set column constraint operation
         ui64 setConstraintTxId2 = ++txId;
         auto response2 = TestSetColumnConstraint(
             runtime, setConstraintTxId2,
@@ -1358,7 +1356,6 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         UNIT_ASSERT_VALUES_EQUAL(response2.GetStatus(), Ydb::StatusIds::SUCCESS);
         env.TestWaitNotification(runtime, setConstraintTxId2, TTestTxConfig::SchemeShard);
 
-        // Start second set column constraint operation
         ui64 setConstraintTxId3 = ++txId;
         auto response3 = TestSetColumnConstraint(
             runtime, setConstraintTxId3,
@@ -1370,13 +1367,13 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         UNIT_ASSERT_VALUES_EQUAL(response3.GetStatus(), Ydb::StatusIds::SUCCESS);
         env.TestWaitNotification(runtime, setConstraintTxId3, TTestTxConfig::SchemeShard);
 
-        // Test list operations
+        // =========================================
+
         auto listResponse = TestListSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, root);
 
         UNIT_ASSERT_VALUES_EQUAL(listResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_GE(listResponse.GetEntries().size(), 3);
 
-        // Check that both operations are in the list
         bool foundOp1 = false, foundOp2 = false, foundOp3 = false;
         for (const auto& entry : listResponse.GetEntries()) {
             const auto& columns = entry.GetSettings().GetNotNullColumns();
@@ -1388,15 +1385,15 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             }
             if (entry.GetId() == setConstraintTxId2) {
                 foundOp2 = true;
-                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(entry.GetState()), static_cast<int>(Ydb::Table::SetColumnConstraintState::STATE_DONE));
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(entry.GetState()), static_cast<int>(Ydb::Table::SetColumnConstraintState::STATE_CANCELLED));
                 UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(columns.Get(0), "value2");
             }
             if (entry.GetId() == setConstraintTxId3) {
                 foundOp3 = true;
-                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(entry.GetState()), static_cast<int>(Ydb::Table::SetColumnConstraintState::STATE_CANCELLED));
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(entry.GetState()), static_cast<int>(Ydb::Table::SetColumnConstraintState::STATE_DONE));
                 UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(columns.Get(0), "value2");
+                UNIT_ASSERT_VALUES_EQUAL(columns.Get(0), "value");
             }
         }
 

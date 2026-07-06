@@ -8,7 +8,7 @@ TEST_SRCS(
 
 SPLIT_FACTOR(10)
 
-REQUIREMENTS(ram:32 cpu:1)
+REQUIREMENTS(ram:32 cpu:32)
 SIZE(LARGE)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 IF (SANITIZER_TYPE == "thread")

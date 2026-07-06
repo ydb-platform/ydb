@@ -5,7 +5,7 @@ TEST_SRCS(
     test_workload.py
 )
 
-REQUIREMENTS(ram:32 cpu:1)
+REQUIREMENTS(ram:32 cpu:4)
 
 SIZE(MEDIUM)
 

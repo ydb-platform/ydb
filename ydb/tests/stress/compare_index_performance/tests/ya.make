@@ -9,7 +9,7 @@ TEST_SRCS(
     test_compare.py
 )
 
-REQUIREMENTS(ram:32 cpu:1)
+REQUIREMENTS(ram:32 cpu:4)
 TAG(ya:external)
 
 SIZE(LARGE)

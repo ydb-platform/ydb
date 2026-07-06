@@ -682,7 +682,6 @@ runs:
         set -x
         export build_preset="${{ inputs.build_preset }}"
         export commit_git_sha="$ORIGINAL_HEAD"
-        export GITHUB_WORKFLOW="$ANALYTICS_JOB_NAME"
 
         python3 .github/scripts/send_build_stats.py
 

@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/persqueue_public)
 
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE)
     REQUIREMENTS(cpu:2)
 ENDIF()

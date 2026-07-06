@@ -58,16 +58,16 @@ DATA(
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:16)
-    REQUIREMENTS(cpu:1)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "address")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-    REQUIREMENTS(cpu:1)
+    REQUIREMENTS(cpu:2)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:1)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 END()

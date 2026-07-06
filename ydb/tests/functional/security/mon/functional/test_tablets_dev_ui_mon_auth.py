@@ -4,7 +4,7 @@ import time
 import pytest
 import requests
 
-from security_test_helpers import (
+from ydb.tests.functional.security.lib.security_test_helpers import (
     _test_endpoints,
     tablet_devui_expected_on_app,
     tablet_devui_new_action_paths,

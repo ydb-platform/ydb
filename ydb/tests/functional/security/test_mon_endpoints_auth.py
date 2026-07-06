@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from concurrent.futures import ThreadPoolExecutor
 import json
+import threading
 from urllib.parse import urlencode
 
 import requests
@@ -188,13 +189,16 @@ ENDPOINT_SPECS = [
 
 _DEFAULT_METHODS = ('GET', 'POST')
 _REQUEST_TIMEOUT = 5
-_MAX_PARALLEL_REQUESTS = 8
+_MAX_PARALLEL_REQUESTS = 32
 
 _DEFAULT_QUERIES = [
     {},
     {'database': DATABASE},
     {'database': TENANT_DATABASE},
 ]
+
+
+_thread_local = threading.local()
 
 
 def _methods_for_spec(spec):
@@ -231,15 +235,23 @@ def _requests_for_spec(cluster, spec):
     ]
 
 
+def _get_http_session():
+    session = getattr(_thread_local, 'session', None)
+    if session is None:
+        session = requests.Session()
+        session.verify = False
+        _thread_local.session = session
+    return session
+
+
 def _request_status(method, base_url, path, token):
     headers = {}
     if token is not None:
         headers['Authorization'] = token
-    response = requests.request(
+    response = _get_http_session().request(
         method,
         base_url + path,
         headers=headers,
-        verify=False,
         timeout=_REQUEST_TIMEOUT,
     )
     return response.status_code

@@ -363,7 +363,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         return self.kafka_api_port
 
     def start(self):
-        self.__port_allocator.hold_port_bindings()
         try:
             self.update_command(self.__make_run_command())
             self.__port_allocator.release_port_bindings()

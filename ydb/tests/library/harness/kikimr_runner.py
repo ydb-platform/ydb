@@ -72,6 +72,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         self.__encryption_key = encryption_key
         self._tenant_affiliation = tenant_affiliation
+        self.__port_allocator = port_allocator
         self.grpc_port = port_allocator.grpc_port
         self.mon_port = port_allocator.mon_port
         self.mon_uses_https = self.__configurator.monitoring_tls_cert_path is not None
@@ -363,6 +364,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
     def start(self):
         try:
+            self.__port_allocator.release_port_bindings()
             self.update_command(self.__make_run_command())
             super(KiKiMRNode, self).start()
         finally:

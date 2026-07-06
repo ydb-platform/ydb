@@ -92,71 +92,91 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
         self.__pgwire_port = None
         self.__kafka_api_port = None
 
+    def __allocate_port(self):
+        return self.__port_manager.get_port(hold_socket=True)
+
     @property
     def mon_port(self):
         if self.__mon_port is None:
-            self.__mon_port = self.__port_manager.get_port()
+            self.__mon_port = self.__allocate_port()
         return self.__mon_port
 
     @property
     def kafka_api_port(self):
         if self.__kafka_api_port is None:
-            self.__kafka_api_port = self.__port_manager.get_port()
+            self.__kafka_api_port = self.__allocate_port()
         return self.__kafka_api_port
 
     @property
     def grpc_port(self):
         if self.__grpc_port is None:
-            self.__grpc_port = self.__port_manager.get_port()
+            self.__grpc_port = self.__allocate_port()
         return self.__grpc_port
 
     @property
     def mbus_port(self):
         if self.__mbus_port is None:
-            self.__mbus_port = self.__port_manager.get_port()
+            self.__mbus_port = self.__allocate_port()
         return self.__mbus_port
 
     @property
     def ic_port(self):
         if self.__ic_port is None:
-            self.__ic_port = self.__port_manager.get_port()
+            self.__ic_port = self.__allocate_port()
         return self.__ic_port
 
     @property
     def grpc_ssl_port(self):
         if self.__grpc_ssl_port is None:
-            self.__grpc_ssl_port = self.__port_manager.get_port()
+            self.__grpc_ssl_port = self.__allocate_port()
         return self.__grpc_ssl_port
 
     @property
     def sqs_port(self):
         if self.__sqs_port is None:
-            self.__sqs_port = self.__port_manager.get_port()
+            self.__sqs_port = self.__allocate_port()
         return self.__sqs_port
 
     @property
     def http_proxy_port(self):
         if self.__http_proxy_port is None:
-            self.__http_proxy_port = self.__port_manager.get_port()
+            self.__http_proxy_port = self.__allocate_port()
         return self.__http_proxy_port
 
     @property
     def pgwire_port(self):
         if self.__pgwire_port is None:
-            self.__pgwire_port = self.__port_manager.get_port()
+            self.__pgwire_port = self.__allocate_port()
         return self.__pgwire_port
 
     @property
     def public_http_port(self):
         if self.__public_http_port is None:
-            self.__public_http_port = self.__port_manager.get_port()
+            self.__public_http_port = self.__allocate_port()
         return self.__public_http_port
 
     @property
     def ext_port(self):
         if self.__ext_port is None:
-            self.__ext_port = self.__port_manager.get_port()
+            self.__ext_port = self.__allocate_port()
         return self.__ext_port
+
+    def release_port_bindings(self):
+        for port in (
+            self.__mon_port,
+            self.__grpc_port,
+            self.__mbus_port,
+            self.__ic_port,
+            self.__sqs_port,
+            self.__http_proxy_port,
+            self.__grpc_ssl_port,
+            self.__ext_port,
+            self.__public_http_port,
+            self.__pgwire_port,
+            self.__kafka_api_port,
+        ):
+            if port is not None:
+                self.__port_manager.unbind_port(port)
 
 
 class KikimrPortManagerPortAllocator(KikimrPortAllocatorInterface):
@@ -230,6 +250,9 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
         self.__pgwire_port = int(os.getenv('YDB_PGWIRE_PORT', pgwire_port))
         self.__http_proxy_port = int(os.getenv('HTTP_PROXY_PORT', http_proxy_port))
         self.__kafka_api_port = int(os.getenv('YDB_KAFKA_PROXY_PORT', kafka_api_port))
+
+    def release_port_bindings(self):
+        pass
 
     @property
     def mon_port(self):

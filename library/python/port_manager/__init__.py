@@ -18,6 +18,14 @@ class PortManagerException(Exception):
     pass
 
 
+class _PortReservation(object):
+    __slots__ = ('filelock', 'socket')
+
+    def __init__(self, filelock, sock):
+        self.filelock = filelock
+        self.socket = sock
+
+
 class PortManager(object):
     """
     Port manager for dynamic port allocation.
@@ -49,23 +57,23 @@ class PortManager(object):
     def __exit__(self, type, value, traceback):
         self.release()
 
-    def get_port(self, port=0):
+    def get_port(self, port=0, hold_socket=False):
         '''
         Gets free TCP port
         '''
-        return self.get_tcp_port(port)
+        return self.get_tcp_port(port, hold_socket=hold_socket)
 
-    def get_tcp_port(self, port=0):
+    def get_tcp_port(self, port=0, hold_socket=False):
         '''
         Gets free TCP port
         '''
-        return self._get_port(port, socket.SOCK_STREAM)
+        return self._get_port(port, socket.SOCK_STREAM, hold_socket=hold_socket)
 
-    def get_udp_port(self, port=0):
+    def get_udp_port(self, port=0, hold_socket=False):
         '''
         Gets free UDP port
         '''
-        return self._get_port(port, socket.SOCK_DGRAM)
+        return self._get_port(port, socket.SOCK_DGRAM, hold_socket=hold_socket)
 
     def get_tcp_and_udp_port(self, port=0):
         '''
@@ -89,17 +97,35 @@ class PortManager(object):
         with self._lock:
             self._release_port_no_lock(port)
 
+    def unbind_port(self, port):
+        '''
+        Closes the held socket for the port but keeps the reservation lock
+        until release_port() / release().
+        Call this immediately before the process that will bind the port.
+        '''
+        with self._lock:
+            reservation = self._filelocks.get(port)
+            if reservation is not None and reservation.socket is not None:
+                reservation.socket.close()
+                reservation.socket = None
+
     def _release_port_no_lock(self, port):
-        filelock = self._filelocks.pop(port, None)
-        if filelock:
-            filelock.release()
+        reservation = self._filelocks.pop(port, None)
+        if reservation is not None:
+            self._close_reservation(reservation)
+
+    def _close_reservation(self, reservation):
+        if reservation.socket is not None:
+            reservation.socket.close()
+            reservation.socket = None
+        if reservation.filelock:
+            reservation.filelock.release()
 
     def release(self):
         with self._lock:
             while self._filelocks:
-                _, filelock = self._filelocks.popitem()
-                if filelock:
-                    filelock.release()
+                _, reservation = self._filelocks.popitem()
+                self._close_reservation(reservation)
 
     def get_port_range(self, start_port, count, random_start=True):
         assert count > 0
@@ -147,7 +173,7 @@ class PortManager(object):
         assert res, ('There are no available valid ports', self._valid_range)
         return res
 
-    def _get_port(self, port, sock_type):
+    def _get_port(self, port, sock_type, hold_socket=False):
         if port and self._no_random_ports():
             return port
 
@@ -164,7 +190,7 @@ class PortManager(object):
                 else:
                     probe_port += left
                     break
-            if not self._capture_port(probe_port, sock_type):
+            if not self._capture_port(probe_port, sock_type, hold_socket=hold_socket):
                 continue
             return probe_port
 
@@ -172,27 +198,39 @@ class PortManager(object):
             "Failed to find valid port (range: {} used: {})".format(self._valid_range, self._filelocks)
         )
 
-    def _capture_port(self, port, sock_type):
+    def _capture_port(self, port, sock_type, hold_socket=False):
         with self._lock:
-            return self._capture_port_no_lock(port, sock_type)
+            return self._capture_port_no_lock(port, sock_type, hold_socket=hold_socket)
 
-    def is_port_free(self, port, sock_type=socket.SOCK_STREAM):
-        sock = socket.socket(socket.AF_INET6, sock_type)
+    def _make_socket(self, sock_type):
+        return socket.socket(socket.AF_INET6, sock_type)
+
+    def _configure_socket(self, sock):
         if os.name == 'nt' and hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
         else:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+    def _try_bind_port(self, port, sock_type):
+        sock = self._make_socket(sock_type)
+        self._configure_socket(sock)
         try:
             sock.bind(('::', port))
         except socket.error as e:
-            if e.errno == errno.EADDRINUSE:
-                return False
-            raise
-        finally:
             sock.close()
+            if e.errno == errno.EADDRINUSE:
+                return None
+            raise
+        return sock
+
+    def is_port_free(self, port, sock_type=socket.SOCK_STREAM):
+        sock = self._try_bind_port(port, sock_type)
+        if sock is None:
+            return False
+        sock.close()
         return True
 
-    def _capture_port_no_lock(self, port, sock_type):
+    def _capture_port_no_lock(self, port, sock_type, hold_socket=False):
         if port in self._filelocks:
             return False
 
@@ -205,19 +243,23 @@ class PortManager(object):
             filelock = library.python.filelock.FileLock(os.path.join(self._sync_dir, str(port)))
             if not filelock.acquire(blocking=False):
                 return False
-            if self.is_port_free(port, sock_type):
-                self._filelocks[port] = filelock
-                return True
-            else:
-                filelock.release()
-                return False
 
-        if self.is_port_free(port, sock_type):
-            self._filelocks[port] = filelock
+        if hold_socket:
+            sock = self._try_bind_port(port, sock_type)
+            if sock is None:
+                if filelock:
+                    filelock.release()
+                return False
+            self._filelocks[port] = _PortReservation(filelock, sock)
             return True
-        if filelock:
-            filelock.release()
-        return False
+
+        if not self.is_port_free(port, sock_type):
+            if filelock:
+                filelock.release()
+            return False
+
+        self._filelocks[port] = _PortReservation(filelock, None)
+        return True
 
     def _no_random_ports(self):
         return os.environ.get("NO_RANDOM_PORTS")

@@ -60,11 +60,20 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
         return "CREATE TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
-        if (tx.GetAlterTable().ColumnsSize() > 0) {
+        // Only label this a rename in the audit log when the alter is PURELY a set of
+        // column renames (every Columns entry has RenameFrom set, no DropColumns) --
+        // otherwise a mixed alter (e.g. rename + add another, unrelated column) would be
+        // mislabeled, hiding the other change from the audit trail.
+        if (tx.GetAlterTable().ColumnsSize() > 0 && tx.GetAlterTable().DropColumnsSize() == 0) {
+            bool allRenames = true;
             for (const auto& col : tx.GetAlterTable().GetColumns()) {
-                if (col.HasRenameFrom()) {
-                    return "ALTER TABLE RENAME COLUMN";
+                if (!col.HasRenameFrom()) {
+                    allRenames = false;
+                    break;
                 }
+            }
+            if (allRenames) {
+                return "ALTER TABLE RENAME COLUMN";
             }
         }
         return "ALTER TABLE";

@@ -265,6 +265,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
         .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
         .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
+        .EnableTableColumnRename = AppData()->FeatureFlags.GetEnableTableColumnRename(),
     };
 
 
@@ -435,6 +436,31 @@ bool CheckRenamingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableD
                             << ", table name: " << tablePath.PathString()
                             << ", index name: " << childName;
                         return false;
+                    }
+                }
+
+                // Every secondary index's impl table -- including specialized vector/
+                // fulltext/json/local bloom-min-max flavors -- implicitly carries the base
+                // table's own primary key columns (CalcTableImplDescription in
+                // ydb/core/base/table_index.cpp appends them unconditionally), even when a
+                // PK column isn't itself listed in IndexKeys/IndexDataColumns. Since this
+                // index type isn't handled by the rename cascade, reject renaming a PK
+                // column too, not just columns explicitly listed above.
+                if (ss->Tables.contains(tablePath.Base()->PathId)) {
+                    const TTableInfo::TPtr table = ss->Tables.at(tablePath.Base()->PathId);
+                    for (ui32 keyColId : table->KeyColumnIds) {
+                        auto colIt = table->Columns.find(keyColId);
+                        if (colIt == table->Columns.end()) {
+                            continue;
+                        }
+                        if (renamedColumns.contains(colIt->second.Name)) {
+                            errStr = TStringBuilder ()
+                                << "Impossible rename column because table has an index whose implementation table implicitly includes the primary key"
+                                << ", column name: " << colIt->second.Name
+                                << ", table name: " << tablePath.PathString()
+                                << ", index name: " << childName;
+                            return false;
+                        }
                     }
                 }
             }
@@ -1181,6 +1207,35 @@ static void AppendIndexRenameCascade(
             if (it != renames.end()) {
                 affectedRenames.emplace_back(col, it->second);
                 col = it->second;
+            }
+        }
+
+        // Every plain secondary index's impl table implicitly carries the base table's own
+        // primary key columns as trailing key columns (CalcTableImplDescription in
+        // ydb/core/base/table_index.cpp appends any base-table PK column not already
+        // explicitly listed as an index key/data column), so a PK column rename must
+        // cascade into the impl table even when the PK column isn't itself part of
+        // IndexKeys/IndexDataColumns. Skip any PK column already covered above to avoid
+        // emitting a duplicate rename entry for the same column.
+        if (context.SS->Tables.contains(path.Base()->PathId)) {
+            THashSet<TString> alreadyAffected;
+            for (const auto& [oldName, newName] : affectedRenames) {
+                alreadyAffected.insert(oldName);
+            }
+
+            const TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
+            for (ui32 keyColId : table->KeyColumnIds) {
+                auto colIt = table->Columns.find(keyColId);
+                if (colIt == table->Columns.end()) {
+                    continue;
+                }
+
+                const TString& pkColName = colIt->second.Name;
+                auto renameIt = renames.find(pkColName);
+                if (renameIt != renames.end() && !alreadyAffected.contains(pkColName)) {
+                    affectedRenames.emplace_back(pkColName, renameIt->second);
+                    alreadyAffected.insert(pkColName);
+                }
             }
         }
 

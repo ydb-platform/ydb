@@ -416,6 +416,57 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
         });
     }
 
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RenameIndexedColumnCascadeWithReboots, 2, 1, false) {
+        // The RENAME COLUMN cascade for a plain secondary index spawns three chained
+        // sub-operations (base table rename, index metadata rename, impl table rename).
+        // If a schemeshard reboot between any of them left the operation in a torn state,
+        // the base table, the index's own metadata, and its impl table would disagree on
+        // the column's name -- verify all three stay consistent under simulated reboots.
+        t.GetTestEnvOptions().EnableTableColumnRename(true);
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                AsyncMkDir(runtime, ++t.TxId, "/MyRoot", "DirB");
+                AsyncCreateIndexedTable(runtime, ++t.TxId, "/MyRoot/DirB", R"(
+                    TableDescription {
+                      Name: "Table1"
+                      Columns { Name: "key"   Type: "Uint64" }
+                      Columns { Name: "value0" Type: "Utf8" }
+                      Columns { Name: "value1" Type: "Utf8" }
+                      KeyColumnNames: ["key"]
+                    }
+                    IndexDescription {
+                      Name: "ByValue0"
+                      KeyColumnNames: ["value0"]
+                      DataColumnNames: ["value1"]
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
+            }
+
+            TestAlterTable(runtime, ++t.TxId, "/MyRoot/DirB", R"(
+                Name: "Table1"
+                Columns { Name: "value0_new" RenameFrom: "value0" }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/Table1"),
+                                   {NLs::Finished,
+                                    NLs::CheckColumns("Table1", {"key", "value0_new", "value1"}, {}, {"key"})});
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/ByValue0"),
+                                   {NLs::Finished,
+                                    NLs::IndexKeys({"value0_new"}),
+                                    NLs::IndexDataColumns({"value1"})});
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/ByValue0/indexImplTable"),
+                                   {NLs::Finished,
+                                    NLs::CheckColumns("indexImplTable", {"value0_new", "value1", "key"}, {}, {"value0_new", "key"})});
+            }
+        });
+    }
+
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropIndexedTableWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {

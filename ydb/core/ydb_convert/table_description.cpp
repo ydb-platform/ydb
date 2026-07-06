@@ -666,6 +666,10 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
             column->SetRenameFrom(rename.source_name());
         }
 
+        if (req->allow_rename_with_json_cdc()) {
+            desc->SetAllowRenameWithJsonCdc(true);
+        }
+
         if (!FillColumnDescription(*desc, req->add_columns(), code, error)) {
             return false;
         }

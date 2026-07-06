@@ -332,4 +332,10 @@ message TFeatureFlags {
     // whose primary key is not a single integer. When OFF, no __ydb_row_id column or its unique index
     // is used or auto-provisioned, and such indexes fall back to requiring a single integer primary key.
     optional bool EnableFulltextIndexRowId = 289 [default = true];
+    // Guards ALTER TABLE ... RENAME COLUMN. Defaults to OFF: a datashard binary older than
+    // this feature still hard-asserts that a column's name never changes for a given
+    // column Id, and will crash on receiving a rename from an already-upgraded
+    // schemeshard. Only enable this once every datashard in the cluster is confirmed to be
+    // running a binary that includes this feature (i.e. after a full rolling upgrade).
+    optional bool EnableTableColumnRename = 290 [default = false];
 }

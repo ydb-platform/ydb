@@ -1008,6 +1008,7 @@ public:
         bool EnableTableDatetime64;
         bool EnableParameterizedDecimal;
         bool EnableDetailedMetrics;
+        bool EnableTableColumnRename;
     };
 
     static TAlterDataPtr CreateAlterData(

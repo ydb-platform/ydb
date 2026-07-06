@@ -452,6 +452,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     }
     THashMap<TString, ui32> colName2Id;
     THashSet<ui32> keys;
+    // Column ids renamed by the first pass below. A second-pass ALTER entry that resolves
+    // to one of these ids (by the column's NEW name) would otherwise overwrite the renamed
+    // alterData entry with a stale copy of the pre-alter source column (reverting the
+    // rename while silently applying only the other property change) -- reject instead.
+    THashSet<ui32> renamedColIds;
 
     if (source) {
         for (const auto& col : source->Columns) {
@@ -474,6 +479,16 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     for (auto& col : *op.MutableColumns()) {
         if (!col.HasRenameFrom()) {
             continue;
+        }
+
+        if (!featureFlags.EnableTableColumnRename) {
+            // A datashard binary older than this feature still hard-asserts that a
+            // column's name never changes for a given column Id, and would crash on
+            // receiving this rename from an already-upgraded schemeshard. Keep this
+            // rejected until an operator explicitly enables the feature flag (i.e. after
+            // confirming every datashard in the cluster has been upgraded).
+            errStr = "Column rename is disabled by the EnableTableColumnRename feature flag";
+            return nullptr;
         }
 
         if (!source) {
@@ -535,6 +550,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
         colName2Id.erase(renameIt);
         colName2Id[newName] = colId;
+        renamedColIds.insert(colId);
 
         TTableInfo::TColumn& column = alterData->Columns[colId];
         column = sourceColumn;
@@ -636,6 +652,12 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             ui32 colId = colName2Id[colName];
+
+            if (renamedColIds.contains(colId)) {
+                errStr = Sprintf("Cannot alter column '%s' in the same statement it is being renamed in", colName.c_str());
+                return nullptr;
+            }
+
             const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
 
             if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromSequence) {

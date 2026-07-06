@@ -4859,7 +4859,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(AlterTableRenameColumn) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableTableColumnRename(true));
         ui64 txId = 100;
 
         TSet<TString> cols = {"key1", "key2", "value", "extra"};
@@ -4941,7 +4941,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(AlterTableRenameIndexedColumnCascades) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableTableColumnRename(true));
         ui64 txId = 100;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
@@ -5008,7 +5008,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(AlterTableRenameColumnWithJsonCdcStreamIsRejectedUnlessOverridden) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableTableColumnRename(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot",
@@ -5045,7 +5045,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(AlterTableRenameColumnWithProtoCdcStreamIsAllowed) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableTableColumnRename(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot",

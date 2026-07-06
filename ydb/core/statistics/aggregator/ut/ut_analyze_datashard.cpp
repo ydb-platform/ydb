@@ -124,7 +124,9 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
         // rename does not orphan or invalidate existing statistics for that column: the same
         // Tag continues to resolve correctly, and a fresh ANALYZE after the rename succeeds
         // and produces the same statistics for that Tag.
-        TTestEnv env(1, 1);
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            settings.AppConfig->MutableFeatureFlags()->SetEnableTableColumnRename(true);
+        });
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Database");

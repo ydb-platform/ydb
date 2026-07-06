@@ -1203,6 +1203,10 @@ message AlterTableRequest {
     repeated SetNotNullItem set_not_null = 27;
     // Rename existing columns
     repeated RenameColumnItem rename_columns = 28;
+    // Explicit acknowledgement that this rename may change the on-wire JSON key for an
+    // active JSON-family changefeed (Json/DynamoDBStreamsJson/DebeziumJson). Required to
+    // rename a column while such a changefeed is active; ignored for any other alter kind.
+    bool allow_rename_with_json_cdc = 29;
 }
 
 message AlterTableResponse {

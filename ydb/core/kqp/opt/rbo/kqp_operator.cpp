@@ -629,7 +629,7 @@ TVector<TInfoUnit> TOpFilter::GetFilterIUs(TPlanProps& props) const {
 
 TVector<TInfoUnit> TOpFilter::GetUsedIUs(TPlanProps& props) {
     Y_UNUSED(props);
-    return std::move(FilterExpr.GetInputIUs(false, true));
+    return FilterExpr.GetInputIUs(false, true);
 }
 
 TVector<TInfoUnit> TOpFilter::GetSubplanIUs(TPlanProps& props) {
@@ -639,7 +639,7 @@ TVector<TInfoUnit> TOpFilter::GetSubplanIUs(TPlanProps& props) {
             res.push_back(iu);
         }
     }
-    return std::move(res);
+    return res;
 }
 
 TString TOpFilter::ToString(TExprContext& ctx) {
@@ -721,7 +721,7 @@ TVector<TInfoUnit> TOpJoin::GetUsedIUs(TPlanProps& props) {
         result.insert(result.end(), filterIUs.begin(), filterIUs.end());
     }
 
-    return std::move(result);
+    return result;
 }
 
 TVector<std::reference_wrapper<TExpression>> TOpJoin::GetExpressions() {
@@ -729,7 +729,7 @@ TVector<std::reference_wrapper<TExpression>> TOpJoin::GetExpressions() {
     for (auto & expr : JoinFilters) {
         result.push_back(expr);
     }
-    return std::move(result);
+    return result;
 }
 
 TString GetJoinAlgoName(NKqp::EJoinAlgoType joinAlgo) {
@@ -1061,7 +1061,7 @@ TVector<TInfoUnit> TOpAggregate::GetUsedIUs(TPlanProps& props) {
     for (const auto& aggTraits : AggregationTraitsList) {
         usedIUs.push_back(aggTraits.OriginalColName);
     }
-    return std::move(usedIUs);
+    return usedIUs;
 }
 
 TString TOpAggregate::ToString(TExprContext& ctx) {

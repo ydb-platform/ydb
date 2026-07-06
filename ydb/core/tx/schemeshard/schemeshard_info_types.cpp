@@ -468,7 +468,89 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
     bool allowSystemColumns = op.GetSystemColumnNamesAllowed();
 
+    // Rename entries are processed first: this frees up the old name in colName2Id
+    // immediately, so a later ADD/rename entry in the same alter can reuse it, and so
+    // the collision check below always sees up-to-date live column names.
     for (auto& col : *op.MutableColumns()) {
+        if (!col.HasRenameFrom()) {
+            continue;
+        }
+
+        if (!source) {
+            errStr = "Cannot rename column: table does not exist yet";
+            return nullptr;
+        }
+
+        if (col.HasType() || col.HasTypeId() || col.HasTypeInfo() || col.HasFamily() || col.HasFamilyName()
+            || col.DefaultValue_case() != NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET
+            || col.HasNotNull() || col.HasIsBuildInProgress() || col.HasCompression() || col.HasSetNotNullInProgress())
+        {
+            errStr = Sprintf("Cannot combine RENAME COLUMN with other column changes for column '%s'", col.GetRenameFrom().c_str());
+            return nullptr;
+        }
+
+        const TString oldName = col.GetRenameFrom();
+        const TString newName = col.GetName();
+
+        auto renameIt = colName2Id.find(oldName);
+        if (renameIt == colName2Id.end()) {
+            errStr = Sprintf("Cannot rename unknown column '%s'", oldName.c_str());
+            return nullptr;
+        }
+        ui32 colId = renameIt->second;
+
+        if (newName == oldName) {
+            errStr = Sprintf("Column '%s' is already named '%s'", oldName.c_str(), oldName.c_str());
+            return nullptr;
+        }
+
+        if (newName.size() > limits.MaxTableColumnNameLength) {
+            errStr = TStringBuilder()
+                << "Column name too long '" << newName << "'. "
+                << "Limit: " << limits.MaxTableColumnNameLength;
+            return nullptr;
+        }
+
+        if (!IsValidColumnName(newName, allowSystemColumns)) {
+            errStr = Sprintf("Invalid name for %s column '%s'", allowSystemColumns ? "any" : "user", newName.data());
+            return nullptr;
+        }
+
+        if (colName2Id.contains(newName)) {
+            errStr = Sprintf("Column '%s' already exists", newName.c_str());
+            return nullptr;
+        }
+
+        const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
+
+        if (sourceColumn.IsBuildInProgress) {
+            errStr = Sprintf("Cannot rename column '%s': column has a build operation in progress", oldName.c_str());
+            return nullptr;
+        }
+
+        if (sourceColumn.SetNotNullInProgress) {
+            errStr = Sprintf("Cannot rename column '%s': SET NOT NULL is in progress for this column", oldName.c_str());
+            return nullptr;
+        }
+
+        if (source->TTLSettings().HasEnabled() && source->TTLSettings().GetEnabled().GetColumnName() == oldName) {
+            errStr = Sprintf("Cannot rename TTL column '%s', disable TTL first", oldName.c_str());
+            return nullptr;
+        }
+
+        colName2Id.erase(renameIt);
+        colName2Id[newName] = colId;
+
+        TTableInfo::TColumn& column = alterData->Columns[colId];
+        column = sourceColumn;
+        column.Name = newName;
+    }
+
+    for (auto& col : *op.MutableColumns()) {
+        if (col.HasRenameFrom()) {
+            continue;
+        }
+
         TString colName = col.GetName();
 
         if (colName.size() > limits.MaxTableColumnNameLength) {
@@ -1832,6 +1914,7 @@ void TTableInfo::FinishAlter() {
         TColumn * oldCol = Columns.FindPtr(col.first);
         if (oldCol) {
             //oldCol->CreateVersion = cinfo.CreateVersion;
+            oldCol->Name = cinfo.Name; // picks up RENAME COLUMN; a no-op for every other alter kind
             oldCol->DeleteVersion = cinfo.DeleteVersion;
             oldCol->Family = cinfo.Family;
             oldCol->DefaultKind = cinfo.DefaultKind;

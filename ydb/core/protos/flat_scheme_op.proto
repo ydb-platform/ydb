@@ -121,6 +121,9 @@ message TColumnDescription {
     // flag that indicates that SET NOT NULL operation is currently in progress
     // for this column (full scan is running to verify no nulls exist).
     optional bool SetNotNullInProgress = 14 [default = false];
+    // If set, this entry renames an existing live column from RenameFrom to Name.
+    // Mutually exclusive with Type/TypeId/TypeInfo/Family/FamilyName/DefaultValue/NotNull/Compression.
+    optional string RenameFrom = 15;
 }
 
 message TStorageSettings {

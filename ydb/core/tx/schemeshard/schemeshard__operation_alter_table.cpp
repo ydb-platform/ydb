@@ -361,6 +361,67 @@ bool CheckDroppingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableD
     return true;
 }
 
+// Stage-1 rename policy: block a column rename outright if the column is used by a live
+// secondary index, or if the table has any live changefeed at all (its wire format is keyed
+// by column name for every column, not just the renamed one). Both restrictions are lifted
+// by a later cascade (index impl-table rename propagation; format-specific CDC handling).
+bool CheckRenamingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableDescription& alter, const TPath& tablePath, TString& errStr) {
+    TSet<TString> renamedColumns;
+
+    for (const auto& colDescr: alter.GetColumns()) {
+        if (colDescr.HasRenameFrom()) {
+            renamedColumns.insert(colDescr.GetRenameFrom());
+        }
+    }
+
+    if (renamedColumns.empty()) {
+        return true;
+    }
+
+    for (const auto& child : tablePath.Base()->GetChildren()) {
+        const auto& childName = child.first;
+        const auto& childPathId = child.second;
+
+        auto childPath = ss->PathsById.at(childPathId);
+
+        if (childPath->IsTableIndex() && !childPath->Dropped()) {
+            const TTableIndexInfo::TPtr indexInfo = ss->Indexes.at(childPathId);
+            for (const auto& indexKey: indexInfo->IndexKeys) {
+                if (renamedColumns.contains(indexKey)) {
+                    errStr = TStringBuilder ()
+                        << "Impossible rename column because table has an index with that column"
+                        << ", column name: " << indexKey
+                        << ", table name: " << tablePath.PathString()
+                        << ", index name: " << childName;
+                    return false;
+                }
+            }
+
+            for (const auto& col: indexInfo->IndexDataColumns) {
+                if (renamedColumns.contains(col)) {
+                    errStr = TStringBuilder ()
+                        << "Impossible rename column because table index covers that column"
+                        << ", column name: " << col
+                        << ", table name: " << tablePath.PathString()
+                        << ", index name: " << childName;
+                    return false;
+                }
+            }
+        }
+
+        if (childPath->IsCdcStream() && !childPath->Dropped()) {
+            errStr = TStringBuilder ()
+                << "Impossible rename column: table has an active changefeed"
+                << ", table name: " << tablePath.PathString()
+                << ", changefeed name: " << childName
+                << ". Its wire format is keyed by column name; drop the changefeed before renaming a column";
+            return false;
+        }
+    }
+
+    return true;
+}
+
 class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
@@ -743,6 +804,11 @@ public:
         Y_ABORT_UNLESS(alterData->AlterVersion == table->AlterVersion + 1);
 
         if (!CheckDroppingColumns(context.SS, alter, path, errStr)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            return result;
+        }
+
+        if (!CheckRenamingColumns(context.SS, alter, path, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }

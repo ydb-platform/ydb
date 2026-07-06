@@ -85,20 +85,20 @@ bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, cons
             if (!meta) {
                 return false;
             }
-            // Forbid two min_max indexes on the same column.
+            // Forbid two min_max and bloom_filter indexes on the same column.
             if (const auto newColumnId = meta->GetSingleColumnId()) {
                 for (const auto& indexPair : Indexes) {
                     const auto& existingIndex = indexPair.second;
                     const auto& existingMeta = existingIndex.GetIndexMeta();
-                    if (meta->GetClassName() == NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName && 
+                    if ((meta->GetClassName() == NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName || meta->GetClassName() != "BLOOM_FILTER") && 
                         existingMeta->GetClassName() == meta->GetClassName() && existingMeta->GetSingleColumnId() == newColumnId) {
                         TString columnName = ToString(*newColumnId);
                         if (const auto* column = currentSchema.GetColumns().GetById(*newColumnId)) {
                             columnName = column->GetName();
                         }
                         errors.AddError(NKikimrScheme::StatusAlreadyExists,
-                            TStringBuilder() << "cannot create min_max index '" << index.GetName() << "' on column '"
-                                             << columnName << "': it already has min_max index '"
+                            TStringBuilder() << "cannot create " << meta->GetClassName() << " index '" << index.GetName() << "' on column '"
+                                             << columnName << "': it already has " << meta->GetClassName() << " index '"
                                              << existingIndex.GetName() << "'");
                         return false;
                     }
@@ -132,9 +132,9 @@ void TOlapIndexesDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& t
     }
 }
 
-bool TOlapIndexesDescription::ValidateNoDuplicateMinMaxIndexes(const TOlapSchema& currentSchema, IErrorCollector& errors) const {
-    // Forbid two min_max indexes on the same column.
-    THashMap<ui32, TString> indexNameByColumnId;   // (columnId, className) -> indexName
+bool TOlapIndexesDescription::ValidateNoDuplicateMinMaxAndBloomFilterIndexes(const TOlapSchema& currentSchema, IErrorCollector& errors) const {
+    // Forbid two min_max and bloom_filter indexes on the same column.
+    THashMap<std::pair<ui32, TString>, TString> indexNameByColumnId;   // (columnId, className) -> indexName
     for (const auto& indexPair : Indexes) {
         const auto& index = indexPair.second;
         const auto& meta = index.GetIndexMeta();
@@ -142,17 +142,18 @@ bool TOlapIndexesDescription::ValidateNoDuplicateMinMaxIndexes(const TOlapSchema
         if (!columnId) {
             continue;
         }
-        if (meta.GetClassName() != NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName) {
+        if (meta.GetClassName() != NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName 
+            && meta.GetClassName() != "BLOOM_FILTER") {
             continue;
         }
-        const auto inserted = indexNameByColumnId.emplace(*columnId, index.GetName());
-        if (!inserted.second) {
+        const auto [it, ok] = indexNameByColumnId.emplace(*columnId, meta.GetClassName() , index.GetName());
+        if (!ok) {
             TString columnName = ToString(*columnId);
             if (const auto* column = currentSchema.GetColumns().GetById(*columnId)) {
                 columnName = column->GetName();
             }
             errors.AddError(NKikimrScheme::StatusSchemeError,
-                TStringBuilder() << "creating 2 min_max indexes on one column is forbidden, tried to create both '" << index.GetName() << "' and '" << inserted.first->second << 
+                TStringBuilder() << "creating 2 " << it->first.second << " indexes on one column is forbidden, tried to create both '" << index.GetName() << "' and '" << it->second << 
                 "' on column " << columnName << ".");
             return false;
         }

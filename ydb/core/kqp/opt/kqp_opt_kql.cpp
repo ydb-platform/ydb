@@ -167,8 +167,6 @@ TString IndexTypeToName(NYql::TIndexDescription::EType type) {
             return "local bloom_ngram_filter";
         case NYql::TIndexDescription::EType::LocalMinMax:
             return "local min_max";
-        case NYql::TIndexDescription::EType::LocalCountMinSketch:
-            return "local count_min_sketch";
     }
     Y_UNREACHABLE();
     return "unknown";
@@ -1009,7 +1007,6 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             case TIndexDescription::EType::LocalBloomFilter:
             case TIndexDescription::EType::LocalBloomNgramFilter:
             case TIndexDescription::EType::LocalMinMax:
-            case TIndexDescription::EType::LocalCountMinSketch:
                 return true;
         }
         Y_UNREACHABLE();

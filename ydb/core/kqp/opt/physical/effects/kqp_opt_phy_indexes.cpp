@@ -155,7 +155,6 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndex
                 case TIndexDescription::EType::LocalBloomFilter:
                 case TIndexDescription::EType::LocalBloomNgramFilter:
                 case TIndexDescription::EType::LocalMinMax:
-                case TIndexDescription::EType::LocalCountMinSketch:
                     break;
             }
         }

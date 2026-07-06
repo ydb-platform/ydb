@@ -172,15 +172,42 @@ std::shared_ptr<arrow::RecordBatch> RowsToBatch(
         return {};
     }
 
-    for (const auto& kv : rows) {
-        const TSerializedCellVec& key = kv.first;
+    for (size_t rowIdx = 0; rowIdx < rows.size(); ++rowIdx) {
+        const auto& key = rows[rowIdx].first;
+        const auto& valueSerialized = rows[rowIdx].second;
+
         TSerializedCellVec value;
-        if (!TSerializedCellVec::TryParse(kv.second, value)) {
+        if (!TSerializedCellVec::TryParse(valueSerialized, value)) {
             errorMessage = "Cannot parse serialized cell vec for value";
             return {};
         }
 
-        batchBuilder.AddRow(key.GetCells(), value.GetCells());
+        const auto keyCells = key.GetCells();
+        const auto valueCells = value.GetCells();
+        if (keyCells.size() + valueCells.size() != ydbSchema.size()) {
+            errorMessage = TStringBuilder()
+                << "Row " << rowIdx << " has unexpected cells count " << (keyCells.size() + valueCells.size())
+                << " (expected " << ydbSchema.size() << ")";
+            return {};
+        }
+
+        for (size_t i = 0; i < keyCells.size(); ++i) {
+            const TString sizeErr = NScheme::HasUnexpectedValueSize(keyCells[i], ydbSchema[i].second);
+            if (!sizeErr.empty()) {
+                errorMessage = TStringBuilder() << "Row " << rowIdx << ", column '" << ydbSchema[i].first << "': " << sizeErr;
+                return {};
+            }
+        }
+        for (size_t i = 0; i < valueCells.size(); ++i) {
+            const size_t col = keyCells.size() + i;
+            const TString sizeErr = NScheme::HasUnexpectedValueSize(valueCells[i], ydbSchema[col].second);
+            if (!sizeErr.empty()) {
+                errorMessage = TStringBuilder() << "Row " << rowIdx << ", column '" << ydbSchema[col].first << "': " << sizeErr;
+                return {};
+            }
+        }
+
+        batchBuilder.AddRow(keyCells, valueCells);
     }
 
     return batchBuilder.FlushBatch(false);

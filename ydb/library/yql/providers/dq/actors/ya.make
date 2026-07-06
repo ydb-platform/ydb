@@ -29,7 +29,7 @@ PEERDIR(
     ydb/library/yql/providers/dq/api/grpc
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/common
-    ydb/library/yql/providers/dq/config
+    yt/yql/providers/dq/config
     ydb/library/yql/providers/dq/counters
     ydb/library/yql/providers/dq/interface
     ydb/library/yql/providers/dq/planner

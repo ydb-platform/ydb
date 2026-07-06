@@ -53,7 +53,7 @@ PEERDIR(
     ydb/library/yql/providers/generic/actors
 
     ydb/library/yql/providers/dq/interface
-    ydb/library/yql/providers/dq/local_gateway
+    yt/yql/providers/dq/local_gateway
     ydb/library/yql/providers/dq/provider/exec
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/dq/helper

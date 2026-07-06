@@ -1,7 +1,7 @@
 #include "yql_dq_control.h"
 
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
-#include <ydb/library/yql/providers/dq/config/config.pb.h>
+#include <yt/yql/providers/dq/config/config.pb.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 

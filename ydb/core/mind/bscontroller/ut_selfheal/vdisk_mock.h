@@ -67,10 +67,10 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(VDiskId.FailRealm, newVDiskId.FailRealm);
             UNIT_ASSERT_VALUES_EQUAL(VDiskId.FailDomain, newVDiskId.FailDomain);
             UNIT_ASSERT_VALUES_EQUAL(VDiskId.VDisk, newVDiskId.VDisk);
-            YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "->",
+            YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "VDiskId updated",
                 {"nodeId", NodeId},
-                {"VDiskId", VDiskId},
-                {"vdiskId", newVDiskId});
+                {"oldVDiskId", VDiskId},
+                {"newVDiskId", newVDiskId});
             VDiskId = newVDiskId;
         }
     }

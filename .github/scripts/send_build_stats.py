@@ -145,14 +145,7 @@ VALUES
             }
 
             for column in FROM_ENV_COLUMNS:
-                if column == "github_workflow":
-                    # ANALYTICS_JOB_NAME is set by test_ya Resolve step for unified
-                    # postcommit naming; fall back to GitHub-injected GITHUB_WORKFLOW.
-                    value = os.environ.get("ANALYTICS_JOB_NAME") or os.environ.get(
-                        "GITHUB_WORKFLOW"
-                    )
-                else:
-                    value = os.environ.get(column.upper(), None)
+                value = os.environ.get(column.upper(), None)
                 parameters["$" + column] = sanitize_str(value)
             
             # workaround for https://github.com/ydb-platform/ydb/issues/5294

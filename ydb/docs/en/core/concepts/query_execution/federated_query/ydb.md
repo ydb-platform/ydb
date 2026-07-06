@@ -44,7 +44,7 @@ SELECT * FROM ydb_datasource.`<table_name>`
 where:
 
 - `ydb_datasource`: external data source identifier
-- `<table_name>` is the full table name within the [directory hierarchy](../../architecture.md#ydb-hierarchy) in the {{ ydb-short-name }} database, for example, `table`, `dir1/table1`, or `dir1/dir2/table3`.
+- `<table_name>` is the full table name within the [directory hierarchy](../../architecture/index.md#ydb-hierarchy) in the {{ ydb-short-name }} database, for example, `table`, `dir1/table1`, or `dir1/dir2/table3`.
 
 If the table is at the top level of the hierarchy (does not belong to any directory), you may omit the backticks around the table name "`":
 

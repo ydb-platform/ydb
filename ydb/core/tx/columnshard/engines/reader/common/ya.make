@@ -11,6 +11,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/tx/program
+    ydb/core/tx/columnshard/engines/protos  # stopgap: columnshard_private_events.h transitively requires engines/protos; direct columnshard dep would create a cycle
     ydb/core/formats/arrow/reader
 )
 

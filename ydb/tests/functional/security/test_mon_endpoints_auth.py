@@ -4,6 +4,7 @@ import json
 import threading
 from urllib.parse import urlencode
 
+import pytest
 import requests
 import yatest.common
 
@@ -296,9 +297,29 @@ def _canonize(name, results):
     return yatest.common.canonical_file(out_path, local=True, universal_lines=True)
 
 
-def test_mon_endpoints_auth(ydb_cluster_for_mon_endpoints_auth):
-    case_name, cluster = ydb_cluster_for_mon_endpoints_auth
+def _run_mon_endpoints_auth_test(canon_case_id, cluster):
     return _canonize(
-        f'mon_endpoints_auth-{case_name}',
+        f'mon_endpoints_auth-{canon_case_id}',
         _collect_endpoints(cluster),
     )
+
+
+_MON_ENDPOINTS_AUTH_CASES = (
+    pytest.param('enforce_user_token_enabled_no_schema_grants', id='enforce_user_token_enabled-no_schema_grants'),
+    pytest.param('enforce_user_token_enabled_with_schema_grants', id='enforce_user_token_enabled-with_schema_grants'),
+    pytest.param('enforce_user_token_disabled_no_schema_grants', id='enforce_user_token_disabled-no_schema_grants'),
+    pytest.param('enforce_user_token_disabled_with_schema_grants', id='enforce_user_token_disabled-with_schema_grants'),
+    pytest.param('require_counters_authentication_no_schema_grants', id='require_counters_authentication-no_schema_grants'),
+    pytest.param('require_counters_authentication_with_schema_grants', id='require_counters_authentication-with_schema_grants'),
+    pytest.param('require_healthcheck_authentication_no_schema_grants', id='require_healthcheck_authentication-no_schema_grants'),
+    pytest.param(
+        'require_healthcheck_authentication_with_schema_grants',
+        id='require_healthcheck_authentication-with_schema_grants',
+    ),
+)
+
+
+@pytest.mark.parametrize('case_name', _MON_ENDPOINTS_AUTH_CASES)
+def test(case_name, request):
+    cluster = request.getfixturevalue(f'ydb_cluster_mon_endpoints_auth_{case_name}')
+    return _run_mon_endpoints_auth_test(request.node.callspec.id, cluster)

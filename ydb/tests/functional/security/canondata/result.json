@@ -1,14 +1,26 @@
 {
-    "test_mon_endpoints_auth.test_mon_endpoints_auth[enforce_user_token_disabled]": {
-        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth_enforce_user_token_disabled_/mon_endpoints_auth-enforce_user_token_disabled.json"
+    "test_mon_endpoints_auth.test[enforce_user_token_disabled-no_schema_grants]": {
+        "uri": "file://test_mon_endpoints_auth.test_enforce_user_token_disabled-no_schema_grants_/mon_endpoints_auth-enforce_user_token_disabled-no_schema_grants.json"
     },
-    "test_mon_endpoints_auth.test_mon_endpoints_auth[enforce_user_token_enabled]": {
-        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth_enforce_user_token_enabled_/mon_endpoints_auth-enforce_user_token_enabled.json"
+    "test_mon_endpoints_auth.test[enforce_user_token_disabled-with_schema_grants]": {
+        "uri": "file://test_mon_endpoints_auth.test_enforce_user_token_disabled-with_schema_grants_/mon_endpoints_auth-enforce_user_token_disabled-with_schema_grants.json"
     },
-    "test_mon_endpoints_auth.test_mon_endpoints_auth[require_counters_authentication]": {
-        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth_require_counters_authentication_/mon_endpoints_auth-require_counters_authentication.json"
+    "test_mon_endpoints_auth.test[enforce_user_token_enabled-no_schema_grants]": {
+        "uri": "file://test_mon_endpoints_auth.test_enforce_user_token_enabled-no_schema_grants_/mon_endpoints_auth-enforce_user_token_enabled-no_schema_grants.json"
     },
-    "test_mon_endpoints_auth.test_mon_endpoints_auth[require_healthcheck_authentication]": {
-        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth_require_healthcheck_authentication_/mon_endpoints_auth-require_healthcheck_authentication.json"
+    "test_mon_endpoints_auth.test[enforce_user_token_enabled-with_schema_grants]": {
+        "uri": "file://test_mon_endpoints_auth.test_enforce_user_token_enabled-with_schema_grants_/mon_endpoints_auth-enforce_user_token_enabled-with_schema_grants.json"
+    },
+    "test_mon_endpoints_auth.test[require_counters_authentication-no_schema_grants]": {
+        "uri": "file://test_mon_endpoints_auth.test_require_counters_authentication-no_schema_grants_/mon_endpoints_auth-require_counters_authentication-no_schema_grants.json"
+    },
+    "test_mon_endpoints_auth.test[require_counters_authentication-with_schema_grants]": {
+        "uri": "file://test_mon_endpoints_auth.test_require_counters_authentication-with_schema_grants_/mon_endpoints_auth-require_counters_authentication-with_schema_grants.json"
+    },
+    "test_mon_endpoints_auth.test[require_healthcheck_authentication-no_schema_grants]": {
+        "uri": "file://test_mon_endpoints_auth.test_require_healthcheck_authentication-no_schema_grants_/mon_endpoints_auth-require_healthcheck_authentication-no_schema_grants.json"
+    },
+    "test_mon_endpoints_auth.test[require_healthcheck_authentication-with_schema_grants]": {
+        "uri": "file://test_mon_endpoints_auth.test_require_healthcheck_authentication-with_schema_grants_/mon_endpoints_auth-require_healthcheck_authentication-with_schema_grants.json"
     }
 }

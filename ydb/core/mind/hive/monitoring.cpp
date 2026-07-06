@@ -2154,13 +2154,10 @@ function reassignGroups() {
             type: 'POST',
             url: url,
             success: function() {
-
+                $('#status_text').text("Started reassign actor");
             },
             error: function(jqXHR, status) {
                 $('#status_text').text(status);
-            },
-            complete: function() {
-                $('#status_text').text("Started reassign actor");
             },
         });
     }

@@ -15,7 +15,8 @@ TTopicMessage::TTopicMessage(const TDataEvent::TMessageBase& msg, ECodec codec, 
         msg.GetMeta(),
         msg.GetMessageMeta(),
         uncompressedSize,
-        msg.GetMessageGroupId()
+        msg.GetMessageGroupId(),
+        msg.GetLogicalMessageCount()
     )
     , Codec(codec)
     , Data(msg.GetData())
@@ -66,6 +67,10 @@ ui64 TTopicMessage::GetOffset() const {
     return Offset;
 }
 
+ui64 TTopicMessage::GetLogicalMessageCount() const {
+    return LogicalMessageCount;
+}
+
 ui64 TTopicMessage::GetSeqNo() const {
     return SeqNo;
 }
@@ -91,6 +96,7 @@ void TTopicMessage::Out(IOutputStream& out) const {
         << " Codec: " << Codec
         << " Data: " << Data.size() << "b"
         << " Offset: " << Offset
+        << " LogicalMessageCount: " << LogicalMessageCount
         << " SeqNo: " << SeqNo
         << " CreateTime: " << CreateTime
         << " WriteTime: " << WriteTime

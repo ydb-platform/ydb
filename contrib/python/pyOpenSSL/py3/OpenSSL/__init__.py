@@ -5,7 +5,7 @@
 pyOpenSSL - A simple wrapper around the OpenSSL library
 """
 
-from OpenSSL import crypto, SSL
+from OpenSSL import SSL, crypto
 from OpenSSL.version import (
     __author__,
     __copyright__,

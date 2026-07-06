@@ -1718,6 +1718,7 @@ struct TTxOnlineSettings {
     FLUENT_SETTING_DEFAULT(bool, AllowInconsistentReads, false);
 };
 
+
 class TTxSettings {
     friend class TTableClient;
 
@@ -1747,6 +1748,10 @@ public:
         return TTxSettings(TS_SNAPSHOT_RW);
     }
 
+    static TTxSettings StrictSerializableRW() {
+        return TTxSettings(TS_STRICT_SERIALIZABLE_RW);
+    }
+
     void Out(IOutputStream& out) const {
         switch (Mode_) {
         case TS_SERIALIZABLE_RW:
@@ -1764,6 +1769,9 @@ public:
         case TS_SNAPSHOT_RW:
             out << "SnapshotRW";
             break;
+        case TS_STRICT_SERIALIZABLE_RW:
+            out << "StrictSerializableRW";
+            break;
         default:
             out << "Unknown";
             break;
@@ -1777,6 +1785,7 @@ private:
         TS_STALE_RO,
         TS_SNAPSHOT_RO,
         TS_SNAPSHOT_RW,
+        TS_STRICT_SERIALIZABLE_RW,
     };
 
     FLUENT_SETTING(TTxOnlineSettings, OnlineSettings);

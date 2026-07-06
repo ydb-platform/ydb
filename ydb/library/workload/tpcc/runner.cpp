@@ -89,7 +89,7 @@ private:
     TLogBackendWithCapture* LogBackend;
     std::shared_ptr<TLog> Log;
 
-    std::vector<TDriver> Drivers;
+    std::vector<NConsoleClient::TScopedDriver> Drivers;
 
     std::stop_source TerminalsStopSource;
 

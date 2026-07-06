@@ -65,7 +65,7 @@ void DoDescribeConsumerRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr
     EnsureReq(p);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Describe consumer request");
-    f.RegisterActor(new NGRpcProxy::V1::TDescribeConsumerActor(p));
+    f.RegisterActor(NKikimr::NGRpcProxy::V1::NTopic::CreateDescribeConsumerActor(p));
 }
 
 void DoDescribePartitionRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
@@ -74,7 +74,7 @@ void DoDescribePartitionRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikim
     EnsureReq(p);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Describe partition request");
-    f.RegisterActor(new NGRpcProxy::V1::TDescribePartitionActor(p));
+    f.RegisterActor(NKikimr::NGRpcProxy::V1::NTopic::CreateDescribePartitionActor(p));
 }
 
 void DoCommitOffsetRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider&) {
@@ -152,10 +152,18 @@ void DoPQRemoveReadRuleRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacili
     }
 
 DECLARE_RPC(DescribeTopic);
-DECLARE_RPC(DescribeConsumer);
-DECLARE_RPC(DescribePartition);
 
 #undef DECLARE_RPC
+
+template<>
+IActor* TEvDescribeConsumerRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return NGRpcProxy::V1::NTopic::CreateDescribeConsumerActor(msg);
+}
+
+template<>
+IActor* TEvDescribePartitionRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return NGRpcProxy::V1::NTopic::CreateDescribePartitionActor(msg);
+}
 
 }
 }

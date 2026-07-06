@@ -14,6 +14,16 @@ import re
 
 
 class TestViewer(object):
+    BSC_STORAGE_STATS_VALUE_FIELDS = {
+        'AvailableGroupsToCreate',
+        'AvailableSizeToCreate',
+        'CurrentAllocatedSize',
+        'CurrentAvailableSize',
+        'CurrentGroupsCreated',
+        'ImmediateGroupsToCreate',
+        'ImmediateSizeToCreate',
+    }
+
     @pytest.fixture(autouse=True, scope='class')
     @classmethod
     def cluster_fixture(cls):
@@ -24,6 +34,7 @@ class TestViewer(object):
             'enable_local_bloom_filter_index': True,
             'enable_local_index_as_scheme_object': True,
             'enable_extra_sids_control_for_http_viewer': True,
+            'enable_column_statistics': True,
             },
             enable_static_auth=True)
         config.yaml_config['domains_config']['security_config']['enforce_user_token_requirement'] = False
@@ -681,6 +692,33 @@ class TestViewer(object):
         return cls.normalize_result(cls.get_viewer_db(url, params))
 
     @classmethod
+    def has_calculated_bsc_storage_stats(cls, result):
+        for entry in result.get('StorageStats', []):
+            for key in cls.BSC_STORAGE_STATS_VALUE_FIELDS:
+                value = entry.get(key)
+                if value is None:
+                    continue
+                try:
+                    if int(value) != 0:
+                        return True
+                except (TypeError, ValueError):
+                    continue
+        return False
+
+    @classmethod
+    def get_viewer_cluster_with_calculated_storage_stats(cls):
+        result = {}
+        tries = 15
+        while tries > 0:
+            result = cls.get_viewer("/viewer/cluster")
+            if cls.has_calculated_bsc_storage_stats(result):
+                return result
+            tries -= 1
+            time.sleep(1)
+        assert cls.has_calculated_bsc_storage_stats(result), \
+            "BSC storage stats were not calculated in /viewer/cluster response: %s" % result.get('StorageStats', [])
+
+    @classmethod
     def test_viewer_nodelist(cls):
         result = cls.get_viewer_db_normalized("/viewer/nodelist", {
         })
@@ -883,7 +921,10 @@ class TestViewer(object):
 
     @classmethod
     def test_viewer_cluster(cls):
-        return cls.get_viewer_normalized("/viewer/cluster")
+        result = cls.get_viewer_cluster_with_calculated_storage_stats()
+        result = cls.normalize_result(result)
+        cls.delete_keys_recursively(result, cls.BSC_STORAGE_STATS_VALUE_FIELDS)
+        return result
 
     @classmethod
     def test_viewer_tenantinfo(cls):

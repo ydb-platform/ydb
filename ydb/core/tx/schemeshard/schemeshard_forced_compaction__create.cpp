@@ -154,6 +154,13 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         info->TotalShardCount = shardsToCompact.size();
 
         NIceDb::TNiceDb db(txc.DB);
+
+        if (!Self->TryFreeForcedCompactionSlot(db, ctx)) {
+            return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder()
+                << "Number of stored forced compaction operations reached the limit of "
+                << Self->ForcedCompactionStoredOperationsLimit);
+        }
+
         Self->PersistForcedCompactionState(db, *info);
         Self->PersistForcedCompactionShards(db, *info, shardsToCompact);
 

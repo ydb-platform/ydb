@@ -39,7 +39,7 @@ TNodeResult TSqlCallExpr::BuildCall() {
 
     TUdfNode* udf_node = Node_ ? Node_->GetUdfNode() : nullptr;
     if (udf_node) {
-        if (!udf_node->DoInit(Ctx_, nullptr)) {
+        if (!udf_node->DoInit(Ctx_, /*src=*/nullptr)) {
             return std::unexpected(ESQLError::Basic);
         }
         TNodePtr positional_args = BuildTuple(Pos_, PositionalArgs_);
@@ -125,7 +125,7 @@ TNodeResult TSqlCallExpr::BuildCall() {
 
     if (WindowName_ && result) {
         if (!IsYqlSelectProduced_) {
-            result = Wrap(BuildCalcOverWindow(Pos_, std::move(WindowName_), std::move(*result)));
+            result = Wrap(BuildCalcOverWindow(Pos_, WindowName_, std::move(*result)));
         } else if (!(*result)->SetYqlSelectWindowName(Ctx_, std::move(WindowName_))) {
             return std::unexpected(ESQLError::Basic);
         }

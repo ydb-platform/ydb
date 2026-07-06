@@ -397,7 +397,7 @@ void TLocalBuffer::NotifyInput(bool force) {
         NActors::TActivationContext::Send<NActors::ESendingType::Tail>(
             new NActors::IEventHandle(Info.InputActorId, NActors::TActorId{}, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback})
         );
-        LastInputNotificationTime = TInstant::Now();
+        LastInputNotificationTime.store(TInstant::Now());
     }
 }
 
@@ -406,7 +406,7 @@ void TLocalBuffer::NotifyOutput(bool force) {
         NActors::TActivationContext::Send<NActors::ESendingType::Tail>(
             new NActors::IEventHandle(Info.OutputActorId, NActors::TActorId{}, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback})
         );
-        LastOutputNotificationTime = TInstant::Now();
+        LastOutputNotificationTime.store(TInstant::Now());
     }
 }
 
@@ -2444,7 +2444,7 @@ bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMay
     bool hasData = popResult && !chunk.Buffer.Empty();
     if (hasData) {
         if (chunk.TransportVersion != Deserializer->TransportVersion || chunk.PackerVersion != Deserializer->PackerVersion) {
-            auto deserializer = CreateDeserializer(Deserializer->RowType, chunk.TransportVersion, chunk.PackerVersion, Nothing(), Deserializer->HolderFactory);
+            auto deserializer = CreateDeserializer(Deserializer->RowType, chunk.TransportVersion, chunk.PackerVersion, Deserializer->DatumValidationMode, Nothing(), Deserializer->HolderFactory);
             Deserializer = std::move(deserializer);
         }
         Deserializer->Deserialize(std::move(chunk.Buffer), batch);
@@ -2585,8 +2585,8 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                 TABLED() {str << sharedBuffer->EarlyFinished.load();}
                                 TABLED() {str << sharedBuffer->PushStats.Bytes.load();}
                                 TABLED() {str << sharedBuffer->PopStats.Bytes.load();}
-                                TABLED() {str << sharedBuffer->LastOutputNotificationTime;}
-                                TABLED() {str << sharedBuffer->LastInputNotificationTime;}
+                                TABLED() {str << sharedBuffer->LastOutputNotificationTime.load();}
+                                TABLED() {str << sharedBuffer->LastInputNotificationTime.load();}
                                 TABLED() {str << sharedBuffer->InflightBytes.load();}
                                 TABLED() {str << sharedBuffer->Queue.size();}
                                 TABLED() {str << sharedBuffer->SpilledBytes.load();}

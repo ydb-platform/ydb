@@ -1,4 +1,3 @@
-/* postgres can not */
 $value = "xaaxaaxaa";
 $match = Re2::Match("[ax]+\\d");
 $grep = Re2Posix::Grep("a.*");

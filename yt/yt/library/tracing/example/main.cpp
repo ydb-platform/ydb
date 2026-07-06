@@ -13,7 +13,7 @@
 using namespace NYT;
 using namespace NYT::NTracing;
 
-void SubrequestExample(std::optional<TString> endpoint)
+void SubrequestExample(std::optional<std::string> endpoint)
 {
     auto traceContext = TTraceContext::NewRoot("Example");
     traceContext->SetSampled();
@@ -45,7 +45,7 @@ void SubrequestExample(std::optional<TString> endpoint)
     Cout << ToString(traceContext->GetTraceId()) << '\t' << ToString(asyncChildTraceContext->GetTraceId()) << Endl;
 }
 
-void DelayedSamplingExample(std::optional<TString> endpoint)
+void DelayedSamplingExample(std::optional<std::string> endpoint)
 {
     auto traceContext = TTraceContext::NewRoot("Job");
     traceContext->SetRecorded();
@@ -127,7 +127,7 @@ int main(int argc, char* argv[])
         SetGlobalTracer(jaeger);
 
         for (int i = 1; i < argc; ++i) {
-            std::optional<TString> endpoint;
+            std::optional<std::string> endpoint;
             if (i != 1) {
                 endpoint = argv[i];
             }

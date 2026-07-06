@@ -200,7 +200,7 @@ private:
             }
         }
 
-        if (!Aggr_->InitAggr(ctx, false, src, *this, Args_)) {
+        if (!Aggr_->InitAggr(ctx, /*isFactory=*/false, src, *this, Args_)) {
             return false;
         }
         return src->AddAggregation(ctx, Aggr_);
@@ -272,7 +272,7 @@ public:
 
 private:
     bool DoInitAggregation(TContext& ctx) {
-        return Aggr_->InitAggr(ctx, true, nullptr, *this, Args_);
+        return Aggr_->InitAggr(ctx, /*isFactory=*/true, /*src=*/nullptr, *this, Args_);
     }
 
 protected:
@@ -583,7 +583,7 @@ public:
 
     void DoUpdateState() const override {
         if (EmptyArgs_) {
-            State_.Set(ENodeState::Const, false);
+            State_.Set(ENodeState::Const, /*val=*/false);
         } else {
             TCallNode::DoUpdateState();
         }
@@ -1810,8 +1810,8 @@ private:
 
     void DoUpdateState() const override {
         TCallNode::DoUpdateState();
-        State_.Set(ENodeState::Aggregated, false /*!RunConfig || RunConfig->IsAggregated()*/);
-        State_.Set(ENodeState::Const, true /* FIXME: To avoid CheckAggregationLevel issue for non-const TypeOf. */);
+        State_.Set(ENodeState::Aggregated, /*val=*/false /*!RunConfig || RunConfig->IsAggregated()*/);
+        State_.Set(ENodeState::Const, /*val=*/true /* FIXME: To avoid CheckAggregationLevel issue for non-const TypeOf. */);
     }
 
 private:
@@ -2025,7 +2025,9 @@ public:
 
             Node_ = Y("block", Q(L(block, Y("return", "res"))));
         } else {
-            Node_ = ctx.EnableSystemColumns ? Y("RemoveSystemMembers", "row") : BuildAtom(Pos_, "row", 0);
+            Node_ = ctx.EnableSystemColumns
+                        ? RemoveSystemColumns(AstNode(TString("row")), ctx.Settings.ExtraSystemColumnPrefixes)
+                        : BuildAtom(Pos_, "row", 0);
         }
         return true;
     }
@@ -2036,7 +2038,7 @@ public:
     }
 
     void DoUpdateState() const override {
-        State_.Set(ENodeState::Const, false);
+        State_.Set(ENodeState::Const, /*val=*/false);
     }
 
     TNodePtr DoClone() const final {
@@ -2068,7 +2070,9 @@ bool TTableRows::DoInit(TContext& ctx, ISource* /*src*/) {
         ctx.Error(Pos_) << "TableRows requires exactly 0 arguments";
         return false;
     }
-    Node_ = ctx.EnableSystemColumns ? Y("RemoveSystemMembers", "inputRowsList") : BuildAtom(Pos_, "inputRowsList", 0);
+    Node_ = ctx.EnableSystemColumns
+                ? RemoveSystemColumns(AstNode(TString("inputRowsList")), ctx.Settings.ExtraSystemColumnPrefixes)
+                : BuildAtom(Pos_, "inputRowsList", 0);
     return true;
 }
 
@@ -2078,7 +2082,7 @@ TAstNode* TTableRows::Translate(TContext& ctx) const {
 }
 
 void TTableRows::DoUpdateState() const {
-    State_.Set(ENodeState::Const, false);
+    State_.Set(ENodeState::Const, /*val=*/false);
 }
 
 TNodePtr TTableRows::DoClone() const {
@@ -2181,7 +2185,7 @@ TAstNode* TSessionWindow::Translate(TContext&) const {
 }
 
 void TSessionWindow::DoUpdateState() const {
-    State_.Set(ENodeState::Const, false);
+    State_.Set(ENodeState::Const, /*val=*/false);
 }
 
 TNodePtr TSessionWindow::DoClone() const {
@@ -2272,11 +2276,11 @@ private:
     }
 
     void DoUpdateState() const override {
-        State_.Set(ENodeState::Const, false);
+        State_.Set(ENodeState::Const, /*val=*/false);
         if (OverWindow_) {
-            State_.Set(ENodeState::OverWindow, true);
+            State_.Set(ENodeState::OverWindow, /*val=*/true);
         } else if (IsStart) {
-            State_.Set(ENodeState::Aggregated, true);
+            State_.Set(ENodeState::Aggregated, /*val=*/true);
         }
     }
 
@@ -2410,7 +2414,7 @@ TAstNode* THoppingWindow::Translate(TContext&) const {
 }
 
 void THoppingWindow::DoUpdateState() const {
-    State_.Set(ENodeState::Const, false);
+    State_.Set(ENodeState::Const, /*val=*/false);
 }
 
 TNodePtr THoppingWindow::DoClone() const {
@@ -2745,7 +2749,7 @@ public:
     }
 
     void DoUpdateState() const override {
-        State_.Set(ENodeState::Const, true);
+        State_.Set(ENodeState::Const, /*val=*/true);
     }
 
     TNodePtr DoClone() const final {
@@ -2872,7 +2876,7 @@ private:
     }
 
     void DoUpdateState() const override {
-        State_.Set(ENodeState::Aggregated, true);
+        State_.Set(ENodeState::Aggregated, /*val=*/true);
     }
 
     TNodePtr DoClone() const override {
@@ -2987,8 +2991,8 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
 
         if (isYqlSelect) {
             TYqlAggregationArgs aggregation = {
-                .FunctionName = std::move(realFunctionName),
-                .FactoryName = std::move(factoryName),
+                .FunctionName = realFunctionName,
+                .FactoryName = factoryName,
                 .Type = type,
                 .Mode = aggMode,
                 .Args = args,
@@ -4220,7 +4224,7 @@ TNodeResult BuildBuiltinFunc(
             if (isYqlSelect && funcInfo.Kind == "Window") {
                 TYqlWindowArgs wargs = {
                     .Name = std::move(normalizedName),
-                    .Args = std::move(args),
+                    .Args = args,
                 };
 
                 return Wrap(BuildYqlWindow(pos, std::move(wargs)));
@@ -4248,10 +4252,53 @@ TNodeResult BuildBuiltinFunc(
             auto fulltextBuiltinName = normalizedName == "fulltextmatch" ? "FulltextMatch" : "FulltextScore";
             return TNonNull(TNodePtr(new TCallNodeImpl(pos, fulltextBuiltinName, args)));
         } else if (normalizedName == "hybridrank") {
+            TVector<TNodePtr> hybridArgs = args;
             if (mustUseNamed && *mustUseNamed) {
+                // The named arguments are packed into a struct (hybridArgs[1]). A custom fusion lambda --
+                // RankLambda (fuses the per-branch ranks) or ScoreLambda (fuses the raw per-branch scores) --
+                // cannot live there: a lambda is not a struct-field-typed value. Pull it out of the struct
+                // and pass it as two trailing positional children of HybridRank: a "rank"/"score" marker
+                // followed by the lambda. The marker comes first because it governs how the lambda is
+                // interpreted (it picks the argument's dict value type -- Int64 ranks vs Double scores) for
+                // both the type checker and the KQP rewrite. The two lambdas are mutually exclusive.
+                if (hybridArgs.size() == 2) {
+                    if (auto* named = hybridArgs[1]->GetStructNode()) {
+                        // Match by label only: a SQL `($x) -> ...` lambda is a BuildSqlLambda node, not a
+                        // TLambdaNode, so GetLambdaNode() would not recognize it here. Whether the value is
+                        // actually a lambda is validated during type annotation (HybridRankBuiltinWrapper).
+                        TVector<TNodePtr> kept;
+                        TNodePtr lambda;
+                        TString kind;
+                        bool duplicate = false;
+                        for (const auto& member : named->GetExprs()) {
+                            const auto& label = member->GetLabel();
+                            if (label == "RankLambda" || label == "ScoreLambda") {
+                                if (lambda) {
+                                    duplicate = true;
+                                } else {
+                                    lambda = member;
+                                    kind = label == "ScoreLambda" ? "score" : "rank";
+                                }
+                            } else {
+                                kept.push_back(member);
+                            }
+                        }
+                        if (duplicate) {
+                            *mustUseNamed = false; // we have consumed the named args; report our own error
+                            return TNonNull(TNodePtr(new TInvalidBuiltin(pos,
+                                                                         "HybridRank accepts at most one of RankLambda or ScoreLambda")));
+                        }
+                        if (lambda) {
+                            lambda->SetLabel(""); // make it a positional child, not a named one
+                            hybridArgs[1] = BuildStructure(pos, kept);
+                            hybridArgs.push_back(BuildQuotedAtom(pos, kind)); // marker first (a bare atom)
+                            hybridArgs.push_back(lambda);
+                        }
+                    }
+                }
                 *mustUseNamed = false;
             }
-            return TNonNull(TNodePtr(new TCallNodeImpl(pos, "HybridRank", args)));
+            return TNonNull(TNodePtr(new TCallNodeImpl(pos, "HybridRank", hybridArgs)));
         } else if (normalizedName == "asstruct" || normalizedName == "structtype") {
             if (args.empty()) {
                 return TNonNull(TNodePtr(new TCallNodeImpl(pos, normalizedName == "asstruct" ? "AsStruct" : "StructType", 0, 0, args)));
@@ -4343,7 +4390,7 @@ TNodeResult BuildBuiltinFunc(
                 resultArgs.emplace_back(std::move(handlers[idx]));
             }
             if (dflt.Defined()) {
-                resultArgs.emplace_back(std::move(dflt->Get()));
+                resultArgs.emplace_back(dflt->Get());
             }
             return TNonNull(TNodePtr(new TCallNodeImpl(pos, "SqlVisit", 1, -1, resultArgs)));
         } else if (normalizedName == "sqlexternalfunction") {
@@ -4429,7 +4476,7 @@ TNodeResult BuildBuiltinFunc(
                 usedArgs.emplace_back(BuildYsonOptionsNode(pos, ctx.PragmaYsonAutoConvert, ctx.PragmaYsonStrict, ctx.PragmaYsonFast));
             }
             positionalArgs = BuildTuple(pos, usedArgs);
-            auto encodeUtf8 = BuildLiteralBool(pos, true);
+            auto encodeUtf8 = BuildLiteralBool(pos, /*value=*/true);
             encodeUtf8->SetLabel("EncodeUtf8");
             namedArgs = BuildStructure(pos, {encodeUtf8});
             usedArgs = {positionalArgs, namedArgs};

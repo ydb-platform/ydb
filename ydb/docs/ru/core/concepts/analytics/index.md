@@ -40,7 +40,7 @@
 Поддерживается трансформация данных с использованием стандартных подходов и инструментов.
 
 - ELT на SQL: используйте `INSERT INTO ... SELECT` для построения витрин. Для управления сложными SQL-пайплайнами есть интеграция с [dbt](../../integrations/migration/dbt.md).
-- ETL на Apache Spark: запускайте ETL-задания на Apache Spark с помощью [параллельного коннектора](../../integrations/ingestion/spark.md).
+- ETL на Apache Spark: запускайте ETL-задания на Apache Spark с помощью [параллельного коннектора](../../integrations/query-engines/spark.md).
 - Оркестрация: автоматизируйте пайплайны с помощью [Apache Airflow](../../integrations/orchestration/airflow.md).
 
 [Подробнее о трансформации данных](concepts/etl.md)
@@ -56,6 +56,6 @@
 Для анализа данных можно использовать стандартные инструменты индустрии:
 
 - BI-инструменты: [Yandex DataLens](../../integrations/visualization/datalens.md), [Apache Superset](../../integrations/visualization/superset.md), [Grafana](../../integrations/visualization/grafana.md), [Polymatica](https://wiki.polymatica.ru/display/PDTNUG1343/YDB+Server).
-- ML-инструменты: используйте [Jupyter Notebook](../../integrations/gui/jupyter.md) и [Apache Spark](../../integrations/ingestion/spark.md) для подготовки данных и обучения моделей машинного обучения.
+- ML-инструменты: используйте [Jupyter Notebook](../../integrations/gui/jupyter.md) и [Apache Spark](../../integrations/query-engines/spark.md) для подготовки данных и обучения моделей машинного обучения.
 
 [Подробнее о BI](concepts/bi.md); [Подробнее о ML](concepts/ml.md)

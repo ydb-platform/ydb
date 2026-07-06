@@ -7,14 +7,14 @@ namespace NKikimr::NPQ::NMLP {
 
 Y_UNIT_TEST_SUITE(TMLPCountersTests) {
 
-Y_UNIT_TEST(SimpleCounters) {
+void SimpleCountersImpl(const bool keepMessagesOrder) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
 
     CreateTopic(setup, "/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
             .PartitioningSettings(2, 2)
             .BeginAddSharedConsumer("mlp-consumer")
-                .KeepMessagesOrder(false)
+                .KeepMessagesOrder(keepMessagesOrder)
                 .BeginDeadLetterPolicy()
                     .Enable()
                     .BeginCondition()
@@ -24,9 +24,12 @@ Y_UNIT_TEST(SimpleCounters) {
                 .EndDeadLetterPolicy()
             .EndAddConsumer());
 
-    WriteMany(setup, "/Root/topic1", 0, 16, 59);
-    WriteMany(setup, "/Root/topic1", 1, 16, 61);
-
+    if (keepMessagesOrder) {
+        WriteManyGroups(setup, "/Root/topic1", 16, 120, 75);
+    } else {
+        WriteMany(setup, "/Root/topic1", 0, 16, 59);
+        WriteMany(setup, "/Root/topic1", 1, 16, 61);
+    }
     {
         Cerr << ">>>>> read from first partition" << Endl;
         CreateReaderActor(runtime, {
@@ -113,7 +116,7 @@ Y_UNIT_TEST(SimpleCounters) {
     assertMetric("topic.inflight.delayed_messages", 0);
     assertMetric("topic.inflight.unlocked_messages", 101);
     assertMetric("topic.inflight.scheduled_to_dlq_messages", 0);
-    
+    assertMetric("topic.inflight.message_groups", keepMessagesOrder ? 75 : 0);
     assertMetric("topic.committed_messages", 1);
     assertMetric("topic.purged_messages", 0);
 
@@ -127,6 +130,14 @@ Y_UNIT_TEST(SimpleCounters) {
     assertDeletedMetric("delete_policy", 0);
     assertDeletedMetric("move_policy", 0);
     assertDeletedMetric("retention", 0);
+}
+
+Y_UNIT_TEST(SimpleCounters) {
+    SimpleCountersImpl(false);
+}
+
+Y_UNIT_TEST(SimpleCountersWithKeepMessageOrder) {
+    SimpleCountersImpl(true);
 }
 
 }

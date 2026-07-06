@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
             runtime.EnableScheduleForActor(fetchId);
 
             auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
-            UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::SUCCESS, ev->Message);
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Status,Ydb::StatusIds::SUCCESS, ev->Message);
         }
 
         {
@@ -321,7 +321,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
             runtime.EnableScheduleForActor(fetchId);
 
             auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
-            UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::UNAUTHORIZED, ev->Message);
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::UNAUTHORIZED, ev->Message);
         }
     }
 };

@@ -955,6 +955,202 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
 
     } // Y_UNIT_TEST(SplitByMinPartitionCountWithTwoIter)
 
+    Y_UNIT_TEST(SplitByMinPartitionCountToSixteen) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        auto countActivePartitions = [](const auto& topic) {
+            ui32 activePartitions = 0;
+            for (const auto& partition : topic.GetPartitions()) {
+                if (partition.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) {
+                    ++activePartitions;
+                }
+            }
+            return activePartitions;
+        };
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 1);
+
+        ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
+        scheme.SetName("Topic1");
+        scheme.MutablePQTabletConfig()->MutablePartitionConfig();
+        scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMaxPartitionCount(100);
+        scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMinPartitionCount(16);
+        scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetPartitionStrategyType(
+            ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+
+        TStringBuilder sb;
+        sb << scheme;
+        const TString schemeStr = sb.substr(1, sb.size() - 2);
+
+        AsyncAlterPQGroup(runtime, ++txId, "/MyRoot/USER_1", schemeStr);
+
+        env.TestWaitNotification(runtime, txId);
+
+        auto topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPartitions().size(), 31);
+        UNIT_ASSERT_VALUES_EQUAL(countActivePartitions(topic), 16);
+
+        ModifyTopic(runtime, env, txId, [&](auto& alterScheme) {
+            alterScheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMaxPartitionCount(100);
+            alterScheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMinPartitionCount(32);
+            alterScheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetPartitionStrategyType(
+                ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+        });
+
+        topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPartitions().size(), 63);
+        UNIT_ASSERT_VALUES_EQUAL(countActivePartitions(topic), 32);
+    } // Y_UNIT_TEST(SplitByMinPartitionCountToSixteen)
+
+    Y_UNIT_TEST(SplitByMinPartitionCountActivePartitionCountWithoutReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        constexpr ui64 lifetimeSeconds = 3600;
+        constexpr ui64 writeSpeed = 1024;
+        const ui64 partitionReserveSize = lifetimeSeconds * writeSpeed;
+        const ui32 expectedActivePartitions = 16;
+
+        const auto AssertTopicReserve = [&](ui64 expectedActiveCount) {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
+                               {NLs::Finished,
+                                NLs::TopicReservedStorage(expectedActiveCount * partitionReserveSize)});
+        };
+
+        CreateSubDomain(runtime, env, ++txId);
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot/USER_1", TStringBuilder() << R"(
+                Name: "Topic1"
+                TotalGroupCount: 1
+                PartitionPerTablet: 7
+                PQTabletConfig {
+                    PartitionConfig {
+                        LifetimeSeconds: )" << lifetimeSeconds << R"(
+                        WriteSpeedInBytesPerSecond : )" << writeSpeed << R"(
+                    }
+                    MeteringMode: METERING_MODE_RESERVED_CAPACITY
+                    PartitionStrategy {
+                        PartitionStrategyType: CAN_SPLIT_AND_MERGE
+                    }
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+        AssertTopicReserve(1);
+
+        ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
+        scheme.SetName("Topic1");
+        scheme.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(lifetimeSeconds);
+        scheme.MutablePQTabletConfig()->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(writeSpeed);
+        scheme.MutablePQTabletConfig()->SetMeteringMode(
+            ::NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY);
+        scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMaxPartitionCount(100);
+        scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMinPartitionCount(expectedActivePartitions);
+        scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetPartitionStrategyType(
+            ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+
+        TStringBuilder sb;
+        sb << scheme;
+        const TString schemeStr = sb.substr(1, sb.size() - 2);
+
+        AsyncAlterPQGroup(runtime, ++txId, "/MyRoot/USER_1", schemeStr);
+        env.TestWaitNotification(runtime, txId);
+
+        auto topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPartitions().size(), 31);
+
+        ui32 activePartitions = 0;
+        for (const auto& partition : topic.GetPartitions()) {
+            if (partition.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) {
+                ++activePartitions;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(activePartitions, expectedActivePartitions);
+
+        // ComputeAlterActivePartitionCount must deduct intermediate parents from PartitionsToAdd.
+        // Without reboot, reserve is based on the stored ActivePartitionCount, not partition statuses.
+        AssertTopicReserve(expectedActivePartitions);
+    } // Y_UNIT_TEST(SplitByMinPartitionCountActivePartitionCountWithoutReboot)
+
+    Y_UNIT_TEST(CreateRootLevelSiblingPartitions) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        auto countActivePartitions = [](const auto& topic) {
+            ui32 activePartitions = 0;
+            for (const auto& partition : topic.GetPartitions()) {
+                if (partition.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) {
+                    ++activePartitions;
+                }
+            }
+            return activePartitions;
+        };
+
+        TString bound0((char*)bound_1_3, sizeof(bound_1_3));
+        TString bound1((char*)bound_2_3, sizeof(bound_2_3));
+        const unsigned char partitionBoundaryBytes[] = {0xBF};
+        const unsigned char splitBoundaryBytes[] = {0xB5};
+        TString partitionBoundary((char*)partitionBoundaryBytes, sizeof(partitionBoundaryBytes));
+        TString splitBoundary((char*)splitBoundaryBytes, sizeof(splitBoundaryBytes));
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 1);
+
+        ModifyTopic(runtime, env, txId, [&](auto& scheme) {
+            auto* boundary0 = scheme.AddRootPartitionBoundaries();
+            boundary0->SetPartition(0);
+            boundary0->MutableKeyRange()->SetToBound(bound0);
+            auto* boundary1 = scheme.AddRootPartitionBoundaries();
+            boundary1->SetPartition(1);
+            boundary1->SetCreatePartition(true);
+            boundary1->MutableKeyRange()->SetFromBound(bound0);
+            boundary1->MutableKeyRange()->SetToBound(bound1);
+            auto* boundary2 = scheme.AddRootPartitionBoundaries();
+            boundary2->SetPartition(2);
+            boundary2->SetCreatePartition(true);
+            boundary2->MutableKeyRange()->SetFromBound(bound1);
+        });
+
+        auto topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPartitions().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(countActivePartitions(topic), 3);
+
+        ModifyTopic(runtime, env, txId, [&](auto& scheme) {
+            auto* boundary0 = scheme.AddRootPartitionBoundaries();
+            boundary0->SetPartition(0);
+            boundary0->MutableKeyRange()->SetToBound(bound0);
+            auto* boundary1 = scheme.AddRootPartitionBoundaries();
+            boundary1->SetPartition(1);
+            boundary1->MutableKeyRange()->SetFromBound(bound0);
+            boundary1->MutableKeyRange()->SetToBound(bound1);
+            auto* boundary2 = scheme.AddRootPartitionBoundaries();
+            boundary2->SetPartition(2);
+            boundary2->MutableKeyRange()->SetFromBound(bound1);
+            boundary2->MutableKeyRange()->SetToBound(partitionBoundary);
+            auto* boundary3 = scheme.AddRootPartitionBoundaries();
+            boundary3->SetPartition(3);
+            boundary3->SetCreatePartition(true);
+            boundary3->MutableKeyRange()->SetFromBound(partitionBoundary);
+        });
+
+        topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPartitions().size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(countActivePartitions(topic), 4);
+
+        SplitPartitionTo(runtime, env, txId, 2, splitBoundary, {3, 4}, true);
+
+        topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPartitions().size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(countActivePartitions(topic), 5);
+    } // Y_UNIT_TEST(CreateRootLevelSiblingPartitions)
+
 } // Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest)
 
 Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {
@@ -1396,5 +1592,92 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {
         ValidatePartitionChildren(partition2, {});
         ValidatePartitionChildren(partition3, {});
 
-    } // Y_UNIT_TEST
+    } // Y_UNIT_TEST(SplitWithExistingPartitionWithPartialOverlapAndCreateRootLevelSibling)
+
+    Y_UNIT_TEST(AlterTopicConfigAfterSplitAlterInterruptedByReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 3);
+
+        const unsigned char b[] = {0x7F};
+        TString boundary((char*)b, sizeof(b));
+
+        ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
+        scheme.SetName("Topic1");
+        scheme.MutablePQTabletConfig()->MutablePartitionConfig();
+        auto* split = scheme.AddSplit();
+        split->SetPartition(1);
+        split->SetSplitBoundary(boundary);
+
+        TStringBuilder sb;
+        sb << scheme;
+        const TString schemeStr = sb.substr(1, sb.size() - 2);
+
+        AsyncAlterPQGroup(runtime, ++txId, "/MyRoot/USER_1", schemeStr);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        env.TestWaitNotification(runtime, txId);
+
+        auto topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPartitions().size(), 5);
+
+        ui32 activePartitions = 0;
+        for (const auto& partition : topic.GetPartitions()) {
+            if (partition.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) {
+                ++activePartitions;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(activePartitions, 4);
+
+        ModifyTopic(runtime, env, txId, [&](auto& alter) {
+            alter.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(7200);
+        });
+    } // Y_UNIT_TEST(AlterTopicConfigAfterSplitAlterInterruptedByReboot)
+
+    Y_UNIT_TEST(AlterTopicConfigAfterMergeAlterInterruptedByReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 3);
+
+        ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
+        scheme.SetName("Topic1");
+        scheme.MutablePQTabletConfig()->MutablePartitionConfig();
+        auto* merge = scheme.AddMerge();
+        merge->SetPartition(0);
+        merge->SetAdjacentPartition(1);
+
+        TStringBuilder sb;
+        sb << scheme;
+        const TString schemeStr = sb.substr(1, sb.size() - 2);
+
+        AsyncAlterPQGroup(runtime, ++txId, "/MyRoot/USER_1", schemeStr);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        env.TestWaitNotification(runtime, txId);
+
+        auto topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPartitions().size(), 4);
+
+        ui32 activePartitions = 0;
+        for (const auto& partition : topic.GetPartitions()) {
+            if (partition.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) {
+                ++activePartitions;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(activePartitions, 2);
+
+        ModifyTopic(runtime, env, txId, [&](auto& alter) {
+            alter.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(7200);
+        });
+    } // Y_UNIT_TEST(AlterTopicConfigAfterMergeAlterInterruptedByReboot)
 }

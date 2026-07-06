@@ -32,7 +32,6 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Bundle(std::move(bundle))
-    , HedgingDelay(DirectBlockGroup->GetOracle()->GetWriteHedgingDelay())
     , RequestTimeout(DirectBlockGroup->GetOracle()->GetWriteRequestTimeout())
     , IndirectWriteReplyTimeout(
           DirectBlockGroup->GetOracle()->GetIndirectWriteReplyTimeout())
@@ -63,7 +62,9 @@ void TWriteRequestExecutor::Run()
     }
 
     ScheduleRequestTimeout();
-    ScheduleHedging();
+    ScheduleHedging(DirectBlockGroup->GetOracle()->GetWriteHedgingDelay(
+        hosts,
+        WriteMode == EWriteMode::IndirectWrite));
 
     switch (WriteMode) {
         case EWriteMode::IndirectWrite: {
@@ -107,7 +108,7 @@ void TWriteRequestExecutor::SendIndirectWriteRequest(THostMask hosts)
     DirectBlockGroup->WriteBlocksToManyPBuffers(
         VChunkConfig.GetVChunkIndex(),
         coordinator,
-        hosts.Hosts(),
+        hosts,
         Bundle->GetLsn(),
         Bundle->GetVChunkRange(),
         IndirectWriteReplyTimeout,
@@ -123,21 +124,6 @@ void TWriteRequestExecutor::SendIndirectWriteRequest(THostMask hosts)
 void TWriteRequestExecutor::OnIndirectWriteResponse(
     const TDBGWriteBlocksToManyPBuffersResponse& response)
 {
-    if (HasError(response.OverallError)) {
-        FailedWrites = FailedWrites.Include(IndirectCoordinator);
-
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s OnIndirectWriteResponse: %s %s",
-            LogTitle.GetWithTime().c_str(),
-            ExtendedDebugState().c_str(),
-            FormatError(response.OverallError).c_str());
-
-        SendAdditionalDirectWrites();
-        return;
-    }
-
     THostMask completedWritesOfCurrentResponse;
     for (const auto& pbufferResponse: response.Responses) {
         const auto host = pbufferResponse.HostIndex;
@@ -181,7 +167,7 @@ void TWriteRequestExecutor::SendAdditionalDirectWrites()
         return;
     }
 
-    LOG_INFO(
+    LOG_TRACE(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "%s SendAdditionalDirectWrites %s",
@@ -251,6 +237,13 @@ void TWriteRequestExecutor::SendDirectWriteRequestsToHandoffs(size_t count)
                            .Exclude(IndirectCoordinator);
 
     for (THostIndex host: hosts) {
+        LOG_TRACE(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s SendAdditionalDirectWrites %s",
+            LogTitle.GetWithTime().c_str(),
+            ExtendedDebugState().c_str());
+
         SendDirectWriteRequest(host);
         if (--count == 0) {
             break;
@@ -412,9 +405,9 @@ void TWriteRequestExecutor::NotifyBelated(THostMask completedOnCurrentResponse)
     Bundle->NotifyBelated(completedOnCurrentResponse);
 }
 
-void TWriteRequestExecutor::ScheduleHedging()
+void TWriteRequestExecutor::ScheduleHedging(TDuration hedgingDelay)
 {
-    if (!HedgingDelay) {
+    if (!hedgingDelay) {
         return;
     }
 
@@ -423,10 +416,10 @@ void TWriteRequestExecutor::ScheduleHedging()
         NKikimrServices::NBS_PARTITION,
         "%s Schedule OnHedgingTimeout() %s",
         LogTitle.GetWithTime().c_str(),
-        FormatDuration(HedgingDelay).c_str());
+        FormatDuration(hedgingDelay).c_str());
 
     DirectBlockGroup->Schedule(
-        HedgingDelay,
+        hedgingDelay,
         [weakSelf = weak_from_this()]()
         {
             if (auto self = weakSelf.lock()) {

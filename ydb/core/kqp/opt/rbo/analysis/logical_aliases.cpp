@@ -1,5 +1,3 @@
-#include "logical_analysis_utils.h"
-
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 
@@ -293,14 +291,16 @@ TPlanAliases::TAliasMap TOpSort::ComputeAliases() {
 }
 
 void ComputePlanAliases(TOpRoot& root) {
-    TPlanAnalysisTraversal traversal(root);
+    const auto traversal = root.PostOrder();
 
-    for (const auto& op : traversal.PostOrder()) {
+    for (const auto& iter : traversal) {
+        const auto& op = iter.Current;
         op->Props.Analysis.Aliases.reset();
         op->Props.Analysis.InRootAliasRegion = false;
     }
 
-    for (const auto& op : traversal.PostOrder()) {
+    for (const auto& iter : traversal) {
+        const auto& op = iter.Current;
         op->Props.Analysis.Aliases = op->ComputeAliases();
     }
 

@@ -1,5 +1,3 @@
-#include "logical_analysis_utils.h"
-
 #include <ydb/core/kqp/opt/rbo/analysis/logical_name_constraints.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
@@ -63,20 +61,21 @@ bool PropagateForbidden(const TIntrusivePtr<IOperator>& op, const TInfoUnitConst
 class TLogicalNameConstraints {
 public:
     explicit TLogicalNameConstraints(TOpRoot& root)
-        : Traversal(root) {
+        : Traversal(root.PostOrder()) {
     }
 
     void Run() {
-        for (const auto& op : Traversal.PostOrder()) {
+        for (const auto& iter : Traversal) {
+            const auto& op = iter.Current;
             op->Props.Analysis.NameConstraints.emplace();
         }
 
-        for (const auto& op : Traversal.PreOrder()) {
-            PropagateSideBySideInputConflicts(*op);
+        for (auto it = Traversal.rbegin(); it != Traversal.rend(); ++it) {
+            PropagateSideBySideInputConflicts(*it->Current);
         }
 
-        for (const auto& op : Traversal.PreOrder()) {
-            Enqueue(op);
+        for (auto it = Traversal.rbegin(); it != Traversal.rend(); ++it) {
+            Enqueue(it->Current);
         }
         Propagate();
     }
@@ -101,7 +100,7 @@ private:
         Queue.clear();
     }
 
-    TPlanAnalysisTraversal Traversal;
+    TOpTraversal Traversal;
     THashSet<IOperator*> Queued;
     TVector<TIntrusivePtr<IOperator>> Queue;
 };

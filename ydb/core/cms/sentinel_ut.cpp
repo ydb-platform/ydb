@@ -750,6 +750,7 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         NKikimrCms::TCmsConfig config;
 
         config.MutableSentinelConfig()->SetFaultyPDisksThresholdPerNode(disksPerShelf - 1);
+        config.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
         TTestEnv env(nodes, disksPerNode, config);
         env.SetLogPriority(NKikimrServices::CMS, NLog::PRI_ERROR);
 

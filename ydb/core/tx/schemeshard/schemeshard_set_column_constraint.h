@@ -14,8 +14,6 @@ struct TSetColumnConstraintOperationInfo;
 TString SerializeSetColumnConstraintColumnNames(const std::vector<TString>& columns);
 std::vector<TString> DeserializeSetColumnConstraintColumnNames(const TString& serialized);
 
-// Common helper functions for filling proto from operation info
-float CalcSetColumnConstraintValidationProgress(const TSetColumnConstraintOperationInfo& operationInfo);
 void FillSetColumnConstraint(
     NKikimrSetColumnConstraint::TSetColumnConstraint& proto,
     const TSetColumnConstraintOperationInfo& operationInfo,

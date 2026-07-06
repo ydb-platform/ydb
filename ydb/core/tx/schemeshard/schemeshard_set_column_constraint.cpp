@@ -28,6 +28,8 @@ std::vector<TString> DeserializeSetColumnConstraintColumnNames(const TString& se
     return result;
 }
 
+namespace {
+
 float CalcSetColumnConstraintValidationProgress(const TSetColumnConstraintOperationInfo& operationInfo) {
     const ui64 total = operationInfo.ValidationShards.size();
     if (total == 0) {
@@ -35,6 +37,8 @@ float CalcSetColumnConstraintValidationProgress(const TSetColumnConstraintOperat
     }
     const ui64 done = operationInfo.DoneValidationShards.size();
     return static_cast<float>(done) / static_cast<float>(total) * 100.0f;
+}
+
 }
 
 void FillSetColumnConstraint(

@@ -30,7 +30,7 @@ TStringBuf GetDbMonRequestHeader(const NMon::TEvRemoteHttpInfo& request, TString
 }
 
 TInstant GetDbMonRequestDeadline(const NMon::TEvRemoteHttpInfo::TPtr& event) {
-    const TString deadlineUs = GetDbMonRequestHeader(*event->Get(), DbMonRequestDeadlineHeader);
+    const TStringBuf deadlineUs = GetDbMonRequestHeader(*event->Get(), DbMonRequestDeadlineHeader);
     const ui64 deadlineValue = FromStringWithDefault<ui64>(deadlineUs);
     if (deadlineValue) {
         return TInstant::MicroSeconds(deadlineValue);

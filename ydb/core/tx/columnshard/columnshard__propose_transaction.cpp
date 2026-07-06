@@ -107,7 +107,8 @@ public:
                 {"event", "removed tx operator"});
             return;
         }
-        YDB_LOG_CREATE_CONTEXT(
+        ::NActors::NStructuredLog::TLogStack::TLogGuard ydblogContextGuard2;
+        YDB_LOG_UPDATE_CONTEXT(
             {"intOpTx", internalOp->GetTxInfo().DebugString()},
             {"intThis", (ui64)internalOp.get()});
         if (!internalOp->CheckTxInfoForReply(*TxInfo)) {

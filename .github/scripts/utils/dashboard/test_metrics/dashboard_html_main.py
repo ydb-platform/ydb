@@ -436,7 +436,7 @@ def build_html_dashboard(
       }}, 0);
     }}
 
-    const data = {json.dumps(payload, ensure_ascii=False)};
+    const data = {json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")};
     const UTC_OFFSET_SEC = Number(data.utc_offset_sec || 0);
     const _fmtCache = {{}};
     function formatHeadlineValue(metric, value) {{

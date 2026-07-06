@@ -272,6 +272,10 @@ def run_monitor(
                 pid = p["pid"]
                 if pid not in ya_pids:
                     continue
+                ram_ya_kb += p.get("rss_kb", 0)
+                r, w = get_process_io(pid)
+                ya_read_bytes += r
+                ya_write_bytes += w
                 if pid not in prev_pid_cpu:
                     prev_pid_cpu[pid] = (p["utime"], p["stime"])
                     continue
@@ -282,10 +286,6 @@ def run_monitor(
                 prev_pid_cpu[pid] = (p["utime"], p["stime"])
                 if delta_total > 0:
                     cpu_ya_jiffies += delta_total
-                ram_ya_kb += p.get("rss_kb", 0)
-                r, w = get_process_io(pid)
-                ya_read_bytes += r
-                ya_write_bytes += w
                 cpu_per_pid.append({
                     "pid": pid,
                     "comm": p["comm"],

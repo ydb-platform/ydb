@@ -198,9 +198,9 @@ class PortManager(object):
             return port
 
         if len(self._filelocks) >= self._valid_port_count:
-            raise PortManagerException("All valid ports are taken ({}): {}".format(
-                self._valid_range, self._reserved_ports()
-            ))
+            raise PortManagerException(
+                "All valid ports are taken ({}): {}".format(self._valid_range, self._reserved_ports())
+            )
 
         salt = random.randint(0, UI16MAXVAL)
         for attempt in six.moves.range(self._valid_port_count):
@@ -217,9 +217,7 @@ class PortManager(object):
             return probe_port
 
         raise PortManagerException(
-            "Failed to find valid port (range: {} used: {})".format(
-                self._valid_range, self._reserved_ports()
-            )
+            "Failed to find valid port (range: {} used: {})".format(self._valid_range, self._reserved_ports())
         )
 
     def _capture_port(self, port, sock_type, hold_socket=False):

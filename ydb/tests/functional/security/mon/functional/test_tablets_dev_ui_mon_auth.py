@@ -303,9 +303,8 @@ def _schemeshard_post_access_cases(legacy_path, secure_path, admin_secure_status
     all_forbidden, _, admin_allowed = tablet_devui_sid_matrix()
     expected_on_secure = dict(admin_allowed)
     expected_on_secure['root@builtin'] = admin_secure_status
-    return (
-        _schemeshard_endpoint_cases([legacy_path], all_forbidden)
-        + _schemeshard_endpoint_cases([secure_path], expected_on_secure)
+    return _schemeshard_endpoint_cases([legacy_path], all_forbidden) + _schemeshard_endpoint_cases(
+        [secure_path], expected_on_secure
     )
 
 
@@ -363,10 +362,7 @@ def test_schemeshard_tablet_devui_mon_paths_with_enforce_user_token(
 ):
     cluster = ydb_cluster_with_enforce_user_token_and_schemeshard_tablet
     tid = cluster.schemeshard_tablet_id
-    cases = (
-        _schemeshard_monitoring_devui_cases(tid)
-        + _schemeshard_admin_devui_cases(tid, secure_path_mode=False)
-    )
+    cases = _schemeshard_monitoring_devui_cases(tid) + _schemeshard_admin_devui_cases(tid, secure_path_mode=False)
 
     for endpoint_path, token, expected_status in cases:
         status = _schemeshard_get_status(cluster, endpoint_path, token)
@@ -381,10 +377,7 @@ def test_schemeshard_tablet_devui_mon_paths_with_secure_path_mode(
 ):
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet
     tid = cluster.schemeshard_tablet_id
-    cases = (
-        _schemeshard_monitoring_devui_cases(tid)
-        + _schemeshard_admin_devui_cases(tid, secure_path_mode=True)
-    )
+    cases = _schemeshard_monitoring_devui_cases(tid) + _schemeshard_admin_devui_cases(tid, secure_path_mode=True)
 
     for endpoint_path, token, expected_status in cases:
         status = _schemeshard_get_status(cluster, endpoint_path, token)
@@ -399,10 +392,7 @@ def test_schemeshard_page_access_matrix_with_secure_path_mode(
 ):
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet
     tid = cluster.schemeshard_tablet_id
-    cases = (
-        _schemeshard_public_page_access_cases(tid)
-        + _schemeshard_admin_page_access_cases(tid)
-    )
+    cases = _schemeshard_public_page_access_cases(tid) + _schemeshard_admin_page_access_cases(tid)
 
     for endpoint_path, token, expected_status in cases:
         status = _schemeshard_get_status(cluster, endpoint_path, token)
@@ -441,7 +431,9 @@ def test_schemeshard_post_split_one_to_one_with_secure_path_mode(
     tid = cluster.schemeshard_tablet_id
     post_data = 'ShardID=1'
     legacy_path, secure_path, admin_secure_status = _schemeshard_post_action_paths(
-        tid, 'SplitOneToOne', admin_secure_status=400,
+        tid,
+        'SplitOneToOne',
+        admin_secure_status=400,
     )
     cases = _schemeshard_post_access_cases(legacy_path, secure_path, admin_secure_status)
 
@@ -459,7 +451,9 @@ def test_schemeshard_new_post_action_is_admin_only_by_default(
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet
     tid = cluster.schemeshard_tablet_id
     legacy_path, secure_path, admin_secure_status = _schemeshard_post_action_paths(
-        tid, 'FutureAction', admin_secure_status=400,
+        tid,
+        'FutureAction',
+        admin_secure_status=400,
     )
     cases = _schemeshard_post_access_cases(legacy_path, secure_path, admin_secure_status)
 
@@ -546,10 +540,7 @@ def test_schemeshard_force_drop_unsafe_form_uses_secure_path(
 ):
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet
     tid = cluster.schemeshard_tablet_id
-    endpoint_path = (
-        f'/tablets/app?TabletID={tid}'
-        f'&Page=PathInfo&OwnerPathId={tid}&LocalPathId=1'
-    )
+    endpoint_path = f'/tablets/app?TabletID={tid}' f'&Page=PathInfo&OwnerPathId={tid}&LocalPathId=1'
     response = _schemeshard_get_response(cluster, endpoint_path, 'monitoring@builtin')
 
     assert response.status_code == 200, response.text

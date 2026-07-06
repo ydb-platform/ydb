@@ -269,9 +269,7 @@ def _test_endpoint_with_certificate(trace_endpoint, client_certificates, cert_ty
 
 def _test_endpoint_without_any_auth(trace_endpoint):
     response = requests.get(trace_endpoint, timeout=5, verify=False)
-    assert (
-        response.status_code == 401
-    ), f"Expected /trace without auth to return 401, got {response.status_code}"
+    assert response.status_code == 401, f"Expected /trace without auth to return 401, got {response.status_code}"
 
 
 def _test_endpoint_with_token(trace_endpoint, token, expected_status):

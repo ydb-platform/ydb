@@ -8,7 +8,6 @@ import pytest
 import requests
 import yatest.common
 
-
 requests.packages.urllib3.disable_warnings()
 
 TOKENS = [
@@ -29,7 +28,7 @@ _DEFAULT_QUERIES = [
     {'database': TENANT_DATABASE},
 ]
 
-# Demo counter handlers stream ~10s by default; keep requests short like viewer unit tests.
+# Change counter handlers defaults (max_counter=10, period=1000ms which causes ~10s per stream).
 _COUNTER_ENDPOINT_QUERIES = [
     {'max_counter': '1', 'period': '1'},
     {'max_counter': '1', 'period': '1', 'database': DATABASE},
@@ -203,7 +202,7 @@ ENDPOINT_SPECS = [
 
 _DEFAULT_METHODS = ('GET', 'POST')
 _REQUEST_TIMEOUT = 5
-_MAX_PARALLEL_REQUESTS = 32
+_MAX_PARALLEL_REQUESTS = 8
 
 _thread_local = threading.local()
 
@@ -236,10 +235,7 @@ def _full_path(base_path, query):
 
 def _requests_for_spec(cluster, spec):
     base_path = _base_path(cluster, spec)
-    return [
-        (base_path, _query_string(query), _full_path(base_path, query))
-        for query in _queries_for_spec(spec)
-    ]
+    return [(base_path, _query_string(query), _full_path(base_path, query)) for query in _queries_for_spec(spec)]
 
 
 def _get_http_session():
@@ -315,9 +311,15 @@ _MON_ENDPOINTS_AUTH_CASES = (
     pytest.param('enforce_user_token_enabled_with_schema_grants', id='enforce_user_token_enabled-with_schema_grants'),
     pytest.param('enforce_user_token_disabled_no_schema_grants', id='enforce_user_token_disabled-no_schema_grants'),
     pytest.param('enforce_user_token_disabled_with_schema_grants', id='enforce_user_token_disabled-with_schema_grants'),
-    pytest.param('require_counters_authentication_no_schema_grants', id='require_counters_authentication-no_schema_grants'),
-    pytest.param('require_counters_authentication_with_schema_grants', id='require_counters_authentication-with_schema_grants'),
-    pytest.param('require_healthcheck_authentication_no_schema_grants', id='require_healthcheck_authentication-no_schema_grants'),
+    pytest.param(
+        'require_counters_authentication_no_schema_grants', id='require_counters_authentication-no_schema_grants'
+    ),
+    pytest.param(
+        'require_counters_authentication_with_schema_grants', id='require_counters_authentication-with_schema_grants'
+    ),
+    pytest.param(
+        'require_healthcheck_authentication_no_schema_grants', id='require_healthcheck_authentication-no_schema_grants'
+    ),
     pytest.param(
         'require_healthcheck_authentication_with_schema_grants',
         id='require_healthcheck_authentication-with_schema_grants',

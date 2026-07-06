@@ -16,7 +16,7 @@ CLUSTER_CONFIG = dict(
         'TX_PROXY_SCHEME_CACHE': LogLevels.DEBUG,
     },
     # do not clutter logs with resource pools auto creation
-    enable_resource_pools=False
+    enable_resource_pools=False,
 )
 
 
@@ -41,8 +41,7 @@ def test_allowed_paths_lookup(ydb_cluster):
     tenant_nodes_2 = ydb_cluster.register_and_start_slots(TENANT_NAME_2)
     ydb_cluster.wait_tenant_up(TENANT_NAME_2)
 
-    permissions_settings = ydb.ModifyPermissionsSettings()\
-        .grant_permissions('user', ('ydb.generic.list',))
+    permissions_settings = ydb.ModifyPermissionsSettings().grant_permissions('user', ('ydb.generic.list',))
 
     # Check allowed lookups from Domain database
     domain_driver_config = ydb.DriverConfig(

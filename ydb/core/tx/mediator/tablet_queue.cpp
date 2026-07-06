@@ -788,19 +788,6 @@ private:
     THashMap<TActorId, TGranularServer> GranularServers;
 };
 
-static TString DumpTxIds(const TVector<TTx>& v) {
-    TStringBuilder stream;
-    stream << '{';
-    for (auto it = v.begin(); it != v.end(); ++it) {
-        if (it != v.begin()) {
-            stream << ", ";
-        }
-        stream << it->TxId;
-    }
-    stream << '}';
-    return std::move(stream);
-}
-
 void TTxMediatorTabletQueue::TTabletEntry::MergeOutOfOrder(TStep* sx, TVector<TTx>&& update) {
     // Step transactions are a union from multiple coordinators, and the update
     // is currently unacknowledged transactions from a single coordinator.
@@ -830,8 +817,8 @@ void TTxMediatorTabletQueue::TTabletEntry::MergeOutOfOrder(TStep* sx, TVector<TT
         YDB_LOG_CRIT_COMP(NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Received out-of-order step for tablet with transactions which are not a subset of previously received",
             {"step", sx->StepRef->Step},
             {"tabletId", TabletId},
-            {"updateTxIds", DumpTxIds(update)},
-            {"txIds", DumpTxIds(sx->Transactions)});
+            {"updateTxIds", TTx::DumpTxIds(update)},
+            {"txIds", TTx::DumpTxIds(sx->Transactions)});
     }
 }
 

@@ -29,17 +29,6 @@ namespace NTxMediator {
             return Buckets[bucketIdx];
         }
 
-        TString DumpTxIds(const TVector<TTx>& tx) {
-            TStringBuilder ss;
-            for (const auto &x : tx) {
-                if (!ss.empty()) {
-                    ss << " ";
-                }
-                ss << x.TxId;
-            }
-            return (TString)ss;
-        }
-
         template<typename TEv>
         void SendStepToBucket(TTabletId tablet, TStepId step, TVector<TTx> &tx, const TActorContext &ctx) {
             TBucket &bucket = SelectBucket(tablet);
@@ -49,7 +38,7 @@ namespace NTxMediator {
                 {"mediatorId", MediatorId},
                 {"step", step},
                 {"forTablet", tablet},
-                {"txIds", DumpTxIds(tx)},
+                {"txIds", TTx::DumpTxIds(tx)},
                 {"marker", "M2"});
 
             YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_EXEC_QUEUE, "SEND Ev",
@@ -58,7 +47,7 @@ namespace NTxMediator {
                 {"to", bucket.ActiveActor},
                 {"step", step},
                 {"forTablet", tablet},
-                {"txIds", DumpTxIds(tx)},
+                {"txIds", TTx::DumpTxIds(tx)},
                 {"marker", "M3"});
             ctx.Send(bucket.ActiveActor, new TEv(step, tablet, tx));
         }

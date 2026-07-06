@@ -121,7 +121,7 @@ public:
             path << modifyScheme->GetWorkingDir() << "/" << TableName();
             YDB_LOG_DEBUG("Created transaction",
                 {"logPrefix", LogPrefix},
-                {"operationType", NKikimrSchemeOp::EOperationType_Name(OperationType)},
+                {"operationType", NKikimrSchemeOp::EOperationType_Name(operationType)},
                 {"path", path.Str()});
 
             modifyScheme->SetOperationType(operationType);
@@ -357,10 +357,10 @@ public:
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
-            YDB_LOG_ERROR("Tablet to pipe not retry",
+            YDB_LOG_ERROR("Tablet to pipe not connected, retry",
                 {"logPrefix", LogPrefix},
                 {"request", GetOperationType()},
-                {"connected", NKikimrProto::EReplyStatus_Name(ev->Get()->Status)});
+                {"status", NKikimrProto::EReplyStatus_Name(ev->Get()->Status)});
             PipeClientClosedByUs = true;
             NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
             SchemePipeActorId = {};
@@ -403,10 +403,10 @@ public:
 
     void Fail(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
         TString message = TStringBuilder() << "Failed " << GetOperationType() << " request: " << ev->Get()->Status() << ". Response: " << ev->Get()->Record;
-        YDB_LOG_ERROR("Faile operation",
+        YDB_LOG_ERROR("Failed operation",
             {"logPrefix", LogPrefix},
             {"operation", GetOperationType()},
-            {"request", ev->Get()->Status()},
+            {"status", ev->Get()->Status()},
             {"response", ev->Get()->Record});
         Reply(false, message);
     }
@@ -425,7 +425,7 @@ public:
         YDB_LOG_INFO("Successful",
             {"logPrefix", LogPrefix},
             {"operationType", GetOperationType()},
-            {"request", ev->Get()->Status()});
+            {"status", ev->Get()->Status()});
         Reply(true);
     }
 

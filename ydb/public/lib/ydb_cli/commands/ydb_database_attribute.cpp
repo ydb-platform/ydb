@@ -32,7 +32,8 @@ void TCommandDatabaseAttributeGet::Parse(TConfig& config) {
 }
 
 int TCommandDatabaseAttributeGet::Run(TConfig& config) {
-    NCms::TCmsClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NCms::TCmsClient client(driver);
     auto result = client.GetDatabaseStatus(config.Database).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
@@ -78,7 +79,8 @@ void TCommandDatabaseAttributeSet::Parse(TConfig& config) {
 }
 
 int TCommandDatabaseAttributeSet::Run(TConfig& config) {
-    NCms::TCmsClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NCms::TCmsClient client(driver);
 
     NYdb::NCms::TAttributes attributes;
     for (const auto& kv : Attributes) {
@@ -112,7 +114,8 @@ void TCommandDatabaseAttributeDel::Parse(TConfig& config) {
 }
 
 int TCommandDatabaseAttributeDel::Run(TConfig& config) {
-    NCms::TCmsClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NCms::TCmsClient client(driver);
 
     NYdb::NCms::TAttributes attributes;
     for (const auto& kv : Attributes) {

@@ -19,11 +19,12 @@ class PortManagerException(Exception):
 
 
 class _PortReservation(object):
-    __slots__ = ('filelock', 'socket')
+    __slots__ = ('filelock', 'socket', 'sock_type')
 
-    def __init__(self, filelock, sock):
+    def __init__(self, filelock, sock, sock_type=socket.SOCK_STREAM):
         self.filelock = filelock
         self.socket = sock
+        self.sock_type = sock_type
 
 
 class PortManager(object):
@@ -71,7 +72,11 @@ class PortManager(object):
 
     def get_udp_port(self, port=0, hold_socket=False):
         '''
-        Gets free UDP port
+        Gets free UDP port.
+
+        hold_socket=True keeps a bound UDP socket, but on Linux SO_REUSEADDR
+        does not guarantee exclusive reservation for UDP; prefer hold_socket
+        for TCP ports when cross-process exclusion is required.
         '''
         return self._get_port(port, socket.SOCK_DGRAM, hold_socket=hold_socket)
 
@@ -109,7 +114,7 @@ class PortManager(object):
                 reservation.socket.close()
                 reservation.socket = None
 
-    def bind_port(self, port, sock_type=socket.SOCK_STREAM):
+    def bind_port(self, port, sock_type=None):
         '''
         Re-binds a held socket for an already reserved port.
         Used to restore OS-level port holding after unbind_port().
@@ -120,6 +125,8 @@ class PortManager(object):
                 return False
             if reservation.socket is not None:
                 return True
+            if sock_type is None:
+                sock_type = reservation.sock_type
             sock = self._try_bind_port(port, sock_type)
             if sock is None:
                 return False
@@ -273,14 +280,14 @@ class PortManager(object):
                 sock = self._try_bind_port(port, sock_type)
                 if sock is None:
                     return False
-                self._filelocks[port] = _PortReservation(filelock, sock)
+                self._filelocks[port] = _PortReservation(filelock, sock, sock_type)
                 filelock = None
                 return True
 
             if not self.is_port_free(port, sock_type):
                 return False
 
-            self._filelocks[port] = _PortReservation(filelock, None)
+            self._filelocks[port] = _PortReservation(filelock, None, sock_type)
             filelock = None
             return True
         finally:

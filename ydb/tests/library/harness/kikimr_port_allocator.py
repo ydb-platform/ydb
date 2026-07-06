@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 import abc
+import logging
 import library.python.port_manager
 import os
+
+logger = logging.getLogger(__name__)
 
 
 class KikimrNodePortAllocatorInterface(object):
@@ -44,6 +47,12 @@ class KikimrNodePortAllocatorInterface(object):
 
     @abc.abstractproperty
     def kafka_api_port(self):
+        pass
+
+    def release_port_bindings(self):
+        pass
+
+    def hold_port_bindings(self):
         pass
 
 
@@ -168,8 +177,11 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
 
     def hold_port_bindings(self):
         for port in self._allocated_ports():
-            if port is not None:
-                self.__port_manager.bind_port(port)
+            if port is not None and not self.__port_manager.bind_port(port):
+                logger.warning(
+                    "Failed to re-hold port %s (port may have been taken externally)",
+                    port,
+                )
 
     def _allocated_ports(self):
         return (
@@ -258,12 +270,6 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
         self.__pgwire_port = int(os.getenv('YDB_PGWIRE_PORT', pgwire_port))
         self.__http_proxy_port = int(os.getenv('HTTP_PROXY_PORT', http_proxy_port))
         self.__kafka_api_port = int(os.getenv('YDB_KAFKA_PROXY_PORT', kafka_api_port))
-
-    def release_port_bindings(self):
-        pass
-
-    def hold_port_bindings(self):
-        pass
 
     @property
     def mon_port(self):

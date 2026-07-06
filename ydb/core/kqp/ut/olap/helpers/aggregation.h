@@ -190,7 +190,8 @@ void CheckPlanForAggregatePushdown(
     Cerr << "AST:" << Endl;
     Cerr << ast << Endl;
     for (auto planNode : expectedPlanNodes) {
-        UNIT_ASSERT_C(CheckOperatorPresentInAst(ast, planNode), TStringBuilder() << planNode << " was not found. Query: " << query);
+        UNIT_ASSERT_C(CheckOperatorPresentInAst(ast, planNode),
+            TStringBuilder() << planNode << " was not found. Query: " << query);
     }
     UNIT_ASSERT_C(ast.find("SqueezeToDict") == std::string::npos, TStringBuilder() << "SqueezeToDict denied for aggregation requests. Query: " << query);
 

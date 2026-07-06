@@ -57,6 +57,8 @@ def build_html_dashboard(
     rf_budget = rf.get("mem_budget_gb", "?")
     rf_ya_mem = rf.get("ya_make_mem_limit_gb", "?")
 
+    payload_json = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
+
     html = f"""<!doctype html>
 <html>
 <head>
@@ -436,7 +438,7 @@ def build_html_dashboard(
       }}, 0);
     }}
 
-    const data = {json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")};
+    const data = {payload_json};
     const UTC_OFFSET_SEC = Number(data.utc_offset_sec || 0);
     const _fmtCache = {{}};
     function formatHeadlineValue(metric, value) {{

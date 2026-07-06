@@ -133,6 +133,7 @@ def build_report_table_html(report_path: Path, out_html: Path, suite_filter: Opt
         "suite_summary": suite_summary,
         "rows": rows,
     }
+    payload_json = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
     html = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -200,7 +201,7 @@ def build_report_table_html(report_path: Path, out_html: Path, suite_filter: Opt
     </div>
   </div>
   <script>
-    const data = {json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")};
+    const data = {payload_json};
     const cols = [
       ['suite_path', 'suite_path'],
       ['tests_in_suite', 'tests in suite'],

@@ -49,7 +49,7 @@ public:
         NJson::TJsonValue jsonData;
         if (!NJson::ReadJsonFastTree(data, &jsonData)) {
             YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Cannot parse string as json",
-                {"base64", Base64Encode(data)});
+                {"data", Base64Encode(data)});
             return {};
         }
         return jsonData;
@@ -88,7 +88,7 @@ public:
         TProtoClass protoData;
         if (!protoData.ParseFromArray(data.data(), data.size())) {
             YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Cannot parse string as proto",
-                {"base64", Base64Encode(data)});
+                {"data", Base64Encode(data)});
             return {};
         }
         return protoData;
@@ -195,8 +195,8 @@ public:
         AFL_VERIFY(maybeExists || !Object)("problem", "initialize for not-empty-object");
         Object.reset(TFactory::Construct(className));
         if (!Object) {
-            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Incorrect class",
-                {"name", className},
+            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Incorrect class name",
+                {"className", className},
                 {"typeName", typeid(IInterface).name()});
             return false;
         }
@@ -245,7 +245,7 @@ public:
         TString binaryData;
         if (!TStringContainerProcessor::DeserializeFromContainer(data, className, binaryData)) {
             YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Cannot parse string as container",
-                {"base64", Base64Encode(data)});
+                {"data", Base64Encode(data)});
             return false;
         }
         if (className == "__UNDEFINED") {
@@ -253,15 +253,15 @@ public:
         }
         std::shared_ptr<IInterface> object(TFactory::Construct(className));
         if (!object) {
-            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Incorrect class",
-                {"name", className},
+            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Incorrect class name",
+                {"className", className},
                 {"typeName", typeid(IInterface).name()});
             return false;
         }
 
         if (!object->DeserializeFromString(binaryData)) {
-            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Cannot parse class",
-                {"instance", className},
+            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Cannot parse class instance",
+                {"className", className},
                 {"typeName", typeid(IInterface).name()});
             return false;
         }
@@ -337,14 +337,14 @@ public:
         }
         std::shared_ptr<IInterface> object(TFactory::Construct(className));
         if (!object) {
-            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Incorrect class",
-                {"name", className},
+            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Incorrect class name",
+                {"className", className},
                 {"typeName", typeid(IInterface).name()});
             return false;
         }
         if (!object->DeserializeFromJson(data["objectData"])) {
-            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Cannot parse class",
-                {"instance", className},
+            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Cannot parse class instance",
+                {"className", className},
                 {"typeName", typeid(IInterface).name()});
             return false;
         }
@@ -383,14 +383,14 @@ public:
         }
         std::shared_ptr<IInterface> object(TFactory::Construct(className));
         if (!object) {
-            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Incorrect class",
-                {"name", className},
+            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Incorrect class name",
+                {"className", className},
                 {"typeName", typeid(IInterface).name()});
             return false;
         }
         if (!object->DeserializeFromProto(data)) {
-            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Cannot parse class",
-                {"instance", className},
+            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Cannot parse class instance",
+                {"className", className},
                 {"typeName", typeid(IInterface).name()});
             return false;
         }

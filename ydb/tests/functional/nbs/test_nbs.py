@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+import time
+
+import pytest
+
 from common import NbsTestBase
 from vhost_user_blk_client import (
     VIRTIO_BLK_S_OK,
@@ -186,3 +190,97 @@ class TestNbs(NbsTestBase):
         # Verify the data matches (trimmed to the original length)
         assert read_data_1[: len(test_data_1)] == test_data_1
         assert read_data_2[: len(test_data_2)] == test_data_2
+
+    def _restart_tenant_slots(self):
+        """
+        Restart the NBS tenant slots (the processes hosting the partition
+        tablet) and wait until the tenant is back up.
+        """
+        for slot in self.cluster.slots.values():
+            slot.stop()
+        for slot in self.cluster.slots.values():
+            slot.start()
+        self.cluster.wait_tenant_up("/Root/NBS")
+
+    @pytest.mark.xfail(
+        strict=False,
+        reason="data safety: after a tablet restart the read succeeds but "
+        "returns garbage instead of the written block; the restore path "
+        "is broken (its unit test is disabled with #if 0). Kept as a live "
+        "repro for the fix.",
+    )
+    def test_nbs_data_survives_tablet_restart(self):
+        """
+        Data safety: write a block, restart the NBS tenant slot (the
+        partition tablet process), read the block back. The static storage
+        nodes keep running, so PBuffers and DDisks keep their content: this
+        exercises the tablet restore path in a real cluster (the functional
+        counterpart of the red ShouldRestorePartitionAfterRestart unit test).
+        """
+        disk_id = self.generate_disk_id()
+        self.create_ddisk_pool()
+        self.create_disk(disk_id)
+        actor_id = self.get_load_actor_adapter_actor_id(disk_id)
+
+        test_data = self.generate_random_data(1024)
+        self.write(actor_id, 0, test_data)
+        assert self.read(actor_id, 0)[: len(test_data)] == test_data
+
+        self._restart_tenant_slots()
+
+        # The load actor adapter is re-created after the restart.
+        actor_id = self.get_load_actor_adapter_actor_id(disk_id)
+        read_data = self.read(actor_id, 0)
+        assert read_data[: len(test_data)] == test_data, (
+            "block content lost or corrupted across a tablet restart")
+
+    @pytest.mark.skip(
+        reason="the tenant does not report up within 2 minutes after a full "
+        "static-node restart in this harness; needs a separate "
+        "investigation before the scenario can run in CI.",
+    )
+    def test_nbs_data_survives_storage_nodes_restart(self):
+        """
+        Data safety: write a block, restart every static storage node
+        (PBuffer and DDisk hosts) and the tenant slot, read the block back.
+        The full 'write, restart, read' chain of the data-safety plan on a
+        real cluster: both the tablet restore path and the storage-side
+        persistence are exercised.
+        """
+        disk_id = self.generate_disk_id()
+        self.create_ddisk_pool()
+        self.create_disk(disk_id)
+        actor_id = self.get_load_actor_adapter_actor_id(disk_id)
+
+        test_data = self.generate_random_data(1024)
+        self.write(actor_id, 0, test_data)
+        assert self.read(actor_id, 0)[: len(test_data)] == test_data
+
+        # Stop the tenant slots first so the tablet does not flap while the
+        # storage nodes below it restart one by one.
+        for slot in self.cluster.slots.values():
+            slot.stop()
+        for node in self.cluster.nodes.values():
+            node.stop()
+            node.start()
+        # The old grpc channels point at the restarted processes.
+        self.cluster.reset_clients()
+        for slot in self.cluster.slots.values():
+            slot.start()
+        # Right after a full static restart the console can answer with a
+        # transient non-SUCCESS, and get_database_status asserts on it
+        # instead of returning a falsy status - so retry the whole wait.
+        deadline = time.time() + 120
+        while True:
+            try:
+                self.cluster.wait_tenant_up("/Root/NBS")
+                break
+            except AssertionError:
+                if time.time() > deadline:
+                    raise
+                time.sleep(5)
+
+        actor_id = self.get_load_actor_adapter_actor_id(disk_id)
+        read_data = self.read(actor_id, 0)
+        assert read_data[: len(test_data)] == test_data, (
+            "block content lost or corrupted across a full storage restart")

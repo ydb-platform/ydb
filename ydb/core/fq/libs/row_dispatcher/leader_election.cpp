@@ -388,7 +388,9 @@ void TLeaderElection::Handle(TEvPrivate::TEvAcquireSemaphoreResult::TPtr& ev) {
 
 void TLeaderElection::PassAway() {
     LOG_ROW_DISPATCHER_DEBUG("PassAway");
-    Driver->Stop(true);
+    if (Driver) {
+        Driver->Stop(true);
+    }
     TActorBootstrapped::PassAway();
 }
 

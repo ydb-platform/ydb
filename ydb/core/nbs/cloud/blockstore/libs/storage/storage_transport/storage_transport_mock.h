@@ -37,7 +37,6 @@ public:
     using TConnectPromise = NThreading::TPromise<TEvConnectResult>;
     using TReadPromise = NThreading::TPromise<TEvReadResult>;
     using TWritePromise = NThreading::TPromise<TEvWriteResult>;
-    using TDisconnectCB = IStorageTransport::TDisconnectCB;
 
     // Default reply status used for immediate (non-pending) responses.
     TReplyStatusE DefaultConnectStatus = TReplyStatus::OK;
@@ -93,9 +92,7 @@ public:
         EConnectionType type,
         const TDDiskId& ddiskId);
 
-    NThreading::TFuture<TEvConnectResult> Connect(
-        const THostConnection& connection,
-        TDisconnectCB disconnectCB) override;
+    TConnectResultFutures Connect(const THostConnection& connection) override;
 
     NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(
         const THostConnection& connection,
@@ -185,7 +182,7 @@ private:
     TMap<TKey, TVector<NKikimr::NDDisk::TQueryCredentials>> ConnectCredentials;
 
     // disconnectCB stored per host during Connect().
-    TMap<TKey, TDisconnectCB> StoredDisconnectCBs;
+    TMap<TKey, NThreading::TPromise<ui32>> StoredDisconnectFutures;
 
     // In-flight pending DDisk reads/writes.
     TMap<TKey, TReadPromise> PendingReadsFromDDisk;

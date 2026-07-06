@@ -597,7 +597,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
 
         const auto& ddisks = transportPtr->GetDDiskIds();
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
-        auto initialReady = RunAndGetInitialReady(dbg);
+        auto initialReady = RunAndGetInitialReady(dbg, false);
         WaitReady(initialReady);
 
         // All sessions confirmed at seq_no=1.
@@ -613,6 +613,9 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
             EConnectionType::DDisk,
             ddisks[0],
             ddisks[0].NodeId);
+        // drain OnNodeDisconnected and queue reconnect
+        DrainExecutor(executor);
+        // drain reconnect
         DrainExecutor(executor);
 
         // The reconnect Connect already carries seq_no=2.
@@ -645,7 +648,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
             transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[0]);
 
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
-        auto initialReady = RunAndGetInitialReady(dbg);
+        auto initialReady = RunAndGetInitialReady(dbg, false);
         DrainExecutor(executor);
 
         // seq_no=2 on DDisk[0] is in flight.

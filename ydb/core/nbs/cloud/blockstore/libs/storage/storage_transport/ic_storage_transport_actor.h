@@ -54,8 +54,8 @@ private:
 
     THashMap<ui64, TWriteToManyPBuffersReqInfo> WriteToManyPBuffersRequests;
 
-    using TDisconnectCB = std::function<void(ui32)>;
-    THashMap<ui64, TVector<TDisconnectCB>> ICSubscribedNodes;
+    // Subscribed nodes with disconnect promises
+    THashMap<ui64, TVector<NThreading::TPromise<ui32>>> ICSubscribedNodes;
 
 public:
     TICStorageTransportActor() = default;

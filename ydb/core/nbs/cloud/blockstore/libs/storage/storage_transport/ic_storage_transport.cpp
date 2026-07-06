@@ -21,20 +21,22 @@ TICStorageTransport::TICStorageTransport(
     , ICStorageTransportActorId(icStorageTransportActorId)
 {}
 
-TFuture<NKikimrBlobStorage::NDDisk::TEvConnectResult>
-TICStorageTransport::Connect(
-    const THostConnection& connection,
-    TDisconnectCB disconnectCB)
+IStorageTransport::TConnectResultFutures TICStorageTransport::Connect(
+    const THostConnection& connection)
 {
+    // Cerr << "TICStorageTransport::Connect" << Endl;
     auto request = std::make_unique<TEvTransportPrivate::TEvConnect>(
         connection.GetServiceId(),
-        connection.Credentials,
-        std::move(disconnectCB));
-    auto future = request->Promise.GetFuture();
+        connection.Credentials);
+
+    IStorageTransport::TConnectResultFutures result = {
+        .ConnectFuture = request->ConnectPromise.GetFuture(),
+        .DisconnectFuture = request->DisconnectPromise.GetFuture(),
+    };
 
     ActorSystem->Send(ICStorageTransportActorId, request.release());
 
-    return future;
+    return result;
 }
 
 TFuture<NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult>

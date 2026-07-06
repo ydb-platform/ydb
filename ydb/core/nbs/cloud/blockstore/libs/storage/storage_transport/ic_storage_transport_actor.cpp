@@ -54,6 +54,20 @@ void RejectAllPending(TMap& map)
     map.clear();
 }
 
+void RejectAllPending(
+    THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvConnect>>& map)
+{
+    for (auto& request: map) {
+        NKikimrBlobStorage::NDDisk::TEvConnectResult record;
+        SetErrorStatus(
+            NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
+            DestroyErrorMessage,
+            record);
+        request.second->ConnectPromise.SetValue(std::move(record));
+    }
+    map.clear();
+}
+
 template <typename T>
 void SetUndeliveryError(T& record)
 {
@@ -108,7 +122,7 @@ TActorId CreateTransportActor()
 
 TICStorageTransportActor::~TICStorageTransportActor()
 {
-    RejectAllPending<NDDisk::TEvConnectResult>(ConnectRequests);
+    RejectAllPending(ConnectRequests);
     RejectAllPending<NDDisk::TEvReadPersistentBufferResult>(
         ReadFromPBufferRequests);
     RejectAllPending<NDDisk::TEvReadResult>(ReadFromDDiskRequests);
@@ -156,8 +170,9 @@ void TICStorageTransportActor::HandleConnect(
     Y_ABORT_UNLESS(inserted);
 
     const auto& request = *it->second;
+    // TODO точно нужен вектор?
     ICSubscribedNodes[request.ServiceId.NodeId()].push_back(
-        request.DisconnectCB);
+        request.DisconnectPromise);
 
     SendWithUndeliveryTracking(
         ctx,
@@ -183,7 +198,7 @@ void TICStorageTransportActor::HandleConnectUndelivery(
         auto& request = **r;
         auto result = NKikimrBlobStorage::NDDisk::TEvConnectResult();
         SetUndeliveryError(result);
-        request.Promise.SetValue(std::move(result));
+        request.ConnectPromise.SetValue(std::move(result));
         ConnectRequests.erase(requestId);
     } else {
         // That means that request is already completed
@@ -209,7 +224,7 @@ void TICStorageTransportActor::HandleConnectResult(
 
     if (auto* r = ConnectRequests.FindPtr(requestId)) {
         auto& request = **r;
-        request.Promise.SetValue(std::move(ev->Get()->Record));
+        request.ConnectPromise.SetValue(std::move(ev->Get()->Record));
 
         ConnectRequests.erase(requestId);
     } else {
@@ -1149,9 +1164,9 @@ void TICStorageTransportActor::HandleICNodeDisconnected(
 
     auto it = ICSubscribedNodes.find(nodeId);
     if (it != ICSubscribedNodes.end()) {
-        for (const auto& cb: it->second) {
-            if (cb) {
-                cb(nodeId);
+        for (auto& disconnectPromise: it->second) {
+            if (!disconnectPromise.HasValue()) {
+                disconnectPromise.SetValue(nodeId);
             }
         }
         ICSubscribedNodes.erase(it);

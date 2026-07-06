@@ -1179,11 +1179,15 @@ void TDirectBlockGroup::DoEstablishConnection(
 
     using TEvConnectResult = NKikimrBlobStorage::NDDisk::TEvConnectResult;
 
-    auto future = StorageTransport->Connect(
-        connection.HostConnection,
-        std::move(disconnectCB));
-
-    future.Subscribe(
+    auto futures = StorageTransport->Connect(connection.HostConnection);
+    futures.DisconnectFuture.Subscribe(
+        [disconnectCB = std::move(disconnectCB)](const TFuture<ui32>& f)
+        {
+            if (disconnectCB) {
+                disconnectCB(f.GetValue());
+            }
+        });
+    futures.ConnectFuture.Subscribe(
         [weakSelf = weak_from_this(),
          executor = Executor,
          connectionType = connection.HostConnection.ConnectionType,

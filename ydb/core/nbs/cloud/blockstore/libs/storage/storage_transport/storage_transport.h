@@ -59,10 +59,14 @@ public:
 
     virtual ~IStorageTransport() = default;
 
-    using TDisconnectCB = std::function<void(ui32)>;
-    virtual NThreading::TFuture<TEvConnectResult> Connect(
-        const THostConnection& connection,
-        TDisconnectCB disconnectCB) = 0;
+    struct TConnectResultFutures
+    {
+        NThreading::TFuture<TEvConnectResult> ConnectFuture;
+        NThreading::TFuture<ui32> DisconnectFuture;
+    };
+
+    virtual TConnectResultFutures Connect(
+        const THostConnection& connection) = 0;
 
     virtual NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(
         const THostConnection& connection,

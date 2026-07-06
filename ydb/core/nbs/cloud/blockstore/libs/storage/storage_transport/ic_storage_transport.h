@@ -17,9 +17,7 @@ public:
 
     ~TICStorageTransport() override = default;
 
-    NThreading::TFuture<TEvConnectResult> Connect(
-        const THostConnection& connection,
-        TDisconnectCB disconnectCB) override;
+    TConnectResultFutures Connect(const THostConnection& connection) override;
 
     NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(
         const THostConnection& connection,

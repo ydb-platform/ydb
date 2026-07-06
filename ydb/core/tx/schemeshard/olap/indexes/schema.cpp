@@ -90,7 +90,7 @@ bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, cons
                 for (const auto& indexPair : Indexes) {
                     const auto& existingIndex = indexPair.second;
                     const auto& existingMeta = existingIndex.GetIndexMeta();
-                    if ((meta->GetClassName() == NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName || meta->GetClassName() != "BLOOM_FILTER") && 
+                    if ((meta->GetClassName() == NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName || meta->GetClassName() == "BLOOM_FILTER") && 
                         existingMeta->GetClassName() == meta->GetClassName() && existingMeta->GetSingleColumnId() == newColumnId) {
                         TString columnName = ToString(*newColumnId);
                         if (const auto* column = currentSchema.GetColumns().GetById(*newColumnId)) {
@@ -146,7 +146,7 @@ bool TOlapIndexesDescription::ValidateNoDuplicateMinMaxAndBloomFilterIndexes(con
             && meta.GetClassName() != "BLOOM_FILTER") {
             continue;
         }
-        const auto [it, ok] = indexNameByColumnId.emplace(*columnId, meta.GetClassName() , index.GetName());
+        const auto [it, ok] = indexNameByColumnId.emplace(std::pair{*columnId, meta.GetClassName()} , index.GetName());
         if (!ok) {
             TString columnName = ToString(*columnId);
             if (const auto* column = currentSchema.GetColumns().GetById(*columnId)) {

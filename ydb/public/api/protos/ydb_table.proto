@@ -1087,6 +1087,13 @@ message RenameIndexItem {
     bool replace_destination = 3;
 }
 
+message RenameColumnItem {
+    // Column name to rename
+    string source_name = 1;
+    // Target column name
+    string destination_name = 2;
+}
+
 // State of compact operation
 message CompactState {
     enum State {
@@ -1194,6 +1201,8 @@ message AlterTableRequest {
 
     // Start set not null for table
     repeated SetNotNullItem set_not_null = 27;
+    // Rename existing columns
+    repeated RenameColumnItem rename_columns = 28;
 }
 
 message AlterTableResponse {

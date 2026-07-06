@@ -3102,6 +3102,30 @@ public:
                             return SyncError();
                         }
                     }
+                } else if (name == "renameColumn") {
+                    if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                            "Renaming columns is not yet supported in column tables"));
+                        return SyncError();
+                    }
+
+                    auto listNode = action.Value().Cast<TExprList>();
+                    auto renameColumn = alterTableRequest.add_rename_columns();
+                    for (size_t i = 0; i < listNode.Size(); ++i) {
+                        auto item = listNode.Item(i);
+                        auto columnTuple = item.Cast<TExprList>();
+                        auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
+                        auto name = TString(nameNode.Value());
+                        if (name == "src") {
+                            renameColumn->set_source_name(columnTuple.Item(1).Cast<TCoAtom>().StringValue());
+                        } else if (name == "dst") {
+                            renameColumn->set_destination_name(columnTuple.Item(1).Cast<TCoAtom>().StringValue());
+                        } else {
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                TStringBuilder() << "Unknown renameColumn param: " << name));
+                            return SyncError();
+                        }
+                    }
                 } else if (name == "compact") {
                     if (!SessionCtx->Config().FeatureFlags.GetEnableForcedCompactions()) {
                         ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),

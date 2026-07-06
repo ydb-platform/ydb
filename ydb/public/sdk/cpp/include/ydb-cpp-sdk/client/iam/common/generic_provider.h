@@ -166,7 +166,6 @@ private:
                     }
                 };
                 auto facility = weakFacility.lock();
-                auto self = weakSelf.lock();
 
                 try {
                     if (facility) {
@@ -176,7 +175,7 @@ private:
                 } catch (...) {
                 }
 
-                if (self) {
+                if (auto self = weakSelf.lock()) {
                     std::lock_guard guard(self->Lock_);
                     self->ResetContextImpl();
                 }

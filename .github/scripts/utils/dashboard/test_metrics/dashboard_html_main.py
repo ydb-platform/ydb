@@ -51,6 +51,12 @@ def build_html_dashboard(
         suite_chunk_issues_summary=suite_chunk_issues_summary,
     )
 
+    rf = (run_config or {}).get("runner_footprint") or {}
+    rf_vcpu = rf.get("vcpu", "?")
+    rf_ram = rf.get("ram_gb", "?")
+    rf_budget = rf.get("mem_budget_gb", "?")
+    rf_ya_mem = rf.get("ya_make_mem_limit_gb", "?")
+
     html = f"""<!doctype html>
 <html>
 <head>
@@ -233,7 +239,7 @@ def build_html_dashboard(
         <li>SIZE still caps recommended CPU (SMALL=1, MEDIUM=4). When CLI flag <code>--maximize-reqs-for-timeout-tests</code> is enabled, suites crossing the duration threshold additionally use size max: <b>SMALL=1, MEDIUM=4, LARGE=4</b>.</li>
         <li><b>recommended_split</b> uses per-<b>chunk</b> load: sum test durations inside each chunk. Overloaded chunks (<code>sum &gt; size_timeout*0.98</code>) are detected <b>even without a timeout</b> (<code>split_severity=at_risk</code>); with a timeout it is <code>timeout</code>. Required chunk count is <code>ceil(overloaded_total / (size_timeout*0.5))</code>, and a single very heavy chunk is split into <code>ceil(max_chunk_load / (size_timeout*0.5))</code> pieces. If a <b>single test</b> alone is at/above the budget (<code>single_test_blocks_split</code>), SPLIT_FACTOR cannot help. In that case, if the test is only marginally over budget <b>and the runner was CPU-saturated</b> during the suite window (<code>single_test_contention_suspected</code>, from <code>resources_monitor.jsonl</code>), it is likely contention-inflated — TRY raising <code>REQUIREMENTS(cpu)</code> (fewer parallel chunks → decontention) before a test-level fix; otherwise (genuinely long) the fix is <code>TIMEOUT()</code> / reduce work / mute.</li>
         <li><b>cpu_action</b> compares recommended cpu to <code>ya_cpu</code>. A <b>lower</b> suggestion is suppressed (kept <b>ok</b>) while the suite is under split/time pressure, because a smaller cpu slot increases parallel chunks and can worsen timeouts/OOM.</li>
-        <li><b>memory → cpu</b>: on a single runner the local <code>ya make -t</code> scheduler caps parallelism <b>only</b> by cpu (sum of <code>REQUIREMENTS(cpu)</code> ≤ cores). <code>REQUIREMENTS(ram)</code> is <b>not honored locally</b>, so it is never recommended. Instead <b>max_chunk_ram</b> (physical peak of the heaviest chunk) is turned into <b>cpu_for_memory</b>: allow at most <code>floor(mem_budget / max_chunk_ram)</code> parallel chunks, i.e. <code>cpu ≈ ceil(cores / that)</code> (runner ≈ <b>96 cores / 283 GB</b>, per-suite budget ≈ <b>200 GB</b>). When <code>cpu_for_memory &gt; p95 cpu</code>, <b>recommended_cpu</b> is raised to it (shown red) to prevent OOM.</li>
+        <li><b>memory → cpu</b>: on a single runner the local <code>ya make -t</code> scheduler caps parallelism <b>only</b> by cpu (sum of <code>REQUIREMENTS(cpu)</code> ≤ cores). <code>REQUIREMENTS(ram)</code> is <b>not honored locally</b>, so it is never recommended. Instead <b>max_chunk_ram</b> (physical peak of the heaviest chunk) is turned into <b>cpu_for_memory</b>: allow at most <code>floor(mem_budget / max_chunk_ram)</code> parallel chunks, i.e. <code>cpu ≈ ceil(cores / that)</code> (provisioned runner ≈ <b>{rf_vcpu} cores / {rf_ram} GB</b>, per-suite budget ≈ <b>{rf_budget} GB</b>). Purple dashed lines on system charts mark provisioned limits from <code>.github/config/runners_footprints.yml</code>; the red monitor line is actual <code>/proc</code> usage (may be lower). When <code>cpu_for_memory &gt; p95 cpu</code>, <b>recommended_cpu</b> is raised to it (shown red) to prevent OOM.</li>
       </ol>
       <ul>
         <li><b>status chunks</b>: counters from report rows where <code>chunk=true</code>. <b>total</b> = all chunk rows, <b>passed</b> = status OK/PASS.</li>
@@ -311,7 +317,8 @@ def build_html_dashboard(
     <div class="box">
       <ul>
         <li><b>By suites (stacked):</b> At time <code>t</code> we sum each active chunk contribution. For CPU it is <code>cpu_sec_report / duration_used_sec</code> (average cores for that run); for RAM it is the chunk memory metric from report converted to GB. This is a model by chunks, not an instantaneous per-process sample.</li>
-        <li><b>Total (monitor, red line):</b> Absolute system CPU (cores) and RAM (GB) from <code>/proc</code>.</li>
+        <li><b>Total (monitor, red line):</b> Absolute system CPU (cores) and RAM (GB) from <code>/proc</code> during the run (actual usage).</li>
+        <li><b>Limits (purple dashed):</b> Provisioned runner maximum from <code>runners_footprints.yml</code> for this build preset. Optional dotted line: ya.make cgroup RAM cap (~{rf_ya_mem} GB).</li>
         <li><b>Chunk duration:</b> <code>duration_report_sec</code> from report; <code>duration_evlog_sec</code> from evlog B/E. For CPU/cores we use <code>duration_used_sec = max(report, evlog)</code>.</li>
         <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics. If value looks like microseconds (&gt;1000), it is divided by <code>1e6</code>.</li>
         <li><b>CPU shown on charts (cores_est):</b> <code>cores_est = cpu_sec_report / duration_used_sec</code> (duration_used_sec = max(report, evlog)). Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
@@ -2000,6 +2007,53 @@ def build_html_dashboard(
       return (sec / 3600).toFixed(2) + ' h';
     }}
 
+    function addCpuLimitTrace(plotId, ro) {{
+      if (!ro || !ro.runner_limits || !ro.runner_limits.cpu_cores_max) return;
+      const xDisp = (ro.xs_evlog_sec || []).map(x => xToDisplay(x));
+      if (!xDisp.length) return;
+      const y = Number(ro.runner_limits.cpu_cores_max);
+      Plotly.addTraces(plotId, [{{
+        x: xDisp,
+        y: xDisp.map(() => y),
+        mode: 'lines',
+        name: 'CPU limit (provisioned)',
+        line: {{ color: '#9333ea', width: 2, dash: 'dash' }},
+        legendrank: 1001,
+        hovertemplate: 'CPU provisioned max: %{{y:.0f}} cores<extra></extra>',
+      }}]);
+    }}
+
+    function addRamLimitTraces(plotId, ro) {{
+      if (!ro || !ro.runner_limits) return;
+      const lim = ro.runner_limits;
+      const xDisp = (ro.xs_evlog_sec || []).map(x => xToDisplay(x));
+      if (!xDisp.length) return;
+      const traces = [];
+      if (lim.ram_gb_max) {{
+        traces.push({{
+          x: xDisp,
+          y: xDisp.map(() => Number(lim.ram_gb_max)),
+          mode: 'lines',
+          name: 'RAM limit (provisioned)',
+          line: {{ color: '#9333ea', width: 2, dash: 'dash' }},
+          legendrank: 1001,
+          hovertemplate: 'RAM provisioned max: %{{y:.1f}} GB<extra></extra>',
+        }});
+      }}
+      if (lim.ya_make_mem_limit_gb) {{
+        traces.push({{
+          x: xDisp,
+          y: xDisp.map(() => Number(lim.ya_make_mem_limit_gb)),
+          mode: 'lines',
+          name: 'RAM ya.make cgroup',
+          line: {{ color: '#c026d3', width: 2, dash: 'dot' }},
+          legendrank: 1002,
+          hovertemplate: 'ya.make MemoryMax (~95%): %{{y:.1f}} GB<extra></extra>',
+        }});
+      }}
+      if (traces.length) Plotly.addTraces(plotId, traces);
+    }}
+
     function stackedArea(divId, xs, tracks, title, yTitle, stepMode) {{
       const names = Object.keys(tracks);
       const xDisp = (xs || []).map(xToDisplay);
@@ -2227,6 +2281,8 @@ def build_html_dashboard(
           {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 8 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
           {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, hovertemplate: '%{{x|%Y-%m-%d %H:%M:%S}}<br>%{{fullData.name}}: %{{y:.3f}} GB<extra></extra>' }},
         ]);
+        addCpuLimitTrace('cpuLayer', ro);
+        addRamLimitTraces('ramLayer', ro);
         Plotly.relayout('cpuLayer', {{ hovermode: 'x unified' }});
         Plotly.relayout('ramLayer', {{ hovermode: 'x unified' }});
         const diskEl = document.getElementById('diskLayer');
@@ -2276,6 +2332,8 @@ def build_html_dashboard(
         {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 8 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
         {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, hovertemplate: '%{{x|%Y-%m-%d %H:%M:%S}}<br>%{{fullData.name}}: %{{y:.3f}} GB<extra></extra>' }},
       ]);
+      addCpuLimitTrace('cpuLayerSuite', ro);
+      addRamLimitTraces('ramLayerSuite', ro);
       Plotly.relayout('cpuLayerSuite', {{ hovermode: 'x unified' }});
       Plotly.relayout('ramLayerSuite', {{ hovermode: 'x unified' }});
       const diskEl = document.getElementById('diskLayerSuite');
@@ -2401,8 +2459,8 @@ def build_html_dashboard(
       const bySuite = document.getElementById('layerBySuite')?.checked ?? true;
       const systemCpu = document.getElementById('layerSystemCpu')?.checked ?? true;
       const systemRam = document.getElementById('layerSystemRam')?.checked ?? true;
-      const CPU_OVERLAY_NAMES = ['CPU total (monitor)', 'CPU total (monitor) outline'];
-      const RAM_OVERLAY_NAMES = ['RAM total (monitor)', 'RAM total (monitor) outline'];
+      const CPU_OVERLAY_NAMES = ['CPU total (monitor)', 'CPU total (monitor) outline', 'CPU limit (provisioned)'];
+      const RAM_OVERLAY_NAMES = ['RAM total (monitor)', 'RAM total (monitor) outline', 'RAM limit (provisioned)', 'RAM ya.make cgroup'];
       function setCpuVisibility(el) {{
         if (!el || !el.data || !window.Plotly) return;
         const vis = el.data.map((tr) => {{

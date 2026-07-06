@@ -27,6 +27,7 @@ if __name__ != "__main__":
     from .dashboard_cpu_recommendations import build_cpu_recommendations
     from .dashboard_html_main import build_html_dashboard
     from .dashboard_report_table import build_report_table_html
+    from ..runner_footprint import enrich_resources_overlay, resolve_runner_footprint
 else:
     _script_dir = Path(__file__).resolve().parent
     _dashboard_dir = _script_dir.parent
@@ -36,6 +37,7 @@ else:
     from dashboard_cpu_recommendations import build_cpu_recommendations
     from dashboard_html_main import build_html_dashboard
     from dashboard_report_table import build_report_table_html
+    from runner_footprint import enrich_resources_overlay, resolve_runner_footprint
 
 # Supports both:
 #   [3/10] chunk
@@ -1090,13 +1092,18 @@ def _infer_sanitizer_from_report(report_obj: dict[str, Any], report_path: Option
     return None
 
 
-def _build_resources_overlay(resources_path: Path, enriched_runs: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
+def _build_resources_overlay(
+    resources_path: Path,
+    enriched_runs: list[dict[str, Any]],
+    records: Optional[list[dict[str, Any]]] = None,
+) -> Optional[dict[str, Any]]:
     """Load resources JSONL and convert to evlog timeline for overlay on CPU/RAM charts."""
     try:
         from ..resources_loader import load_resources_jsonl
     except ImportError:
         from resources_loader import load_resources_jsonl  # type: ignore[no-redef]
-    records = load_resources_jsonl(resources_path)
+    if records is None:
+        records = load_resources_jsonl(resources_path)
     if not records or not enriched_runs:
         return None
     # Time alignment: evlog_sec = ref_start_ev + (resource_ts - ref_report_ts)
@@ -1136,6 +1143,15 @@ def _build_resources_overlay(resources_path: Path, enriched_runs: list[dict[str,
         # Prefer normalized MB/s; fallback to legacy per-sample deltas.
         disk_read_mb.append(float(r.get("disk_read_mbps", r.get("disk_read_mb_delta", 0)) or 0))
         disk_write_mb.append(float(r.get("disk_write_mbps", r.get("disk_write_mb_delta", 0)) or 0))
+    ram_total_gb: Optional[float] = None
+    for rec in records:
+        v = rec.get("ram_total_gb")
+        if v is not None:
+            try:
+                ram_total_gb = float(v)
+                break
+            except (TypeError, ValueError):
+                continue
     if not xs_evlog:
         return None
     return {
@@ -1145,7 +1161,8 @@ def _build_resources_overlay(resources_path: Path, enriched_runs: list[dict[str,
         "disk_read_mb": disk_read_mb,
         "disk_write_mb": disk_write_mb,
         "evlog_range_sec": [min_evlog, max_evlog],
-        "cpu_cores": cpu_cores,  # machine cores used for %->cores conversion; shown in dashboard for verification
+        "cpu_cores": cpu_cores,
+        "ram_total_gb": ram_total_gb,
     }
 
 
@@ -1375,6 +1392,12 @@ def main() -> None:
         help="SANITIZER_TYPE for ya.make IF branches. If omitted, auto-detected from report metadata when possible.",
     )
     p.add_argument("--resources-jsonl", type=Path, default=None, help="Optional resources_monitor.jsonl to overlay CPU/RAM/disk metrics on charts")
+    p.add_argument(
+        "--build-preset",
+        type=str,
+        default=None,
+        help="ya make build preset (e.g. release-asan) for runner footprint limits from .github/config/runners_footprints.yml",
+    )
     p.add_argument("--runner", type=str, default=None, help="Runner name (e.g. GitHub Actions runner) for monitoring link")
     p.add_argument("--pr", type=str, default=None, help="PR number for dashboard header")
     p.add_argument("--branch", type=str, default=None, help="Target branch for dashboard header")
@@ -1528,9 +1551,22 @@ def main() -> None:
         sole = int(kinds.get("sole", 0) or 0)
         report_chunks_by_suite[suite_norm] = indexed if indexed > 0 else sole
 
+    resources_records: Optional[list[dict[str, Any]]] = None
     resources_overlay = None
     if args.resources_jsonl and args.resources_jsonl.exists():
-        resources_overlay = _build_resources_overlay(args.resources_jsonl, enriched_runs)
+        try:
+            from ..resources_loader import load_resources_jsonl
+        except ImportError:
+            from resources_loader import load_resources_jsonl  # type: ignore[no-redef]
+        resources_records = load_resources_jsonl(args.resources_jsonl)
+        resources_overlay = _build_resources_overlay(args.resources_jsonl, enriched_runs, records=resources_records)
+
+    runner_footprint = resolve_runner_footprint(build_preset=args.build_preset)
+    resources_overlay = enrich_resources_overlay(
+        resources_overlay,
+        runner_footprint,
+        records=resources_records,
+    )
 
     # Runner CPU-utilization series (evlog_sec, cpu_pct) for saturation-aware recommendations.
     runner_cpu_series: Optional[list[tuple[float, float]]] = None
@@ -1552,6 +1588,7 @@ def main() -> None:
         test_duration_stats_by_suite=test_duration_stats_by_suite,
         maximize_reqs_for_timeout_tests=args.maximize_reqs_for_timeout_tests,
         runner_cpu_series=runner_cpu_series,
+        runner_footprint=runner_footprint,
     )
     suite_test_event_times = build_test_event_times_direct(
         args.report, args.suite_path, enriched_runs, args.evlog
@@ -1686,6 +1723,8 @@ def main() -> None:
             "maximize_reqs_for_timeout_tests": args.maximize_reqs_for_timeout_tests,
             "repo_root_for_synthetic": str(repo_root) if repo_root else None,
             "sanitizer": effective_sanitizer,
+            "build_preset": args.build_preset,
+            "runner_footprint": runner_footprint.to_dict(),
         }
         build_html_dashboard(
             args.suite_path,

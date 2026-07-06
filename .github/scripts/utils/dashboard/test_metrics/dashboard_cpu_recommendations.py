@@ -1,8 +1,18 @@
 from __future__ import annotations
 
 import math
+import sys
 from collections import defaultdict
+from pathlib import Path
 from typing import Any, Optional
+
+try:
+    from ..runner_footprint import RunnerFootprint, resolve_runner_footprint
+except ImportError:
+    _dashboard_dir = Path(__file__).resolve().parent.parent
+    if str(_dashboard_dir) not in sys.path:
+        sys.path.insert(0, str(_dashboard_dir))
+    from runner_footprint import RunnerFootprint, resolve_runner_footprint
 
 
 def _status_bucket() -> dict[str, int]:
@@ -22,30 +32,7 @@ def _round_cpu_tier(cores: float) -> int:
     return 16
 
 
-# Runner class these compat suites schedule on. IMPORTANT: on a single runner the local
-# `ya make -t` scheduler caps parallelism ONLY by cpu (sum of REQUIREMENTS(cpu) <= cores).
-# REQUIREMENTS(ram) is NOT honored locally, so memory pressure / OOM is controlled by
-# raising cpu (which reduces how many chunks run in parallel), never by ram.
-RUNNER_CORES = 96
-RUNNER_RAM_GB = 283
-# Per-suite co-resident RAM budget: the most one suite may hold at once. Chosen below the
-# machine total to leave headroom for other suites + OS and avoid OOM when a heavy suite
-# packs several chunks in parallel.
-MEM_BUDGET_GB = 200.0
-# Skip memory-driven cpu bumps for light suites (heaviest chunk below this threshold).
-MEM_MIN_CHUNK_GB = 24.0
-# CPU tiers allowed for memory-driven throttling (may exceed the p95 cap of 16).
-MEM_CPU_TIERS = (1, 2, 4, 8, 16, 32, 48, 96)
-# Runner CPU utilization (percent) at/above which we treat the box as saturated. When a
-# near-budget single test runs on a saturated runner, its wall time is likely inflated by
-# contention, so raising cpu (fewer parallel chunks) can pull it back under the timeout.
-CPU_SATURATION_PCT = 90.0
-# A single test is "near budget" (decontention may help) if it is within this factor of the
-# SIZE timeout. Far above -> genuinely oversized, decontention will not save it.
-NEAR_BUDGET_FACTOR = 1.10
-
-
-def _round_cpu_up(cores: float, tiers: tuple[int, ...] = MEM_CPU_TIERS) -> int:
+def _round_cpu_up(cores: float, tiers: tuple[int, ...]) -> int:
     """Round a fractional core count up to the next allowed cpu tier."""
     for tier in tiers:
         if cores <= tier:
@@ -223,7 +210,15 @@ def build_cpu_recommendations(
     test_duration_stats_by_suite: Optional[dict[str, dict[str, Any]]] = None,
     maximize_reqs_for_timeout_tests: bool = False,
     runner_cpu_series: Optional[list[tuple[float, float]]] = None,
+    runner_footprint: Optional[RunnerFootprint] = None,
 ) -> list[dict[str, Any]]:
+    fp = runner_footprint or resolve_runner_footprint()
+    runner_cores = fp.vcpu
+    mem_budget_gb = fp.mem_budget_gb
+    mem_min_chunk_gb = fp.mem_min_chunk_gb
+    cpu_saturation_pct = fp.cpu_saturation_pct
+    near_budget_factor = fp.near_budget_factor
+    mem_cpu_tiers = fp.mem_cpu_tiers
     dedup_runs_by_chunk: dict[tuple[str, str], dict[str, Any]] = {}
     dedup_runs_fallback: list[dict[str, Any]] = []
     for r in runs:
@@ -404,15 +399,15 @@ def build_cpu_recommendations(
         # Memory-driven cpu throttle. REQUIREMENTS(ram) is ignored by the local scheduler,
         # so the only lever against OOM is cpu: a bigger per-chunk cpu slot means fewer
         # chunks run in parallel. Cap parallelism so heaviest_chunk_ram * parallel stays
-        # within MEM_BUDGET_GB, then raise the cpu recommendation if p95 alone is too low.
+        # within mem_budget_gb, then raise the cpu recommendation if p95 alone is too low.
         _ps_mem = parallel_stats.get(suite, {})
         max_chunk_ram_gb = float(_ps_mem.get("max_chunk_ram_gb", 0.0) or 0.0)
         cpu_for_memory: Any = None
         mem_max_parallel = 0
         mem_driven_cpu = False
-        if max_chunk_ram_gb >= MEM_MIN_CHUNK_GB:
-            mem_max_parallel = max(1, int(MEM_BUDGET_GB // max_chunk_ram_gb))
-            cpu_for_memory = _round_cpu_up(RUNNER_CORES / mem_max_parallel)
+        if max_chunk_ram_gb >= mem_min_chunk_gb:
+            mem_max_parallel = max(1, int(mem_budget_gb // max_chunk_ram_gb))
+            cpu_for_memory = _round_cpu_up(runner_cores / mem_max_parallel, mem_cpu_tiers)
             if recommended_req != "all" and int(recommended_req) < int(cpu_for_memory):
                 recommended_req = cpu_for_memory
                 mem_driven_cpu = True
@@ -423,7 +418,7 @@ def build_cpu_recommendations(
         if cpu_for_memory is not None:
             explain_parts.append(
                 f"mem: heaviest_chunk={max_chunk_ram_gb:.1f}GB -> cap {mem_max_parallel} parallel "
-                f"(budget {MEM_BUDGET_GB:.0f}GB) -> cpu:{cpu_for_memory}"
+                f"(budget {mem_budget_gb:.0f}GB) -> cpu:{cpu_for_memory}"
                 + ("(applied)" if mem_driven_cpu else "(<=p95, not applied)")
             )
         if long_test_boost_applied:
@@ -495,17 +490,17 @@ def build_cpu_recommendations(
         near_budget_single_test = (
             single_test_blocks_split
             and timeout_sec > 0
-            and max_single_test_in_overloaded_sec <= float(timeout_sec) * NEAR_BUDGET_FACTOR
+            and max_single_test_in_overloaded_sec <= float(timeout_sec) * near_budget_factor
         )
         runner_saturated = (
-            runner_cpu_pct_median is not None and runner_cpu_pct_median >= CPU_SATURATION_PCT
+            runner_cpu_pct_median is not None and runner_cpu_pct_median >= cpu_saturation_pct
         )
         single_test_contention_suspected = bool(near_budget_single_test and runner_saturated)
         # Suggested cpu to halve parallelism (decontention). Only when we have a current cpu.
         cpu_for_contention: Any = None
         if single_test_contention_suspected and ya_cpu is not None:
             try:
-                cpu_for_contention = _round_cpu_up(int(ya_cpu) * 2)
+                cpu_for_contention = _round_cpu_up(int(ya_cpu) * 2, mem_cpu_tiers)
             except (TypeError, ValueError):
                 cpu_for_contention = None
         # Severity: "timeout" if a real timeout already occurred, "at_risk" if a chunk
@@ -734,7 +729,7 @@ def build_cpu_recommendations(
             cpu_tip_parts.append(
                 f"Memory-driven: heaviest chunk ≈{max_chunk_ram_gb:.1f} GB; cpu raised to "
                 f"cpu:{cpu_for_memory} to cap ~{mem_max_parallel} parallel chunk(s) "
-                f"(budget {MEM_BUDGET_GB:.0f} GB) and avoid OOM (REQUIREMENTS(ram) is ignored locally)."
+                f"(budget {mem_budget_gb:.0f} GB) and avoid OOM (REQUIREMENTS(ram) is ignored locally)."
             )
         if ya_cpu is not None:
             cpu_tip_parts.append(f"Recommend REQUIREMENTS(cpu:{recommended_req}); ya.make has cpu:{ya_cpu}.")
@@ -747,7 +742,7 @@ def build_cpu_recommendations(
                 (
                     f"Increase REQUIREMENTS(cpu) from {ya_cpu} to {recommended_req} for MEMORY, not CPU: "
                     f"heaviest chunk ≈{max_chunk_ram_gb:.1f} GB, and a bigger cpu slot runs fewer chunks "
-                    f"in parallel (~{mem_max_parallel}) so the suite stays within ~{MEM_BUDGET_GB:.0f} GB. "
+                    f"in parallel (~{mem_max_parallel}) so the suite stays within ~{mem_budget_gb:.0f} GB. "
                     f"REQUIREMENTS(ram) is ignored by the local scheduler."
                 )
                 if mem_driven_cpu
@@ -868,14 +863,14 @@ def build_cpu_recommendations(
         mem_explain = (
             f"max_chunk_ram_gb={max_chunk_ram_gb:.1f}; peak_suite_ram_gb={peak_ram:.1f}; "
             f"max_parallel_self={max_par}; avg_per_chunk_ram_gb={per_chunk_ram_gb:.1f}; "
-            f"mem_budget_gb={MEM_BUDGET_GB:.0f}; cpu_for_memory={cpu_for_memory}; "
+            f"mem_budget_gb={mem_budget_gb:.0f}; cpu_for_memory={cpu_for_memory}; "
             f"mem_driven_cpu={mem_driven_cpu}"
         )
         if cpu_for_memory is not None:
             mem_tooltip = (
                 f"Heaviest chunk peak RAM ≈{max_chunk_ram_gb:.1f} GB. REQUIREMENTS(ram) is ignored by "
                 f"the local ya scheduler, so OOM is controlled via cpu: cap ~{mem_max_parallel} parallel "
-                f"chunk(s) (budget {MEM_BUDGET_GB:.0f} GB) → REQUIREMENTS(cpu:{cpu_for_memory})"
+                f"chunk(s) (budget {mem_budget_gb:.0f} GB) → REQUIREMENTS(cpu:{cpu_for_memory})"
                 + (
                     f" (applied: cpu {ya_cpu}→{cpu_for_memory})."
                     if mem_driven_cpu
@@ -884,7 +879,7 @@ def build_cpu_recommendations(
             )
         else:
             mem_tooltip = (
-                f"Heaviest chunk peak RAM ≈{max_chunk_ram_gb:.1f} GB (< {MEM_MIN_CHUNK_GB:.0f} GB): "
+                f"Heaviest chunk peak RAM ≈{max_chunk_ram_gb:.1f} GB (< {mem_min_chunk_gb:.0f} GB): "
                 f"no memory-driven cpu bump needed. REQUIREMENTS(ram) has no effect on the local scheduler."
             )
         test_status_tooltip = (

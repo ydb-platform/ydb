@@ -509,6 +509,7 @@ runs:
             --out-trace "$TESTS_METRICS_DIR/trace.json" \
             --out-stats "$TESTS_METRICS_DIR/stats.json" \
             --resources-jsonl "$RESOURCES_JSONL" \
+            --build-preset "$BUILD_PRESET" \
             --runner "${{ runner.name }}" \
             --pr "${{ github.event.number }}" \
             --branch "${BRANCH_NAME}" \

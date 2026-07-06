@@ -15,9 +15,9 @@ namespace NYql::NDq {
 template<bool fast>
 class TPackedSerializer : public TOutputSerializer {
 public:
-    TPackedSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, TMaybe<size_t> bufferPageAllocSize)
-        : TOutputSerializer(buffer, rowType, transportVersion, packerVersion, bufferPageAllocSize)
-        , Packer(rowType, packerVersion, bufferPageAllocSize) {
+    TPackedSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, TMaybe<size_t> bufferPageAllocSize)
+        : TOutputSerializer(buffer, rowType, transportVersion, packerVersion, datumValidationMode, bufferPageAllocSize)
+        , Packer(rowType, packerVersion, datumValidationMode, bufferPageAllocSize) {
     }
 
     NKikimr::NMiniKQL::TValuePackerTransport<fast> Packer;
@@ -26,8 +26,8 @@ public:
 template<bool fast>
 class TBuferredSerializer : public TPackedSerializer<fast> {
 public:
-    TBuferredSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, ui64 maxChunkBytes, TMaybe<size_t> bufferPageAllocSize)
-        : TPackedSerializer<fast>(buffer, rowType, transportVersion, packerVersion, bufferPageAllocSize)
+    TBuferredSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, ui64 maxChunkBytes, TMaybe<size_t> bufferPageAllocSize)
+        : TPackedSerializer<fast>(buffer, rowType, transportVersion, packerVersion, datumValidationMode, bufferPageAllocSize)
         , MaxChunkBytes(maxChunkBytes) {
 
     }
@@ -48,8 +48,8 @@ public:
     using TBuferredSerializer<fast>::MaxChunkBytes;
     using TBuferredSerializer<fast>::Rows;
 
-    TNarrowSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, ui64 maxChunkBytes, TMaybe<size_t> bufferPageAllocSize)
-        : TBuferredSerializer<fast>(buffer, rowType, transportVersion, packerVersion, maxChunkBytes, bufferPageAllocSize) {
+    TNarrowSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, ui64 maxChunkBytes, TMaybe<size_t> bufferPageAllocSize)
+        : TBuferredSerializer<fast>(buffer, rowType, transportVersion, packerVersion, datumValidationMode, maxChunkBytes, bufferPageAllocSize) {
     }
 
     void Flush(bool finished) override {
@@ -97,8 +97,8 @@ public:
     using TBuferredSerializer<fast>::MaxChunkBytes;
     using TBuferredSerializer<fast>::Rows;
 
-    TWideSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, ui64 maxChunkBytes, TMaybe<size_t> bufferPageAllocSize)
-        : TBuferredSerializer<fast>(buffer, rowType, transportVersion, packerVersion, maxChunkBytes, bufferPageAllocSize) {
+    TWideSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, ui64 maxChunkBytes, TMaybe<size_t> bufferPageAllocSize)
+        : TBuferredSerializer<fast>(buffer, rowType, transportVersion, packerVersion, datumValidationMode, maxChunkBytes, bufferPageAllocSize) {
     }
 
     void Flush(bool finished) override {
@@ -147,8 +147,8 @@ public:
     using TOutputSerializer::BufferPageAllocSize;
     using TPackedSerializer<fast>::Packer;
 
-    TBlockSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, TMaybe<size_t> bufferPageAllocSize, TMaybe<ui8> arrayBufferMinFillPercentage)
-        : TPackedSerializer<fast>(buffer, rowType, transportVersion, packerVersion, bufferPageAllocSize) {
+    TBlockSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, TMaybe<size_t> bufferPageAllocSize, TMaybe<ui8> arrayBufferMinFillPercentage)
+        : TPackedSerializer<fast>(buffer, rowType, transportVersion, packerVersion, datumValidationMode, bufferPageAllocSize) {
         Packer.SetMinFillPercentage(arrayBufferMinFillPercentage);
     }
 
@@ -183,9 +183,9 @@ public:
 template<bool fast>
 class TChunkedSerializer : public TBlockSerializer<fast> {
 public:
-    TChunkedSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion,
+    TChunkedSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode,
         TMaybe<size_t> bufferPageAllocSize, TMaybe<ui8> arrayBufferMinFillPercentage, const NKikimr::NMiniKQL::THolderFactory& holderFactory, NArrow::IBlockSplitter::TPtr splitter)
-        : TBlockSerializer<fast>(buffer, rowType, transportVersion, packerVersion, bufferPageAllocSize, arrayBufferMinFillPercentage)
+        : TBlockSerializer<fast>(buffer, rowType, transportVersion, packerVersion, datumValidationMode, bufferPageAllocSize, arrayBufferMinFillPercentage)
         , HolderFactory(holderFactory)
         , Splitter(splitter) {
     }
@@ -215,9 +215,9 @@ class TPackedDeserializer : public TInputDeserializer {
 public:
     using TInputDeserializer::HolderFactory;
 
-    TPackedDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, TMaybe<size_t> bufferPageAllocSize, const NKikimr::NMiniKQL::THolderFactory& holderFactory)
-        : TInputDeserializer(rowType, transportVersion, packerVersion, holderFactory)
-        , Packer(rowType, packerVersion, bufferPageAllocSize) {
+    TPackedDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, TMaybe<size_t> bufferPageAllocSize, const NKikimr::NMiniKQL::THolderFactory& holderFactory)
+        : TInputDeserializer(rowType, transportVersion, packerVersion, datumValidationMode, holderFactory)
+        , Packer(rowType, packerVersion, datumValidationMode, bufferPageAllocSize) {
     }
 
     void Deserialize(TChunkedBuffer&& data, NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
@@ -240,17 +240,17 @@ std::unique_ptr<TOutputSerializer> CreateSerializer(const TDqChannelSettings& se
             }
 
             if (local || chunkSizeLimit == 0) {
-                return std::make_unique<TBlockSerializer<fast>>(buffer, settings.RowType, settings.TransportVersion, settings.PackerVersion,
+                return std::make_unique<TBlockSerializer<fast>>(buffer, settings.RowType, settings.TransportVersion, settings.PackerVersion, settings.DatumValidationMode,
                     settings.BufferPageAllocSize, local ? Nothing() : settings.ArrayBufferMinFillPercentage);
             } else {
                 auto splitter = NArrow::CreateBlockSplitter(settings.RowType, chunkSizeLimit);
-                return std::make_unique<TChunkedSerializer<fast>>(buffer, settings.RowType, settings.TransportVersion, settings.PackerVersion, settings.BufferPageAllocSize, settings.ArrayBufferMinFillPercentage, *settings.HolderFactory, splitter);
+                return std::make_unique<TChunkedSerializer<fast>>(buffer, settings.RowType, settings.TransportVersion, settings.PackerVersion, settings.DatumValidationMode, settings.BufferPageAllocSize, settings.ArrayBufferMinFillPercentage, *settings.HolderFactory, splitter);
             }
         } else {
-            return std::make_unique<TWideSerializer<fast>>(buffer, settings.RowType, settings.TransportVersion, settings.PackerVersion, std::min(settings.MaxStoredBytes, settings.MaxChunkBytes), settings.BufferPageAllocSize);
+            return std::make_unique<TWideSerializer<fast>>(buffer, settings.RowType, settings.TransportVersion, settings.PackerVersion, settings.DatumValidationMode, std::min(settings.MaxStoredBytes, settings.MaxChunkBytes), settings.BufferPageAllocSize);
         }
     } else {
-        return std::make_unique<TNarrowSerializer<fast>>(buffer, settings.RowType, settings.TransportVersion, settings.PackerVersion, std::min(settings.MaxStoredBytes, settings.MaxChunkBytes), settings.BufferPageAllocSize);
+        return std::make_unique<TNarrowSerializer<fast>>(buffer, settings.RowType, settings.TransportVersion, settings.PackerVersion, settings.DatumValidationMode, std::min(settings.MaxStoredBytes, settings.MaxChunkBytes), settings.BufferPageAllocSize);
     }
 }
 
@@ -270,21 +270,21 @@ std::unique_ptr<TOutputSerializer> ConvertToLocalSerializer(std::unique_ptr<TOut
     if (IsLegacyStructBlock(rowType, blockLengthIndex, items) || IsMultiBlock(rowType, blockLengthIndex, items)) {
         if (serializer->TransportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0
                 || serializer->TransportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0) {
-            return std::make_unique<TBlockSerializer<true>>(serializer->Buffer, rowType, serializer->TransportVersion, serializer->PackerVersion, serializer->BufferPageAllocSize, Nothing());
+            return std::make_unique<TBlockSerializer<true>>(serializer->Buffer, rowType, serializer->TransportVersion, serializer->PackerVersion, serializer->DatumValidationMode, serializer->BufferPageAllocSize, Nothing());
         } else {
-            return std::make_unique<TBlockSerializer<false>>(serializer->Buffer, rowType, serializer->TransportVersion, serializer->PackerVersion, serializer->BufferPageAllocSize, Nothing());
+            return std::make_unique<TBlockSerializer<false>>(serializer->Buffer, rowType, serializer->TransportVersion, serializer->PackerVersion, serializer->DatumValidationMode, serializer->BufferPageAllocSize, Nothing());
         }
     } else {
         return serializer;
     }
 }
 
-std::unique_ptr<TInputDeserializer> CreateDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, TMaybe<size_t> bufferPageAllocSize, const NKikimr::NMiniKQL::THolderFactory& holderFactory) {
+std::unique_ptr<TInputDeserializer> CreateDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, TMaybe<size_t> bufferPageAllocSize, const NKikimr::NMiniKQL::THolderFactory& holderFactory) {
     if (transportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0
           || transportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0) {
-        return std::make_unique<TPackedDeserializer<true>>(rowType, transportVersion, packerVersion, bufferPageAllocSize, holderFactory);
+        return std::make_unique<TPackedDeserializer<true>>(rowType, transportVersion, packerVersion, datumValidationMode, bufferPageAllocSize, holderFactory);
     } else {
-        return std::make_unique<TPackedDeserializer<false>>(rowType, transportVersion, packerVersion, bufferPageAllocSize, holderFactory);
+        return std::make_unique<TPackedDeserializer<false>>(rowType, transportVersion, packerVersion, datumValidationMode, bufferPageAllocSize, holderFactory);
     }
 }
 

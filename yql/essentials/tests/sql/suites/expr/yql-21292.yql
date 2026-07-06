@@ -1,4 +1,3 @@
-
 PRAGMA config.flags("TransformCycleDetector","10");
 
 $variant_to_struct = ($v) -> {

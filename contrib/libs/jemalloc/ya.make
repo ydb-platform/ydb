@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(5.3.0)
+VERSION(5.3.1)
 
-ORIGINAL_SOURCE(https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2)
+ORIGINAL_SOURCE(https://github.com/jemalloc/jemalloc/releases/download/5.3.1/jemalloc-5.3.1.tar.bz2)
 
 ADDINCL(
     contrib/libs/jemalloc/include
@@ -57,6 +57,7 @@ SRCS(
     src/buf_writer.c
     src/cache_bin.c
     src/ckh.c
+    src/conf.c
     src/counter.c
     src/ctl.c
     src/decay.c
@@ -74,7 +75,9 @@ SRCS(
     src/fxp.c
     src/hook.c
     src/hpa.c
+    src/hpa_central.c
     src/hpa_hooks.c
+    src/hpa_utils.c
     src/hpdata.c
     src/inspect.c
     src/jemalloc.c
@@ -88,12 +91,12 @@ SRCS(
     src/pa_extra.c
     src/pac.c
     src/pages.c
-    src/pai.c
     src/peak_event.c
     src/prof.c
     src/prof_data.c
     src/prof_log.c
     src/prof_recent.c
+    src/prof_stack_range.c
     src/prof_stats.c
     src/prof_sys.c
     src/psset.c
@@ -108,8 +111,10 @@ SRCS(
     src/tcache.c
     src/test_hooks.c
     src/thread_event.c
+    src/thread_event_registry.c
     src/ticker.c
     src/tsd.c
+    src/util.c
     src/witness.c
 )
 

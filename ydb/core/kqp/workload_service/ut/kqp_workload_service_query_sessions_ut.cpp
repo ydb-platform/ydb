@@ -15,18 +15,18 @@ using namespace NYdb;
 using namespace NActors;
 
 ///
-/// Wraps the real IWmSessionUpdater and suppresses state transitions beyond
+/// Wraps the real ISessionUpdater and suppresses state transitions beyond
 /// FinalState. This lets a test freeze the WM state visible in
 /// .sys/query_sessions at a chosen level.
 ///
-class TWmSessionUpdaterWrapper : public IWmSessionUpdater {
+class TWmSessionUpdaterWrapper : public ISessionUpdater {
 public:
-    TWmSessionUpdaterWrapper(EWmState finalState, std::shared_ptr<IWmSessionUpdater> inner)
+    TWmSessionUpdaterWrapper(EState finalState, std::shared_ptr<ISessionUpdater> inner)
         : Inner(inner)
         , FinalState(finalState)
     {}
 
-    void SetRequestState(EWmState state, TInstant timestamp) override {
+    void SetRequestState(EState state, TInstant timestamp) override {
         if (state > FinalState) {
             return;
         }
@@ -38,8 +38,8 @@ public:
     }
 
 private:
-    std::shared_ptr<IWmSessionUpdater> Inner;
-    EWmState FinalState;
+    std::shared_ptr<ISessionUpdater> Inner;
+    EState FinalState;
 };
 
 ///
@@ -121,7 +121,7 @@ struct TInterceptorRules {
 class TKqpWorkloadProxyActor : public TActorBootstrapped<TKqpWorkloadProxyActor> {
 public:
     TKqpWorkloadProxyActor(
-        IWmSessionUpdater::EWmState finalState,
+        ISessionUpdater::EState finalState,
         TActorId realWorkloadServiceId,
         std::shared_ptr<TInterceptorRules> rules
     )
@@ -166,7 +166,7 @@ public:
     }
 
 private:
-    IWmSessionUpdater::EWmState FinalState;
+    ISessionUpdater::EState FinalState;
     TActorId WorkloadServiceId;
     std::shared_ptr<TInterceptorRules> Rules;
 };
@@ -241,7 +241,7 @@ private:
 
 class TQuerySessionTestFixture {
 public:
-    TQuerySessionTestFixture(const TString myPoolId, IWmSessionUpdater::EWmState state, size_t limit = 10)
+    TQuerySessionTestFixture(const TString myPoolId, ISessionUpdater::EState state, size_t limit = 10)
         : State(state)
         , Rules(std::make_shared<TInterceptorRules>())
     {
@@ -285,7 +285,7 @@ public:
     }
 
 private:
-    IWmSessionUpdater::EWmState State;
+    ISessionUpdater::EState State;
     TIntrusivePtr<IYdbSetup> Ydb;
     TActorId ProxyActorId;
     std::shared_ptr<TInterceptorRules> Rules;
@@ -299,7 +299,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
     /// It captures session data from .sys/query_sessions by 'parking' the request
     /// in the interceptor actor, ensuring a race-free read before actual SQL execution starts.
     ///
-    TQuerySessionReader ReadQuerySessionAfterState(IWmSessionUpdater::EWmState state) {
+    TQuerySessionReader ReadQuerySessionAfterState(ISessionUpdater::EState state) {
         TQuerySessionTestFixture f("my_pool", state);
         auto myPool = TQueryRunnerSettings().PoolId("my_pool");
         const TString& query = TSampleQueries::TSelect42::Query;
@@ -324,7 +324,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
     }
 
     Y_UNIT_TEST(TestWmStateNone) {  
-        auto reader = ReadQuerySessionAfterState(IWmSessionUpdater::NONE);
+        auto reader = ReadQuerySessionAfterState(ISessionUpdater::NONE);
 
         UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(reader[0].WmState, "NONE");
@@ -334,7 +334,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
     }
 
     Y_UNIT_TEST(TestWmStatePending) {
-        auto reader = ReadQuerySessionAfterState(IWmSessionUpdater::PENDING);
+        auto reader = ReadQuerySessionAfterState(ISessionUpdater::PENDING);
 
         UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(reader[0].WmState, "PENDING");
@@ -344,7 +344,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
     }
 
     Y_UNIT_TEST(TestWmStateExited) {
-        auto reader = ReadQuerySessionAfterState(IWmSessionUpdater::EXITED);
+        auto reader = ReadQuerySessionAfterState(ISessionUpdater::EXITED);
 
         UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(reader[0].WmState, "EXITED");
@@ -362,7 +362,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
     /// preserving its original 'WmEnterTime' and recording a valid 'WmExitTime'.
     ///
     Y_UNIT_TEST(TestWmStateDelayedToExited) {
-        TQuerySessionTestFixture f("my_pool", IWmSessionUpdater::EXITED, /*limit=*/1);
+        TQuerySessionTestFixture f("my_pool", ISessionUpdater::EXITED, /*limit=*/1);
         auto myPool = TQueryRunnerSettings().PoolId("my_pool");
         auto& runtime = *f.GetYdb()->GetRuntime();
 
@@ -421,7 +421,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
         using namespace NYdb::NTable;
 
         // We use PENDING state because AttachQueryText calls Clean() before placing request into pool
-        TQuerySessionTestFixture f(NResourcePool::DEFAULT_POOL_ID, IWmSessionUpdater::PENDING);
+        TQuerySessionTestFixture f(NResourcePool::DEFAULT_POOL_ID, ISessionUpdater::PENDING);
         auto& runtime = *f.GetYdb()->GetRuntime();
 
         auto db = f.GetYdb()->GetTableClient();

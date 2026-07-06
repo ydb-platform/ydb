@@ -4,8 +4,6 @@
 
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
-#include <yt/yt/core/logging/log.h>
-
 #include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/name_table.h>
 #include <yt/yt/client/table_client/versioned_reader.h>
@@ -14,10 +12,6 @@ namespace NYT::NTableClient {
 
 using namespace NChunkClient;
 using namespace NConcurrency;
-
-////////////////////////////////////////////////////////////////////////////////
-
-const NLogging::TLogger Logger("TableClientTest");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -145,7 +139,6 @@ void CheckResult(std::vector<TVersionedRow> expected, IVersionedReaderPtr reader
     std::vector<TVersionedRow> actual;
     actual.reserve(100);
 
-    int rowIndex = 0;
     while (auto batch = reader->Read({.MaxRowsPerRead = 20})) {
         if (batch->IsEmpty()) {
             ASSERT_TRUE(WaitFor(reader->GetReadyEvent()).IsOK());
@@ -168,27 +161,8 @@ void CheckResult(std::vector<TVersionedRow> expected, IVersionedReaderPtr reader
 
         std::vector<TVersionedRow> ex(it, std::min(it + actual.size(), expected.end()));
 
-        // Log row mismatches into the test log to aid diagnosing flaky failures:
-        // the per-row gtest trace is only emitted on assertion and is lost if the failing run is not retained.
-        for (int index = 0; index < std::ssize(actual); ++index) {
-            auto expectedRow = index < std::ssize(ex) ? ex[index] : TVersionedRow();
-            if (!TBitwiseVersionedRowEqual()(expectedRow, actual[index])) {
-                YT_LOG_ERROR("Versioned row mismatch (RowIndex: %v, Expected: %v, Actual: %v)",
-                    rowIndex + index,
-                    expectedRow,
-                    actual[index]);
-            }
-        }
-
         CheckSchemafulResult(ex, actual);
         it += ex.size();
-        rowIndex += std::ssize(actual);
-    }
-
-    if (it != expected.end()) {
-        YT_LOG_ERROR("Versioned reader returned fewer rows than expected (ExpectedRowCount: %v, ActualRowCount: %v)",
-            std::ssize(expected),
-            rowIndex);
     }
 
     ASSERT_TRUE(it == expected.end());

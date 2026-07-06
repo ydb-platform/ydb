@@ -135,10 +135,10 @@ public:
 
         if (auto* expr = ctx->expr()) {
             visit(expr);
-            Names_->Define(std::move(*ref), expr);
+            Names_->Define(*ref, expr);
         } else if (auto* select = ctx->select_unparenthesized_stmt()) {
             visit(select);
-            Names_->Define(std::move(*ref), std::monostate());
+            Names_->Define(*ref, std::monostate());
         }
 
         return {};
@@ -175,9 +175,9 @@ public:
         }
 
         if (IsDefining_) {
-            Names_->Define(std::move(*ref), std::monostate());
+            Names_->Define(*ref, std::monostate());
         } else {
-            Names_->Reference(std::move(*ref));
+            Names_->Reference(*ref);
         }
 
         return {};

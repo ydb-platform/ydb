@@ -85,11 +85,11 @@ public:
     }
 
     void GetAllFunctions(IFunctionsSink& sink) const final {
-        AddFunc(sink, "Parse", true,
+        AddFunc(sink, "Parse", /*isTypeAware=*/true,
                 R"([[[];{type=["CallableType";[];[["UniversalStructType"]];[[["DataType";"String"];1u]]]}]])");
-        AddFunc(sink, "TryParse", true,
+        AddFunc(sink, "TryParse", /*isTypeAware=*/true,
                 R"([[[];{type=["CallableType";[];[["OptionalType";["UniversalStructType"]]];[[["DataType";"String"];1u]]]}]])");
-        AddFunc(sink, "Serialize", true,
+        AddFunc(sink, "Serialize", /*isTypeAware=*/true,
                 R"([[[];{type=["CallableType";[];[["DataType";"String"]];[[["UniversalStructType"];1u]]]}]])");
     }
 
@@ -112,7 +112,7 @@ public:
                            builder, &typeInfo,
                            EProtoStringYqlType::Bytes,
                            dyn->GetSyntaxAware(),
-                           false,
+                           /*useJsonName=*/false,
                            dyn->GetYtMode());
 
             auto stringType = builder.SimpleType<char*>();

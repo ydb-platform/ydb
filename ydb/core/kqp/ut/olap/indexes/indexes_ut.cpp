@@ -1176,6 +1176,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
         TKikimrRunner kikimr(settings);
 
         ExecQuery(kikimr, UseQueryService, R"(
@@ -3353,6 +3354,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableCsDictionaryEncoding(true);
         TKikimrRunner kikimr(settings);
         auto& client = kikimr.GetTestClient();

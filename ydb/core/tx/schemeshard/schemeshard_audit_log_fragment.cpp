@@ -60,6 +60,13 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
         return "CREATE TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
+        if (tx.GetAlterTable().ColumnsSize() > 0) {
+            for (const auto& col : tx.GetAlterTable().GetColumns()) {
+                if (col.HasRenameFrom()) {
+                    return "ALTER TABLE RENAME COLUMN";
+                }
+            }
+        }
         return "ALTER TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTable:
         return "DROP TABLE";

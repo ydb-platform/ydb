@@ -533,17 +533,23 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             return nullptr;
         }
 
-        if (source->TTLSettings().HasEnabled() && source->TTLSettings().GetEnabled().GetColumnName() == oldName) {
-            errStr = Sprintf("Cannot rename TTL column '%s', disable TTL first", oldName.c_str());
-            return nullptr;
-        }
-
         colName2Id.erase(renameIt);
         colName2Id[newName] = colId;
 
         TTableInfo::TColumn& column = alterData->Columns[colId];
         column = sourceColumn;
         column.Name = newName;
+
+        // Auto-carry the TTL column reference through the rename: a bare RENAME COLUMN
+        // request never sets op.HasTTLSettings(), so without this the TTL setting would
+        // keep pointing at the now-stale old name (GetTTLColumnId() silently fails to
+        // resolve it after the next schemeshard reload, disabling TTL enforcement).
+        if (source->TTLSettings().HasEnabled() && source->TTLSettings().GetEnabled().GetColumnName() == oldName) {
+            if (!alterData->TableDescriptionFull->HasTTLSettings()) {
+                alterData->TableDescriptionFull->MutableTTLSettings()->CopyFrom(source->TTLSettings());
+            }
+            alterData->TableDescriptionFull->MutableTTLSettings()->MutableEnabled()->SetColumnName(newName);
+        }
     }
 
     for (auto& col : *op.MutableColumns()) {

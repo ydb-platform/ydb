@@ -52,7 +52,8 @@ struct TSessionPoolSettings {
     // Sessions will not be closed by CloseIdleThreshold if the number of sessions less then this limit.
     FLUENT_SETTING_DEFAULT(uint32_t, MinPoolSize, 10);
 
-    // Create session after timeout
+    // Create session in the background even after client timeout.
+    // This is useful for applications with short session timeouts.
     FLUENT_SETTING_DEFAULT(bool, UseDeferredSessionCreation, false);
 };
 

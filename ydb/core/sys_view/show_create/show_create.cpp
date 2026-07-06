@@ -118,6 +118,8 @@ private:
         } catch (const TFormatFail& ex) {
             ReplyErrorAndDie(ex.Status, ex.Error);
             return true;
+        } catch (const std::exception& ex) {
+            return OnUnhandledException(ex);
         }
 
         return false;
@@ -129,12 +131,6 @@ private:
     }
 
     void StartScan() final {
-        if (!AppData()->FeatureFlags.GetEnableShowCreate()) {
-            ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
-                TStringBuilder() << "Sys view 'show_create' is not supported");
-            return;
-        }
-
         const auto& cellsFrom = TableRange.From.GetCells();
 
         if (cellsFrom.size() != 2 || cellsFrom[0].IsNull() || cellsFrom[1].IsNull()) {

@@ -1,27 +1,27 @@
 #include "dq_solomon_write_actor.h"
 #include "dq_solomon_actors_util.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
-
-#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
-#include <yql/essentials/minikql/mkql_alloc.h>
-#include <yql/essentials/minikql/mkql_string_util.h>
-#include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/utils/actors/http_sender_actor.h>
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/utils/url_builder.h>
-#include <yql/essentials/utils/yql_panic.h>
-
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http_proxy.h>
-#include <library/cpp/json/easy_parse/json_easy_parser.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
+#include <ydb/library/yql/utils/actors/http_sender_actor.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/url_builder.h>
+#include <yql/essentials/utils/yql_panic.h>
+
+#include <library/cpp/json/easy_parse/json_easy_parser.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
@@ -58,7 +58,7 @@ namespace {
 const ui64 MaxMetricsPerRequest = 1000; // Max allowed count is 10000
 const ui64 MaxRequestsInflight = 3;
 
-auto RetryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolicy(
+const auto RetryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolicy(
     [](const NHttp::TEvHttpProxy::TEvHttpIncomingResponse* resp){
         if (!resp || !resp->Response) {
             // Connection wasn't established. Should retry.
@@ -147,7 +147,7 @@ public:
 
         ui64 metricsCount = 0;
         batch.ForEachRow([&](const auto& value) {
-            if (metricsCount + WriteParams.Shard.GetScheme().GetSensors().size() > MaxMetricsPerRequest) {
+            if (metricsCount && metricsCount + WriteParams.Shard.GetScheme().GetSensors().size() > MaxMetricsPerRequest) {
                 PushMetricsToBuffer(metricsCount);
             }
 
@@ -283,7 +283,7 @@ private:
 
             // Restore FreeSpace and remove the inflight entry so backpressure
             // accounting stays consistent even when we report an error.
-            if (auto ptr = InflightBuffer.find(ev->Cookie); ptr != InflightBuffer.end()) {
+            if (auto ptr = InflightBuffer.find(ev->Cookie); ptr != InflightBuffer.end() && res->IsTerminal) {
                 FreeSpace += ptr->second.BodySize;
                 InflightBuffer.erase(ptr);
             }
@@ -423,7 +423,7 @@ private:
             SINK_LOG_T("Sent " << metricsToSend.MetricsCount << " metrics with size of " << metricsToSend.Data.size() << " bytes to solomon");
 
             *Metrics.SentMetrics += metricsToSend.MetricsCount;
-            InflightBuffer.emplace(Cookie++, TMetricsInflight { httpSenderId, metricsToSend.MetricsCount, bodySize });
+            Y_VALIDATE(InflightBuffer.emplace(Cookie++, TMetricsInflight { httpSenderId, metricsToSend.MetricsCount, bodySize }).second, "Duplicated inflight event");
             EgressStats.Bytes += bodySize;
             EgressStats.Chunks++;
             return true;
@@ -450,7 +450,7 @@ private:
         auto ptr = InflightBuffer.find(cookie);
         if (ptr == InflightBuffer.end()) {
             SINK_LOG_E("Solomon response[" << cookie << "] was not found in inflight");
-            TIssues issues { TIssue(TStringBuilder() << "Internal error in monitoring writer") };
+            TIssues issues { TIssue("Internal error in monitoring writer") };
             Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             return;
         }
@@ -560,8 +560,7 @@ private:
     ui64 Cookie = 0;
 };
 
-
-} // namespace
+} // anonymous namespace
 
 std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(
     NYql::NSo::NProto::TDqSolomonShard&& settings,

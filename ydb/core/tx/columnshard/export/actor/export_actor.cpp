@@ -1,5 +1,6 @@
 #include "export_actor.h"
 
+#include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
 namespace NKikimr::NOlap::NExport {
@@ -183,7 +184,7 @@ void TActor::OnBootstrap(const TActorContext& /*ctx*/) {
     Exporter = Register(actor.release());
     auto evStart = BuildRequestInitiator(ExportSession->GetCursor());
     evStart->Record.SetGeneration((ui64)TabletId);
-    evStart->Record.SetCSScanPolicy("PLAIN");
+    evStart->Record.SetCSScanPolicy("EXPORT");
     Send(TabletActorId, evStart.release());
     Become(&TActor::StateFunc);
 }
@@ -243,6 +244,8 @@ class TTxProposeFinish: public NTabletFlatExecutor::TTransactionBase<NColumnShar
 private:
     using TBase = NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard>;
     const ui64 TxId;
+    const NActors::TActorId ProgressActorId;
+    const ui64 TxInternalId;
 
 protected:
     virtual bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override {
@@ -251,13 +254,16 @@ protected:
     }
 
     virtual void Complete(const TActorContext& ctx) override {
+        ctx.Send(ProgressActorId, new NBackground::TEvLocalTransactionCompleted(TxInternalId));
         Self->GetProgressTxController().FinishProposeOnComplete(TxId, ctx);
     }
 
 public:
-    TTxProposeFinish(NColumnShard::TColumnShard* self, const ui64 txId)
+    TTxProposeFinish(NColumnShard::TColumnShard* self, const ui64 txId, const NActors::TActorId& progressActorId, const ui64 txInternalId)
         : TBase(self)
         , TxId(txId)
+        , ProgressActorId(progressActorId)
+        , TxInternalId(txInternalId)
     {
     }
 };
@@ -266,7 +272,8 @@ void TActor::OnSessionStateSaved() {
     AFL_VERIFY(ExportSession->IsFinished() || ExportSession->IsAborted());
     NYDBTest::TControllers::GetColumnShardController()->OnExportFinished();
     if (ExportSession->GetTxId()) {
-        ExecuteTransaction(std::make_unique<TTxProposeFinish>(GetShardVerified<NColumnShard::TColumnShard>(), *ExportSession->GetTxId()));
+        ExecuteTransaction(std::make_unique<TTxProposeFinish>(
+            GetShardVerified<NColumnShard::TColumnShard>(), *ExportSession->GetTxId(), SelfId(), GetNextTxId()));
     } else {
         Session->FinishActor();
     }

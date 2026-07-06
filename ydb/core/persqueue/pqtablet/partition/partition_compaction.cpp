@@ -77,7 +77,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
     TClientBlob blob(std::move(p.Msg.SourceId), p.Msg.SeqNo, std::move(p.Msg.Data), partData, WriteTimestampEstimate,
                         TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
                         p.Msg.UncompressedSize, std::move(p.Msg.PartitionKey), std::move(p.Msg.ExplicitHashKey),
-                        p.Msg.MessageCount, p.Msg.MessageFormat); //remove curOffset when LB will report CTime
+                        p.Msg.LogicalMessageCount, p.Msg.IsBatch); //remove curOffset when LB will report CTime
 
     bool lastBlobPart = blob.IsLastPart();
 
@@ -138,7 +138,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
                 << " NewHead: " << CompactionBlobEncoder.NewHead
         );
 
-        curOffset += p.Msg.MessageCount;
+        curOffset += p.Msg.LogicalMessageCount;
         CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
     }
 
@@ -291,7 +291,7 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
             ui16 partNo = blob.GetPartNo();
             const auto offsetPartNo = std::make_pair(offset, partNo);
             if (blob.IsLastPart()) {
-                offset += blob.MessageCount;
+                offset += blob.LogicalMessageCount;
             }
 
             if (FirstCompactionPart && (offsetPartNo <= *FirstCompactionPart)) {
@@ -357,8 +357,8 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
                 .External = false,
                 .IgnoreQuotaDeadline = true,
                 .HeartbeatVersion = std::nullopt,
-                .MessageCount = blob.MessageCount,
-                .MessageFormat = blob.MessageFormat,
+                .LogicalMessageCount = blob.LogicalMessageCount,
+                .IsBatch = blob.IsBatch,
             }, std::nullopt};
             msg.Internal = true;
 

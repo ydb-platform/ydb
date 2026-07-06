@@ -1,32 +1,29 @@
 #pragma once
 
-#include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/minikql/jsonpath/parser/parser.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/types/binary_json/format.h>
 
-#include <compare>
 #include <set>
 #include <variant>
 
 namespace NKikimr::NJsonIndex {
 
 // YQL json numbers are double precision floats. The maximum supported integer is +-2^53.
-static constexpr i64 MaxSupportedInt = 9007199254740992ll;
+static constexpr i64 MaxSupportedInt = 9007199254740992LL;
 
 // A token paired with an optional parameter name
 struct TToken {
 public:
     // Constructs a token with the given path token (full or partial path-prefix token)
     explicit TToken(TString pathToken)
-        : PathToken(std::move(pathToken))
-    {
+        : PathToken(std::move(pathToken)) {
     }
 
     // Constructs a token with the given path token and parameter name (partial path-prefix and YQL param name)
     explicit TToken(TString pathToken, TString paramName)
         : PathToken(std::move(pathToken))
-        , ParamName(std::move(paramName))
-    {
+        , ParamName(std::move(paramName)) {
     }
 
     auto operator<=>(const TToken& other) const {
@@ -37,7 +34,6 @@ public:
         return std::tie(PathToken, ParamName) == std::tie(other.PathToken, other.ParamName);
     }
 
-public:
     // Full or partial path-prefix token
     TString PathToken;
 
@@ -53,13 +49,12 @@ class TCollectResult {
 public:
     using TError = NYql::TIssue;
 
-    enum class ETokensMode {
+    enum class ETokensMode : ui8 {
         NotSet = 0,
         And = 1,
         Or = 2,
     };
 
-public:
     // Constructs a collect result with the given tokens
     explicit TCollectResult(TTokens&& tokens);
 
@@ -105,7 +100,7 @@ private:
 
 // Type of the callable function that is used for the JSON index collection
 // It is given from the predicate of the SELECT statement
-enum class ECallableType {
+enum class ECallableType : ui8 {
     JsonExists = 0,
     JsonValue = 1,
     JsonQuery = 2,
@@ -131,8 +126,7 @@ TCollectResult MergeAnd(TCollectResult left, TCollectResult right);
 TCollectResult MergeOr(TCollectResult left, TCollectResult right);
 
 // Appends NULL, binary JSON entry type byte, and scalar payload (the index token layout)
-void AppendJsonIndexLiteral(TString& out, NBinaryJson::EEntryType type, TStringBuf stringPayload = {},
-    const double* numberPayload = nullptr);
+void AppendJsonIndexLiteral(TString& out, NBinaryJson::EEntryType type, TStringBuf stringPayload = {}, const double* numberPayload = nullptr);
 
 // Formats an index token and optional parameter name as a JSON-like object string.
 // The path portion is decoded from length-prefixed key segments joined by '.'.
@@ -146,4 +140,4 @@ void AppendJsonIndexLiteral(TString& out, NBinaryJson::EEntryType type, TStringB
 //   ("", "")             -> {}
 TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName);
 
-} // namespace NKikimr::NJsonIndex
+}   // namespace NKikimr::NJsonIndex

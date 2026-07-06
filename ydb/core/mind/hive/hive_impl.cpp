@@ -1065,6 +1065,9 @@ void THive::Handle(TEvHive::TEvReassignTablet::TPtr &ev) {
                 }
                 groups[i].SetGroupID(record.GetForcedGroupIDs(i));
             }
+            if (!std::exchange(tablet->IsMarkedForReassign, true)) {
+                UpdateCounterTabletsReassigning(+1);
+            }
             Execute(CreateUpdateTabletGroups(tablet->Id, std::move(groups)));
         } else {
             Execute(CreateReassignGroups(tablet->Id, ev.Get()->Sender, channelProfileNewGroup, ev->Get()->Record.GetAsync()));
@@ -1834,6 +1837,14 @@ void THive::UpdateCounterTabletsDeleting() {
     if (TabletCounters != nullptr) {
         auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_DELETING];
         counter.Set(DeleteTabletInProgress);
+    }
+}
+
+void THive::UpdateCounterTabletsReassigning(i64 tabletsReassigningDiff) {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_REASSIGNING];
+        auto newValue = counter.Get() + tabletsReassigningDiff;
+        counter.Set(newValue);
     }
 }
 
@@ -3849,7 +3860,7 @@ void THive::Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
     BLOG_D("Handle TEvShrinkStoragePool");
     const auto& record = ev->Get()->Record;
     auto& pool = GetStoragePool(record.GetStoragePool());
-    if (pool.ConsoleVersion < record.GetVersion()) {
+    if (pool.ConsoleVersion <= record.GetVersion()) {
         pool.ConsoleVersion = record.GetVersion();
     } else {
         BLOG_W("Got outdated TEvShrinkStoragePool request");
@@ -4110,6 +4121,7 @@ void THive::CheckRemainingHistory(TStoragePoolInfo& pool) {
     BLOG_D("ShrinkPool - done");
     auto ev = std::make_unique<TEvHive::TEvShrinkStoragePoolDone>();
     ev->Record.SetStoragePool(pool.Name);
+    ev->Record.MutableGroupsToRemove()->Assign(pool.InactiveGroups.begin(), pool.InactiveGroups.end());
     if (AreWeRootHive()) {
         SendToConsolePipe(ev.release());
     } else {

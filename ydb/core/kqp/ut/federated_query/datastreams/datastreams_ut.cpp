@@ -1,5 +1,6 @@
 #include "common.h"
 
+#include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
@@ -12,6 +13,7 @@ using namespace fmt::literals;
 using namespace NTestUtils;
 using namespace NYdb;
 using namespace NYdb::NQuery;
+using namespace NFederatedQueryTest;
 
 Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(CreateExternalDataSource, TStreamingTestFixture) {
@@ -1148,9 +1150,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         auto results = ExecQuery(fmt::format(R"(
             $input = SELECT
-                    CAST(SystemMetadata("partition_id") as String) as part_id,
-                    CAST(SystemMetadata("offset") as String) as offset,
-                    SystemMetadata("cluster") as cluster,
+                    CAST(__ydb_partition_id as String) as part_id,
+                    CAST(__ydb_offset as String) as offset,
+                    __ydb_cluster as cluster,
                     value as value
                 FROM {topic} WITH (
                     FORMAT = "json_each_row",
@@ -1165,6 +1167,69 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CheckScriptResult(results[0], 1, 1, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "0-0--value1");
         });
+    }
+
+    Y_UNIT_TEST_F(ReadSystemColumnsWithoutRename, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        constexpr char topicName[] = "inReadSystemColumnsWithoutRename";
+        CreateTopic(topicName, std::nullopt, true);
+
+        WriteTopicMessage(topicName, R"({"key": 1, "value": "value1"})", 0, /* local */ true);
+
+        auto results = ExecQuery(fmt::format(R"(
+            SELECT __ydb_partition_id, __ydb_offset, value
+                FROM {topic} WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        key Uint64 NOT NULL,
+                        value String NOT NULL
+                    )
+            );)",
+            "topic"_a = topicName
+        ));
+
+        auto resultSet = results[0];
+        auto columns = resultSet.GetColumnsMeta();
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "__ydb_partition_id");
+        UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "__ydb_offset");
+        UNIT_ASSERT_VALUES_EQUAL(columns[2].Name, "value");
+
+        TResultSetParser parser(resultSet);
+        UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("__ydb_partition_id").GetUint64(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("__ydb_offset").GetUint64(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("value").GetString(), "value1");
+    }
+
+    // TODO: Implement SELECT * filtering for table mode topics to exclude __ydb_ system columns.
+    // The PQ provider (streaming mode) already filters them in GetReadTopicSchema,
+    // but the KQP table mode path adds __ydb_ columns through a different mechanism
+    // that doesn't yet support filtering them from SELECT *.
+
+    Y_UNIT_TEST_F(WriteToSystemColumnsIsProhibited, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        constexpr char topicName[] = "inWriteToSystemColumnsIsProhibited";
+        CreateTopic(topicName, std::nullopt, true);
+
+        // Attempt to insert into a topic referencing a system column should fail
+        ExecQuery(fmt::format(R"(
+            INSERT INTO {topic}
+                SELECT __ydb_offset FROM {topic} WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        key Uint64 NOT NULL,
+                        value String NOT NULL
+                    )
+                );)",
+            "topic"_a = topicName
+        ),
+        EStatus::GENERIC_ERROR);
     }
 
     Y_UNIT_TEST_F(TableModeWithDisabledPredicatePushdown, TStreamingTestFixture) {
@@ -1185,12 +1250,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         ExecQuery(fmt::format(R"(
             SELECT 
-                SystemMetadata('partition_id') as partition_id,
-                SystemMetadata("offset") as offset,
+                __ydb_partition_id as partition_id,
+                __ydb_offset as offset,
                 key as data
             FROM `{topic}`
             WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
-            WHERE SystemMetadata('partition_id') = 1)",
+            WHERE __ydb_partition_id = 1)",
             "topic"_a = topic
         ),
         EStatus::PRECONDITION_FAILED, "Cannot parse input");
@@ -1217,8 +1282,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto test = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
             TString text = fmt::format(R"(
                 SELECT 
-                    SystemMetadata('partition_id') as partition_id,
-                    SystemMetadata("offset") as offset,
+                    __ydb_partition_id as partition_id,
+                    __ydb_offset as offset,
                     key as data
                 FROM `{topic}`
                 WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
@@ -1230,24 +1295,24 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             CheckScriptResult(result[0], 3, rowCount, validator);
         };
 
-        test("SystemMetadata('partition_id') > 42", 0, [&](TResultSetParser&) {});
-        test("SystemMetadata('partition_id') IS NOT DISTINCT FROM 2", 1, [&](TResultSetParser& resultSet) {
+        test("__ydb_partition_id > 42", 0, [&](TResultSetParser&) {});
+        test("__ydb_partition_id IS NOT DISTINCT FROM 2", 1, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data2");
         });
 
-        test("SystemMetadata('partition_id') = 0 \
-           OR SystemMetadata('partition_id') >= 2", 3, [&](TResultSetParser& resultSet) {
+        test("__ydb_partition_id = 0 \
+           OR __ydb_partition_id >= 2", 3, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data0"
             || resultSet.ColumnParser(2).GetString() == "data2"
             || resultSet.ColumnParser(2).GetString() == "data3");
         });
 
-        test("(SystemMetadata('partition_id') = 0 AND SystemMetadata('offset') >=0) \
-           OR (SystemMetadata('partition_id') = 2 AND SystemMetadata('offset') >=1)", 1, [&](TResultSetParser& resultSet) {
+        test("(__ydb_partition_id = 0 AND __ydb_offset >=0) \
+           OR (__ydb_partition_id = 2 AND __ydb_offset >=1)", 1, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data0");
         });
 
-        test("SystemMetadata('partition_id') = 0 and key = 'data0'", 1, [&](TResultSetParser& resultSet) {
+        test("__ydb_partition_id = 0 and key = 'data0'", 1, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), 0);
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(2).GetString(), "data0");
         });
@@ -1274,8 +1339,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto test = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
             TString text = fmt::format(R"(
                 SELECT 
-                    SystemMetadata('partition_id') as partition_id,
-                    SystemMetadata("offset") as offset,
+                    __ydb_partition_id as partition_id,
+                    __ydb_offset as offset,
                     key as data
                 FROM `{topic}`
                 WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
@@ -1287,33 +1352,33 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             CheckScriptResult(result[0], 3, rowCount, validator);
         };
 
-        test("SystemMetadata('offset') < -42", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        test("SystemMetadata('offset') < -42 AND SystemMetadata('offset') > 42", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        test("SystemMetadata('offset') <   0", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        test("SystemMetadata('offset') >  42", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        test("SystemMetadata('offset') = 1", 1,  [&](TResultSetParser& resultSet) {
+        test("__ydb_offset < -42", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("__ydb_offset < -42 AND __ydb_offset > 42", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("__ydb_offset <   0", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("__ydb_offset >  42", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("__ydb_offset = 1", 1,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
             });
-        test("SystemMetadata('offset') IS NOT DISTINCT FROM 1", 1,  [&](TResultSetParser& resultSet) {
+        test("__ydb_offset IS NOT DISTINCT FROM 1", 1,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
             });
-        test("SystemMetadata('offset') >= 1 AND SystemMetadata('offset') < 3", 2,  [&](TResultSetParser& resultSet) {
+        test("__ydb_offset >= 1 AND __ydb_offset < 3", 2,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
             });
         // bug
-        // test("NOT (SystemMetadata('offset') < 1 AND NOT SystemMetadata('offset') < 3)", 2,  [&](TResultSetParser& resultSet) {
+        // test("NOT (__ydb_offset < 1 AND NOT __ydb_offset < 3)", 2,  [&](TResultSetParser& resultSet) {
         //         UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
         //     });
-        test("1 <= SystemMetadata('offset') AND 3 > SystemMetadata('offset')", 2,  [&](TResultSetParser& resultSet) {
+        test("1 <= __ydb_offset AND 3 > __ydb_offset", 2,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
             });
-        test("SystemMetadata('offset') IN (1, 2)", 2,  [&](TResultSetParser& resultSet) {
+        test("__ydb_offset IN (1, 2)", 2,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
             });
-        test("SystemMetadata('offset') BETWEEN 1 AND 2", 2,  [&](TResultSetParser& resultSet) {
+        test("__ydb_offset BETWEEN 1 AND 2", 2,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
             });
-        test("SystemMetadata('offset') == CAST(SUBSTRING('1234567891', 9, 1) AS Uint64)", 1,  [&](TResultSetParser& resultSet) {
+        test("__ydb_offset == CAST(SUBSTRING('1234567891', 9, 1) AS Uint64)", 1,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
             });
     }
@@ -1341,8 +1406,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto test = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
             TString text = fmt::format(R"(
                 SELECT 
-                    SystemMetadata('partition_id') as partition_id,
-                    SystemMetadata("write_time") as offset,
+                    __ydb_partition_id as partition_id,
+                    __ydb_write_time as offset,
                     key as data
                 FROM `{topic}`
                 WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
@@ -1354,24 +1419,24 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             CheckScriptResult(result[0], 3, rowCount, validator);
         };
 
-        test("SystemMetadata('write_time') = Timestamp(\"2020-01-01T00:00:00Z\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        test("SystemMetadata('write_time') < Timestamp(\"2020-01-01T00:00:00Z\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        test("SystemMetadata('write_time') = Timestamp(\"2020-01-01T00:00:00Z\") AND SystemMetadata('write_time') > Timestamp(\"2021-01-01T00:00:00Z\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        test("SystemMetadata('write_time') = Timestamp(\"" + received[1].second.ToString() + "\")", 1,  [&](TResultSetParser& resultSet) {
+        test("__ydb_write_time = Timestamp(\"2020-01-01T00:00:00Z\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("__ydb_write_time < Timestamp(\"2020-01-01T00:00:00Z\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("__ydb_write_time = Timestamp(\"2020-01-01T00:00:00Z\") AND __ydb_write_time > Timestamp(\"2021-01-01T00:00:00Z\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("__ydb_write_time = Timestamp(\"" + received[1].second.ToString() + "\")", 1,  [&](TResultSetParser& resultSet) {
             UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
         });
-        test("SystemMetadata('write_time') >= Timestamp(\"" + received[1].second.ToString() + "\") \
-            AND SystemMetadata('write_time') <= Timestamp(\"" + received[2].second.ToString() + "\")", 2,  [&](TResultSetParser& resultSet) {
+        test("__ydb_write_time >= Timestamp(\"" + received[1].second.ToString() + "\") \
+            AND __ydb_write_time <= Timestamp(\"" + received[2].second.ToString() + "\")", 2,  [&](TResultSetParser& resultSet) {
             UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
         });
 
         // the implementation does not support such a test
         // auto future = received[3].second + TDuration::Seconds(100);
-        // test("SystemMetadata('write_time') > Timestamp(\"" + future.ToString() + "\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        // test("__ydb_write_time > Timestamp(\"" + future.ToString() + "\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
 
         auto test_raw = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
             TString text = fmt::format(R"(
-                SELECT SystemMetadata("write_time") as offset, Data FROM `{topic}` WHERE {filter})",
+                SELECT __ydb_write_time as offset, Data FROM `{topic}` WHERE {filter})",
                 "topic"_a = topic,
                 "filter"_a = filter
             );
@@ -1379,7 +1444,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             CheckScriptResult(result[0], 2, rowCount, validator);
         };
 
-        test_raw("SystemMetadata('write_time') > CurrentUtcTimestamp(1) - Interval('P1D') AND Data LIKE '%data3%'", 1, [&](TResultSetParser& resultSet) {
+        test_raw("__ydb_write_time > CurrentUtcTimestamp(1) - Interval('P1D') AND Data LIKE '%data3%'", 1, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT(resultSet.ColumnParser(1).GetString() == "data3");
         });
     }
@@ -1412,8 +1477,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto test = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
             TString text = fmt::format(R"(
                 SELECT 
-                    SystemMetadata('partition_id') as partition_id,
-                    SystemMetadata("offset") as offset,
+                    __ydb_partition_id as partition_id,
+                    __ydb_offset as offset,
                     key as data
                 FROM `{topic}`
                 WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
@@ -1425,18 +1490,19 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             CheckScriptResult(result[0], 3, rowCount, validator);
         };
 
-        test("SystemMetadata('partition_id') = 0 AND SystemMetadata('offset') = 1", 1,  [&](TResultSetParser& resultSet) {
+        test("__ydb_partition_id = 0 AND __ydb_offset = 1", 1,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data0");
             });
-        test("SystemMetadata('partition_id') = 1 AND SystemMetadata('offset') >= 2", 1,  [&](TResultSetParser& resultSet) {
+        test("__ydb_partition_id = 1 AND __ydb_offset >= 2", 1,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
             });
-        test("SystemMetadata('partition_id') = 2 AND SystemMetadata('offset') < 1", 1,  [&](TResultSetParser& resultSet) {
+        test("__ydb_partition_id = 2 AND __ydb_offset < 1", 1,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data2");
             });
     }
 
     Y_UNIT_TEST_F(CreateExternalDataSourceAuthMethodIam, TStreamingWithSchemaSecretsTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
         ++DynamicNodeCount;
         auto storagePoolType = StoragePoolTypes.emplace_back("hdd");
         auto& appConfig = SetupAppConfig();
@@ -2172,6 +2238,158 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     ), hashMode, algo, any, /* rAny*/ false, /* lStream */ false, /* rStream */ true, isSelf);
                 }
             }
+        }
+    }
+    Y_UNIT_TEST_F(ForbidYqlSysColumnsRejectsSystemMetadataInStreamingMode, TStreamingTestFixture) {
+        auto& config = SetupAppConfig();
+        config.MutableQueryServiceConfig()->MutableStreamingQueries()->SetForbidYqlSysColumnsAndSystemMetadata(true);
+
+        constexpr char sourceName[] = "forbidSysSourceStreaming";
+        constexpr char topicName[] = "forbidSysTopicStreaming";
+        CreateTopic(topicName);
+        CreatePqSource(sourceName);
+
+        // SystemMetadata callable should be rejected
+        ExecQuery(fmt::format(R"(
+            SELECT SystemMetadata('write_time') as wt FROM `{source}`.`{topic}` WITH (
+                STREAMING = "TRUE",
+                FORMAT = "json_each_row",
+                SCHEMA = (
+                    key String NOT NULL
+                )
+            )
+            LIMIT 1;
+        )",
+            "source"_a = sourceName,
+            "topic"_a = topicName
+        ),
+        EStatus::GENERIC_ERROR,
+        "SystemMetadata is not allowed, use __ydb_-prefixed columns instead"
+        );
+    }
+
+    Y_UNIT_TEST_F(ForbidYqlSysColumnsRejectsSystemMetadataInTableMode, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutableQueryServiceConfig()->MutableStreamingQueries()->SetForbidYqlSysColumnsAndSystemMetadata(true);
+
+        constexpr char topicName[] = "forbidSysTableModeTopic";
+        CreateTopic(topicName, std::nullopt, true);
+
+        // SystemMetadata callable should be rejected in table mode too
+        ExecQuery(fmt::format(R"(
+            SELECT SystemMetadata('write_time') as wt FROM {topic} WITH (
+                FORMAT = "json_each_row",
+                SCHEMA = (
+                    key String NOT NULL
+                )
+            );
+        )",
+            "topic"_a = topicName
+        ),
+        EStatus::GENERIC_ERROR,
+        "SystemMetadata is not allowed, use __ydb_-prefixed columns instead"
+        );
+    }
+
+    Y_UNIT_TEST_F(ForbidYqlSysColumnsAllowsYdbColumnsInTableMode, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutableQueryServiceConfig()->MutableStreamingQueries()->SetForbidYqlSysColumnsAndSystemMetadata(true);
+
+        constexpr char topicName[] = "forbidSysAllowYdbTopic";
+        CreateTopic(topicName, std::nullopt, true);
+
+        WriteTopicMessage(topicName, R"({"key": 1, "value": "value1"})", 0, /* local */ true);
+
+        // __ydb_-prefixed columns should still work
+        auto results = ExecQuery(fmt::format(R"(
+            SELECT __ydb_partition_id, __ydb_offset, value FROM {topic} WITH (
+                FORMAT = "json_each_row",
+                SCHEMA (
+                    key Uint64 NOT NULL,
+                    value String NOT NULL
+                )
+            );)",
+            "topic"_a = topicName
+        ));
+
+        CheckScriptResult(results[0], 3, 1, [](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("__ydb_partition_id").GetUint64(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("__ydb_offset").GetUint64(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("value").GetString(), "value1");
+        });
+    }
+
+    // In streaming mode through KQP, _yql_sys_* columns are not supported —
+    // only __ydb_* columns work. The ForbidYqlSysColumns flag is irrelevant here.
+    Y_UNIT_TEST_F(YqlSysColumnsAccessInStreamingMode, TStreamingTestFixture) {
+        constexpr char sourceName[] = "yqlSysColsStreamSource";
+        constexpr char topicName[] = "yqlSysColsStreamTopic";
+        CreateTopic(topicName);
+        CreatePqSource(sourceName);
+
+        for (const char* column : {"_yql_sys_offset", "_yql_sys_partition_id", "_yql_sys_write_time"}) {
+            auto query = fmt::format(R"(
+                SELECT `{column}` FROM `{source}`.`{topic}` WITH (
+                    STREAMING = "TRUE",
+                    FORMAT = "json_each_row",
+                    SCHEMA = (key String NOT NULL)
+                ) LIMIT 1;
+            )", "column"_a = column, "source"_a = sourceName, "topic"_a = topicName);
+
+            ExecQuery(query, EStatus::GENERIC_ERROR);
+        }
+    }
+
+    // In table mode (local topics via KQP), _yql_sys_* columns are never supported —
+    // only __ydb_* columns work. The ForbidYqlSysColumns flag is irrelevant here.
+    Y_UNIT_TEST_F(YqlSysColumnsAccessInTableMode, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+
+        constexpr char topicName[] = "yqlSysColsTableTopic";
+        CreateTopic(topicName, std::nullopt, true);
+
+        for (const char* column : {"_yql_sys_offset", "_yql_sys_partition_id", "_yql_sys_write_time"}) {
+            auto query = fmt::format(R"(
+                SELECT `{column}` FROM {topic} WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA = (key String NOT NULL)
+                );
+            )", "column"_a = column, "topic"_a = topicName);
+
+            ExecQuery(query, EStatus::GENERIC_ERROR);
+        }
+    }
+
+    // In table mode, _yql_sys_* columns in predicates are never supported —
+    // only __ydb_* columns work for filtering.
+    Y_UNIT_TEST_F(YqlSysColumnsAccessInFilter, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutableFeatureFlags()->SetEnableTopicsPredicatePushdown(true);
+
+        constexpr char topicName[] = "yqlSysColsFilterTopic";
+        CreateTopic(topicName, std::nullopt, true);
+
+        for (const auto& [column, predicate] : std::vector<std::pair<const char*, const char*>>{
+            {"_yql_sys_partition_id", "_yql_sys_partition_id = 0"},
+            {"_yql_sys_offset", "_yql_sys_offset >= 0"}
+        }) {
+            auto query = fmt::format(R"(
+                SELECT key FROM {topic} WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA = (key String NOT NULL)
+                )
+                WHERE {predicate};
+            )", "topic"_a = topicName, "predicate"_a = predicate);
+
+            ExecQuery(query, EStatus::GENERIC_ERROR);
         }
     }
 }

@@ -15,6 +15,21 @@
 
 namespace NKikimr::NKqp {
 
+namespace {
+
+template <size_t N>
+std::vector<std::size_t> CollectBitsetIndexes(const std::bitset<N>& values) {
+    std::vector<std::size_t> result;
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (values[i]) {
+            result.push_back(i);
+        }
+    }
+    return result;
+}
+
+} // anonymous namespace
+
 bool TJoinColumn::operator==(const TJoinColumn& other) const {
     return RelName == other.RelName && AttributeName == other.AttributeName;
 }
@@ -740,6 +755,68 @@ TString TOrderingsStateMachine::ToString() const {
     return ss;
 }
 
+TOrderingsStateMachine::TDebugView TOrderingsStateMachine::DebugView() const {
+    TDebugView view;
+    view.Storage = &FDStorage;
+    view.ProcessedFDs = &ProcessedFDs_;
+
+    if (!Built_) {
+        return view;
+    }
+
+    view.NFSMNodes.reserve(Nfsm_.Nodes_.size());
+    for (const auto& node : Nfsm_.Nodes_) {
+        view.NFSMNodes.push_back({
+            .Ordering = node.Ordering,
+            .IsInteresting = node.Type == TNFSM::TNode::EInteresting,
+            .InterestingOrderingIdx = node.InterestingOrderingIdx,
+            .Details = node.ToString()
+        });
+    }
+
+    view.NFSMEdges.reserve(Nfsm_.Edges_.size());
+    for (const auto& edge : Nfsm_.Edges_) {
+        view.NFSMEdges.push_back({
+            .SrcNodeIdx = edge.SrcNodeIdx,
+            .DstNodeIdx = edge.DstNodeIdx,
+            .FdIdx = edge.FdIdx
+        });
+    }
+
+    if (!Dfsm_) {
+        return view;
+    }
+
+    view.DFSMNodes.reserve(Dfsm_->Nodes_.size());
+    for (const auto& node : Dfsm_->Nodes_) {
+        view.DFSMNodes.push_back({
+            .NFSMNodes = node.NFSMNodes,
+            .InterestingOrderingIdxes = CollectBitsetIndexes(node.InterestingOrderings),
+            .OutgoingFDIdxes = CollectBitsetIndexes(node.OutgoingFDs),
+            .Details = node.ToString()
+        });
+    }
+
+    view.DFSMEdges.reserve(Dfsm_->Edges_.size());
+    for (const auto& edge : Dfsm_->Edges_) {
+        view.DFSMEdges.push_back({
+            .SrcNodeIdx = edge.SrcNodeIdx,
+            .DstNodeIdx = edge.DstNodeIdx,
+            .FdIdx = edge.FdIdx
+        });
+    }
+
+    view.InitStates.reserve(Dfsm_->InitStateByOrderingIdx_.size());
+    for (const auto& state : Dfsm_->InitStateByOrderingIdx_) {
+        view.InitStates.push_back({
+            .StateIdx = state.StateIdx,
+            .ShuffleHashFuncArgsCount = state.ShuffleHashFuncArgsCount
+        });
+    }
+
+    return view;
+}
+
 void TOrderingsStateMachine::CollectItemInfo(
     const std::vector<TFunctionalDependency>& fds,
     const std::vector<TOrdering>& interestingOrderings) {
@@ -789,10 +866,10 @@ void TOrderingsStateMachine::Build(
     const std::vector<TFunctionalDependency>& fds,
     const std::vector<TOrdering>& interestingOrderings) {
     CollectItemInfo(fds, interestingOrderings);
-    std::vector<TFunctionalDependency> processedFDs = PruneFDs(fds, interestingOrderings);
-    Nfsm_.Build(processedFDs, interestingOrderings, ItemInfo_);
+    ProcessedFDs_ = PruneFDs(fds, interestingOrderings);
+    Nfsm_.Build(ProcessedFDs_, interestingOrderings, ItemInfo_);
     Dfsm_ = MakeSimpleShared<TDFSM>();
-    Dfsm_->Build(Nfsm_, processedFDs, interestingOrderings);
+    Dfsm_->Build(Nfsm_, ProcessedFDs_, interestingOrderings);
     Built_ = true;
 }
 

@@ -57,5 +57,8 @@ void PrintOperationsList(const NOperation::TOperationsList<NYdb::NBackup::TBacku
 void PrintOperation(const NYdb::NTable::TCompactionOperation& operation, EDataFormat format);
 void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TCompactionOperation>& operations, EDataFormat format);
 
+void PrintOperation(const NYdb::NTable::TAnalyzeOperation& operation, EDataFormat format);
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TAnalyzeOperation>& operations, EDataFormat format);
+
 }
 }

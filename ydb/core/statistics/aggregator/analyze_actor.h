@@ -91,6 +91,10 @@ private:
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     ui64 HiveId = 0;
 
+    ui32 ScansCompletedTotal = 0;
+
+    void SendProgressEvent(ui32 shardsTotal, ui32 shardsDone);
+
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev);
 

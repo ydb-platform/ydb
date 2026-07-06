@@ -90,6 +90,7 @@ struct Schema: NIceDb::Schema {
         LastCompletedBackupTransaction = 22,
         LastCleanupSnapshotStep = 23,
         LastCleanupSnapshotTxId = 24,
+        SubDomainSmallBlobsQuotaExceeded = 25,
     };
 
     enum class EInsertTableIds: ui8 {

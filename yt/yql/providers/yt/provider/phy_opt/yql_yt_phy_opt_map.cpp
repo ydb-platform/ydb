@@ -520,4 +520,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UnessentialFilter(TExpr
         .Done();
 }
 
-}  // namespace NYql
+} // namespace NYql

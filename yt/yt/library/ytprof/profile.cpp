@@ -125,7 +125,7 @@ NProto::Profile TCMallocProfileToProtoProfile(const tcmalloc::Profile& snapshot)
         "TBasicString::TBasicString",
     })));
 
-    Symbolize(&profile, { .SymbolizeExistingFunctions = true});
+    Symbolize(&profile, {.SymbolizeExistingFunctions = true});
     return profile;
 }
 

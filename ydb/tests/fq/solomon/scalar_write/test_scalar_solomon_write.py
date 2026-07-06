@@ -12,6 +12,7 @@ from ydb.tests.fq.streaming_common.common import Kikimr, YdbClient
 from ydb.tests.library.test_meta import link_test_case
 from ydb.library.yql.tools.solomon_emulator.client.client import (
     cleanup_solomon,
+    fail_solomon_push,
     get_solomon_metrics,
 )
 
@@ -181,6 +182,24 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
                 ]);"""
         )
         self.assert_shard(shard, [42, 43, 44, 45, 46, 47, 48])
+
+    def test_write_retries_after_non_terminal_error(
+        self, kikimr: Kikimr, entity_name: Callable[[str], str]
+    ) -> None:
+        """A transient (retriable) failure from the monitoring api must not break the write.
+        """
+        source_name, (shard,) = self.prepare(kikimr, entity_name, "write_retry")
+        ref = shard.ref(source_name)
+
+        # The first push to this shard is answered with a retriable error; the write actor
+        # must retry it and the retry must succeed.
+        fail_solomon_push(shard.project, shard.cluster, shard.service, count=1)
+
+        kikimr.ydb_client.query(
+            f"""INSERT INTO {ref}
+                SELECT CurrentUtcTimestamp() AS Ts, "my_data" AS Label, 42 AS Sensor;"""
+        )
+        self.assert_shard(shard, [42])
 
     @link_test_case("#39422")
     def test_write_precompute_agg(

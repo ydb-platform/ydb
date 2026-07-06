@@ -58,3 +58,7 @@ items:
       href: load-actors-memory.md
     - name: Stop
       href: load-actors-stop.md
+- name: Тестирование
+  items:
+  - name: Хаос-тестирование
+    href: testing/chaos-testing.md

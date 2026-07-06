@@ -1,10 +1,8 @@
 #pragma once
 
 #include "kqp_info_unit.h"
-
+#include <ydb/core/kqp/opt/kqp_opt.h>
 #include <yql/essentials/core/yql_statistics.h>
-
-#include <util/generic/string.h>
 
 #include <optional>
 
@@ -49,7 +47,7 @@ struct TBroadcastConnection: public TConnection {
     }
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
     virtual TString GetExplainName() const override {
-        return "Broadcast";
+        return "Broadcast connection";
     }
 };
 
@@ -59,7 +57,7 @@ struct TMapConnection: public TConnection {
     }
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
     virtual TString GetExplainName() const override {
-        return "Map";
+        return "Map connection";
     }
 };
 
@@ -70,7 +68,7 @@ struct TUnionAllConnection: public TConnection {
     }
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
     virtual TString GetExplainName() const override {
-        return "UnionAll";
+        return "UnionAll connection";
     }
 
 private:
@@ -88,7 +86,7 @@ struct TShuffleConnection: public TConnection {
 
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
     virtual TString GetExplainName() const override {
-        return "HashShuffle";
+        return "HashShuffle connection";
     }
     virtual NJson::TJsonValue ToJson() const override;
 
@@ -105,7 +103,7 @@ struct TMergeConnection: public TConnection {
 
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
     virtual TString GetExplainName() const override {
-        return "Merge";
+        return "Merge connection";
     }
     virtual NJson::TJsonValue ToJson() const override;
 

@@ -247,7 +247,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         for (const auto& item : TTraits::GetItems(settings)) {
             TString userSpecifiedPath = CanonizePath(item.source_path());
             TString fullPath;
-            if (HasCommonSourcePathPrefix(userSpecifiedPath)) {
+            if (HasCommonSourcePathPrefix(userSpecifiedPath) || userSpecifiedPath == CommonSourcePath) {
                 fullPath = userSpecifiedPath; // Full path
             } else {
                 fullPath = CommonSourcePath + userSpecifiedPath; // Relative path
@@ -616,6 +616,18 @@ public:
                 }
                 if (settings.has_encryption_settings()) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
+                }
+                if constexpr (IsFsExport) {
+                    if (settings.items().empty()) {
+                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
+                            "Exporting without explicitly specified items is not supported in current configuration");
+                    }
+                    for (const auto& item : settings.items()) {
+                        if (TTraits::GetDestination(item).empty()) {
+                            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
+                                TStringBuilder() << "destination_path must be specified for item \"" << item.source_path() << "\" in current configuration");
+                        }
+                    }
                 }
             }
             if (settings.items().empty() && !commonDestSpecified) {

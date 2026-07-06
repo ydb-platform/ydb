@@ -672,8 +672,8 @@ protected:
         currentSpilling.StateWidth = keysAndStatesWidth;
 
         for (size_t i = 0; i < NumBuckets; ++i) {
-            currentSpilling.Spillage[i].SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, KeysAndStatesType, SpillingIoBuffer);
-            currentSpilling.Spillage[i].SpilledInput = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, InputUnpackedItemsType, SpillingIoBuffer);
+            currentSpilling.Spillage[i].SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, KeysAndStatesType, SpillingIoBuffer, Ctx.RuntimeSettings.DatumValidation.Get());
+            currentSpilling.Spillage[i].SpilledInput = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, InputUnpackedItemsType, SpillingIoBuffer, Ctx.RuntimeSettings.DatumValidation.Get());
         }
 
         [[maybe_unused]] size_t totalWritten = 0;
@@ -1823,15 +1823,17 @@ public:
         for (ui32 i = 0; i < OutputColumns; ++i) {
             auto& arr = BlockArrays[i];
             if (auto& array = arr.front(); ui64(array->length) == sliceSize) {
-                *output[i] = Ctx.HolderFactory.CreateArrowBlock(std::move(array));
+                // Pass NYql::EDatumValidationMode::None since we just chop blocks without changing their content.
+                *output[i] = Ctx.HolderFactory.CreateArrowBlock(std::move(array), NYql::EDatumValidationMode::None);
                 arr.pop_front();
             }
             else {
-                *output[i] = Ctx.HolderFactory.CreateArrowBlock(NYql::NUdf::Chop(arr.front(), sliceSize));
+                // Pass NYql::EDatumValidationMode::None since we just chop blocks without changing their content.
+                *output[i] = Ctx.HolderFactory.CreateArrowBlock(NYql::NUdf::Chop(arr.front(), sliceSize), NYql::EDatumValidationMode::None);
             }
         }
 
-        *output[OutputColumns] = Ctx.HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(sliceSize)));
+        *output[OutputColumns] = Ctx.HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(sliceSize)), Ctx.RuntimeSettings.DatumValidation.Get());
 
         OutputRowCounter.Add(sliceSize);
         OutputRows += sliceSize;

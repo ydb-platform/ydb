@@ -30,11 +30,11 @@ using namespace NKikimr::NFulltext;
  *
  * This scan takes the main table and writes output to indexImplTable.
  *
- * Source columns: <PK columns>, <text column>, <data columns>
- * Destination columns with a FulltextPlain index: __ydb_token, <PK columns>, <data columns>
- * Destination columns with a FulltextRelevance index: __ydb_token, <PK columns>, __ydb_freq
+ * Source columns: <PK columns>, <text column>, <data columns>, <prefix columns>
+ * Destination columns with a FulltextPlain index: <prefix columns>, __ydb_token, <PK columns>, <data columns>
+ * Destination columns with a FulltextRelevance index: <prefix columns>, __ydb_token, <PK columns>, __ydb_freq
  * Destination columns with a FulltextCompact/FulltextCompactRelevance/JsonCompact index:
- *   __ydb_token, __ydb_max_id, __ydb_generation (always max), __ydb_added (always true), __ydb_segment
+ *   __ydb_token, __ydb_generation (always max), __ydb_max_id, __ydb_added (always true), __ydb_segment
  *
  * Request:
  * - The client sends TEvBuildFulltextIndexRequest with:
@@ -52,12 +52,17 @@ using namespace NKikimr::NFulltext;
 
 struct TTokenState {
     TString Token;
+    // Segments are bucketed per (prefix, token): a delta segment is a doc-id run within a single
+    // prefix, so different prefix values must never share a segment. BucketKey uniquely identifies
+    // the (prefix, token) bucket; Prefix holds the leading key cells prepended to the posting key.
+    TString BucketKey;
+    TOwnedCellVec Prefix;
     TDeltaWriter Segment;
 };
 
 struct TTokenStateLess {
     bool operator()(const TTokenState* a, const TTokenState* b) const {
-        return a->Segment.GetCount() > b->Segment.GetCount() || a->Segment.GetCount() == b->Segment.GetCount() && a->Token < b->Token;
+        return a->Segment.GetCount() > b->Segment.GetCount() || a->Segment.GetCount() == b->Segment.GetCount() && a->BucketKey < b->BucketKey;
     }
 };
 
@@ -87,6 +92,12 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     bool IsBinaryJson = false;
     bool UseRowIdAsDocId = false;
     size_t RowIdRowIndex = 0; // position of __ydb_row_id in the row returned by the scan
+
+    // Prefix (leading) key columns of the posting table. The posting key is
+    // [prefix..., __ydb_token, doc_id...]. PrefixRowIndices are their positions
+    // in the row returned by the scan.
+    TVector<TString> PrefixColumns;
+    TVector<size_t> PrefixRowIndices;
 
     TBatchRowsUploader Uploader;
     TBufferData* UploadBuf = nullptr;
@@ -169,6 +180,12 @@ public:
                 RowIdRowIndex = ScanTags.size();
                 ScanTags.push_back(tags.at(NKikimr::NTableIndex::NFulltext::RowIdColumn));
             }
+
+            PrefixColumns.assign(Request.GetPrefixColumns().begin(), Request.GetPrefixColumns().end());
+            for (const auto& prefixColumn : PrefixColumns) {
+                PrefixRowIndices.push_back(ScanTags.size());
+                ScanTags.push_back(tags.at(prefixColumn));
+            }
         }
 
         auto addType = [&](auto& uploadTypes, const auto& column) {
@@ -217,6 +234,11 @@ public:
     {
         auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
 
+        // Leading prefix key columns come first in the posting key.
+        for (const auto& prefixColumn : PrefixColumns) {
+            addType(uploadTypes, prefixColumn);
+        }
+
         if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json ||
             Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact) {
             Ydb::Type type;
@@ -234,13 +256,13 @@ public:
         case NKikimrTxDataShard::EFulltextIndexType::JsonCompact:
             {
                 Ydb::Type type;
-                NScheme::ProtoFromTypeInfo(KeyTypes.at(0), type);
-                uploadTypes->emplace_back(MaxIdColumn, type);
+                type.set_type_id(NTableIndex::NFulltext::GenType);
+                uploadTypes->emplace_back(GenColumn, type);
             }
             {
                 Ydb::Type type;
-                type.set_type_id(NTableIndex::NFulltext::GenType);
-                uploadTypes->emplace_back(GenColumn, type);
+                NScheme::ProtoFromTypeInfo(KeyTypes.at(0), type);
+                uploadTypes->emplace_back(MaxIdColumn, type);
             }
             {
                 Ydb::Type type;
@@ -340,6 +362,12 @@ public:
             docIdKey = TArrayRef<const TCell>(&rowIdCell, 1);
         }
 
+        // Leading prefix key cells of the posting table.
+        TVector<TCell> prefixCells(::Reserve(PrefixRowIndices.size()));
+        for (size_t prefixIndex : PrefixRowIndices) {
+            prefixCells.push_back(row.Get(prefixIndex));
+        }
+
         TVector<TString> tokens;
         if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json ||
             Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact) {
@@ -372,13 +400,16 @@ public:
                     freq++;
                     continue;
                 }
-                auto& state = TokenBuf[tokens[i]];
-                if (state.Token.empty()) {
+                TString bucketKey = MakeCompactBucketKey(prefixCells, tokens[i]);
+                auto& state = TokenBuf[bucketKey];
+                if (state.BucketKey.empty()) {
                     state.Token = tokens[i];
+                    state.BucketKey = bucketKey;
+                    state.Prefix = TOwnedCellVec(prefixCells);
                     state.Segment.Reset(WithRelevance, Signed);
-                    BufferedBytes += tokens[i].size(); // count token sizes
+                    BufferedBytes += bucketKey.size(); // count bucket-key sizes
                 } else if (!state.Segment.GetCount()) {
-                    EmptyTokenBytes -= tokens[i].size();
+                    EmptyTokenBytes -= bucketKey.size();
                     state.Segment.Reset(WithRelevance, Signed);
                 }
                 TokensBySize.erase(&state);
@@ -399,7 +430,7 @@ public:
                     if (!(*mostFreqIt)->Segment.GetCount()) {
                         break;
                     }
-                    FlushToken(TokenBuf.at((*mostFreqIt)->Token));
+                    FlushToken(TokenBuf.at((*mostFreqIt)->BucketKey));
                 }
             }
             if (EmptyTokenBytes >= MaxBatchBytes/3) {
@@ -414,29 +445,30 @@ public:
             // key as the per-destination boundary; GetMinFlushedKey() then yields a checkpoint that is
             // safe across the asymmetrically-filling posting and docs buffers.
             Uploader.SetCurrentSourceKey(LastProcessedKey);
-            UploadFulltextRelevance(docIdKey, tokens);
+            UploadFulltextRelevance(prefixCells, docIdKey, tokens);
             UploadDocRow(docIdKey, row, tokens.size());
         } else {
             LastProcessedKey = TSerializedCellVec(key);
             Uploader.SetCurrentSourceKey(LastProcessedKey);
-            UploadFulltextPlain(docIdKey, row, tokens);
+            UploadFulltextPlain(prefixCells, docIdKey, row, tokens);
         }
 
         return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
     }
 
-    void UploadFulltextRelevance(TArrayRef<const TCell> key, const TVector<TString>& tokens)
+    void UploadFulltextRelevance(TArrayRef<const TCell> prefix, TArrayRef<const TCell> key, const TVector<TString>& tokens)
     {
         THashMap<TString, ui32> tokenFreq;
         for (const auto& token : tokens) {
             tokenFreq[token]++;
         }
 
-        TVector<TCell> uploadKey(::Reserve(key.size() + 1));
+        TVector<TCell> uploadKey(::Reserve(prefix.size() + key.size() + 1));
         TVector<TCell> uploadValue(::Reserve(1));
 
         for (const auto& [token, freq] : tokenFreq) {
             uploadKey.clear();
+            uploadKey.insert(uploadKey.end(), prefix.begin(), prefix.end());
             uploadKey.push_back(TCell(token));
             uploadKey.insert(uploadKey.end(), key.begin(), key.end());
 
@@ -471,13 +503,14 @@ public:
         TotalDocLength += totalTokens;
     }
 
-    void UploadFulltextPlain(TArrayRef<const TCell> key, const TRow& row, const TVector<TString>& tokens)
+    void UploadFulltextPlain(TArrayRef<const TCell> prefix, TArrayRef<const TCell> key, const TRow& row, const TVector<TString>& tokens)
     {
-        TVector<TCell> uploadKey(::Reserve(key.size() + 1));
+        TVector<TCell> uploadKey(::Reserve(prefix.size() + key.size() + 1));
         TVector<TCell> uploadValue(::Reserve(Request.GetDataColumns().size()));
 
         for (const auto& token : tokens) {
             uploadKey.clear();
+            uploadKey.insert(uploadKey.end(), prefix.begin(), prefix.end());
             uploadKey.push_back(TCell(token));
             uploadKey.insert(uploadKey.end(), key.begin(), key.end());
 
@@ -497,27 +530,41 @@ public:
         }
     }
 
+    // Unique map key for the (prefix, token) segment bucket. Without prefix it is the raw token
+    // (preserving the non-prefixed behavior); with prefix it is the serialized [prefix..., token] key.
+    static TString MakeCompactBucketKey(TArrayRef<const TCell> prefix, const TString& token)
+    {
+        if (prefix.empty()) {
+            return token;
+        }
+        TVector<TCell> cells(::Reserve(prefix.size() + 1));
+        cells.insert(cells.end(), prefix.begin(), prefix.end());
+        cells.push_back(TCell(token.data(), token.size()));
+        return TSerializedCellVec::Serialize(cells);
+    }
+
     void FlushToken(TTokenState& state)
     {
         if (!state.Segment.GetCount()) {
             return;
         }
         auto segment = state.Segment.GetBuf();
-        TVector<TCell> uploadKey(::Reserve(3));
+        TVector<TCell> uploadKey(::Reserve(state.Prefix.size() + 3));
+        uploadKey.insert(uploadKey.end(), state.Prefix.begin(), state.Prefix.end());
         uploadKey.push_back(TCell(state.Token));
+        uploadKey.push_back(TCell::Make(std::numeric_limits<NTableIndex::NFulltext::TGen>::max()));
         if (KeyTypeId == NScheme::NTypeIds::Uint64 || KeyTypeId == NScheme::NTypeIds::Int64) {
             uploadKey.push_back(TCell::Make(state.Segment.GetMaxId()));
         } else {
             uploadKey.push_back(TCell::Make((ui32)state.Segment.GetMaxId()));
         }
-        uploadKey.push_back(TCell::Make(std::numeric_limits<NTableIndex::NFulltext::TGen>::max()));
         TVector<TCell> uploadValue(::Reserve(2));
         uploadValue.push_back(TCell::Make(true));
         uploadValue.push_back(TCell((const char*)segment.data(), segment.size()));
         UploadBuf->AddRow(uploadKey, uploadValue);
         TokensBySize.erase(&state);
         BufferedBytes -= state.Segment.GetBuf().size();
-        EmptyTokenBytes += state.Token.size();
+        EmptyTokenBytes += state.BucketKey.size();
         state.Segment = TDeltaWriter();
         TokensBySize.insert(&state);
     }
@@ -778,9 +825,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         const auto& userTable = **userTableIt;
 
         // 2. Validating request fields
-        if (!request.HasSnapshotStep() || !request.HasSnapshotTxId()) {
-            badRequest(TStringBuilder() << "Missing snapshot");
-        } else {
+        // The snapshot is optional: live-table scans (plain/relevance/compact over the main table)
+        // always carry one, but the compact rowid-mode posting fill scans the transient seq-keyed
+        // row-id source table - a build impl table that is immutable once the prepass completed and so
+        // needs no snapshot (mirrors the dictionary scan over the 0build impl table, fulltext_dict.cpp).
+        if (request.HasSnapshotStep() || request.HasSnapshotTxId()) {
             const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
             if (!SnapshotManager.FindAvailable(snapshotKey)) {
                 badRequest(TStringBuilder() << "Unknown snapshot for path id " << pathId.OwnerId << ":" << pathId.LocalPathId
@@ -815,6 +864,21 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
                 << NKikimr::NTableIndex::NFulltext::RowIdColumn << "' not found in table");
         }
 
+        for (const auto& prefixColumn : request.GetPrefixColumns()) {
+            if (!tags.contains(prefixColumn)) {
+                badRequest(TStringBuilder() << "Unknown prefix column: " << prefixColumn);
+            }
+        }
+
+        if (request.GetPrefixColumns().size() &&
+            (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json ||
+             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact)) {
+            badRequest(TStringBuilder() << "Prefix columns are not supported for JSON indexes");
+        }
+
+        // Compact builds scan a table with a single integer key holding the doc id: either the main
+        // table (single-integer-PK case) or, for an arbitrary-PK main table, the row-id source table
+        // built by the rowid-mode prepass (a generic secondary-index build keyed by __ydb_row_id).
         if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||
             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance ||
             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact) {

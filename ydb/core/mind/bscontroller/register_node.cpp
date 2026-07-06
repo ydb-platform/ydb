@@ -614,6 +614,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
             timingQ.emplace_back(*it->second);
             updates.push_back({
                 .VDiskId = it->second->GetVDiskId(),
+                .OnlyPhantomsRemain = it->second->IsReplicatingWithPhantomsOnly(),
                 .IsReady = it->second->IsReady,
                 .VDiskStatus = it->second->GetStatus(),
             });
@@ -625,8 +626,10 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
         auto& slot = it->second;
         slot.ReadySince = TMonotonic::Max();
         slot.VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+        slot.OnlyPhantomsRemain = false;
         updates.push_back({
             .VDiskId = slot.VDiskId,
+            .OnlyPhantomsRemain = slot.IsReplicatingWithPhantomsOnly(),
             .ReadySince = slot.ReadySince,
             .VDiskStatus = slot.VDiskStatus,
         });

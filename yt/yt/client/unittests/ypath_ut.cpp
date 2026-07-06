@@ -1002,9 +1002,9 @@ inline constexpr char ClusterKey[] = "cluster";
 TEST(TConstraintRichYPathTest, AllowedAttributes)
 {
     using TWhitelistAttributePath = TConstrainedRichYPath<TWhitelistAttributesValidator<MyAttributeKey1, MyAttributeKey2>>;
-    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TWhitelistAttributePath(TRichYPath("<a=b>//home/path"))), "YPath \"<\\\"a\\\"=\\\"b\\\";\\n>//home/path\" has unexpected attribute \"a\"");
-    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TWhitelistAttributePath(TRichYPath("<a=b;my_attribute_1=b>//home/path"))), "YPath \"<\\\"a\\\"=\\\"b\\\";\\n\\\"my_attribute_1\\\"=\\\"b\\\";\\n>//home/path\" has unexpected attribute \"a\"");
-    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TWhitelistAttributePath(TRichYPath("<a=b;my_attribute_1=b;my_attribute_2=b>//home/path"))), "YPath \"<\\\"a\\\"=\\\"b\\\";\\n\\\"my_attribute_1\\\"=\\\"b\\\";\\n\\\"my_attribute_2\\\"=\\\"b\\\";\\n>//home/path\" has unexpected attribute \"a\"");
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TWhitelistAttributePath(TRichYPath("<a=b>//home/path"))), "YPath <\"a\"=\"b\";\n>//home/path has unexpected attribute \"a\"");
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TWhitelistAttributePath(TRichYPath("<a=b;my_attribute_1=b>//home/path"))), "YPath <\"a\"=\"b\";\n\"my_attribute_1\"=\"b\";\n>//home/path has unexpected attribute \"a\"");
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TWhitelistAttributePath(TRichYPath("<a=b;my_attribute_1=b;my_attribute_2=b>//home/path"))), "YPath <\"a\"=\"b\";\n\"my_attribute_1\"=\"b\";\n\"my_attribute_2\"=\"b\";\n>//home/path has unexpected attribute \"a\"");
     Y_UNUSED(TWhitelistAttributePath(TRichYPath("<my_attribute_1=b>//home/path")));
     Y_UNUSED(TWhitelistAttributePath(TRichYPath("<my_attribute_2=b>//home/path")));
     Y_UNUSED(TWhitelistAttributePath(TRichYPath("<my_attribute_2=b;my_attribute_1=b>//home/path")));
@@ -1013,9 +1013,9 @@ TEST(TConstraintRichYPathTest, AllowedAttributes)
 TEST(TConstraintRichYPathTest, RequiredAttributes)
 {
     using TRequiredAttributePath = TConstrainedRichYPath<TRequiredAttributesValidator<MyAttributeKey1, MyAttributeKey2>>;
-    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TRequiredAttributePath(TRichYPath("<a=b>//home/path"))), "YPath \"<\\\"a\\\"=\\\"b\\\";\\n>//home/path\" does not have attribute \"my_attribute_");
-    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TRequiredAttributePath(TRichYPath("<a=b;my_attribute_1=b>//home/path"))), "YPath \"<\\\"a\\\"=\\\"b\\\";\\n\\\"my_attribute_1\\\"=\\\"b\\\";\\n>//home/path\" does not have attribute \"my_attribute_2\"");
-    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TRequiredAttributePath(TRichYPath("<my_attribute_2=b>//home/path"))), "YPath \"<\\\"my_attribute_2\\\"=\\\"b\\\";\\n>//home/path\" does not have attribute \"my_attribute_1\"");
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TRequiredAttributePath(TRichYPath("<a=b>//home/path"))), "YPath <\"a\"=\"b\";\n>//home/path does not have attribute \"my_attribute_");
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TRequiredAttributePath(TRichYPath("<a=b;my_attribute_1=b>//home/path"))), "YPath <\"a\"=\"b\";\n\"my_attribute_1\"=\"b\";\n>//home/path does not have attribute \"my_attribute_2\"");
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TRequiredAttributePath(TRichYPath("<my_attribute_2=b>//home/path"))), "YPath <\"my_attribute_2\"=\"b\";\n>//home/path does not have attribute \"my_attribute_1\"");
     Y_UNUSED(TRequiredAttributePath(TRichYPath("<my_attribute_1=b;my_attribute_2=b>//home/path")));
     Y_UNUSED(TRequiredAttributePath(TRichYPath("<my_attribute_1=b;my_attribute_2=b;a=b>//home/path")));
 }

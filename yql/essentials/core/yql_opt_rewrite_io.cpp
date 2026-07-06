@@ -19,6 +19,11 @@ IGraphTransformer::TStatus RewriteIO(const TExprNode::TPtr& input, TExprNode::TP
                 auto datasource = types.DataSourceMap.FindPtr(dataSourceName);
                 YQL_ENSURE(datasource);
                 return (*datasource)->RewriteIO(node, ctx);
+            } else if (child->IsCallable(MaterializeName)) {
+                auto dataSinkName = child->Child(1)->Child(0)->Content();
+                auto datasink = types.DataSinkMap.FindPtr(dataSinkName);
+                YQL_ENSURE(datasink);
+                return (*datasink)->RewriteIO(node, ctx);
             }
         } else if (node->IsCallable(WriteName)) {
             auto dataSinkName = node->Child(1)->Child(0)->Content();
@@ -40,7 +45,7 @@ IGraphTransformer::TStatus RewriteIO(const TExprNode::TPtr& input, TExprNode::TP
         !ctx.Step.IsDone(TExprStep::ExpandSeq) ||
         !ctx.Step.IsDone(TExprStep::ExprEval)
     ) {
-        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
     }
 
     for (const auto& ds : types.DataSinks)

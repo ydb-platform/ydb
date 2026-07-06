@@ -4,6 +4,7 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
@@ -239,7 +240,10 @@ private:
                 } else if (columnInfo.IsDefaultFromSequence()) {
                     i64 nextVal = columnInfo.AcquireNextVal();
                     if (columnInfo.BitReverseSequenceValue) {
-                        nextVal = static_cast<i64>(ReverseBits(static_cast<ui64>(nextVal)));
+                        // Set only for __ydb_row_id: apply the shared row-id layout (spread high bits,
+                        // dense seq low bits) so online-inserted values match the backfill scan
+                        // (secondary_index.cpp).
+                        nextVal = static_cast<i64>(NKikimr::NTableIndex::NFulltext::RowIdFromSeq(static_cast<ui64>(nextVal)));
                     }
                     *rowItems++ = NUdf::TUnboxedValuePod(nextVal);
                     rowSize += sizeof(NUdf::TUnboxedValuePod);

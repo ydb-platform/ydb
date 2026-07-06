@@ -272,6 +272,14 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, WriteHugeLog, WriteHugeLog);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, LogRead, ReadLog);
 
+    LogWriteOpCounters.resize(WriteSourceCount());
+    ChunkWriteOpCounters.resize(WriteSourceCount());
+    ForEachWriteSourceInfo([&](const TWriteSourceInfo& info) {
+        Y_ABORT_UNLESS(info.Ordinal < LogWriteOpCounters.size());
+        LogWriteOpCounters[info.Ordinal].Setup("Log", PDiskGroup, TString(info.Name), visibilityForExtended);
+        ChunkWriteOpCounters[info.Ordinal].Setup("Chunk", PDiskGroup, TString(info.Name), visibilityForExtended);
+    });
+
     COUNTER_INIT(PDiskGroup, PDiskThreadCPU, true);
     COUNTER_INIT(PDiskGroup, SubmitThreadCPU, true);
     COUNTER_INIT(PDiskGroup, GetThreadCPU, true);
@@ -472,6 +480,18 @@ void TPDiskMon::UpdateStats() {
 
     *FreeSpacePerMile = freePerMile;
     *UsedSpacePerMile = usedPerMile;
+}
+
+void TPDiskMon::CountLogWriteOpRequest(const TWriteSource& source, ui32 size) {
+    const size_t ordinal = WriteSourceOrdinal(source);
+    Y_ABORT_UNLESS(ordinal < LogWriteOpCounters.size());
+    LogWriteOpCounters[ordinal].CountRequest(size);
+}
+
+void TPDiskMon::CountChunkWriteOpRequest(const TWriteSource& source, ui32 size) {
+    const size_t ordinal = WriteSourceOrdinal(source);
+    Y_ABORT_UNLESS(ordinal < ChunkWriteOpCounters.size());
+    ChunkWriteOpCounters[ordinal].CountRequest(size);
 }
 
 TPDiskMon::TIoCounters *TPDiskMon::GetWriteCounter(ui8 priority) {

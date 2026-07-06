@@ -3,7 +3,6 @@
 #include "key_name.h"
 #include "structured_message.h"
 
-#include <ydb/core/base/id_wrapper.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <util/generic/maybe.h>
@@ -45,17 +44,12 @@ public:
     template <typename T>
     class THasToStringMethod {
         // check the signature if it exists
-        template <typename X> static constexpr typename std::is_same<decltype(&X::ToString), TString(X::*)()const>::type check(int);
-        // in case when there is no such signature
-        template <typename>   static constexpr std::false_type check(...);
-    public:
-        static constexpr bool value = decltype(check<T>(0))::value;
-    };
-
-    template <typename T>
-    class THasGetDebugShortStringMethod {
-        // check the signature if it exists
-        template <typename X> static constexpr typename std::is_same<decltype(&X::GetDebugShortString), TString(X::*)()const>::type check(int);
+        template <typename X> static constexpr decltype(static_cast<TString (X::*)() const>(&X::ToString), std::true_type{}) check(int);
+        template <typename X> static constexpr decltype(static_cast<const TString& (X::*)() const>(&X::ToString), std::true_type{}) check(int);
+        template <typename X> static constexpr decltype(static_cast<TStringBuf (X::*)() const>(&X::ToString), std::true_type{}) check(int);
+        template <typename X> static constexpr decltype(static_cast<std::string (X::*)() const>(&X::ToString), std::true_type{}) check(int);
+        template <typename X> static constexpr decltype(static_cast<const std::string& (X::*)() const>(&X::ToString), std::true_type{}) check(int);
+        template <typename X> static constexpr decltype(static_cast<std::string_view (X::*)() const>(&X::ToString), std::true_type{}) check(int);
         // in case when there is no such signature
         template <typename>   static constexpr std::false_type check(...);
     public:
@@ -127,10 +121,6 @@ public:
             // By default, Out<T> can't write classes with ToString() method. (see TStateStorageInfo as example)
             // Because of this, OutputParam must be able to process various standard containers, variants, tuples, etc...
             s << value.ToString();
-        } else if constexpr (THasGetDebugShortStringMethod<Tx>::value) {
-            // By default, Out<T> can't write classes with GetDebugShortString() method.
-            // Because of this, OutputParam must be able to process various standard containers, variants, tuples, etc...
-            s << value.GetDebugShortString();
         } else if constexpr (TOptionalTraits<Tx>::HasOptionalValue) {
             // YDB uses several ways to store/pass optional values (see TOptionalTraits<T> below).
             // So, it is required to process optional data using this OutputParam<TValue> (instead of Out<T>).

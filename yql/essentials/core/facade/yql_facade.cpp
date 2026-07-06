@@ -303,10 +303,6 @@ TProgramPtr TProgramFactory::Create(
         udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FunctionRegistry_, udfResolver, *UdfResolverLogfile_, sessionId);
     }
 
-    if (udfIndex) {
-        udfResolver = NCommon::CreateUdfResolverWithIndex(udfIndex, udfResolver, FileStorage_);
-    }
-
     // make UserDataTable_ copy here
     return new TProgram(IssueReportTarget_, FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
                         LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
@@ -364,6 +360,7 @@ TProgram::TProgram(
     , UdfIndex_(udfIndex)
     , UdfIndexPackageSet_(std::move(udfIndexPackageSet))
     , FileStorage_(fileStorage)
+    , UrlPreprocessing_(urlPreprocessing)
     , SavedUserDataTable_(std::move(userDataTable))
     , GatewaysConfig_(gatewaysConfig)
     , Filename_(std::move(filename))
@@ -474,12 +471,8 @@ TProgram::TProgram(
 TProgram::~TProgram() {
     try {
         CloseLastSession().GetValueSync();
-        // stop all non complete execution before deleting TExprCtx
-        with_lock (DataProvidersLock_) {
-            DataProviders_.clear();
-        }
     } catch (...) {
-        Cerr << CurrentExceptionMessage() << Endl;
+        Cerr << "CloseLastSession failed when destroying TProgram: " << CurrentExceptionMessage() << Endl;
     }
 }
 
@@ -895,7 +888,7 @@ TProgram::TStatus TProgram::TestPartialTypecheck() {
 
     TIssues issues;
     auto ret = PartialAnnonateTypes(AstRoot_, /*isLibrary=*/false, LangVer_, /*udfMeta=*/nullptr, issues, [&](TTypeAnnotationContext& newTypeCtx) {
-        return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true);
+        return CreateConfigProvider(newTypeCtx, /*config=*/nullptr, "", {}, /*forPartialTypeCheck=*/true);
     },
                                     /*typeParser=*/{}, /*typeWriter=*/{})
                    ? TProgram::TStatus::Ok
@@ -1030,7 +1023,7 @@ TProgram::TFutureStatus TProgram::DiscoverAsync(const TString& username) {
             ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e));
             return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
         }
-        return AsyncTransform(*Transformer_, ExprRoot_, *ExprCtx_, false);
+        return AsyncTransform(*Transformer_, ExprRoot_, *ExprCtx_, /*applyAsyncChanges=*/false);
     });
 }
 
@@ -1055,7 +1048,7 @@ TProgram::TFutureStatus TProgram::LineageAsync(const TString& username, IOutputS
                        .AddPreTypeAnnotation()
                        .AddExpressionEvaluation(*FunctionRegistry_)
                        .AddIOAnnotation()
-                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
+                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true)
                        .AddPostTypeAnnotation()
                        .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
                        .AddLineageOptimization(LineageStr_)
@@ -1118,7 +1111,7 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
                        .AddPreTypeAnnotation()
                        .AddExpressionEvaluation(*FunctionRegistry_)
                        .AddIOAnnotation()
-                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
+                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true)
                        .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
                        .Build();
 
@@ -1193,7 +1186,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
                        .AddPreTypeAnnotation()
                        .AddExpressionEvaluation(*FunctionRegistry_)
                        .AddIOAnnotation()
-                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
+                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true)
                        .AddPostTypeAnnotation()
                        .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
                        .AddOptimizationWithLineage(EnableLineage_)
@@ -1262,7 +1255,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1322,7 +1315,7 @@ TProgram::TFutureStatus TProgram::LineageAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1403,7 +1396,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true);
     pipeline.AddPostTypeAnnotation();
     pipeline.Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput");
     pipeline.AddOptimizationWithLineage(EnableLineage_);
@@ -1480,7 +1473,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1970,11 +1963,11 @@ void TProgram::FinalizeIssues() {
         constexpr size_t TopCount = 10;
         auto noBlockTypes = TypeCtx_->GetTopNoBlocksTypes(TopCount);
         if (!noBlockTypes.empty()) {
-            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockTypes, true));
+            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockTypes, /*isTypes=*/true));
         }
         auto noBlockCallables = TypeCtx_->GetTopNoBlocksCallables(TopCount);
         if (!noBlockCallables.empty()) {
-            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockCallables, false));
+            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockCallables, /*isTypes=*/false));
         }
     }
 }
@@ -2038,10 +2031,20 @@ NThreading::TFuture<void> TProgram::CloseLastSession() {
         }
     }
 
-    return NThreading::WaitExceptionOrAll(closeFutures)
-        .Apply([promise = std::move(promise)](const NThreading::TFuture<void>&) mutable {
-            promise.SetValue();
+    // TODO: should be WaitAll()
+    NThreading::WaitExceptionOrAll(closeFutures)
+        .Subscribe([promise = std::move(promise), sessionId = std::move(sessionId)](const NThreading::TFuture<void>& f) mutable {
+            try {
+                f.TryRethrow();
+                promise.SetValue();
+            } catch (...) {
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
+                YQL_LOG(ERROR) << "CloseSession failed: " << CurrentExceptionMessage();
+                promise.SetException(std::current_exception());
+            }
         });
+
+    return CloseLastSessionFuture_;
 }
 
 TString TProgram::ResultsAsString() const {
@@ -2191,6 +2194,15 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
 
     typeAnnotationContext->UserDataStorage->SetTokenResolver(tokenResolver);
 
+    if (UdfIndex_) {
+        typeAnnotationContext->UdfResolver = NCommon::CreateUdfResolverWithIndex(
+            UdfIndex_,
+            typeAnnotationContext->UdfResolver,
+            FileStorage_,
+            UrlPreprocessing_,
+            tokenResolver);
+    }
+
     if (auto* urlListerManager = typeAnnotationContext->UrlListerManager.Get()) {
         urlListerManager->SetTokenResolver(std::move(tokenResolver));
     }
@@ -2233,7 +2245,7 @@ void TProgram::Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanP
             issueCode));
     }
 
-    auto compositeTransformer = CreateCompositeGraphTransformer(printTransformers, false);
+    auto compositeTransformer = CreateCompositeGraphTransformer(printTransformers, /*useIssueScopes=*/false);
     InstantTransform(*compositeTransformer, ExprRoot_, *ExprCtx_);
 }
 

@@ -266,7 +266,7 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
                         FeedCollection(elem, collection, hasEmpty);
                     }
                 } else {
-                    TVector<TNodePtr> elemList(1, std::move(elem));
+                    TVector<TNodePtr> elemList(1, elem);
                     collection.push_back(BuildListOfNamedNodes(Ctx_.Pos(), std::move(elemList)));
                 }
             }

@@ -29,7 +29,9 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/scheme
 )
 
-IF(YDB_CLI_AI_INCLUDE_DOCS)
+# Docs archive is compiled into the binary by default.
+# Build with `-D YDB_CLI_AI_EXCLUDE_DOCS=yes` to exclude it.
+IF(NOT YDB_CLI_AI_EXCLUDE_DOCS)
     INCLUDE(${ARCADIA_ROOT}/ydb/public/lib/ydb_cli/commands/interactive/ai/tools/docs_generate/ya.make.inc)
 ENDIF()
 

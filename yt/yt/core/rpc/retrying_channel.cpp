@@ -243,12 +243,18 @@ private:
             Retry();
         }
 
-        void HandleResponse(TSharedRefArray message, const std::string& address) override
+        void HandleResponse(
+            TSharedRefArray message,
+            const std::string& address,
+            NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer) override
         {
             YT_LOG_DEBUG("Request attempt succeeded (RequestId: %v)",
                 Request_->GetRequestId());
 
-            ResponseHandler_->HandleResponse(std::move(message), address);
+            ResponseHandler_->HandleResponse(
+                std::move(message),
+                address,
+                std::move(attachmentsTransfer));
         }
 
         void HandleStreamingPayload(const TStreamingPayload& /*payload*/) override

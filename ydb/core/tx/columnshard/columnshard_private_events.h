@@ -48,7 +48,6 @@ struct TEvPrivate {
         EvForget,
         EvGetExported,
         EvWriteBlobsResult,
-        EvStartReadTask,
         EvWriteDraft,
         EvGarbageCollectionFinished,
         EvTieringModified,

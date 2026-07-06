@@ -8,6 +8,8 @@ SRCS(
 PEERDIR(
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/testlib
+    ydb/core/protos
+    ydb/core/statistics
 )
 
 YQL_LAST_ABI_VERSION()

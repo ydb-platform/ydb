@@ -34,12 +34,83 @@ void DoWriteJsonRows(TTestBasicRuntime& runtime, const TVector<std::pair<ui64, T
     }
 }
 
-Ydb::Table::TableIndex JsonIndexConfig() {
+Ydb::Table::TableIndex JsonIndexConfig(const TString& name = "json_idx") {
     Ydb::Table::TableIndex index;
-    index.set_name("json_idx");
+    index.set_name(name);
     index.add_index_columns("data");
     index.mutable_global_json_index();
     return index;
+}
+
+void DoCreateJsonTableWithRowId(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId,
+    const TString& rowIdType = "Uint64", bool rowIdNotNull = true, bool createUniqueIndex = true,
+    const TString& uniqueIndexKey = NTableIndex::NFulltext::RowIdColumn)
+{
+    const TString tableColumns = Sprintf(R"(
+            Columns { Name: "pk" Type: "Utf8" NotNull: true }
+            Columns { Name: "data" Type: "Json" }
+            Columns { Name: "%s" Type: "%s" %s }
+            KeyColumnNames: ["pk"]
+    )", NTableIndex::NFulltext::RowIdColumn, rowIdType.c_str(),
+        rowIdNotNull ? "NotNull: true" : "");
+
+    if (!createUniqueIndex) {
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            Name: "texts"
+            %s
+        )", tableColumns.c_str()));
+    } else {
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+                Name: "texts"
+                %s
+            }
+            IndexDescription {
+                Name: "uniq_rowid"
+                KeyColumnNames: ["%s"]
+                Type: EIndexTypeGlobalUnique
+            }
+        )", tableColumns.c_str(), uniqueIndexKey.c_str()));
+    }
+    env.TestWaitNotification(runtime, txId);
+}
+
+void DoCreateCustomPkJsonTable(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId) {
+    TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+        Name: "texts"
+        Columns { Name: "pk" Type: "Utf8" NotNull: true }
+        Columns { Name: "data" Type: "Json" }
+        KeyColumnNames: ["pk"]
+    )");
+    env.TestWaitNotification(runtime, txId);
+}
+
+void DoWriteJsonTextRows(TTestBasicRuntime& runtime, bool withRowId) {
+    struct TRow { TString Pk; TString Json; ui64 RowId; };
+    const TVector<TRow> rows = {
+        {"pone",   R"({"a": 1})",          1},
+        {"ptwo",   R"({"a": 1, "b": 2})",  2},
+        {"pthree", R"({"b": 2})",          3},
+        {"pfour",  R"({"c": 3})",          4},
+    };
+    for (const auto& row : rows) {
+        TVector<TCell> keys = {TCell(row.Pk.data(), row.Pk.size())};
+        TVector<TCell> values = {TCell(row.Json.data(), row.Json.size())};
+        TVector<ui32> valueTags = {2};
+        if (withRowId) {
+            values.push_back(TCell::Make(row.RowId));
+            valueTags.push_back(3);
+        }
+        UploadRow(runtime, "/MyRoot/texts", 0, {1}, valueTags, keys, values);
+    }
+}
+
+void EnableJsonRowIdFlags(TTestActorRuntime& runtime) {
+    auto& appData = runtime.GetAppData();
+    appData.FeatureFlags.SetEnableJsonIndex(true);
+    appData.FeatureFlags.SetEnableFulltextIndex(true);
+    appData.FeatureFlags.SetEnableAddUniqueIndex(true);
+    appData.FeatureFlags.SetEnableUniqConstraint(true);
 }
 
 } // namespace
@@ -279,5 +350,230 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
         checkIndex("/MyRoot/table_imported");
 
         NKikimr::ShutdownAwsAPI();
+    }
+
+    Y_UNIT_TEST(RowIdOptIn_BuildsAndKeysByRowId) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableJsonRowIdFlags(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        DoCreateJsonTableWithRowId(runtime, env, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/uniq_rowid"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+
+        // No data is written here: the assertion below is purely on the impl-table schema (its key columns),
+        // which holds regardless of contents. Bulk upload cannot target a table that already has the unique
+        // secondary index, and the custom-PK auto-provision tests cover the data-backfill path instead.
+
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", JsonIndexConfig());
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        {
+            auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                op.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+                op.DebugString());
+        }
+
+        // The JSON posting impl-table must be keyed by [__ydb_token, __ydb_row_id], not by [__ydb_token, pk].
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/json_idx/" + TString(NTableIndex::ImplTable)), {
+            NLs::PathExist,
+            NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                /*strictCount=*/ true),
+        });
+    }
+
+    Y_UNIT_TEST(RowIdOptIn_RejectsIfRowIdWrongType) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableJsonRowIdFlags(runtime);
+        ui64 txId = 100;
+
+        DoCreateJsonTableWithRowId(runtime, env, txId,
+            /*rowIdType=*/ "Uint32",
+            /*rowIdNotNull=*/ true,
+            /*createUniqueIndex=*/ false);
+
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", JsonIndexConfig(),
+            Ydb::StatusIds::BAD_REQUEST);
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(RowIdOptIn_RejectsIfRowIdNullable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableJsonRowIdFlags(runtime);
+        ui64 txId = 100;
+
+        DoCreateJsonTableWithRowId(runtime, env, txId,
+            /*rowIdType=*/ "Uint64",
+            /*rowIdNotNull=*/ false,
+            /*createUniqueIndex=*/ false);
+
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", JsonIndexConfig(),
+            Ydb::StatusIds::BAD_REQUEST);
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(RowIdOptIn_AutoProvisionsMissingUniqueIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableJsonRowIdFlags(runtime);
+        ui64 txId = 100;
+
+        // __ydb_row_id is well-formed (Uint64 NOT NULL) but has no unique index yet - auto-provision it.
+        DoCreateJsonTableWithRowId(runtime, env, txId,
+            /*rowIdType=*/ "Uint64",
+            /*rowIdNotNull=*/ true,
+            /*createUniqueIndex=*/ false);
+
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", JsonIndexConfig());
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
+
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+    }
+
+    Y_UNIT_TEST(RowIdOptIn_AutoProvisionsRowIdAndUniqueIndexForCustomPk) {
+        // A custom (non single integer) PK without __ydb_row_id is auto-provisioned: the build adds the
+        // __ydb_row_id column and a unique index over it.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableJsonRowIdFlags(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        DoCreateCustomPkJsonTable(runtime, env, txId);
+        DoWriteJsonTextRows(runtime, /*withRowId=*/ false);
+
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", JsonIndexConfig());
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        {
+            auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
+                Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
+        }
+
+        // Both the __ydb_row_id column and its unique index were auto-provisioned; the unique index is Ready.
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+
+        // The JSON posting impl-table is keyed by [__ydb_token, __ydb_row_id].
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/json_idx/" + TString(NTableIndex::ImplTable)), {
+            NLs::PathExist,
+            NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                /*strictCount=*/ true),
+        });
+    }
+
+    Y_UNIT_TEST(AutoProvision_SecondJsonBuildReusesInfra) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableJsonRowIdFlags(runtime);
+        ui64 txId = 100;
+
+        DoCreateCustomPkJsonTable(runtime, env, txId);
+        DoWriteJsonTextRows(runtime, /*withRowId=*/ false);
+
+        // First JSON index provisions __ydb_row_id + the unique index.
+        {
+            const ui64 buildTx = ++txId;
+            TestBuildIndex(runtime, buildTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", JsonIndexConfig("json_one"));
+            env.TestWaitNotification(runtime, buildTx);
+            auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
+                Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
+        }
+
+        // Second JSON index reuses the existing __ydb_row_id + unique index (no duplicates).
+        {
+            const ui64 buildTx = ++txId;
+            TestBuildIndex(runtime, buildTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", JsonIndexConfig("json_two"));
+            env.TestWaitNotification(runtime, buildTx);
+            auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
+                Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
+        }
+
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/json_two/" + TString(NTableIndex::ImplTable)), {
+            NLs::PathExist,
+            NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                /*strictCount=*/ true),
+        });
+    }
+
+    Y_UNIT_TEST(AutoProvision_SingleIntegerPkUnaffected) {
+        // A single integer PK keeps the legacy doc_id=PK behaviour: no __ydb_row_id / unique index added.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableJsonRowIdFlags(runtime);
+        ui64 txId = 100;
+
+        DoCreateJsonTable(runtime, env, txId);
+
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/table", JsonIndexConfig());
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        {
+            auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
+                Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
+        }
+
+        // No auto unique index was created.
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/table/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathNotExist,
+        });
+
+        // The JSON impl-table is keyed by [__ydb_token, id] (the integer PK), not __ydb_row_id.
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/table/json_idx/" + TString(NTableIndex::ImplTable)), {
+            NLs::PathExist,
+            NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                { NTableIndex::NFulltext::TokenColumn, "id" },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, "id" },
+                /*strictCount=*/ true),
+        });
     }
 }

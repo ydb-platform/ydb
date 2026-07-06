@@ -108,8 +108,11 @@ public:
  * we convert it into a final physical representation that directly correpsonds to the execution plan.
  */
 TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& ctx);
+void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString stageName);
 void ComputePlanLiveness(TOpRoot& root);
+const TInfoUnitSet& GetLiveOut(IOperator* op);
 void ComputePlanAliases(TOpRoot& root);
+const TPlanAliases::TCandidates* GetAliases(IOperator* op, const TInfoUnit& iu);
 
 TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan);
 TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "");

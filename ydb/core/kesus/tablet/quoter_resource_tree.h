@@ -320,6 +320,8 @@ public:
         ::NMonitoring::TDynamicCounters::TCounterPtr Sessions;
         ::NMonitoring::TDynamicCounters::TCounterPtr ActiveSessions;
         ::NMonitoring::TDynamicCounters::TCounterPtr Limit; // Current limit according to settings. If resource has no explicit limit, the counter is nullptr.
+        ::NMonitoring::TDynamicCounters::TCounterPtr LimitTotal; // resources.request_units.limit_total
+        ::NMonitoring::TDynamicCounters::TCounterPtr ConsumedTotal; // resources.request_units.consumed_total
         ::NMonitoring::TDynamicCounters::TCounterPtr ElapsedMicrosecWhenResourceActive;
 
         void AddAllocated(double allocated);

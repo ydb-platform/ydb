@@ -159,7 +159,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvReadF
                 const bool verifyReadOffset = req.verify_read_offset();
 
                 ctx.Send(ctx.SelfID, new TEvPQProxy::TEvStartRead(
-                        getAssignId(request.start_read()), readOffset, req.commit_offset(), verifyReadOffset
+                        getAssignId(request.start_read()), readOffset, req.commit_offset(), verifyReadOffset, TMaybe<ui64>{}
                 ));
                 return (void)ReadFromStreamOrDie(ctx);
             }
@@ -229,14 +229,15 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvReadF
                 const auto& req = request.start_partition_session_response();
 
                 const ui64 readOffset = req.read_offset();
-                const ui64 commitOffset = req.commit_offset();
+                TMaybe<ui64> commitOffset = req.has_commit_offset() ? req.commit_offset() : TMaybe<ui64>{};
+                TMaybe<ui64> maxOffset =  req.has_max_offset() ? req.max_offset() + 1 : TMaybe<ui64>{}; // input max_offset is inclusive, maxOffset is exclusive
                 if (ReadWithoutConsumer && req.has_commit_offset()) {
                     return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "can't commit when reading without a consumer", ctx);
                 }
 
                 ctx.Send(ctx.SelfID, new TEvPQProxy::TEvStartRead(
-                        getAssignId(req), readOffset, req.has_commit_offset() ? commitOffset : TMaybe<ui64>{},
-                        req.has_read_offset()
+                        getAssignId(req), readOffset, commitOffset,
+                        req.has_read_offset(), maxOffset
                 ));
                 return (void)ReadFromStreamOrDie(ctx);
             }
@@ -537,12 +538,13 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvStartRead::T
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got StartRead from client"
         << ": partition# " << it->second.Partition
         << ", readOffset# " << ev->Get()->ReadOffset
-        << ", commitOffset# " << ev->Get()->CommitOffset);
+        << ", commitOffset# " << ev->Get()->CommitOffset
+        << ", maxOffset# " << ev->Get()->MaxOffset);
 
     // proxy request to partition - allow initing
     // TODO: add here VerifyReadOffset too and check it againts Committed position
     ctx.Send(it->second.Actor, new TEvPQProxy::TEvLockPartition(
-        ev->Get()->ReadOffset, ev->Get()->CommitOffset, ev->Get()->VerifyReadOffset, true
+        ev->Get()->ReadOffset, ev->Get()->CommitOffset, ev->Get()->VerifyReadOffset, true, ev->Get()->MaxOffset
     ));
 }
 
@@ -815,6 +817,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
         ReadTimestampMs = 0; // read_from per topic only
         ReadOnlyLocal = true;
         DirectRead = init.direct_read();
+        BatchingSupported = init.is_batching_supported();
         if (init.reader_name()) {
             PeerName = init.reader_name();
         }
@@ -1170,13 +1173,21 @@ bool TReadSessionActor<UseMigrationProtocol>::InitSession(const TActorContext& c
 
     for (const auto& [topicName, topic] : Topics) {
         if (ReadWithoutConsumer) {
-            if (topic->Groups.size() == 0) {
-                CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "explicitly specify the partitions when reading without a consumer", ctx);
-                return false;
-            }
-            for (auto group : topic->Groups) {
-                if (!SendLockPartitionToSelf(group-1, topicName, topic, ctx)) {
+            if (topic->Groups.empty()) {
+                if (!AutoPartitioningSupport) {
+                    CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "explicitly specify the partitions when reading without a consumer by non-autoscale aware client", ctx);
                     return false;
+                }
+                for (auto partitionId : topic->GetPartitionGraph()->GetRootPartitions()) {
+                    if (!SendLockPartitionToSelf(partitionId, topicName, topic, ctx)) {
+                        return false;
+                    }
+                }
+            } else {
+                for (auto group : topic->Groups) {
+                    if (!SendLockPartitionToSelf(group-1, topicName, topic, ctx)) {
+                        return false;
+                    }
                 }
             }
         } else {
@@ -1314,7 +1325,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
         ctx.SelfID, ClientId, ClientPath, Cookie, Session, partitionId, record.GetGeneration(),
         record.GetStep(), record.GetTabletId(), it->second, ClientDC, RangesMode,
         converterIter->second, database, DirectRead, UseMigrationProtocol, maxLag, readTimestampMs,
-        topic, notCommitedToFinishParents, PartitionMaxInFlightBytes));
+        topic, notCommitedToFinishParents, PartitionMaxInFlightBytes, BatchingSupported));
 
     if (SessionsActive) {
         PartsPerSession.DecFor(Partitions.size(), 1);
@@ -1339,7 +1350,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
         << " topic=" << converter->GetPrintableString()
         << " assign: record# " << record);
 
-    ctx.Send(actorId, new TEvPQProxy::TEvLockPartition(0, {}, false, false));
+    ctx.Send(actorId, new TEvPQProxy::TEvLockPartition(0, {}, false, false, {}));
 }
 
 template <bool UseMigrationProtocol>
@@ -2470,6 +2481,11 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
             }
             for (auto p : msg->ChildPartitionIds) {
                 r->add_child_partition_ids(p);
+                if (ReadWithoutConsumer && topic->Groups.empty()) {
+                    if (!SendLockPartitionToSelf(p, it->first, topic, ctx)) {
+                        return;
+                    }
+                }
             }
 
             LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " sending to client end partition stream event");

@@ -467,4 +467,28 @@ TWaitForOperationsResponse WaitForOperationsResponseFromProto(const NProto::TWai
     return response;
 }
 
+NProto::TWaitForTasksRequest WaitForTasksRequestToProto(const TWaitForTasksRequest& request) {
+    NProto::TWaitForTasksRequest protoRequest;
+    protoRequest.SetAvailableSlots(request.AvailableSlots);
+    protoRequest.SetTimeoutMs(request.Timeout.MilliSeconds());
+    return protoRequest;
+}
+
+TWaitForTasksRequest WaitForTasksRequestFromProto(const NProto::TWaitForTasksRequest& protoRequest) {
+    return TWaitForTasksRequest{
+        .AvailableSlots = protoRequest.GetAvailableSlots(),
+        .Timeout = TDuration::MilliSeconds(protoRequest.GetTimeoutMs()),
+    };
+}
+
+NProto::TWaitForTasksResponse WaitForTasksResponseToProto(const TWaitForTasksResponse& response) {
+    NProto::TWaitForTasksResponse protoResponse;
+    protoResponse.SetAvailableTasksCount(response.AvailableTasksCount);
+    return protoResponse;
+}
+
+TWaitForTasksResponse WaitForTasksResponseFromProto(const NProto::TWaitForTasksResponse& protoResponse) {
+    return TWaitForTasksResponse{.AvailableTasksCount = protoResponse.GetAvailableTasksCount()};
+}
+
 } // namespace NYql::NFmr

@@ -35,6 +35,13 @@ void TKqpColumnStatisticsRequester::PropagateTableToLambdaArgument(const TExprNo
         }
 
         if (callableInput->IsList()){
+            // Only propagate when the lambda takes exactly one argument per list element (the shape this
+            // mapping assumes). Some callables pair a list child0 with a lambda of a different arity -- e.g.
+            // HybridRank, whose child0 is the positional scoring tuple but whose Fuse lambda takes a single
+            // rank-vector argument -- and indexing Arg(j) past the lambda's args would be out of range.
+            if (lambda.Args().Size() != callableInput->ChildrenSize()) {
+                continue;
+            }
             for (size_t j = 0; j < callableInput->ChildrenSize(); ++j){
                 KqpTableByExprNode[lambda.Args().Arg(j).Ptr()] = KqpTableByExprNode[callableInput->Child(j)];
             }
@@ -80,20 +87,26 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
         return IGraphTransformer::TStatus::Ok;
     }
 
+    auto sharedState = std::make_shared<TColumnStatisticsSharedState>();
     AsyncReadiness = NThreading::WaitAll(futures).Apply(
-            [this, futures=std::move(futures)](const TFuture<void>&) mutable {
+            [weakSharedState=std::weak_ptr{sharedState}, futures=std::move(futures)](const TFuture<void>&) mutable {
         for (auto& fut : futures) {
             if (fut.HasException()) {
                 fut.TryRethrow();
             }
 
             auto newStats = fut.ExtractValue();
-            if (!ColumnStatisticsResponse) {
-                ColumnStatisticsResponse = std::move(newStats);
+            auto sharedState = weakSharedState.lock();
+            if (!sharedState) {
+                //parent already deleted, just return
+                return;
+            }
+            if (!sharedState->Response.has_value()) {
+                sharedState->Response = std::move(newStats);
             } else {
                 // merge statistics
                 for (const auto& [table, column2Stat] : newStats.ColumnStatisticsByTableName) {
-                    auto& oldColumn2Stat = ColumnStatisticsResponse->ColumnStatisticsByTableName[table];
+                    auto& oldColumn2Stat = sharedState->Response->ColumnStatisticsByTableName[table];
                     for (const auto& [column, newStat] : column2Stat.Data) {
                         auto& oldStat = oldColumn2Stat.Data[column];
                         if (newStat.CountMinSketch) {
@@ -107,20 +120,21 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
             }
         }
     });
+    SharedState = sharedState;
 
     return TStatus::Async;
 }
 
 IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoApplyAsyncChanges(TExprNode::TPtr, TExprNode::TPtr&, TExprContext&) {
-    Y_ENSURE(AsyncReadiness.IsReady() && ColumnStatisticsResponse.has_value());
+    Y_ENSURE(AsyncReadiness.IsReady() && SharedState && SharedState->Response.has_value());
 
-    if (!ColumnStatisticsResponse->Issues().Empty()) {
-        TStringStream ss; ColumnStatisticsResponse->Issues().PrintTo(ss);
+    if (!SharedState->Response->Issues().Empty()) {
+        TStringStream ss; SharedState->Response->Issues().PrintTo(ss);
         YQL_CLOG(TRACE, ProviderKikimr) << "Can't load columns statistics for request: " << ss.Str();
         return IGraphTransformer::TStatus::Ok;
     }
 
-    for (auto&& [tableName, columnStatistics]:  ColumnStatisticsResponse->ColumnStatisticsByTableName) {
+    for (auto&& [tableName, columnStatistics]:  SharedState->Response->ColumnStatisticsByTableName) {
         TypesCtx.ColumnStatisticsByTableName.insert(
             {std::move(tableName), new NYql::TOptimizerStatistics::TColumnStatMap(std::move(columnStatistics))}
         );

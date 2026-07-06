@@ -5,6 +5,7 @@ SRCS(
     bit_util_ut.cpp
     block_array_tree_ut.cpp
     block_reader_ut.cpp
+    dense_union_ut.cpp
 )
 
 PEERDIR(
@@ -14,6 +15,7 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
     yql/essentials/minikql
     yql/essentials/minikql/invoke_builtins/llvm16
+    yql/essentials/utils
 )
 
 YQL_LAST_ABI_VERSION()

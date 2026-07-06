@@ -59,8 +59,8 @@ struct TTvmServiceConfig
     //! "SecretPrefix-" + ToString(ClientSelfId).
     bool RequireMockSecret = true;
 
-    //! Returns ClientSelfId or parsed value from ClientSelfIdEnv or just 0.
-    TTvmId GetClientSelfId() const;
+    //! Returns ClientSelfId or parsed value from ClientSelfIdEnv.
+    std::optional<TTvmId> GetClientSelfId() const;
 
     // Returns ClientSelfSecret or value from env  ClientSelfSecretEnv or value from file ClientSelfSecretPath or nullopt.
     std::optional<std::string> GetClientSelfSecret() const;

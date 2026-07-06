@@ -1633,6 +1633,185 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         {"json"});
     }
 
+    Y_UNIT_TEST(MoveTableWithGlobalJsonRowIdAutoProvisionIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto& ff = runtime.GetAppData().FeatureFlags;
+        ff.SetEnableJsonIndex(true);
+        ff.SetEnableFulltextIndex(true);
+        ff.SetEnableAddUniqueIndex(true);
+        ff.SetEnableUniqConstraint(true);
+
+        // Table with Utf8 PK - no __ydb_row_id yet; build will auto-provision it.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "texts"
+            Columns { Name: "pk"   Type: "Utf8" NotNull: true }
+            Columns { Name: "data" Type: "Json" }
+            KeyColumnNames: ["pk"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            Ydb::Table::TableIndex index;
+            index.set_name("json_idx");
+            index.add_index_columns("data");
+            index.mutable_global_json_index();
+            TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+        }
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts"),
+                           {NLs::IsTable, NLs::IndexesCount(2)});
+
+        auto preMoveDomainDesc = DescribePath(runtime, "/MyRoot");
+        const ui64 expectedDomainPaths =
+            preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+        const ui64 expectedDomainShards =
+            preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetShardsInside();
+
+        TestMoveTable(runtime, ++txId, "/MyRoot/texts", "/MyRoot/texts_moved");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts_moved"),
+                           {NLs::IsTable, NLs::IndexesCount(2)});
+
+        // json_idx must preserve UseRowIdAsDocId=true through the move.
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_moved/json_idx"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalJson),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        {
+            const auto d = DescribePrivatePath(runtime, "/MyRoot/texts_moved/json_idx");
+            const auto& ti = d.GetPathDescription().GetTableIndex();
+            UNIT_ASSERT_C(ti.HasFulltextIndexDescription(),
+                "json_idx after move: FulltextIndexDescription must be set");
+            UNIT_ASSERT_C(ti.GetFulltextIndexDescription().GetUseRowIdAsDocId(),
+                "json_idx after move: UseRowIdAsDocId must be preserved through MoveTable");
+        }
+
+        // Impl-table must be keyed by [__ydb_token, __ydb_row_id].
+        TestDescribeResult(DescribePrivatePath(runtime,
+                "/MyRoot/texts_moved/json_idx/" + TString(NTableIndex::ImplTable)), {
+            NLs::PathExist,
+            NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                /*strictCount=*/ true),
+        });
+
+        // Auto-provisioned unique index must have been moved.
+        TestDescribeResult(DescribePrivatePath(runtime,
+                TStringBuilder() << "/MyRoot/texts_moved/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
+                            NLs::ShardsInsideDomain(expectedDomainShards)});
+    }
+
+    Y_UNIT_TEST(MoveTableWithGlobalJsonRowIdManualInfraIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto& ff = runtime.GetAppData().FeatureFlags;
+        ff.SetEnableJsonIndex(true);
+        ff.SetEnableFulltextIndex(true);
+        ff.SetEnableAddUniqueIndex(true);
+        ff.SetEnableUniqConstraint(true);
+
+        // Table with Utf8 PK + explicit __ydb_row_id + user-created unique index.
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+                Name: "texts"
+                Columns { Name: "pk"   Type: "Utf8"   NotNull: true }
+                Columns { Name: "data" Type: "Json" }
+                Columns { Name: "%s"   Type: "Uint64" NotNull: true }
+                KeyColumnNames: ["pk"]
+            }
+            IndexDescription {
+                Name: "uniq_rowid"
+                KeyColumnNames: ["%s"]
+                Type: EIndexTypeGlobalUnique
+            }
+        )", NTableIndex::NFulltext::RowIdColumn, NTableIndex::NFulltext::RowIdColumn));
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            Ydb::Table::TableIndex index;
+            index.set_name("json_idx");
+            index.add_index_columns("data");
+            index.mutable_global_json_index();
+            TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+        }
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts"),
+                           {NLs::IsTable, NLs::IndexesCount(2)});
+
+        auto preMoveDomainDesc = DescribePath(runtime, "/MyRoot");
+        const ui64 expectedDomainPaths =
+            preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+        const ui64 expectedDomainShards =
+            preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetShardsInside();
+
+        TestMoveTable(runtime, ++txId, "/MyRoot/texts", "/MyRoot/texts_moved");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts_moved"),
+                           {NLs::IsTable, NLs::IndexesCount(2)});
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_moved/json_idx"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalJson),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        {
+            const auto d = DescribePrivatePath(runtime, "/MyRoot/texts_moved/json_idx");
+            const auto& ti = d.GetPathDescription().GetTableIndex();
+            UNIT_ASSERT_C(ti.HasFulltextIndexDescription(),
+                "json_idx after move: FulltextIndexDescription must be set");
+            UNIT_ASSERT_C(ti.GetFulltextIndexDescription().GetUseRowIdAsDocId(),
+                "json_idx after move: UseRowIdAsDocId must be preserved through MoveTable");
+        }
+
+        TestDescribeResult(DescribePrivatePath(runtime,
+                "/MyRoot/texts_moved/json_idx/" + TString(NTableIndex::ImplTable)), {
+            NLs::PathExist,
+            NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                /*strictCount=*/ true),
+        });
+
+        // User-created unique index must have been moved.
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_moved/uniq_rowid"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+
+        // Auto-provision index must NOT exist on the moved table (user infra was reused).
+        TestDescribeResult(DescribePrivatePath(runtime,
+                TStringBuilder() << "/MyRoot/texts_moved/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathNotExist,
+        });
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
+                            NLs::ShardsInsideDomain(expectedDomainShards)});
+    }
+
     Y_UNIT_TEST(AsyncIndexWithSyncInFly) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -1858,6 +2037,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
     Y_UNIT_TEST(CopyMovePreservesMultipleBloomPrefixes) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
         ui64 txId = 100;
 
         // Create source table with multiple bloom filter prefixes
@@ -1875,29 +2055,47 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // Verify source table has multiple bloom filter prefixes
-        {
-            auto srcTable = DescribePath(runtime, "/MyRoot/Table", true).GetPathDescription().GetTable();
-            const auto& srcConfig = srcTable.GetPartitionConfig();
-            UNIT_ASSERT_VALUES_EQUAL(srcConfig.ByKeyFilterPrefixesSize(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(srcConfig.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(srcConfig.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
-            UNIT_ASSERT_DOUBLES_EQUAL(srcConfig.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
+        // Restart SchemeShard to trigger migration to scheme objects
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // Wait deterministically for migration to complete by polling for scheme objects
+        int retries = 10;
+        while (retries--) {
+            auto tableDescr = DescribePath(runtime, "/MyRoot/Table", true);
+            const auto& table = tableDescr.GetPathDescription().GetTable();
+
+            // Check if migration has completed (scheme objects exist)
+            if (table.TableIndexesSize() == 2) {
+                bool allReady = true;
+                for (const auto& idx : table.GetTableIndexes()) {
+                    if (idx.GetState() != NKikimrSchemeOp::EIndexStateReady) {
+                        allReady = false;
+                        break;
+                    }
+                }
+                if (allReady) {
+                    break; // Migration complete
+                }
+            }
+
+            // Use SimulateSleep instead of manual DispatchEvents
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
         }
+
+        // Verify source table has multiple bloom filter prefixes and scheme objects after migration
+        NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/Table",
+            {1, 3},
+            {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
 
         // Perform CopyTable operation
         TestCopyTable(runtime, ++txId, "/MyRoot", "TableCopy", "/MyRoot/Table");
         env.TestWaitNotification(runtime, txId);
 
-        // Verify copied table has all bloom filter prefixes
-        {
-            auto dstTable = DescribePath(runtime, "/MyRoot/TableCopy", true).GetPathDescription().GetTable();
-            const auto& dstConfig = dstTable.GetPartitionConfig();
-            UNIT_ASSERT_VALUES_EQUAL(dstConfig.ByKeyFilterPrefixesSize(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(dstConfig.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(dstConfig.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
-            UNIT_ASSERT_DOUBLES_EQUAL(dstConfig.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
-        }
+        // Verify copied table has all bloom filter prefixes and scheme objects
+        NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/TableCopy",
+            {1, 3},
+            {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
 
         // Perform MoveTable operation on the copied table
         TestMoveTable(runtime, ++txId, "/MyRoot/TableCopy", "/MyRoot/TableMove");
@@ -1907,15 +2105,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TableCopy"),
                            {NLs::PathNotExist});
 
-        // Verify moved table has all bloom filter prefixes
-        {
-            auto movedTable = DescribePath(runtime, "/MyRoot/TableMove", true).GetPathDescription().GetTable();
-            const auto& config = movedTable.GetPartitionConfig();
-            UNIT_ASSERT_VALUES_EQUAL(config.ByKeyFilterPrefixesSize(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(config.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(config.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
-            UNIT_ASSERT_DOUBLES_EQUAL(config.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
-        }
+        // Verify moved table has all bloom filter prefixes and scheme objects
+        NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/TableMove",
+            {1, 3},
+            {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
     }
 
 

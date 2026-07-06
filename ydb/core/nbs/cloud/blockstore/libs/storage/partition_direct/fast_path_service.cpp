@@ -21,8 +21,11 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
+#include <library/cpp/threading/future/wait/wait.h>
+
 #include <util/system/fs.h>
 
+#include <memory>
 #include <utility>
 
 using namespace NKikimr;
@@ -92,7 +95,7 @@ size_t RegionCount(ui64 blockCount, ui32 blockSize)
     return AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
 }
 
-TVector<std::shared_ptr<TRegion>> CreateRegions(
+TVector<TRegionPtr> CreateRegions(
     IPartitionDirectService* partitionDirectService,
     ui64 blockCount,
     ui32 blockSize,
@@ -102,7 +105,7 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     NMonitoring::TDynamicCounterPtr counters)
 {
     const size_t regionCount = RegionCount(blockCount, blockSize);
-    TVector<std::shared_ptr<TRegion>> regions(regionCount);
+    TVector<TRegionPtr> regions(regionCount);
     for (size_t i = 0; i < regionCount; i++) {
         NMonitoring::TDynamicCounterPtr regionCounters =
             counters->GetSubgroup("region", ToString(i));
@@ -176,15 +179,9 @@ TFastPathService::~TFastPathService()
         NKikimrServices::NBS_PARTITION,
         "TFastPathService::Destroy %s",
         DiskId.Quote().c_str());
-
-    // TODO. Should stop and destroy regions before TFastPathService
-    // destruction.
-    for (const auto& region: Regions) {
-        region->Stop();
-    }
 }
 
-void TFastPathService::Run()
+NThreading::TFuture<void> TFastPathService::Run()
 {
     LOG_INFO(
         *ActorSystem,
@@ -192,13 +189,33 @@ void TFastPathService::Run()
         "TFastPathService::Run %s",
         DiskId.Quote().c_str());
 
+    TVector<NThreading::TFuture<void>> initialReadyFutures;
+    initialReadyFutures.reserve(DirectBlockGroups.size());
     for (const auto& dbg: DirectBlockGroups) {
-        dbg->Run(this);
+        initialReadyFutures.push_back(dbg->Run(this));
     }
     for (const auto& region: Regions) {
         region->Run();
     }
     ScheduleDirtyMapDebugPrint();
+
+    return NThreading::WaitAll(initialReadyFutures);
+}
+
+NThreading::TFuture<void> TFastPathService::Stop()
+{
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TFastPathService::Stop %s",
+        DiskId.Quote().c_str());
+
+    TVector<NThreading::TFuture<void>> stopFutures;
+    for (const auto& region: Regions) {
+        stopFutures.push_back(region->Stop());
+    }
+
+    return NThreading::WaitAll(stopFutures);
 }
 
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
@@ -218,6 +235,13 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
 
     const size_t regionIndex =
         GetRegionIndex(*request->Headers.VolumeConfig, request->Headers.Range);
+
+    Y_ABORT_UNLESS(
+        regionIndex < Regions.size(),
+        "Region index out of bound: %" PRISZT " >= %" PRISZT,
+        regionIndex,
+        Regions.size());
+
     auto result = Regions[regionIndex]->ReadBlocksLocal(
         std::move(callContext),
         std::move(request),
@@ -260,6 +284,12 @@ TFastPathService::WriteBlocksLocal(
 
     const size_t regionIndex =
         GetRegionIndex(*request->Headers.VolumeConfig, request->Headers.Range);
+
+    Y_ABORT_UNLESS(
+        regionIndex < Regions.size(),
+        "Region index out of bound: %" PRISZT " >= %" PRISZT,
+        regionIndex,
+        Regions.size());
 
     auto result = Regions[regionIndex]->WriteBlocksLocal(
         std::move(callContext),
@@ -336,9 +366,9 @@ void TFastPathService::ScheduleAfterDelay(
 
 void TFastPathService::UpdateVChunkConfig(const TVChunkConfig& cfg)
 {
-    ActorSystem->Send(
-        PartitionActorId,
-        new TEvPartitionDirectPrivate::TEvUpdateVChunkConfig(cfg));
+    auto event =
+        std::make_unique<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>(cfg);
+    ActorSystem->Send(PartitionActorId, event.release());
 }
 
 ui64 TFastPathService::GenerateLsn()
@@ -346,6 +376,17 @@ ui64 TFastPathService::GenerateLsn()
     const ui64 lsn = ++SequenceGenerator;
     MaybeTriggerPBufferCleanup(lsn);
     return lsn;
+}
+
+TFastPathServiceInfo TFastPathService::GetMonInfo() const
+{
+    const ui64 vchunkSize = StorageConfig->GetVChunkSize();
+    Y_ABORT_UNLESS(vchunkSize != 0);
+    return {
+        .LsnCounter = SequenceGenerator.load(),
+        .TotalVChunks = Regions.size() * (RegionSize / vchunkSize),
+        .DbgCount = DirectBlockGroups.size(),
+    };
 }
 
 void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)

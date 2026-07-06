@@ -150,6 +150,7 @@ Y_UNIT_TEST_SUITE(YdbUnaryRetrySettings) {
         TMockUnaryRetryClient client;
         client.SetInRetryOperationContext(true);
 
+
         ui32 callCount = 0;
         const auto settings = FastUnaryRetrySettings(5);
 
@@ -160,6 +161,7 @@ Y_UNIT_TEST_SUITE(YdbUnaryRetrySettings) {
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAVAILABLE);
         UNIT_ASSERT_VALUES_EQUAL(callCount, 1u);
+        client.SetInRetryOperationContext(false);
     }
 
     Y_UNIT_TEST(RunUnaryWithRetryPerformsInnerRetryOutsideRetryOperationContext) {

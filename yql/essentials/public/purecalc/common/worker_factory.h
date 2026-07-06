@@ -35,6 +35,7 @@ struct TWorkerFactoryOptions {
     bool UseWorkerPool;
     TInternalProgramSettings InternalSettings;
     TString IssueReportTarget;
+    bool RemoveUnsupportedPragmas;
 
     TWorkerFactoryOptions(
         IProgramFactoryPtr Factory,
@@ -57,7 +58,8 @@ struct TWorkerFactoryOptions {
         bool useSystemColumns,
         bool useWorkerPool,
         const TInternalProgramSettings& internalSettings,
-        TString issueReportTarget)
+        TString issueReportTarget,
+        bool removeUnsupportedPragmas)
         : Factory(std::move(Factory))
         , InputSpec(InputSpec)
         , OutputSpec(OutputSpec)
@@ -79,6 +81,7 @@ struct TWorkerFactoryOptions {
         , UseWorkerPool(useWorkerPool)
         , InternalSettings(internalSettings)
         , IssueReportTarget(std::move(issueReportTarget))
+        , RemoveUnsupportedPragmas(removeUnsupportedPragmas)
     {
     }
 };
@@ -113,6 +116,7 @@ protected:
     NYql::TRuntimeSettings::TConstPtr RuntimeSettings_;
     TVector<THolder<IWorker>> WorkerPool_;
     const TString IssueReportTarget_;
+    bool RemoveUnsupportedPragmas_;
 
 public:
     TWorkerFactory(TWorkerFactoryOptions, EProcessorMode);

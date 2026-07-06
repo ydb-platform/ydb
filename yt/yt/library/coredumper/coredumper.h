@@ -12,7 +12,7 @@ namespace NYT::NCoreDump {
 
 struct TCoreDump
 {
-    TString Path;
+    std::string Path;
     TFuture<void> WrittenEvent;
 };
 

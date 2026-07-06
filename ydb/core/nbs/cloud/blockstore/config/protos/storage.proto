@@ -10,10 +10,10 @@ import "ydb/core/nbs/cloud/blockstore/config/protos/ddisk_config.proto";
 enum EWriteMode {
     // Persistent Buffers replication is going from one of PBuffers. Write request
     // will be sended to 1 PBuffer, then this PBuffer will send request to other PBuffer.
-    PBufferReplication = 0;
+    IndirectWrite = 0;
 
     // WriteRequests are going to all Persistent Buffers directly.
-    DirectPBuffersFilling = 1;
+    DirectWrite = 1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -125,4 +125,16 @@ message TStorageServiceConfig
     // Persistent buffer cleanup is triggered once the cleanup LSN advances by
     // at least this many LSNs since the last cleanup. 0 disables cleanup.
     optional uint64 PBufferCleanupLsnStep = 26;
+
+    // Delay (in microseconds) before reading from another location.
+    optional uint32 ReadHedgingDelay = 27;
+
+    // Timeout (in milliseconds) for reading request handlers.
+    optional uint32 ReadRequestTimeout = 28;
+
+    // Timeout (in milliseconds) for flush request handlers.
+    optional uint32 FlushRequestTimeout = 29;
+
+    // Timeout (in milliseconds) for erase request handlers.
+    optional uint32 EraseRequestTimeout = 30;
 }

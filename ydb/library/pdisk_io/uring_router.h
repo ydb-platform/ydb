@@ -2,6 +2,8 @@
 
 #include "uring_operation.h"
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <util/generic/string.h>
 #include <util/system/fhandle.h>
 
@@ -71,6 +73,11 @@ struct TUringRouterConfig {
     TString ToString() const;
 };
 
+struct TUringCounters {
+    NMonitoring::TDynamicCounters::TCounterPtr CompletionThreadCPU;
+    NMonitoring::TDynamicCounters::TCounterPtr CompletionThreadBusyTimeNs;
+};
+
 // TUringRouter is NOT thread-safe.  All public methods (Register*, Start,
 // Read, Write, Flush, Stop, SubmitItemsLeft, etc.) must be called from a
 // single thread (e.g. the DDisk actor). The only internal concurrency is the
@@ -78,7 +85,12 @@ struct TUringRouterConfig {
 // OnComplete callbacks.
 class TUringRouter {
 public:
-    TUringRouter(FHANDLE fd, NActors::TActorSystem* actorSystem, TUringRouterConfig config = {});
+    TUringRouter(
+        FHANDLE fd,
+        NActors::TActorSystem* actorSystem,
+        TUringRouterConfig config = {},
+        TUringCounters* counters = nullptr);
+
     ~TUringRouter();
 
     const TUringRouterConfig& GetConfig() const {
@@ -108,7 +120,11 @@ public:
 
     // --- Submission (call from a single thread, e.g., DDisk actor) ---
 
-    // Submit a read operation. op->Iov and op->DiskOffset must be initialized.
+    // Submit a vectored read (Read) or write (Write) operation.
+    // op->Iov and op->DiskOffset must be initialized before calling:
+    //   single buffer:      PrepareIov(buf, size, offset)
+    //   scatter-gather:     PrepareScatterGather(count, offset) + AddIov() × count
+    // op->OperationType must also be set via SetOperationType().
     // op must remain alive until op->OnComplete is called.
     // Returns true if SQE was written to the ring, false if SQ is full.
     bool Read(TUringOperationBase* op);
@@ -152,6 +168,7 @@ private:
     FHANDLE Fd;
     NActors::TActorSystem* ActorSystem;
     TUringRouterConfig Config;
+    TUringCounters* Counters;
 
     std::unique_ptr<struct io_uring> Ring;
 

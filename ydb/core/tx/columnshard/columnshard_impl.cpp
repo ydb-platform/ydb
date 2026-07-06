@@ -4,7 +4,6 @@
 #include "scan_snapshot_guard.h"
 
 #include "blobs_action/bs/storage.h"
-#include "blobs_reader/events.h"
 #include "blobs_reader/task.h"
 #include "common/tablet_id.h"
 #include "resource_subscriber/task.h"
@@ -188,6 +187,22 @@ NOlap::TSnapshot TColumnShard::GetMaxReadVersion() const {
         // it must correctly break conflicting serializable txs
         return GetCurrentSnapshotForInternalModification();
     }
+}
+
+NOlap::TSnapshot TColumnShard::GetMaxReadVersionForSchema(const ui64 schemaVersion) const {
+    const NOlap::TSnapshot maxReadVersion = GetMaxReadVersion();
+    const auto* index = GetIndexOptional();
+    if (!index) {
+        return maxReadVersion;
+    }
+    const auto nextSchemaChange = index->GetVersionedIndex().GetNextSchemaSnapshot(schemaVersion);
+    if (!nextSchemaChange) {
+        // The write's schema is the latest known one, so reading at the freshest snapshot is correct.
+        return maxReadVersion;
+    }
+    // A newer schema already exists. The scan must resolve exactly the schema the
+    // write was built against, so pin the read to the last snapshot where that schema is still active.
+    return std::min(maxReadVersion, nextSchemaChange->GetPreviousSnapshot());
 }
 
 ui64 TColumnShard::GetOutdatedStep() const {
@@ -932,7 +947,7 @@ void TColumnShard::SetupCleanupTables() {
         pathIdsEmptyInInsertTable.insert(pathIds.begin(), pathIds.end());
     }
 
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsEmptyInInsertTable);
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsEmptyInInsertTable, DataLocksManager);
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;
@@ -1597,6 +1612,12 @@ void TColumnShard::Handle(TAutoPtr<TEventHandle<NOlap::NBackground::TEvExecuteGe
     Execute(ev->Get()->ExtractTransaction().release(), ctx);
 }
 
+void TColumnShard::Handle(NOlap::NBackground::TEvRemoveSession::TPtr& ev, const TActorContext& ctx) {
+    auto txRemove = BackgroundSessionsManager->TxRemove(ev->Get()->GetClassName(), ev->Get()->GetIdentifier());
+    AFL_VERIFY(!!txRemove);
+    Execute(txRemove.release(), ctx);
+}
+
 void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx) {
     if (SharingSessionsManager->IsSharingInProgress()) {
         ctx.Send(NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()),
@@ -1637,6 +1658,7 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
         HFunc(TEvPrivate::TEvNormalizerResult, Handle);
         HFunc(TEvPrivate::TEvAskTabletDataAccessors, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+        HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);
         default:
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "unexpected event in enqueue");
             return NTabletFlatExecutor::TTabletExecutedFlat::Enqueue(ev);

@@ -166,18 +166,17 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::PostDelayedCallback(TInstant 
 template <CInvocationTimePolicy TInvocationTimePolicy>
 void TPeriodicExecutorBase<TInvocationTimePolicy>::PostCallback()
 {
-    GuardedInvoke(
-        Invoker_,
-        [this, weakThis = MakeWeak(this)] {
+    Invoker_->Invoke(MakeGuardedCallback(
+        BIND_NO_PROPAGATE([this, weakThis = MakeWeak(this)] {
             if (auto this_ = weakThis.Lock()) {
                 RunCallback();
             }
-        },
-        [this, weakThis = MakeWeak(this)] {
+        }),
+        BIND_NO_PROPAGATE([this, weakThis = MakeWeak(this)] {
             if (auto this_ = weakThis.Lock()) {
                 OnCallbackCancelled();
             }
-        });
+        })));
 }
 
 template <CInvocationTimePolicy TInvocationTimePolicy>

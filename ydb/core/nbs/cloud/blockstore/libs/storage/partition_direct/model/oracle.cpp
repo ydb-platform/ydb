@@ -97,9 +97,14 @@ TOracle::TOracle(
     IHostStateController* hostStateController)
     : StorageConfig(std::move(storageConfig))
     , HostStateController(hostStateController)
+    , DefaultReadHedgingDelay(StorageConfig->GetReadHedgingDelay())
+    , DefaultReadRequestTimeout(StorageConfig->GetReadRequestTimeout())
     , DefaultWriteHedgingDelay(StorageConfig->GetWriteHedgingDelay())
     , DefaultWriteRequestTimeout(StorageConfig->GetWriteRequestTimeout())
-    , DefaultPBufferReplyTimeout(StorageConfig->GetPBufferReplyTimeout())
+    , DefaultIndirectWriteReplyTimeout(
+          StorageConfig->GetIndirectWriteReplyTimeout())
+    , DefaultFlushRequestTimeout(StorageConfig->GetFlushRequestTimeout())
+    , DefaultEraseRequestTimeout(StorageConfig->GetEraseRequestTimeout())
     , DefaultWriteMode(GetWriteModeFromProto(StorageConfig->GetWriteMode()))
     , HostStatistics(DirectBlockGroupHostCount)
     , HostStates(DirectBlockGroupHostCount)
@@ -124,14 +129,15 @@ void TOracle::Think(TInstant now)
     for (size_t i = 0; i < HostStatistics.size(); ++i) {
         auto errorsInfo = HostStatistics[i].GetErrorsInfo(now);
 
-        const bool hasSufferingSymptom = (errorsInfo.ErrorCount != 0);
+        const bool hasSufferingSymptom =
+            (errorsInfo.ConsecutiveErrorCount != 0);
         const bool hasTemporaryOfflineSymptom =
             hasSufferingSymptom &&
-            ((errorsInfo.ErrorCount >=
+            ((errorsInfo.ConsecutiveErrorCount >=
                   config.GetMinErrorsCountBeforeGoingOffline() &&
               errorsInfo.FromFirstError >
                   config.GetMaxDurationBeforeGoingTemporaryOffline()) ||
-             (errorsInfo.ErrorCount >=
+             (errorsInfo.ConsecutiveErrorCount >=
               config.GetErrorsCountForGoingOffline()) ||
              (HostStateController->GetHostPBufferUsedSize(i) >=
               config.GetErrorsTotalSizeForGoingOffline()));
@@ -190,11 +196,19 @@ void TOracle::OnRequestFailed(
     HostStatistics[hostIndex].OnError(now, operation);
 }
 
+void TOracle::OnRequestCancelled(
+    THostIndex hostIndex,
+    EOperation operation,
+    TInstant now)
+{
+    HostStatistics[hostIndex].OnCancelled(now, operation);
+}
+
 THostIndex TOracle::SelectBestPBufferHost(
-    std::span<const THostIndex> hostIndexes,
+    THostMask hosts,
     EOperation operation) const
 {
-    Y_ABORT_UNLESS(!hostIndexes.empty());
+    Y_ABORT_UNLESS(!hosts.Empty());
 
     auto getInflight = [this, operation](THostIndex hostIndex)
     {
@@ -205,15 +219,14 @@ THostIndex TOracle::SelectBestPBufferHost(
     // the given operation type. Ties (multiple hosts with the same minimum
     // value) are broken uniformly at random via reservoir sampling, so the
     // load isn't always biased towards the first host in `hostIndexes`.
-    THostIndex bestHostIndex = hostIndexes[0];
-    size_t bestInflight = getInflight(bestHostIndex);
-    size_t tieCount = 1;
-    for (size_t i = 1; i < hostIndexes.size(); ++i) {
-        const THostIndex hostIndex = hostIndexes[i];
-        const size_t inflight = getInflight(hostIndex);
-        if (inflight < bestInflight) {
+    THostIndex bestHostIndex = InvalidHostIndex;
+    size_t bestInflight = 0;
+    size_t tieCount = 0;
+    for (auto host: hosts) {
+        const size_t inflight = getInflight(host);
+        if (bestHostIndex == InvalidHostIndex || inflight < bestInflight) {
             bestInflight = inflight;
-            bestHostIndex = hostIndex;
+            bestHostIndex = host;
             tieCount = 1;
         } else if (inflight == bestInflight) {
             ++tieCount;
@@ -221,11 +234,21 @@ THostIndex TOracle::SelectBestPBufferHost(
             // 1/tieCount so that, after the loop, every tied host has equal
             // probability of being chosen.
             if (RandomNumber<size_t>(tieCount) == 0) {
-                bestHostIndex = hostIndex;
+                bestHostIndex = host;
             }
         }
     }
     return bestHostIndex;
+}
+
+TDuration TOracle::GetReadHedgingDelay() const
+{
+    return DefaultReadHedgingDelay;
+}
+
+TDuration TOracle::GetReadRequestTimeout() const
+{
+    return DefaultReadRequestTimeout;
 }
 
 TDuration TOracle::GetWriteHedgingDelay() const
@@ -238,14 +261,29 @@ TDuration TOracle::GetWriteRequestTimeout() const
     return DefaultWriteRequestTimeout;
 }
 
-TDuration TOracle::GetPBufferReplyTimeout() const
+TDuration TOracle::GetIndirectWriteReplyTimeout() const
 {
-    return DefaultPBufferReplyTimeout;
+    return DefaultIndirectWriteReplyTimeout;
+}
+
+TDuration TOracle::GetFlushRequestTimeout() const
+{
+    return DefaultFlushRequestTimeout;
+}
+
+TDuration TOracle::GetEraseRequestTimeout() const
+{
+    return DefaultEraseRequestTimeout;
 }
 
 EWriteMode TOracle::GetWriteMode() const
 {
     return DefaultWriteMode;
+}
+
+const THostStat& TOracle::GetHostStatistics(THostIndex hostIndex) const
+{
+    return HostStatistics[hostIndex];
 }
 
 TString TOracle::Dump() const

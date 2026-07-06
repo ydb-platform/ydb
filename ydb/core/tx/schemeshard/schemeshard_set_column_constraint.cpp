@@ -1,123 +1,172 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_set_column_constraint.h"
-#include <ydb/core/tx/schemeshard/index/build_index_helpers.h>
+#include <util/string/split.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
 
-namespace {
-    // TODO(flown4qqqq): Implement all Persist* functions in the next pull requests.
-    // For now we intentionally keep them as stubs so current tests work,
-    // because they do not cover restart scenarios yet.
-    // This is used for LOG_E macros
-    const TString LogPrefix = "[SetColumnConstraint]";
-} // anonymous namespace
+TString SerializeSetColumnConstraintColumnNames(const std::vector<TString>& columns) {
+    NKikimrSetColumnConstraint::TSetColumnConstraintSettings data;
+    for (const auto& column : columns) {
+        data.AddNotNullColumns(column);
+    }
+
+    return data.SerializeAsString();
+}
+
+std::vector<TString> DeserializeSetColumnConstraintColumnNames(const TString& serialized) {
+    std::vector<TString> result;
+
+    NKikimrSetColumnConstraint::TSetColumnConstraintSettings data;
+    if (data.ParseFromString(serialized)) {
+        for (const auto& column : data.GetNotNullColumns()) {
+            result.push_back(column);
+        }
+    }
+
+    return result;
+}
 
 void TSchemeShard::PersistCreateSetColumnConstraint(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
-    Y_UNUSED(db);
-    Y_UNUSED(operationInfo);
-    LOG_E("PersistCreateSetColumnConstraint is called, but is not implemented yet");
+    TString serializedColumnNames = SerializeSetColumnConstraintColumnNames(operationInfo.SetNotNullColumns);
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::TableOwnerId>(operationInfo.TablePathId.OwnerId),
+        NIceDb::TUpdate<Schema::SetColumnConstraint::TableLocalId>(operationInfo.TablePathId.LocalPathId),
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SerializedColumnNames>(serializedColumnNames),
+        NIceDb::TUpdate<Schema::SetColumnConstraint::ValidationFailed>(operationInfo.ValidationFailed),
+        NIceDb::TUpdate<Schema::SetColumnConstraint::OperationState>(ui32(operationInfo.OperationState)),
+        NIceDb::TUpdate<Schema::SetColumnConstraint::StartTime>(operationInfo.StartTime.Seconds())
+    );
+    if (operationInfo.UserSID) {
+        db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+            NIceDb::TUpdate<Schema::SetColumnConstraint::UserSID>(*operationInfo.UserSID)
+        );
+    }
 }
 
 void TSchemeShard::PersistSetColumnConstraintState(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
-    Y_UNUSED(db);
-    Y_UNUSED(operationInfo);
-    LOG_E("PersistSetColumnConstraintState is called, but is not implemented yet");
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::OperationState>(ui32(operationInfo.OperationState))
+    );
+    if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Done) {
+        db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+            NIceDb::TUpdate<Schema::SetColumnConstraint::EndTime>(operationInfo.EndTime.Seconds())
+        );
+    }
+}
+
+void TSchemeShard::PersistSetColumnConstraintResetSubState(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TNull<Schema::SetColumnConstraint::SubStateTxId>(),
+        NIceDb::TNull<Schema::SetColumnConstraint::SubStateTxStatus>(),
+        NIceDb::TNull<Schema::SetColumnConstraint::SubStateTxDone>()
+    );
 }
 
 void TSchemeShard::PersistSetColumnConstraintLockTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
-    Y_UNUSED(db);
-    Y_UNUSED(operationInfo);
-    LOG_E("PersistSetColumnConstraintLockTxId is called, but is not implemented yet");
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxId>(operationInfo.LockTxId),
+        NIceDb::TUpdate<Schema::SetColumnConstraint::LockTxId>(operationInfo.LockTxId)
+    );
 }
 
 void TSchemeShard::PersistSetColumnConstraintLockTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
-    Y_UNUSED(db);
-    Y_UNUSED(operationInfo);
-    LOG_E("PersistSetColumnConstraintLockTxStatus is called, but is not implemented yet");
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxStatus>(operationInfo.LockTxStatus)
+    );
 }
 
 void TSchemeShard::PersistSetColumnConstraintLockTxDone(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
-    Y_UNUSED(db);
-    Y_UNUSED(operationInfo);
-    LOG_E("PersistSetColumnConstraintLockTxDone is called, but is not implemented yet");
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxDone>(operationInfo.LockTxDone)
+    );
 }
 
 void TSchemeShard::PersistSetColumnConstraintLockNullWritesTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
-    Y_UNUSED(db);
-    Y_UNUSED(operationInfo);
-    LOG_E("PersistSetColumnConstraintLockNullWritesTxId is called, but is not implemented yet");
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxId>(operationInfo.LockNullWritesTxId)
+    );
 }
 
 void TSchemeShard::PersistSetColumnConstraintLockNullWritesTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
-    Y_UNUSED(db);
-    Y_UNUSED(operationInfo);
-    LOG_E("PersistSetColumnConstraintLockNullWritesTxStatus is called, but is not implemented yet");
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxStatus>(operationInfo.LockNullWritesTxStatus)
+    );
 }
 
 void TSchemeShard::PersistSetColumnConstraintLockNullWritesTxDone(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
-    Y_UNUSED(db);
-    Y_UNUSED(operationInfo);
-    LOG_E("PersistSetColumnConstraintLockNullWritesTxDone is called, but is not implemented yet");
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxDone>(operationInfo.LockNullWritesTxDone)
+    );
 }
 
 void TSchemeShard::PersistSetColumnConstraintUnlockNullWritesTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
-    Y_UNUSED(db);
-    Y_UNUSED(operationInfo);
-    LOG_E("PersistSetColumnConstraintUnlockNullWritesTxId is called, but is not implemented yet");
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxId>(operationInfo.UnlockNullWritesTxId)
+    );
 }
 
 void TSchemeShard::PersistSetColumnConstraintUnlockNullWritesTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
-    Y_UNUSED(db);
-    Y_UNUSED(operationInfo);
-    LOG_E("PersistSetColumnConstraintUnlockNullWritesTxStatus is called, but is not implemented yet");
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxStatus>(operationInfo.UnlockNullWritesTxStatus)
+    );
 }
 
 void TSchemeShard::PersistSetColumnConstraintUnlockNullWritesTxDone(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
-    Y_UNUSED(db);
-    Y_UNUSED(operationInfo);
-    LOG_E("PersistSetColumnConstraintUnlockNullWritesTxDone is called, but is not implemented yet");
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxDone>(operationInfo.UnlockNullWritesTxDone)
+    );
 }
 
 void TSchemeShard::PersistSetColumnConstraintUnlockTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
-    Y_UNUSED(db);
-    Y_UNUSED(operationInfo);
-    LOG_E("PersistSetColumnConstraintUnlockTxId is called, but is not implemented yet");
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxId>(operationInfo.UnlockTxId)
+    );
 }
 
 void TSchemeShard::PersistSetColumnConstraintUnlockTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
-    Y_UNUSED(db);
-    Y_UNUSED(operationInfo);
-    LOG_E("PersistSetColumnConstraintUnlockTxStatus is called, but is not implemented yet");
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxStatus>(operationInfo.UnlockTxStatus)
+    );
 }
 
 void TSchemeShard::PersistSetColumnConstraintUnlockTxDone(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
-    Y_UNUSED(db);
-    Y_UNUSED(operationInfo);
-    LOG_E("PersistSetColumnConstraintUnlockTxDone is called, but is not implemented yet");
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxDone>(operationInfo.UnlockTxDone)
+    );
 }
 
-void TSchemeShard::PersistSetColumnConstraintValidationSnapshot(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
-    Y_UNUSED(db);
-    Y_UNUSED(operationInfo);
-    LOG_E("PersistSetColumnConstraintValidationSnapshot is called, but is not implemented yet");
+void TSchemeShard::PersistSetColumnConstraintValidationFailedValue(
+    NIceDb::TNiceDb& db,
+    const TSetColumnConstraintOperationInfo& operationInfo)
+{
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::ValidationFailed>(operationInfo.ValidationFailed)
+    );
 }
 
-void TSchemeShard::PersistSetColumnConstraintValidationShardStatus(NIceDb::TNiceDb& db, TShardIdx shardIdx, const TIndexBuildShardStatus& status) {
-    Y_UNUSED(db);
-    Y_UNUSED(shardIdx);
-    Y_UNUSED(status);
-    LOG_E("PersistSetColumnConstraintValidationShardStatus is called, but is not implemented yet");
-}
-
-void TSchemeShard::PersistSetColumnConstraintValidationIssue(NIceDb::TNiceDb& db, const TString& issue) {
-    Y_UNUSED(db);
-    Y_UNUSED(issue);
-    LOG_E("PersistSetColumnConstraintValidationIssue is called, but is not implemented yet");
+void TSchemeShard::PersistSetColumnConstraintShardDone(
+    NIceDb::TNiceDb& db,
+    TIndexBuildId operationId,
+    TShardIdx shardIdx,
+    const TSetColumnConstraintOperationInfo& operationInfo)
+{
+    auto status = operationInfo.ValidationShards.at(shardIdx);
+    db.Table<Schema::SetColumnConstraintShardStatus>()
+        .Key(operationId, shardIdx.GetOwnerId(), shardIdx.GetLocalId())
+        .Update(
+            NIceDb::TUpdate<Schema::SetColumnConstraintShardStatus::Status>(status.ValidateStatus),
+            NIceDb::TUpdate<Schema::SetColumnConstraintShardStatus::Issue>(status.DebugMessage)
+        );
 }
 
 void TSchemeShard::Handle(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxCreateSetColumnConstraint(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvSetColumnConstraint::TEvGetRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxGetSetColumnConstraint(ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev, const TActorContext& ctx) {

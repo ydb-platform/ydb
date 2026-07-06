@@ -94,6 +94,9 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TSharedShardEntry = std::tuple<TShardIdx, TPathId, std::optional<TTxId>>;
     TStack<TSharedShardEntry> SharedShardEntries;
 
+    using TTestShardSetState = std::pair<TPathId, TTestShardSetInfo::TPtr>;
+    TStack<TTestShardSetState> TestShardSets;
+
 public:
     ~TMemoryChanges() = default;
 
@@ -161,6 +164,9 @@ public:
 
     void GrabNewSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx, const TPathId& pathId);
     void GrabSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx, const TPathId& pathId);
+
+    void GrabNewTestShardSet(TSchemeShard* ss, const TPathId& pathId);
+    void GrabTestShardSet(TSchemeShard* ss, const TPathId& pathId);
 
     void UnDo(TSchemeShard* ss);
 };

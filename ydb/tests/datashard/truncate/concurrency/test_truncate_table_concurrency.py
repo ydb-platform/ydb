@@ -182,7 +182,7 @@ class TestTruncateTableConcurrency(TestBase):
         )
 
     def execute_concurrent_operations(self, table_name: str, operations: list):
-        execution_time = 25
+        execution_time = 15
         deadline = time.time() + execution_time
 
         def random_operations_worker():

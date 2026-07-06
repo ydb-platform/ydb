@@ -1198,7 +1198,12 @@ typename TProtobufTypeBuilder<TType>::TTypePtr TProtobufTypeBuilder<TType>::Find
             VisitStruct(type, typeConfig, descriptor);
             return type;
         case ELogicalMetatype::Dict:
-            YT_VERIFY(repeated);
+            if (!repeated) {
+                ThrowSchemaMismatch(
+                    "non-repeated protobuf field cannot match \"dict\" type in schema",
+                    descriptor,
+                    typeConfig);
+            }
             VisitDict(type, typeConfig, descriptor);
             return type;
         case ELogicalMetatype::Simple:

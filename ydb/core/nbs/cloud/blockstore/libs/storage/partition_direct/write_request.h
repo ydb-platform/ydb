@@ -40,7 +40,7 @@ public:
     TString Print() override;
 
 private:
-    void SendIndirectWriteRequest();
+    void SendIndirectWriteRequest(THostMask hosts);
     void OnIndirectWriteResponse(
         const TDBGWriteBlocksToManyPBuffersResponse& response);
     void SendAdditionalDirectWrites();

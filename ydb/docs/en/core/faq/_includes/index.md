@@ -7,4 +7,4 @@
 * [Errors](../errors.md)
 * [YQL](../yql.md)
 * [Analytics](../analytics.md)
-
+* [Known issues](../known-issues.md)

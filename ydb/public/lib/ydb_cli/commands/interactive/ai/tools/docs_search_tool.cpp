@@ -931,7 +931,7 @@ private:
 
 ITool::TPtr CreateDocsSearchTool() {
     if (!NResource::Has(DOCS_ARCHIVE_RESOURCE)) {
-        YDB_CLI_LOG(Notice, "Documentation search tool disabled, recompile with `-D YDB_CLI_AI_INCLUDE_DOCS` to enable tool")
+        YDB_CLI_LOG(Notice, "Documentation search tool disabled, recompile without `-D YDB_CLI_AI_EXCLUDE_DOCS` to enable tool")
         return nullptr;
     }
     return std::make_shared<TDocsSearchTool>();

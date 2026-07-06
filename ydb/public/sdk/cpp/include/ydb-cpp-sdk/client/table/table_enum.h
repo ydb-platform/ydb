@@ -52,6 +52,15 @@ enum class ECompactState {
     Cancelled = 3,
 };
 
+enum class EAnalyzeState {
+    Unspecified = 0,
+    Enqueued = 1,
+    InProgress = 2,
+    Done = 3,
+    Cancelled = 4,
+    Failed = 5,
+};
+
 enum class EChangefeedMode {
     KeysOnly /* "KEYS_ONLY" */,
     Updates /* "UPDATES" */,

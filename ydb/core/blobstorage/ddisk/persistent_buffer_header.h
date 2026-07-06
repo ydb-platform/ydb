@@ -30,8 +30,9 @@ namespace NKikimr::NDDisk {
         ui32 NodeId;
         ui32 PDiskId;
         ui32 SlotId;
+        ui32 BatchSize;
 
-        ui32 Reserved[14];
+        ui32 Reserved[13];
     };
 
     static_assert(sizeof(TPersistentBufferHeader) == 128);
@@ -70,8 +71,8 @@ namespace NKikimr::NDDisk {
     struct TPersistentBufferLsnRecordHeader {
         // Max lsn record data size is 128 sectors
         static constexpr ui32 MaxSectorsPerBufferRecord = 128;
+        static constexpr ui32 MaxSectorsPerPackBufferRecord = 8;
 
-        TPersistentBufferHeader Header;
         ui64 TabletId;
         ui32 Generation;
         ui32 Reserved1;
@@ -79,10 +80,11 @@ namespace NKikimr::NDDisk {
         ui32 OffsetInBytes;
         ui32 Size;
         ui64 Lsn;
-        TPersistentBufferSectorInfo Locations[MaxSectorsPerBufferRecord];
     };
 
     static_assert(sizeof(TPersistentBufferLsnRecordHeader) <= DataAlignment);
-
+    static_assert(DataAlignment >= sizeof(TPersistentBufferHeader) + sizeof(TPersistentBufferLsnRecordHeader)
+        + TPersistentBufferLsnRecordHeader::MaxSectorsPerBufferRecord * sizeof(TPersistentBufferSectorInfo)
+    );
 #pragma pack(pop)
 }

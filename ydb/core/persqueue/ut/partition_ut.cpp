@@ -1,8 +1,10 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
-#include <ydb/core/persqueue/common/key.h>
+#include <ydb/core/persqueue/common/blob_refcounter.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
+#include <ydb/core/persqueue/pqtablet/partition/partition_blob_encoder.h>
+#include <ydb/core/persqueue/pqtablet/partition/partition_util.h>
 #include <ydb/core/persqueue/pqtablet/partition/blob_key_filter.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
@@ -28,6 +30,7 @@
 
 #include <deque>
 #include <functional>
+#include <memory>
 
 template<>
 void Out<NKikimrPQ::TEvProposeTransactionResult_EStatus>(IOutputStream& out, NKikimrPQ::TEvProposeTransactionResult_EStatus v) {
@@ -75,6 +78,30 @@ public:
     {}
 
     void LoadMeta(const NKikimrPQ::TPartitionCounterData& data);
+
+    static ui64 GetCompactionZoneEmptyStartOffset(TPartition& partition) {
+        return partition.GetCompactionZoneEmptyStartOffset();
+    }
+
+    static TPartitionBlobEncoder& CompactionBlobEncoder(TPartition& partition) {
+        return partition.CompactionBlobEncoder;
+    }
+
+    static TPartitionBlobEncoder& BlobEncoder(TPartition& partition) {
+        return partition.BlobEncoder;
+    }
+
+    static void FinalizeEmptyBlobEncoder(TPartition& partition,
+                                         TPartitionBlobEncoder& encoder,
+                                         ui64 startOffset,
+                                         bool updateEndOffset) {
+        partition.FinalizeEmptyBlobEncoder(encoder, startOffset, updateEndOffset);
+    }
+
+    static bool CleanUpBlobs(TPartition& partition, const TActorContext& ctx) {
+        return partition.CleanUpBlobs(nullptr, ctx);
+    }
+
 private:
     TInitMetaStep* MetaStep;
 };
@@ -146,6 +173,8 @@ protected:
         TMaybe<size_t> Count;
         TMaybe<ui64> PlanStep;
         TMaybe<ui64> TxId;
+        TMaybe<ui64> MetaStartOffset;
+        TMaybe<ui64> MetaEndOffset;
         THashMap<size_t, TUserInfoMatcher> UserInfos;
         THashMap<size_t, TDeleteRangeMatcher> DeleteRanges;
     };
@@ -573,12 +602,27 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
     Cerr << "Got cmd write: \n" << event->Record.DebugString() << Endl;
+    bool metaFound = false;
     for (unsigned i = 0; i < event->Record.CmdWriteSize(); ++i) {
         auto& cmd = event->Record.GetCmdWrite(i);
         TString key = cmd.GetKey();
 
         UNIT_ASSERT(key.size() >= 1);
         switch (key[0]) {
+        case TKeyPrefix::TypeMeta: {
+            NKikimrPQ::TPartitionMeta meta;
+            UNIT_ASSERT(meta.ParseFromString(cmd.GetValue()));
+            if (matcher.MetaStartOffset.Defined()) {
+                UNIT_ASSERT(meta.HasStartOffset());
+                UNIT_ASSERT_VALUES_EQUAL(*matcher.MetaStartOffset, meta.GetStartOffset());
+            }
+            if (matcher.MetaEndOffset.Defined()) {
+                UNIT_ASSERT(meta.HasEndOffset());
+                UNIT_ASSERT_VALUES_EQUAL(*matcher.MetaEndOffset, meta.GetEndOffset());
+            }
+            metaFound = true;
+            break;
+        }
         case TKeyPrefix::TypeTxMeta: {
             NKikimrPQ::TPartitionTxMeta meta;
             UNIT_ASSERT(meta.ParseFromString(event->Record.GetCmdWrite(i).GetValue()));
@@ -657,6 +701,10 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
             TString consumer = key.substr(12);
             UNIT_ASSERT_VALUES_EQUAL(*deleteRange.Consumer, consumer);
         }
+    }
+
+    if (matcher.MetaStartOffset.Defined() || matcher.MetaEndOffset.Defined()) {
+        UNIT_ASSERT(metaFound);
     }
 }
 
@@ -4747,6 +4795,263 @@ Y_UNIT_TEST_F(AddBlobsFromBodyLastOffsetAndUpdateUsageSkips, TPartitionFixture) 
         return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
     });
     Ctx->Runtime->DispatchEvents(options);
+}
+
+TBlobKeyTokenPtr MakeTestBlobKeyToken() {
+    auto token = std::make_shared<TBlobKeyToken>();
+    token->NeedDelete = false;
+    return token;
+}
+
+void AddHeadKeyWithBatch(
+    TPartitionBlobEncoder& encoder,
+    ui32 levelBorder,
+    const TPartitionId& partitionId,
+    ui64 offset,
+    char fill,
+    ui64 seqNo,
+    ui32 levelIndex = 0)
+{
+    std::deque<TClientBlob> dq;
+    dq.push_back(MakeSinglePartBodyReadBlob(seqNo, fill));
+    TBatch batch = TBatch::FromBlobs(offset, std::move(dq));
+    batch.Pack();
+    const ui32 blobSize = batch.GetPackedSize();
+
+    const TKey key = TKey::ForHead(TKeyPrefix::TypeData, partitionId, offset, 0, 1, 0);
+
+    if (encoder.DataKeysHead.size() <= levelIndex) {
+        while (encoder.DataKeysHead.size() <= levelIndex) {
+            encoder.DataKeysHead.emplace_back(levelBorder);
+        }
+    }
+    encoder.DataKeysHead[levelIndex].AddKey(key, blobSize);
+    encoder.HeadKeys.push_back(TDataKey{key, blobSize, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()});
+    encoder.Head.AddBatch(batch);
+}
+
+void AddBodyKeyToEncoder(
+    TPartitionBlobEncoder& encoder,
+    const TPartitionId& partitionId,
+    ui64 offset,
+    ui32 size)
+{
+    const TKey key = TKey::ForBody(TKeyPrefix::TypeData, partitionId, offset, 0, 1, 0);
+    encoder.DataKeysBody.push_back(TDataKey{key, size, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()});
+    encoder.BodySize += size;
+}
+
+void AddHeadKeyWithPartNo(
+    TPartitionBlobEncoder& encoder,
+    ui32 levelBorder,
+    const TPartitionId& partitionId,
+    ui64 offset,
+    ui16 partNo,
+    char fill,
+    ui64 seqNo,
+    ui32 levelIndex = 0)
+{
+    std::deque<TClientBlob> dq;
+    dq.push_back(MakeSinglePartBodyReadBlob(seqNo, fill));
+    TBatch batch = TBatch::FromBlobs(offset, std::move(dq));
+    batch.Pack();
+    const ui32 blobSize = batch.GetPackedSize();
+
+    const TKey key = TKey::ForHead(TKeyPrefix::TypeData, partitionId, offset, partNo, 1, 0);
+
+    if (encoder.DataKeysHead.size() <= levelIndex) {
+        while (encoder.DataKeysHead.size() <= levelIndex) {
+            encoder.DataKeysHead.emplace_back(levelBorder);
+        }
+    }
+    encoder.DataKeysHead[levelIndex].AddKey(key, blobSize);
+    encoder.HeadKeys.push_back(TDataKey{key, blobSize, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()});
+    encoder.Head.AddBatch(batch);
+    encoder.Head.Offset = offset;
+    encoder.Head.PartNo = partNo;
+}
+
+Y_UNIT_TEST_F(GetCompactionZoneEmptyStartOffsetUsesFwzBodyStart, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+
+    const TPartitionId partitionId(1);
+    TPartitionTestWrapper::CompactionBlobEncoder(*partition).DataKeysBody.clear();
+    TPartitionTestWrapper::CompactionBlobEncoder(*partition).HeadKeys.clear();
+
+    AddBodyKeyToEncoder(TPartitionTestWrapper::BlobEncoder(*partition), partitionId, 100, 1000);
+    TPartitionTestWrapper::BlobEncoder(*partition).StartOffset = 100;
+    TPartitionTestWrapper::BlobEncoder(*partition).EndOffset = 202;
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetCompactionZoneEmptyStartOffset(*partition), 100u);
+}
+
+Y_UNIT_TEST_F(GetCompactionZoneEmptyStartOffsetUsesFwzHeadPartNo, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+
+    const TPartitionId partitionId(1);
+    TPartitionTestWrapper::CompactionBlobEncoder(*partition).DataKeysBody.clear();
+    TPartitionTestWrapper::CompactionBlobEncoder(*partition).HeadKeys.clear();
+
+    TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.clear();
+    TPartitionTestWrapper::BlobEncoder(*partition).StartOffset = 8;
+    TPartitionTestWrapper::BlobEncoder(*partition).EndOffset = 10;
+
+    AddHeadKeyWithPartNo(TPartitionTestWrapper::BlobEncoder(*partition), 8_MB, partitionId, 8, 2, 'm', 1);
+
+    // Old bug used GetEndOffset()==10; correct boundary is offset + 1 when PartNo > 0.
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetCompactionZoneEmptyStartOffset(*partition), 9u);
+}
+
+Y_UNIT_TEST_F(GetCompactionZoneEmptyStartOffsetPrefersCzhHead, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+
+    const TPartitionId partitionId(1);
+    AddHeadKeyWithPartNo(TPartitionTestWrapper::CompactionBlobEncoder(*partition), 8_MB, partitionId, 4, 1, 'h', 1);
+
+    AddBodyKeyToEncoder(TPartitionTestWrapper::BlobEncoder(*partition), partitionId, 100, 1000);
+    TPartitionTestWrapper::BlobEncoder(*partition).StartOffset = 100;
+    TPartitionTestWrapper::BlobEncoder(*partition).EndOffset = 202;
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetCompactionZoneEmptyStartOffset(*partition), 5u);
+}
+
+class TPartitionMethodTestActor : public TActorBootstrapped<TPartitionMethodTestActor> {
+public:
+    TPartitionMethodTestActor(TActorId edge, std::function<void(const TActorContext&)> body)
+        : Edge(edge)
+        , Body(std::move(body))
+    {}
+
+    void Bootstrap(const TActorContext& ctx) {
+        Body(ctx);
+        Send(Edge, new NActors::TEvents::TEvWakeup());
+        PassAway();
+    }
+
+private:
+    TActorId Edge;
+    std::function<void(const TActorContext&)> Body;
+};
+
+Y_UNIT_TEST_F(FinalizeEmptyBlobEncoderResetsHeadPartNo, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+
+    const TPartitionId partitionId(1);
+    auto& encoder = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    while (encoder.DataKeysHead.size() < 4) {
+        encoder.DataKeysHead.emplace_back(8_MB);
+    }
+    AddHeadKeyWithPartNo(encoder, 8_MB, partitionId, 4, 2, 'h', 1);
+    encoder.Head.PartNo = 2;
+
+    TPartitionTestWrapper::FinalizeEmptyBlobEncoder(*partition, encoder, 100, true);
+
+    UNIT_ASSERT(encoder.HeadKeys.empty());
+    UNIT_ASSERT(encoder.Head.GetBatches().empty());
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.PartNo, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.Offset, 100u);
+}
+
+Y_UNIT_TEST_F(FinalizeEmptyBlobEncoderClearsNewHead, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+
+    const TPartitionId partitionId(1);
+    auto& encoder = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    while (encoder.DataKeysHead.size() < 4) {
+        encoder.DataKeysHead.emplace_back(8_MB);
+    }
+
+    std::deque<TClientBlob> dq;
+    dq.push_back(MakeSinglePartBodyReadBlob(1, 'n'));
+    TBatch newHeadBatch = TBatch::FromBlobs(50, std::move(dq));
+    newHeadBatch.Pack();
+    const ui32 newHeadBatchSize = newHeadBatch.GetPackedSize();
+
+    encoder.NewHead.Offset = 50;
+    encoder.NewHead.PartNo = 1;
+    encoder.NewHead.PackedSize = newHeadBatchSize;
+    encoder.NewHead.AddBatch(newHeadBatch);
+
+    const TKey newHeadKey = TKey::ForHead(TKeyPrefix::TypeData, partitionId, 50, 1, 1, 0);
+    encoder.NewHeadKey = TDataKey{newHeadKey, newHeadBatchSize, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()};
+
+    UNIT_ASSERT(!encoder.NewHead.GetBatches().empty());
+    UNIT_ASSERT_VALUES_UNEQUAL(encoder.NewHeadKey.Size, 0u);
+
+    TPartitionTestWrapper::FinalizeEmptyBlobEncoder(*partition, encoder, 100, true);
+
+    UNIT_ASSERT(encoder.NewHead.GetBatches().empty());
+    UNIT_ASSERT_VALUES_EQUAL(encoder.NewHead.PackedSize, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.NewHead.PartNo, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.NewHead.Offset, 100u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.NewHeadKey.Size, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.NewHeadKey.Key.GetOffset(), 0u);
+}
+
+Y_UNIT_TEST_F(CleanUpBlobsResetsStaleCompactionZoneHeadPartNo, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableTopicRetentionDeleteLastBlob(true);
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+
+    auto& czEncoder = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    czEncoder.DataKeysBody.clear();
+    czEncoder.HeadKeys.clear();
+    czEncoder.Head.Clear();
+    czEncoder.Head.Offset = 200;
+    czEncoder.Head.PartNo = 2;
+
+    auto& fwzEncoder = TPartitionTestWrapper::BlobEncoder(*partition);
+    fwzEncoder.StartOffset = 200;
+    fwzEncoder.EndOffset = 202;
+
+    auto probe = [&](const TActorContext& ctx) {
+        TPartitionTestWrapper::CleanUpBlobs(*partition, ctx);
+        UNIT_ASSERT_VALUES_EQUAL(czEncoder.Head.PartNo, 0u);
+    };
+
+    Ctx->Runtime->Register(new TPartitionMethodTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
+Y_UNIT_TEST(PopFrontHeadKeySyncsHeadWithRemainingHeadKeys) {
+    const TPartitionId partitionId(1);
+    TPartitionBlobEncoder encoder(partitionId, false);
+
+    AddHeadKeyWithBatch(encoder, 8_MB, partitionId, 10, 'a', 1, 0);
+    AddHeadKeyWithBatch(encoder, 8_MB, partitionId, 11, 'b', 2, 0);
+
+    encoder.Head.Offset = 10;
+    encoder.Head.PartNo = 0;
+    encoder.Head.PackedSize = encoder.HeadKeys[0].Size + encoder.HeadKeys[1].Size;
+
+    UNIT_ASSERT_VALUES_EQUAL(encoder.HeadKeys.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.GetBatches().size(), 2u);
+
+    encoder.PopFrontHeadKey();
+
+    UNIT_ASSERT_VALUES_EQUAL(encoder.HeadKeys.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.HeadKeys.front().Key.GetOffset(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.Offset, 11u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.PartNo, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.GetBatches().size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.GetBatch(0).GetOffset(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.PackedSize, encoder.HeadKeys.front().Size);
+
+    TVector<TClientBlob> remaining;
+    encoder.Head.GetBatch(0).UnpackTo(&remaining);
+    UNIT_ASSERT_VALUES_EQUAL(remaining.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(remaining[0].Data[0], 'b');
 }
 
 } // End of suite

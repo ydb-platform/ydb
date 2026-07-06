@@ -42,14 +42,37 @@ bool IsEmptyQuery(google::protobuf::Message* message) {
            !sqlQuery.GetAlt_sql_query1().GetRule_sql_stmt_list1().HasBlock2();
 }
 
+const TRule_id_table_or_type* GetCTERef(const TRule_table_ref& rule) {
+    if (rule.HasBlock1()) {
+        return nullptr;
+    }
+
+    if (rule.HasBlock2()) {
+        return nullptr;
+    }
+
+    const auto& block = rule.GetBlock3();
+    if (!block.HasAlt1()) {
+        return nullptr;
+    }
+
+    const auto& key = block.GetAlt1().GetRule_table_key1();
+    if (key.HasBlock2()) {
+        return nullptr;
+    }
+
+    return &key.GetRule_id_table_or_type1();
+}
+
 const TRule_select_or_expr* GetSelectOrExpr(const TRule_smart_parenthesis& msg) {
     if (!msg.GetBlock2().HasAlt1()) {
         return nullptr;
     }
 
-    return &msg.GetBlock2()
-                .GetAlt1()
-                .GetRule_select_subexpr1()
+    const auto& select_subexpr = msg.GetBlock2().GetAlt1().GetRule_select_subexpr1();
+
+    return &select_subexpr
+                .GetRule_select_subexpr_core2()
                 .GetRule_select_subexpr_intersect1()
                 .GetRule_select_or_expr1();
 }
@@ -116,21 +139,25 @@ const TRule_smart_parenthesis* GetParenthesis(const TRule_expr& msg) {
                 .GetRule_smart_parenthesis1();
 }
 
+bool IsSelect(const TRule_select_or_expr& msg) {
+    if (msg.HasAlt_select_or_expr1()) {
+        return true;
+    }
+
+    return IsSelect(
+        msg
+            .GetAlt_select_or_expr2()
+            .GetRule_tuple_or_expr1()
+            .GetRule_expr1());
+}
+
 bool IsSelect(const TRule_smart_parenthesis& msg) {
     const auto* select_or_expr = GetSelectOrExpr(msg);
     if (!select_or_expr) {
         return false;
     }
 
-    if (select_or_expr->HasAlt_select_or_expr1()) {
-        return true;
-    }
-
-    return IsSelect(
-        select_or_expr
-            ->GetAlt_select_or_expr2()
-            .GetRule_tuple_or_expr1()
-            .GetRule_expr1());
+    return IsSelect(*select_or_expr);
 }
 
 bool IsSelect(const TRule_expr& msg) {
@@ -143,13 +170,15 @@ bool IsSelect(const TRule_expr& msg) {
 }
 
 bool IsOnlySubExpr(const TRule_select_subexpr& msg) {
-    return msg.GetBlock2().empty() &&
-           msg.GetRule_select_subexpr_intersect1().GetBlock2().empty();
+    return !msg.HasBlock1() &&
+           msg.GetRule_select_subexpr_core2().GetBlock2().empty() &&
+           msg.GetRule_select_subexpr_core2().GetRule_select_subexpr_intersect1().GetBlock2().empty();
 }
 
 bool IsOnlySelect(const TRule_select_stmt& rule) {
-    return rule.GetBlock2().empty() &&
-           rule.GetRule_select_stmt_intersect1().GetBlock2().empty();
+    return !rule.HasBlock1() &&
+           rule.GetRule_select_stmt_core2().GetBlock2().empty() &&
+           rule.GetRule_select_stmt_core2().GetRule_select_stmt_intersect1().GetBlock2().empty();
 }
 
 const TRule_select_kind_partial& Unpack(const TRule_select_kind_parenthesis& rule) {

@@ -42,6 +42,8 @@ SRCS(
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(
+    library/cpp/type_info/tz
+
     yt/yt/build
     yt/yt/core/test_framework
     yt/yt/core

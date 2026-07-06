@@ -9,11 +9,16 @@
 
 #if defined(__linux__)
 #include <unistd.h>
+
 #endif
+#define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 
 namespace NKikimr::NDDisk {
 
 namespace {
+    const TVector<double> WriteBatchSizeBounds = {
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 24, 32, 40, 48, 64, 128
+    };
 
     const TVector<double> NvmeLatencyHistBoundsMs = {
         0.01, 0.02, 0.03, 0.04, 0.05,                   // 10th us
@@ -47,7 +52,11 @@ namespace {
             auto [it, inserted] = PersistentBufferSectorsChecksum.insert({idx, {}});
             it->second.resize(SectorInChunk);
             if (!inserted) {
-                STLOG(PRI_ERROR, BS_DDISK, BSDD10, "TDDiskActor::TDDiskActor persistent buffer has duplicated chunk index in log", (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID), (ChunkIdx, idx));
+                YDB_LOG_ERROR("TDDiskActor::TDDiskActor persistent buffer has duplicated chunk index in log",
+                    {"marker", "BSDD10"},
+                    {"DDiskId", DDiskId},
+                    {"PDiskActorId", BaseInfo.PDiskActorID},
+                    {"chunkIdx", idx});
                 continue;
             }
             PersistentBufferSpaceAllocator.AddNewChunk(idx);
@@ -168,11 +177,18 @@ namespace {
                 COUNTER(DirectIO, RunningCount, false)
                 HISTOGRAM(DirectIO, QueueTime, latencyHistBounds)
             },
+#if defined(__linux__)
+            .UringCounters = {
+                COUNTER(DirectIO, CompletionThreadCPU, true)
+                COUNTER(DirectIO, CompletionThreadBusyTimeNs, true)
+            },
+#endif
             .PersistentBuffer = {
                 COUNTER(PersistentBuffer, AllocatedChunks, false)
                 COUNTER(PersistentBuffer, TotalBytes, false)
                 COUNTER(PersistentBuffer, PendingEventsQueueSize, false)
                 COUNTER(PersistentBuffer, InMemoryCacheSize, false)
+                HISTOGRAM(PersistentBuffer, WriteBatchSize, WriteBatchSizeBounds)
             },
         };
 
@@ -196,7 +212,9 @@ namespace {
         FillPool(PersistentBufferPartIoOpPool);
         FillPool(InternalSyncWriteOpPool);
 
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD09, "TDDiskActor::Bootstrap", (DDiskId, DDiskId));
+        YDB_LOG_DEBUG("TDDiskActor::Bootstrap",
+            {"marker", "BSDD09"},
+            {"DDiskId", DDiskId});
         if (IsPersistentBufferActor) {
             InitUring();
             Become(&TThis::StateFuncPersistentBuffer);
@@ -225,14 +243,14 @@ namespace {
             auto& sync = it->second;
 
             if (ev->Cookie < sync.FirstRequestId || ev->Cookie >= sync.FirstRequestId + sync.Requests.size()) {
-                STLOG(PRI_ERROR, BS_DDISK, BSDD23,
-                    "TDDiskActor::Handle(TEvUndelivered) request cookie out of range",
-                    (DDiskId, DDiskId),
-                    (Cookie, ev->Cookie),
-                    (SyncId, syncId),
-                    (FirstRequestId, sync.FirstRequestId),
-                    (RequestsCount, sync.Requests.size()),
-                    (SourceType, sourceType));
+                YDB_LOG_ERROR("TDDiskActor::Handle(TEvUndelivered) request cookie out of range",
+                    {"marker", "BSDD23"},
+                    {"DDiskId", DDiskId},
+                    {"cookie", ev->Cookie},
+                    {"syncId", syncId},
+                    {"firstRequestId", sync.FirstRequestId},
+                    {"requestsCount", sync.Requests.size()},
+                    {"sourceType", sourceType});
                 return;
             }
             auto& request = sync.Requests[ev->Cookie - sync.FirstRequestId];
@@ -357,12 +375,12 @@ namespace {
         case NKikimrProto::INVALID_ROUND:
         case NKikimrProto::CORRUPTED:
         case NKikimrProto::OUT_OF_SPACE:
-            STLOG(PRI_NOTICE, BS_DDISK, BSDD44,
-                "TDDiskActor: PDisk session lost, switching to terminate state",
-                (DDiskId, DDiskId),
-                (Source, source),
-                (Status, NKikimrProto::EReplyStatus_Name(status)),
-                (ErrorReason, errorReason));
+            YDB_LOG_NOTICE("TDDiskActor: PDisk session lost, switching to terminate state",
+                {"marker", "BSDD44"},
+                {"DDiskId", DDiskId},
+                {"source", source},
+                {"status", NKikimrProto::EReplyStatus_Name(status)},
+                {"errorReason", errorReason});
             Become(&TThis::StateFuncTerminate);
             return false;
         default:

@@ -7,10 +7,15 @@
 
 #include <util/string/split.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
+
 namespace NKikimr::NStorage {
 
     void TNodeWarden::DestroyLocalVDisk(TVDiskRecord& vdisk) {
-        STLOG(PRI_INFO, BS_NODE, NW35, "DestroyLocalVDisk", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vdisk.GetVSlotId()));
+        YDB_LOG_INFO("DestroyLocalVDisk",
+            {"marker", "NW35"},
+            {"VDiskId", vdisk.GetVDiskId()},
+            {"VSlotId", vdisk.GetVSlotId()});
         Y_ABORT_UNLESS(!vdisk.RuntimeData);
 
         const TVSlotId vslotId = vdisk.GetVSlotId();
@@ -23,8 +28,11 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::PoisonLocalVDisk(TVDiskRecord& vdisk) {
-        STLOG(PRI_INFO, BS_NODE, NW00, "PoisonLocalVDisk", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vdisk.GetVSlotId()),
-            (RuntimeData, vdisk.RuntimeData.has_value()));
+        YDB_LOG_INFO("PoisonLocalVDisk",
+            {"marker", "NW00"},
+            {"VDiskId", vdisk.GetVDiskId()},
+            {"VSlotId", vdisk.GetVSlotId()},
+            {"runtimeData", vdisk.RuntimeData.has_value()});
 
         bool vdiskRunning = false;
 
@@ -64,10 +72,15 @@ namespace NKikimr::NStorage {
         const bool readOnly = vdisk.Config.GetReadOnly();
         Y_VERIFY_S(!donorMode || !readOnly, "Only one of modes should be enabled: donorMode " << donorMode << ", readOnly " << readOnly);
 
-        STLOG(PRI_DEBUG, BS_NODE, NW23, "StartLocalVDiskActor", (SlayInFlight, SlayInFlight.contains(vslotId)),
-            (VDiskId, vdisk.GetVDiskId()), (VSlotId, vslotId), (PDiskGuid, pdiskGuid), (DonorMode, donorMode),
-            (PDiskRestartInFlight, PDiskRestartInFlight.contains(vslotId.PDiskId)),
-            (PDisksWaitingToStart, PDisksWaitingToStart.contains(vslotId.PDiskId)));
+        YDB_LOG_DEBUG("StartLocalVDiskActor",
+            {"marker", "NW23"},
+            {"slayInFlight", SlayInFlight.contains(vslotId)},
+            {"VDiskId", vdisk.GetVDiskId()},
+            {"VSlotId", vslotId},
+            {"PDiskGuid", pdiskGuid},
+            {"donorMode", donorMode},
+            {"PDiskRestartInFlight", PDiskRestartInFlight.contains(vslotId.PDiskId)},
+            {"PDisksWaitingToStart", PDisksWaitingToStart.contains(vslotId.PDiskId)});
 
         if (SlayInFlight.contains(vslotId)) {
             return;
@@ -106,16 +119,22 @@ namespace NKikimr::NStorage {
             // find group containing VDisk being started
             const auto it = Groups.find(vdisk.GetGroupId());
             if (it == Groups.end()) {
-                STLOG_DEBUG_FAIL(BS_NODE, NW09, "group not found while starting VDisk actor",
-                    (GroupId, vdisk.GetGroupId()), (VDiskId, vdiskId), (Config, vdisk.Config));
+                YDB_LOG_DEBUG_COMP_FAIL(BS_NODE, "group not found while starting VDisk actor",
+                    {"marker", "NW09"},
+                    {"GroupId", vdisk.GetGroupId()},
+                    {"VDiskId", vdiskId},
+                    {"Config", vdisk.Config});
                 return;
             }
             auto& group = it->second;
 
             // ensure the group has correctly filled protobuf (in case when there is no relevant info pointer)
             if (!group.Group) {
-                STLOG_DEBUG_FAIL(BS_NODE, NW13, "group configuration does not contain protobuf to start VDisk",
-                    (GroupId, it->first), (VDiskId, vdiskId), (Config, vdisk.Config));
+                YDB_LOG_DEBUG_COMP_FAIL(BS_NODE, "group configuration does not contain protobuf to start VDisk",
+                    {"marker", "NW13"},
+                    {"GroupId", it->first},
+                    {"VDiskId", vdiskId},
+                    {"Config", vdisk.Config});
                 return;
             }
 
@@ -231,6 +250,15 @@ namespace NKikimr::NStorage {
                 if (Cfg->PBufferConfig->HasEnableFastErases()) {
                     pbufferFormat.EnableFastErases = Cfg->PBufferConfig->GetEnableFastErases();
                 }
+                if (Cfg->PBufferConfig->HasWritesBatchingPeriodMicroseconds()) {
+                    pbufferFormat.WritesBatchingPeriodMicroseconds = Cfg->PBufferConfig->GetWritesBatchingPeriodMicroseconds();
+                }
+                if (Cfg->PBufferConfig->HasEnableWritesBatching()) {
+                    pbufferFormat.EnableWritesBatching = Cfg->PBufferConfig->GetEnableWritesBatching();
+                }
+                if (Cfg->PBufferConfig->HasMinFreeSectorsReserve()) {
+                    pbufferFormat.MinFreeSectorsReserve = Cfg->PBufferConfig->GetMinFreeSectorsReserve();
+                }
             }
             actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbufferFormat),
                 std::move(ddiskConfig), AppData()->Counters));
@@ -265,6 +293,8 @@ namespace NKikimr::NStorage {
             vdiskConfig->MaxActiveCompactionsPerPDisk = MaxActiveCompactionsPerPDisk;
             vdiskConfig->DefragThrottlerBytesRate = DefragThrottlerBytesRate;
             vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
+            vdiskConfig->SyncLogMaxDiskAmount = SyncLogMaxDiskAmount;
+            vdiskConfig->SyncLogMaxMemAmount = SyncLogMaxMemAmount;
 
             if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {
                 vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionHDD;
@@ -290,6 +320,7 @@ namespace NKikimr::NStorage {
             vdiskConfig->EnablePhantomFlagStorage = EnablePhantomFlagStorage;
             vdiskConfig->EnablePersistentPhantomFlagStorage = EnablePersistentPhantomFlagStorage;
             vdiskConfig->PhantomFlagStorageLimit = PhantomFlagStorageLimitPerVDiskBytes;
+            vdiskConfig->VolatilePhantomFlagStorageBlobSizeLimit = VolatilePhantomFlagStorageBlobSizeLimitBytes;
             vdiskConfig->EnableChunkKeeper = EnableChunkKeeper;
 
             vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
@@ -324,6 +355,8 @@ namespace NKikimr::NStorage {
 
             vdiskConfig->EnableDeepScrubbing = EnableDeepScrubbing;
 
+            vdiskConfig->EnableFreshSyncDataThrottling = EnableFreshSyncDataThrottling;
+
             // debug options
             if (Cfg->TinySyncLog) {
                 vdiskConfig->SyncLogMaxDiskAmount = 1;
@@ -348,8 +381,13 @@ namespace NKikimr::NStorage {
         as->RegisterLocalService(vdiskServiceId, actorId);
         VDiskIdByActor.try_emplace(actorId, vslotId);
 
-        STLOG(PRI_DEBUG, BS_NODE, NW24, "StartLocalVDiskActor done", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vslotId),
-            (PDiskGuid, pdiskGuid), (DDisk, ddisk), (VDiskServiceId, vdiskServiceId));
+        YDB_LOG_DEBUG("StartLocalVDiskActor done",
+            {"marker", "NW24"},
+            {"VDiskId", vdisk.GetVDiskId()},
+            {"VSlotId", vslotId},
+            {"PDiskGuid", pdiskGuid},
+            {"DDisk", ddisk},
+            {"VDiskServiceId", vdiskServiceId});
 
         // for dynamic groups -- start state aggregator
         if (!ddisk && TGroupID(groupInfo->GroupID).ConfigurationType() == EGroupConfigurationType::Dynamic) {
@@ -412,14 +450,19 @@ namespace NKikimr::NStorage {
         // of a VDisk in the occupied slot.
 
         if (!vdisk.HasVDiskID() || !vdisk.HasVDiskLocation()) {
-            STLOG_DEBUG_FAIL(BS_NODE, NW30, "weird VDisk configuration", (Record, vdisk));
+            YDB_LOG_DEBUG_COMP_FAIL(BS_NODE, "weird VDisk configuration",
+                {"marker", "NW30"},
+                {"Record", vdisk});
             return;
         }
 
         const auto& loc = vdisk.GetVDiskLocation();
         if (loc.GetNodeID() != LocalNodeId) {
             if (TGroupID(vdisk.GetVDiskID().GetGroupID()).ConfigurationType() != EGroupConfigurationType::Static) {
-                STLOG_DEBUG_FAIL(BS_NODE, NW31, "incorrect NodeId in VDisk configuration", (Record, vdisk), (NodeId, LocalNodeId));
+                YDB_LOG_DEBUG_COMP_FAIL(BS_NODE, "incorrect NodeId in VDisk configuration",
+                    {"marker", "NW31"},
+                    {"Record", vdisk},
+                    {"NodeId", LocalNodeId});
             }
             return;
         }
@@ -466,8 +509,11 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::Slay(TVDiskRecord& vdisk) {
         const TVSlotId vslotId = vdisk.GetVSlotId();
-        STLOG(PRI_INFO, BS_NODE, NW33, "Slay", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vdisk.GetVSlotId()),
-            (SlayInFlight, SlayInFlight.contains(vslotId)));
+        YDB_LOG_INFO("Slay",
+            {"marker", "NW33"},
+            {"VDiskId", vdisk.GetVDiskId()},
+            {"VSlotId", vdisk.GetVSlotId()},
+            {"slayInFlight", SlayInFlight.contains(vslotId)});
         if (!SlayInFlight.contains(vslotId)) {
             PoisonLocalVDisk(vdisk);
             const TVSlotId vslotId = vdisk.GetVSlotId();
@@ -496,7 +542,10 @@ namespace NKikimr::NStorage {
     void TNodeWarden::Handle(TEvBlobStorage::TEvDropDonor::TPtr ev) {
         auto *msg = ev->Get();
         const TVSlotId vslotId(msg->NodeId, msg->PDiskId, msg->VSlotId);
-        STLOG(PRI_INFO, BS_NODE, NW34, "TEvDropDonor", (VSlotId, vslotId), (VDiskId, msg->VDiskId));
+        YDB_LOG_INFO("TEvDropDonor",
+            {"marker", "NW34"},
+            {"VSlotId", vslotId},
+            {"VDiskId", msg->VDiskId});
         SendDropDonorQuery(msg->NodeId, msg->PDiskId, msg->VSlotId, msg->VDiskId);
 
         if (const auto it = LocalVDisks.find(vslotId); it != LocalVDisks.end()) {

@@ -142,6 +142,7 @@ private:
             EKafkaErrors ErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
             TString ErrorMessage;
             TEvPartitionWriter::TEvWriteResponse::TPtr Value;
+            size_t RecordsCount = 0;
         };
         std::vector<TPartitionResult> Results;
 

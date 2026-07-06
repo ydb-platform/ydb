@@ -83,7 +83,7 @@ class TStatementIterator final
 
 public:
     explicit TStatementIterator(const TString&& program)
-        : Program_(std::move(program))
+        : Program_(program)
         , Cur_()
         , Pos_(0)
         , State_(EState::InOperator)
@@ -703,7 +703,7 @@ void PrintExprTo(const TProgramPtr& program, IOutputStream& out) {
     TStringStream baseSS;
 
     auto baseAst = ConvertToAst(*program->ExprRoot(), program->ExprCtx(),
-                                NYql::TExprAnnotationFlags::None, true);
+                                NYql::TExprAnnotationFlags::None, /*refAtoms=*/true);
     baseAst.Root->PrettyPrintTo(baseSS, PRETTY_FLAGS);
 
     out << baseSS.Data();
@@ -737,7 +737,7 @@ void WriteErrorToStream(const TProgramPtr program)
     program->PrintErrorsTo(Cerr);
 
     for (const auto& topIssue : program->Issues()) {
-        WalkThroughIssues(topIssue, true, [&](const TIssue& issue, ui16 /*level*/) {
+        WalkThroughIssues(topIssue, /*leafOnly=*/true, [&](const TIssue& issue, ui16 /*level*/) {
             const auto msg = GetPgErrorMessage(issue);
             Cout << msg;
             if (msg.back() != '\n') {
@@ -1004,7 +1004,7 @@ void CreateYtFileTable(const TFsPath& dataDir, const TString tableName, const TE
     rowSpec->SetColumnOrder(std::move(columnOrder));
 
     NYT::TNode attrs = NYT::TNode::CreateMap();
-    rowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], 0, false);
+    rowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], 0, /*useCompactForm=*/false);
 
     NYT::TNode spec;
     rowSpec->FillCodecNode(spec[YqlRowSpecAttribute]);
@@ -1180,8 +1180,8 @@ int Main(int argc, char** argv)
     auto fileStorage = CreateFileStorage(*fsConfig);
     fileStorage = WithAsync(fileStorage);
 
-    auto funcRegistry = CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, CreateBuiltinRegistry(), false, udfsPaths);
-    IUdfResolver::TPtr udfResolver = NCommon::CreateSimpleUdfResolver(funcRegistry.Get(), fileStorage, true);
+    auto funcRegistry = CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, CreateBuiltinRegistry(), /*allowUdfPatch=*/false, udfsPaths);
+    IUdfResolver::TPtr udfResolver = NCommon::CreateSimpleUdfResolver(funcRegistry.Get(), fileStorage, /*useFakeMD5=*/true);
 
     bool keepTempFiles = true;
     bool emulateOutputForMultirun = false;
@@ -1199,7 +1199,7 @@ int Main(int argc, char** argv)
     TExprContext ctx;
 
     IModuleResolver::TPtr moduleResolver;
-    if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, clusterMapping, true)) {
+    if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, clusterMapping, /*optimizeLibraries=*/true)) {
         Cerr << "Errors loading default YQL libraries:" << Endl;
         ctx.IssueManager.GetIssues().PrintTo(Cerr);
         return -1;
@@ -1207,7 +1207,7 @@ int Main(int argc, char** argv)
 
     TExprContext::TFreezeGuard freezeGuard(ctx);
 
-    TProgramFactory factory(true, funcRegistry.Get(), ctx.NextUniqueId, dataProvidersInit, runnerName);
+    TProgramFactory factory(/*useRepeatableRandomAndTimeProviders=*/true, funcRegistry.Get(), ctx.NextUniqueId, dataProvidersInit, runnerName);
     factory.SetModules(moduleResolver);
     factory.SetUdfResolver(udfResolver);
     factory.SetGatewaysConfig(gatewaysConfig.Get());
@@ -1323,7 +1323,7 @@ int Main(int argc, char** argv)
             }
         }
 
-        auto status = program->Run(username, nullptr, nullptr, nullptr, true);
+        auto status = program->Run(username, /*traceOut=*/nullptr, /*tracePlan=*/nullptr, /*exprOut=*/nullptr, /*withTypes=*/true);
         program->ConfigureYsonResultFormat(NYson::EYsonFormat::Text);
 
         if (status == TProgram::TStatus::Error) {

@@ -78,7 +78,7 @@ public:
                      const ui64 tabletID, const TTopicCounters& counters,
                      const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database, bool directRead,
                      bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
-                     const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes);
+                     const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes, bool canReadBatches);
     ~TPartitionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -200,6 +200,7 @@ private:
     bool ClientVerifyReadOffset;
     ui64 CommittedOffset;
     ui64 WriteTimestampEstimateMs;
+    TMaybe<ui64> ClientMaxOffset;
 
     ui64 ReadIdToResponse;
     ui64 ReadIdCommitted;
@@ -252,6 +253,7 @@ private:
     TString Database;
 
     bool DirectRead = false;
+    bool CanReadBatches = false;
 
     ui64 DirectReadId = 1;
     std::map<ui64, NKikimrClient::TPersQueuePartitionResponse::TCmdPrepareDirectReadResult> DirectReadResults;
@@ -280,6 +282,9 @@ private:
     bool ReadingFinishedSent;
 
     std::unordered_set<ui64> NotCommitedToFinishParents;
+
+    inline bool IsPartitionDataReady() const;
+    inline bool IsNeedMorePartitionData() const;
 };
 
 

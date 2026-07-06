@@ -85,7 +85,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString Path;
+    std::string Path;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -220,7 +220,7 @@ struct TExecuteBatchOptions
 struct TExecuteBatchCommandRequest
     : public NYTree::TYsonStruct
 {
-    TString Command;
+    std::string Command;
     NYTree::IMapNodePtr Parameters;
     NYTree::INodePtr Input;
 

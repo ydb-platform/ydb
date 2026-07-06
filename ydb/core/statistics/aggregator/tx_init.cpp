@@ -89,6 +89,10 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded global traversal round: " << value);
                         break;
                     }
+                    case Schema::SysParam_ForceTraversalOperationId:
+                        Self->ForceTraversalOperationId = value;
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded force traversal operation id: " << value);
+                        break;
                     default:
                         SA_LOG_CRIT("[" << Self->TabletID() << "] Unexpected SysParam id: " << id);
                 }
@@ -203,6 +207,18 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 ui64 createdAt = rowset.GetValue<Schema::ForceTraversalOperations::CreatedAt>();
                 TString databaseName = rowset.GetValue<Schema::ForceTraversalOperations::DatabaseName>();
                 TActorId replyToActorId = rowset.GetValue<Schema::ForceTraversalOperations::ReplyToActorId>();
+                ui64 endTime = rowset.GetValueOrDefault<Schema::ForceTraversalOperations::EndTime>(0);
+                ui64 stateVal = rowset.GetValueOrDefault<Schema::ForceTraversalOperations::State>(0);
+
+                // Guard against a corrupted/future enum value
+                auto state = Ydb::Table::AnalyzeState::STATE_UNSPECIFIED;
+                if (Ydb::Table::AnalyzeState::State_IsValid(static_cast<int>(stateVal))) {
+                    state = static_cast<Ydb::Table::AnalyzeState::State>(stateVal);
+                } else {
+                    SA_LOG_W("[" << Self->TabletID() << "] tx_init: invalid persisted"
+                        " AnalyzeState=" << stateVal << " for operationId="
+                        << operationId.Quote() << ", clamping to STATE_UNSPECIFIED");
+                }
 
                 TForceTraversalOperation operation {
                     .OperationId = operationId,
@@ -212,6 +228,8 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                     .ReplyToActorId = replyToActorId,
                     .RequestingActorReattached = false,
                     .CreatedAt = TInstant::FromValue(createdAt),
+                    .State = state,
+                    .EndTime = TInstant::FromValue(endTime),
                 };
                 Self->ForceTraversals.emplace_back(operation);
 
@@ -220,7 +238,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 }
             }
 
-            Self->TabletCounters->Simple()[COUNTER_FORCE_TRAVERSALS_INFLIGHT_SIZE].Set(Self->ForceTraversals.size());
+            Self->RecalcForceTraversalsInflightSizeCounter();
 
             SA_LOG_D("[" << Self->TabletID() << "] Loaded ForceTraversalOperations: "
                 << "table count# " << Self->ForceTraversals.size());
@@ -242,6 +260,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 ui64 localPathId = rowset.GetValue<Schema::ForceTraversalTables::LocalPathId>();
                 TString columnTagsStr = rowset.GetValue<Schema::ForceTraversalTables::ColumnTags>();
                 TForceTraversalTable::EStatus status = (TForceTraversalTable::EStatus)rowset.GetValue<Schema::ForceTraversalTables::Status>();
+                TString path = rowset.GetValueOrDefault<Schema::ForceTraversalTables::Path>(TString{});
 
                 auto pathId = TPathId(ownerId, localPathId);
                 auto columnTags = Scan<ui32>(SplitString(columnTagsStr, ","));
@@ -249,6 +268,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 TForceTraversalTable operationTable {
                     .PathId = pathId,
                     .ColumnTags = std::move(columnTags),
+                    .Path = path,
                     .Status = status,
                 };
                 auto forceTraversalOperation = Self->ForceTraversalOperation(operationId);

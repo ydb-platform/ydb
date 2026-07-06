@@ -3,14 +3,27 @@
 #include <ydb/core/tx/columnshard/bg_tasks/transactions/tx_save_progress.h>
 #include <ydb/core/tx/columnshard/bg_tasks/transactions/tx_save_state.h>
 
+#include <ydb/library/actors/core/log.h>
+
 namespace NKikimr::NOlap::NBackground {
+
+bool TSessionActor::SendTabletTransaction(std::unique_ptr<NTabletFlatExecutor::ITransaction>&& tx) {
+    if (Send<TEvExecuteGeneralLocalTransaction>(TabletActorId, std::move(tx))) {
+        return true;
+    }
+    AFL_WARN(NKikimrServices::TX_BACKGROUND)("event", "tablet_transaction_send_failed")("tablet_id", TabletId)("self_id", SelfId());
+    return false;
+}
 
 void TSessionActor::SaveSessionProgress() {
     AFL_VERIFY(!SaveSessionProgressTx);
     const ui64 txId = GetNextTxId();
     SaveSessionProgressTx.emplace(txId);
     auto tx = std::make_unique<TTxSaveSessionProgress>(Session, SelfId(), Adapter, txId);
-    AFL_VERIFY(Send<TEvExecuteGeneralLocalTransaction>(TabletActorId, std::move(tx)));
+    if (!SendTabletTransaction(std::move(tx))) {
+        SaveSessionProgressTx.reset();
+        PassAway();
+    }
 }
 
 void TSessionActor::SaveSessionState() {
@@ -18,7 +31,10 @@ void TSessionActor::SaveSessionState() {
     const ui64 txId = GetNextTxId();
     SaveSessionStateTx.emplace(txId);
     auto tx = std::make_unique<TTxSaveSessionState>(Session, SelfId(), Adapter, txId);
-    AFL_VERIFY(Send<TEvExecuteGeneralLocalTransaction>(TabletActorId, std::move(tx)));
+    if (!SendTabletTransaction(std::move(tx))) {
+        SaveSessionStateTx.reset();
+        PassAway();
+    }
 }
 
 void TSessionActor::Handle(TEvLocalTransactionCompleted::TPtr& ev) {

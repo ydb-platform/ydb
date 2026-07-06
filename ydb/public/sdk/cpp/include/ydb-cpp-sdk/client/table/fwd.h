@@ -65,6 +65,7 @@ struct TReplicationPolicy;
 
 class TBuildIndexOperation;
 class TCompactionOperation;
+class TAnalyzeOperation;
 
 class TTtlDeleteAction;
 class TTtlEvictToExternalStorageAction;

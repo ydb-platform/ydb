@@ -110,6 +110,8 @@ int TCommandGetOperation::Run(TConfig& config) {
         return GetOperation<NBackup::TBackupCollectionRestoreResponse>(client, OperationId, OutputFormat);
     case TOperationId::COMPACTION:
         return GetOperation<NTable::TCompactionOperation>(client, OperationId, OutputFormat);
+    case TOperationId::ANALYZE:
+        return GetOperation<NTable::TAnalyzeOperation>(client, OperationId, OutputFormat);
     default:
         throw TMisuseException() << "Invalid operation ID (unexpected kind of operation)";
     }
@@ -151,6 +153,7 @@ void TCommandListOperations::InitializeKindToHandler(TConfig& config) {
         {"fullbackup", &ListOperations<NBackup::TFullBackupResponse>},
         {"restore", &ListOperations<NBackup::TBackupCollectionRestoreResponse>},
         {"compaction", &ListOperations<NTable::TCompactionOperation>},
+        {"analyze", &ListOperations<NTable::TAnalyzeOperation>},
     };
     if (config.UseExportToYt) {
         KindToHandler.emplace("export", THandlerWrapper(&ListOperations<NExport::TExportToYtResponse>, true)); // deprecated

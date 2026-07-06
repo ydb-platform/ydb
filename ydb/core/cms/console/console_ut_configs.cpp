@@ -906,73 +906,6 @@ config:
     some_removed_feature_flag_example: true
 )";
 
-const TString VERSIONED_MAIN_CONFIG_V0_STALE = R"(
----
-metadata:
-  kind: MainConfig
-  cluster: ""
-  version: 0
-config:
-  log_config:
-    cluster_name: clusterA
-)";
-
-const TString VERSIONED_MAIN_CONFIG_V1 = R"(
----
-metadata:
-  kind: MainConfig
-  cluster: ""
-  version: 1
-config:
-  log_config:
-    cluster_name: clusterA
-)";
-
-const TString VERSIONED_MAIN_CONFIG_V2 = R"(
----
-metadata:
-  kind: MainConfig
-  cluster: ""
-  version: 2
-config:
-  log_config:
-    cluster_name: clusterB
-)";
-
-const TString VERSIONED_DATABASE_CONFIG_V0_STALE = R"(
----
-metadata:
-  kind: DatabaseConfig
-  database: "/dc-1/users/tenant-1"
-  version: 0
-config:
-  feature_flags:
-    some_removed_feature_flag_example: true
-)";
-
-const TString VERSIONED_DATABASE_CONFIG_V1 = R"(
----
-metadata:
-  kind: DatabaseConfig
-  database: "/dc-1/users/tenant-1"
-  version: 1
-config:
-  feature_flags:
-    some_removed_feature_flag_example: true
-)";
-
-const TString VERSIONED_DATABASE_CONFIG_V2 = R"(
----
-metadata:
-  kind: DatabaseConfig
-  database: "/dc-1/users/tenant-1"
-  version: 2
-config:
-  feature_flags:
-    some_removed_feature_flag_example: false
-)";
-
-
 void InitializeTestConfigItems()
 {
     ITEM_DOMAIN_LOG_1
@@ -4718,32 +4651,54 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
     Y_UNIT_TEST(TestReplaceMainYamlConfigVersionCheck) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
 
+        const TString mainConfigTemplate = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: VERSION
+config:
+  log_config:
+    cluster_name: VALUE
+)";
+
+        auto makeConfig = [&](int version, const TString& value) {
+            TString config = mainConfigTemplate;
+            SubstGlobal(config, "VERSION", ToString(version));
+            SubstGlobal(config, "VALUE", value);
+            return config;
+        };
+
         // Fresh runtime: YamlVersion = 0. Per documentation, the client must send
         // the *current* stored version. A version ahead of stored is rejected.
-        CheckReplaceConfig(runtime, Ydb::StatusIds::BAD_REQUEST, VERSIONED_MAIN_CONFIG_V1,
+        CheckReplaceConfig(runtime, Ydb::StatusIds::BAD_REQUEST, makeConfig(1, "A"),
             "Version mismatch");
 
         // version: 0 matches stored YamlVersion = 0 — accepted; YamlVersion becomes 1.
-        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_MAIN_CONFIG_V0_STALE);
-        CheckMainConfigReplacedWith(runtime, VERSIONED_MAIN_CONFIG_V0_STALE);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, makeConfig(0, "A"));
+        CheckMainConfigReplacedWith(runtime, makeConfig(0, "A"));
 
         // version: 2 with stored = 1 — rejected.
-        CheckReplaceConfig(runtime, Ydb::StatusIds::BAD_REQUEST, VERSIONED_MAIN_CONFIG_V2,
+        CheckReplaceConfig(runtime, Ydb::StatusIds::BAD_REQUEST, makeConfig(2, "B"),
             "Version mismatch");
 
         // Re-applying the same body with the stale version: 0 is silently
         // accepted (documented idempotent behaviour: wire == stored - 1 with
         // identical content). YamlVersion stays at 1.
-        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_MAIN_CONFIG_V0_STALE);
-        CheckMainConfigReplacedWith(runtime, VERSIONED_MAIN_CONFIG_V0_STALE);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, makeConfig(0, "A"));
+        CheckMainConfigReplacedWith(runtime, makeConfig(0, "A"));
 
         // version: 1 matches stored YamlVersion = 1 — accepted; YamlVersion becomes 2.
-        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_MAIN_CONFIG_V1);
-        CheckMainConfigReplacedWith(runtime, VERSIONED_MAIN_CONFIG_V1);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, makeConfig(1, "A"));
+        CheckMainConfigReplacedWith(runtime, makeConfig(1, "A"));
 
         // version: 2 with a differing body now matches stored — accepted; YamlVersion = 3.
-        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_MAIN_CONFIG_V2);
-        CheckMainConfigReplacedWith(runtime, VERSIONED_MAIN_CONFIG_V2);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, makeConfig(2, "B"));
+        CheckMainConfigReplacedWith(runtime, makeConfig(2, "B"));
+
+        // Check if the last set config survives a Console restart
+        GracefulRestartTablet(runtime, MakeConsoleID(), runtime.AllocateEdgeActor(0));
+        CheckMainConfigReplacedWith(runtime, makeConfig(2, "B"));
     }
 
     Y_UNIT_TEST(TestReplaceDatabaseYamlConfigVersionCheck) {
@@ -4751,40 +4706,246 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         appcfg.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
         TTenantTestRuntime runtime(TenantConsoleTestConfig(), appcfg);
 
-        const TString DATABASE = TENANT1_1_NAME;
+        const TString mainConfig = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  log_config:
+    cluster_name: A
+)";
 
-        // ValidateDatabaseConfig appends the database config into the main config
-        // and re-validates the result, which requires a non-empty MainYamlConfig.
-        // Seed a minimal main config first (fresh YamlVersion = 0, so wire = 0).
-        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_MAIN_CONFIG_V0_STALE);
+        const TString DATABASE = TENANT1_1_NAME;
+        const TString dbConfigTemplate = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: VERSION
+config:
+  feature_flags:
+    some_removed_feature_flag_example: VALUE
+)";
+
+        auto makeDbConfig = [&](int version, const TString& value) {
+            TString config = dbConfigTemplate;
+            SubstGlobal(config, "VERSION", ToString(version));
+            SubstGlobal(config, "VALUE", value);
+            return config;
+        };
+
+        // Database config is appended into the main config which requires a non-empty main config.
+        // Seed a minimal main config first.
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, mainConfig);
 
         // Fresh runtime: no per-database config stored, so currentVersion = 0.
         // Per documentation, the wire version must equal the stored version.
         // Sending version: 1 must be rejected.
-        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST, VERSIONED_DATABASE_CONFIG_V1,
+
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST, makeDbConfig(1, "A"),
             "Version mismatch");
 
         // version: 0 matches stored currentVersion = 0 — accepted; stored version becomes 1.
-        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_DATABASE_CONFIG_V0_STALE);
-        CheckDatabaseConfigReplacedWith(runtime, DATABASE, VERSIONED_DATABASE_CONFIG_V0_STALE);
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, makeDbConfig(0, "A"));
+        CheckDatabaseConfigReplacedWith(runtime, DATABASE, makeDbConfig(0, "A"));
 
         // version: 2 with stored = 1 — rejected.
-        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST, VERSIONED_DATABASE_CONFIG_V2,
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST, makeDbConfig(2, "B"),
             "Version mismatch");
 
         // Re-applying the same body with the stale version: 0 is silently
         // accepted (documented idempotent behaviour: wire == stored - 1 with
         // identical content). Stored version stays at 1.
-        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_DATABASE_CONFIG_V0_STALE);
-        CheckDatabaseConfigReplacedWith(runtime, DATABASE, VERSIONED_DATABASE_CONFIG_V0_STALE);
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, makeDbConfig(0, "A"));
+        CheckDatabaseConfigReplacedWith(runtime, DATABASE, makeDbConfig(0, "A"));
 
         // version: 1 matches stored = 1 — accepted; stored version becomes 2.
-        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_DATABASE_CONFIG_V1);
-        CheckDatabaseConfigReplacedWith(runtime, DATABASE, VERSIONED_DATABASE_CONFIG_V1);
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, makeDbConfig(1, "A"));
+        CheckDatabaseConfigReplacedWith(runtime, DATABASE, makeDbConfig(1, "A"));
 
         // version: 2 with a differing body now matches stored = 2 — accepted; version = 3.
-        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_DATABASE_CONFIG_V2);
-        CheckDatabaseConfigReplacedWith(runtime, DATABASE, VERSIONED_DATABASE_CONFIG_V2);
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, makeDbConfig(2, "B"));
+        CheckDatabaseConfigReplacedWith(runtime, DATABASE, makeDbConfig(2, "B"));
+
+        // Check if the last set config survives a Console restart
+        GracefulRestartTablet(runtime, MakeConsoleID(), runtime.AllocateEdgeActor(0));
+        CheckDatabaseConfigReplacedWith(runtime, DATABASE, makeDbConfig(2, "B"));
+    }
+
+    void DoTestForceReplaceMainYamlConfig(bool higherVersion) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+
+        const TString mainConfigTemplate = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: VERSION
+config:
+  log_config:
+    cluster_name: VALUE
+)";
+
+        auto makeConfig = [&](int version, const TString& value) {
+            TString config = mainConfigTemplate;
+            SubstGlobal(config, "VERSION", ToString(version));
+            SubstGlobal(config, "VALUE", value);
+            return config;
+        };
+
+        // 1. Force-apply config with version 10 - treated as version 0; new version = 1
+        CheckForceReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, makeConfig(10, "forced_v10"));
+        CheckMainConfigReplacedWith(runtime, makeConfig(0, "forced_v10"));
+
+        // 2. Force-apply config with version 5 - treated as version 1; new version = 2
+        CheckForceReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, makeConfig(5, "forced_v5"));
+        CheckMainConfigReplacedWith(runtime, makeConfig(1, "forced_v5"));
+
+        // 3. Do sequential (non-forced) applies with correct versions
+        {
+            for (int v = 2; v < 6; v++) {
+                TString fieldValue = (TStringBuilder() << "sequential_" << v);
+                auto config = makeConfig(v, fieldValue);
+                CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, config);
+                CheckMainConfigReplacedWith(runtime, config);
+            }
+        }
+
+        // Current version = 6
+
+        // 4. Force-apply config with LOWER / HIGHER version (by higherVersion)
+        CheckForceReplaceConfig(runtime, Ydb::StatusIds::SUCCESS,
+            higherVersion ? makeConfig(20, "forced_v20") : makeConfig(3, "forced_v3"));
+        CheckMainConfigReplacedWith(runtime, makeConfig(6, higherVersion ? "forced_v20" : "forced_v3"));
+
+        // Current version = 7
+
+        // 5. Check if forced config survives a Console restart
+        GracefulRestartTablet(runtime, MakeConsoleID(), runtime.AllocateEdgeActor(0));
+        // After restart, the forced config must still be active
+        CheckMainConfigReplacedWith(runtime, makeConfig(6, higherVersion ? "forced_v20" : "forced_v3"));
+
+        // 6. Sequential applies again
+        {
+            for (int v = 7; v < 10; v++) {
+                TString fieldValue = (TStringBuilder() << "final_" << v);
+                auto config = makeConfig(v, fieldValue);
+                CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, config);
+                CheckMainConfigReplacedWith(runtime, config);
+            }
+        }
+
+        // Current version = 10
+
+        // 7. Check multiple force-apply works correclty
+        for (int v = 10; v < 13; v++) {
+            CheckForceReplaceConfig(runtime, Ydb::StatusIds::SUCCESS,
+                makeConfig(higherVersion ? 20 : 3, "forced_vX" + ToString(v)));
+            CheckMainConfigReplacedWith(runtime, makeConfig(v, "forced_vX" + ToString(v)));
+        }
+    }
+
+    Y_UNIT_TEST(TestForceReplaceMainYamlConfig) {
+        DoTestForceReplaceMainYamlConfig(/* higherVersion = */ false);
+        DoTestForceReplaceMainYamlConfig(/* higherVersion = */ true);
+    }
+
+    void DoTestForceReplaceDatabaseYamlConfig(bool higherVersion) {
+        NKikimrConfig::TAppConfig appcfg;
+        appcfg.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+        TTenantTestRuntime runtime(TenantConsoleTestConfig(), appcfg);
+
+        const TString mainConfig = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  log_config:
+    cluster_name: A
+)";
+
+        const TString DATABASE = TENANT1_1_NAME;
+        const TString dbConfigTemplate = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: VERSION
+config:
+  feature_flags:
+    some_removed_feature_flag_example: VALUE
+)";
+
+        auto makeDbConfig = [&](int version, const TString& value) {
+            TString config = dbConfigTemplate;
+            SubstGlobal(config, "VERSION", ToString(version));
+            SubstGlobal(config, "VALUE", value);
+            return config;
+        };
+
+        // Database config is appended into the main config which requires a non-empty main config.
+        // Seed a minimal main config first.
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, mainConfig);
+
+        // 1. Force-apply database config with version 10 - treated as version 0; new version = 1
+        CheckForceReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, makeDbConfig(10, "forced_v10"));
+        CheckDatabaseConfigReplacedWith(runtime, DATABASE, makeDbConfig(0, "forced_v10"));
+
+        // 2. Force-apply database config with version 5 - treated as version 1; new version = 2
+        CheckForceReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, makeDbConfig(5, "forced_v5"));
+        CheckDatabaseConfigReplacedWith(runtime, DATABASE, makeDbConfig(1, "forced_v5"));
+
+        // 3. Do sequential (non-forced) applies with correct versions
+        {
+            for (int v = 2; v < 6; v++) {
+                TString fieldValue = (TStringBuilder() << "sequential_" << v);
+                auto config = makeDbConfig(v, fieldValue);
+                CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, config);
+                CheckDatabaseConfigReplacedWith(runtime, DATABASE, config);
+            }
+        }
+
+        // Current version = 6
+
+        // 4. Force-apply config with LOWER / HIGHER metadata version (by higherVersion)
+        CheckForceReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS,
+            higherVersion ? makeDbConfig(20, "forced_v20") : makeDbConfig(3, "forced_v3"));
+        CheckDatabaseConfigReplacedWith(runtime, DATABASE, makeDbConfig(6, higherVersion ? "forced_v20" : "forced_v3"));
+
+        // Current version = 7
+
+        // 5. Check if forced config survives a Console restart
+        GracefulRestartTablet(runtime, MakeConsoleID(), runtime.AllocateEdgeActor(0));
+        // After restart, the forced config must still be active
+        CheckDatabaseConfigReplacedWith(runtime, DATABASE, makeDbConfig(6, higherVersion ? "forced_v20" : "forced_v3"));
+
+        // 6. Sequential applies again
+        {
+            for (int v = 7; v < 10; v++) {
+                TString fieldValue = (TStringBuilder() << "final_" << v);
+                auto config = makeDbConfig(v, fieldValue);
+                CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, config);
+                CheckDatabaseConfigReplacedWith(runtime, DATABASE, config);
+            }
+        }
+
+        // Current version = 10
+
+        // 7. Check multiple force-apply works correclty
+        for (int v = 10; v < 13; v++) {
+            CheckForceReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS,
+                makeDbConfig(higherVersion ? 20 : 3, "forced_vX" + ToString(v)));
+            CheckDatabaseConfigReplacedWith(runtime, DATABASE, makeDbConfig(v, "forced_vX" + ToString(v)));
+        }
+    }
+
+    Y_UNIT_TEST(TestForceReplaceDatabaseYamlConfig) {
+        DoTestForceReplaceDatabaseYamlConfig(/* higherVersion = */ false);
+        DoTestForceReplaceDatabaseYamlConfig(/* higherVersion = */ true);
     }
 
     // PrivateDatabaseConfig is marked '(NMarkers.OpaqueConfig) = true'
@@ -4805,7 +4966,7 @@ metadata:
   version: 0
 config:
   log_config:
-    cluster_name: clusterA
+    cluster_name: A
   private_database_config:
     some_unknown_field: 42
     some_unknown_struct:
@@ -4824,9 +4985,16 @@ config:
         appcfg.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
         TTenantTestRuntime runtime(TenantConsoleTestConfig(), appcfg);
 
-        // ValidateDatabaseConfig appends the database config into the main config
-        // and re-validates the result, which requires a non-empty MainYamlConfig.
-        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_MAIN_CONFIG_V0_STALE);
+        const TString mainConfig = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  log_config:
+    cluster_name: A
+)";
 
         const TString DATABASE = TENANT1_1_NAME;
         const TString databaseConfig = R"(
@@ -4845,6 +5013,10 @@ config:
         field_1: 2
         field_2: def
 )";
+        // Database config is appended into the main config which requires a non-empty main config.
+        // Seed a minimal main config first.
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, mainConfig);
+
         CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, databaseConfig);
         CheckDatabaseConfigReplacedWith(runtime, DATABASE, databaseConfig);
     }

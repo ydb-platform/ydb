@@ -291,8 +291,8 @@ public:
 
         SSL_set_bio(Ssl_.get(), InputBIO_, OutputBIO_);
 
-        InputBuffer_ = TSharedMutableRef::Allocate<TTlsBufferTag>(TlsBufferSize);
-        OutputBuffer_ = TSharedMutableRef::Allocate<TTlsBufferTag>(TlsBufferSize);
+        InputBuffer_ = TSharedMutableRef::Allocate<TTlsBufferTag>(TlsBufferSize, {.InitializeStorage = false});
+        OutputBuffer_ = TSharedMutableRef::Allocate<TTlsBufferTag>(TlsBufferSize, {.InitializeStorage = false});
     }
 
     void SetHost(const std::string& host)
@@ -544,13 +544,12 @@ private:
     void HandleUnderlyingIOResult(TFuture<T> future, TCallback<void(const TErrorOr<T>&)> handler)
     {
         future.Subscribe(BIND([handler = std::move(handler), invoker = Invoker_] (const TErrorOr<T>& result) {
-            GuardedInvoke(
-                std::move(invoker),
+            invoker->Invoke(MakeGuardedCallback(
                 BIND(handler, result),
                 BIND([=] {
                     TError error("Poller terminated");
                     handler(error);
-                }));
+                })));
         }));
     }
 

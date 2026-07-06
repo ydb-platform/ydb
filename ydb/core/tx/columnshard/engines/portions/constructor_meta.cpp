@@ -38,6 +38,7 @@ TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta) {
     CompactionLevel = meta.GetCompactionLevel();
     DeletionsCount = meta.GetDeletionsCount();
     TierName = meta.GetTierNameOptional();
+    BsIndexBlobBytes = meta.GetBsIndexBlobBytes();
 }
 
 TPortionMeta TPortionMetaConstructor::Build() {
@@ -67,6 +68,7 @@ TPortionMeta TPortionMetaConstructor::Build() {
     result.ColumnBlobBytes = *TValidator::CheckNotNull(ColumnBlobBytes);
     result.IndexRawBytes = *TValidator::CheckNotNull(IndexRawBytes);
     result.IndexBlobBytes = *TValidator::CheckNotNull(IndexBlobBytes);
+    result.BsIndexBlobBytes = BsIndexBlobBytes;
     result.NumSlices = *TValidator::CheckNotNull(NumSlices);
     YDB_LOG_DEBUG("",
         {"memorySize", result.GetMemorySize()},
@@ -94,6 +96,9 @@ bool TPortionMetaConstructor::LoadMetadata(
     ColumnBlobBytes = TValidator::CheckNotNull(portionMeta.GetColumnBlobBytes());
     IndexRawBytes = portionMeta.GetIndexRawBytes();
     IndexBlobBytes = portionMeta.GetIndexBlobBytes();
+    if (portionMeta.HasBsIndexBlobBytes()) {
+        BsIndexBlobBytes = portionMeta.GetBsIndexBlobBytes();
+    }
     NumSlices = portionMeta.HasNumSlices() ? portionMeta.GetNumSlices() : 1;
     if (portionMeta.HasPrimaryKeyBordersV1()) {
         FirstAndLastPK = NArrow::TFirstLastSpecialKeys(

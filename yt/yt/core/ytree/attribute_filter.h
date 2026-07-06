@@ -87,8 +87,8 @@ public:
     template <class T>
     TAttributeFilter(std::initializer_list<T> keys);
 
+    TAttributeFilter(std::initializer_list<std::string> keys);
     // TODO(babenko): switch to std::string
-    TAttributeFilter(std::initializer_list<TString> keys);
     TAttributeFilter(const std::vector<TString>& keys);
 
     //! Returns true for non-universal filter and false otherwise.

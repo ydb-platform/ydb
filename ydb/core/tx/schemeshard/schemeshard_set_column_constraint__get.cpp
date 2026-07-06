@@ -77,11 +77,19 @@ private:
     {
         proto.SetId(ui64(operationInfo.Id));
 
-        // TODO(flown4qqqq): add UserSID, StartTime, EndTime
+        if (operationInfo.UserSID) {
+            proto.SetUserSID(*operationInfo.UserSID);
+        }
+        if (operationInfo.StartTime != TInstant::Zero()) {
+            *proto.MutableStartTime() = SecondsToProtoTimeStamp(operationInfo.StartTime.Seconds());
+        }
+        if (operationInfo.EndTime != TInstant::Zero()) {
+            *proto.MutableEndTime() = SecondsToProtoTimeStamp(operationInfo.EndTime.Seconds());
+        }
 
         // Map internal state to proto state
         using EState = TSetColumnConstraintOperationInfo::EOperationState;
-        using ProtoState = Ydb::Table::SetColumnConstraintState;
+        using ProtoState = Ydb::Table::SetNotNullState;
         switch (operationInfo.OperationState) {
         case EState::Locking:
         case EState::LockingNullWrites:

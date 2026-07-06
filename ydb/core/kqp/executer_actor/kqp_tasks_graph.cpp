@@ -1751,6 +1751,7 @@ void TKqpTasksGraph::PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& resu
 
         taskInfo->ClearProgram();
         taskInfo->ClearSecureParams();
+        taskInfo->ClearParameters();    // clear parameters to avoid bloating the saved cell
     }
 }
 

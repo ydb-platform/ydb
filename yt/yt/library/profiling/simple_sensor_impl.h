@@ -62,8 +62,6 @@ private:
     std::atomic<i64> Value_ = 0;
 };
 
-static_assert(sizeof(TSimpleCounter) == 32);
-
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSimpleTimeCounter
@@ -77,8 +75,6 @@ public:
 private:
     std::atomic<TDuration::TValue> Value_ = 0;
 };
-
-static_assert(sizeof(TSimpleTimeCounter) == 32);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -33,6 +33,7 @@ _MON_ENDPOINTS_AUTH_CLUSTER_PARAMS = (
         {
             'case_name': 'enforce_user_token_enabled',
             'enforce_user_token_requirement': True,
+            'extra_feature_flags': ['enable_extra_sids_control_for_http_viewer'],
         },
         id='enforce_user_token_enabled',
     ),
@@ -40,6 +41,7 @@ _MON_ENDPOINTS_AUTH_CLUSTER_PARAMS = (
         {
             'case_name': 'enforce_user_token_disabled',
             'enforce_user_token_requirement': False,
+            'extra_feature_flags': ['enable_extra_sids_control_for_http_viewer'],
         },
         id='enforce_user_token_disabled',
     ),
@@ -48,6 +50,7 @@ _MON_ENDPOINTS_AUTH_CLUSTER_PARAMS = (
             'case_name': 'require_counters_authentication',
             'enforce_user_token_requirement': True,
             'require_counters_authentication': True,
+            'extra_feature_flags': ['enable_extra_sids_control_for_http_viewer'],
         },
         id='require_counters_authentication',
     ),
@@ -56,6 +59,7 @@ _MON_ENDPOINTS_AUTH_CLUSTER_PARAMS = (
             'case_name': 'require_healthcheck_authentication',
             'enforce_user_token_requirement': True,
             'require_healthcheck_authentication': True,
+            'extra_feature_flags': ['enable_extra_sids_control_for_http_viewer'],
         },
         id='require_healthcheck_authentication',
     ),

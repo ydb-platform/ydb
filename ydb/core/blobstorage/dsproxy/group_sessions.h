@@ -23,20 +23,19 @@ namespace NKikimr {
                     TIntrusivePtr<NBackpressure::TFlowRecord> FlowRecord;
                     struct AtomicParameter : public std::atomic<bool> {
                         AtomicParameter& operator=(const AtomicParameter& other) {
-                            store(other.load());
+                            store(other.load(std::memory_order_acquire), std::memory_order_release);
                             return *this;
                         }
 
                         AtomicParameter(const AtomicParameter& other) {
-                            store(other.load());
+                            store(other.load(std::memory_order_acquire), std::memory_order_release);
                         }
 
                         AtomicParameter() {
-                            store(false);
+                            store(false, std::memory_order_release);
                         }
-                    } ExtraBlockChecksSupport, Checksumming;
+                    } ExtraBlockChecksSupport, Checksumming, IsConnected;
                     std::shared_ptr<const TCostModel> CostModel = nullptr;
-                    volatile bool IsConnected = false;
                 };
                 TQueue PutTabletLog;
                 TQueue PutAsyncBlob;

@@ -11,6 +11,9 @@ PY_SRCS(
     aggregate/graph.py
     aggregate/run.py
 
+    bench/__init__.py
+    bench/run.py
+
     analyze/__init__.py
     analyze/cache.py
     analyze/clang_runner.py

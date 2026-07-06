@@ -3062,6 +3062,56 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR));
     }
 
+    Y_UNIT_TEST(RenameColumn) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/KeyValue` RENAME COLUMN Value TO Value2;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto describeResult = session.DescribeTable("/Root/KeyValue").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetStatus(), EStatus::SUCCESS, describeResult.GetIssues().ToString());
+
+        bool foundNew = false;
+        bool foundOld = false;
+        for (const auto& col : describeResult.GetTableDescription().GetColumns()) {
+            foundNew |= (col.Name == "Value2");
+            foundOld |= (col.Name == "Value");
+        }
+        UNIT_ASSERT(foundNew);
+        UNIT_ASSERT(!foundOld);
+    }
+
+    Y_UNIT_TEST(RenameKeyColumn) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/KeyValue` RENAME COLUMN Key TO KeyRenamed;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto describeResult = session.DescribeTable("/Root/KeyValue").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetStatus(), EStatus::SUCCESS, describeResult.GetIssues().ToString());
+
+        const auto& primaryKey = describeResult.GetTableDescription().GetPrimaryKeyColumns();
+        UNIT_ASSERT_VALUES_EQUAL(primaryKey.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(primaryKey[0], "KeyRenamed");
+
+        // the new key column name resolves in DML
+        auto selectResult = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            SELECT KeyRenamed FROM `/Root/KeyValue` WHERE KeyRenamed = 1;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(selectResult.GetStatus(), EStatus::SUCCESS, selectResult.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(DropIndexDataColumn) {
         auto setting = NKikimrKqp::TKqpSetting();
         TKikimrRunner kikimr({setting});

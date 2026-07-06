@@ -4857,6 +4857,31 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
     }
 
+    Y_UNIT_TEST(AlterTableRenameColumnRejectedWhenFeatureFlagDisabled) { //+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime); // EnableTableColumnRename is off by default
+        ui64 txId = 100;
+
+        TSet<TString> cols = {"key", "value"};
+        TSet<TString> keyCol = {"key"};
+        TSet<TString> dropCols;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table"
+                    Columns { Name: "key"   Type: "Uint64"}
+                    Columns { Name: "value" Type: "Utf8"}
+                    KeyColumnNames: ["key"]
+                )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table" Columns { Name: "value2" RenameFrom: "value" })",
+                {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
+    }
+
     Y_UNIT_TEST(AlterTableRenameColumn) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableTableColumnRename(true));
@@ -4919,6 +4944,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         Cdbg << "AlterTable: rename combined with another column change is rejected" << Endl;
         TestAlterTable(runtime, ++txId, "/MyRoot",
                 R"(Name: "Table" Columns { Name: "value2_x" RenameFrom: "value2" NotNull: true })",
+                {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
+
+        Cdbg << "AlterTable: cannot alter a column (by its new name) in a separate entry "
+                "within the same statement it was renamed in" << Endl;
+        TestAlterTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table"
+                    Columns { Name: "value3" RenameFrom: "value2" }
+                    Columns { Name: "value3" NotNull: true }
+                )",
                 {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),

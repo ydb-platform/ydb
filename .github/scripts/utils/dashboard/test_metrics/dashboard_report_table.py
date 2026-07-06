@@ -65,6 +65,7 @@ def ram_kb(metrics: dict[str, Any]) -> float:
 
 
 def build_report_table_html(report_path: Path, out_html: Path, suite_filter: Optional[str]) -> None:
+    suite_filter = normalize_suite_path(suite_filter) if suite_filter else None
     report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
     results = report.get("results", []) if isinstance(report, dict) else []
     rows: list[dict[str, Any]] = []

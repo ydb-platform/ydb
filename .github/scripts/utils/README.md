@@ -5,7 +5,7 @@
 ## Структура
 
 - **metrics/** — сбор метрик во время ya make
-  - `monitor_resources.py` — CPU, RAM, disk I/O (JSONL + ram_usage.txt)
+  - `monitor_resources.py` — CPU, RAM, disk I/O (JSONL; optionally appends `ram_usage.txt` with `--ram-usage-file`)
 
 - **dashboard/** — построение дашбордов
   - `analyze_resources.py` — resources_report.html (CPU/RAM/disk по данным monitor)

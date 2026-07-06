@@ -27,13 +27,15 @@ from pathlib import Path
 
 
 def read_proc_stat() -> tuple[float, float]:
-    """Read /proc/stat, return (total_jiffies, idle_jiffies)."""
+    """Read /proc/stat, return (total_jiffies, idle_jiffies including iowait)."""
     with open("/proc/stat") as f:
         line = f.readline()
     parts = line.split()
     # cpu user nice system idle iowait irq softirq steal guest guest_nice
     total = sum(int(x) for x in parts[1:])
     idle = int(parts[4]) if len(parts) > 4 else 0
+    iowait = int(parts[5]) if len(parts) > 5 else 0
+    idle += iowait
     return float(total), float(idle)
 
 
@@ -72,13 +74,16 @@ def _is_ya_root(cmdline: str, comm: str) -> bool:
     return False
 
 
-def find_ya_process_tree() -> set[int]:
-    """Find all PIDs in ya make process tree (roots + descendants)."""
+def read_process_snapshot() -> dict[int, dict]:
+    """Read one /proc snapshot with process parent, command, CPU and RSS fields."""
     proc = Path("/proc")
-    ppid_map: dict[int, int] = {}
-    cmdline_map: dict[int, str] = {}
-    comm_map: dict[int, str] = {}
-
+    snapshot: dict[int, dict] = {}
+    try:
+        page_size_kb = os.sysconf("SC_PAGE_SIZE") // 1024
+    except (OSError, ValueError):
+        page_size_kb = 4
+    if page_size_kb <= 0:
+        page_size_kb = 4
     for pid_dir in proc.iterdir():
         if not pid_dir.is_dir() or not pid_dir.name.isdigit():
             continue
@@ -90,63 +95,45 @@ def find_ya_process_tree() -> set[int]:
                 continue
             comm = stat[stat.find("(") + 1 : rparen]
             rest = stat[rparen + 2 :].split()
-            if len(rest) < 14:
+            if len(rest) < 24:
                 continue
             ppid = int(rest[1])
-            ppid_map[pid] = ppid
-            comm_map[pid] = comm
-            cmdline_map[pid] = _read_cmdline(pid)
+            utime = int(rest[11])
+            stime = int(rest[12])
+            rss_pages = int(rest[21])
+            snapshot[pid] = {
+                "pid": pid,
+                "ppid": ppid,
+                "comm": comm[:80],
+                "cmdline": _read_cmdline(pid),
+                "utime": utime,
+                "stime": stime,
+                "rss_kb": rss_pages * page_size_kb,
+            }
         except (OSError, ValueError):
             continue
+    return snapshot
 
-    roots = {p for p, cmd in cmdline_map.items() if _is_ya_root(cmd, comm_map.get(p, ""))}
+
+def find_ya_process_tree(processes: dict[int, dict]) -> set[int]:
+    """Find ya make PIDs as detected ya roots plus their descendants."""
+    roots = {
+        pid
+        for pid, proc in processes.items()
+        if _is_ya_root(str(proc.get("cmdline", "")), str(proc.get("comm", "")))
+    }
     ya_pids: set[int] = set(roots)
-    # Include ancestors (e.g. main "ya" is parent of "ya-tc" workers)
-    for r in roots:
-        pid = ppid_map.get(r)
-        while pid and pid != 1:
-            ya_pids.add(pid)
-            pid = ppid_map.get(pid)
-    # Include descendants of roots
+    # Include only descendants of actual ya roots. Adding arbitrary ancestors (shell,
+    # runner, systemd scope) can pull unrelated sibling processes into ya-only metrics.
     changed = True
     while changed:
         changed = False
-        for pid, ppid in ppid_map.items():
+        for pid, proc in processes.items():
+            ppid = int(proc.get("ppid") or 0)
             if pid not in ya_pids and ppid in ya_pids:
                 ya_pids.add(pid)
                 changed = True
     return ya_pids
-
-
-def get_process_stats(pid: int) -> dict | None:
-    """Get utime, stime, rss_kb for a process. Returns None on error."""
-    try:
-        stat = (Path("/proc") / str(pid) / "stat").read_text()
-        rparen = stat.rfind(")")
-        if rparen < 0:
-            return None
-        rest = stat[rparen + 2 :].split()
-        if len(rest) < 24:
-            return None
-        utime = int(rest[11])
-        stime = int(rest[12])
-        rss_pages = int(rest[21])
-        comm = stat[stat.find("(") + 1 : rparen][:80]
-        try:
-            page_size_kb = os.sysconf("SC_PAGE_SIZE") // 1024
-        except (OSError, ValueError):
-            page_size_kb = 4
-        if page_size_kb <= 0:
-            page_size_kb = 4
-        return {
-            "pid": pid,
-            "comm": comm,
-            "utime": utime,
-            "stime": stime,
-            "rss_kb": rss_pages * page_size_kb,
-        }
-    except (OSError, ValueError):
-        return None
 
 
 def get_process_io(pid: int) -> tuple[int, int]:
@@ -164,18 +151,9 @@ def get_process_io(pid: int) -> tuple[int, int]:
         return 0, 0
 
 
-def get_cpu_per_process() -> list[dict]:
-    """Get CPU usage per process from /proc/*/stat."""
-    result = []
-    proc = Path("/proc")
-    for pid_dir in proc.iterdir():
-        if not pid_dir.is_dir() or not pid_dir.name.isdigit():
-            continue
-        pid = int(pid_dir.name)
-        s = get_process_stats(pid)
-        if s:
-            result.append(s)
-    return result
+def get_cpu_per_process(processes: dict[int, dict]) -> list[dict]:
+    """Return CPU/RSS process records from a pre-read /proc snapshot."""
+    return list(processes.values())
 
 
 def read_meminfo() -> int:
@@ -279,8 +257,9 @@ def run_monitor(
             prev_stat = curr_stat
 
             # ya make process tree
-            ya_pids = find_ya_process_tree()
-            pid_data = get_cpu_per_process()
+            process_snapshot = read_process_snapshot()
+            ya_pids = find_ya_process_tree(process_snapshot)
+            pid_data = get_cpu_per_process(process_snapshot)
 
             # CPU per process + ya aggregates (ALL ya tree, no top-N limit)
             cpu_per_pid: list[dict] = []

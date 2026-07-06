@@ -271,6 +271,7 @@ def parse_report_chunks(
     dict[str, int],
     dict[str, int],
 ]:
+    suite_filter = normalize_suite_path(suite_filter) if suite_filter else None
     report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
     results = report.get("results", []) if isinstance(report, dict) else []
     chunks: dict[tuple[str, Optional[str], int], dict[str, Any]] = {}
@@ -316,7 +317,7 @@ def parse_report_chunks(
         if not suite_raw:
             continue
         suite = normalize_suite_path(suite_raw)
-        if suite_filter and suite != normalize_suite_path(suite_filter):
+        if suite_filter and suite != suite_filter:
             continue
 
         status = str(item.get("status", ""))
@@ -688,6 +689,7 @@ def build_test_event_times_direct(
     Build test-level error/timeout marker times directly from report rows (chunk=false),
     mapping test chunk_hid -> run end_us. Falls back to suite/chunk index mapping.
     """
+    suite_filter = normalize_suite_path(suite_filter) if suite_filter else None
     report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
     results = report.get("results", []) if isinstance(report, dict) else []
 
@@ -770,7 +772,7 @@ def build_test_event_times_direct(
                 if not suite:
                     continue
                 suite = normalize_suite_path(suite)
-                if suite_filter and suite != normalize_suite_path(suite_filter):
+                if suite_filter and suite != suite_filter:
                     continue
                 run_begin_by_uid[m_uid.group(1)] = (suite, float(ev.get("ts", 0.0)))
                 continue
@@ -847,6 +849,7 @@ def build_test_event_times_direct(
 
 
 def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict[str, Any]]:
+    suite_filter = normalize_suite_path(suite_filter) if suite_filter else None
     events = load_json_or_jsonl(evlog_path)
     stacks: dict[tuple[int, int], list[dict[str, Any]]] = defaultdict(list)
     runs: list[dict[str, Any]] = []
@@ -872,7 +875,7 @@ def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict
             # Skip aux-only runs (meta.json, run_test.log, etc.): they are side-effect events, not real chunk runs.
             if chunk == 0 and "/chunk" not in arg_name and EVLOG_AUX_OUTPUT_RE.search(arg_name):
                 continue
-            if suite_filter is not None and normalize_suite_path(suite_raw) != normalize_suite_path(suite_filter):
+            if suite_filter is not None and normalize_suite_path(suite_raw) != suite_filter:
                 continue
             time_range = value.get("time") if isinstance(value.get("time"), list) else None
             if (
@@ -950,7 +953,7 @@ def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict
                 and suite_raw is not None
                 and chunk is not None
                 and ev_name == "TM"
-                and (suite_filter is None or suite_norm == normalize_suite_path(suite_filter))
+                and (suite_filter is None or suite_norm == suite_filter)
             )
             # Skip aux-only runs (meta.json, run_test.log, etc.) in trace format too.
             if is_target and chunk == 0 and "/chunk" not in arg_name and EVLOG_AUX_OUTPUT_RE.search(arg_name):
@@ -1013,11 +1016,12 @@ def parse_report_runs_from_chunks(
     suite_filter: Optional[str],
 ) -> list[dict[str, Any]]:
     """Build timeline runs directly from report chunk rows (full coverage, no evlog dependency)."""
+    suite_filter = normalize_suite_path(suite_filter) if suite_filter else None
     runs: list[dict[str, Any]] = []
     for (suite_raw, chunk_group, chunk_idx), meta in chunks.items():
         if meta.get("_fallback_alias"):
             continue
-        if suite_filter and normalize_suite_path(suite_raw) != normalize_suite_path(suite_filter):
+        if suite_filter and normalize_suite_path(suite_raw) != suite_filter:
             continue
         dur_sec = float(meta.get("duration_sec", 0.0) or 0.0)
         start_ts = meta.get("suite_start_timestamp")

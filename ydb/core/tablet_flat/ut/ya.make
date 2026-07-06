@@ -39,6 +39,7 @@ SRCS(
     ut_compaction_multi.cpp
     ut_data_cleanup.cpp
     ut_datetime.cpp
+    ut_db_mon.cpp
     ut_decimal.cpp    
     ut_charge.cpp
     ut_part.cpp

@@ -1365,7 +1365,7 @@ public:
 
     void Bootstrap() {
         AuditCtx.InitAudit(Event, NeedAudit);
-        if (Authorizer) {
+        if (AuthMode != TMon::EAuthMode::Disabled && Authorizer) {
             NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get()->Request.Get());
             if (handle) {
                 Send(handle);
@@ -1669,11 +1669,21 @@ public:
             }
         }
 
-        TStringBuf url = ev->Get()->Request->URL.Before('?');
+        const TString requestUrl(ev->Get()->Request->URL.Before('?'));
+        const bool authDisabled = DisabledAuthenticationPaths.contains(requestUrl);
+
+        TStringBuf url = requestUrl;
         while (!url.empty()) {
             auto it = Handlers.find(TString(url));
             if (it != Handlers.end()) {
-                Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second, Authorizer));
+                auto fields = it->second;
+                if (authDisabled) {
+                    fields.AuthMode = TMon::EAuthMode::Disabled;
+                }
+                Register(new THttpMonAuthorizedActorRequest(
+                    std::move(ev),
+                    fields,
+                    authDisabled ? TMon::TRequestAuthorizer() : Authorizer));
                 return;
             } else {
                 if (url.EndsWith('/')) {
@@ -1689,11 +1699,16 @@ public:
             }
         }
 
-        TStringBuf requestUrl = ev->Get()->Request->URL.Before('?');
-        TMon::EAuthMode authMode = DisabledAuthenticationPaths.contains(TString(requestUrl))
+        const TMon::EAuthMode authMode = authDisabled
             ? TMon::EAuthMode::Disabled
             : TMon::EAuthMode::Enforce;
-        Register(new THttpMonAuthorizedPageRequest(std::move(ev), IndexMonPage.Get(), AllowedSIDs, Authorizer, NeedMonLegacyAudit, authMode));
+        Register(new THttpMonAuthorizedPageRequest(
+            std::move(ev),
+            IndexMonPage.Get(),
+            AllowedSIDs,
+            authDisabled ? TMon::TRequestAuthorizer() : Authorizer,
+            NeedMonLegacyAudit,
+            authMode));
     }
 
     void Handle(TEvMon::TEvRegisterHandler::TPtr& ev) {

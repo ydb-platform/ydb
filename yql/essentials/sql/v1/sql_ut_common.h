@@ -8050,7 +8050,7 @@ Y_UNIT_TEST(ErrAddColumnAndRename) {
 
 Y_UNIT_TEST(ErrRenameColumnWithAddColumn) {
     ExpectFailWithError("USE ydb;   ALTER TABLE table RENAME COLUMN oldc TO newc, ADD COLUMN addc uint64",
-                        "<main>:1:60: Error: RENAME COLUMN can not be used together with another table action\n");
+                        "<main>:1:52: Error: RENAME COLUMN can not be used together with another table action\n");
 }
 
 Y_UNIT_TEST(ErrAddColumnAndRenameColumn) {

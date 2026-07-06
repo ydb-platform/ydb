@@ -20,8 +20,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CLUSTER_BALANCING
 
-#define YDB_LOG_THIS_FILE_COMPONENT BS_CLUSTER_BALANCING
-
 namespace NKikimr::NBsController {
 
     enum {

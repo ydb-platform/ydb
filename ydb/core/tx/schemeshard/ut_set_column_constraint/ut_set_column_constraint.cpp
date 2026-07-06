@@ -1379,19 +1379,19 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             const auto& columns = entry.GetSettings().GetNotNullColumns();
             if (entry.GetId() == setConstraintTxId1) {
                 foundOp1 = true;
-                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(entry.GetState()), static_cast<int>(Ydb::Table::SetColumnConstraintState::STATE_DONE));
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(entry.GetState()), static_cast<int>(Ydb::Table::SetNotNullState::STATE_DONE));
                 UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(columns.Get(0), "value");
             }
             if (entry.GetId() == setConstraintTxId2) {
                 foundOp2 = true;
-                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(entry.GetState()), static_cast<int>(Ydb::Table::SetColumnConstraintState::STATE_CANCELLED));
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(entry.GetState()), static_cast<int>(Ydb::Table::SetNotNullState::STATE_CANCELLED));
                 UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(columns.Get(0), "value2");
             }
             if (entry.GetId() == setConstraintTxId3) {
                 foundOp3 = true;
-                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(entry.GetState()), static_cast<int>(Ydb::Table::SetColumnConstraintState::STATE_DONE));
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(entry.GetState()), static_cast<int>(Ydb::Table::SetNotNullState::STATE_DONE));
                 UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(columns.Get(0), "value");
             }

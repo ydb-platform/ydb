@@ -138,15 +138,12 @@ void TMaxTasksGraph::AddTask(const TTask& task, std::optional<TNodeId> node) {
     CheckInvariants();
 }
 
+// static
 void TMaxTasksGraph::PlaceColumnOnNode(TGroup& group, size_t columnIdx, TNodeIdx node) {
     group.ColumnNodes.at(columnIdx) = node;
 }
 
 void TMaxTasksGraph::EstimateTasksResources() {
-    // Mirror TKqpPlanner: it estimated every task's memory with a single coarse task count - the total number of tasks
-    // being placed - not the per-stage count. Dividing the mkql limit by the per-stage count would give a low-parallelism
-    // stage (e.g. a 1-task result stage) the full mkql limit, turning its column into a memory outlier that sorts first
-    // and pre-loads a node, skewing larger sibling stages. Keep the coarse count so the placement matches the planner.
     size_t totalTasks = 0;
     for (const auto& stage : Stages) {
         totalTasks += stage.Tasks.size();
@@ -160,8 +157,6 @@ void TMaxTasksGraph::EstimateTasksResources() {
                 continue; // empty stage (e.g. a COPY of an empty input) contributes no task to the column.
             }
 
-            // Mirror TKqpPlanner::BuildInitialTaskResources: a single channel buffer per direction that exists, and the
-            // mkql class taken from the stage program.
             TTaskResourceEstimation est;
             est.ChannelBuffersCount = (stage.Info->InputsCount ? 1 : 0) + (stage.Info->OutputsCount ? 1 : 0);
             est.HeavyProgram = stage.Info->Meta.GetStage(stage.Info->Id).GetProgram().GetSettings().GetHasMapJoin();
@@ -190,21 +185,17 @@ void TMaxTasksGraph::DistributeTasksToNodes(const TPlacementParams& params) {
         return;
     }
 
-    // KqpPlanner-parity local-node fast paths, only when we know which node is the executer's own.
     const std::optional<TNodeIdx> executer = LocalNodeIdx(params);
     if (executer) {
-        // Step 2: the whole query fits locally -> run everything on the executer node.
         if (TryPlaceAllLocally(params, *executer)) {
             CheckInvariants();
             return;
         }
-        // Step 4: pin the small top (collector) stage to the executer node before spreading the rest.
         PinTopStageLocally(params, *executer);
     }
 
-    // Resource-aware placement first (Step 5, with local-DC preference); round-robin only when it can't fit everything
-    // (e.g. nodes report no budget, as in unit tests, or the cluster is genuinely too small). Pinned columns are kept
-    // by both paths (idempotent).
+    // Resource-aware placement first - and round-robin only when it can't fit everything.
+    // Pinned columns are kept by both paths (idempotent).
     if (!DistributeByResources(params, executer)) {
         DistributeRoundRobin();
     }
@@ -213,8 +204,6 @@ void TMaxTasksGraph::DistributeTasksToNodes(const TPlacementParams& params) {
 }
 
 bool TMaxTasksGraph::TryPlaceAllLocally(const TPlacementParams& params, TNodeIdx executer) {
-    // Sum the a-priori estimate over every task and count the pinned nodes (scans / local writes), mirroring
-    // TKqpPlanner::PrepareToProcess + the single-node check in AssignTasksToNodes.
     ui64 totalMemory = 0;
     ui64 totalTasks = 0;
     size_t freeColumns = 0;
@@ -235,8 +224,6 @@ bool TMaxTasksGraph::TryPlaceAllLocally(const TPlacementParams& params, TNodeIdx
         return false; // nothing left to place locally; keep the already-pinned columns.
     }
 
-    // Task memory can grow during execution; KqpPlanner reserves twice the estimate for the local-run decision
-    // (MEMORY_ESTIMATION_OVERFLOW), which is deliberately more conservative than the greedy path's 1.2x.
     constexpr ui64 memoryOverflow = 2;
     const ui64 nonParallelLimit = params.MayRunTasksLocally
         ? params.MaxNonParallelDataQueryTasksLimit
@@ -305,9 +292,6 @@ void TMaxTasksGraph::PinTopStageLocally(const TPlacementParams& params, TNodeIdx
 }
 
 bool TMaxTasksGraph::DistributeByResources(const TPlacementParams& params, std::optional<TNodeIdx> executer) {
-    // Local-datacenter preference (KqpPlanner Step 5): first try to fit every free column onto the executer's DC, and
-    // only if that fails spread over all nodes. Skipped when there is no local-node context, or when every node shares
-    // the same DC (common in unit tests, where DataCenterId is empty) - then the local pass would equal the full one.
     if (params.PreferLocalDatacenterExecution && executer) {
         const TString& localDc = NodeResources[*executer].DataCenterId;
         std::vector<bool> localDcNodes(NodesCount(), false);
@@ -396,7 +380,7 @@ bool TMaxTasksGraph::DistributeByResourcesOnNodes(const std::vector<bool>& allow
         }
 
         if (!best) {
-            return false; // doesn't fit anywhere - bail out without touching the placement.
+            return false; // doesn't fit anywhere - return without touching the placement.
         }
 
         placement[i] = *best;
@@ -539,10 +523,17 @@ void TMaxTasksGraph::PlaceTasks(TKqpTasksGraph& graph) {
     for (auto& stage : Stages) {
         const auto& group = Groups[stage.Group];
 
+        // A column may be left unplaced when the placement pipeline is disabled: its tasks are laid into
+        // the stage in column (creation) order without an ExpectedNodeId, deferring the node choice to TKqpPlanner.
         std::vector<std::vector<ui64>> byNode(NodesCount());
+        std::vector<ui64> unplaced;
         for (size_t columnIdx = 0; columnIdx < stage.Tasks.size(); ++columnIdx) {
-            const TNodeIdx n = *group.ColumnNodes[columnIdx];
-            byNode[n].push_back(idMap.at(stage.Tasks[columnIdx]));
+            const ui64 id = idMap.at(stage.Tasks[columnIdx]);
+            if (const auto& node = group.ColumnNodes[columnIdx]) {
+                byNode[*node].push_back(id);
+            } else {
+                unplaced.push_back(id);
+            }
         }
 
         auto& stageTasks = stage.Info->Tasks;
@@ -552,6 +543,9 @@ void TMaxTasksGraph::PlaceTasks(TKqpTasksGraph& graph) {
                 graph.GetTask(id).Meta.ExpectedNodeId = NodeIdByIdx[n];
                 stageTasks.push_back(id);
             }
+        }
+        for (ui64 id : unplaced) {
+            stageTasks.push_back(id); // no ExpectedNodeId - placed later by TKqpPlanner.
         }
     }
 
@@ -571,6 +565,9 @@ void TMaxTasksGraph::PlaceTasks(TKqpTasksGraph& graph) {
             for (size_t i = 0; i < memberTasks.size(); ++i) {
                 const auto& rootNode = graph.GetTask(rootTasks[i]).Meta.ExpectedNodeId;
                 const auto& memberNode = graph.GetTask(memberTasks[i]).Meta.ExpectedNodeId;
+                if (!rootNode && !memberNode) {
+                    continue; // unplaced column (ShrinkTasks off): node choice deferred to TKqpPlanner.
+                }
                 Y_ENSURE(rootNode && memberNode && *rootNode == *memberNode,
                     "Copy-group placement mismatch: root stage[" << group.Root << "] task[" << i << "] is on node "
                         << (rootNode ? ToString(*rootNode) : TString("<none>")) << ", but member stage[" << memberIdx

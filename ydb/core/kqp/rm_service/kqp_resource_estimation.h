@@ -29,8 +29,6 @@ struct TTaskResourceEstimation {
 
 TTaskResourceEstimation BuildInitialTaskResources(const NYql::NDqProto::TDqTask& task);
 
-// Memory-limit formula inputs (a subset of TTableServiceConfig::TResourceManager). The resource manager passes its
-// live atomic values; other callers (e.g. the executer's task placement in TMaxTasksGraph) pass the config getters.
 struct TTaskResourceEstimationParams {
     ui64 ChannelBufferSize = 0;
     ui64 MinChannelBufferSize = 0;
@@ -39,10 +37,6 @@ struct TTaskResourceEstimationParams {
     ui64 MkqlLightProgramMemoryLimit = 0;
 };
 
-// Pure memory estimation: fills ChannelBufferMemoryLimit / MkqlProgramMemoryLimit / TotalMemoryLimit from
-// ret.ChannelBuffersCount, ret.HeavyProgram and the per-query task count. Single source of truth shared by the
-// resource manager and the executer's task placement.
 void EstimateTaskResources(TTaskResourceEstimation& ret, const TTaskResourceEstimationParams& params, ui32 tasksCount);
-
 
 } // namespace NKikimr::NKqp

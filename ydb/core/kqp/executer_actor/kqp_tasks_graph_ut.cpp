@@ -495,7 +495,7 @@ public:
             .SetUseRealThreads(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableColumnStatistics(true);
 
-        // settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMaxChannelCountPerNode(100);
+        settings.AppConfig.MutableTableServiceConfig()->SetUseKqpTasksGraphV2(true);
 
         if constexpr (N > 0) {
             using TExecutor = NKikimrConfig::TActorSystemConfig::TExecutor;

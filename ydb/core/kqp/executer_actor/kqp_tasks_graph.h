@@ -23,10 +23,6 @@ namespace NKikimr::NKqp {
 class TMaxTasksGraph;
 struct TQueryExecutionStats;
 
-// Inputs for the KqpPlanner-parity placement heuristics (local-node fast paths + local-DC preference) run by
-// TMaxTasksGraph::DistributeTasksToNodes. Callers that only need task-count estimation (prepare) or unit tests leave it
-// at its default: with ExecuterNodeId == 0 there is no local-node context, so the heuristics are skipped and placement
-// is a plain resource-aware / round-robin spread. Fields mirror TKqpPlanner + TPlannerPlacingOptions.
 struct TPlacementParams {
     ui64 ExecuterNodeId = 0;                     // 0 == no local-node context: skip the local-node/DC heuristics.
     ui64 LocalMemory = 0;                        // executer node free memory (RM GetLocalResources) - for the "fits locally" test.
@@ -330,11 +326,6 @@ struct TTaskOutputMeta {
 };
 
 struct TTaskMeta {
-    // For data executer (unresolved shards case):
-    // - ShardId is set in case we don't know NodeId, later we gather all ShardId tasks (without writes) into RemoteTasks,
-    //   set inside ScanTasksFromSource only.
-    // - NodeId is set if it's local node id, otherwise set ShardId
-
     std::optional<ui64> ExpectedNodeId;
     bool ScanTask = false;
     TActorId ExecuterId;
@@ -403,7 +394,7 @@ public:
         const TKqpRequestCounters::TPtr& counters,
         TActorId bufferActorId,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-        bool shrinkTasks
+        bool useKqpTasksGraphV2
     );
     ~TKqpTasksGraph();
 
@@ -485,13 +476,6 @@ private:
 
     void FillSecureParamsFromStage(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const;
 
-    // True if the stage writes through the shared per-query buffer actor (a consistent-tx, non-OLAP internal
-    // KqpTableSink, or any internal-sink output transform - see FillKqpTableSinkSettings/BuildInternalSinks/
-    // BuildInternalOutputTransform). Such tasks must be pinned to the executer's own node: the buffer actor talks
-    // to them via a direct, non-serializable actor Send (TKqpForwardWriteActor::SendData), not over the
-    // interconnect, so placing the task remotely trips the "IsSerializable()" VERIFY in GenericSend. Mirrors the
-    // pre-refactor NeedToRunLocally check (kqp_planner.cpp), but computed straight off the physical plan because
-    // MaxTasksGraph placement now runs before BuildSinks fills task.Outputs.
     bool StageNeedsLocalPlacement(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo) const;
 
     void BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) const;
@@ -511,7 +495,7 @@ private:
     TActorId BufferActorId; // TODO: not sure if it belongs here
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     std::unique_ptr<TMaxTasksGraph> MaxTasksGraph;
-    const bool ShrinkTasks;
+    const bool UseKqpTasksGraphV2;
 };
 
 } // namespace NKikimr::NKqp

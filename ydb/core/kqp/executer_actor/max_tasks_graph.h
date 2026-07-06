@@ -39,33 +39,21 @@ public:
     void AddNodes(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot);
     void AddNode(TNodeId node); // TODO: it's workaround. remove later.
 
-    // Registers a stage. The graph keeps a reference to stageInfo: it reads stageInfo.Id and later (in PlaceTasks)
-    // writes the placed task Ids back into stageInfo.Tasks. A COPY stage joins the group of its copyInput.
     void AddStage(TStageInfo& stageInfo, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput = std::nullopt);
 
-    // Registers a task. Only the task Id is stored; the task itself stays in TKqpTasksGraph. For a copy group's root the
-    // task starts a new column (pinned to `node`, or left unplaced for DistributeTasksToNodes if `node` is empty); for a
-    // follower stage the task joins the matching column and inherits its node (the `node` argument is ignored).
     void AddTask(const TTask& task, std::optional<TNodeId> node);
 
-    // Fills each group's per-column resource cost (memory / compute actors), consumed by the resource-aware placement in
-    // DistributeTasksToNodes. Works off the per-stage info (kept via AddStage) plus the estimation params, so it needs
-    // neither the task objects nor the node snapshot (node budgets are already captured in AddNodes). The cost is uniform
-    // across a group's columns - it depends only on stage-level signals (inputs/outputs presence, HasMapJoin) and the
-    // per-stage task count - so it is stored once per group (see TGroup::ColumnCost).
     void EstimateTasksResources();
 
-    // Places every still-unplaced (free) column onto a node. Reproduces TKqpPlanner's placement decisions (local-node
-    // fast paths, local-DC preference, greedy resource-aware spread), plus the copy-column improvement. Idempotent:
-    // already-placed (pinned) columns are kept. `params` carries the local-node context (executer node, its resources,
-    // the placing limits); at its default (ExecuterNodeId == 0) the local-node/DC heuristics are skipped.
     void DistributeTasksToNodes(const TPlacementParams& params = {});
 
     void Shrink(); // TODO: forbid double call - it's not idempotent.
 
-    // Materializes the placement onto the graph: drops the tasks of the columns that didn't survive Shrink, renumbers
-    // the survivors so their Ids stay contiguous, stamps every survivor's Meta.ExpectedNodeId and fills stageInfo.Tasks
-    // (node-major order). Runs once, before channels are built.
+    // Materializes the placement onto the graph:
+    // - drops the tasks of the columns that didn't survive Shrink(),
+    // - renumbers the survivors so their Ids stay contiguous,
+    // - stamps every survivor's Meta.ExpectedNodeId and fills stageInfo.Tasks.
+    // Runs once, before channels are built.
     void PlaceTasks(TKqpTasksGraph& graph);
 
     size_t GetStageTasksCount(const TStageId& stage, TNodeId node) const;
@@ -74,8 +62,8 @@ public:
     TString DumpToString() const;
 
 private:
-    // Per-node budget read from the resources snapshot. Used by the greedy resource-aware placement (the seam in
-    // DistributeTasksToNodes). Nodes added via the AddNode workaround have no snapshot entry and keep zero budgets.
+    // Per-node budget read from the resources snapshot.
+    // Nodes added via the AddNode workaround have no snapshot entry and keep zero budgets.
     struct TNodeResources {
         ui64 RemainsMemory = 0;   // TotalMemory - UsedMemory at snapshot time.
         ui32 RemainsTasks = 0;    // how many more tasks the node can host (one task == one compute actor, from
@@ -123,21 +111,22 @@ private:
     // The executer's own node index, if it is known to the graph (params.ExecuterNodeId set and present); else nullopt.
     std::optional<TNodeIdx> LocalNodeIdx(const TPlacementParams& params) const;
 
-    // KqpPlanner's single-node fast path (its Step 2): if the whole query fits on the executer node and is either small
-    // enough or reads from a single node, pin every free column there and return true. Leaves pinned columns as they are.
+    // KqpPlanner's single-node fast path: if the whole query fits on the executer node
+    // and is either small enough or reads from a single node, pin every free column there and return true.
+    // Leaves pinned columns as they are.
     bool TryPlaceAllLocally(const TPlacementParams& params, TNodeIdx executer);
 
-    // KqpPlanner's top-stage pin (its Step 4): if the deepest (max stage-level) stages hold no more tasks than
+    // KqpPlanner's final-stage pin: if the deepest (max stage-level) stages hold no more tasks than
     // MaxNonParallelTopStageExecutionLimit (the merge/union-all collector), pin their free columns to the executer node.
     void PinTopStageLocally(const TPlacementParams& params, TNodeIdx executer);
 
     // The basic placement action: pin a column of a group to a node.
-    void PlaceColumnOnNode(TGroup& group, size_t columnIdx, TNodeIdx node);
+    static void PlaceColumnOnNode(TGroup& group, size_t columnIdx, TNodeIdx node);
 
     // Greedy resource-aware placement of all free columns (ported from KqpPlanner's strategy). Mirrors its local-DC
-    // preference: when params asks for it, first tries to fit every free column onto the executer's datacenter, and only
-    // if that fails spreads over all nodes. Returns false (placing nothing) if some column doesn't fit anywhere even
-    // across all nodes - the caller then falls back to round-robin.
+    // preference: when params asks for it, first tries to fit every free column onto the executer's datacenter,
+    // and only if that fails spreads over all nodes.
+    // Returns false (placing nothing) if some column doesn't fit anywhere even across all nodes.
     bool DistributeByResources(const TPlacementParams& params, std::optional<TNodeIdx> executer);
 
     // One greedy pass restricted to the `allowedNodes` mask for free-column candidates (pinned columns still pre-charge

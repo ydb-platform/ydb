@@ -3260,10 +3260,9 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
         }
     }
 
-    MaxTasksGraph->EstimateTasksResources();
-    MaxTasksGraph->DistributeTasksToNodes(placementParams);
-
-    if (ShrinkTasks) {
+    if (UseKqpTasksGraphV2) {
+        MaxTasksGraph->EstimateTasksResources();
+        MaxTasksGraph->DistributeTasksToNodes(placementParams);
         MaxTasksGraph->Shrink();
     }
 
@@ -3377,7 +3376,7 @@ TKqpTasksGraph::TKqpTasksGraph(
     const TKqpRequestCounters::TPtr& counters,
     TActorId bufferActorId,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-    bool shrinkTasks)
+    bool useKqpTasksGraphV2)
     : Transactions(transactions)
     , TxAlloc(txAlloc)
     , AggregationSettings(aggregationSettings)
@@ -3392,7 +3391,7 @@ TKqpTasksGraph::TKqpTasksGraph(
               .MkqlHeavyProgramMemoryLimit = resourceManagerConfig.GetMkqlHeavyProgramMemoryLimit(),
               .MkqlLightProgramMemoryLimit = resourceManagerConfig.GetMkqlLightProgramMemoryLimit(),
           }))
-    , ShrinkTasks(shrinkTasks)
+    , UseKqpTasksGraphV2(useKqpTasksGraphV2)
 {
     GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
     GetMeta().Database = database;

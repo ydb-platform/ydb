@@ -51,11 +51,11 @@ public:
         const std::optional<TLlvmSettings>& llvmSettings,
         std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
         const IKqpTransactionManagerPtr& txManager,
-        bool shrinkTasksGraph)
+        bool useKqpTasksGraphV2)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, {}, database,
             userToken, std::move(formatsSettings), counters, executerConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter",
-            {}, txManager, Nothing(), channelService, shrinkTasksGraph)
+            {}, txManager, Nothing(), channelService, useKqpTasksGraphV2)
         , LlvmSettings(llvmSettings)
     {
         YQL_ENSURE(Request.Transactions.size() == 1);
@@ -300,11 +300,11 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const std::optional<TLlvmSettings>& llvmSettings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-    const IKqpTransactionManagerPtr& txManager, bool shrinkTasksGraph)
+    const IKqpTransactionManagerPtr& txManager, bool useKqpTasksGraphV2)
 {
     return new TKqpScanExecuter(std::move(request), database, userToken, std::move(formatsSettings),
         counters, executerConfig, std::move(asyncIoFactory), userRequestContext, statementResultIndex,
-        federatedQuerySetup, GUCSettings, llvmSettings, channelService, txManager, shrinkTasksGraph);
+        federatedQuerySetup, GUCSettings, llvmSettings, channelService, txManager, useKqpTasksGraphV2);
 }
 
 } // namespace NKqp

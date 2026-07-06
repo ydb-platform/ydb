@@ -68,12 +68,12 @@ public:
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
         ui64 generation,
         std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-        bool shrinkTasksGraph,
+        bool useKqpTasksGraphV2,
         TVector<NKikimr::TTableId> tableIdsForSnapshot)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
             database, userToken, std::move(formatsSettings), counters,
             executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
-            "DataExecuter", bufferActorId, txManager, std::move(batchOperationSettings), channelService, shrinkTasksGraph)
+            "DataExecuter", bufferActorId, txManager, std::move(batchOperationSettings), channelService, useKqpTasksGraphV2)
         , ShardIdToTableInfo(shardIdToTableInfo)
         , TableIdsForSnapshot(std::move(tableIdsForSnapshot))
         , ReadOnlyTx(IsReadOnlyTx())
@@ -627,8 +627,6 @@ private:
         size_t sourceScanPartitionsCount = 0;
 
         if (!graphRestored) {
-            // MayRunTasksLocally mirrors ExecuteTasks() below; HasExternalSources / HasOlapTable / HasDatashardSourceScan
-            // are already set by the table-resolve handler that runs before Execute().
             const bool mayRunTasksLocally = !HasExternalSources && !HasOlapTable && !HasDatashardSourceScan;
             sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), BuildPlacementParams(mayRunTasksLocally));
         }
@@ -1271,13 +1269,13 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
-    std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool shrinkTasksGraph,
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool useKqpTasksGraphV2,
     TVector<NKikimr::TTableId> tableIdsForSnapshot)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, std::move(formatsSettings), counters, executerConfig,
         std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
         std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation,
-        channelService, shrinkTasksGraph, std::move(tableIdsForSnapshot));
+        channelService, useKqpTasksGraphV2, std::move(tableIdsForSnapshot));
 }
 
 } // namespace NKqp

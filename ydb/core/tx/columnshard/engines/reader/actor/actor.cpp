@@ -119,7 +119,7 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
     }
 }
 
-void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResult::TPtr& ev) {
+void TColumnShardScan::HandleScan(NReader::TEvTaskProcessedResult::TPtr& ev) {
     TDuration delta = TDuration::Zero();
     if (ChunksLimiter.HasMore()) {
         delta = TInstant::Now() - StartWaitTime;

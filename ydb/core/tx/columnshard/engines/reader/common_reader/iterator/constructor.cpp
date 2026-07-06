@@ -1,7 +1,6 @@
 #include "constructor.h"
 
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
@@ -26,7 +25,7 @@ bool TBlobsFetcherTask::DoOnError(const TString& storageId, const TBlobRange& ra
         {"statusCode", status.GetStatus()},
         {"storageId", storageId});
     NActors::TActorContext::AsActorContext().Send(Context->GetCommonContext()->GetScanActorId(),
-        std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
+        std::make_unique<NReader::TEvTaskProcessedResult>(
             TConclusionStatus::Fail(TStringBuilder{} << "Error reading blob range for data: " << range.ToString()
                                                      << ", error: " << status.GetErrorMessage()
                                                      << ", status: " << NKikimrProto::EReplyStatus_Name(status.GetStatus())), std::move(Guard)));

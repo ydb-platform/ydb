@@ -2,7 +2,7 @@
 #include "import_downloader_counters.h"
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
 #include <ydb/core/tx/datashard/import_common.h>

@@ -2,8 +2,8 @@
 
 #include <ydb/core/formats/arrow/process_columns.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/operations/common/context.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 #include <ydb/core/tx/data_events/write_data.h>
 
 #include <ydb/library/actors/core/event_local.h>

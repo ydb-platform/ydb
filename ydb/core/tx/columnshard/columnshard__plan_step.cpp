@@ -1,6 +1,7 @@
 #include "columnshard_impl.h"
-#include "columnshard_private_events.h"
 #include "columnshard_schema.h"
+
+#include <ydb/core/tx/columnshard/private_events/events.h>
 
 #include <util/string/vector.h>
 

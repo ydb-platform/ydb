@@ -4,10 +4,10 @@
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/column_fetching/manager.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/conveyor_task.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/result.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
@@ -98,8 +98,8 @@ public:
 
     void AbortWithError(const TString& errorMessage) {
         if (AbortionFlag->Inc() == 1) {
-            NActors::TActivationContext::Send(ScanActorId, std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
-                                                               TConclusionStatus::Fail(errorMessage), Counters.GetAbortsGuard()));
+            NActors::TActivationContext::Send(ScanActorId,
+                std::make_unique<NReader::TEvTaskProcessedResult>(TConclusionStatus::Fail(errorMessage), Counters.GetAbortsGuard()));
         }
     }
 

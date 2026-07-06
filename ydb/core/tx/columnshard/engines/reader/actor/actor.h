@@ -3,11 +3,12 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/column_fetching/manager.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/conveyor_task.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/tracing/usage/tracing.h>
 
@@ -61,13 +62,13 @@ private:
             hFunc(NActors::TEvents::TEvPoison, HandleScan);
             hFunc(TEvents::TEvUndelivered, HandleScan);
             hFunc(TEvents::TEvWakeup, HandleScan);
-            hFunc(NColumnShard::TEvPrivate::TEvTaskProcessedResult, HandleScan);
+            hFunc(NReader::TEvTaskProcessedResult, HandleScan);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
     }
 
-    void HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResult::TPtr& ev);
+    void HandleScan(NReader::TEvTaskProcessedResult::TPtr& ev);
 
     void HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev);
 

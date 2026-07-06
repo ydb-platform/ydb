@@ -1,11 +1,11 @@
 #include "tx_scan.h"
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>

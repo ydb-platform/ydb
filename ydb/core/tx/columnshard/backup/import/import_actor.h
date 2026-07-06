@@ -7,8 +7,8 @@
 #include <ydb/core/tx/columnshard/backup/import/session.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/actor.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 

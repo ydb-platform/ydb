@@ -1,10 +1,11 @@
 #include "columnshard_impl.h"
-#include "columnshard_private_events.h"
 
 #include "blobs_action/transaction/tx_draft.h"
 #include "blobs_action/transaction/tx_write_index.h"
 #include "engines/changes/abstract/abstract.h"
 #include "engines/writer/compacted_blob_constructor.h"
+
+#include <ydb/core/tx/columnshard/private_events/events.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/slide_limiter/usage/abstract.h>

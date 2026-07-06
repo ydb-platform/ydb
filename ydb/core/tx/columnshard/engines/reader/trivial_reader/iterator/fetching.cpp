@@ -4,6 +4,7 @@
 
 #include <ydb/core/tx/columnshard/engines/filter.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/conveyor_task.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates/events.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
@@ -399,7 +400,7 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
     ReportTracing(source, step, TMonotonic::Now() - startExecution);
     const ui64 blobBytes = source->GetTotalBytesRead();
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
-        new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
+        new NReader::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
             source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard(), source->GetDeprecatedPortionId(), blobBytes,
             sSource->GetUsedRawBytes(), recordsCount, source->GetRecordsCount(), source->GetReservedMemory()));
     return false;
@@ -453,7 +454,7 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
         context->GetCommonContext()->GetCounters().OnSourceFinished(source->GetRecordsCount(), sSource->GetUsedRawBytes(), 0);
         const ui64 blobBytes = source->GetTotalBytesRead();
         NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
-            new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
+            new TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
                 source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard(), source->GetDeprecatedPortionId(), blobBytes,
                 sSource->GetUsedRawBytes(), 0, source->GetRecordsCount(), source->GetReservedMemory()));
         return false;

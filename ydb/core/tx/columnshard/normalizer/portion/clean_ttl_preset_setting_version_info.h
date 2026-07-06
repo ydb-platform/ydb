@@ -2,8 +2,8 @@
 
 #include "clean_unused_tables_template.h"
 
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 
 namespace NKikimr::NOlap::NCleanUnusedTables {
 using namespace NColumnShard;

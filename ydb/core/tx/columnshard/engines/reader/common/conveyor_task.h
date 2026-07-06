@@ -1,9 +1,11 @@
 #pragma once
 
 #include <ydb/core/tx/columnshard/counters/scan.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/conclusion/result.h>
 
 namespace NKikimr::NOlap::NReader {
@@ -74,6 +76,60 @@ public:
         {
         }
     };
+};
+
+class TEvTaskProcessedResult: public NActors::TEventLocal<TEvTaskProcessedResult, NColumnShard::TEvPrivate::EEv::EvTaskProcessedResult> {
+private:
+    TConclusion<std::shared_ptr<IApplyAction>> Result;
+    NColumnShard::TCounterGuard ScanCounter;
+    ui64 SourceId = 0;
+    ui64 BlobBytes = 0;
+    ui64 RawBytes = 0;
+    ui32 FilteredRows = 0;
+    ui32 TotalRows = 0;
+    ui64 TotalReservedBytes = 0;
+
+public:
+    TConclusion<std::shared_ptr<IApplyAction>>& MutableResult() {
+        return Result;
+    }
+
+    ui64 GetSourceId() const {
+        return SourceId;
+    }
+
+    ui64 GetBlobBytes() const {
+        return BlobBytes;
+    }
+
+    ui64 GetRawBytes() const {
+        return RawBytes;
+    }
+
+    ui32 GetFilteredRows() const {
+        return FilteredRows;
+    }
+
+    ui32 GetTotalRows() const {
+        return TotalRows;
+    }
+
+    ui64 GetTotalReservedBytes() const {
+        return TotalReservedBytes;
+    }
+
+    TEvTaskProcessedResult(TConclusion<std::shared_ptr<IApplyAction>>&& result, NColumnShard::TCounterGuard&& scanCounters, ui64 sourceId = 0,
+        ui64 blobBytes = 0, ui64 rawBytes = 0, ui32 filteredRows = 0, ui32 totalRows = 0, ui64 totalReservedBytes = 0)
+        : Result(std::move(result))
+        , ScanCounter(std::move(scanCounters))
+        , SourceId(sourceId)
+        , BlobBytes(blobBytes)
+        , RawBytes(rawBytes)
+        , FilteredRows(filteredRows)
+        , TotalRows(totalRows)
+        , TotalReservedBytes(totalReservedBytes)
+    {
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader

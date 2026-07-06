@@ -1,7 +1,7 @@
 #include "policy.h"
 
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/data_accessor/abstract/collector.h>
+#include <ydb/core/tx/columnshard/data_accessor/abstract/events.h>
 #include <ydb/core/tx/general_cache/source/events.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 
@@ -87,7 +87,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
             }
             for (auto&& i : requests) {
                 NActors::TActivationContext::Send(
-                    i.first, std::make_unique<NColumnShard::TEvPrivate::TEvAskTabletDataAccessors>(i.second.ExtractRequest(),
+                    i.first, std::make_unique<NOlap::NDataAccessorControl::TEvAskTabletDataAccessors>(i.second.ExtractRequest(),
                                  std::make_shared<TAccessorsCallback>(i.first, selfPtr, i.second.ExtractRequestedAddresses())), 0, cookie);
             }
         }

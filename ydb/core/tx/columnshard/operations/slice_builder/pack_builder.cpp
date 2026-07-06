@@ -3,12 +3,12 @@
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/formats/arrow/reader/result_builder.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/defs.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/writer/buffer/events.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
 

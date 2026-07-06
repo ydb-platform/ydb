@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/column_record.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/conveyor_task.h>
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/collection.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
@@ -106,7 +107,7 @@ private:
             {"statusCode", status.GetStatus()},
             {"storageId", storageId});
         NActors::TActorContext::AsActorContext().Send(Source->GetContext()->GetCommonContext()->GetScanActorId(),
-            std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
+            std::make_unique<NReader::TEvTaskProcessedResult>(
                 TConclusionStatus::Fail(
                     TStringBuilder{} << "Error reading blob range for columns: " << range.ToString() << ", error: " << status.GetErrorMessage()
                                      << ", status: " << NKikimrProto::EReplyStatus_Name(status.GetStatus())), std::move(Guard)));

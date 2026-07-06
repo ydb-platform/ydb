@@ -1,7 +1,5 @@
 #include "conveyor_task.h"
 
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
-
 #include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr::NOlap::NReader {
@@ -10,17 +8,17 @@ void IDataTasksProcessor::ITask::DoExecute(const std::shared_ptr<NConveyor::ITas
     auto result = DoExecuteImpl();
     if (result.IsFail()) {
         NActors::TActivationContext::AsActorContext().Send(
-            OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(result, std::move(Guard), GetSourceId()));
+            OwnerId, new NReader::TEvTaskProcessedResult(result, std::move(Guard), GetSourceId()));
     } else if (*result) {
-        NActors::TActivationContext::AsActorContext().Send(OwnerId,
-            new NColumnShard::TEvPrivate::TEvTaskProcessedResult(static_pointer_cast<IDataTasksProcessor::ITask>(taskPtr), std::move(Guard),
-                GetSourceId(), GetBlobBytes(), GetRawBytes(), GetFilteredRows(), GetTotalRows(), GetTotalReservedBytes()));
+        NActors::TActivationContext::AsActorContext().Send(
+            OwnerId, new NReader::TEvTaskProcessedResult(static_pointer_cast<IDataTasksProcessor::ITask>(taskPtr), std::move(Guard),
+                         GetSourceId(), GetBlobBytes(), GetRawBytes(), GetFilteredRows(), GetTotalRows(), GetTotalReservedBytes()));
     }
 }
 
 void IDataTasksProcessor::ITask::DoOnCannotExecute(const TString& reason) {
     NActors::TActivationContext::AsActorContext().Send(
-        OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(TConclusionStatus::Fail(reason), std::move(Guard)));
+        OwnerId, new NReader::TEvTaskProcessedResult(TConclusionStatus::Fail(reason), std::move(Guard)));
 }
 
 }   // namespace NKikimr::NOlap::NReader

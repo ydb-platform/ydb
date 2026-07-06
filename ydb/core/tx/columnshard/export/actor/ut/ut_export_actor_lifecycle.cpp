@@ -3,12 +3,12 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/local.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/export/session/session.h>
 #include <ydb/core/tx/columnshard/export/session/task.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/datashard/datashard.h>

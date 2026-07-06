@@ -1,7 +1,7 @@
 #include "gc_actor.h"
 
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 

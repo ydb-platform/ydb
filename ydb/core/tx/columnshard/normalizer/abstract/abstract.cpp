@@ -1,8 +1,9 @@
 #include "abstract.h"
+#include "events.h"
 
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
@@ -56,7 +57,7 @@ bool TNormalizationController::SwitchNormalizer() {
 }
 
 void TTrivialNormalizerTask::Start(const TNormalizationController& /* controller */, const TNormalizationContext& nCtx) {
-    TActorContext::AsActorContext().Send(nCtx.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(Changes));
+    TActorContext::AsActorContext().Send(nCtx.GetShardActor(), std::make_unique<NKikimr::NOlap::TEvNormalizerResult>(Changes));
 }
 
 void TNormalizationController::AddNormalizerEvent(NIceDb::TNiceDb& db, const TString& eventType, const TString& eventDescription) const {

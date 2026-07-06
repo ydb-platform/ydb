@@ -84,9 +84,8 @@ private:
     }
 
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
-        NActors::TActivationContext::AsActorContext().Send(
-            ScanActorId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
-                             std::make_shared<TApplySourceResult>(std::move(result), StartTime), std::move(Guard)));
+        NActors::TActivationContext::AsActorContext().Send(ScanActorId,
+            new NReader::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(std::move(result), StartTime), std::move(Guard)));
     }
 
 public:

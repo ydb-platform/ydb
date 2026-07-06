@@ -24,6 +24,7 @@ IF (NOT OS_WINDOWS)
         ydb/core/tx
         ydb/core/tx/columnshard
         ydb/core/tx/columnshard/hooks/testing
+        ydb/core/tx/columnshard/private_events
         ydb/core/tx/columnshard/test_helper
         ydb/core/tx/schemeshard/ut_helpers
         ydb/core/util

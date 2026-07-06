@@ -1,24 +1,18 @@
 #pragma once
 
-#include "defs.h"
-
-#include "blobs_action/abstract/gc.h"
-
 #include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/gc.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
-#include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/defs.h>
+#include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
-#include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
-#include <ydb/core/tx/columnshard/resource_subscriber/container.h>
 #include <ydb/core/tx/data_events/write_data.h>
+#include <ydb/core/tx/general_cache/source/abstract.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/priorities/usage/abstract.h>
-
-namespace NKikimr::NOlap::NReader {
-class IApplyAction;
-}
 
 namespace NKikimr::NOlap {
 class IBlobsWritingAction;
@@ -97,52 +91,6 @@ struct TEvPrivate {
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-    class TEvMetadataAccessorsInfo: public NActors::TEventLocal<TEvMetadataAccessorsInfo, EvMetadataAccessorsInfo> {
-    private:
-        const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
-        const ui64 Generation;
-        std::optional<NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>> Result;
-
-    public:
-        const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& GetProcessor() const {
-            return Processor;
-        }
-
-        ui64 GetGeneration() const {
-            return Generation;
-        }
-
-        NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult> ExtractResult() {
-            AFL_VERIFY(Result);
-            auto result = std::move(*Result);
-            Result.reset();
-            return result;
-        }
-
-        TEvMetadataAccessorsInfo(const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor, const ui64 gen,
-            NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>&& result)
-            : Processor(processor)
-            , Generation(gen)
-            , Result(std::move(result))
-        {
-        }
-    };
-
-    class TEvAskTabletDataAccessors
-        : public NActors::TEventLocal<TEvAskTabletDataAccessors, NColumnShard::TEvPrivate::EEv::EvAskTabletDataAccessors> {
-    private:
-        using TPortions = THashMap<TInternalPathId, NOlap::NDataAccessorControl::TPortionsByConsumer>;
-        YDB_ACCESSOR_DEF(TPortions, Portions);
-        YDB_READONLY_DEF(std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>, Callback);
-
-    public:
-        explicit TEvAskTabletDataAccessors(TPortions&& portions, const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& callback)
-            : Portions(std::move(portions))
-            , Callback(callback)
-        {
-        }
-    };
-
     class TEvAskColumnData: public NActors::TEventLocal<TEvAskColumnData, NColumnShard::TEvPrivate::EEv::EvAskColumnData> {
     public:
         class TPortionRequest {
@@ -200,60 +148,6 @@ struct TEvPrivate {
         }
     };
 
-    class TEvTaskProcessedResult: public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult> {
-    private:
-        TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>> Result;
-        TCounterGuard ScanCounter;
-        ui64 SourceId = 0;
-        ui64 BlobBytes = 0;
-        ui64 RawBytes = 0;
-        ui32 FilteredRows = 0;
-        ui32 TotalRows = 0;
-        ui64 TotalReservedBytes = 0;
-
-    public:
-        TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>& MutableResult() {
-            return Result;
-        }
-
-        ui64 GetSourceId() const {
-            return SourceId;
-        }
-
-        ui64 GetBlobBytes() const {
-            return BlobBytes;
-        }
-
-        ui64 GetRawBytes() const {
-            return RawBytes;
-        }
-
-        ui32 GetFilteredRows() const {
-            return FilteredRows;
-        }
-
-        ui32 GetTotalRows() const {
-            return TotalRows;
-        }
-
-        ui64 GetTotalReservedBytes() const {
-            return TotalReservedBytes;
-        }
-
-        TEvTaskProcessedResult(TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>&& result, TCounterGuard&& scanCounters,
-            ui64 sourceId = 0, ui64 blobBytes = 0, ui64 rawBytes = 0, ui32 filteredRows = 0, ui32 totalRows = 0, ui64 totalReservedBytes = 0)
-            : Result(std::move(result))
-            , ScanCounter(std::move(scanCounters))
-            , SourceId(sourceId)
-            , BlobBytes(blobBytes)
-            , RawBytes(rawBytes)
-            , FilteredRows(filteredRows)
-            , TotalRows(totalRows)
-            , TotalReservedBytes(totalReservedBytes)
-        {
-        }
-    };
-
     struct TEvTieringModified: public TEventLocal<TEvTieringModified, EvTieringModified> {};
 
     struct TEvWriteDraft: public TEventLocal<TEvWriteDraft, EvWriteDraft> {
@@ -262,21 +156,6 @@ struct TEvPrivate {
         TEvWriteDraft(std::shared_ptr<IWriteController> controller)
             : WriteController(controller)
         {
-        }
-    };
-
-    class TEvNormalizerResult: public TEventLocal<TEvNormalizerResult, EvNormalizerResult> {
-        NOlap::INormalizerChanges::TPtr Changes;
-
-    public:
-        TEvNormalizerResult(NOlap::INormalizerChanges::TPtr changes)
-            : Changes(changes)
-        {
-        }
-
-        NOlap::INormalizerChanges::TPtr GetChanges() const {
-            Y_ABORT_UNLESS(!!Changes);
-            return Changes;
         }
     };
 

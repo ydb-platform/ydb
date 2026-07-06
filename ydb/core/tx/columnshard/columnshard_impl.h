@@ -1,7 +1,6 @@
 #pragma once
 #include "background_controller.h"
 #include "columnshard.h"
-#include "columnshard_private_events.h"
 #include "columnshard_subdomain_path_id.h"
 #include "counters.h"
 #include "defs.h"
@@ -13,6 +12,7 @@
 #include "common/path_id.h"
 #include "counters/columnshard.h"
 #include "counters/counters_manager.h"
+#include "data_accessor/abstract/events.h"
 #include "data_sharing/destination/events/control.h"
 #include "data_sharing/destination/events/transfer.h"
 #include "data_sharing/manager/sessions.h"
@@ -21,8 +21,10 @@
 #include "data_sharing/source/events/control.h"
 #include "data_sharing/source/events/transfer.h"
 #include "normalizer/abstract/abstract.h"
+#include "normalizer/abstract/events.h"
 #include "operations/events.h"
 #include "operations/manager.h"
+#include "resource_subscriber/container.h"
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "subscriber/abstract/manager/manager.h"
@@ -39,6 +41,7 @@
 #include <ydb/core/tx/columnshard/column_fetching/manager.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_events.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/locks/locks.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -174,6 +177,37 @@ using ITransaction = NTabletFlatExecutor::ITransaction;
 template <typename T>
 using TTransactionBase = NTabletFlatExecutor::TTransactionBase<T>;
 
+class TEvMetadataAccessorsInfo: public NActors::TEventLocal<TEvMetadataAccessorsInfo, TEvPrivate::EvMetadataAccessorsInfo> {
+private:
+    const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
+    const ui64 Generation;
+    std::optional<NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>> Result;
+
+public:
+    const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& GetProcessor() const {
+        return Processor;
+    }
+
+    ui64 GetGeneration() const {
+        return Generation;
+    }
+
+    NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult> ExtractResult() {
+        AFL_VERIFY(Result);
+        auto result = std::move(*Result);
+        Result.reset();
+        return result;
+    }
+
+    TEvMetadataAccessorsInfo(const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor, const ui64 gen,
+        NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>&& result)
+        : Processor(processor)
+        , Generation(gen)
+        , Result(std::move(result))
+    {
+    }
+};
+
 class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTabletExecutedFlat {
     friend class TEvWriteCommitSyncTransactionOperator;
     friend class TEvWriteCommitSecondaryTransactionOperator;
@@ -280,7 +314,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& ev, const TActorContext& ctx);
 
@@ -297,7 +331,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvWriteDraft::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
-    void Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext&);
+    void Handle(NOlap::TEvNormalizerResult::TPtr& ev, const TActorContext&);
 
     void Handle(NStat::TEvStatistics::TEvAnalyzeShard::TPtr& ev, const TActorContext& ctx);
     void Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
@@ -319,7 +353,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishToSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx);
-    void Handle(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& ctx);
     void Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable::TPtr& ev, const TActorContext& ctx);
@@ -457,7 +491,7 @@ protected:
             HFunc(TEvTxProcessing::TEvPlanStep, Handle);
             HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
             HFunc(TEvPrivate::TEvStartCompaction, Handle);
-            HFunc(TEvPrivate::TEvMetadataAccessorsInfo, Handle);
+            HFunc(TEvMetadataAccessorsInfo, Handle);
             HFunc(NPrivateEvents::NWrite::TEvWritePortionResult, Handle);
 
             HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
@@ -494,7 +528,7 @@ protected:
             HFunc(NOlap::NDataSharing::NEvents::TEvFinishedFromSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
-            HFunc(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors, Handle);
+            HFunc(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors, Handle);
             HFunc(NColumnShard::TEvPrivate::TEvAskColumnData, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);

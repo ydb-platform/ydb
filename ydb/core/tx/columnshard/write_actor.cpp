@@ -1,6 +1,6 @@
 #include "columnshard_impl.h"
-#include "columnshard_private_events.h"
 
+#include <ydb/core/tx/columnshard/private_events/events.h>
 #include <ydb/core/util/backoff.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>

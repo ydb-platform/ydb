@@ -2,10 +2,10 @@
 
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/defs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>

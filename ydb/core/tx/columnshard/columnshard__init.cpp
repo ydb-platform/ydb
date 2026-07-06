@@ -1,5 +1,4 @@
 #include "columnshard_impl.h"
-#include "columnshard_private_events.h"
 #include "columnshard_schema.h"
 
 #include "bg_tasks/adapter/adapter.h"
@@ -15,6 +14,7 @@
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 #include <ydb/core/tx/columnshard/transactions/locks_db.h>
 #include <ydb/core/tx/tiering/manager.h>
 
@@ -349,7 +349,7 @@ ITransaction* TColumnShard::CreateTxInitSchema() {
     return new TTxInitSchema(this);
 }
 
-void TColumnShard::Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext& ctx) {
+void TColumnShard::Handle(NOlap::TEvNormalizerResult::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxApplyNormalizer(this, ev->Get()->GetChanges()), ctx);
 }
 

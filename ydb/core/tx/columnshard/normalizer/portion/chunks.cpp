@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/normalizer/abstract/events.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
 
 namespace NKikimr::NOlap {
@@ -72,8 +73,7 @@ protected:
         }
 
         auto changes = std::make_shared<TChunksNormalizer::TNormalizerResult>(std::move(Chunks));
-        TActorContext::AsActorContext().Send(
-            NormContext.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(changes));
+        TActorContext::AsActorContext().Send(NormContext.GetShardActor(), std::make_unique<NKikimr::NOlap::TEvNormalizerResult>(changes));
     }
 
 public:

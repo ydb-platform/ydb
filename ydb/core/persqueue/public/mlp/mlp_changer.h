@@ -8,8 +8,10 @@
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/util/backoff.h>
 
+#include <library/cpp/containers/absl/flat_hash_map.h>
+
 #include <type_traits>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+
 
 #define Service TBase::Service
 #define LogBuilder TBase::LogBuilder

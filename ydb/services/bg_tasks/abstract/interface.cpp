@@ -8,8 +8,8 @@ namespace NKikimr::NBackgroundTasks {
 bool TStringContainerProcessor::DeserializeFromContainer(const TString& data, TString& className, TString& binary) {
     NKikimrProto::TStringContainer protoData;
     if (!protoData.ParseFromArray(data.data(), data.size())) {
-        YDB_LOG_ERROR("Cannot parse string",
-            {"proto", Base64Encode(data)});
+        YDB_LOG_ERROR("Cannot parse string as proto",
+            {"base64", Base64Encode(data)});
         return false;
     }
     className = protoData.GetClassName();

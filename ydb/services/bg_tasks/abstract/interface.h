@@ -48,8 +48,8 @@ public:
     static std::optional<NJson::TJsonValue> ParseStringToStorageObject(const TString& data) {
         NJson::TJsonValue jsonData;
         if (!NJson::ReadJsonFastTree(data, &jsonData)) {
-            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Cannot parse string as",
-                {"json", Base64Encode(data)});
+            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Cannot parse string as json",
+                {"base64", Base64Encode(data)});
             return {};
         }
         return jsonData;
@@ -87,8 +87,8 @@ public:
     static std::optional<TProtoClass> ParseStringToStorageObject(const TString& data) {
         TProtoClass protoData;
         if (!protoData.ParseFromArray(data.data(), data.size())) {
-            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Cannot parse string as",
-                {"proto", Base64Encode(data)});
+            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Cannot parse string as proto",
+                {"base64", Base64Encode(data)});
             return {};
         }
         return protoData;
@@ -244,8 +244,8 @@ public:
         TString className;
         TString binaryData;
         if (!TStringContainerProcessor::DeserializeFromContainer(data, className, binaryData)) {
-            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Cannot parse string as",
-                {"proto", Base64Encode(data)});
+            YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Cannot parse string as container",
+                {"base64", Base64Encode(data)});
             return false;
         }
         if (className == "__UNDEFINED") {

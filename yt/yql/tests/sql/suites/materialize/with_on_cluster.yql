@@ -1,0 +1,8 @@
+MATERIALIZE plato.Input ON plato INTO $result;
+
+SELECT
+    *
+FROM
+    $result
+ORDER BY
+    key;

@@ -990,7 +990,7 @@ Y_NO_INLINE void RunInFiberContext(TFiber* fiber, TClosure callback)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Compared to GuardedInvoke TResumeGuard reduces frame count in backtrace.
+// Compared to MakeGuardedCallback TResumeGuard reduces frame count in backtrace.
 class TResumeGuard
 {
 public:

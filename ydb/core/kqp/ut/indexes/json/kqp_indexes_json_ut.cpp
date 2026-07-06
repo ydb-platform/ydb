@@ -16,6 +16,7 @@ TKikimrRunner KikimrJsonRowId() {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableJsonIndex(true);
     featureFlags.SetEnableAddUniqueIndex(true);
+    featureFlags.SetEnableFulltextIndexRowId(true);
     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
     settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
     return TKikimrRunner(settings);

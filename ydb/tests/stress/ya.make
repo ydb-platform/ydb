@@ -2,6 +2,7 @@ RECURSE(
     backup
     cdc
     common
+    compare_index_performance
     ctas
     federated_queries
     fulltext_workload

@@ -66,6 +66,13 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
 
     if (input->Kind == EOperator::Map) {
         auto map = CastOperator<TOpMap>(input);
+        const auto newMapInputIUs = remainingFilter->GetOutputIUs();
+
+        for (const auto& mapEl : map->MapElements) {
+            if (!mapEl.DependsOnlyOn(newMapInputIUs)) {
+                return false;
+            }
+        }
 
         // Stop if we compute something from one of the dependent columns, except for Just
         for (const auto & mapEl : map->MapElements) {
@@ -90,7 +97,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
 
         if (!addToMap.empty()) {
             for (const auto & add : addToMap) {
-                map->MapElements.push_back(TMapElement(add, add, map->Pos, &ctx.ExprCtx, &props, false));
+                map->MapElements.push_back(TMapElement(add, add, map->Pos, &ctx.ExprCtx, &props));
             }
         }
 

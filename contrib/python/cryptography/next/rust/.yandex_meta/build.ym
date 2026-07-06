@@ -26,6 +26,7 @@ _rust
 _openssl
 {% endblock %}
 
+{% block rust_version %}nightly-2026-06-04{% endblock %}
 {% block current_version %}41.0.6{% endblock %}
 {% block current_url %}https://github.com/pyca/cryptography/archive/refs/tags/{{self.version().strip()}}.tar.gz{% endblock %}
 
@@ -46,17 +47,21 @@ export CC_aarch64_apple_darwin=mac-target-cc-arm
 
 export DEP_OPENSSL_INCLUDE={{arcadia_root}}/contrib/libs/openssl/include
 export PYO3_CROSS_PYTHON_VERSION=3.12
+export RUSTFLAGS="${RUSTFLAGS:-} -Cembed-bitcode=no"
 
 rm -rf docs vectors tests
 cd src/rust
 {{super()}}
+find ${BUILD} -name '*.a' -type f | while read l; do
+    echo "_rust_eh_personality {{self.mod_name().strip()}}__rust_eh_personality" >> prog
+    llvm-objcopy --redefine-syms=prog ${l}
+    rm prog
+done
 
 {% for p in self.msan_platforms().strip().split('\n') %}
 export CC_{{p.replace('-', '_')}}=target-cc-msan
 {% endfor %}
-export RUSTFLAGS="-Zsanitizer=memory -Zsanitizer-memory-track-origins=2 -Ctarget-feature=-crt-static"
-
-export RUSTC_BOOTSTRAP=1
+export RUSTFLAGS="${RUSTFLAGS:-} -Zsanitizer=memory -Zsanitizer-memory-track-origins=2 -Ctarget-feature=-crt-static -Cunsafe-allow-abi-mismatch=sanitizer -Ccodegen-units=1"
 
 {% for arch in self.msan_platforms().strip().split('\n') %}
 LD_PRELOAD=${BIN}/getrandom.so cargo {{self.cargo_flags().strip()}} build {{self.cargo_build_flags().strip()}} --release --target {{arch}} {{self.binary_type().strip()}} --target-dir ${BUILD}-msan \
@@ -69,6 +74,7 @@ find ${BUILD}-msan -name '*.a' -type f | while read l; do
     llvm-nm --extern-only --defined-only -A ${l} | sed -e 's|.* ||' | grep -v 'PyInit_' | sort | while read s; do
         echo "${s} {{self.mod_name().strip()}}_${s}" >> prog
     done
+    echo "_rust_eh_personality {{self.mod_name().strip()}}__rust_eh_personality" >> prog
     llvm-objcopy --redefine-syms=prog ${l}
     rm prog
 done

@@ -48,7 +48,12 @@ public:
     }
 
     std::shared_ptr<NYdb::ICredentialsProvider> CreateProvider() const override {
-        return std::make_shared<TCachingIamServiceCredentialsProvider>(ServiceAccountId, ResourceId, ActorSystem);
+        auto provider = std::make_shared<TCachingIamServiceCredentialsProvider>(ServiceAccountId, ResourceId, ActorSystem);
+        try {
+            (void)provider->GetAuthInfo(); // dummy call to wait for CreateProvider inside caching service
+        } catch(...) {
+        }
+        return provider;
     }
 
 private:

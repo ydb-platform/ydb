@@ -2,7 +2,14 @@ UNITTEST_FOR(ydb/core/load_test)
 
 FORK_SUBTESTS(MODULO)
 
-SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+    REQUIREMENTS(cpu:4)
+    SPLIT_FACTOR(11)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
 
 PEERDIR(
     ydb/core/blobstorage/ut_blobstorage/lib

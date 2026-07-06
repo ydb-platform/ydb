@@ -3,7 +3,12 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-SIZE(SMALL)
+IF (SANITIZER_TYPE)
+    SIZE(MEDIUM)
+    REQUIREMENTS(cpu:4)
+ELSE()
+    SIZE(SMALL)
+ENDIF()
 
 SRCS(
     kqp_tli_ut.cpp

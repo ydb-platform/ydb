@@ -2,7 +2,12 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
-SIZE(SMALL)
+IF (SANITIZER_TYPE)
+    SIZE(MEDIUM)
+    REQUIREMENTS(cpu:4)
+ELSE()
+    SIZE(SMALL)
+ENDIF()
 
 PEERDIR(
     library/cpp/json

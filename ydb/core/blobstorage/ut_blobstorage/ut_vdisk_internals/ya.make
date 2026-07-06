@@ -1,15 +1,22 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
-    FORK_SUBTESTS()
+FORK_SUBTESTS()
 
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+    REQUIREMENTS(cpu:4)
+    SPLIT_FACTOR(11)
+ELSE()
     SIZE(MEDIUM)
+ENDIF()
 
-    SRCS(
-        vdisk_internals.cpp
-    )
+SRCS(
+    vdisk_internals.cpp
+)
 
-    PEERDIR(
-        ydb/core/blobstorage/ut_blobstorage/lib
-    )
+PEERDIR(
+    ydb/core/blobstorage/ut_blobstorage/lib
+)
 
 END()

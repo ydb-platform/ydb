@@ -2,6 +2,10 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
+IF (SANITIZER_TYPE)
+    SIZE(MEDIUM)
+ENDIF()
+
 PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre

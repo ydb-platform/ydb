@@ -1,4 +1,4 @@
-#include "kqp_olap_filter_inspection.h"
+#include "kqp_olap_expr_inspection.h"
 
 #include <ydb/library/yql/utils/plan/plan_utils.h>
 

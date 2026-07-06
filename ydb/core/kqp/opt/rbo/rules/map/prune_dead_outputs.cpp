@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/opt/rbo/rules/kqp_rules_include.h>
 
-#include <ydb/core/kqp/opt/physical/kqp_olap_filter_inspection.h>
+#include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
 
 namespace NKikimr {
 namespace NKqp {

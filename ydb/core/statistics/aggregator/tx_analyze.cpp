@@ -51,15 +51,9 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
         if (existingOperation && existingOperation->DatabaseName != Record().GetDatabase()) {
             YDB_LOG_WARN("TTxAnalyze::Execute. Replacing force traversal with same OperationId from different database",
                 {"tabletId", Self->TabletID()},
-<<<<<<< HEAD
-                {"operationId", operationId},
-                {"existingDatabase", existingOperation->DatabaseName},
-                {"newDatabase", Record().GetDatabase()});
-=======
                 {"operationId", operationId.Quote()},
                 {"existingOperationDatabase", existingOperation->DatabaseName},
                 {"requestDatabase", Record().GetDatabase()});
->>>>>>> e8bbce79a1b8f3cb01b4c1205a473fb9549a3fe6
             Self->DeleteForceTraversalOperation(operationId, db);
             existingOperation = nullptr;
         }

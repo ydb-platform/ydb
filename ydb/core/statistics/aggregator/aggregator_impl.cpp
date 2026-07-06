@@ -487,11 +487,7 @@ void TStatisticsAggregator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
             }
             YDB_LOG_CRIT("TEvDeliveryProblem to unexpected tablet",
                 {"tabletId", TabletID()},
-<<<<<<< HEAD
-                {"unexpectedTabletId", tabletId});
-=======
                 {"destinationTabletId", tabletId});
->>>>>>> e8bbce79a1b8f3cb01b4c1205a473fb9549a3fe6
         }
     } else {
         YDB_LOG_ERROR("TEvDeliveryProblem to DataShard",

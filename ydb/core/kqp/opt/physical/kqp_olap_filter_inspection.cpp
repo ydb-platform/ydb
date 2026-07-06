@@ -314,25 +314,13 @@ struct TExplainColumnRange {
 using TExplainRange = TVector<TExplainColumnRange>;
 using TExplainRanges = TVector<TExplainRange>;
 
-TExplainColumnRange MakeFullExplainRange() {
+TExplainColumnRange MakeFullColumnRange() {
     return {};
 }
 
-std::optional<TExplainRangeBound> IntersectFromBound(const TExplainRangeBound& left, const TExplainRangeBound& right) {
-    if (!left.Value) {
-        return right;
-    }
-    if (!right.Value) {
-        return left;
-    }
-    if (*left.Value != *right.Value) {
-        return std::nullopt;
-    }
-
-    return TExplainRangeBound{.Value = left.Value, .Inclusive = left.Inclusive && right.Inclusive};
-}
-
-std::optional<TExplainRangeBound> IntersectToBound(const TExplainRangeBound& left, const TExplainRangeBound& right) {
+// Bound values are formatted strings, so ordering is unknown: intersection is only representable
+// when one side is unbounded or both sides carry the same value.
+std::optional<TExplainRangeBound> IntersectBound(const TExplainRangeBound& left, const TExplainRangeBound& right) {
     if (!left.Value) {
         return right;
     }
@@ -347,8 +335,8 @@ std::optional<TExplainRangeBound> IntersectToBound(const TExplainRangeBound& lef
 }
 
 std::optional<TExplainColumnRange> IntersectColumnRange(const TExplainColumnRange& left, const TExplainColumnRange& right) {
-    auto from = IntersectFromBound(left.From, right.From);
-    auto to = IntersectToBound(left.To, right.To);
+    auto from = IntersectBound(left.From, right.From);
+    auto to = IntersectBound(left.To, right.To);
     if (!from || !to) {
         return std::nullopt;
     }
@@ -362,8 +350,8 @@ std::optional<TExplainRange> IntersectExplainRange(const TExplainRange& left, co
     result.reserve(size);
 
     for (size_t i = 0; i < size; ++i) {
-        const auto& leftColumn = i < left.size() ? left[i] : MakeFullExplainRange();
-        const auto& rightColumn = i < right.size() ? right[i] : MakeFullExplainRange();
+        const auto& leftColumn = i < left.size() ? left[i] : MakeFullColumnRange();
+        const auto& rightColumn = i < right.size() ? right[i] : MakeFullColumnRange();
         auto column = IntersectColumnRange(leftColumn, rightColumn);
         if (!column) {
             return std::nullopt;

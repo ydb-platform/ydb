@@ -1,5 +1,4 @@
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
-#include <ydb/core/kqp/opt/physical/kqp_olap_filter_inspection.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
 #include <yql/essentials/core/extract_predicate/extract_predicate.h>
@@ -249,15 +248,15 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Pruned lambda: " << KqpExprToPrettyString(*buildResult.PrunedLambda, ctx);
 
     TOpRead::TRangeInfo rangeInfo{
+        .ComputeNode = ranges,
         .KeyColumns = keyColumns,
-        .ReadRangeDescriptions = NOpt::BuildReadRangeDescriptions(ranges, keyColumns, buildResult.UsedPrefixLen),
         .UsedPrefixLen = buildResult.UsedPrefixLen,
         .ExpectedMaxRanges = buildResult.ExpectedMaxRanges
             ? TMaybe<size_t>(*buildResult.ExpectedMaxRanges)
             : TMaybe<size_t>(),
     };
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, read->OlapFilterLambda,
-                                          read->Limit, ranges, TExpression(originalLambda, &ctx, &props), read->SortDir, read->Props, read->Pos, std::move(rangeInfo));
+                                          read->Limit, std::move(rangeInfo), TExpression(originalLambda, &ctx, &props), read->SortDir, read->Props, read->Pos);
     return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(buildResult.PrunedLambda, &ctx, &props));
 }
 } // namespace NKikimr::NKqp

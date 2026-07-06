@@ -350,18 +350,21 @@ public:
 
 class TOpRead: public IOperator {
 public:
+    // Everything the read carries about pushed-down key ranges. ComputeNode is the source of
+    // truth for the ranges themselves; the other fields are range extractor outputs that cannot
+    // be recovered from the expression later (explain has no access to table metadata or the
+    // extractor settings).
     struct TRangeInfo {
+        TExprNode::TPtr ComputeNode;  // ranges expression pushed into the read
         TVector<TString> KeyColumns;  // all table key columns (with or without alias prefix)
-        TVector<TString> ReadRangeDescriptions;
         size_t UsedPrefixLen = 0;     // how many leading key columns are range-constrained
         TMaybe<size_t> ExpectedMaxRanges;
     };
 
     TOpRead(TExprNode::TPtr node);
     TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
-            const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TExprNode::TPtr& ranges,
-            const std::optional<TExpression>& originalPredicate, const ESortDir sortDireciont, const TPhysicalOpProps& props, TPositionHandle pos,
-            std::optional<TRangeInfo> rangeInfo = std::nullopt);
+            const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, std::optional<TRangeInfo> ranges,
+            const std::optional<TExpression>& originalPredicate, const ESortDir sortDireciont, const TPhysicalOpProps& props, TPositionHandle pos);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
@@ -376,7 +379,7 @@ public:
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
     NYql::EStorageType GetTableStorageType() const;
 
-    TExprNode::TPtr GetRanges() const { return Ranges; }
+    TExprNode::TPtr GetRanges() const { return RangeInfo ? RangeInfo->ComputeNode : nullptr; }
     TExprNode::TPtr GetTable() const { return TableCallable; }
 
     // TODO: make it private members, we should not access it directly
@@ -389,7 +392,6 @@ public:
     TExprNode::TPtr TableCallable;
     TExprNode::TPtr OlapFilterLambda;
     TExprNode::TPtr Limit;
-    TExprNode::TPtr Ranges;
     std::optional<TExpression> OriginalPredicate;
     ESortDir SortDir{ESortDir::None};
     std::optional<TRangeInfo> RangeInfo;

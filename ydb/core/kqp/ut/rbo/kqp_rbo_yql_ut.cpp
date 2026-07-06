@@ -302,7 +302,7 @@ TIntrusivePtr<TOpRead> MakeTestRead(const TVector<TInfoUnit>& outputIUs, TPositi
         nullptr,
         nullptr,
         nullptr,
-        nullptr,
+        std::nullopt,
         std::nullopt,
         ESortDir::None,
         TPhysicalOpProps{},

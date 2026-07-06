@@ -1,5 +1,7 @@
 #include "add_data.h"
 
+#include <ydb/library/actors/core/log.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::EXT_INDEX
 
 namespace NKikimr::NCSIndex {

@@ -1,4 +1,5 @@
 #include "hash_by_columns.h"
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/formats/arrow/hash/calcer.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -85,14 +86,14 @@ std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow::Re
                 const NYql::NJsonPath::TJsonPathPtr jsonPath = NYql::NJsonPath::ParseJsonPath(Fields[i].GetJsonPath(), issues, 100);
                 if (!issues.Empty()) {
                     YDB_LOG_ERROR("Cannot parse path for json",
-                        {"extraction", issues});
+                        {"issues", issues});
                     return {};
                 }
 
                 const auto result = NYql::NJsonPath::ExecuteJsonPath(jsonPath, binaryJsonRoot, NYql::NJsonPath::TVariablesMap{}, nullptr);
                 if (result.IsError()) {
                     YDB_LOG_ERROR("Runtime errors found on json path",
-                        {"usage", result.GetError()});
+                        {"error", result.GetError()});
                     return {};
                 }
 

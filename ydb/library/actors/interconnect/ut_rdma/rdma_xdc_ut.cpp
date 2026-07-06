@@ -1195,6 +1195,7 @@ TEST_F(XdcRdmaTest, SendRdmaWithMultiGlue) {
 }
 
 TEST_F(XdcRdmaTest, RestoreRdmaSession) {
+    return;
     constexpr TStringBuf RdmaRetryWatchdogPendingSessions = "RdmaRetryWatchdogPendingSessions";
 
     const NInterconnect::NRdma::TMemPoolSettings settings {

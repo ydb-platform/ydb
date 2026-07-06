@@ -1063,7 +1063,7 @@ TEST_F(XdcRdmaTest, SendRdmaEmptyProtoRecordWithPayload) {
     auto buf = memPool->AllocRcBuf(5000, 0).value();
     std::fill(buf.GetDataMut(), buf.GetDataMut() + 5000, 'X');
 
-    auto* ev = new TEvTestSerialization();
+    std::unique_ptr<TEvTestSerialization> ev = std::make_unique<TEvTestSerialization>();
     ev->AddPayload(TRope(std::move(buf)));
     UNIT_ASSERT_VALUES_EQUAL(ev->Record.ByteSize(), 0);
     UNIT_ASSERT(ev->AllowExternalDataChannel());
@@ -1078,7 +1078,7 @@ TEST_F(XdcRdmaTest, SendRdmaEmptyProtoRecordWithPayload) {
 
     Sleep(TDuration::MilliSeconds(1000));
 
-    auto senderPtr = new TSendActor(receiver, ev);
+    auto senderPtr = new TSendActor(receiver, std::move(ev));
     cluster.RegisterActor(senderPtr, 2);
     UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 

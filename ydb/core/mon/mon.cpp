@@ -1716,15 +1716,10 @@ public:
         Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler(ev->Get()->Fields.Path, SelfId()));
     }
 
-    void Handle(TEvMon::TEvAddDisabledAuthenticationPath::TPtr& ev) {
-        DisabledAuthenticationPaths.insert(ev->Get()->Path);
-    }
-
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
             hFunc(TEvMon::TEvRegisterHandler, Handle);
-            hFunc(TEvMon::TEvAddDisabledAuthenticationPath, Handle);
             cFunc(TEvents::TSystem::Poison, PassAway);
         }
     }

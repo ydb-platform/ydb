@@ -11,7 +11,6 @@ struct TEvMon {
         EvRegisterHandler,
         EvMonitoringCancelRequest,
         EvCleanupProxy,
-        EvAddDisabledAuthenticationPath,
         End
     };
 
@@ -43,14 +42,6 @@ struct TEvMon {
 
         TEvCleanupProxy(const TString& address)
             : Address(address)
-        {}
-    };
-
-    struct TEvAddDisabledAuthenticationPath : NActors::TEventLocal<TEvAddDisabledAuthenticationPath, EvAddDisabledAuthenticationPath> {
-        TString Path;
-
-        TEvAddDisabledAuthenticationPath(TString path)
-            : Path(std::move(path))
         {}
     };
 };

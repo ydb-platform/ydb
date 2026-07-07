@@ -100,3 +100,16 @@ def ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag(certif
     cluster.start()
     yield cluster
     cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_disabled_authentication_paths(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+        disabled_authentication_paths=['/ver', '/blockstore/user_stats/spack'],
+    )
+    cluster = KiKiMR(configurator)
+    cluster.start()
+    yield cluster
+    cluster.stop()

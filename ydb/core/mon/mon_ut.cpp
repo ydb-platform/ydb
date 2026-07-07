@@ -437,12 +437,27 @@ Y_UNIT_TEST_SUITE(DisabledAuthenticationPaths) {
     Y_UNIT_TEST(ExactPathNoAuthRequired) {
         THttpMonTestEnv env({
             .RegKind = THttpMonTestEnvOptions::ERegKind::MonPage,
-            .DisabledAuthenticationPaths = {"/test_mon_path"},
+            .DisabledAuthenticationPaths = {TEST_MON_URL},
         });
 
         TStringStream responseStream;
         // No auth headers — should succeed because path is in DisabledAuthenticationPaths
-        const auto status = env.GetHttpClient().DoGet("/test_mon_path", &responseStream);
+        const auto status = env.GetHttpClient().DoGet(TEST_MON_URL, &responseStream);
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
+
+        TFakeTicketParserActor* ticketParser = env.GetTicketParser();
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 0);
+    }
+
+    // Query parameters are stripped before matching DisabledAuthenticationPaths
+    Y_UNIT_TEST(ExactPathWithQueryNoAuthRequired) {
+        THttpMonTestEnv env({
+            .RegKind = THttpMonTestEnvOptions::ERegKind::MonPage,
+            .DisabledAuthenticationPaths = {TEST_MON_URL},
+        });
+
+        TStringStream responseStream;
+        const auto status = env.GetHttpClient().DoGet(TEST_MON_URL + "?foo=bar", &responseStream);
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
 
         TFakeTicketParserActor* ticketParser = env.GetTicketParser();
@@ -453,41 +468,56 @@ Y_UNIT_TEST_SUITE(DisabledAuthenticationPaths) {
     Y_UNIT_TEST(PrefixSubpathStillRequiresAuth) {
         THttpMonTestEnv env({
             .RegKind = THttpMonTestEnvOptions::ERegKind::MonPage,
-            .DisabledAuthenticationPaths = {"/test_mon_path"},
+            .DisabledAuthenticationPaths = {TEST_MON_URL},
         });
 
         TStringStream responseStream;
         THttpHeaders outHeaders;
-        // /test_mon_path/subpath is NOT in DisabledAuthenticationPaths — must get 401/403
-        const auto status = env.GetHttpClient().DoGet("/test_mon_path/subpath", &responseStream, {}, &outHeaders);
-        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_UNAUTHORIZED);
+        const TString invalidToken = TString("Bearer invalid");
+        // /test_mon/subpath is NOT in DisabledAuthenticationPaths — auth must not be bypassed
+        const auto status = env.GetHttpClient().DoGet(
+            TEST_MON_URL + "/subpath", &responseStream, env.MakeAuthHeaders(invalidToken), &outHeaders);
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_FORBIDDEN);
+
+        TFakeTicketParserActor* ticketParser = env.GetTicketParser();
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
     }
 
     // A path that has the disabled path as a SUFFIX must still require auth
     Y_UNIT_TEST(SuffixPathStillRequiresAuth) {
         THttpMonTestEnv env({
             .RegKind = THttpMonTestEnvOptions::ERegKind::MonPage,
-            .DisabledAuthenticationPaths = {"/test_mon_path"},
+            .DisabledAuthenticationPaths = {TEST_MON_URL},
         });
 
         TStringStream responseStream;
         THttpHeaders outHeaders;
-        // /prefix/test_mon_path is NOT in DisabledAuthenticationPaths — must get 401/403
-        const auto status = env.GetHttpClient().DoGet("/prefix/test_mon_path", &responseStream, {}, &outHeaders);
-        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_UNAUTHORIZED);
+        const TString invalidToken = TString("Bearer invalid");
+        // /prefix/test_mon is NOT in DisabledAuthenticationPaths — auth must not be bypassed
+        const auto status = env.GetHttpClient().DoGet(
+            "/prefix" + TEST_MON_URL, &responseStream, env.MakeAuthHeaders(invalidToken), &outHeaders);
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_FORBIDDEN);
+
+        TFakeTicketParserActor* ticketParser = env.GetTicketParser();
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
     }
 
     // A path not listed at all still requires auth
     Y_UNIT_TEST(UnlistedPathRequiresAuth) {
         THttpMonTestEnv env({
             .RegKind = THttpMonTestEnvOptions::ERegKind::MonPage,
-            .DisabledAuthenticationPaths = {"/test_mon_path"},
+            .DisabledAuthenticationPaths = {TEST_MON_URL},
         });
 
         TStringStream responseStream;
         THttpHeaders outHeaders;
-        const auto status = env.GetHttpClient().DoGet("/other_path", &responseStream, {}, &outHeaders);
-        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_UNAUTHORIZED);
+        const TString invalidToken = TString("Bearer invalid");
+        const auto status = env.GetHttpClient().DoGet(
+            "/other_path", &responseStream, env.MakeAuthHeaders(invalidToken), &outHeaders);
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_FORBIDDEN);
+
+        TFakeTicketParserActor* ticketParser = env.GetTicketParser();
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
     }
 }
 

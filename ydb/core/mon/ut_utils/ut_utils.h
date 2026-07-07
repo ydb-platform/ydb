@@ -16,6 +16,7 @@ using namespace NActors;
 using namespace NKikimr;
 
 extern const TString TEST_MON_PATH;
+extern const TString TEST_MON_URL;
 extern const TString TEST_RESPONSE;
 extern const TString AUTHORIZATION_HEADER;
 extern const TString VALID_TOKEN;

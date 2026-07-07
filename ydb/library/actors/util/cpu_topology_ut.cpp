@@ -343,4 +343,39 @@ Y_UNIT_TEST_SUITE(CpuTopology) {
         AssertGroup(topology.PlacementGroups, 1, 1, "20-39,60-79");
     }
 
+    Y_UNIT_TEST(IntelMeteorLakeSnapshotUsesL3PlacementGroupWithCpuWithoutL3Cache) {
+        const TCpuTopology topology = LoadSnapshot("intel-meteor-lake");
+
+        UNIT_ASSERT_VALUES_EQUAL(topology.Cpus.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(topology.NumaNodes.size(), 1);
+        AssertGroup(topology.NumaNodes, 0, 0, "0-21");
+
+        const TLogicalCpuInfo* cpu0 = topology.FindCpu(0);
+        UNIT_ASSERT(cpu0);
+        UNIT_ASSERT_VALUES_EQUAL(cpu0->Capacity, 1024u);
+        UNIT_ASSERT_VALUES_EQUAL(cpu0->CoreId, 16u);
+        UNIT_ASSERT_VALUES_EQUAL(cpu0->ClusterId, 32u);
+        UNIT_ASSERT_VALUES_EQUAL(ToCpuListString(cpu0->ThreadSiblings), "0,5");
+        UNIT_ASSERT_VALUES_EQUAL(cpu0->L3CacheId, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(ToCpuListString(cpu0->L3CacheCpus), "0-19");
+
+        const TLogicalCpuInfo* cpu20 = topology.FindCpu(20);
+        UNIT_ASSERT(cpu20);
+        UNIT_ASSERT_VALUES_EQUAL(cpu20->CoreId, 32u);
+        UNIT_ASSERT_VALUES_EQUAL(cpu20->ClusterId, 64u);
+        UNIT_ASSERT_VALUES_EQUAL(ToCpuListString(cpu20->ThreadSiblings), "20");
+        UNIT_ASSERT_VALUES_EQUAL(cpu20->L3CacheId, UnknownCpuTopologyId);
+        UNIT_ASSERT(cpu20->L3CacheCpus.IsEmpty());
+
+        UNIT_ASSERT_VALUES_EQUAL(topology.Packages.size(), 1);
+        AssertGroup(topology.Packages, 0, 0, "0-21");
+        UNIT_ASSERT_VALUES_EQUAL(topology.Dies.size(), 1);
+        AssertGroup(topology.Dies, 0, 0, "0-21");
+        UNIT_ASSERT_VALUES_EQUAL(topology.L3CacheGroups.size(), 1);
+        AssertGroup(topology.L3CacheGroups, 0, 0, "0-19");
+        UNIT_ASSERT_VALUES_EQUAL(topology.PlacementGroups.size(), 1);
+        AssertSequentialPlacementGroupIds(topology);
+        AssertGroup(topology.PlacementGroups, 0, 0, "0-19");
+    }
+
 }

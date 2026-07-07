@@ -471,6 +471,7 @@ ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelAuto
 ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelForce
 ydb/core/kqp/ut/rbo KqpRboOlap.CountWhereColumnIsNull
 ydb/core/kqp/ut/rbo KqpRboOlap.DisableBlocksOnColumnsLimit
+ydb/core/kqp/ut/rbo KqpRboOlap.DoubleOutOfRangeInJson
 ydb/core/kqp/ut/rbo KqpRboOlap.OlapFilterPeephole
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
 ydb/core/kqp/ut/rbo KqpRboYql.AggregateKeyColumnsNotLeakedToInputMap
@@ -561,6 +562,7 @@ ydb/core/tablet_flat/ut TPageHandleTest.HandleRef
 ydb/core/tablet_flat/ut TPageHandleTest.PinnedRef
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Local
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
+ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingCDCMessage
 ydb/core/transfer/ut/column_table unittest.sole chunk
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote
@@ -670,6 +672,7 @@ ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/bulk_upsert BulkUpsert.RetryOverheadOnHappyPath
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/0
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/1
+ydb/public/sdk/cpp/tests/unit/client/table TableTest.AlterTableSetMetricsSettings
 ydb/services/cms/ut TGRpcCmsTest.AlterRemoveTest
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
 ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.ProcessGlobalGrpcDeadDoesNotStopLiveDeprecatedPQWriteSession
@@ -799,6 +802,7 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[50]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[64]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[14]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[64]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[78]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[10]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[11]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[12]

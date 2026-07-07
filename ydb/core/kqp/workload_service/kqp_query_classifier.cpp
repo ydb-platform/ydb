@@ -51,7 +51,8 @@ public:
             }
 
             if (settings.Action == NResourcePool::EClassifierAction::Reject) {
-                return *PreClassifyResult = MakeRejectFromClassifier(value);
+                PreClassifyResult = MakeRejectFromClassifier(value);
+                return *PreClassifyResult;
             }
 
             if (TryResolve(settings, PreClassifyResult)) {
@@ -84,7 +85,8 @@ public:
             }
 
             if (settings.Action == NResourcePool::EClassifierAction::Reject) {
-                return *PostClassifyResult = MakeRejectFromClassifier(it->second);
+                PostClassifyResult = MakeRejectFromClassifier(it->second);
+                return *PostClassifyResult;
             }
 
             if (TryResolve(settings, PostClassifyResult)) {

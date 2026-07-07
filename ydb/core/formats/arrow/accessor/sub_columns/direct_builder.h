@@ -40,8 +40,6 @@ public:
     void BuildPlainAccessor(const ui32 recordsCount);
     void BuildDictionaryAccessor(const ui32 recordsCount);
 
-    ui32 GetDistinctCount() const;
-
     TColumnElements(const TStringBuf key)
         : KeyName(key) {
     }
@@ -181,10 +179,18 @@ public:
         auto builder = TDictStats::MakeBuilder();
         for (auto&& i : keys) {
             const ui32 presentCount = i->GetRecordIndexes().size();
+            // All stored values count toward the distinct set, nulls included (a null is one value).
+            const auto enumerateValues = [i](const auto& consumer) {
+                for (const auto& v : i->GetValues()) {
+                    if (!consumer(TStringBuf(v.data(), v.size()))) {
+                        break;
+                    }
+                }
+            };
             IChunkedArray::EType accessorType = IChunkedArray::EType::Array;
             if (settings.IsSparsed(presentCount, recordsCount)) {
                 accessorType = IChunkedArray::EType::SparsedArray;
-            } else if (allowDictionary && settings.IsDictionary(i->GetDistinctCount(), presentCount)) {
+            } else if (allowDictionary && settings.IsDictionary(presentCount, enumerateValues)) {
                 accessorType = IChunkedArray::EType::Dictionary;
             }
             builder.Add(i->GetKeyName(), presentCount, i->GetDataSize(), accessorType);

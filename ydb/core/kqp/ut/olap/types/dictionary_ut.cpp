@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
         const TString script = TStringBuilder() << DictionaryTableSetup(/*withCompactionPlanner=*/true) << R"(
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
-                    `DICTIONARY_DETECTOR_KFF`=`2`)
+                    `DICTIONARY_UNIQUE_FRACTION`=`0.5`)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"a" : "x"}')), (2u, JsonDocument('{"a" : "y"}')),
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
         const TString script = TStringBuilder() << DictionaryTableSetup() << R"(
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
-                    `OTHERS_ALLOWED_FRACTION`=`0`, `DICTIONARY_DETECTOR_KFF`=`1`)
+                    `OTHERS_ALLOWED_FRACTION`=`0`, `DICTIONARY_UNIQUE_FRACTION`=`1`)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"a" : "x"}')), (2u, JsonDocument('{"a" : "y"}')),
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
         const TString script = DictionaryTableSetup(/*withCompactionPlanner=*/true) + TString(std::format(R"(
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
-                    `OTHERS_ALLOWED_FRACTION`=`0`, `MEM_LIMIT_CHUNK`=`100`, `DICTIONARY_DETECTOR_KFF`=`1`)
+                    `OTHERS_ALLOWED_FRACTION`=`0`, `MEM_LIMIT_CHUNK`=`100`, `DICTIONARY_UNIQUE_FRACTION`=`1`)
         ------
         BULK_UPSERT:
             /Root/ColumnTable
@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
     TString scriptAllValueTypes = TStringBuilder() << DictionaryTableSetup() << R"(
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`true`,
-                    `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0`$$, `DICTIONARY_DETECTOR_KFF`=`1`|$$)
+                    `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0`$$, `DICTIONARY_UNIQUE_FRACTION`=`1`|$$)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"a" : "str"}')), (2u, JsonDocument('{"a" : 42}')),
@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
 
     // Read-path scenarios generated (with isDictionary=true) from the same source as json_ut's
     // *Variants (isDictionary=false, see sub_columns_scenarios.h): identical data/queries/expected, the
-    // only difference being DICTIONARY_DETECTOR_KFF=1 and the "all sub-columns Dictionary" assertion the
+    // only difference being DICTIONARY_UNIQUE_FRACTION=1 and the "all sub-columns Dictionary" assertion the
     // generator appends. Reads must return the same results as the non-dictionary path.
     Y_UNIT_TEST(RestoreFullJson) {
         Variator::ToExecutor(Variator::SingleScript(NSubColumnsScenarios::RestoreFullJson(/*isDictionary=*/true))).Execute();

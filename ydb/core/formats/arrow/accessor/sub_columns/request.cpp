@@ -21,11 +21,11 @@ TConclusionStatus TRequestedConstuctor::DoDeserializeFromRequest(NYql::TFeatures
     if (auto kff = features.Extract<ui32>("SPARSED_DETECTOR_KFF")) {
         Settings.SetSparsedDetectorKff(*kff);
     }
-    if (auto kff = features.Extract<double>("DICTIONARY_DETECTOR_KFF")) {
-        if (*kff < 1) {
-            return TConclusionStatus::Fail("DICTIONARY_DETECTOR_KFF must be greater than or equal to 1");
+    if (auto fraction = features.Extract<double>("DICTIONARY_UNIQUE_FRACTION")) {
+        if (*fraction < 0 || *fraction > 1) {
+            return TConclusionStatus::Fail("DICTIONARY_UNIQUE_FRACTION must be in [0, 1] interval");
         }
-        Settings.SetDictionaryDetectorKff(*kff);
+        Settings.SetDictionaryUniqueFraction(*fraction);
     }
     THolder<IDataAdapter> extractor;
     if (auto dataExtractorClassName = features.Extract<TString>("DATA_EXTRACTOR_CLASS_NAME")) {

@@ -38,9 +38,9 @@ message TRequestedConstructor {
             optional double OthersAllowedFraction = 4 [default = 0.05];
             optional TDataExtractor DataExtractor = 5;
             // Apply dictionary encoding to subcolumn with string storage (BinaryJson ones or with deduced string types in future)
-            // if <unique count> * kff >= <total non-null count>
-            // Value of `1` means always dictionary-encode.
-            optional double DictionaryDetectorKff = 6 [default = 0];
+            // if the fraction of unique values (<unique count> / <total present count>) <= this value.
+            // Value of `1` means always dictionary-encode; `0` (default) - never dictionary-encode.
+            optional double DictionaryUniqueFraction = 6 [default = 0];
         }
         optional TSettings Settings = 1;
     }
@@ -72,7 +72,7 @@ message TConstructor {
             optional uint32 ChunkMemoryLimit = 3 [default = 50000000];
             optional double OthersAllowedFraction = 4 [default = 0.05];
             optional TDataExtractor DataExtractor = 5;
-            optional double DictionaryDetectorKff = 6 [default = 0];
+            optional double DictionaryUniqueFraction = 6 [default = 0];
         }
         optional TSettings Settings = 1;
     }
@@ -110,4 +110,3 @@ message TSubColumnsAccessor {
     repeated TColumn OtherColumns = 4;
     optional uint32 OtherRecordsCount = 5;
 }
-

@@ -12,7 +12,7 @@
 // returns a full script:
 //   * isDictionary == false -> a settings-sweep VARIATOR ($$...$$ axes) that asserts every separated
 //                              Col2 sub-column is stored as EType::Array (dictionary never engages);
-//   * isDictionary == true  -> a fixed setup with DICTIONARY_DETECTOR_KFF=1 that asserts every
+//   * isDictionary == true  -> a fixed setup with DICTIONARY_UNIQUE_FRACTION=1 that asserts every
 //                              separated Col2 sub-column is stored as EType::Dictionary.
 // The data + reads (the bodies below) and the expected results are identical either way.
 namespace NKikimr::NKqp::NSubColumnsScenarios {
@@ -74,7 +74,7 @@ template <typename... TBodyParts>
 inline TString BuildScenario(const TStringBuf alterColumnExtractor, const bool isDictionary, const TBodyParts&... bodyParts) {
     const TStringBuf partitions = isDictionary ? TStringBuf("1") : TStringBuf("$$1|2|10$$");
     const TString alterColumn = isDictionary
-        ? Sprintf(R"(ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, %s`DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0`, `DICTIONARY_DETECTOR_KFF`=`1`))",
+        ? Sprintf(R"(ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, %s`DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0`, `DICTIONARY_UNIQUE_FRACTION`=`1`))",
               alterColumnExtractor.data())
         : Sprintf(R"(ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, %s`DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`))",
               alterColumnExtractor.data());

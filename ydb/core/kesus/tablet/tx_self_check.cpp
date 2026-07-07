@@ -21,7 +21,7 @@ struct TKesusTablet::TTxSelfCheck : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_SELF_CHECK; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "[u] TTxSelfCheck::Execute",
+        YDB_LOG_DEBUG_CTX(ctx, "TTxSelfCheck::Execute",
             {"tabletId", Self->TabletID()});
         Y_ABORT_UNLESS(Self->SelfCheckPending);
 
@@ -31,7 +31,7 @@ struct TKesusTablet::TTxSelfCheck : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "[u] TTxSelfCheck::Complete",
+        YDB_LOG_DEBUG_CTX(ctx, "TTxSelfCheck::Complete",
             {"tabletId", Self->TabletID()});
         Y_ABORT_UNLESS(Self->SelfCheckPending);
         Cookie.Detach();
@@ -76,7 +76,7 @@ void TKesusTablet::Handle(TEvPrivate::TEvSelfCheckTimeout::TPtr& ev) {
         // Try to die as soon as possible
         const auto& ctx = TActivationContext::AsActorContext();
         YDB_LOG_ERROR_CTX(ctx, "Self-check timeout, attempting suicide",
-            {"tabletID", TabletID()});
+            {"tabletId", TabletID()});
         HandlePoison(TActivationContext::ActorContextFor(SelfId()));
     }
 }

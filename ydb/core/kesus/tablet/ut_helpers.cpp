@@ -8,8 +8,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_PROXY
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_PROXY
-
 namespace NKikimr {
 namespace NKesus {
 
@@ -55,7 +53,7 @@ private:
     {
         YDB_LOG_DEBUG("TFakeMetering: unhandled event",
             {"type", ev->GetTypeRewrite()},
-            {"event", ev->ToString()});
+            {"ev", ev->ToString()});
     }
 };
 

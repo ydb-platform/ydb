@@ -26,9 +26,9 @@ struct TKesusTablet::TTxSemaphoreDelete : public TTxBase {
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSemaphoreDelete::Execute",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie},
-            {"name", Record.GetName().Quote()},
+            {"semaphoreId", Record.GetName()},
             {"force", Record.GetForce()});
 
         NIceDb::TNiceDb db(txc.DB);
@@ -96,7 +96,7 @@ struct TKesusTablet::TTxSemaphoreDelete : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSemaphoreDelete::Complete",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie});
         Self->RemoveSessionTx(Record.GetSessionId());
 

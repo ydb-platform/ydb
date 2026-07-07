@@ -27,9 +27,9 @@ struct TKesusTablet::TTxSemaphoreUpdate : public TTxBase {
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSemaphoreUpdate::Execute",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie},
-            {"name", Record.GetName().Quote()});
+            {"semaphoreId", Record.GetName()});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -85,7 +85,7 @@ struct TKesusTablet::TTxSemaphoreUpdate : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSemaphoreUpdate::Complete",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie});
         Self->RemoveSessionTx(Record.GetSessionId());
 

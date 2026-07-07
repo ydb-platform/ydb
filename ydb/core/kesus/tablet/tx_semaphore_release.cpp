@@ -36,9 +36,9 @@ struct TKesusTablet::TTxSemaphoreRelease : public TTxBase {
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSemaphoreRelease::Execute",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie},
-            {"name", Record.GetName().Quote()});
+            {"semaphoreId", Record.GetName()});
 
         auto* proxy = Self->Proxies.FindPtr(Sender);
         if (!proxy || proxy->Generation != Record.GetProxyGeneration()) {
@@ -94,7 +94,7 @@ struct TKesusTablet::TTxSemaphoreRelease : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSemaphoreRelease::Complete",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie});
         Self->RemoveSessionTx(Record.GetSessionId());
 

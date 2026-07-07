@@ -76,7 +76,7 @@ struct TKesusTablet::TTxQuoterResourceDescribe : public TTxBase {
         Y_UNUSED(txc);
         YDB_LOG_DEBUG_CTX(ctx, "TTxQuoterResourceDescribe::Execute",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie},
             {"ids", FormatIdsToDescribe()},
             {"paths", FormatPathsToDescribe()},
@@ -117,7 +117,7 @@ struct TKesusTablet::TTxQuoterResourceDescribe : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxQuoterResourceDescribe::Complete",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie});
 
         Y_ABORT_UNLESS(Reply);

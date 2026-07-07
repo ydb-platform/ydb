@@ -30,11 +30,11 @@ struct TKesusTablet::TTxQuoterResourceUpdate : public TTxBase {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "TTxQuoterResourceUpdate::Execute path=",
+        YDB_LOG_DEBUG_CTX(ctx, "TTxQuoterResourceUpdate::Execute",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie},
-            {"id", Record.GetResource().GetResourceId()},
+            {"resourceId", Record.GetResource().GetResourceId()},
             {"resourcePath", Record.GetResource().GetResourcePath()},
             {"config", Record.GetResource().GetHierarchicalDRRResourceConfig()});
 
@@ -64,7 +64,7 @@ struct TKesusTablet::TTxQuoterResourceUpdate : public TTxBase {
         YDB_LOG_DEBUG_CTX(ctx, "Updated quoter resource",
             {"tabletId", Self->TabletID()},
             {"resourceId", resource->GetResourceId()},
-            {"path", resource->GetPath()});
+            {"resourcePath", resource->GetPath()});
 
         ReplyOk(resource->GetResourceId());
 
@@ -78,7 +78,7 @@ struct TKesusTablet::TTxQuoterResourceUpdate : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxQuoterResourceUpdate::Complete",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie});
 
         Y_ABORT_UNLESS(Reply);

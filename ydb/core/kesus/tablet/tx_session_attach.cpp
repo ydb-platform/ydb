@@ -33,9 +33,9 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSessionAttach::Execute",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie},
-            {"session", SessionId},
+            {"sessionId", SessionId},
             {"seqNo", Record.GetSeqNo()});
 
         auto* proxy = Self->Proxies.FindPtr(Sender);
@@ -142,9 +142,9 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSessionAttach::Complete",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie},
-            {"session", SessionId});
+            {"sessionId", SessionId});
 
         if (SessionId != 0) {
             Self->RemoveSessionTx(SessionId);
@@ -264,10 +264,10 @@ void TKesusTablet::Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
             // two sessions successfully attached is not possible.
             // Unless they use the same SessionId that is.
             YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Fast-path attach",
-                {"tabletID", TabletID()},
-                {"session", sessionId},
-                {"toSender", ev->Sender},
+                {"tabletId", TabletID()},
+                {"sender", ev->Sender},
                 {"cookie", ev->Cookie},
+                {"sessionId", sessionId},
                 {"seqNo", record.GetSeqNo()});
 
             if (session->OwnerProxy && session->OwnerProxy != proxy) {

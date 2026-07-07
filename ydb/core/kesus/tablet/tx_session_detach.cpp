@@ -27,9 +27,9 @@ struct TKesusTablet::TTxSessionDetach : public TTxBase {
         Y_UNUSED(txc);
         YDB_LOG_DEBUG_CTX(ctx, "TTxSessionDetach::Execute",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie},
-            {"session", Record.GetSessionId()});
+            {"sessionId", Record.GetSessionId()});
 
         auto* proxy = Self->Proxies.FindPtr(Sender);
         if (!proxy || proxy->Generation != Record.GetProxyGeneration()) {
@@ -60,7 +60,7 @@ struct TKesusTablet::TTxSessionDetach : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSessionDetach::Complete",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie});
         Self->RemoveSessionTx(Record.GetSessionId());
 
@@ -101,10 +101,10 @@ void TKesusTablet::Handle(TEvKesus::TEvDetachSession::TPtr& ev) {
 
         // avoid unnecessary transactions
         YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Fast-path detach",
-            {"tabletID", TabletID()},
-            {"session", sessionId},
-            {"fromSender", ev->Sender},
-            {"cookie", ev->Cookie});
+            {"tabletId", TabletID()},
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie},
+            {"sessionId", sessionId});
 
         Y_ABORT_UNLESS(ScheduleSessionTimeout(session, TActivationContext::AsActorContext()));
         Send(ev->Sender,

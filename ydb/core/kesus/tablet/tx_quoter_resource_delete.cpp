@@ -29,11 +29,11 @@ struct TKesusTablet::TTxQuoterResourceDelete : public TTxBase {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "TTxQuoterResourceDelete::Execute path=",
+        YDB_LOG_DEBUG_CTX(ctx, "TTxQuoterResourceDelete::Execute",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie},
-            {"id", Record.GetResourceId()},
+            {"resourceId", Record.GetResourceId()},
             {"resourcePath", Record.GetResourcePath()});
 
         TQuoterResourceTree* resource = Record.GetResourceId() ?
@@ -73,7 +73,7 @@ struct TKesusTablet::TTxQuoterResourceDelete : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxQuoterResourceDelete::Complete",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie});
 
         Y_ABORT_UNLESS(Reply);

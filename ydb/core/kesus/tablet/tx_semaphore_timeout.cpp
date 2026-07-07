@@ -29,8 +29,8 @@ struct TKesusTablet::TTxSemaphoreTimeout : public TTxBase {
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSemaphoreTimeout::Execute",
             {"tabletId", Self->TabletID()},
-            {"session", SessionId},
-            {"semaphore", SemaphoreId});
+            {"sessionId", SessionId},
+            {"semaphoreId", SemaphoreId});
 
         if (!Cookie.DetachEvent()) {
             // Timeout has been cancelled
@@ -71,8 +71,8 @@ struct TKesusTablet::TTxSemaphoreTimeout : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSemaphoreTimeout::Complete",
             {"tabletId", Self->TabletID()},
-            {"session", SessionId},
-            {"semaphore", SemaphoreId});
+            {"sessionId", SessionId},
+            {"semaphoreId", SemaphoreId});
         Self->RemoveSessionTx(SessionId);
 
         for (auto& ev : Events) {

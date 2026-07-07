@@ -30,9 +30,9 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSemaphoreCreate::Execute",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie},
-            {"name", Record.GetName().Quote()},
+            {"semaphoreId", Record.GetName()},
             {"limit", Record.GetLimit()});
 
         NIceDb::TNiceDb db(txc.DB);
@@ -105,8 +105,7 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
         Self->TabletCounters->Simple()[COUNTER_SEMAPHORE_COUNT].Add(1);
         YDB_LOG_DEBUG_CTX(ctx, "Created new semaphore",
             {"tabletId", Self->TabletID()},
-            {"semaphoreId", semaphoreId},
-            {"recordNameQuote", Record.GetName().Quote()});
+            {"semaphoreId", Record.GetName()});
         ReplyOk();
         return true;
     }
@@ -114,7 +113,7 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSemaphoreCreate::Complete",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie});
         Self->RemoveSessionTx(Record.GetSessionId());
 

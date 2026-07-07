@@ -32,9 +32,9 @@ struct TKesusTablet::TTxQuoterResourceAdd : public TTxBase {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "TTxQuoterResourceAdd::Execute path=",
+        YDB_LOG_DEBUG_CTX(ctx, "TTxQuoterResourceAdd::Execute",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie},
             {"resourcePath", Record.GetResource().GetResourcePath()},
             {"config", Record.GetResource().GetHierarchicalDRRResourceConfig()});
@@ -87,7 +87,7 @@ struct TKesusTablet::TTxQuoterResourceAdd : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxQuoterResourceAdd::Complete",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie});
 
         Y_ABORT_UNLESS(Reply);

@@ -22,7 +22,7 @@ struct TKesusTablet::TTxSessionsDescribe : public TTxBase {
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSessionsDescribe::Execute",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie});
 
         NIceDb::TNiceDb db(txc.DB);
@@ -48,7 +48,7 @@ struct TKesusTablet::TTxSessionsDescribe : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSessionsDescribe::Complete",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie});
 
         Y_ABORT_UNLESS(Reply);

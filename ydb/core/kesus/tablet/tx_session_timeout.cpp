@@ -27,7 +27,7 @@ struct TKesusTablet::TTxSessionTimeout : public TTxBase {
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSessionTimeout::Execute",
             {"tabletId", Self->TabletID()},
-            {"session", SessionId});
+            {"sessionId", SessionId});
 
         if (!Cookie.DetachEvent()) {
             // Timeout has been cancelled
@@ -57,7 +57,7 @@ struct TKesusTablet::TTxSessionTimeout : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSessionTimeout::Complete",
             {"tabletId", Self->TabletID()},
-            {"session", SessionId});
+            {"sessionId", SessionId});
         Self->RemoveSessionTx(SessionId);
 
         for (auto& ev : Events) {

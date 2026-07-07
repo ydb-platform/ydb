@@ -15,25 +15,17 @@ class TIamResolverActor : public NActors::TActor<TIamResolverActor> {
     public:
         TIamResolverActor(const TString& serviceAccountId, const TString& resourceId)
             : TBase(&TIamResolverActor::StateFunc)
+            , ServiceAccountId(serviceAccountId)
+            , ResourceId(resourceId)
         {
-            const auto& serviceControl = NKikimr::AppData()->ReplicationConfig.GetIamServiceControl();
-
-            NYdb::TIamServiceParams iamParams;
-            iamParams.SystemServiceAccountCredentials = NYdb::CreateIamCredentialsProviderFactory();
-            iamParams.Endpoint = serviceControl.GetEndpoint();
-            iamParams.ServiceId = serviceControl.GetServiceId();
-            iamParams.MicroserviceId = serviceControl.GetMicroserviceId();
-            iamParams.ResourceType = serviceControl.GetResourceType();
-            iamParams.ResourceId = resourceId;
-            iamParams.TargetServiceAccountId = serviceAccountId;
-
-            Provider = CreateIamServiceCredentialsProviderFactory(iamParams)->CreateProvider();
         }
+
     private:
         STRICT_STFUNC(StateFunc,
             hFunc(NYql::TEvIamAuthCredentialsProviderService::TEvGetAuthInfoRequest, Handle);
             sFunc(NActors::TEvents::TEvPoison, PassAway);
         )
+
         void Handle(NYql::TEvIamAuthCredentialsProviderService::TEvGetAuthInfoRequest::TPtr& event) {
             auto& promise = event->Get()->Promise;
             // Attention: only Promise field is valid here
@@ -41,12 +33,30 @@ class TIamResolverActor : public NActors::TActor<TIamResolverActor> {
                 if (!NKikimr::AppData()->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam()) {
                     throw yexception() << "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it";
                 }
+                if (!Provider) {
+                    const auto& serviceControl = NKikimr::AppData()->ReplicationConfig.GetIamServiceControl();
+
+                    NYdb::TIamServiceParams iamParams;
+                    iamParams.SystemServiceAccountCredentials = NYdb::CreateIamCredentialsProviderFactory();
+                    iamParams.Endpoint = serviceControl.GetEndpoint();
+                    iamParams.ServiceId = serviceControl.GetServiceId();
+                    iamParams.MicroserviceId = serviceControl.GetMicroserviceId();
+                    iamParams.ResourceType = serviceControl.GetResourceType();
+                    iamParams.ResourceId = ResourceId;
+                    iamParams.TargetServiceAccountId = ServiceAccountId;
+
+                    Provider = CreateIamServiceCredentialsProviderFactory(iamParams)->CreateProvider();
+                }
                 promise.SetValue(Provider->GetAuthInfo());
             } catch(...) {
                 promise.SetException(std::current_exception());
             }
         }
+
+    private:
         NYdb::TCredentialsProviderPtr Provider;
+        const TString ServiceAccountId;
+        const TString ResourceId;
 };
 
 class TIamResolverServiceActor : public NActors::TActor<TIamResolverServiceActor> {

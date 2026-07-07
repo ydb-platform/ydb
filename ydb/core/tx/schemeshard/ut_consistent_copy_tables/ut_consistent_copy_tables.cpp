@@ -746,8 +746,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                 Columns { Name: "key" Type: "Uint32" NotNull: true }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: "key"
-                MultiColumnStatistics { Name: "s1" ColumnNames: "value" Types: COUNT_MIN_SKETCH }
             }
+            MultiColumnStatistics { Name: "s1" ColumnNames: "value" Types: COUNT_MIN_SKETCH }
         )");
         env.TestWaitNotification(runtime, txId);
 

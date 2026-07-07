@@ -664,6 +664,76 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
     }
 
+    // Flushes of one range must land on the DDisk in lsn order: routes are
+    // independent and the DDisk keeps whatever arrives last, so a newer
+    // record must not flush while an older overlapping record's data is not
+    // on the DDisk yet. Otherwise the older bytes can land on top of the
+    // newer ones - for example when the older write reaches its quorum late
+    // and flushes after the newer one was already flushed and erased.
+    Y_UNIT_TEST(ShouldNotFlushWhileOlderOverlappingWriteIsNotFlushed)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        const auto range = TBlockRange64::WithLength(10, 10);
+        const auto disjointRange = TBlockRange64::WithLength(100, 10);
+
+        // The older overlapping write (lsn 10) is dispatched but has not
+        // reached its quorum yet; the newer one (lsn 20) already has.
+        dirtyMap.RegisterInflightWrite(10, range);
+        dirtyMap.RegisterInflightWrite(20, range);
+        dirtyMap
+            .WriteFinished(20, range, MakePrimaryHosts(), MakePrimaryHosts());
+
+        // A disjoint write is not affected by the ordering gate.
+        dirtyMap.RegisterInflightWrite(30, disjointRange);
+        dirtyMap.WriteFinished(
+            30,
+            disjointRange,
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
+
+        // Lsn 20 must stay parked while lsn 10 is not flushed; lsn 30 flushes.
+        auto hint = dirtyMap.MakeFlushHint(1);
+        UNIT_ASSERT_C(
+            hint.DebugPrint().find(":20[") == TString::npos,
+            "newer overlapping write got a flush hint while the older one is "
+            "not flushed: "
+                << hint.DebugPrint());
+        UNIT_ASSERT_C(
+            hint.DebugPrint().find(":30[") != TString::npos,
+            "disjoint write must not be affected by the ordering gate: "
+                << hint.DebugPrint());
+
+        // The older write reaches its quorum: it flushes first, the newer one
+        // still waits for its data to land on the DDisk.
+        dirtyMap
+            .WriteFinished(10, range, MakePrimaryHosts(), MakePrimaryHosts());
+        auto olderHint = dirtyMap.MakeFlushHint(1);
+        UNIT_ASSERT_C(
+            olderHint.DebugPrint().find(":10[") != TString::npos,
+            "older write must flush once it reaches the quorum: "
+                << olderHint.DebugPrint());
+        UNIT_ASSERT_C(
+            olderHint.DebugPrint().find(":20[") == TString::npos,
+            "newer write must wait until the older one is flushed, not just "
+            "requested: "
+                << olderHint.DebugPrint());
+
+        // The older flush lands on the DDisk - now the newer one may flush.
+        for (const auto& [route, segments]: olderHint.GetAllHints()) {
+            dirtyMap.FlushFinished(route, MakeLsnVector(segments.Segments), {});
+        }
+        auto newerHint = dirtyMap.MakeFlushHint(1);
+        UNIT_ASSERT_C(
+            newerHint.DebugPrint().find(":20[") != TString::npos,
+            "newer write must flush after the older one landed: "
+                << newerHint.DebugPrint());
+    }
+
     Y_UNIT_TEST(ShouldWriteAndFlushAndEraseWhenAdditionalHandOffDesired)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
@@ -932,7 +1002,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             TBlockRange64::WithLength(95, 10),
             requested,
             confirmed);
-        // Range over write watermark. Should be flushed to 3 ddisks.
+        // Range over write watermark. Should be flushed to 3 ddisks. It
+        // overlaps lsn 124, so the ordering gate defers it until 124's data
+        // lands on the DDisks.
         dirtyMap.RegisterInflightWrite(125, TBlockRange64::WithLength(100, 10));
         dirtyMap.WriteFinished(
             125,
@@ -942,11 +1014,22 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         auto flushHint = dirtyMap.MakeFlushHint(3);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0->H0:123[10..19],124[95..104],125[100..109];"
-            "H0->H3:123[10..19],124[95..104],125[100..109];"
-            "H1->H1:123[10..19],124[95..104],125[100..109];"
+            "H0->H0:123[10..19],124[95..104];"
+            "H0->H3:123[10..19],124[95..104];"
+            "H1->H1:123[10..19],124[95..104];"
             "H2->H2:123[10..19],124[95..104];",
             flushHint.DebugPrint());
+
+        // Land 123 and 124 on the DDisks - the deferred 125 flushes next.
+        for (const auto& [route, hint]: flushHint.GetAllHints()) {
+            dirtyMap.FlushFinished(route, MakeLsnVector(hint.Segments), {});
+        }
+        auto deferredHint = dirtyMap.MakeFlushHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0->H0:125[100..109];"
+            "H0->H3:125[100..109];"
+            "H1->H1:125[100..109];",
+            deferredHint.DebugPrint());
     }
 
     Y_UNIT_TEST(ShouldBlockFlushOverWriteWatermark)
@@ -979,7 +1062,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             TBlockRange64::WithLength(95, 10),
             requested,
             confirmed);
-        // Range over write watermark. Should be flushed only to healthy DDisks.
+        // Range over write watermark. Should be flushed only to healthy
+        // DDisks. It overlaps lsn 124, so the ordering gate defers it until
+        // 124's data lands on the DDisks.
         dirtyMap.RegisterInflightWrite(125, TBlockRange64::WithLength(100, 10));
         dirtyMap.WriteFinished(
             125,
@@ -989,10 +1074,20 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         auto flushHint = dirtyMap.MakeFlushHint(3);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0->H0:123[10..19],124[95..104],125[100..109];"
-            "H1->H1:123[10..19],124[95..104],125[100..109];"
+            "H0->H0:123[10..19],124[95..104];"
+            "H1->H1:123[10..19],124[95..104];"
             "H2->H2:123[10..19],124[95..104];",
             flushHint.DebugPrint());
+
+        // Land 123 and 124 on the DDisks - the deferred 125 flushes next.
+        for (const auto& [route, hint]: flushHint.GetAllHints()) {
+            dirtyMap.FlushFinished(route, MakeLsnVector(hint.Segments), {});
+        }
+        auto deferredHint = dirtyMap.MakeFlushHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0->H0:125[100..109];"
+            "H1->H1:125[100..109];",
+            deferredHint.DebugPrint());
     }
 
     Y_UNIT_TEST(ShouldLockPBuffer)

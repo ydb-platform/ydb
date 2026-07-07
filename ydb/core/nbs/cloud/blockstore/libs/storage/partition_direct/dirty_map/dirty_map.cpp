@@ -480,6 +480,34 @@ TFlushHints TBlocksDirtyMap::MakeFlushHint(size_t batchSize)
             continue;
         }
 
+        // Flushes of one range must land on the DDisk in lsn order: flush
+        // requests run on independent routes and the DDisk keeps whatever
+        // arrives last, so a record must not flush while an older overlapping
+        // record's data is not on the DDisk yet - otherwise the older bytes
+        // can land on top of the newer ones (for example when the older write
+        // reaches its quorum late and flushes after the newer one was already
+        // flushed and erased).
+        bool olderUnflushedOverlap = false;
+        Inflight.EnumerateOverlapping(
+            item->Range,
+            [&](TInflightMap::TFindItem& overlap)
+            {
+                const auto state = overlap.Value.GetState();
+                const bool onDDisk =
+                    state == TInflightInfo::EState::PBufferFlushed ||
+                    state == TInflightInfo::EState::PBufferErasing ||
+                    state == TInflightInfo::EState::PBufferErased;
+                if (overlap.Key < lsn && !onDDisk) {
+                    olderUnflushedOverlap = true;
+                    return TInflightMap::EEnumerateContinuation::Stop;
+                }
+                return TInflightMap::EEnumerateContinuation::Continue;
+            });
+        if (olderUnflushedOverlap) {
+            ReadyToFlush.insert(lsn);
+            continue;
+        }
+
         for (THostIndex destination: DesiredDDisks) {
             if (!DDiskStates[destination].NeedFlushToDDisk(item->Range)) {
                 continue;

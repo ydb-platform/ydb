@@ -715,8 +715,9 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
     }
 
     for (const auto& message : messages) {
-
-        LOG_ROW_DISPATCHER_TRACE("Data received: " << message.DebugString(true));
+        YDB_LOG_TRACE("Data received",
+            {"logPrefix", LogPrefix},
+            {"data", message.DebugString(true)});
         YDB_LOG_TRACE("Data received",
             {"logPrefix", LogPrefix},
             {"data", message.DebugString(true)});

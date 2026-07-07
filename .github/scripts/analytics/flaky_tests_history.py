@@ -121,11 +121,11 @@ def determine_start_date(ydb_wrapper, test_runs_table, flaky_tests_table, build_
 def build_history_query(date, test_runs_table, testowners_table, build_type, branch):
     """Build SQL query to get test history for a specific date."""
     return f"""
-        select
+        SELECT
             full_name,
             date_base,
             history_list,
-            if(dist_hist = '','no_runs',dist_hist) as dist_hist,
+            IF(dist_hist = '', 'no_runs', dist_hist) AS dist_hist,
             suite_folder,
             test_name,
             build_type,
@@ -133,59 +133,74 @@ def build_history_query(date, test_runs_table, testowners_table, build_type, bra
             owners,
             first_run,
             last_run
-
-        from (
-            select
+        FROM (
+            SELECT
                 full_name,
                 date_base,
-                AGG_LIST(status) as history_list ,
-                String::JoinFromList( ListSort(AGG_LIST_DISTINCT(status)) ,',') as dist_hist,
-                suite_folder,
-                test_name,
-                owners,
+                MAX_BY(history_list, suite_len) AS history_list,
+                MAX_BY(dist_hist, suite_len) AS dist_hist,
+                MAX_BY(suite_folder, suite_len) AS suite_folder,
+                MAX_BY(test_name, suite_len) AS test_name,
+                MAX_BY(owners, suite_len) AS owners,
                 build_type,
                 branch,
-                min(run_timestamp) as first_run,
-                max(run_timestamp) as last_run
-            from (
-                select * from (
-                    select distinct
-                        full_name,
-                        suite_folder,
-                        test_name,
-                        owners,
-                        Date('{date}') as date_base,
-                        '{build_type}' as  build_type,
-                        '{branch}' as  branch
-                    from  `{testowners_table}` 
-                ) as test_and_date
-                left JOIN (
-                    select
-                        suite_folder || '/' || test_name as full_name,
-                        run_timestamp,
-                        status
-                    from  `{test_runs_table}`
-                    where
-                        run_timestamp >= Date('{date}')
-                        and run_timestamp < Date('{date}') + Interval("P1D")
-                        and job_name in (
-                            'Nightly-run',
-                            'Regression-run',
-                            'Regression-run_Large',
-                            'Regression-run_Small_and_Medium',
-                            'Regression-run_compatibility',
-                            'Regression-whitelist-run',
-                            'Postcommit_relwithdebinfo', 
-                            'Postcommit_asan'
-                        ) 
-                        and build_type = '{build_type}'
-                        and branch = '{branch}'
-                        and (pull IS NULL OR NOT String::Contains(pull, 'manual'))
-                    order by full_name,run_timestamp desc
-                ) as hist
-                ON test_and_date.full_name=hist.full_name
+                MIN(first_run) AS first_run,
+                MAX(last_run) AS last_run
+            FROM (
+                SELECT
+                    full_name,
+                    date_base,
+                    AGG_LIST(status) AS history_list,
+                    String::JoinFromList(ListSort(AGG_LIST_DISTINCT(status)), ',') AS dist_hist,
+                    suite_folder,
+                    test_name,
+                    owners,
+                    build_type,
+                    branch,
+                    Length(suite_folder) AS suite_len,
+                    MIN(run_timestamp) AS first_run,
+                    MAX(run_timestamp) AS last_run
+                FROM (
+                    SELECT * FROM (
+                        SELECT DISTINCT
+                            full_name,
+                            suite_folder,
+                            test_name,
+                            owners,
+                            Date('{date}') AS date_base,
+                            '{build_type}' AS build_type,
+                            '{branch}' AS branch
+                        FROM `{testowners_table}`
+                    ) AS test_and_date
+                    LEFT JOIN (
+                        SELECT
+                            suite_folder || '/' || test_name AS full_name,
+                            run_timestamp,
+                            status
+                        FROM `{test_runs_table}`
+                        WHERE
+                            run_timestamp >= Date('{date}')
+                            AND run_timestamp < Date('{date}') + Interval("P1D")
+                            AND job_name IN (
+                                'Nightly-run',
+                                'Regression-run',
+                                'Regression-run_Large',
+                                'Regression-run_Small_and_Medium',
+                                'Regression-run_compatibility',
+                                'Regression-whitelist-run',
+                                'Postcommit_relwithdebinfo',
+                                'Postcommit_asan'
+                            )
+                            AND build_type = '{build_type}'
+                            AND branch = '{branch}'
+                            AND (pull IS NULL OR NOT String::Contains(pull, 'manual'))
+                        ORDER BY full_name, run_timestamp DESC
+                    ) AS hist
+                    ON test_and_date.full_name = hist.full_name
+                )
+                GROUP BY full_name, suite_folder, test_name, date_base, build_type, branch, owners
             )
-            GROUP BY full_name,suite_folder,test_name,date_base,build_type,branch,owners
+            GROUP BY full_name, date_base, build_type, branch
         )
     """
                 

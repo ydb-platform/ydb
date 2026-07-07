@@ -19,6 +19,21 @@ from github_issue_utils import (
 from testowners_utils import normalize_github_team_owners_string
 
 
+def dedupe_dataframe_by_full_name(df):
+    """Collapse rows that share full_name (e.g. legacy vs canonical suite_folder split).
+
+    Keeps the row with the longest suite_folder path as the canonical decomposition.
+    """
+    if df is None or df.empty or 'full_name' not in df.columns:
+        return df
+    return (
+        df.assign(_suite_len=df['suite_folder'].astype(str).str.len())
+        .sort_values(['full_name', '_suite_len'])
+        .drop_duplicates('full_name', keep='last')
+        .drop(columns='_suite_len')
+    )
+
+
 def create_tables(ydb_wrapper, table_path):
     print(f"> create table if not exists:'{table_path}'")
 
@@ -421,7 +436,7 @@ def main():
                     )
                 rows.append(rec)
 
-            return pd.DataFrame(rows)
+            return dedupe_dataframe_by_full_name(pd.DataFrame(rows))
 
         # Get last existing day
         print("Getting date of last collected monitor data")
@@ -551,7 +566,7 @@ def main():
         print(f'Getting aggregated history for {len(date_list)} day(s): {date_list[0]} .. {date_list[-1]}')
         for date in sorted(date_list):
             query_get_history = f"""
-                SELECT 
+                SELECT
                     hist.branch AS branch,
                     hist.build_type AS build_type,
                     hist.date_window AS date_window,
@@ -568,32 +583,41 @@ def main():
                     hist.suite_folder AS suite_folder,
                     hist.test_name AS test_name
                 FROM (
-                    SELECT * FROM
-                    `{flaky_tests_table}` 
-                    WHERE 
-                    date_window = Date('{date}')
-                    AND build_type = '{build_type}' 
-                    AND branch = '{branch}'
-                ) AS hist 
+                    SELECT *
+                    FROM (
+                        SELECT
+                            hist.*,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY hist.full_name
+                                ORDER BY Length(hist.suite_folder) DESC
+                            ) AS _dedup_rn
+                        FROM `{flaky_tests_table}` AS hist
+                        WHERE
+                            hist.date_window = Date('{date}')
+                            AND hist.build_type = '{build_type}'
+                            AND hist.branch = '{branch}'
+                    )
+                    WHERE _dedup_rn = 1
+                ) AS hist
                 INNER JOIN (
-                    SELECT 
-                        test_name,
-                        suite_folder,
-                        owners,
-                        is_muted,
+                    SELECT
+                        suite_folder || '/' || test_name AS full_name,
+                        MAX_BY(test_name, Length(suite_folder)) AS test_name,
+                        MAX_BY(suite_folder, Length(suite_folder)) AS suite_folder,
+                        MAX_BY(owners, Length(suite_folder)) AS owners,
+                        MAX_BY(is_muted, Length(suite_folder)) AS is_muted,
                         date,
                         build_type
-                    FROM 
-                        `{all_tests_table}`
-                    WHERE 
+                    FROM `{all_tests_table}`
+                    WHERE
                         branch = '{branch}'
                         AND build_type = '{build_type}'
                         AND date = Date('{date}')
                         AND run_timestamp_last >= Timestamp('{thirty_days_ago_ts}')
+                    GROUP BY suite_folder || '/' || test_name, date, build_type
                 ) AS owners_t
-                ON 
-                    hist.test_name = owners_t.test_name
-                    AND hist.suite_folder = owners_t.suite_folder
+                ON
+                    hist.full_name = owners_t.full_name
                     AND hist.date_window = owners_t.date
                     AND hist.build_type = owners_t.build_type;
             """
@@ -629,7 +653,7 @@ def main():
                 )
 
         start_time = time.time()
-        df = pd.DataFrame(data)
+        df = dedupe_dataframe_by_full_name(pd.DataFrame(data))
 
         if df.empty:
             print(f"No test data found for branch='{branch}', build_type='{build_type}' in the date range. Nothing to process.")

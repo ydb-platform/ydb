@@ -21,6 +21,7 @@
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/library/aws_init/aws.h>
+#include <ydb/public/lib/value/value.h>
 
 #include <library/cpp/testing/hook/hook.h>
 
@@ -1298,6 +1299,23 @@ namespace {
             Runtime().WaitFor("export actors stopped", [&]{ return ctx.GetAliveCounter() == 0; }, TDuration::Seconds(60));
             ctx.BlockExportBatch->Stop();
             ctx.BlockExportBatch->Unblock();
+        }
+
+        ui64 CountCompletedBackupsRows() {
+            const auto result = LocalMiniKQL(Runtime(), TTestTxConfig::SchemeShard, R"(
+                (
+                    (let range '(
+                        '('PathId (Null) (Void))
+                        '('TxId (Null) (Void))
+                        '('DateTimeOfCompletion (Null) (Void))
+                    ))
+                    (let fields '('PathId))
+                    (return (AsList
+                        (SetResult 'Result (SelectRange 'CompletedBackups range fields '()))
+                    ))
+                )
+            )");
+            return NKikimr::NClient::TValue::Create(result)[0]["List"].Size();
         }
 
         void CancelColumnTableExportWithReboot(bool rebootCS, bool rebootSS, bool rebootBeforeCancel) {
@@ -5041,5 +5059,32 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         FinalizeColumnTableSlowS3Export(ctx);
 
         RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+    }
+
+    Y_UNIT_TEST(DropColumnTableAfterCompletedExportClearsBackupHistory) {
+        InitColumnTableExportSlowS3Test();
+        Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
+
+        ui64 txId = 100;
+        CreateColumnTableWithData(txId, "ColumnTable");
+
+        const ui64 exportId = StartColumnTableS3Export(txId, "ColumnTable", "dest");
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const TString exportCopyPath = Sprintf("/MyRoot/export-%" PRIu64 "/0", exportId);
+        TestDescribeResult(DescribePath(Runtime(), exportCopyPath), {NLs::PathExist});
+        UNIT_ASSERT_VALUES_UNEQUAL(CountCompletedBackupsRows(), 0u);
+
+        TestDropColumnTable(Runtime(), ++txId, Sprintf("/MyRoot/export-%" PRIu64, exportId), "0");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountCompletedBackupsRows(), 0u);
+        TestDescribeResult(DescribePath(Runtime(), exportCopyPath), {NLs::PathNotExist});
+
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/ColumnTable"), {NLs::PathExist});
+        UNIT_ASSERT_VALUES_EQUAL(CountCompletedBackupsRows(), 0u);
     }
 }

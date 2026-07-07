@@ -4688,7 +4688,7 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId,
         db.Table<Schema::BackupSettings>().Key(pathId.LocalPathId).Delete();
     }
     db.Table<Schema::MigratedBackupSettings>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
-    
+
     db.Table<Schema::RestoreTasks>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 
     db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Delete();

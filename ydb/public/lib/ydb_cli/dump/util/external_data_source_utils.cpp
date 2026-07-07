@@ -21,19 +21,17 @@ std::string PropertyToString(const std::pair<TString, TString>& property) {
 
 TString BuildCreateExternalDataSourceQuery(
     const Ydb::Table::DescribeExternalDataSourceResult& description,
-    const TString& db,
-    bool ifNotExists)
+    const TString& db)
 {
     return std::format(
-        "{}"
-        "CREATE EXTERNAL DATA SOURCE {}`{}`\n"
+        "-- database: \"{}\"\n"
+        "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}`\n"
         "WITH (\n"
         "{},\n"
         "{}"
         "{}\n"
         ");",
-        db.empty() ? std::string() : std::format("-- database: \"{}\"\n", db.c_str()),
-        ifNotExists ? "IF NOT EXISTS " : "",
+        db.c_str(),
         description.self().name().c_str(),
         KeyValueToString("SOURCE_TYPE", description.source_type()),
         KeyValueToString("LOCATION", description.location()),

@@ -4,6 +4,8 @@ SRCS(
     affinity.cpp
     affinity.h
     cpu_load_log.h
+    cpu_topology.cpp
+    cpu_topology.h
     cpumask.h
     datetime.h
     defs.h

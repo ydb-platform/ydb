@@ -70,16 +70,16 @@ void TPQTabletMock::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TA
     Y_ABORT_UNLESS(ev->Get()->Leader, "Unexpectedly connected to follower of tablet %" PRIu64, ev->Get()->TabletId);
 
     if (PipeClientCache->OnConnect(ev)) {
-        YDB_LOG_DEBUG_CTX(ctx, "Connected to tablet from tablet",
-            {"TabletId", ev->Get()->TabletId},
-            {"tabletID", TabletID()});
+        YDB_LOG_DEBUG_CTX(ctx, "Connected",
+            {"toTabletId", ev->Get()->TabletId},
+            {"fromTabletID", TabletID()});
     } else {
         if (ev->Get()->Dead) {
             //AckRSToDeletedTablet(ev->Get()->TabletId, ctx);
         } else {
-            YDB_LOG_NOTICE_CTX(ctx, "Failed to connect to tablet from tablet",
-                {"TabletId", ev->Get()->TabletId},
-                {"tabletID", TabletID()});
+            YDB_LOG_NOTICE_CTX(ctx, "Failed to connect",
+                {"toTabletId", ev->Get()->TabletId},
+                {"fromTabletID", TabletID()});
             //RestartPipeRS(ev->Get()->TabletId, ctx);
         }
     }
@@ -87,9 +87,9 @@ void TPQTabletMock::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TA
 
 void TPQTabletMock::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx)
 {
-    YDB_LOG_DEBUG_CTX(ctx, "Client pipe to tablet from is reset",
-        {"TabletId", ev->Get()->TabletId},
-        {"tabletID", TabletID()});
+    YDB_LOG_DEBUG_CTX(ctx, "Client pipe is reset",
+        {"toTabletId", ev->Get()->TabletId},
+        {"fromTabletID", TabletID()});
 
     PipeClientCache->OnDisconnect(ev);
     //RestartPipeRS(ev->Get()->TabletId, ctx);

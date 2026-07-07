@@ -112,14 +112,14 @@ public:
     // Dictionary-encode a column unless it has "too many" distinct values.
     // `enumerate` feeds the values counted toward the distinct set. Short-circuits as soon as the verdict is clear.
     template <class TEnumerator>
-    bool IsDictionary(const ui32 recordsCount, const TEnumerator& enumerate) const {
+    bool IsDictionary(const ui32 presentCount, const TEnumerator& enumerate) const {
         if (DictionaryUniqueFraction == 0) {
             return false;
         }
         if (DictionaryUniqueFraction == 1) {
             return true;
         }
-        const ui32 tooManyUnique = static_cast<ui32>(DictionaryUniqueFraction * recordsCount) + 1;
+        const ui32 tooManyUnique = static_cast<ui32>(DictionaryUniqueFraction * presentCount) + 1;
         return !HasAtLeastUniqueValues(tooManyUnique, enumerate);
     }
 

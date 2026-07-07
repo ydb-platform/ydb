@@ -71,7 +71,7 @@ public:
 // its own step, so callers pass the DATA/READ steps directly instead of pre-joining them) + the matching
 // accessor check. See the file header for the two modes.
 template <typename... TBodyParts>
-inline TString BuildScenario(const TStringBuf alterColumnExtractor, const bool isDictionary, const TBodyParts&... bodyParts) {
+inline TString BuildScenario(const TString alterColumnExtractor, const bool isDictionary, const TBodyParts&... bodyParts) {
     const TStringBuf partitions = isDictionary ? TStringBuf("1") : TStringBuf("$$1|2|10$$");
     const TString alterColumn = isDictionary
         ? Sprintf(R"(ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, %s`DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0`, `DICTIONARY_UNIQUE_FRACTION`=`1`))",

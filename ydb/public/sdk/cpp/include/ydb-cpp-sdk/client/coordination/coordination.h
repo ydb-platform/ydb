@@ -315,8 +315,6 @@ public:
     TAsyncDescribeNodeResult DescribeNode(const std::string& path,
         const TDescribeNodeSettings& settings = TDescribeNodeSettings());
 
-    TDistributedLock CreateDistributedLock(const TDistributedLockSettings& settings);
-
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
@@ -328,6 +326,7 @@ class TSessionContext;
 
 class TSession {
     friend class TSessionContext;
+    friend class TDistributedLock;
 
 public:
     TSession() = default;
@@ -365,8 +364,12 @@ public:
     TAsyncResult<void> DeleteSemaphore(const std::string& name,
         bool force = false);
 
+    TDistributedLock CreateDistributedLock(const TDistributedLockSettings& settings);
+
 private:
     explicit TSession(TSessionContext* context);
+
+    std::shared_ptr<void> SubscribeSessionLost(std::function<void()> callback);
 
 private:
     class TImpl;

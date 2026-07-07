@@ -22,6 +22,7 @@ namespace {
 constexpr TDuration TEST_TIMEOUT = TDuration::MilliSeconds(500);
 constexpr const char* COORD_PATH = "/Some/CoordPath";
 constexpr const char* SEMAPHORE_NAME = "test-lock";
+constexpr const char* ANOTHER_SEMAPHORE_NAME = "another-test-lock";
 
 struct TTestEnv {
     TPortManager PortManager;
@@ -68,9 +69,18 @@ struct TTestEnv {
     }
 };
 
-TDistributedLock MakeLock(TTestEnv& env, const char* name = SEMAPHORE_NAME) {
-    return env.Client->CreateDistributedLock(
-        TDistributedLockSettings().Path(COORD_PATH).Name(name).Timeout(TEST_TIMEOUT));
+TSession MakeSession(TTestEnv& env) {
+    auto sessionResult = env.Client->StartSession(
+        COORD_PATH,
+        TSessionSettings().Timeout(TEST_TIMEOUT)
+    ).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), EStatus::SUCCESS, sessionResult.GetIssues().ToString());
+    return sessionResult.ExtractResult();
+}
+
+TDistributedLock MakeLock(TSession session, const char* name = SEMAPHORE_NAME) {
+    return session.CreateDistributedLock(
+        TDistributedLockSettings().Name(name).Timeout(TEST_TIMEOUT));
 }
 
 } // namespace
@@ -79,37 +89,54 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
 
     Y_UNIT_TEST(LockUnlock) {
         TTestEnv env;
-        auto lock = MakeLock(env);
+        auto session = MakeSession(env);
+        auto lock = MakeLock(session);
         lock.lock();
         lock.unlock();
     }
 
     Y_UNIT_TEST(LockGuard) {
         TTestEnv env;
-        auto lock = MakeLock(env);
+        auto session = MakeSession(env);
+        auto lock = MakeLock(session);
         std::lock_guard guard(lock);
     }
 
     Y_UNIT_TEST(TryLockSuccess) {
         TTestEnv env;
-        auto lock = MakeLock(env);
+        auto session = MakeSession(env);
+        auto lock = MakeLock(session);
         UNIT_ASSERT(lock.try_lock());
         lock.unlock();
     }
 
     Y_UNIT_TEST(TryLockFailsWhenHeld) {
         TTestEnv env;
-        auto lockA = MakeLock(env);
-        auto lockB = MakeLock(env);
+        auto sessionA = MakeSession(env);
+        auto sessionB = MakeSession(env);
+        auto lockA = MakeLock(sessionA);
+        auto lockB = MakeLock(sessionB);
         lockA.lock();
         UNIT_ASSERT(!lockB.try_lock());
+        lockA.unlock();
+    }
+
+    Y_UNIT_TEST(MultipleLockNamesInOneSession) {
+        TTestEnv env;
+        auto session = MakeSession(env);
+        auto lockA = MakeLock(session);
+        auto lockB = MakeLock(session, ANOTHER_SEMAPHORE_NAME);
+        lockA.lock();
+        lockB.lock();
+        lockB.unlock();
         lockA.unlock();
     }
 
     Y_UNIT_TEST(LockThrowsOnAcquireFailure) {
         TTestEnv env;
         env.CoordinationService.FailNextAcquire.store(true);
-        auto lock = MakeLock(env);
+        auto session = MakeSession(env);
+        auto lock = MakeLock(session);
         UNIT_ASSERT_EXCEPTION(lock.lock(), TYdbLockException);
         UNIT_ASSERT(!lock.getStopToken().stop_requested());
         lock.lock();
@@ -118,7 +145,8 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
 
     Y_UNIT_TEST(UnlockFailureNotifiesStopToken) {
         TTestEnv env;
-        auto lock = MakeLock(env);
+        auto session = MakeSession(env);
+        auto lock = MakeLock(session);
         lock.lock();
         auto token = lock.getStopToken();
         env.CoordinationService.FailNextRelease.store(true);
@@ -128,12 +156,9 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
 
     Y_UNIT_TEST(OwnerDataIsHostName) {
         TTestEnv env;
-        auto lock = MakeLock(env);
+        auto session = MakeSession(env);
+        auto lock = MakeLock(session);
         lock.lock();
-
-        auto sessionResult = env.Client->StartSession(COORD_PATH).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), EStatus::SUCCESS, sessionResult.GetIssues().ToString());
-        auto session = sessionResult.ExtractResult();
 
         auto describeResult = session.DescribeSemaphore(
             SEMAPHORE_NAME,
@@ -150,14 +175,16 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
 
     Y_UNIT_TEST(GetStopTokenInitiallyValid) {
         TTestEnv env;
-        auto lock = MakeLock(env);
+        auto session = MakeSession(env);
+        auto lock = MakeLock(session);
         UNIT_ASSERT(!lock.getStopToken().stop_requested());
     }
 
     Y_UNIT_TEST(SessionExpiryWhileHoldingLock) {
         TTestEnv env;
         env.CoordinationService.MaxPingResponses.store(2);
-        auto lock = MakeLock(env);
+        auto session = MakeSession(env);
+        auto lock = MakeLock(session);
         lock.lock();
         const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
         while (!lock.getStopToken().stop_requested() && TInstant::Now() < deadline) {
@@ -165,8 +192,35 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
         }
         UNIT_ASSERT(lock.getStopToken().stop_requested());
         lock.unlock();
+
+        UNIT_ASSERT_EXCEPTION(lock.lock(), TYdbLockException);
+
+        env.CoordinationService.MaxPingResponses.store(0);
+        auto newSession = MakeSession(env);
+        auto newLock = MakeLock(newSession);
+        newLock.lock();
+        UNIT_ASSERT(!newLock.getStopToken().stop_requested());
+        newLock.unlock();
+    }
+
+    Y_UNIT_TEST(RecoverableTransportFailureDoesNotNotifyStopToken) {
+        TTestEnv env;
+        auto session = MakeSession(env);
+        auto lock = MakeLock(session);
         lock.lock();
-        UNIT_ASSERT(!lock.getStopToken().stop_requested());
+        auto token = lock.getStopToken();
+
+        env.CoordinationService.BreakNextPingWithoutSessionLoss.store(true);
+        auto pingResult = session.Ping().ExtractValueSync();
+        UNIT_ASSERT_VALUES_UNEQUAL(pingResult.GetStatus(), EStatus::SUCCESS);
+
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
+        while (session.GetConnectionState() != EConnectionState::CONNECTED && TInstant::Now() < deadline) {
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(session.GetConnectionState(), EConnectionState::CONNECTED);
+        UNIT_ASSERT(!token.stop_requested());
+
         lock.unlock();
     }
 

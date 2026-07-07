@@ -8,7 +8,6 @@ namespace NCoordination {
     };
     struct TDistributedLockSettings {
         using TSelf = TDistributedLockSettings;
-        FLUENT_SETTING(std::string, Path);
         FLUENT_SETTING(std::string, Name);
         FLUENT_SETTING_DEFAULT(TDuration, Timeout, TDuration::Seconds(5));
     };
@@ -16,7 +15,7 @@ namespace NCoordination {
     // Satisfies BasicLockable (lock/unlock) for std::lock_guard; not a blocking Lockable.
     class TDistributedLock {
     public:
-        TDistributedLock(TClient& client, const TDistributedLockSettings& settings);
+        TDistributedLock(TSession session, const TDistributedLockSettings& settings);
         ~TDistributedLock();
         TDistributedLock(const TDistributedLock&) = delete;
         TDistributedLock& operator=(const TDistributedLock&) = delete;

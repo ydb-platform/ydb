@@ -47,6 +47,7 @@ class TMockCoordinationService : public Ydb::Coordination::V1::CoordinationServi
 public:
     std::atomic<bool> FailNextAcquire{false};
     std::atomic<bool> FailNextRelease{false};
+    std::atomic<bool> BreakNextPingWithoutSessionLoss{false};
     // Zero means unlimited pong responses; set to a positive value to stop responding
     // after N pings (used by SessionPingTimeout).
     std::atomic<size_t> MaxPingResponses{0};
@@ -82,6 +83,9 @@ public:
         size_t pingsReceived = 0;
         while (stream->Read(&request)) {
             if (request.has_ping()) {
+                if (BreakNextPingWithoutSessionLoss.exchange(false)) {
+                    return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Injected recoverable transport failure");
+                }
                 const size_t maxResponses = MaxPingResponses.load();
                 if (!maxResponses || ++pingsReceived <= maxResponses) {
                     Ydb::Coordination::SessionResponse response;

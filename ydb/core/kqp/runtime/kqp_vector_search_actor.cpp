@@ -590,6 +590,17 @@ private:
         meta->SetNotNull(notNull);
     }
 
+    // Append a column to the read from its proto TColumnMeta, forwarding the optional
+    // per-column TypeInfo (mirrors AddColumnMetaKeyColumnType, which does this for key
+    // column types). `id` is passed explicitly because output and PK columns are read
+    // under the posting/main table's own column ids, not TColumnMeta::Id.
+    void AddColumnMeta(NKikimrTxDataShard::TKqpReadRangesSourceSettings* src,
+        ui32 id, const NKikimrTxDataShard::TKqpTransaction::TColumnMeta& col)
+    {
+        AddColumn(src, id, col.GetName(), col.GetType(),
+            col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr, col.GetNotNull());
+    }
+
     // Push top-K-by-distance ranking down into the datashard read so it returns only
     // the K nearest rows of this read instead of the full scan. The actor still merges
     // the per-read top-K across shards/clusters into the global top-K (the global K
@@ -653,14 +664,10 @@ private:
             // plus any PK columns not already among them for per-row dedup; see
             // BuildCoveredPostingColumns.
             for (size_t i = 0; i < Settings.OutputColumnsSize(); ++i) {
-                const auto& col = Settings.GetOutputColumns(i);
-                const NKikimrProto::TTypeInfo* ti = col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr;
-                AddColumn(src, Settings.GetPostingOutputColumnIds(i), col.GetName(), col.GetType(), ti, col.GetNotNull());
+                AddColumnMeta(src, Settings.GetPostingOutputColumnIds(i), Settings.GetOutputColumns(i));
             }
             for (ui32 j : CoveredExtraPkIndices) {
-                const auto& pk = Settings.GetMainTableKeyColumns(j);
-                const NKikimrProto::TTypeInfo* ti = pk.HasTypeInfo() ? &pk.GetTypeInfo() : nullptr;
-                AddColumn(src, Settings.GetPostingTableKeyColumnIds(j + 1), pk.GetName(), pk.GetType(), ti, pk.GetNotNull());
+                AddColumnMeta(src, Settings.GetPostingTableKeyColumnIds(j + 1), Settings.GetMainTableKeyColumns(j));
             }
             // Covered index ranks on the posting table: push top-K down so the
             // datashard returns only the nearest rows. A single read batches several
@@ -675,9 +682,7 @@ private:
             // Read just the PK columns (using posting table column ids) to feed
             // the main table read.
             for (size_t i = 0; i < Settings.MainTableKeyColumnsSize(); ++i) {
-                const auto& pk = Settings.GetMainTableKeyColumns(i);
-                const NKikimrProto::TTypeInfo* ti = pk.HasTypeInfo() ? &pk.GetTypeInfo() : nullptr;
-                AddColumn(src, Settings.GetPostingTableKeyColumnIds(i + 1), pk.GetName(), pk.GetType(), ti, pk.GetNotNull());
+                AddColumnMeta(src, Settings.GetPostingTableKeyColumnIds(i + 1), Settings.GetMainTableKeyColumns(i));
             }
         }
 
@@ -726,8 +731,7 @@ private:
 
         AddMainKeyColumnTypes(src);
         for (const auto& col : Settings.GetOutputColumns()) {
-            const NKikimrProto::TTypeInfo* ti = col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr;
-            AddColumn(src, col.GetId(), col.GetName(), col.GetType(), ti, col.GetNotNull());
+            AddColumnMeta(src, col.GetId(), col);
         }
 
         // Non-covered index ranks on the main table: push top-K down so the
@@ -819,7 +823,13 @@ private:
         TVector<TActiveRead> finishedReads;
         {
             auto guard = BindAllocator();
-            for (auto& ar : ActiveReads) {
+            // Partition the active reads into finished and still-running as we drain
+            // them, so dropping the finished ones needs no second membership scan.
+            TVector<TActiveRead> keptReads;
+            keptReads.reserve(ActiveReads.size());
+            size_t i = 0;
+            for (; i < ActiveReads.size(); ++i) {
+                auto& ar = ActiveReads[i];
                 TMaybe<TInstant> watermark;
                 ui64 freeSpace = 32 * 1024 * 1024;
                 bool finished = false;
@@ -832,27 +842,26 @@ private:
                 if (finished) {
                     CollectLocks(ar.Read);
                     finishedReads.push_back(ar);
+                } else {
+                    keptReads.push_back(ar);
                 }
                 if (Failed) {
+                    ++i;
                     break;
                 }
             }
-        }
-        // Drop finished reads from the active set and tear them down outside our
-        // allocator guard (their PassAway binds the allocator itself). Most wake-ups
-        // deliver partial data with nothing finished, so skip this entirely then --
-        // both the membership scan of ActiveReads and the reads' teardown. Any reads
-        // left unpolled after a Failed break stay active and are torn down in PassAway.
-        if (!finishedReads.empty()) {
-            ActiveReads.erase(
-                std::remove_if(ActiveReads.begin(), ActiveReads.end(), [&](const TActiveRead& ar) {
-                    return std::any_of(finishedReads.begin(), finishedReads.end(),
-                        [&](const TActiveRead& f) { return f.Read == ar.Read; });
-                }),
-                ActiveReads.end());
-            for (const auto& ar : finishedReads) {
-                StopRead(ar.Read);
+            // Reads left unpolled after a Failed break stay active (torn down in
+            // PassAway); keep them in the active set.
+            for (; i < ActiveReads.size(); ++i) {
+                keptReads.push_back(ActiveReads[i]);
             }
+            ActiveReads.swap(keptReads);
+        }
+        // Tear the finished reads down outside our allocator guard (their PassAway
+        // binds the allocator itself). Most wake-ups deliver partial data with nothing
+        // finished, so this loop is usually empty.
+        for (const auto& ar : finishedReads) {
+            StopRead(ar.Read);
         }
         if (Failed) {
             return;

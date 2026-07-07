@@ -4161,6 +4161,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         // Block gen2 from dropping the gen1 lease (so that there will be a
         // small window with gen1 still holding the lease).
         TBlockEvents<TEvTablet::TEvDropLease> blockedDropLease(runtime);
+        UNIT_ASSERT(tabletToStorageInfo.contains(tableShardId));
         StartTestTablet(
             runtime,
             tabletToStorageInfo.at(tableShardId).Release(),
@@ -4189,7 +4190,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         THashSet<TActorId> writeResultSenders;
         auto writeResultObserver = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>(
         [&](const NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
-            if (ev->Get()->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+            if (ev->Get()->Record.GetOrigin() == tableShardId &&
+                ev->Get()->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
                 writeResultSenders.insert(ev->Sender);
             }
         });
@@ -4200,13 +4202,23 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         auto tableShardGen2Actor = ResolveTablet(runtime, tableShardId);
         UNIT_ASSERT(tableShardGen1Actor != tableShardGen2Actor);
 
-        // Gen1 should not send acks as it is no longer the leader.
-        UNIT_ASSERT(!readSetAckSenders.contains(tableShardGen1Actor));
         // Gen2 should get a resent readset.
-        UNIT_ASSERT(readSetRecipients.contains(tableShardGen2Actor));
+        runtime.WaitFor("ReadSets for gen2", [&] {
+            return readSetRecipients.contains(tableShardGen2Actor);
+        });
+
+        // Gen1 should not send acks as it is no longer the leader.
+        runtime.WaitFor("ReadSetAcks", [&] {
+            return !readSetAckSenders.empty();
+        });
+        UNIT_ASSERT(!readSetAckSenders.contains(tableShardGen1Actor));
+
         // Gen1 should be able to send a successful TEvWriteResult, as the transaction
         // outcome is decided by the time the PQ readset reaches Gen1 (even though
         // it is not the leader anymore).
+        runtime.WaitFor("TEvWriteResult", [&] {
+            return !writeResultSenders.empty();
+        });
         UNIT_ASSERT_VALUES_EQUAL(writeResultSenders.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(*writeResultSenders.begin(), tableShardGen1Actor);
 

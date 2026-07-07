@@ -107,7 +107,7 @@ def ydb_cluster_with_disabled_authentication_paths(certificates):
     configurator = create_ydb_configurator(
         certificates,
         enforce_user_token_requirement=True,
-        disabled_authentication_paths=['/ver', '/blockstore/user_stats/spack'],
+        disabled_authentication_paths=['/ver', '/trace'],
     )
     cluster = KiKiMR(configurator)
     cluster.start()

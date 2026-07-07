@@ -3,7 +3,7 @@ import requests
 
 requests.packages.urllib3.disable_warnings()
 
-DISABLED_AUTHENTICATION_PATHS = ['/ver', '/blockstore/user_stats/spack']
+DISABLED_AUTHENTICATION_PATHS = ['/ver', '/trace']
 
 
 def _base_url(cluster):

@@ -150,7 +150,7 @@ public:
 
         YDB_LOG_DEBUG("Send pool",
             {"logPrefix", LogPrefix},
-            {"request", request->Record});
+            {"request", request->Record.ShortDebugString()});
 
         NTabletPipe::SendData(ctx, BSControllerPipe, request.Release());
     }
@@ -168,9 +168,9 @@ public:
     void ReplyAndDie(IEventBase *resp,
                      const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG("Reply with",
+        YDB_LOG_DEBUG("Reply",
             {"logPrefix", LogPrefix},
-            {"response", resp->ToString()});
+            {"ev", resp->ToString()});
         ctx.Send(OwnerId, resp);
         Die(ctx);
     }
@@ -200,9 +200,9 @@ public:
     {
         auto &rec = ev->Get()->Record.GetResponse();
 
-        YDB_LOG_DEBUG("Got read",
+        YDB_LOG_DEBUG("Got read response",
             {"logPrefix", LogPrefix},
-            {"response", rec});
+            {"ev", rec.ShortDebugString()});
 
         if (!CheckReadStatus(rec)) {
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, Pool->Issue), ctx);
@@ -251,9 +251,9 @@ public:
     {
         auto &rec = ev->Get()->Record.GetResponse();
 
-        YDB_LOG_DEBUG("Got config",
+        YDB_LOG_DEBUG("Got config response",
             {"logPrefix", LogPrefix},
-            {"response", rec});
+            {"ev", rec.ShortDebugString()});
 
         if (!rec.GetSuccess() || !rec.GetStatus(0).GetSuccess()) {
             TString error = rec.GetErrorDescription();
@@ -288,9 +288,9 @@ public:
     {
         auto &rec = ev->Get()->Record.GetResponse();
 
-        YDB_LOG_DEBUG("Got check",
+        YDB_LOG_DEBUG("Got check response",
             {"logPrefix", LogPrefix},
-            {"response", rec});
+            {"ev", rec.ShortDebugString()});
 
         if (!CheckReadStatus(rec)) {
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, Pool->Issue), ctx);
@@ -306,10 +306,10 @@ public:
 
         const auto &scope = rec.GetStatus(0).GetStoragePool(0).GetScopeId();
         if (TTenantsManager::TDomainId(scope.GetX1(), scope.GetX2()) != Tenant->DomainId) {
-            YDB_LOG_ERROR("Scope id check failure vs",
+            YDB_LOG_ERROR("Scope id check failure",
                 {"logPrefix", LogPrefix},
                 {"tenantDomainId", Tenant->DomainId},
-                {"scope", scope});
+                {"scope", scope.ShortDebugString()});
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, Pool->Issue), ctx);
             return;
         }
@@ -322,9 +322,9 @@ public:
     {
         auto &rec = ev->Get()->Record.GetResponse();
 
-        YDB_LOG_DEBUG("Got config",
+        YDB_LOG_DEBUG("Got config response",
             {"logPrefix", LogPrefix},
-            {"response", rec});
+            {"ev", rec.ShortDebugString()});
 
         if (!rec.GetSuccess() || !rec.GetStatus(0).GetSuccess()) {
             TString error = rec.GetErrorDescription();
@@ -576,7 +576,7 @@ public:
     }
 
     void AlterUserAttribute(const TActorContext &ctx) {
-        YDB_LOG_DEBUG("TSubDomainManip( alter user attribute",
+        YDB_LOG_DEBUG("TSubDomainManip alter user attribute",
             {"tenantPath", Tenant->Path});
         auto request = MakeProposeTransaction();
 
@@ -588,7 +588,7 @@ public:
         tx.MutableAlterUserAttributes()->CopyFrom(Tenant->Attributes);
         tx.MutableAlterUserAttributes()->SetPathName(Subdomain.second);
 
-        YDB_LOG_TRACE("TSubdomainManip( send alter user attribute",
+        YDB_LOG_TRACE("TSubdomainManip send alter user attribute",
             {"tenantPath", Tenant->Path},
             {"cmd", request->ToString()});
 
@@ -597,7 +597,7 @@ public:
 
     void AlterSubdomain(const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG("TSubDomainManip( alter subdomain version",
+        YDB_LOG_DEBUG("TSubDomainManip alter subdomain version",
             {"tenantPath", Tenant->Path},
             {"version", Version});
         auto request = MakeProposeTransaction();
@@ -613,7 +613,7 @@ public:
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterSubDomain);
         }
 
-        YDB_LOG_TRACE("TSubdomainManip( send alter subdomain",
+        YDB_LOG_TRACE("TSubdomainManip send alter subdomain",
             {"tenantPath", Tenant->Path},
             {"cmd", request->ToString()});
 
@@ -622,7 +622,7 @@ public:
 
     void CreateSubdomain(const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG("TSubDomainManip( create subdomain",
+        YDB_LOG_DEBUG("TSubDomainManip create subdomain",
             {"tenantPath", Tenant->Path});
         auto request = MakeProposeTransaction();
 
@@ -640,7 +640,7 @@ public:
         if (Tenant->Attributes.UserAttributesSize())
             tx.MutableAlterUserAttributes()->CopyFrom(Tenant->Attributes);
 
-        YDB_LOG_TRACE("TSubdomainManip( send subdomain creation",
+        YDB_LOG_TRACE("TSubdomainManip send subdomain creation",
             {"tenantPath", Tenant->Path},
             {"cmd", request->ToString()});
 
@@ -656,7 +656,7 @@ public:
 
     void DropSubdomain(const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG("TSubDomainManip( drop subdomain",
+        YDB_LOG_DEBUG("TSubDomainManip drop subdomain",
             {"tenantPath", Tenant->Path});
         auto request = MakeProposeTransaction();
 
@@ -669,7 +669,7 @@ public:
         tx.SetWorkingDir(Subdomain.first);
         tx.MutableDrop()->SetName(Subdomain.second);
 
-        YDB_LOG_TRACE("TSubdomainManip( send subdomain drop",
+        YDB_LOG_TRACE("TSubdomainManip send subdomain drop",
             {"tenantPath", Tenant->Path},
             {"cmd", request->ToString()});
 
@@ -716,7 +716,7 @@ public:
 
     void ReplyAndDie(const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG("TSubdomainManip( done",
+        YDB_LOG_DEBUG("TSubdomainManip done",
             {"tenantPath", Tenant->Path});
         if (Action == CREATE)
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainCreated(Tenant, SchemeshardId, PathId), ctx);
@@ -733,9 +733,9 @@ public:
     void ReplyAndDie(IEventBase *resp,
                      const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG("TSubdomainManip( reply with",
+        YDB_LOG_DEBUG("TSubdomainManip reply with",
             {"tenantPath", Tenant->Path},
-            {"response", resp->ToString()});
+            {"ev", resp->ToString()});
 
         using TAuditFunc = decltype(AuditLogEndConfigureDatabase);
         auto audit = [&](TAuditFunc auditFunc) {
@@ -793,9 +793,9 @@ public:
         auto request = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(TxId);
 
-        YDB_LOG_TRACE("TSubdomainManip( send notification",
+        YDB_LOG_TRACE("TSubdomainManip send notification",
             {"tenantPath", Tenant->Path},
-            {"request", request->ToString()});
+            {"ev", request->ToString()});
 
         NTabletPipe::SendData(ctx, Pipe, request.Release());
     }
@@ -811,7 +811,7 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        YDB_LOG_DEBUG("TSubdomainManip( )::Bootstrap",
+        YDB_LOG_DEBUG("TSubdomainManip Bootstrap",
             {"tenantPath", Tenant->Path});
 
         if (Action == CREATE) {
@@ -831,15 +831,15 @@ public:
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr &ev, const TActorContext&) {
-        YDB_LOG_DEBUG("TSubdomainManip( got",
+        YDB_LOG_DEBUG("TSubdomainManip got TEvNotifyTxCompletionRegistered",
             {"tenantPath", Tenant->Path},
-            {"TEvNotifyTxCompletionRegistered", ev->Get()->Record});
+            {"ev", ev->Get()->Record.ShortDebugString()});
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr &ev, const TActorContext& ctx) {
-        YDB_LOG_DEBUG("TSubdomainManip( got",
+        YDB_LOG_DEBUG("TSubdomainManip got TEvNotifyTxCompletionResult",
             {"tenantPath", Tenant->Path},
-            {"TEvNotifyTxCompletionResult", ev->Get()->Record});
+            {"ev", ev->Get()->Record.ShortDebugString()});
 
         if (Action == CONFIGURE && Tenant->Attributes.UserAttributesSize()) {
             AlterUserAttribute(ctx);
@@ -861,9 +861,9 @@ public:
 
     void HandleSubdomain(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx)
     {
-        YDB_LOG_DEBUG("TSubdomainManip( got propose",
+        YDB_LOG_DEBUG("TSubdomainManip got propose",
             {"tenantPath", Tenant->Path},
-            {"result", ev->Get()->Record});
+            {"result", ev->Get()->Record.ShortDebugString()});
 
         auto &rec = ev->Get()->Record;
         switch (rec.GetStatus()) {
@@ -893,7 +893,7 @@ public:
                 // Check if removal finished or in-progress.
                 if (rec.GetSchemeShardStatus() == NKikimrScheme::StatusPathDoesNotExist
                     || rec.GetSchemeShardStatus() == NKikimrScheme::StatusMultipleModifications) {
-                    YDB_LOG_DEBUG("TSubdomainManip( consider subdomain is removed",
+                    YDB_LOG_DEBUG("TSubdomainManip consider subdomain is removed",
                         {"tenantPath", Tenant->Path});
                     ActionFinished(ctx);
                     break;
@@ -912,9 +912,9 @@ public:
     {
         const auto &rec = ev->Get()->GetRecord();
 
-        YDB_LOG_DEBUG("TSubdomainManip( got describe",
+        YDB_LOG_DEBUG("TSubdomainManip got describe",
             {"tenantPath", Tenant->Path},
-            {"result", rec});
+            {"result", rec.ShortDebugString()});
 
         if (Action == REMOVE) {
             switch (rec.GetStatus()) {
@@ -933,7 +933,7 @@ public:
         }
 
         if (rec.GetStatus() != NKikimrScheme::EStatus::StatusSuccess) {
-            YDB_LOG_ERROR("TSubdomainManip( Receive TEvDescribeSchemeResult with bad status reason is < > while resolving subdomain",
+            YDB_LOG_ERROR("TSubdomainManip Receive TEvDescribeSchemeResult with bad status while resolving subdomain",
                 {"tenantPath", Tenant->Path},
                 {"status", NKikimrScheme::EStatus_Name(rec.GetStatus())},
                 {"reason", rec.GetReason()});
@@ -945,7 +945,7 @@ public:
         auto pathType = rec.GetPathDescription().GetSelf().GetPathType();
         auto expectedPathType = Tenant->IsExternalSubdomain ? NKikimrSchemeOp::EPathTypeExtSubDomain : NKikimrSchemeOp::EPathTypeSubDomain;
         if (pathType != expectedPathType) {
-            YDB_LOG_ERROR("TSubdomainManip( Resolve subdomain fail, tenant path has invalid path type but expected",
+            YDB_LOG_ERROR("TSubdomainManip Resolve subdomain fail, tenant path has invalid path type",
                 {"tenantPath", Tenant->Path},
                 {"pathType", NKikimrSchemeOp::EPathType_Name(pathType)},
                 {"expectedPathType", NKikimrSchemeOp::EPathType_Name(expectedPathType)});
@@ -1018,7 +1018,7 @@ public:
     {}
 
     void Bootstrap(const TActorContext &ctx) {
-        YDB_LOG_DEBUG("TScaleRecommenderManip( )::Bootstrap",
+        YDB_LOG_DEBUG("TScaleRecommenderManip Bootstrap",
             {"tenantPath", Tenant->Path});
 
         Become(&TThis::StateResolveHive);
@@ -1126,7 +1126,7 @@ public:
         }
 
         YDB_LOG_TRACE_CTX(ctx, "Send TEvHive::TEvConfigureScaleRecommender",
-            {"request", request->Record});
+            {"request", request->Record.ShortDebugString()});
 
         NTabletPipe::SendData(ctx, HivePipe, request.release());
     }
@@ -1174,7 +1174,7 @@ public:
             case NKikimrProto::UNKNOWN:
                 YDB_LOG_ERROR_CTX(ctx, "TScaleRecommenderManip got error reply during configuring hive",
                     {"tenantPath", Tenant->Path},
-                    {"reply", ev->Get()->Record});
+                    {"reply", ev->Get()->Record.ShortDebugString()});
                 Finish();
                 break;
         }
@@ -1239,8 +1239,8 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        YDB_LOG_DEBUG("TInitiateShrinkPool( )::Bootstrap",
-            {"name", Pool->Config.GetName()});
+        YDB_LOG_DEBUG("TInitiateShrinkPool Bootstrap",
+            {"poolName", Pool->Config.GetName()});
 
         Become(&TThis::StateWork);
         SendRequest(ctx);
@@ -1258,8 +1258,8 @@ public:
         record.SetNewSize(std::min<ui64>(Pool->Config.GetNumGroups(), Pool->AllocatedNumGroups));
         record.SetVersion(Tenant->Generation);
 
-        YDB_LOG_TRACE_CTX(ctx, "Send",
-            {"request", request->Record});
+        YDB_LOG_TRACE_CTX(ctx, "Send TEvHive::TEvShrinkStoragePool",
+            {"ev", request->Record.ShortDebugString()});
 
         NTabletPipe::SendData(ctx, HivePipe, request.release());
     }
@@ -1284,7 +1284,7 @@ public:
                 break;
             default:
                 YDB_LOG_ERROR_CTX(ctx, "TInitiateShrinkPool got error reply",
-                    {"reply", ev->Get()->Record});
+                    {"reply", ev->Get()->Record.ShortDebugString()});
                 ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, ev->Get()->Record.GetError()), ctx);
                 break;
         }
@@ -1393,8 +1393,8 @@ public:
     {
         auto &rec = ev->Get()->Record.GetResponse();
 
-        YDB_LOG_DEBUG("TDecommitGroups got config",
-            {"response", rec});
+        YDB_LOG_DEBUG("TDecommitGroups got config response",
+            {"ev", rec.ShortDebugString()});
 
         if (!rec.GetSuccess() || rec.StatusSize() == 0 || !rec.GetStatus(0).GetSuccess()) {
             TString error = rec.GetErrorDescription();
@@ -1402,7 +1402,7 @@ public:
                 error = rec.GetStatus(0).GetErrorDescription();
 
             YDB_LOG_ERROR("TDecommitGroups cannot decommit groups",
-                {"name", Pool->Config.GetName()},
+                {"poolName", Pool->Config.GetName()},
                 {"poolId", Pool->Config.GetStoragePoolId()},
                 {"error", error});
             ctx.Send(OwnerId, new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, error));
@@ -2126,7 +2126,7 @@ bool TTenantsManager::CheckComputationalUnitsQuota(const TUnitsCount &units,
             ui64 cur = pr.second.Allocated * 100;
             ui64 quota = pr.second.Connected * Config.TotalComputationalUnitsLoadQuota;
             if (cur > quota) {
-                YDB_LOG_NOTICE("Cluster computational units load quota %) is exceeded for slots",
+                YDB_LOG_NOTICE("Cluster computational units load quota is exceeded for slots",
                     {"totalComputationalUnitsLoadQuota", Config.TotalComputationalUnitsLoadQuota},
                     {"slot", pr.first},
                     {"allocated", pr.second.Allocated},
@@ -2352,8 +2352,8 @@ void TTenantsManager::DeleteTenantPools(TTenant::TPtr tenant, const TActorContex
 
         if (pr.second->Borrowed) {
             YDB_LOG_DEBUG("Mark borrowed pool as deleted",
-                {"tenant", tenant->Path},
-                {"pool", pr.second->Config.GetName()});
+                {"tenantPath", tenant->Path},
+                {"poolName", pr.second->Config.GetName()});
 
             pr.second->Worker = SelfId();
             ctx.Send(SelfId(), new TTenantsManager::TEvPrivate::TEvPoolDeleted(tenant, pr.second));
@@ -2390,7 +2390,7 @@ void TTenantsManager::RequestTenantResources(TTenant::TPtr tenant, const TActorC
     }
 
     YDB_LOG_TRACE_CTX(ctx, "Send TEvTenantSlotBroker::TEvAlterTenant",
-        {"request", request->Record});
+        {"ev", request->Record.ShortDebugString()});
 
     NTabletPipe::SendData(ctx, TenantSlotBrokerPipe, request.Release());
 }
@@ -2405,7 +2405,7 @@ void TTenantsManager::RequestTenantSlotsState(TTenant::TPtr tenant, const TActor
     request->Record.SetTenantName(tenant->Path);
 
     YDB_LOG_TRACE_CTX(ctx, "Send TEvTenantSlotBroker::TEvGetTenantState",
-        {"request", request->Record});
+        {"ev", request->Record.ShortDebugString()});
 
     NTabletPipe::SendData(ctx, TenantSlotBrokerPipe, request.Release());
 }
@@ -2418,7 +2418,7 @@ void TTenantsManager::RequestTenantSlotsStats(const TActorContext &ctx)
     auto request = MakeHolder<TEvTenantSlotBroker::TEvGetSlotStats>();
 
     YDB_LOG_TRACE_CTX(ctx, "Send TEvTenantSlotBroker::TEvGetSlotStats",
-        {"request", request->Record});
+        {"ev", request->Record.ShortDebugString()});
 
     NTabletPipe::SendData(ctx, TenantSlotBrokerPipe, request.Release());
 }
@@ -2716,7 +2716,7 @@ void TTenantsManager::SendTenantNotifications(TTenant::TPtr tenant,
         YDB_LOG_TRACE_CTX(ctx, "Send notification",
             {"tenantPath", tenant->Path},
             {"subscriber", subscriber},
-            {"notification", notification->Record});
+            {"notification", notification->Record.ShortDebugString()});
 
         ctx.Send(subscriber, notification.Release());
 
@@ -2848,15 +2848,15 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
         {"state", tenant->State},
         {"coordinators", tenant->Coordinators},
         {"mediators", tenant->Mediators},
-        {"planresolution", tenant->PlanResolution},
-        {"timecastbucketspermediator", tenant->TimeCastBucketsPerMediator},
+        {"planResolution", tenant->PlanResolution},
+        {"timeCastBucketsPerMediator", tenant->TimeCastBucketsPerMediator},
         {"issue", tenant->Issue},
-        {"txid", tenant->TxId},
-        {"subdomainversion", tenant->SubdomainVersion},
-        {"confirmedsubdomain", tenant->ConfirmedSubdomain},
+        {"txId", tenant->TxId},
+        {"subdomainVersion", tenant->SubdomainVersion},
+        {"confirmedSubdomain", tenant->ConfirmedSubdomain},
         {"attrs", tenant->Attributes},
         {"generation", tenant->Generation},
-        {"errorcode", tenant->ErrorCode},
+        {"errorCode", tenant->ErrorCode},
         {"isExternalSubDomain", tenant->IsExternalSubdomain},
         {"isExternalHive", tenant->IsExternalHive},
         {"isExternalSysViewProcessor", tenant->IsExternalSysViewProcessor},
@@ -2919,9 +2919,9 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
 
         YDB_LOG_TRACE_CTX(ctx, "Add tenant pool to database",
             {"poolName", pool.Config.GetName()},
-            {"kind", pool.Kind},
-            {"config", pool.Config},
-            {"allocatednumgroups", pool.AllocatedNumGroups},
+            {"poolKind", pool.Kind},
+            {"config", pool.Config.ShortDebugString()},
+            {"allocatedNumGroups", pool.AllocatedNumGroups},
             {"state", pool.State});
 
         TString config;
@@ -2933,7 +2933,7 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
     }
 
     for (auto &pr : tenant->ComputationalUnits) {
-        YDB_LOG_TRACE_CTX(ctx, "Add computational unit for to database",
+        YDB_LOG_TRACE_CTX(ctx, "Add computational units to database",
             {"tenantPath", tenant->Path},
             {"kind", pr.first.first},
             {"zone", pr.first.second},
@@ -3048,7 +3048,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         AddTenant(tenant);
 
         YDB_LOG_DEBUG_CTX(ctx, "Loaded tenant",
-            {"path", path});
+            {"tenantPath", path});
 
         if (!tenantRowset.Next())
             return false;
@@ -3075,9 +3075,9 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
 
         RemovedTenants[tenant.Path] = tenant;
 
-        YDB_LOG_DEBUG_CTX(ctx, "Loaded removed tenant (txid",
+        YDB_LOG_DEBUG_CTX(ctx, "Loaded removed tenant",
             {"tenantPath", tenant.Path},
-            {"tenantTxId", tenant.TxId});
+            {"txId", tenant.TxId});
 
         if (!removedRowset.Next())
             return false;
@@ -3109,11 +3109,11 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
 
             YDB_LOG_DEBUG_CTX(ctx, "Loaded pool",
                 {"poolName", pool->Config.GetName()},
-                {"path", path});
+                {"tenantPath", path});
         } else {
             YDB_LOG_CRIT_CTX(ctx, "Loaded pool for unknown tenant",
                 {"poolName", pool->Config.GetName()},
-                {"path", path});
+                {"tenantPath", path});
         }
 
         if (!poolRowset.Next())
@@ -3134,11 +3134,11 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
 
             Counters.Inc(kind, zone, COUNTER_COMPUTATIONAL_UNITS, count);
 
-            YDB_LOG_DEBUG_CTX(ctx, "Loaded units < >( for tenant",
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded units",
                 {"kind", kind},
                 {"zone", zone},
                 {"count", count},
-                {"path", path});
+                {"tenantPath", path});
         } else {
             YDB_LOG_CRIT_CTX(ctx, "Loaded units < >( for unknown tenant",
                 {"kind", kind},

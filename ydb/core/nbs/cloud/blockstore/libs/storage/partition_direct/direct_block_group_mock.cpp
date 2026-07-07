@@ -49,8 +49,12 @@ THostIndex TOracleMock::SelectBestPBufferHost(
     return *hosts.First();
 }
 
-TDuration TOracleMock::GetReadHedgingDelay() const
+TDuration TOracleMock::GetReadHedgingDelay(
+    THostIndex host,
+    EDataLocation dataLocation) const
 {
+    Y_UNUSED(host, dataLocation);
+
     return ReadHedgingDelay;
 }
 
@@ -59,8 +63,12 @@ TDuration TOracleMock::GetReadRequestTimeout() const
     return ReadRequestTimeout;
 }
 
-TDuration TOracleMock::GetWriteHedgingDelay() const
+TDuration TOracleMock::GetWriteHedgingDelay(
+    THostMask hosts,
+    bool indirect) const
 {
+    Y_UNUSED(hosts, indirect);
+
     return WriteHedgingDelay;
 }
 

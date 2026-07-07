@@ -24,6 +24,9 @@ bool IsGeneratedIgnoreIU(const TInfoUnit& iu);
 TInfoUnit MakeGeneratedIgnoreIU(TPlanProps& props);
 TVector<TInfoUnit> GetSubplanResultIUs(const TIntrusivePtr<IOperator>& op);
 
+bool JoinOutputsLeft(const TString& joinKind);
+bool JoinOutputsRight(const TString& joinKind);
+
 TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right);
 TVector<TInfoUnit> IUSetIntersect(TVector<TInfoUnit> left, TVector<TInfoUnit> right);
 TVector<TInfoUnit> IUSetIntersect(TVector<TInfoUnit> left, const TInfoUnitSet& right);

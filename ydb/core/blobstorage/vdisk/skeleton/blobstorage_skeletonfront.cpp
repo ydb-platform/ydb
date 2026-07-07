@@ -374,13 +374,13 @@ namespace NKikimr {
                     TDuration passedTime = now - msgInfo.ReceivedTime;
                     if (passedTime > TDuration::Minutes(5)) {
                         hasError = true;
-                        STLOG(PRI_ERROR, NKikimrServices::BS_SKELETON, BSVSF04,
-                                vDiskLogPrefix << " passed more than 5 munites for message in the internal queue",
-                                (MsgId, msgInfo.MsgId),
-                                (QueueName, Name),
-                                (PassedTimeSeconds, passedTime.Seconds()),
-                                (Trace, (msgInfo.VDiskSkeletonTrace ? msgInfo.VDiskSkeletonTrace->ToString() : "None"))
-                                );
+                        YDB_LOG_ERROR_COMP(NKikimrServices::BS_SKELETON, "Passed more than 5 munites for message in the internal queue",
+                            {"marker", "BSVSF04"},
+                            {"VDiskLogPrefix", vDiskLogPrefix},
+                            {"msgId", msgInfo.MsgId},
+                            {"queueName", Name},
+                            {"passedTimeSeconds", passedTime.Seconds()},
+                            {"trace", (msgInfo.VDiskSkeletonTrace ? msgInfo.VDiskSkeletonTrace->ToString() : "None")});
                     }
                 }
                 return hasError;
@@ -1223,12 +1223,13 @@ namespace NKikimr {
 
         template <class TEventPtr>
         void DatabaseAccessDeniedHandle(TEventPtr &ev, const TActorContext &ctx) {
-            LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                    << "Access denied Type# " << Sprintf("0x%08" PRIx32, ev->GetTypeRewrite())
-                    << " Sender# " << ev->Sender.ToString()
-                    << " OriginScopeId# " << ScopeIdToString(ev->OriginScopeId)
-                    << " LocalScopeId# " << ScopeIdToString(AppData(ctx)->LocalScopeId.GetInterconnectScopeId())
-                    << " Marker# BSVSF01");
+            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::BS_SKELETON, "Access denied",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"type", Sprintf("0x%08" PRIx32, ev->GetTypeRewrite())},
+                {"sender", ev->Sender},
+                {"originScopeId", ScopeIdToString(ev->OriginScopeId)},
+                {"localScopeId", ScopeIdToString(AppData(ctx)->LocalScopeId.GetInterconnectScopeId())},
+                {"marker", "BSVSF01"});
             ++*AccessDeniedMessages;
             TInstant now = TAppData::TimeProvider->Now();
             FillInCostSettingsAndTimestampIfApplicable(ev->Get()->Record, now);
@@ -1266,9 +1267,9 @@ namespace NKikimr {
 
         template <class TEventPtr>
         void DatabaseReadOnlyHandle(TEventPtr &ev, const TActorContext &ctx) {
-            LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                << "Unavailable in read-only"
-                << " Sender# " << ev->Sender.ToString());
+            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::BS_SKELETON, "Unavailable in read-only",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"sender", ev->Sender});
            TInstant now = TAppData::TimeProvider->Now();
            Reply(ev, ctx, NKikimrProto::ERROR, "VDisk is in read-only mode", now);
         }
@@ -1348,9 +1349,10 @@ namespace NKikimr {
                     << NKikimrBlobStorage::EVDiskInternalQueueId_Name(intQueueId) << " extQueue# "
                     << NKikimrBlobStorage::EVDiskQueueId_Name(extQueueId));
 
-            LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::BS_REQUEST_COST,
-                        "SkeletonFront Request Type# " << TypeName(*ev) << " Cost# " << cost <<
-                        " Sender# " << ev->Sender.ToString());
+            YDB_LOG_TRACE_CTX_COMP(TActivationContext::AsActorContext(), NKikimrServices::BS_REQUEST_COST, "SkeletonFront Request",
+                {"type", TypeName(*ev)},
+                {"cost", cost},
+                {"sender", ev->Sender});
 
             TExtQueueClass &extQueue = GetExtQueue(extQueueId);
             NBackpressure::TQueueClientId clientId(msgQoS);
@@ -1452,8 +1454,11 @@ namespace NKikimr {
                 name = "TEvVPatchXorDiff";
             }
 
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                    << name << ": received;" << " OriginalBlobId# " << blob << " PatchedBlobId# " << patchedBlob);
+            YDB_LOG_DEBUG_CTX_COMP(TActivationContext::AsActorContext(), NKikimrServices::BS_SKELETON, "Received;",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"name", name},
+                {"originalBlobId", blob},
+                {"patchedBlobId", patchedBlob});
             HandleRequestWithQoS(TActivationContext::AsActorContext(), ev, name, cost, *queue);
         }
 
@@ -1569,9 +1574,11 @@ namespace NKikimr {
                 if (record.HasVDiskID()) {
                     const TVDiskID& vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
                     if (!SelfVDiskId.SameExceptGeneration(vdiskId)) {
-                        LOG_CRIT_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                            << "VDiskId mismatch expected# " << SelfVDiskId << " provided# " << vdiskId
-                            << " Marker# BSVSF05");
+                        YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::BS_SKELETON, "VDiskId mismatch",
+                            {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                            {"expected", SelfVDiskId},
+                            {"provided", vdiskId},
+                            {"marker", "BSVSF05"});
                         Y_DEBUG_ABORT_S(VCtx->VDiskLogPrefix << "VDiskId mismatch");
                         return Reply(ev, ctx, NKikimrProto::ERROR, "VDiskId mismatch", TAppData::TimeProvider->Now());
                     }
@@ -1765,9 +1772,10 @@ namespace NKikimr {
             }
 
             // all checks passed
-            LOG_INFO_S(ctx, BS_SKELETON, VCtx->VDiskLogPrefix << "VDisk Generation Change success;"
-                    << " new VDiskId# " << vdiskId
-                    << " Marker# BSVSF02");
+            YDB_LOG_INFO_CTX_COMP(ctx, BS_SKELETON, "VDisk Generation Change success; new",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"VDiskId", vdiskId},
+                {"marker", "BSVSF02"});
 
             // update GroupInfo-related fields
             GInfo = info;
@@ -1792,10 +1800,10 @@ namespace NKikimr {
 
             PDiskErrorState.Set(errorStateChange->Status, errorStateChange->PDiskFlags, errorStateChange->ErrorReason);
 
-            LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                    << "SkeletonFront: got TEvPDiskErrorStateChange;"
-                    << PDiskErrorState.ToString()
-                    << " Marker# BSVSF03");
+            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::BS_SKELETON, "SkeletonFront: got TEvPDiskErrorStateChange;",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"PDiskErrorState", PDiskErrorState},
+                {"marker", "BSVSF03"});
 
             // switch skeleton state to PDiskError
             SkeletonFrontGroup->ResetCounters();
@@ -2109,9 +2117,12 @@ namespace NKikimr {
             if constexpr (!IsWithoutVDiskId<TEventType>) {
                 const auto& vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
                 if (!vdiskId.SameExceptGeneration(SelfVDiskId)) {
-                    LOG_CRIT_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                        << "VDiskId mismatch expected# " << SelfVDiskId << " provided# " << vdiskId
-                        << " Type# " << TypeName<TEventType>() << " Marker# BSVSF06");
+                    YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::BS_SKELETON, "VDiskId mismatch",
+                        {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                        {"expected", SelfVDiskId},
+                        {"provided", vdiskId},
+                        {"type", TypeName<TEventType>()},
+                        {"marker", "BSVSF06"});
                     Y_DEBUG_ABORT_S(VCtx->VDiskLogPrefix << "VDiskId mismatch");
                     return Reply(ev, ctx, NKikimrProto::ERROR, "VDiskId mismatch", TAppData::TimeProvider->Now());
                 } else if (!vdiskId.SameDisk(SelfVDiskId)) {
@@ -2121,7 +2132,9 @@ namespace NKikimr {
             if (!GInfo->CheckScope(TKikimrScopeId(ev->OriginScopeId), ctx, true)) {
                 DatabaseAccessDeniedHandle(ev, ctx);
             } else if (Config->BaseInfo.ReadOnly && !IsReadOnlyCompatible<TEventType>) {
-                LOG_INFO_S(ctx, BS_SKELETON, VCtx->VDiskLogPrefix << "Blocking request incompatible with read-only: " << TypeName<TEventType>());
+                YDB_LOG_INFO_CTX_COMP(ctx, BS_SKELETON, "Blocking request incompatible with",
+                    {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                    {"typeName", TypeName<TEventType>()});
                 DatabaseReadOnlyHandle(ev, ctx);
             } else {
                 SetReceivedTime(ev);
@@ -2156,10 +2169,10 @@ namespace NKikimr {
                     IntQueueDiscover.get(), IntQueueLowGets.get(), IntQueueLogPuts.get(),
                     IntQueueHugePutsForeground.get(), IntQueueHugePutsBackground.get() }) {
                 if (queue->IsStuck()) {
-                    LOG_CRIT_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                            << "Stuck internal queue detected, restarting VDisk, "
-                            << " Queue.Name# " << queue->Name
-                            << " Marker# BSVSF08");
+                    YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::BS_SKELETON, "Stuck internal queue detected, restarting VDisk,",
+                        {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                        {"queueName", queue->Name},
+                        {"marker", "BSVSF08"});
                     TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
                     ctx.Send(wardenId, new TEvBlobStorage::TEvAskRestartVDisk(
                             Config->BaseInfo.PDiskId, SelfVDiskId));

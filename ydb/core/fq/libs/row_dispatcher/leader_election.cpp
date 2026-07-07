@@ -409,6 +409,9 @@ void TLeaderElection::Handle(TEvPrivate::TEvAcquireSemaphoreResult::TPtr& ev) {
 void TLeaderElection::PassAway() {
     YDB_LOG_DEBUG("PassAway",
         {"logPrefix", LogPrefix});
+    if (Driver) {
+        Driver->Stop(true);
+    }
     TActorBootstrapped::PassAway();
 }
 

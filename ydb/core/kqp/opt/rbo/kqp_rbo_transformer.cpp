@@ -298,6 +298,15 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
                             if (newStat.EqWidthHistogramEstimator) {
                                 oldStat.EqWidthHistogramEstimator = newStat.EqWidthHistogramEstimator;
                             }
+                            if (!newStat.Type.empty()) {
+                                oldStat.Type = newStat.Type;
+                            }
+                            if (newStat.NumUniqueVals) {
+                                oldStat.NumUniqueVals = newStat.NumUniqueVals;
+                            }
+                            if (newStat.HyperLogLog) {
+                                oldStat.HyperLogLog = newStat.HyperLogLog;
+                            }
                         }
                     }
                 }

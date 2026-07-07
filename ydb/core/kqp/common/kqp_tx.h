@@ -182,6 +182,7 @@ public:
         SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
         SnapshotHandle.Handle = NKqp::TSnapshotHandle();
         HasImmediateEffects = false;
+        HasUnflushedEffectsInBuffer = false;
 
         HasOlapTable = false;
         HasOltpTable = false;
@@ -245,7 +246,7 @@ public:
 
     bool ShouldExecuteDeferredEffects() const {
         if (NeedUncommittedChangesFlush || HasOlapTable) {
-            return !DeferredEffects.Empty();
+            return !DeferredEffects.Empty() || HasUnflushedEffectsInBuffer;
         }
 
         return false;
@@ -327,6 +328,7 @@ public:
 
     bool NeedUncommittedChangesFlush = false;
     THashSet<NKikimr::TTableId> ModifiedTablesSinceLastFlush;
+    bool HasUnflushedEffectsInBuffer = false;
 
     TActorId BufferActorId;
     IKqpTransactionManagerPtr TxManager = nullptr;

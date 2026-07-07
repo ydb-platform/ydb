@@ -1794,7 +1794,8 @@ public:
         }
 
         request.AcquireLocksTxId = txCtx.LockHandle.GetLockId();
-        request.UseImmediateEffects = true;
+        request.FlushEffects = true;
+        txCtx.HasUnflushedEffectsInBuffer = false;
         request.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
 
         txCtx.HasImmediateEffects = true;
@@ -1935,8 +1936,20 @@ public:
             request.AcquireLocksTxId = txCtx.LockHandle.GetLockId();
 
             if (!txCtx.CanDeferEffects()) {
-                request.UseImmediateEffects = true;
+                request.FlushEffects = true;
+            } else {
+                // RETURNING
+                AFL_ENSURE(tx->ResultsSize() > 0);
             }
+        }
+
+        if (tx && tx->GetHasEffects() && !request.FlushEffects) {
+            // Has unflushed effects (used for RETURNING)
+            txCtx.HasUnflushedEffectsInBuffer = true;
+        }
+
+        if (request.FlushEffects || commit) {
+            txCtx.HasUnflushedEffectsInBuffer = false;
         }
 
         LWTRACK(KqpSessionPhyQueryProposeTx,

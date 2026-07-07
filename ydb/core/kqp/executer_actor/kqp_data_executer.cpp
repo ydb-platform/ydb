@@ -237,7 +237,7 @@ public:
                 0,
                 ExecuterSpan.GetTraceId());
             return;
-        } else if (Request.UseImmediateEffects) {
+        } else if (Request.FlushEffects) {
             Become(&TKqpDataExecuter::FinalizeState);
             KQP_STLOG_D(KQPDATA, "Send Flush to BufferActor",
                 (buffer_actor_id, BufferActorId),
@@ -452,15 +452,13 @@ private:
 
 private:
     bool IsReadOnlyTx() const {
-        if (TxManager->GetTopicOperations().HasOperations()) {
-            YQL_ENSURE(!Request.UseImmediateEffects);
+        if (Request.LocksOp == ELocksOp::Commit) {
+            YQL_ENSURE(!Request.FlushEffects);
             return false;
         }
 
-        if (Request.LocksOp == ELocksOp::Commit) {
-            YQL_ENSURE(!Request.UseImmediateEffects);
-            return false;
-        }
+        // Topic operations can only be executed at commit.
+        AFL_ENSURE(!TxManager->GetTopicOperations().HasOperations());
 
         for (const auto& tx : Request.Transactions) {
             for (const auto& stage : tx.Body->GetStages()) {
@@ -468,6 +466,10 @@ private:
                     return false;
                 }
             }
+        }
+
+        if (Request.FlushEffects) {
+            return false;
         }
 
         return true;
@@ -696,7 +698,7 @@ private:
                 break;
         }
 
-        if ((ReadOnlyTx || Request.UseImmediateEffects) && GetSnapshot().IsValid()) {
+        if ((ReadOnlyTx || Request.FlushEffects) && GetSnapshot().IsValid()) {
             // Snapshot reads are always immediate
             // Uncommitted writes are executed without coordinators, so they can be immediate
             ImmediateTx = true;

@@ -25,7 +25,11 @@ bool CheckNonNullKeys(const TIntrusivePtr<IOperator> &input, const TVector<TInfo
 
 namespace NKikimr {
 namespace NKqp {
-    
+
+bool TInlineJoinFiltersRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Join;
+}
+
 // Inline join filters. In case of inner join, replace the join with a filter on top of inner or cross join
 // More complex logic for other types of joins
 

@@ -40,6 +40,10 @@ TRenameSourceCounts CountRenameSources(const TOpMap& map) {
 
 } // anonymous namespace
 
+bool TRenameToAppendRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Map;
+}
+
 bool TRenameToAppendRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);

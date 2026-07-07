@@ -1,6 +1,6 @@
 # Настройка мониторинга кластера {{ ydb-short-name }}
 
-Страница описывает настройку сбора метрик кластера {{ ydb-short-name }} в [Prometheus](https://prometheus.io/) и визуализацию в [Grafana](https://grafana.com/). Дополнительно на каждом узле метрики можно просмотреть в браузере по встроенному HTTP-интерфейсу мониторинга — см. раздел [Доступ к метрикам через веб-интерфейс](#web-metrics).
+Страница входит в раздел [Обзор наблюдаемости](index.md) и описывает настройку сбора метрик кластера {{ ydb-short-name }} в [Prometheus](https://prometheus.io/) и визуализацию в [Grafana](https://grafana.com/). На каждом узле метрики также доступны во встроенном HTTP-интерфейсе мониторинга — раздел [Доступ к метрикам через веб-интерфейс](#web-metrics).
 
 {% note tip %}
 
@@ -24,7 +24,9 @@
 
 ### Варианты подготовки конфигурации сбора метрик {#prometheus-config-variants}
 
-Конфигурацию сбора метрик с узлов {{ ydb-short-name }} можно подготовить одним из способов ниже. Во всех случаях в конфигурацию Prometheus должно быть передано содержимое файла `prometheus_ydb.yml`. Список статических и динамических узлов, с которых требуется осуществлять сбор метрик, указывается в файлах `ydbd-storage.yml` и `ydbd-database.yml` соответственно. Пути к указанным файлам задаются относительно рабочей директории процесса Prometheus или указываются абсолютными путями.
+Конфигурацию сбора метрик с узлов {{ ydb-short-name }} можно подготовить одним из способов ниже. Во всех случаях потребуется файл `prometheus_ydb.yml` — в нем описан сбор метрик {{ ydb-short-name }}.
+
+Список узлов хранения и динамических узлов базы данных указывается в файлах `ydbd-storage.yml` и `ydbd-database.yml` соответственно. Пути к этим файлам задаются в `prometheus_ydb.yml` (подробнее — в разделе [Запуск Prometheus с подготовленной конфигурацией](#prometheus-start)).
 
 {% list tabs %}
 
@@ -52,14 +54,18 @@
   - `ca.crt` — сертификат, использованный при развертывании кластера.
   - `grafana-dashboards` — каталог с шаблонами дашбордов для Grafana. Шаблоны загружаются из [репозитория GitHub](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/helm/ydb-prometheus/dashboards).
 
-  Проверьте содержимое сгенерированных файлов `ydbd-storage.yml` и `ydbd-database.yml`. Список узлов и портов должен совпадать с фактической топологией кластера, в том числе с узлами, отображаемыми в интерфейсе {{ ydb-short-name }}.
+  Проверьте содержимое сгенерированных файлов `ydbd-storage.yml` и `ydbd-database.yml`. Список узлов и портов должен совпадать с фактической топологией кластера, в том числе с узлами, отображаемыми во [встроенном UI кластера](../../reference/embedded-ui/ydb-monitoring.md).
 
   Пример проверки содержимого каталога с конфигурацией:
 
   ```bash
   cd promconf
   ls -la
+  ```
 
+  Пример вывода:
+
+  ```text
   -rw-rw-r-- 1 1818 ca.crt
   drwxrwxr-x 2 4096 grafana-dashboards
   -rw-rw-r-- 1 17532 prometheus_ydb.yml
@@ -71,17 +77,17 @@
 
   Скопируйте файлы из каталога [ydb/deploy/prometheus](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus) репозитория {{ ydb-short-name }}.
 
-  Заполните секции `targets` в [`ydbd-storage.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-storage.yml) и [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml): укажите хосты и порты мониторинга (`--mon-port`) всех узлов хранения и динамических узлов баз данных, с которых нужно собирать метрики (как определить порт, см. блок «Как определить значение параметра `<ydb-port>`» в разделе [Доступ к метрикам через веб-интерфейс](#web-metrics)).
+  Заполните секции `targets` в [`ydbd-storage.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-storage.yml) и [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml): укажите хосты и порты мониторинга (`--mon-port`) всех узлов хранения и динамических узлов баз данных, с которых нужно собирать метрики (как определить порт, см. [Как определить порт мониторинга](#web-metrics-mon-port)).
 
-  В [`prometheus_ydb.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/prometheus_ydb.yml) для задач сбора метрик задайте **`scheme: http`** и отключите или удалите параметры `tls_config`.
+  В [`prometheus_ydb.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/prometheus_ydb.yml) для задач сбора метрик задайте `scheme: http` и отключите или удалите параметры `tls_config`.
 
 - Вручную с TLS
 
   Скопируйте файлы из каталога [ydb/deploy/prometheus](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus) репозитория {{ ydb-short-name }}.
 
-  Заполните секции `targets` в [`ydbd-storage.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-storage.yml) и [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml): укажите хосты и порты мониторинга (`--mon-port`) всех узлов хранения и динамических узлов баз данных, с которых нужно собирать метрики (как определить порт, см. блок «Как определить значение параметра `<ydb-port>`» в разделе [Доступ к метрикам через веб-интерфейс](#web-metrics)).
+  Заполните секции `targets` в [`ydbd-storage.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-storage.yml) и [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml): укажите хосты и порты мониторинга (`--mon-port`) всех узлов хранения и динамических узлов баз данных, с которых нужно собирать метрики (как определить порт, см. [Как определить порт мониторинга](#web-metrics-mon-port)).
 
-  В [`prometheus_ydb.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/prometheus_ydb.yml) для задач сбора метрик задайте **`scheme: https`** и настройте `tls_config`. Укажите путь к [сертификату центра сертификации](../deployment-options/manual/initial-deployment/deployment-preparation.md#tls-certificates) (CA), которым подписаны сертификаты TLS кластера:
+  В [`prometheus_ydb.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/prometheus_ydb.yml) для задач сбора метрик задайте `scheme: https` и настройте `tls_config`. Укажите путь к [сертификату центра сертификации](../deployment-options/manual/initial-deployment/deployment-preparation.md#tls-certificates) (CA), которым подписаны сертификаты TLS кластера:
 
   ```yaml
   scheme: https
@@ -102,35 +108,37 @@
 
 - Локальный однонодовый кластер (быстрый старт)
 
-  Если {{ ydb-short-name }} запущен локально в конфигурации «один узел» и мониторинг слушает на одном порту (часто `8765`), в **обоих** файлах — `ydbd-storage.yml` и `ydbd-database.yml` — в секции `targets` укажите один и тот же адрес, например `localhost:8765` или `<hostname>:8765`.
+  Если {{ ydb-short-name }} запущен локально в конфигурации «один узел» и мониторинг слушает на одном порту (часто `8765`), в обоих файлах — `ydbd-storage.yml` и `ydbd-database.yml` — в секции `targets` укажите один и тот же адрес, например `localhost:8765` или `<hostname>:8765`.
 
 {% endlist %}
 
 ### Запуск Prometheus с подготовленной конфигурацией {#prometheus-start}
 
-Отредактированные файлы положите в **любую** удобную директорию на машине, где запускается Prometheus (рядом с бинарником или отдельно, например `/etc/prometheus`). Файлы `prometheus_ydb.yml`, `ydbd-storage.yml` и `ydbd-database.yml` держите в **одной** папке: в шаблоне к файлам списков целей обращаются **относительные** пути, и Prometheus ищет их относительно **рабочей директории процесса** при старте. Если в `file_sd_configs` заданы абсолютные пути к `ydbd-storage.yml` и `ydbd-database.yml`, запускать Prometheus можно из любой рабочей директории.
+Отредактированные файлы положите в любую удобную директорию на машине, где запускается Prometheus (рядом с бинарником или отдельно, например `/etc/prometheus`). Файлы `prometheus_ydb.yml`, `ydbd-storage.yml` и `ydbd-database.yml` расположите в одной папке.
 
-Если Prometheus поднимается **только для {{ ydb-short-name }}**, в параметре `--config.file` укажите **полный или относительный путь** к `prometheus_ydb.yml`. Перед запуском перейдите в каталог с конфигурацией и запустите процесс из него:
+В `prometheus_ydb.yml` в каждой задаче секции `scrape_configs` параметр `file_sd_configs` указывает, из каких файлов брать список целей — `ydbd-storage.yml` и `ydbd-database.yml`. По умолчанию пути в `file_sd_configs` относительные: Prometheus ищет эти файлы относительно рабочей директории процесса при старте. Если задать абсолютные пути, запускать Prometheus можно из любой рабочей директории.
+
+Если Prometheus поднимается только для {{ ydb-short-name }}, в параметре `--config.file` укажите полный или относительный путь к `prometheus_ydb.yml`. Перед запуском перейдите в каталог с конфигурацией и запустите процесс из него:
 
 ```bash
-cd <путь_к_каталогу_с_конфигами>
+cd <path_to_config_dir>
 prometheus --config.file=prometheus_ydb.yml
 ```
 
-Если Prometheus **уже** используется для других систем, **не** подменяйте основной конфиг файлом `prometheus_ydb.yml` в `--config.file`. Добавьте в существующий файл конфигурации (обычно `prometheus.yml`) задачи из секции `scrape_configs` в `prometheus_ydb.yml` — все записи с `job_name`, начинающимся с `ydb/`. 
+Если Prometheus уже используется для других систем, не подменяйте основной конфиг файлом `prometheus_ydb.yml` в `--config.file`. Добавьте в существующий файл конфигурации (обычно `prometheus.yml`) задачи из секции `scrape_configs` в `prometheus_ydb.yml` — все записи с `job_name`, начинающимся с `ydb/`.
 
-Файлы `ydbd-storage.yml` и `ydbd-database.yml` разместите в каталоге, откуда Prometheus читает пути в `file_sd_configs`, или укажите для них абсолютные пути в этих задачах.
+Убедитесь, что `ydbd-storage.yml` и `ydbd-database.yml` доступны по путям в `file_sd_configs` перенесенных задач (см. абзац про `file_sd_configs` [выше](#prometheus-start)).
 
 Секцию `global:` из `prometheus_ydb.yml` переносите только при необходимости и сверьте значения с уже заданными в вашем конфиге. Запускайте Prometheus с вашим конфигом, например:
 
 ```bash
-prometheus --config.file=<ваш_prometheus.yml>
+prometheus --config.file=<your_prometheus.yml>
 ```
 
 После изменений проверьте конфигурацию:
 
 ```bash
-promtool check config <ваш_prometheus.yml>
+promtool check config <your_prometheus.yml>
 ```
 
 Проверьте, что Prometheus запущен и отвечает:
@@ -139,7 +147,7 @@ promtool check config <ваш_prometheus.yml>
 curl "http://localhost:9090/-/healthy"
 ```
 
-В веб-интерфейсе Prometheus (как правило, порт `9090`) откройте **Status** → **Target** и убедитесь, что группы опроса метрик находятся в состоянии успешного сбора. Исключение — группа, связанная с топиками: при отсутствии топиков в базе данных для нее может отображаться ответ **`204 No content`** — это не признак ошибки конфигурации.
+В веб-интерфейсе Prometheus (как правило, порт `9090`) откройте **Status** → **Targets** и убедитесь, что группы опроса метрик находятся в состоянии **UP** (успешный сбор). Исключение — группа, связанная с топиками: при отсутствии топиков в базе данных для нее может отображаться ответ `204 No content`. Это не признак ошибки конфигурации.
 
 ### Настройка Grafana {#grafana-setup}
 
@@ -171,28 +179,24 @@ curl "http://localhost:9090/-/healthy"
 
 {% endcut %}
 
-После настройки Prometheus и Grafana проверьте на узлах кластера порты мониторинга (`--mon-port`) и группы метрик из `ydbd-storage.yml` и `ydbd-database.yml`. Для этого откройте в браузере URL веб-интерфейса `/counters/` — см. раздел [Доступ к метрикам через веб-интерфейс](#web-metrics).
+После настройки убедитесь, что цели {{ ydb-short-name }} в Prometheus в состоянии **UP** (см. [Запуск Prometheus с подготовленной конфигурацией](#prometheus-start)), а на дашборде **YDB Essential Metrics** отображаются метрики.
 
 ## Доступ к метрикам через веб-интерфейс {#web-metrics}
 
-Каждый узел кластера отдает собственный набор метрик по HTTP или HTTPS. Имена групп и метрик поясняются в [описании метрик](../../reference/observability/metrics/index.md). Мгновенные значения можно открыть в браузере по базовому пути `/counters/` на том же хосте и порту мониторинга (`--mon-port`), которые участвуют в опросе Prometheus:
+Помимо сбора в Prometheus, каждый узел кластера предоставляет встроенный HTTP-интерфейс для просмотра метрик в браузере. Интерфейс показывает текущие значения метрик на момент запроса, без истории; непрерывный сбор и хранение настраивают в Prometheus (см. [выше](#prometheus-grafana)). Интерфейс слушает порт `--mon-port` (по умолчанию `8765`) на хосте узла.
 
-```text
-http://<ydb-server-address>:<ydb-port>/counters/
-```
+Главная страница — `http://<ydb-server-address>:<ydb-port>/counters/`: на ней отображается список групп метрик (подсистем). Имена групп и метрик — в [описании метрик](../../reference/observability/metrics/index.md).
 
 где:
 
-- `<ydb-server-address>` – адрес сервера {{ ydb-short-name }};
-- `<ydb-port>` – порт {{ ydb-short-name }}, указанный в параметре `--mon-port` при запуске узла. Значение по умолчанию: `8765`.
+- `<ydb-server-address>` — адрес сервера {{ ydb-short-name }};
+- `<ydb-port>` — порт мониторинга узла, параметр `--mon-port` при запуске. Значение по умолчанию: `8765`. Как определить порт на конкретном хосте, см. [ниже](#web-metrics-mon-port).
 
 При включенном TLS на узле используйте схему `https://` в URL.
 
-В шаблонном `prometheus_ydb.yml` хосты и порты узлов совпадают с теми, что заданы в `ydbd-storage.yml` и `ydbd-database.yml`; для каждой группы метрик в `scrape_configs` задается `metrics_path`, обычно вида `/counters/counters=<имя_подсистемы>/prometheus`. Подсистемы (`auth`, `compile`, `grpc`, `kqp`, `pdisks`, `vdisks` и другие) совпадают с группами, которые видны на странице `/counters/` в браузере.
+### Как определить порт мониторинга (`--mon-port`) {#web-metrics-mon-port}
 
-{% cut "Как определить значение параметра `<ydb-port>`" %}
-
-Определите значение параметра `<ydb-port>` командой на **том хосте (сервере)**, где запущен узел {{ ydb-short-name }}: по SSH к этой машине или в локальной консоли на ней. Если в кластере несколько серверов, при необходимости выполните команду на каждом из них.
+Если порт неизвестен, определите его на хосте, где запущен узел {{ ydb-short-name }} (по SSH или в локальной консоли). Если в кластере несколько серверов, при необходимости выполните команду на каждом из них.
 
 ```bash
 ps aux | grep ydbd
@@ -200,51 +204,55 @@ ps aux | grep ydbd
 
 ![пример вывода ps aux с параметром --mon-port у процессов ydbd](../../_assets/mon-port.png)
 
-В выводе может быть несколько процессов `ydbd` с **разными** значениями `--mon-port` (например, статический и динамический узел на одном сервере). Добавьте в мониторинг **все** порты тех узлов, метрики которых нужно собирать. На скриншоте выделены отдельные значения только для примера — ориентируйтесь на фактический вывод команды на ваших хостах.
+В выводе может быть несколько процессов `ydbd` с разными значениями `--mon-port` (например, статический и динамический узел на одном сервере). Добавьте в мониторинг все порты тех узлов, метрики которых нужно собирать. На скриншоте выделены отдельные значения только для примера — ориентируйтесь на фактический вывод команды на ваших хостах.
 
-{% endcut %}
+### Группы метрик на главной странице {#web-metrics-groups}
 
-{% cut "Пример интерфейса" %}
+На главной странице перечислены группы метрик по подсистемам — `auth`, `compile`, `grpc`, `kqp`, `pdisks`, `vdisks` и другие. Каждая группа — ссылка на страницу с метриками этой подсистемы.
 
 ![пример веб-интерфейса мониторинга YDB со списком групп метрик](../../_assets/monitoring-UI.png)
 
-{% endcut %}
+### Просмотр метрик группы (подсистемы) {#web-metrics-subgroup}
 
-Связанные метрики объединены в подгруппы (например, `counters auth`). Чтобы посмотреть значения метрик только определенной подгруппы, перейдите по URL следующего вида:
+Чтобы открыть метрики одной группы (подсистемы), перейдите по URL:
 
 ```text
 http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/
 ```
 
-- `<servicename>` — имя подгруппы метрик.
+- `<servicename>` — имя группы (подсистемы), как в списке на главной странице.
 
-Например, данные об утилизации аппаратных ресурсов сервера объединены в подгруппу `utils` и доступны по следующему URL:
+Например, метрики утилизации ресурсов сервера — в группе `utils`:
 
 ```text
 http://<ydb-server-address>:<ydb-port>/counters/counters=utils
 ```
 
-Тот же узел отдает метрики в [формате Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) по пути с суффиксом `/prometheus` (его использует Prometheus в `metrics_path`):
+### Метрики в формате Prometheus {#web-metrics-prometheus}
+
+Тот же узел отдает метрики в [формате Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) — по URL с суффиксом `/prometheus`. Именно эти адреса опрашивает Prometheus (параметр `metrics_path` в `scrape_configs`):
 
 ```text
 http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheus
 ```
 
-- `<servicename>` — имя подгруппы метрик.
-
-Пример проверки доступности эндпоинта метрик:
+Проверить доступность эндпоинта:
 
 ```bash
 curl "http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheus"
 ```
 
-Для TLS используйте `https://`; при необходимости для диагностики самоподписанного сертификата добавьте флаг `-k`.
+Для TLS — `https://`; при самоподписанном сертификате для диагностики добавьте флаг `-k`.
 
-Непрерывный сбор и визуализацию настраивают в разделе [Настройка мониторинга с помощью Prometheus и Grafana](#prometheus-grafana); другие системы с поддержкой формата Prometheus (например, Zabbix или Amazon CloudWatch) подключают к тем же URL по аналогии.
+### Связь с конфигурацией Prometheus {#web-metrics-prom-config}
+
+В шаблонном `prometheus_ydb.yml` хосты и порты совпадают с `ydbd-storage.yml` и `ydbd-database.yml`. Для каждой группы метрик в `scrape_configs` задан `metrics_path` вида `/counters/counters=<servicename>/prometheus` — те же подсистемы, что в списке на [главной странице](#web-metrics-groups) веб-интерфейса.
+
+Другие системы с поддержкой формата Prometheus (Zabbix, Amazon CloudWatch и др.) подключают к тем же URL.
 
 ## См. также {#see-also}
 
-- [Описание метрик](../../reference/observability/metrics/index.md)
-- [Справочник по дашбордам Grafana](../../reference/observability/metrics/grafana-dashboards.md)
-- [Быстрый старт](../../quickstart.md)
-- [Способы развертывания](../deployment-options/index.md)
+- [{#T}](../../reference/observability/metrics/index.md)
+- [{#T}](../../reference/observability/metrics/grafana-dashboards.md)
+- [{#T}](../../quickstart.md)
+- [{#T}](../deployment-options/index.md)

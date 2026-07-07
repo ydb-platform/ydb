@@ -411,11 +411,11 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     void DoTestOrderByCosine(ui32 indexLevels, int flags, std::optional<bool> enableIndexStreamWrite = std::nullopt) {
         // Run the same scenario through both the legacy StreamLookup lowering and the new specialized
-        // vector search actor (TableServiceConfig.EnableVectorSearch, off by default), so both
+        // vector search actor (TableServiceConfig.EnableVectorSearchActor, off by default), so both
         // read paths are verified identically against the same brute-force ground truth.
-        for (bool enableVectorSearch : {false, true}) {
+        for (bool enableVectorSearchActor : {false, true}) {
             Cerr << "DoTestOrderByCosine: indexLevels=" << indexLevels << " flags=" << flags
-                 << " enableVectorSearch=" << enableVectorSearch << Endl;
+                 << " enableVectorSearchActor=" << enableVectorSearchActor << Endl;
 
             NKikimrConfig::TFeatureFlags featureFlags;
             auto setting = NKikimrKqp::TKqpSetting();
@@ -425,7 +425,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             if (enableIndexStreamWrite) {
                 serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(*enableIndexStreamWrite);
             }
-            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearch(enableVectorSearch);
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(enableVectorSearchActor);
 
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -711,13 +711,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         // both the legacy StreamLookup lowering and the new vector search actor. Regression
         // guard: the read actor used to silently compile TopK=0 for a non-literal LIMIT, which
         // made it return an empty result set.
-        for (bool enableVectorSearch : {false, true}) {
+        for (bool enableVectorSearchActor : {false, true}) {
             NKikimrConfig::TFeatureFlags featureFlags;
             auto setting = NKikimrKqp::TKqpSetting();
             auto serverSettings = TKikimrSettings()
                 .SetFeatureFlags(featureFlags)
                 .SetKqpSettings({setting});
-            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearch(enableVectorSearch);
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(enableVectorSearchActor);
 
             TKikimrRunner kikimr(serverSettings);
             auto db = kikimr.GetTableClient();
@@ -740,9 +740,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params)
                 .ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(),
-                "enableVectorSearch=" << enableVectorSearch << ": " << result.GetIssues().ToString());
+                "enableVectorSearchActor=" << enableVectorSearchActor << ": " << result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSet(0).RowsCount(), 3,
-                "enableVectorSearch=" << enableVectorSearch);
+                "enableVectorSearchActor=" << enableVectorSearchActor);
         }
     }
 

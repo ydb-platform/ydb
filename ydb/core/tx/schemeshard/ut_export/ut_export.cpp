@@ -1167,38 +1167,62 @@ namespace {
             Env().TestWaitNotification(Runtime(), exportTxId);
         }
 
-        void CancelColumnTableExportWithReboot(bool rebootCS, bool rebootSS, bool rebootBeforeCancel) {
+        struct TColumnTableInfo {
+            ui64 PathId = 0;
+            ui64 ShardId = 0;
+        };
+
+        struct TColumnTableSlowS3ExportContext {
+            ui64 TxId = 0;
+            ui64 ExportId = 0;
+            ui64 ShardId = 0;
+            ui64 PathId = 0;
+            THolder<NActors::TBlockEvents<NKikimr::NColumnShard::TEvPrivate::TEvBackupExportRecordBatch>> BlockExportBatch;
+            std::function<ui64()> GetAliveCounter;
+        };
+
+        void InitColumnTableExportSlowS3Test(bool enableScanWriteLog = true) {
             Env();
             Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
             Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
-            Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
-            Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_WRITE, NActors::NLog::PRI_DEBUG);
+            if (enableScanWriteLog) {
+                Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
+                Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_WRITE, NActors::NLog::PRI_DEBUG);
+            }
+        }
 
-            ui64 txId = 100;
+        std::function<ui64()> MakeColumnTableExportAliveCounter() {
+            return [this]() {
+                auto subgroup = GetServiceCounters(Runtime().GetDynamicCounters(0), "tablets")
+                    ->GetSubgroup("subsystem", "columnshard")
+                    ->GetSubgroup("module_id", "ExportActor");
+                return subgroup->GetCounter("Value/Export/Actors/Alive", false)->Val();
+            };
+        }
 
-            TestCreateColumnTable(Runtime(), ++txId, "/MyRoot", R"(
-                Name: "ColumnTable"
+        TColumnTableInfo CreateColumnTableWithData(ui64& txId, const TString& tableName) {
+            TestCreateColumnTable(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+                Name: "%s"
                 ColumnShardCount: 1
                 Schema {
                     Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                     Columns { Name: "value" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
                 }
-            )");
+            )", tableName.c_str()));
             Env().TestWaitNotification(Runtime(), txId);
 
-            ui64 pathId = 0;
-            ui64 shardId = 0;
+            TColumnTableInfo info;
             {
-                auto describe = DescribePath(Runtime(), "/MyRoot/ColumnTable");
+                auto describe = DescribePath(Runtime(), Sprintf("/MyRoot/%s", tableName.c_str()));
                 TestDescribeResult(describe, {NLs::PathExist});
-                pathId = describe.GetPathId();
+                info.PathId = describe.GetPathId();
                 const auto& sharding = describe.GetPathDescription().GetColumnTableDescription().GetSharding();
                 UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
-                shardId = sharding.GetColumnShards()[0];
+                info.ShardId = sharding.GetColumnShards()[0];
             }
-            UNIT_ASSERT(shardId);
-            UNIT_ASSERT(pathId);
+            UNIT_ASSERT(info.ShardId);
+            UNIT_ASSERT(info.PathId);
 
             {
                 TActorId sender = Runtime().AllocateEdgeActor();
@@ -1210,33 +1234,77 @@ namespace {
                 ui64 writeId = 0;
                 std::vector<ui64> writeIds;
                 ++txId;
-                NTxUT::WriteData(Runtime(), sender, shardId, ++writeId, pathId, data, ydbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
-                auto planStep = NTxUT::ProposeCommit(Runtime(), sender, shardId, txId, writeIds, txId);
-                NTxUT::PlanCommit(Runtime(), sender, shardId, planStep, {txId});
+                NTxUT::WriteData(Runtime(), sender, info.ShardId, ++writeId, info.PathId, data, ydbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                auto planStep = NTxUT::ProposeCommit(Runtime(), sender, info.ShardId, txId, writeIds, txId);
+                NTxUT::PlanCommit(Runtime(), sender, info.ShardId, planStep, {txId});
             }
 
-            NActors::TBlockEvents<NKikimr::NColumnShard::TEvPrivate::TEvBackupExportRecordBatch> blockExportBatch(Runtime());
+            return info;
+        }
 
+        ui64 StartColumnTableS3Export(ui64& txId, const TString& tableName, const TString& destinationPrefix) {
             const ui64 exportTxId = ++txId;
             TestExport(Runtime(), exportTxId, "/MyRoot", Sprintf(R"(
                 ExportToS3Settings {
                   endpoint: "localhost:%d"
                   scheme: HTTP
                   items {
-                    source_path: "/MyRoot/ColumnTable"
-                    destination_prefix: ""
+                    source_path: "/MyRoot/%s"
+                    destination_prefix: "%s"
                   }
                 }
-            )", S3Port()));
-            const ui64 exportId = exportTxId;
+            )", S3Port(), tableName.c_str(), destinationPrefix.c_str()));
+            return exportTxId;
+        }
 
-            auto getAliveCounter = [&]() {
-                auto subgroup = GetServiceCounters(Runtime().GetDynamicCounters(0), "tablets")
-                    ->GetSubgroup("subsystem", "columnshard")
-                    ->GetSubgroup("module_id", "ExportActor");
-                return subgroup->GetCounter("Value/Export/Actors/Alive", false)->Val();
-            };
-            Runtime().WaitFor("export actor alive", [&]{ return getAliveCounter() != 0; }, TDuration::Seconds(60));
+        TColumnTableSlowS3ExportContext SetupColumnTableSlowS3Export(
+            ui64 startTxId = 100,
+            const TString& tableName = "ColumnTable",
+            const TString& destinationPrefix = "",
+            bool enableScanWriteLog = true)
+        {
+            InitColumnTableExportSlowS3Test(enableScanWriteLog);
+
+            TColumnTableSlowS3ExportContext ctx;
+            ctx.TxId = startTxId;
+
+            const auto tableInfo = CreateColumnTableWithData(ctx.TxId, tableName);
+            ctx.PathId = tableInfo.PathId;
+            ctx.ShardId = tableInfo.ShardId;
+
+            ctx.BlockExportBatch = MakeHolder<NActors::TBlockEvents<NKikimr::NColumnShard::TEvPrivate::TEvBackupExportRecordBatch>>(Runtime());
+            ctx.ExportId = StartColumnTableS3Export(ctx.TxId, tableName, destinationPrefix);
+
+            ctx.GetAliveCounter = MakeColumnTableExportAliveCounter();
+            Runtime().WaitFor("export actor alive", [&]{ return ctx.GetAliveCounter() != 0; }, TDuration::Seconds(60));
+
+            return ctx;
+        }
+
+        void VerifyExportCancelledAndForget(ui64& txId, ui64 exportId) {
+            Env().TestWaitNotification(Runtime(), exportId);
+
+            auto desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+            auto entry = desc.GetResponse().GetEntry();
+            UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
+
+            TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
+            Env().TestWaitNotification(Runtime(), exportId);
+
+            TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        }
+
+        void FinalizeColumnTableSlowS3Export(TColumnTableSlowS3ExportContext& ctx) {
+            Runtime().WaitFor("export actors stopped", [&]{ return ctx.GetAliveCounter() == 0; }, TDuration::Seconds(60));
+            ctx.BlockExportBatch->Stop();
+            ctx.BlockExportBatch->Unblock();
+        }
+
+        void CancelColumnTableExportWithReboot(bool rebootCS, bool rebootSS, bool rebootBeforeCancel) {
+            auto ctx = SetupColumnTableSlowS3Export();
+            ui64 txId = ctx.TxId;
+            const ui64 exportId = ctx.ExportId;
+            const ui64 shardId = ctx.ShardId;
 
             if (rebootBeforeCancel) {
                 if (rebootCS) {
@@ -1260,21 +1328,8 @@ namespace {
 
             TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
 
-            Env().TestWaitNotification(Runtime(), exportId);
-
-            auto desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-            auto entry = desc.GetResponse().GetEntry();
-            UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
-
-            TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
-            Env().TestWaitNotification(Runtime(), exportId);
-
-            TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
-
-            Runtime().WaitFor("export actors stopped", [&]{ return getAliveCounter() == 0; }, TDuration::Seconds(60));
-
-            blockExportBatch.Stop();
-            blockExportBatch.Unblock();
+            VerifyExportCancelledAndForget(txId, exportId);
+            FinalizeColumnTableSlowS3Export(ctx);
         }
 
     private:
@@ -4905,185 +4960,25 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
     }
 
     Y_UNIT_TEST(CancelColumnTableExportDuringSlowS3ViaSSPipeline) {
-        Env();
-        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
-        Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
-        Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
-        Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_WRITE, NActors::NLog::PRI_DEBUG);
+        auto ctx = SetupColumnTableSlowS3Export();
+        ui64 txId = ctx.TxId;
 
-        ui64 txId = 100;
+        TestCancelExport(Runtime(), ++txId, "/MyRoot", ctx.ExportId);
 
-        TestCreateColumnTable(Runtime(), ++txId, "/MyRoot", R"(
-            Name: "ColumnTable"
-            ColumnShardCount: 1
-            Schema {
-                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
-                Columns { Name: "value" Type: "Utf8" }
-                KeyColumnNames: "timestamp"
-            }
-        )");
-        Env().TestWaitNotification(Runtime(), txId);
-
-        ui64 pathId = 0;
-        ui64 shardId = 0;
-        {
-            auto describe = DescribePath(Runtime(), "/MyRoot/ColumnTable");
-            TestDescribeResult(describe, {NLs::PathExist});
-            pathId = describe.GetPathId();
-            const auto& sharding = describe.GetPathDescription().GetColumnTableDescription().GetSharding();
-            UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
-            shardId = sharding.GetColumnShards()[0];
-        }
-        UNIT_ASSERT(shardId);
-        UNIT_ASSERT(pathId);
-
-        {
-            TActorId sender = Runtime().AllocateEdgeActor();
-            const std::vector<NArrow::NTest::TTestColumn> ydbSchema = {
-                NArrow::NTest::TTestColumn("timestamp", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)).SetNullable(false),
-                NArrow::NTest::TTestColumn("value", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)),
-            };
-            const auto data = NTxUT::MakeTestBlob({0, 100}, ydbSchema, {}, {"timestamp"});
-            ui64 writeId = 0;
-            std::vector<ui64> writeIds;
-            ++txId;
-            NTxUT::WriteData(Runtime(), sender, shardId, ++writeId, pathId, data, ydbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
-            auto planStep = NTxUT::ProposeCommit(Runtime(), sender, shardId, txId, writeIds, txId);
-            NTxUT::PlanCommit(Runtime(), sender, shardId, planStep, {txId});
-        }
-
-        NActors::TBlockEvents<NKikimr::NColumnShard::TEvPrivate::TEvBackupExportRecordBatch> blockExportBatch(Runtime());
-
-        const ui64 exportTxId = ++txId;
-        TestExport(Runtime(), exportTxId, "/MyRoot", Sprintf(R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_path: "/MyRoot/ColumnTable"
-                destination_prefix: ""
-              }
-            }
-        )", S3Port()));
-        const ui64 exportId = exportTxId;
-
-        auto getAliveCounter = [&]() {
-            auto subgroup = GetServiceCounters(Runtime().GetDynamicCounters(0), "tablets")
-                ->GetSubgroup("subsystem", "columnshard")
-                ->GetSubgroup("module_id", "ExportActor");
-            return subgroup->GetCounter("Value/Export/Actors/Alive", false)->Val();
-        };
-        Runtime().WaitFor("export actor alive", [&]{ return getAliveCounter() != 0; }, TDuration::Seconds(60));
-
-        TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
-
-        Env().TestWaitNotification(Runtime(), exportId);
-
-        auto desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        auto entry = desc.GetResponse().GetEntry();
-        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
-
-        TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
-        Env().TestWaitNotification(Runtime(), exportId);
-
-        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
-        
-        Runtime().WaitFor("export actor alive", [&]{ return getAliveCounter() == 0; }, TDuration::Seconds(60));
-
-        blockExportBatch.Stop();
-        blockExportBatch.Unblock();
+        VerifyExportCancelledAndForget(txId, ctx.ExportId);
+        FinalizeColumnTableSlowS3Export(ctx);
     }
 
     Y_UNIT_TEST(MultipleCancelsColumnTableExportDuringSlowS3ViaSSPipeline) {
-        Env();
-        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
-        Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
-        Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
-        Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_WRITE, NActors::NLog::PRI_DEBUG);
+        auto ctx = SetupColumnTableSlowS3Export();
+        ui64 txId = ctx.TxId;
 
-        ui64 txId = 100;
+        TestCancelExport(Runtime(), ++txId, "/MyRoot", ctx.ExportId);
+        TestCancelExport(Runtime(), ++txId, "/MyRoot", ctx.ExportId);
+        TestCancelExport(Runtime(), ++txId, "/MyRoot", ctx.ExportId);
 
-        TestCreateColumnTable(Runtime(), ++txId, "/MyRoot", R"(
-            Name: "ColumnTable"
-            ColumnShardCount: 1
-            Schema {
-                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
-                Columns { Name: "value" Type: "Utf8" }
-                KeyColumnNames: "timestamp"
-            }
-        )");
-        Env().TestWaitNotification(Runtime(), txId);
-
-        ui64 pathId = 0;
-        ui64 shardId = 0;
-        {
-            auto describe = DescribePath(Runtime(), "/MyRoot/ColumnTable");
-            TestDescribeResult(describe, {NLs::PathExist});
-            pathId = describe.GetPathId();
-            const auto& sharding = describe.GetPathDescription().GetColumnTableDescription().GetSharding();
-            UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
-            shardId = sharding.GetColumnShards()[0];
-        }
-        UNIT_ASSERT(shardId);
-        UNIT_ASSERT(pathId);
-
-        {
-            TActorId sender = Runtime().AllocateEdgeActor();
-            const std::vector<NArrow::NTest::TTestColumn> ydbSchema = {
-                NArrow::NTest::TTestColumn("timestamp", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)).SetNullable(false),
-                NArrow::NTest::TTestColumn("value", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)),
-            };
-            const auto data = NTxUT::MakeTestBlob({0, 100}, ydbSchema, {}, {"timestamp"});
-            ui64 writeId = 0;
-            std::vector<ui64> writeIds;
-            ++txId;
-            NTxUT::WriteData(Runtime(), sender, shardId, ++writeId, pathId, data, ydbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
-            auto planStep = NTxUT::ProposeCommit(Runtime(), sender, shardId, txId, writeIds, txId);
-            NTxUT::PlanCommit(Runtime(), sender, shardId, planStep, {txId});
-        }
-
-        NActors::TBlockEvents<NKikimr::NColumnShard::TEvPrivate::TEvBackupExportRecordBatch> blockExportBatch(Runtime());
-
-        const ui64 exportTxId = ++txId;
-        TestExport(Runtime(), exportTxId, "/MyRoot", Sprintf(R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_path: "/MyRoot/ColumnTable"
-                destination_prefix: ""
-              }
-            }
-        )", S3Port()));
-        const ui64 exportId = exportTxId;
-
-        auto getAliveCounter = [&]() {
-            auto subgroup = GetServiceCounters(Runtime().GetDynamicCounters(0), "tablets")
-                ->GetSubgroup("subsystem", "columnshard")
-                ->GetSubgroup("module_id", "ExportActor");
-            return subgroup->GetCounter("Value/Export/Actors/Alive", false)->Val();
-        };
-        Runtime().WaitFor("export actor alive", [&]{ return getAliveCounter() != 0; }, TDuration::Seconds(60));
-
-        TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
-        TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
-        TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
-
-        Env().TestWaitNotification(Runtime(), exportId);
-
-        auto desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        auto entry = desc.GetResponse().GetEntry();
-        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
-
-        TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
-        Env().TestWaitNotification(Runtime(), exportId);
-
-        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
-
-        Runtime().WaitFor("export actor alive", [&]{ return getAliveCounter() == 0; }, TDuration::Seconds(60));
-
-        blockExportBatch.Stop();
-        blockExportBatch.Unblock();
+        VerifyExportCancelledAndForget(txId, ctx.ExportId);
+        FinalizeColumnTableSlowS3Export(ctx);
     }
 
     Y_UNIT_TEST(CancelColumnTableExportRebootCSThenCancelAgain) {
@@ -5111,201 +5006,39 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
     }
 
     Y_UNIT_TEST(CancelTwoColumnTableExportsDuringSlowS3ViaSSPipeline) {
-        Env();
-        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
-        Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
-        Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
-        Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_WRITE, NActors::NLog::PRI_DEBUG);
-
+        InitColumnTableExportSlowS3Test();
         ui64 txId = 100;
 
-        const std::vector<NArrow::NTest::TTestColumn> ydbSchema = {
-            NArrow::NTest::TTestColumn("timestamp", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)).SetNullable(false),
-            NArrow::NTest::TTestColumn("value", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)),
-        };
-
         for (const auto& tableName : {"ColumnTable1", "ColumnTable2"}) {
-            TestCreateColumnTable(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
-                Name: "%s"
-                ColumnShardCount: 1
-                Schema {
-                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
-                    Columns { Name: "value" Type: "Utf8" }
-                    KeyColumnNames: "timestamp"
-                }
-            )", tableName));
-            Env().TestWaitNotification(Runtime(), txId);
+            CreateColumnTableWithData(txId, tableName);
         }
 
-        for (const auto& tableName : {"ColumnTable1", "ColumnTable2"}) {
-            auto describe = DescribePath(Runtime(), Sprintf("/MyRoot/%s", tableName));
-            TestDescribeResult(describe, {NLs::PathExist});
-            ui64 pathId = describe.GetPathId();
-            const auto& sharding = describe.GetPathDescription().GetColumnTableDescription().GetSharding();
-            UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
-            ui64 shardId = sharding.GetColumnShards()[0];
-            UNIT_ASSERT(shardId);
-            UNIT_ASSERT(pathId);
+        TColumnTableSlowS3ExportContext ctx;
+        ctx.BlockExportBatch = MakeHolder<NActors::TBlockEvents<NKikimr::NColumnShard::TEvPrivate::TEvBackupExportRecordBatch>>(Runtime());
+        ctx.GetAliveCounter = MakeColumnTableExportAliveCounter();
 
-            TActorId sender = Runtime().AllocateEdgeActor();
-            const auto data = NTxUT::MakeTestBlob({0, 100}, ydbSchema, {}, {"timestamp"});
-            ui64 writeId = 0;
-            std::vector<ui64> writeIds;
-            ++txId;
-            NTxUT::WriteData(Runtime(), sender, shardId, ++writeId, pathId, data, ydbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
-            auto planStep = NTxUT::ProposeCommit(Runtime(), sender, shardId, txId, writeIds, txId);
-            NTxUT::PlanCommit(Runtime(), sender, shardId, planStep, {txId});
-        }
+        const ui64 exportTxId1 = StartColumnTableS3Export(txId, "ColumnTable1", "table1");
+        const ui64 exportTxId2 = StartColumnTableS3Export(txId, "ColumnTable2", "table2");
 
-        NActors::TBlockEvents<NKikimr::NColumnShard::TEvPrivate::TEvBackupExportRecordBatch> blockExportBatch(Runtime());
-
-        const ui64 exportTxId1 = ++txId;
-        TestExport(Runtime(), exportTxId1, "/MyRoot", Sprintf(R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_path: "/MyRoot/ColumnTable1"
-                destination_prefix: "table1"
-              }
-            }
-        )", S3Port()));
-
-        const ui64 exportTxId2 = ++txId;
-        TestExport(Runtime(), exportTxId2, "/MyRoot", Sprintf(R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_path: "/MyRoot/ColumnTable2"
-                destination_prefix: "table2"
-              }
-            }
-        )", S3Port()));
-
-        auto getAliveCounter = [&]() {
-            auto subgroup = GetServiceCounters(Runtime().GetDynamicCounters(0), "tablets")
-                ->GetSubgroup("subsystem", "columnshard")
-                ->GetSubgroup("module_id", "ExportActor");
-            return subgroup->GetCounter("Value/Export/Actors/Alive", false)->Val();
-        };
-        Runtime().WaitFor("export actors alive", [&]{ return getAliveCounter() >= 2; }, TDuration::Seconds(60));
+        Runtime().WaitFor("export actors alive", [&]{ return ctx.GetAliveCounter() >= 2; }, TDuration::Seconds(60));
 
         TestCancelExport(Runtime(), ++txId, "/MyRoot", exportTxId1);
         TestCancelExport(Runtime(), ++txId, "/MyRoot", exportTxId2);
 
-        Env().TestWaitNotification(Runtime(), exportTxId1);
-        Env().TestWaitNotification(Runtime(), exportTxId2);
-
-        {
-            auto desc = TestGetExport(Runtime(), exportTxId1, "/MyRoot", Ydb::StatusIds::CANCELLED);
-            auto entry = desc.GetResponse().GetEntry();
-            UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
-        }
-        {
-            auto desc = TestGetExport(Runtime(), exportTxId2, "/MyRoot", Ydb::StatusIds::CANCELLED);
-            auto entry = desc.GetResponse().GetEntry();
-            UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
-        }
-
-        TestForgetExport(Runtime(), ++txId, "/MyRoot", exportTxId1);
-        Env().TestWaitNotification(Runtime(), exportTxId1);
-        TestGetExport(Runtime(), exportTxId1, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
-
-        TestForgetExport(Runtime(), ++txId, "/MyRoot", exportTxId2);
-        Env().TestWaitNotification(Runtime(), exportTxId2);
-        TestGetExport(Runtime(), exportTxId2, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
-
-        Runtime().WaitFor("export actors stopped", [&]{ return getAliveCounter() == 0; }, TDuration::Seconds(60));
-
-        blockExportBatch.Stop();
-        blockExportBatch.Unblock();
+        VerifyExportCancelledAndForget(txId, exportTxId1);
+        VerifyExportCancelledAndForget(txId, exportTxId2);
+        FinalizeColumnTableSlowS3Export(ctx);
     }
 
     Y_UNIT_TEST(CancelColumnTableExportThenForgetThenReboot) {
-        Env();
-        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
-        Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+        auto ctx = SetupColumnTableSlowS3Export(/*startTxId=*/100, "ColumnTable", "", /*enableScanWriteLog=*/false);
+        ui64 txId = ctx.TxId;
 
-        ui64 txId = 100;
+        TestCancelExport(Runtime(), ++txId, "/MyRoot", ctx.ExportId);
+        TestCancelExport(Runtime(), ++txId, "/MyRoot", ctx.ExportId);
 
-        TestCreateColumnTable(Runtime(), ++txId, "/MyRoot", R"(
-            Name: "ColumnTable"
-            ColumnShardCount: 1
-            Schema {
-                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
-                Columns { Name: "value" Type: "Utf8" }
-                KeyColumnNames: "timestamp"
-            }
-        )");
-        Env().TestWaitNotification(Runtime(), txId);
-
-        ui64 pathId = 0;
-        ui64 shardId = 0;
-        {
-            auto describe = DescribePath(Runtime(), "/MyRoot/ColumnTable");
-            TestDescribeResult(describe, {NLs::PathExist});
-            pathId = describe.GetPathId();
-            const auto& sharding = describe.GetPathDescription().GetColumnTableDescription().GetSharding();
-            UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
-            shardId = sharding.GetColumnShards()[0];
-        }
-        UNIT_ASSERT(shardId);
-        UNIT_ASSERT(pathId);
-
-        {
-            TActorId sender = Runtime().AllocateEdgeActor();
-            const std::vector<NArrow::NTest::TTestColumn> ydbSchema = {
-                NArrow::NTest::TTestColumn("timestamp", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)).SetNullable(false),
-                NArrow::NTest::TTestColumn("value", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)),
-            };
-            const auto data = NTxUT::MakeTestBlob({0, 100}, ydbSchema, {}, {"timestamp"});
-            ui64 writeId = 0;
-            std::vector<ui64> writeIds;
-            ++txId;
-            NTxUT::WriteData(Runtime(), sender, shardId, ++writeId, pathId, data, ydbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
-            auto planStep = NTxUT::ProposeCommit(Runtime(), sender, shardId, txId, writeIds, txId);
-            NTxUT::PlanCommit(Runtime(), sender, shardId, planStep, {txId});
-        }
-
-        NActors::TBlockEvents<NKikimr::NColumnShard::TEvPrivate::TEvBackupExportRecordBatch> blockExportBatch(Runtime());
-
-        const ui64 exportTxId = ++txId;
-        TestExport(Runtime(), exportTxId, "/MyRoot", Sprintf(R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_path: "/MyRoot/ColumnTable"
-                destination_prefix: ""
-              }
-            }
-        )", S3Port()));
-
-        auto getAliveCounter = [&]() {
-            auto subgroup = GetServiceCounters(Runtime().GetDynamicCounters(0), "tablets")
-                ->GetSubgroup("subsystem", "columnshard")
-                ->GetSubgroup("module_id", "ExportActor");
-            return subgroup->GetCounter("Value/Export/Actors/Alive", false)->Val();
-        };
-        Runtime().WaitFor("export actor alive", [&]{ return getAliveCounter() != 0; }, TDuration::Seconds(60));
-
-        TestCancelExport(Runtime(), ++txId, "/MyRoot", exportTxId);
-        TestCancelExport(Runtime(), ++txId, "/MyRoot", exportTxId);
-        Env().TestWaitNotification(Runtime(), exportTxId);
-
-        auto desc = TestGetExport(Runtime(), exportTxId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        UNIT_ASSERT_VALUES_EQUAL(desc.GetResponse().GetEntry().GetProgress(),
-                                 Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
-
-        TestForgetExport(Runtime(), ++txId, "/MyRoot", exportTxId);
-        Env().TestWaitNotification(Runtime(), exportTxId);
-        TestGetExport(Runtime(), exportTxId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
-
-        Runtime().WaitFor("export actors stopped", [&]{ return getAliveCounter() == 0; }, TDuration::Seconds(60));
-
-        blockExportBatch.Stop();
-        blockExportBatch.Unblock();
+        VerifyExportCancelledAndForget(txId, ctx.ExportId);
+        FinalizeColumnTableSlowS3Export(ctx);
 
         RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
     }

@@ -17,7 +17,32 @@ from github_issue_utils import (
     min_area_by_owner_team_from_rows,
 )
 from testowners_utils import normalize_github_team_owners_string
-from test_path_dedup import dedupe_dataframe_by_full_name, dedupe_rows_by_full_name
+
+
+def _dedupe_monitor_rows(rows):
+    """One row per full_name; prefer deepest suite_folder."""
+    if not rows:
+        return rows
+    best = {}
+    for row in rows:
+        full_name = row['full_name']
+        suite_len = len(str(row.get('suite_folder') or ''))
+        if full_name not in best or suite_len > len(str(best[full_name].get('suite_folder') or '')):
+            best[full_name] = row
+    return list(best.values())
+
+
+def _dedupe_monitor_df(df):
+    """One row per (full_name, date_window); prefer deepest suite_folder."""
+    if df is None or df.empty:
+        return df
+    keys = ['full_name', 'date_window']
+    return (
+        df.assign(_suite_len=df['suite_folder'].astype(str).str.len())
+        .sort_values(keys + ['_suite_len'])
+        .drop_duplicates(keys, keep='last')
+        .drop(columns='_suite_len')
+    )
 
 
 def create_tables(ydb_wrapper, table_path):
@@ -422,7 +447,7 @@ def main():
                     )
                 rows.append(rec)
 
-            return dedupe_dataframe_by_full_name(pd.DataFrame(rows))
+            return _dedupe_monitor_df(pd.DataFrame(rows))
 
         # Get last existing day
         print("Getting date of last collected monitor data")
@@ -598,7 +623,7 @@ def main():
                     AND hist.build_type = owners_t.build_type;
             """
             results = ydb_wrapper.execute_scan_query(query_get_history, query_name=f"get_monitor_history_for_date_{branch}")
-            results = dedupe_rows_by_full_name(results)
+            results = _dedupe_monitor_rows(results)
 
             if results:
                 for row in results:
@@ -630,7 +655,7 @@ def main():
                 )
 
         start_time = time.time()
-        df = dedupe_dataframe_by_full_name(pd.DataFrame(data))
+        df = _dedupe_monitor_df(pd.DataFrame(data))
 
         if df.empty:
             print(f"No test data found for branch='{branch}', build_type='{build_type}' in the date range. Nothing to process.")

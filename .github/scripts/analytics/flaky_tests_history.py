@@ -5,7 +5,19 @@ import datetime
 import os
 import ydb
 from ydb_wrapper import YDBWrapper
-from test_path_dedup import dedupe_rows_by_full_name
+
+
+def _dedupe_history_rows(rows):
+    """One row per full_name; prefer deepest suite_folder."""
+    if not rows:
+        return rows
+    best = {}
+    for row in rows:
+        full_name = row['full_name']
+        suite_len = len(str(row.get('suite_folder') or ''))
+        if full_name not in best or suite_len > len(str(best[full_name].get('suite_folder') or '')):
+            best[full_name] = row
+    return list(best.values())
 
 
 BASE_DATE = datetime.date(1970, 1, 1)
@@ -258,7 +270,7 @@ def process_date_range(ydb_wrapper, test_runs_table, testowners_table, flaky_tes
             query, 
             query_name=f"get_flaky_test_history_for_date_{branch}"
         )
-        results = dedupe_rows_by_full_name(results)
+        results = _dedupe_history_rows(results)
         print(f'📈 History data captured, {len(results)} rows')
         
         for row in results:

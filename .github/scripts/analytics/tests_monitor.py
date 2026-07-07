@@ -20,23 +20,23 @@ from testowners_utils import normalize_github_team_owners_string
 
 
 def _dedupe_monitor_rows(rows):
-    """One row per full_name; prefer deepest suite_folder."""
+    """One row per (full_name, date_window, branch, build_type); prefer deepest suite_folder."""
     if not rows:
         return rows
     best = {}
     for row in rows:
-        full_name = row['full_name']
+        key = (row['full_name'], row['date_window'], row['branch'], row['build_type'])
         suite_len = len(str(row.get('suite_folder') or ''))
-        if full_name not in best or suite_len > len(str(best[full_name].get('suite_folder') or '')):
-            best[full_name] = row
+        if key not in best or suite_len > len(str(best[key].get('suite_folder') or '')):
+            best[key] = row
     return list(best.values())
 
 
 def _dedupe_monitor_df(df):
-    """One row per (full_name, date_window); prefer deepest suite_folder."""
+    """One row per (full_name, date_window, branch, build_type); prefer deepest suite_folder."""
     if df is None or df.empty:
         return df
-    keys = ['full_name', 'date_window']
+    keys = ['full_name', 'date_window', 'branch', 'build_type']
     return (
         df.assign(_suite_len=df['suite_folder'].astype(str).str.len())
         .sort_values(keys + ['_suite_len'])

@@ -5,4 +5,12 @@ SRCS(
     config.proto
 )
 
+PEERDIR(
+    contrib/ydb/public/api/protos/annotations
+)
+
+IF (NOT PY_PROTOS_FOR)
+    EXCLUDE_TAGS(GO_PROTO)
+ENDIF()
+
 END()

@@ -217,13 +217,11 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
     template <typename TEvent, typename T>
     bool Check(TEvent& ev, T this_, T that, const TString& what) {
         if (this_ != that) {
-            YDB_LOG_ERROR("Suspicious other",
+            YDB_LOG_ERROR(TStringBuilder() << "Suspicious " << what,
                 {"selfId", SelfId()},
-                {"typeName", TypeName<TEvent>()},
                 {"sender", ev->Sender},
-                {"what", what},
-                {"this", this_},
-                {"that", that});
+                {"expected", this_},
+                {"got", that});
             return false;
         }
 
@@ -691,13 +689,13 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         auto* msg = static_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder*>(ev->Get());
         auto& record = msg->Record;
 
-        YDB_LOG_DEBUG("Handle TEvSchemeShard::TEvDescribeSchemeResult event preserialized",
+        YDB_LOG_DEBUG("Handle TEvSchemeShard::TEvDescribeSchemeResult",
             {"selfId", SelfId()},
-            {"ev", record},
+            {"ev", record.ShortDebugString()},
             {"sender", ev->Sender},
             {"cookie", ev->Cookie},
-            {"cachedSize", msg->GetCachedByteSize()},
-            {"serializedSize", msg->PreSerializedData.size()});
+            {"eventSize", msg->GetCachedByteSize()},
+            {"preserializedSize", msg->PreSerializedData.size()});
 
         if (!record.HasStatus()) {
             YDB_LOG_ERROR("Description without status",
@@ -709,12 +707,12 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         const bool isDeletion = record.GetStatus() == NKikimrScheme::StatusPathDoesNotExist;
         const ui64 version = isDeletion ? Max<ui64>() : NSchemeBoard::GetPathVersion(record);
 
-        YDB_LOG_NOTICE("Update description is",
+        YDB_LOG_NOTICE("Update description",
             {"selfId", SelfId()},
             {"owner", Owner},
             {"pathId", pathId},
             {"cookie", ev->Cookie},
-            {"deletion", (isDeletion ? "true" : "false")},
+            {"isDeletion", (isDeletion ? "true" : "false")},
             {"version", (isDeletion ? 0 : version)});
 
         if (isDeletion) {
@@ -787,18 +785,20 @@ class TPopulator: public TMonitorableActor<TPopulator> {
 
         auto it = UpdateAcks.find(ev->Cookie);
         if (it == UpdateAcks.end()) {
-            YDB_LOG_DEBUG("Ack for unknown update (already acked?)",
+            YDB_LOG_DEBUG("Ack for unknown update",
                 {"selfId", SelfId()},
                 {"sender", ev->Sender},
-                {"cookie", ev->Cookie});
+                {"cookie", ev->Cookie},
+                {"reason", "already acked"});
             return;
         }
         TActorId* ackedReplica = ReplicaToReplicaPopulatorBackMap.FindPtr(ev->Sender);
         if (ackedReplica == nullptr) {
-            YDB_LOG_DEBUG("Ack from unknown replica (config changed?)",
+            YDB_LOG_DEBUG("Ack from unknown replica",
                 {"selfId", SelfId()},
                 {"sender", ev->Sender},
-                {"cookie", ev->Cookie});
+                {"cookie", ev->Cookie},
+                {"reason", "config changed");
             return;
         }
         const TPathId pathId = ev->Get()->GetPathId();
@@ -809,7 +809,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                && pathIt->first.first == pathId
                && pathIt->first.second <= version) {
             if (CheckQuorum(pathIt->second, *ackedReplica)) {
-                YDB_LOG_NOTICE("Ack update ack",
+                YDB_LOG_NOTICE("Ack update",
                     {"selfId", SelfId()},
                     {"to", it->second.AckTo},
                     {"cookie", ev->Cookie},

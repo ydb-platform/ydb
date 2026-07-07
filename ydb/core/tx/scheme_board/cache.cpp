@@ -317,7 +317,7 @@ namespace {
                     if (!securityObject->CheckAccess(access, *token)) {
                         YDB_LOG_WARN("Access denied",
                             {"self", this->SelfId()},
-                            {"for", token->GetUserSID()},
+                            {"sid", token->GetUserSID()},
                             {"access", NACLib::AccessRightsToString(access)});
 
                         const auto hasDescribeAccess = securityObject->CheckAccess(NACLib::DescribeSchema, *token);
@@ -2528,7 +2528,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         TCacheItem* byPath = Cache.FindPtr(notify.Path);
         TCacheItem* byPathId = Cache.FindPtr(notify.PathId);
 
-        YDB_LOG_DEBUG("ResolveCacheItem by by",
+        YDB_LOG_DEBUG("ResolveCacheItem",
             {"self", SelfId()},
             {"notify", notify},
             {"path", (byPath ? byPath->ToString() : "nullptr")},
@@ -2550,16 +2550,18 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
         }
 
-        YDB_LOG_DEBUG("ResolveCacheItemForNotify: subdomain case",
+        YDB_LOG_DEBUG("ResolveCacheItemForNotify",
             {"self", SelfId()},
+            {"case", "subdomain"},
             {"path", notify.Path},
             {"pathId", notify.PathId},
             {"byPath", (byPath ? byPath->ToString() : "nullptr")},
             {"byPathId", (byPathId ? byPathId->ToString() : "nullptr")});
 
         if (byPath->GetDomainId() != notifyDomainId && notifyDomainId) {
-            YDB_LOG_DEBUG("ResolveCacheItemForNotify: recreation domain case",
+            YDB_LOG_DEBUG("ResolveCacheItemForNotify",
                 {"self", SelfId()},
+                {"case", "recreation domain"},
                 {"path", notify.Path},
                 {"pathId", notify.PathId},
                 {"byPath", (byPath ? byPath->ToString() : "nullptr")},
@@ -2574,15 +2576,17 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         if (byPath->GetPathId() == notifyDomainId) { //Update from TSS, GSS->TSS
             if (byPath->GetAbandonedSchemeShardIds().contains(notify.PathId.OwnerId)) {
-                YDB_LOG_DEBUG("ResolveCacheItemForNotify: this is update from TSS, the update is ignored, present GSS reverted implicitly that TSS",
+                YDB_LOG_DEBUG("ResolveCacheItemForNotify",
                     {"self", SelfId()},
+                    {"case", "update from TSS is ignored, present GSS reverted implicitly that TSS"},
                     {"path", notify.Path},
                     {"pathId", notify.PathId});
                 return byPathId;
             }
 
-            YDB_LOG_DEBUG("ResolveCacheItemForNotify: this is update from TSS, the update overrides GSS by path",
+            YDB_LOG_DEBUG("ResolveCacheItemForNotify",
                 {"self", SelfId()},
+                {"case", "update from TSS overrides GSS by path"},
                 {"path", notify.Path},
                 {"pathId", notify.PathId});
             return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
@@ -2590,31 +2594,35 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         if (byPath->GetDomainId() == notify.PathId) { //Update from GSS, TSS->GSS
             if (abandonedSchemeShardIds.contains(byPath->GetPathId().OwnerId)) { //GSS reverts TSS
-                YDB_LOG_DEBUG("ResolveCacheItemForNotify: this is update from GSS, the update overrides TSS by path, GSS implicitly reverts that TSS",
+                YDB_LOG_DEBUG("ResolveCacheItemForNotify",
                     {"self", SelfId()},
+                    {"case", "update from GSS overrides TSS by path, GSS implicitly reverts that TSS"},
                     {"path", notify.Path},
                     {"pathId", notify.PathId});
                 return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
             }
 
             if (!notifyDomainId) {
-                YDB_LOG_DEBUG("ResolveCacheItemForNotify: this is update from GSS that removes TSS",
+                YDB_LOG_DEBUG("ResolveCacheItemForNotify",
                     {"self", SelfId()},
+                    {"case", "update from GSS that removes TSS"},
                     {"path", notify.Path},
                     {"pathId", notify.PathId});
                 return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
             }
 
-            YDB_LOG_DEBUG("ResolveCacheItemForNotify: this is update from GSS, the update is ignored, TSS is preferred",
+            YDB_LOG_DEBUG("ResolveCacheItemForNotify",
                 {"self", SelfId()},
+                {"case", "update from GSS is ignored, TSS is preferred"},
                 {"path", notify.Path},
                 {"pathId", notify.PathId});
             return byPathId;
         }
 
         if (byPath->GetDomainId() == notifyDomainId && notifyDomainId) {
-            YDB_LOG_DEBUG("ResolveCacheItemForNotify: recreation migrated path case",
+            YDB_LOG_DEBUG("ResolveCacheItemForNotify",
                 {"self", SelfId()},
+                {"case", "recreation migrated path"},
                 {"path", notify.Path},
                 {"pathId", notify.PathId},
                 {"byPath", (byPath ? byPath->ToString() : "nullptr")},
@@ -2628,8 +2636,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         if (!notifyDomainId) {
-            YDB_LOG_DEBUG("ResolveCacheItemForNotify: path has gone, update only by pathId",
+            YDB_LOG_DEBUG("ResolveCacheItemForNotify",
                 {"self", SelfId()},
+                {"case", "path has gone, update only by pathId"},
                 {"path", notify.Path},
                 {"pathId", notify.PathId});
             return byPathId;

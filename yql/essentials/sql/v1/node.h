@@ -1419,6 +1419,7 @@ struct TAlterTableParameters {
     TVector<TIndexDescription> AlterIndexes;
     TVector<TIdentifier> DropIndexes;
     TMaybe<std::pair<TIdentifier, TIdentifier>> RenameIndexTo;
+    TMaybe<std::pair<TIdentifier, TIdentifier>> RenameColumn;
     TMaybe<TIdentifier> RenameTo;
     TVector<TChangefeedDescription> AddChangefeeds;
     TVector<TChangefeedDescription> AlterChangefeeds;
@@ -1437,6 +1438,7 @@ struct TAlterTableParameters {
                AlterIndexes.empty() &&
                DropIndexes.empty() &&
                !RenameIndexTo.Defined() &&
+               !RenameColumn.Defined() &&
                !RenameTo.Defined() &&
                AddChangefeeds.empty() &&
                AlterChangefeeds.empty() &&

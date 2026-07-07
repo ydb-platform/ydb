@@ -118,6 +118,34 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
         Analyze(runtime, saTabletId, {pathId}, "operationId");
     }
 
+    Y_UNIT_TEST(AnalyzeAfterRenameColumnResolvesByIdNotByStaleName) {
+        // Statistics are keyed by column Id (Tag), not by name -- the aggregator re-resolves
+        // current column names fresh via Navigate on every cycle. This confirms a column
+        // rename does not orphan or invalidate existing statistics for that column: the same
+        // Tag continues to resolve correctly, and a fresh ANALYZE after the rename succeeds
+        // and produces the same statistics for that Tag.
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            settings.AppConfig->MutableFeatureFlags()->SetEnableTableColumnRename(true);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        PrepareTable(env, "Table");
+
+        ui64 saTabletId = 0;
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
+
+        Analyze(runtime, saTabletId, {pathId});
+        ValidateCountMinSketch(runtime, pathId);
+
+        ExecuteYqlScript(env, R"(
+            ALTER TABLE `Root/Database/Table` RENAME COLUMN Value TO ValueRenamed;
+        )");
+
+        Analyze(runtime, saTabletId, {pathId}, "operationIdAfterRename");
+        ValidateCountMinSketch(runtime, pathId);
+    }
+
     Y_UNIT_TEST(DeleteForceTraversalUsesCorrectKey) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();

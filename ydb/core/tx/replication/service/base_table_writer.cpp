@@ -1,4 +1,5 @@
 #include "base_table_writer.h"
+#include "json_change_record.h"
 #include "logging.h"
 #include "service.h"
 #include "worker.h"
@@ -82,7 +83,17 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
         TString source;
 
         for (auto record : ev->Get()->Records) {
-            Serializer->Serialize(record, *event->Record.AddChanges());
+            try {
+                Serializer->Serialize(record, *event->Record.AddChanges());
+            } catch (const TUnknownColumnException& ex) {
+                // Most likely a source-table column rename racing with this in-flight record.
+                // Give up gracefully (same path as a hard error reported by the datashard
+                // itself) instead of crashing the whole process: the worker will re-resolve
+                // the current schema from scratch on the next attempt.
+                LOG_E("Cannot serialize change record, treating as a schema mismatch"
+                    << ": error# " << ex.what());
+                return Leave(true);
+            }
 
             if (!source) {
                 source = record->GetSourceId();

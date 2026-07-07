@@ -89,6 +89,7 @@ public:
     FEATURE_FLAG_SETTER(EnableCsDictionaryEncoding)
     FEATURE_FLAG_SETTER(EnableDataShardDetailedMetrics)
     FEATURE_FLAG_SETTER(EnableTopicDeferredPublish)
+    FEATURE_FLAG_SETTER(EnableTableColumnRename)
     #undef FEATURE_FLAG_SETTER
 };
 

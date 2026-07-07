@@ -63,7 +63,20 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     const TAppData* appData = AppData(context.Ctx);
 
     if (!path.IsCommonSensePath()) {
-        if (alter.ColumnsSize() != 0 || alter.DropColumnsSize() != 0) {
+        // A pure column rename (every Columns[i] entry has RenameFrom set, no adds) is the
+        // one exception: AppendIndexRenameCascade sends exactly this to an index's impl
+        // table to keep it in sync with a base-table RENAME COLUMN. Real adds/drops (or a
+        // rename mixed with anything else, already rejected earlier by ParseParams) still
+        // aren't supported here.
+        bool onlyRenames = alter.DropColumnsSize() == 0;
+        for (const auto& col : alter.GetColumns()) {
+            if (!col.HasRenameFrom()) {
+                onlyRenames = false;
+                break;
+            }
+        }
+
+        if (!onlyRenames) {
             errStr = "Adding or dropping columns in index table is not supported";
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
@@ -252,6 +265,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
         .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
         .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
+        .EnableTableColumnRename = AppData()->FeatureFlags.GetEnableTableColumnRename(),
     };
 
 
@@ -353,6 +367,148 @@ bool CheckDroppingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableD
                     << ", column name: " << col
                     << ", table name: " << tablePath.PathString()
                     << ", index name: " << childName;
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+// Stage-1 rename policy: block a column rename outright if the column is used by a live
+// secondary index, or if the table has any live changefeed at all (its wire format is keyed
+// by column name for every column, not just the renamed one). Both restrictions are lifted
+// by a later cascade (index impl-table rename propagation; format-specific CDC handling).
+bool CheckRenamingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableDescription& alter, const TPath& tablePath, TString& errStr) {
+    TSet<TString> renamedColumns;
+
+    for (const auto& colDescr: alter.GetColumns()) {
+        if (colDescr.HasRenameFrom()) {
+            renamedColumns.insert(colDescr.GetRenameFrom());
+        }
+    }
+
+    if (renamedColumns.empty()) {
+        return true;
+    }
+
+    for (const auto& child : tablePath.Base()->GetChildren()) {
+        const auto& childName = child.first;
+        const auto& childPathId = child.second;
+
+        auto childPath = ss->PathsById.at(childPathId);
+
+        if (childPath->IsTableIndex() && !childPath->Dropped()) {
+            const TTableIndexInfo::TPtr indexInfo = ss->Indexes.at(childPathId);
+
+            // Plain global secondary indexes (single simple impl table) are cascaded by
+            // AppendIndexRenameCascade below; specialized index topologies (vector,
+            // fulltext, json, local bloom/min-max) are not understood by that cascade yet,
+            // so renaming a column they reference is still rejected here.
+            bool cascadeHandlesThisIndex = false;
+            switch (indexInfo->Type) {
+                case NKikimrSchemeOp::EIndexTypeGlobal:
+                case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+                case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                    cascadeHandlesThisIndex = true;
+                    break;
+                default:
+                    break;
+            }
+
+            if (!cascadeHandlesThisIndex) {
+                for (const auto& indexKey: indexInfo->IndexKeys) {
+                    if (renamedColumns.contains(indexKey)) {
+                        errStr = TStringBuilder ()
+                            << "Impossible rename column because table has an index with that column"
+                            << ", column name: " << indexKey
+                            << ", table name: " << tablePath.PathString()
+                            << ", index name: " << childName;
+                        return false;
+                    }
+                }
+
+                for (const auto& col: indexInfo->IndexDataColumns) {
+                    if (renamedColumns.contains(col)) {
+                        errStr = TStringBuilder ()
+                            << "Impossible rename column because table index covers that column"
+                            << ", column name: " << col
+                            << ", table name: " << tablePath.PathString()
+                            << ", index name: " << childName;
+                        return false;
+                    }
+                }
+
+                // Every secondary index's impl table -- including specialized vector/
+                // fulltext/json/local bloom-min-max flavors -- implicitly carries the base
+                // table's own primary key columns (CalcTableImplDescription in
+                // ydb/core/base/table_index.cpp appends them unconditionally), even when a
+                // PK column isn't itself listed in IndexKeys/IndexDataColumns. Since this
+                // index type isn't handled by the rename cascade, reject renaming a PK
+                // column too, not just columns explicitly listed above.
+                if (ss->Tables.contains(tablePath.Base()->PathId)) {
+                    const TTableInfo::TPtr table = ss->Tables.at(tablePath.Base()->PathId);
+                    for (ui32 keyColId : table->KeyColumnIds) {
+                        auto colIt = table->Columns.find(keyColId);
+                        if (colIt == table->Columns.end()) {
+                            continue;
+                        }
+                        if (renamedColumns.contains(colIt->second.Name)) {
+                            errStr = TStringBuilder ()
+                                << "Impossible rename column because table has an index whose implementation table implicitly includes the primary key"
+                                << ", column name: " << colIt->second.Name
+                                << ", table name: " << tablePath.PathString()
+                                << ", index name: " << childName;
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (childPath->IsCdcStream() && !childPath->Dropped()) {
+            // Only the JSON-family formats embed column names as JSON keys in the emitted
+            // change record (every column, not just the renamed one) -- a rename silently
+            // changes that wire contract for existing consumers. The raw Proto format is
+            // immune (field-number based), so it doesn't block rename.
+            bool isJsonFamily = false;
+            if (ss->CdcStreams.contains(childPathId)) {
+                switch (ss->CdcStreams.at(childPathId)->Format) {
+                    case NKikimrSchemeOp::ECdcStreamFormatJson:
+                    case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
+                    case NKikimrSchemeOp::ECdcStreamFormatDebeziumJson:
+                        isJsonFamily = true;
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            if (isJsonFamily && childPath->AsyncReplication.IsDefined()) {
+                // This CDC stream feeds an async replication target. The replication reader
+                // (ydb/core/tx/replication/service/json_change_record.cpp) still hard-crashes
+                // on an unrecognized column name instead of gracefully re-resolving the
+                // target schema, so this case is unconditionally rejected -- there is no
+                // override, because allowing it would trade a clear DDL error for a later
+                // process crash on the replication side.
+                errStr = TStringBuilder ()
+                    << "Impossible rename column: table feeds an active async replication via changefeed"
+                    << ", table name: " << tablePath.PathString()
+                    << ", changefeed name: " << childName
+                    << ". The replication reader does not yet handle a renamed column gracefully;"
+                    << " stop or drop the replication target first";
+                return false;
+            }
+
+            if (isJsonFamily && !alter.GetAllowRenameWithJsonCdc()) {
+                errStr = TStringBuilder ()
+                    << "Impossible rename column: table has an active JSON-family changefeed"
+                    << ", table name: " << tablePath.PathString()
+                    << ", changefeed name: " << childName
+                    << ". Its wire format is keyed by column name for every column, which would silently"
+                    << " change the on-wire contract for existing consumers. Drop or recreate the changefeed"
+                    << " after renaming, or set AllowRenameWithJsonCdc if you have already coordinated the"
+                    << " consumer-side change";
                 return false;
             }
         }
@@ -747,6 +903,11 @@ public:
             return result;
         }
 
+        if (!CheckRenamingColumns(context.SS, alter, path, errStr)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            return result;
+        }
+
         if (isReplicated) {
             for (const auto& [id, column] : alterData->Columns) {
                 if (column.CreateVersion == alterData->AlterVersion) {
@@ -990,6 +1151,135 @@ static std::optional<TVector<ISubOperation::TPtr>> AddLocalBloomIndexes(
     return result;
 }
 
+// Cascade a base-table RENAME COLUMN into any live plain global secondary index
+// (Global / GlobalAsync / GlobalUnique — the only types with a single, simple impl
+// table whose column-rename topology this cascade understands) that references the
+// renamed column(s) as one of its own key or (covering) data columns. Specialized index
+// types (vector, fulltext, json, local bloom/min-max) are intentionally left out of scope
+// here and continue to have such renames rejected by CheckRenamingColumns.
+static void AppendIndexRenameCascade(
+    TVector<ISubOperation::TPtr>& result, TOperationId id,
+    const TTxTransaction& tx, const TPath& path, TOperationContext& context)
+{
+    THashMap<TString, TString> renames; // oldName -> newName
+    for (const auto& col : tx.GetAlterTable().GetColumns()) {
+        if (col.HasRenameFrom()) {
+            renames[col.GetRenameFrom()] = col.GetName();
+        }
+    }
+    if (renames.empty()) {
+        return;
+    }
+
+    for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
+        auto childPathPtr = context.SS->PathsById.at(childPathId);
+        if (!childPathPtr->IsTableIndex() || childPathPtr->Dropped()) {
+            continue;
+        }
+        if (!context.SS->Indexes.contains(childPathId)) {
+            continue;
+        }
+
+        const TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(childPathId);
+        switch (indexInfo->Type) {
+            case NKikimrSchemeOp::EIndexTypeGlobal:
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                break;
+            default:
+                continue;
+        }
+
+        TVector<std::pair<TString, TString>> affectedRenames;
+
+        TVector<TString> newKeys(indexInfo->IndexKeys.begin(), indexInfo->IndexKeys.end());
+        for (auto& key : newKeys) {
+            auto it = renames.find(key);
+            if (it != renames.end()) {
+                affectedRenames.emplace_back(key, it->second);
+                key = it->second;
+            }
+        }
+
+        TVector<TString> newDataColumns(indexInfo->IndexDataColumns.begin(), indexInfo->IndexDataColumns.end());
+        for (auto& col : newDataColumns) {
+            auto it = renames.find(col);
+            if (it != renames.end()) {
+                affectedRenames.emplace_back(col, it->second);
+                col = it->second;
+            }
+        }
+
+        // Every plain secondary index's impl table implicitly carries the base table's own
+        // primary key columns as trailing key columns (CalcTableImplDescription in
+        // ydb/core/base/table_index.cpp appends any base-table PK column not already
+        // explicitly listed as an index key/data column), so a PK column rename must
+        // cascade into the impl table even when the PK column isn't itself part of
+        // IndexKeys/IndexDataColumns. Skip any PK column already covered above to avoid
+        // emitting a duplicate rename entry for the same column.
+        if (context.SS->Tables.contains(path.Base()->PathId)) {
+            THashSet<TString> alreadyAffected;
+            for (const auto& [oldName, newName] : affectedRenames) {
+                alreadyAffected.insert(oldName);
+            }
+
+            const TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
+            for (ui32 keyColId : table->KeyColumnIds) {
+                auto colIt = table->Columns.find(keyColId);
+                if (colIt == table->Columns.end()) {
+                    continue;
+                }
+
+                const TString& pkColName = colIt->second.Name;
+                auto renameIt = renames.find(pkColName);
+                if (renameIt != renames.end() && !alreadyAffected.contains(pkColName)) {
+                    affectedRenames.emplace_back(pkColName, renameIt->second);
+                    alreadyAffected.insert(pkColName);
+                }
+            }
+        }
+
+        if (affectedRenames.empty()) {
+            continue;
+        }
+
+        TPath indexPath = path.Child(childName);
+
+        {
+            // 1) Update the index's own metadata (IndexKeys / IndexDataColumns).
+            auto scheme = TransactionTemplate(path.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+            scheme.SetInternal(true);
+            auto alterIndex = scheme.MutableAlterTableIndex();
+            alterIndex->SetName(childName);
+            alterIndex->SetState(indexInfo->State);
+            for (const auto& key : newKeys) {
+                alterIndex->AddKeyColumnNames(key);
+            }
+            for (const auto& col : newDataColumns) {
+                alterIndex->AddDataColumnNames(col);
+            }
+            result.push_back(CreateAlterTableIndex(NextPartId(id, result), scheme));
+        }
+
+        // 2) Rename the same column(s) in the index's own impl table, reusing the exact
+        // same AlterTable/RenameFrom mechanism as the base table's own rename.
+        Y_ABORT_UNLESS(indexPath.Base()->GetChildren().size() == 1);
+        for (const auto& [implName, implPathId] : indexPath.Base()->GetChildren()) {
+            Y_UNUSED(implPathId);
+            auto implScheme = TransactionTemplate(indexPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+            implScheme.SetInternal(true);
+            auto implAlter = implScheme.MutableAlterTable();
+            implAlter->SetName(implName);
+            for (const auto& [oldName, newName] : affectedRenames) {
+                auto* col = implAlter->AddColumns();
+                col->SetName(newName);
+                col->SetRenameFrom(oldName);
+            }
+            result.push_back(CreateAlterTable(NextPartId(id, result), implScheme));
+        }
+    }
+}
+
 TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
 
@@ -1029,6 +1319,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
 
     if (path.IsCommonSensePath()) {
         TVector<ISubOperation::TPtr> result;
+        AppendIndexRenameCascade(result, id, tx, path, context);
         result.push_back(CreateAlterTable(NextPartId(id, result), tx));
         AppendOwnedSequenceDrops(result, id, tx, path, context);
         return result;

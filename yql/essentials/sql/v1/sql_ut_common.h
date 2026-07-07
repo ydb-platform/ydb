@@ -4172,6 +4172,10 @@ Y_UNIT_TEST(AlterTableRenameToIsCorrect) {
     UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table RENAME TO moved").IsOk());
 }
 
+Y_UNIT_TEST(AlterTableRenameColumnIsCorrect) {
+    UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table RENAME COLUMN oldc TO newc").IsOk());
+}
+
 Y_UNIT_TEST(AlterTableAddDropColumnIsCorrect) {
     UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table ADD COLUMN addc uint64, DROP COLUMN dropc, ADD addagain uint64").IsOk());
 }
@@ -8042,6 +8046,17 @@ Y_UNIT_TEST(ErrAddColumnAndRename) {
     // FIXME: fix positions in ALTER TABLE
     ExpectFailWithError("USE ydb;   ALTER TABLE table ADD COLUMN addc uint64, RENAME TO moved",
                         "<main>:1:46: Error: RENAME TO can not be used together with another table action\n");
+}
+
+Y_UNIT_TEST(ErrRenameColumnWithAddColumn) {
+    ExpectFailWithError("USE ydb;   ALTER TABLE table RENAME COLUMN oldc TO newc, ADD COLUMN addc uint64",
+                        "<main>:1:52: Error: RENAME COLUMN can not be used together with another table action\n");
+}
+
+Y_UNIT_TEST(ErrAddColumnAndRenameColumn) {
+    // FIXME: fix positions in ALTER TABLE
+    ExpectFailWithError("USE ydb;   ALTER TABLE table ADD COLUMN addc uint64, RENAME COLUMN oldc TO newc",
+                        "<main>:1:46: Error: RENAME COLUMN can not be used together with another table action\n");
 }
 
 Y_UNIT_TEST(InvalidUuidValue) {

@@ -1,6 +1,6 @@
 # Changing columns
 
-{{ backend_name }} supports adding columns to {% if backend_name == "YDB" and oss == true %} row and column tables{% else %} tables {% endif %}, deleting non-key columns from tables, and changing properties of existing columns.
+{{ backend_name }} supports adding columns to {% if backend_name == "YDB" and oss == true %} row and column tables{% else %} tables {% endif %}, deleting non-key columns from tables, changing properties of existing columns, and renaming columns of {% if backend_name == "YDB" and oss == true %}row tables{% else %}tables{% endif %}.
 
 ## ADD COLUMN
 
@@ -128,3 +128,47 @@ The code below will delete the column named `views` from the `episodes` table.
 ```yql
 ALTER TABLE episodes DROP COLUMN views;
 ```
+
+## RENAME COLUMN
+
+Renames an existing column, including a column that is part of the primary key. The rename is a pure metadata change: no data is rewritten, since rows are physically addressed by an internal numeric column identifier, not by name.
+
+```yql
+ALTER TABLE table_name RENAME COLUMN column_name TO new_column_name;
+```
+
+`RENAME COLUMN` cannot be combined with other actions in the same `ALTER TABLE` statement.
+
+### Request parameters
+
+#### table_name
+
+The path of the table containing the column to rename.
+
+#### column_name
+
+The current name of the column.
+
+#### new_column_name
+
+The new name for the column. It must not already be used by another live column of the table, and it is subject to the same [column naming rules](../../../../concepts/datamodel/table.md#column-naming-rules) as a new column.
+
+### Example
+
+The code below renames the `views` column of the `episodes` table to `view_count`.
+
+```yql
+ALTER TABLE episodes RENAME COLUMN views TO view_count;
+```
+
+{% note warning %}
+
+A column rename is rejected if the column is used as a key or a covered (data) column of a secondary index of a specialized type (vector, full-text, or local bloom/min-max filter indexes) — rename such a column after dropping the affected index, then recreate the index under the new name. Renaming a column referenced by a plain global secondary index is supported: the index definition and its underlying implementation table are updated automatically as part of the same operation.
+
+A column rename is also rejected while the table has an active [changefeed](../../../../concepts/cdc.md) using a JSON-family output format (`JSON`, `DYNAMODB_STREAMS_JSON`, or `DEBEZIUM_JSON`), because those formats embed every column's *current* name as a JSON key in every emitted record — a rename would silently change this contract for existing consumers. Drop and recreate the changefeed after the rename, or explicitly acknowledge the format change if you have already updated the consumer side. This restriction does not apply to changefeeds using the raw protobuf format. If the changefeed feeds an active asynchronous replication target, the rename is rejected unconditionally, with no way to override it — stop or drop the replication target first.
+
+{{ backend_name }} does not track which [views](../create-view.md) depend on a given table's columns. Renaming a column does not automatically update views defined with a query that references it (including via `SELECT *`) — such views may return an error or unexpected results after the rename. Review and, if necessary, recreate any dependent views after renaming a column.
+
+Statistics collected for a column (via `ANALYZE`) are retained across a rename, since they are keyed by the column's internal identifier rather than by its name.
+
+{% endnote %}

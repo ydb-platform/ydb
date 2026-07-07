@@ -1868,6 +1868,18 @@ public:
             actions = L(actions, Q(Y(Q("renameIndexTo"), Q(desc))));
         }
 
+        if (Params_.RenameColumn) {
+            auto src = BuildQuotedAtom(Params_.RenameColumn->first.Pos, Params_.RenameColumn->first.Name);
+            auto dst = BuildQuotedAtom(Params_.RenameColumn->second.Pos, Params_.RenameColumn->second.Name);
+
+            auto desc = Y();
+
+            desc = L(desc, Q(Y(Q("src"), src)));
+            desc = L(desc, Q(Y(Q("dst"), dst)));
+
+            actions = L(actions, Q(Y(Q("renameColumn"), Q(desc))));
+        }
+
         if (Params_.RenameTo) {
             auto destination = ctx.GetPrefixedPath(Scoped_->CurrService, Scoped_->CurrCluster,
                                                    TDeferredAtom(Params_.RenameTo->Pos, Params_.RenameTo->Name));

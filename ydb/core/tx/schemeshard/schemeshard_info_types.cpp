@@ -452,6 +452,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     }
     THashMap<TString, ui32> colName2Id;
     THashSet<ui32> keys;
+    // Column ids renamed by the first pass below. A second-pass ALTER entry that resolves
+    // to one of these ids (by the column's NEW name) would otherwise overwrite the renamed
+    // alterData entry with a stale copy of the pre-alter source column (reverting the
+    // rename while silently applying only the other property change) -- reject instead.
+    THashSet<ui32> renamedColIds;
 
     if (source) {
         for (const auto& col : source->Columns) {
@@ -468,7 +473,106 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
     bool allowSystemColumns = op.GetSystemColumnNamesAllowed();
 
+    // Rename entries are processed first: this frees up the old name in colName2Id
+    // immediately, so a later ADD/rename entry in the same alter can reuse it, and so
+    // the collision check below always sees up-to-date live column names.
     for (auto& col : *op.MutableColumns()) {
+        if (!col.HasRenameFrom()) {
+            continue;
+        }
+
+        if (!featureFlags.EnableTableColumnRename) {
+            // A datashard binary older than this feature still hard-asserts that a
+            // column's name never changes for a given column Id, and would crash on
+            // receiving this rename from an already-upgraded schemeshard. Keep this
+            // rejected until an operator explicitly enables the feature flag (i.e. after
+            // confirming every datashard in the cluster has been upgraded).
+            errStr = "Column rename is disabled by the EnableTableColumnRename feature flag";
+            return nullptr;
+        }
+
+        if (!source) {
+            errStr = "Cannot rename column: table does not exist yet";
+            return nullptr;
+        }
+
+        if (col.HasType() || col.HasTypeId() || col.HasTypeInfo() || col.HasFamily() || col.HasFamilyName()
+            || col.DefaultValue_case() != NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET
+            || col.HasNotNull() || col.HasIsBuildInProgress() || col.HasCompression() || col.HasSetNotNullInProgress())
+        {
+            errStr = Sprintf("Cannot combine RENAME COLUMN with other column changes for column '%s'", col.GetRenameFrom().c_str());
+            return nullptr;
+        }
+
+        const TString oldName = col.GetRenameFrom();
+        const TString newName = col.GetName();
+
+        auto renameIt = colName2Id.find(oldName);
+        if (renameIt == colName2Id.end()) {
+            errStr = Sprintf("Cannot rename unknown column '%s'", oldName.c_str());
+            return nullptr;
+        }
+        ui32 colId = renameIt->second;
+
+        if (newName == oldName) {
+            errStr = Sprintf("Column '%s' is already named '%s'", oldName.c_str(), oldName.c_str());
+            return nullptr;
+        }
+
+        if (newName.size() > limits.MaxTableColumnNameLength) {
+            errStr = TStringBuilder()
+                << "Column name too long '" << newName << "'. "
+                << "Limit: " << limits.MaxTableColumnNameLength;
+            return nullptr;
+        }
+
+        if (!IsValidColumnName(newName, allowSystemColumns)) {
+            errStr = Sprintf("Invalid name for %s column '%s'", allowSystemColumns ? "any" : "user", newName.data());
+            return nullptr;
+        }
+
+        if (colName2Id.contains(newName)) {
+            errStr = Sprintf("Column '%s' already exists", newName.c_str());
+            return nullptr;
+        }
+
+        const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
+
+        if (sourceColumn.IsBuildInProgress) {
+            errStr = Sprintf("Cannot rename column '%s': column has a build operation in progress", oldName.c_str());
+            return nullptr;
+        }
+
+        if (sourceColumn.SetNotNullInProgress) {
+            errStr = Sprintf("Cannot rename column '%s': SET NOT NULL is in progress for this column", oldName.c_str());
+            return nullptr;
+        }
+
+        colName2Id.erase(renameIt);
+        colName2Id[newName] = colId;
+        renamedColIds.insert(colId);
+
+        TTableInfo::TColumn& column = alterData->Columns[colId];
+        column = sourceColumn;
+        column.Name = newName;
+
+        // Auto-carry the TTL column reference through the rename: a bare RENAME COLUMN
+        // request never sets op.HasTTLSettings(), so without this the TTL setting would
+        // keep pointing at the now-stale old name (GetTTLColumnId() silently fails to
+        // resolve it after the next schemeshard reload, disabling TTL enforcement).
+        if (source->TTLSettings().HasEnabled() && source->TTLSettings().GetEnabled().GetColumnName() == oldName) {
+            if (!alterData->TableDescriptionFull->HasTTLSettings()) {
+                alterData->TableDescriptionFull->MutableTTLSettings()->CopyFrom(source->TTLSettings());
+            }
+            alterData->TableDescriptionFull->MutableTTLSettings()->MutableEnabled()->SetColumnName(newName);
+        }
+    }
+
+    for (auto& col : *op.MutableColumns()) {
+        if (col.HasRenameFrom()) {
+            continue;
+        }
+
         TString colName = col.GetName();
 
         if (colName.size() > limits.MaxTableColumnNameLength) {
@@ -548,6 +652,12 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             ui32 colId = colName2Id[colName];
+
+            if (renamedColIds.contains(colId)) {
+                errStr = Sprintf("Cannot alter column '%s' in the same statement it is being renamed in", colName.c_str());
+                return nullptr;
+            }
+
             const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
 
             if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromSequence) {
@@ -882,6 +992,16 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         }
 
         ui32 colId = colName2Id[keyName];
+        if (!alterData->Columns.contains(colId) && source && source->Columns.contains(colId)) {
+            // This key column isn't otherwise touched by this alter (e.g. an existing key
+            // column simply re-listed alongside a newly added one) -- seed it from the
+            // source column so FinishAlter's Name/DefaultKind/etc. copy-back doesn't clobber
+            // it with a default-constructed (empty-named) TColumn. Reset KeyOrder to "unset":
+            // it's about to be recomputed below from this alter's own key column list, and the
+            // duplicate-entry check right after relies on it starting out unset.
+            alterData->Columns[colId] = source->Columns.at(colId);
+            alterData->Columns[colId].KeyOrder = Max<ui32>();
+        }
         TTableInfo::TColumn& column = alterData->Columns[colId];
         if (column.KeyOrder != (ui32)-1) {
             errStr = Sprintf("Column '%s' specified more than once in key column list", keyName.data());
@@ -1832,6 +1952,7 @@ void TTableInfo::FinishAlter() {
         TColumn * oldCol = Columns.FindPtr(col.first);
         if (oldCol) {
             //oldCol->CreateVersion = cinfo.CreateVersion;
+            oldCol->Name = cinfo.Name; // picks up RENAME COLUMN; a no-op for every other alter kind
             oldCol->DeleteVersion = cinfo.DeleteVersion;
             oldCol->Family = cinfo.Family;
             oldCol->DefaultKind = cinfo.DefaultKind;

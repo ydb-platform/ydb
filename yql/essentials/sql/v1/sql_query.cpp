@@ -2489,6 +2489,12 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         return false;
     }
 
+    if (params.RenameColumn) {
+        // rename column action is followed by some other actions
+        Error() << "RENAME COLUMN can not be used together with another table action";
+        return false;
+    }
+
     switch (node.Alt_case()) {
         case TRule_alter_table_action::kAltAlterTableAction1: {
             // ADD COLUMN
@@ -2690,6 +2696,18 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
                 return false;
             }
 
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction24: {
+            // RENAME COLUMN TO
+            if (!params.IsEmpty()) {
+                // rename action follows some other actions
+                Error() << "RENAME COLUMN can not be used together with another table action";
+                return false;
+            }
+
+            const auto& renameColumn = node.GetAlt_alter_table_action24().GetRule_alter_table_rename_column1();
+            AlterTableRenameColumn(renameColumn, params);
             break;
         }
         case TRule_alter_table_action::ALT_NOT_SET:
@@ -3038,6 +3056,13 @@ void TSqlQuery::AlterTableRenameIndexTo(const TRule_alter_table_rename_index_to&
     auto dst = IdEx(node.GetRule_an_id5(), *this);
 
     params.RenameIndexTo = std::make_pair(src, dst);
+}
+
+void TSqlQuery::AlterTableRenameColumn(const TRule_alter_table_rename_column& node, TAlterTableParameters& params) {
+    auto src = IdEx(node.GetRule_an_id3(), *this);
+    auto dst = IdEx(node.GetRule_an_id5(), *this);
+
+    params.RenameColumn = std::make_pair(src, dst);
 }
 
 bool TSqlQuery::AlterTableAlterIndex(const TRule_alter_table_alter_index& node, TAlterTableParameters& params) {

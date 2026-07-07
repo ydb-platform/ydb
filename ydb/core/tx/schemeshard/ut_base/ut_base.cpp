@@ -4857,6 +4857,261 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
     }
 
+    Y_UNIT_TEST(AlterTableRenameColumnRejectedWhenFeatureFlagDisabled) { //+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime); // EnableTableColumnRename is off by default
+        ui64 txId = 100;
+
+        TSet<TString> cols = {"key", "value"};
+        TSet<TString> keyCol = {"key"};
+        TSet<TString> dropCols;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table"
+                    Columns { Name: "key"   Type: "Uint64"}
+                    Columns { Name: "value" Type: "Utf8"}
+                    KeyColumnNames: ["key"]
+                )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table" Columns { Name: "value2" RenameFrom: "value" })",
+                {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
+    }
+
+    Y_UNIT_TEST(AlterTableRenameColumn) { //+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableTableColumnRename(true));
+        ui64 txId = 100;
+
+        TSet<TString> cols = {"key1", "key2", "value", "extra"};
+        TSet<TString> keyCol = {"key1", "key2"};
+        TSet<TString> dropCols;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table"
+                    Columns { Name: "key2"   Type: "Uint32"}
+                    Columns { Name: "key1"   Type: "Uint64"}
+                    Columns { Name: "value"  Type: "Utf8"}
+                    Columns { Name: "extra"  Type: "Utf8"}
+                    KeyColumnNames: ["key1", "key2"]
+                )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
+
+        Cdbg << "AlterTable: rename non-key column" << Endl;
+        cols.erase("value");
+        cols.insert("value2");
+        TestAlterTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table" Columns { Name: "value2" RenameFrom: "value" })");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
+
+        Cdbg << "AlterTable: rename key column" << Endl;
+        cols.erase("key1");
+        cols.insert("key1_renamed");
+        keyCol.erase("key1");
+        keyCol.insert("key1_renamed");
+        TestAlterTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table" Columns { Name: "key1_renamed" RenameFrom: "key1" })");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
+
+        Cdbg << "AlterTable: rename unknown column" << Endl;
+        TestAlterTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table" Columns { Name: "whatever" RenameFrom: "doesnotexist" })",
+                {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        Cdbg << "AlterTable: rename to existing column name" << Endl;
+        TestAlterTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table" Columns { Name: "extra" RenameFrom: "value2" })",
+                {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        Cdbg << "AlterTable: rename to the same name" << Endl;
+        TestAlterTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table" Columns { Name: "value2" RenameFrom: "value2" })",
+                {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        Cdbg << "AlterTable: rename combined with another column change is rejected" << Endl;
+        TestAlterTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table" Columns { Name: "value2_x" RenameFrom: "value2" NotNull: true })",
+                {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
+
+        Cdbg << "AlterTable: cannot alter a column (by its new name) in a separate entry "
+                "within the same statement it was renamed in" << Endl;
+        TestAlterTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table"
+                    Columns { Name: "value3" RenameFrom: "value2" }
+                    Columns { Name: "value3" NotNull: true }
+                )",
+                {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
+
+        Cdbg << "AlterTable: rename frees up the old name for reuse in the same alter" << Endl;
+        cols.erase("extra");
+        cols.insert("extra_renamed");
+        cols.insert("extra");
+        TestAlterTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table"
+                    Columns { Name: "extra_renamed" RenameFrom: "extra" }
+                    Columns { Name: "extra" Type: "Utf8" }
+                )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
+    }
+
+    Y_UNIT_TEST(AlterTableRenameIndexedColumnCascades) { //+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableTableColumnRename(true));
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
+        env.TestWaitNotification(runtime, txId);
+
+        AsyncCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint64" }
+              Columns { Name: "value0" Type: "Utf8" }
+              Columns { Name: "value1" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "ByValue0"
+              KeyColumnNames: ["value0"]
+              DataColumnNames: ["value1"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        Cdbg << "AlterTable: rename index key column cascades into the index and its impl table" << Endl;
+        TestAlterTable(runtime, ++txId, "/MyRoot/DirA",
+                R"(Name: "Table" Columns { Name: "value0_new" RenameFrom: "value0" })");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/Table"),
+                           {NLs::CheckColumns("Table", {"key", "value0_new", "value1"}, {}, {"key"}),
+                            NLs::Finished, [] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                                const auto& indexes = record.GetPathDescription().GetTable().GetTableIndexes();
+                                UNIT_ASSERT_VALUES_EQUAL(indexes.size(), 1);
+                                UNIT_ASSERT_VALUES_EQUAL(indexes[0].GetKeyColumnNames(0), "value0_new");
+                                UNIT_ASSERT_VALUES_EQUAL(indexes[0].GetDataColumnNames(0), "value1");
+                            }});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/Table/ByValue0/indexImplTable"),
+                           {NLs::CheckColumns("indexImplTable", {"value0_new", "value1", "key"}, {}, {"value0_new", "key"})});
+
+        Cdbg << "AlterTable: rename index data column cascades too" << Endl;
+        TestAlterTable(runtime, ++txId, "/MyRoot/DirA",
+                R"(Name: "Table" Columns { Name: "value1_new" RenameFrom: "value1" })");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/Table"),
+                           {NLs::CheckColumns("Table", {"key", "value0_new", "value1_new"}, {}, {"key"}),
+                            NLs::Finished, [] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                                const auto& indexes = record.GetPathDescription().GetTable().GetTableIndexes();
+                                UNIT_ASSERT_VALUES_EQUAL(indexes.size(), 1);
+                                UNIT_ASSERT_VALUES_EQUAL(indexes[0].GetKeyColumnNames(0), "value0_new");
+                                UNIT_ASSERT_VALUES_EQUAL(indexes[0].GetDataColumnNames(0), "value1_new");
+                            }});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/Table/ByValue0/indexImplTable"),
+                           {NLs::CheckColumns("indexImplTable", {"value0_new", "value1_new", "key"}, {}, {"value0_new", "key"})});
+
+        Cdbg << "AlterTable: rename a PK column not referenced by the index still works" << Endl;
+        TestAlterTable(runtime, ++txId, "/MyRoot/DirA",
+                R"(Name: "Table" Columns { Name: "key_new" RenameFrom: "key" })");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/Table"),
+                           {NLs::CheckColumns("Table", {"key_new", "value0_new", "value1_new"}, {}, {"key_new"})});
+    }
+
+    Y_UNIT_TEST(AlterTableRenameColumnWithJsonCdcStreamIsRejectedUnlessOverridden) { //+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableTableColumnRename(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table"
+                    Columns { Name: "key"   Type: "Uint64"}
+                    Columns { Name: "value" Type: "Utf8"}
+                    KeyColumnNames: ["key"]
+                )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatJson
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        Cdbg << "AlterTable: rename is rejected by default while a JSON-family changefeed is active" << Endl;
+        TestAlterTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table" Columns { Name: "value_new" RenameFrom: "value" })",
+                {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusPreconditionFailed});
+
+        Cdbg << "AlterTable: rename succeeds with the explicit override" << Endl;
+        TestAlterTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table" Columns { Name: "value_new" RenameFrom: "value" } AllowRenameWithJsonCdc: true)");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::CheckColumns("Table", {"key", "value_new"}, {}, {"key"})});
+    }
+
+    Y_UNIT_TEST(AlterTableRenameColumnWithProtoCdcStreamIsAllowed) { //+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableTableColumnRename(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table"
+                    Columns { Name: "key"   Type: "Uint64"}
+                    Columns { Name: "value" Type: "Utf8"}
+                    KeyColumnNames: ["key"]
+                )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        Cdbg << "AlterTable: rename needs no override for a Proto-format changefeed (immune by construction)" << Endl;
+        TestAlterTable(runtime, ++txId, "/MyRoot",
+                R"(Name: "Table" Columns { Name: "value_new" RenameFrom: "value" })");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::CheckColumns("Table", {"key", "value_new"}, {}, {"key"})});
+    }
+
     Y_UNIT_TEST(AlterTableDropColumnReCreateSplit) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

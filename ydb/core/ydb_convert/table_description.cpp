@@ -58,7 +58,7 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTabl
     THashSet<EAlterOperationKind> ops;
 
     if (req->add_columns_size() || req->drop_columns_size() ||
-        req->alter_columns_size() ||
+        req->alter_columns_size() || req->rename_columns_size() ||
         req->ttl_action_case() !=
             Ydb::Table::AlterTableRequest::TTL_ACTION_NOT_SET ||
         req->has_alter_storage_settings() || req->add_column_families_size() ||
@@ -658,6 +658,16 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
 
         for (const auto &drop : req->drop_columns()) {
             desc->AddDropColumns()->SetName(drop);
+        }
+
+        for (const auto& rename : req->rename_columns()) {
+            auto column = desc->AddColumns();
+            column->SetName(rename.destination_name());
+            column->SetRenameFrom(rename.source_name());
+        }
+
+        if (req->allow_rename_with_json_cdc()) {
+            desc->SetAllowRenameWithJsonCdc(true);
         }
 
         if (!FillColumnDescription(*desc, req->add_columns(), code, error)) {
@@ -1455,6 +1465,12 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
     }
 
     const auto OpType = *ops.begin();
+
+    if (req->rename_columns_size()) {
+        status = Ydb::StatusIds::UNSUPPORTED;
+        error = "Renaming columns is not yet supported in column tables";
+        return false;
+    }
 
     std::pair<TString, TString> pathPair;
     try {

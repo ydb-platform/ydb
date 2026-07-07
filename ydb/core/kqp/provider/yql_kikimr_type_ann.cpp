@@ -2237,6 +2237,7 @@ private:
                     && name != "addChangefeed"
                     && name != "dropChangefeed"
                     && name != "renameIndexTo"
+                    && name != "renameColumn"
                     && name != "alterIndex"
                     && name != "compact")
             {

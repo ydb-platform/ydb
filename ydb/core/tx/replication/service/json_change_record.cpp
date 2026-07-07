@@ -99,7 +99,14 @@ static bool ParseValue(TVector<NTable::TTag>& tags, TVector<TCell>& cells,
 
     for (const auto& [column, value] : value) {
         auto it = schema->ValueColumns.find(column);
-        Y_ABORT_UNLESS(it != schema->ValueColumns.end());
+        if (it == schema->ValueColumns.end()) {
+            // Most likely cause: the source table renamed this column and the destination's
+            // resolved schema was refreshed before this in-flight record (produced under the
+            // old name) was processed. Not a Y_ABORT_UNLESS: the caller has a graceful
+            // recovery path (leave and let the worker re-resolve from scratch) instead of
+            // crashing the whole process for what is an expected, if rare, race.
+            throw TUnknownColumnException() << "Unknown column in change record: '" << column << "'";
+        }
 
         tags.push_back(it->second.Tag);
         if (!NFormats::MakeCell(cells.emplace_back(), value, it->second.Type, pool, error)) {

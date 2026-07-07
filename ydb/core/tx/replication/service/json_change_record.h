@@ -16,6 +16,14 @@ namespace NKikimrTxDataShard {
 
 namespace NKikimr::NReplication::NService {
 
+// Thrown by TChangeRecord::Serialize() when a value column name from the JSON change
+// record body cannot be found in the (possibly already-refreshed) destination schema --
+// the expected symptom of a source-table column rename racing with in-flight CDC records
+// produced before the rename. Callers that own an actor-level recovery path (see
+// TTablePartitionWriter::Handle(TEvRecords) in base_table_writer.cpp) should catch this and
+// leave gracefully (TEvGone hardError=true) rather than let it propagate as a raw crash.
+struct TUnknownColumnException : public yexception {};
+
 class TChangeRecordBuilder;
 
 class TChangeRecord: public NChangeExchange::TChangeRecordBase {

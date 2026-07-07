@@ -531,7 +531,8 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
         ui32 colId = col.GetId();
         if (table.Columns.contains(colId)) {
             const TUserTable::TUserColumn &column = table.Columns.at(colId);
-            Y_ENSURE(column.Name == col.GetName());
+            // Name is allowed to differ here: RENAME COLUMN sends the new Name for an
+            // existing Id. Type/TypeMod must still never change for an existing column.
             const auto& typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(), &col.GetTypeInfo());
             Y_ENSURE(column.Type == typeInfoMod.TypeInfo);
             Y_ENSURE(column.TypeMod == typeInfoMod.TypeMod);

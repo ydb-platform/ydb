@@ -121,6 +121,9 @@ message TColumnDescription {
     // flag that indicates that SET NOT NULL operation is currently in progress
     // for this column (full scan is running to verify no nulls exist).
     optional bool SetNotNullInProgress = 14 [default = false];
+    // If set, this entry renames an existing live column from RenameFrom to Name.
+    // Mutually exclusive with Type/TypeId/TypeInfo/Family/FamilyName/DefaultValue/NotNull/Compression.
+    optional string RenameFrom = 15;
 }
 
 message TStorageSettings {
@@ -474,6 +477,11 @@ message TTableDescription {
     optional TTableDetailedMetricsSettings DetailedMetricsSettings = 51;
 
     reserved 52;
+
+    // Explicit acknowledgement that a RENAME COLUMN in this request may change the on-wire
+    // JSON key for an active JSON-family changefeed (Json/DynamoDBStreamsJson/DebeziumJson);
+    // without it such a rename is rejected. Ignored (no effect) for any other alter kind.
+    optional bool AllowRenameWithJsonCdc = 53 [default = false];
 }
 
 message TCompressionOptions {
@@ -1436,6 +1444,10 @@ message TIndexAlteringConfig {
         TBloomNGrammFilter BloomNGrammFilterDescription = 9;
     }
     optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 3;
+    // Only set (non-empty) when a base-table column rename cascades into this index;
+    // when set, both KeyColumnNames and this field carry the FULL updated column list
+    // (renamed entries replaced, everything else unchanged).
+    repeated string DataColumnNames = 10;
 }
 
 message TIndexedTableCreationConfig {

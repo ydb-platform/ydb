@@ -279,6 +279,8 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
             auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
                 col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
             column = TUserColumn(typeInfoMod.TypeInfo, typeInfoMod.TypeMod, col.GetName());
+        } else {
+            column.Name = col.GetName(); // picks up RENAME COLUMN for an already-known column Id
         }
         column.Family = col.GetFamily();
         column.NotNull = col.GetNotNull();
@@ -600,7 +602,11 @@ void TUserTable::ApplyAlter(
         const TUserColumn& column = col.second;
 
         auto it = oldTable.Columns.find(colId);
-        if (it == oldTable.Columns.end() || it->second.NotNull != column.NotNull || it->second.SetNotNullInProgress != column.SetNotNullInProgress) {
+        if (it == oldTable.Columns.end()
+            || it->second.NotNull != column.NotNull
+            || it->second.SetNotNullInProgress != column.SetNotNullInProgress
+            || it->second.Name != column.Name) // picks up RENAME COLUMN
+        {
             for (ui32 tid : tids) {
                 auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
                 alter.AddColumnWithTypeInfo(tid, column.Name, colId, columnType.TypeId, columnType.TypeInfo, column.NotNull, false, {}, column.SetNotNullInProgress);

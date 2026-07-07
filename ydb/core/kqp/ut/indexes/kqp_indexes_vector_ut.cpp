@@ -941,6 +941,73 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             F_RETURNING | (Covered ? F_COVERING : 0));
     }
 
+    Y_UNIT_TEST(VectorIndexUpdateDestroyReadActorNoRace) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
+            .SetUseRealThreads(false)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+
+        const int flags = 0;
+        kikimr.RunCall([&] {
+            auto db = kikimr.GetTableClient();
+            DoCreateTableAndVectorIndex(db, flags);
+        });
+
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+        TVector<TAutoPtr<IEventHandle>> poisonEvents;
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvents::TEvPoison::EventType &&
+                runtime->FindActorName(ev->GetRecipientRewrite()) == "KQP_SOURCE_READ_ACTOR") {
+                // Postpone poison events
+                poisonEvents.emplace_back(ev.Release());
+                return true;
+            }
+            return false;
+        };
+        runtime->SetEventFilter(captureEvents);
+
+        // Update that changes the cluster (triggers VectorResolveActor to read level table)
+        {
+            const TString query(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `pk`=9;)"));
+            auto result = kikimr.RunCall([&] {
+                auto db = kikimr.GetTableClient();
+                auto session = db.CreateSession().GetValueSync().GetSession();
+                return session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        // Now send poisonEvents
+        // Actual code doesn't send them but the previous version did;
+        // When they were here they triggered Use-after-free caught by ASan.
+        // The check is left here as a regression test.
+        runtime->SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+            return false;
+        });
+        for (auto& ev: poisonEvents) {
+            runtime->Send(ev.Release());
+        }
+        poisonEvents.clear();
+
+        // Check that KqpReadActors spawned by VectorResolveActor are destroyed.
+        {
+            NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+            int wait = 10;
+            auto count = counters.ReadActorsCount->Val();
+            while (count != 0 && wait > 0) {
+                wait--;
+                runtime->SimulateSleep(TDuration::Seconds(1));
+                count = counters.ReadActorsCount->Val();
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(count, 0, "KqpReadActors are not destroyed");
+        }
+    }
+
     // First index level build is processed differently when table has 1 and >1 partitions so we check both cases
     Y_UNIT_TEST_QUAD(EmptyVectorIndexUpdate, Partitioned, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;

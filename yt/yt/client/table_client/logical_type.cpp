@@ -565,7 +565,7 @@ TLogicalTypePtr ParseType(TStringBuf typeString)
 
 //////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TLogicalType& logicalType)
+std::string ToString(const TLogicalType& logicalType)
 {
     auto formatTypes = [] (TRange<TLogicalTypePtr> types, TString* destination) {
         bool first = true;
@@ -575,7 +575,7 @@ TString ToString(const TLogicalType& logicalType)
             } else {
                 destination->append(',');
             }
-            destination->append(ToString(*type));
+            destination->append(TStringBuf(ToString(*type)));
         }
     };
 
@@ -593,7 +593,7 @@ TString ToString(const TLogicalType& logicalType)
                 .append(escapedName)
                 .append('\'')
                 .append(':')
-                .append(ToString(*field.Type));
+                .append(TStringBuf(ToString(*field.Type)));
         }
     };
 
@@ -656,7 +656,7 @@ TString ToString(const TLogicalType& logicalType)
             const auto& taggedType = logicalType.AsTaggedTypeRef();
             auto escapedTag = EscapeCAndSingleQuotes(taggedType.GetTag());
             return TString("Tagged<")
-                .append(ToString(*taggedType.GetElement()))
+                .append(TStringBuf(ToString(*taggedType.GetElement())))
                 .append(",'")
                 .append(escapedTag)
                 .append("'>");

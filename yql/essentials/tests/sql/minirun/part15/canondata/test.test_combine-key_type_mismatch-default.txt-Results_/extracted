@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:16:34: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: SqlCombine
+    	    <|key: 5, subkey: 55, value: "555"|>,
+	                                 ^
+        <tmp_path>/program.sql:<main>:16:34: Warning: Consider using explicit CAST or BITCAST to convert from Uint64 to Int32
+        	    <|key: 5, subkey: 55, value: "555"|>,
+	                                 ^

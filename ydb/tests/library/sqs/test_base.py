@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import itertools
 import logging
+import os
 import time
 import requests
 import json
@@ -28,6 +29,38 @@ from concurrent import futures
 
 DEFAULT_VISIBILITY_TIMEOUT = 30
 DEFAULT_TABLES_FORMAT = 1
+
+# Feature flag keys use the dense snake_case form produced by the YAML config
+# parser (NProtobufJson::ToSnakeCaseDense): the acronym "SQS" keeps no underscore
+# before the following "Migration", so EnableSQSMigrationTopicCreation becomes
+# enable_sqsmigration_topic_creation.
+SQS_MIGRATION_FEATURE_FLAGS = [
+    'enable_sqsmigration_topic_creation',
+    'enable_sqsmigration_compatibility',
+    'enable_sqsmigration_finished',
+]
+
+SQS_MIGRATION_REQUIRED_FEATURE_FLAGS = [
+    'enable_topic_message_level_parallelism',
+]
+
+SQS_MIGRATION_STAGES = {
+    'topic_creation': {
+        'enable_sqsmigration_topic_creation': True,
+        'enable_sqsmigration_compatibility': False,
+        'enable_sqsmigration_finished': False,
+    },
+    'compatibility': {
+        'enable_sqsmigration_topic_creation': True,
+        'enable_sqsmigration_compatibility': True,
+        'enable_sqsmigration_finished': False,
+    },
+    'finished': {
+        'enable_sqsmigration_topic_creation': True,
+        'enable_sqsmigration_compatibility': True,
+        'enable_sqsmigration_finished': True,
+    },
+}
 
 
 logger = logging.getLogger(__name__)
@@ -278,13 +311,40 @@ class KikimrSqsTestBase(object):
             cls.cluster.stop()
 
     @classmethod
+    def _get_sqs_migration_feature_flags(cls):
+        stage = os.environ.get('YDB_SQS_MIGRATION_STAGE')
+        if stage is None:
+            return {flag: False for flag in SQS_MIGRATION_FEATURE_FLAGS}
+        if stage not in SQS_MIGRATION_STAGES:
+            raise RuntimeError('Unknown YDB_SQS_MIGRATION_STAGE: {}'.format(stage))
+        return SQS_MIGRATION_STAGES[stage]
+
+    @classmethod
+    def _is_topic_migration_stage(cls):
+        return os.environ.get('YDB_SQS_MIGRATION_STAGE') in ('compatibility', 'finished')
+
+    @classmethod
+    def _is_topic_migration_finished(cls):
+        return os.environ.get('YDB_SQS_MIGRATION_STAGE') == 'finished'
+
+    @classmethod
     def _setup_config_generator(cls):
+        log_configs = {'SQS': LogLevels.TRACE}
+        if cls._is_topic_migration_stage():
+            log_configs['PQ_MLP_DLQ_MOVER'] = LogLevels.DEBUG
+            log_configs['PQ_MLP_CONSUMER'] = LogLevels.DEBUG
+
         config_generator = KikimrConfigGenerator(
             erasure=cls.erasure,
             use_in_memory_pdisks=cls.use_in_memory_pdisks,
-            additional_log_configs={'SQS': LogLevels.TRACE},
+            additional_log_configs=log_configs,
             enable_sqs=True,
         )
+        for flag, enabled in cls._get_sqs_migration_feature_flags().items():
+            config_generator.yaml_config['feature_flags'][flag] = enabled
+        if os.environ.get('YDB_SQS_MIGRATION_STAGE') is not None:
+            for flag in SQS_MIGRATION_REQUIRED_FEATURE_FLAGS:
+                config_generator.yaml_config['feature_flags'][flag] = True
         config_generator.yaml_config['sqs_config']['root'] = cls.sqs_root
         config_generator.yaml_config['sqs_config']['enable_queue_master'] = True
         config_generator.yaml_config['sqs_config']['masters_describer_update_time_ms'] = 2000
@@ -294,6 +354,10 @@ class KikimrSqsTestBase(object):
         config_generator.yaml_config['sqs_config']['check_all_shards_in_receive_message'] = True
         config_generator.yaml_config['sqs_config']['create_legacy_duration_counters'] = False
         config_generator.yaml_config['sqs_config']['validate_message_body'] = True
+
+        if cls._is_topic_migration_stage():
+            config_generator.yaml_config['pqconfig']['balancer_wakeup_interval_sec'] = 1
+            config_generator.yaml_config['pqconfig']['balancer_stats_wakeup_interval_sec'] = 1
 
         return config_generator
 
@@ -366,7 +430,7 @@ class KikimrSqsTestBase(object):
                 return
         raise RuntimeError("Failed to create SQS user")
 
-    def _create_api_for_user(self, user_name, raise_on_error=True, security_token=None, force_private=False, iam_token=None, folder_id=None):
+    def _create_api_for_user(self, user_name, raise_on_error=True, security_token=None, force_private=False, iam_token=None, folder_id=None, extra_headers=None):
         api = SqsHttpApi(self.cluster.nodes[1].host,
                          self.cluster_nodes[0].sqs_port,
                          user_name,
@@ -375,7 +439,8 @@ class KikimrSqsTestBase(object):
                          security_token=security_token,
                          force_private=force_private,
                          iam_token=iam_token,
-                         folder_id=folder_id
+                         folder_id=folder_id,
+                         extra_headers=extra_headers
                          )
         return api
 
@@ -512,6 +577,14 @@ class KikimrSqsTestBase(object):
                         raise AssertionError("Message {} appeared twice before visibility timeout expired".format(msg_id))
         return ret
 
+    def _read_single_message_no_wait(self, queue_url, visibility_timeout=0):
+        return self._read_while_not_empty(
+            queue_url,
+            messages_count=1,
+            visibility_timeout=visibility_timeout,
+            wait_timeout=0,
+        )
+
     def _read_messages_and_assert(
             self, queue_url, messages_count, matcher=None, visibility_timeout=None, wait_timeout=1
     ):
@@ -619,6 +692,153 @@ class KikimrSqsTestBase(object):
     def _get_counter_value(self, counters, labels, default_value=None):
         sensor = self._get_counter(counters, labels)
         return sensor['value'] if sensor is not None else default_value
+
+    def _async_metrics_retry_attempts(self, attempts=None):
+        if attempts is not None:
+            return attempts
+        return 30 if self._is_topic_migration_stage() else 10
+
+    def _retry_attempts(self, non_migration, migration):
+        return migration if self._is_topic_migration_stage() else non_migration
+
+    def _visibility_timeout_unlock_grace_sec(self):
+        return 2 if self._is_topic_migration_stage() else 0
+
+    def _sleep_for_visibility_timeout(self, visibility_timeout, extra=0.1):
+        time.sleep(visibility_timeout + extra + self._visibility_timeout_unlock_grace_sec())
+
+    def _get_queue_resource_id(self, queue_url, queue_name, cloud_id=None):
+        cloud_id = cloud_id if cloud_id is not None else getattr(self, 'cloud_id', None)
+        assert cloud_id is not None, 'cloud_id is required'
+        folder_index = queue_url.find(cloud_id)
+        assert folder_index != -1
+        resource_id_start_index = folder_index + len(cloud_id) + 1
+        resource_id_end_index = len(queue_url) - len(queue_name) - 1
+        return queue_url[resource_id_start_index:resource_id_end_index]
+
+    def _wait_for_dlq_message_count(self, dlq_url, expected_message_count, sleep_sec=0.5):
+        attempts = self._retry_attempts(20, 60)
+        while attempts:
+            attempts -= 1
+            if self._is_topic_migration_stage():
+                message_count = int(self._sqs_api.get_queue_attributes(dlq_url).get('ApproximateNumberOfMessages', 0))
+                msgs = self._read_single_message_no_wait(dlq_url)
+                if message_count >= expected_message_count and len(msgs) >= min(expected_message_count, 1):
+                    if message_count == expected_message_count:
+                        return
+            else:
+                message_count = int(self._sqs_api.get_queue_attributes(dlq_url)['ApproximateNumberOfMessages'])
+                if message_count == expected_message_count:
+                    return
+            time.sleep(sleep_sec)
+        message_count = int(self._sqs_api.get_queue_attributes(dlq_url).get('ApproximateNumberOfMessages', 0))
+        assert_that(message_count, equal_to(expected_message_count))
+
+    def _wait_for_messages_in_dlq(self, dlq_url, messages_count, wait_timeout=0, sleep_sec=0.5):
+        attempts = self._retry_attempts(1, 60)
+        last_result = []
+        while attempts:
+            attempts -= 1
+            last_result = self._read_messages_and_assert(
+                dlq_url, messages_count=messages_count, visibility_timeout=0, wait_timeout=wait_timeout,
+                matcher=None
+            )
+            if len(last_result) == messages_count:
+                return last_result
+            time.sleep(sleep_sec)
+        assert_that(len(last_result), equal_to(messages_count))
+        return last_result
+
+    def _wait_for_message_body_in_dlq(self, dlq_url, msg_body, sleep_sec=0.5):
+        attempts = self._retry_attempts(1, 60)
+        while attempts:
+            attempts -= 1
+            msgs_from_dlq = self._read_single_message_no_wait(dlq_url)
+            if msgs_from_dlq and msgs_from_dlq[0]['Body'] == msg_body:
+                return msgs_from_dlq[0]
+            if attempts:
+                logging.debug(
+                    'Wait for async DLQ move on topic path. Attempts left: {}'.format(attempts))
+                time.sleep(sleep_sec)
+        assert_that(None, not_none(), 'Message {} was not moved to DLQ'.format(msg_body))
+
+    def _wait_for_message_body_in_queue(
+        self, queue_url, msg_body, visibility_timeout=0, per_read_wait_timeout=None, sleep_sec=0.5
+    ):
+        if per_read_wait_timeout is None:
+            per_read_wait_timeout = 1 if self._is_topic_migration_stage() else 10
+        attempts = self._retry_attempts(1, 60)
+        result_list = []
+        while attempts:
+            attempts -= 1
+            result_list = self._read_while_not_empty(
+                queue_url=queue_url,
+                messages_count=1,
+                visibility_timeout=visibility_timeout,
+                wait_timeout=per_read_wait_timeout,
+            )
+            if result_list and result_list[0]['Body'] == msg_body:
+                return result_list
+            result_list = []
+            if self._is_topic_migration_stage() and attempts:
+                logging.debug(
+                    'Wait for message restore to source queue after DLQ delete. Attempts left: {}'.format(
+                        attempts))
+                time.sleep(sleep_sec)
+            else:
+                break
+        assert_that(result_list[0]['Body'], equal_to(msg_body))
+        return result_list
+
+    def _wait_for_sqs_counters(self, assert_fn, attempts=None, sleep_sec=0.5, node_index=0, counters_format='json'):
+        attempts = self._async_metrics_retry_attempts(attempts)
+        while attempts:
+            attempts -= 1
+            counters = self._get_counters(
+                node_index, "sqs", counters_format, dump_to_log=(attempts == 0)
+            )
+            try:
+                assert_fn(counters)
+                return counters
+            except AssertionError:
+                if not attempts:
+                    raise
+                time.sleep(sleep_sec)
+
+    def _wait_for_counter_value(self, labels, expected, default_value=None, attempts=None, sleep_sec=0.5, node_index=0):
+        def assert_fn(counters):
+            value = self._get_counter_value(counters, labels, default_value)
+            assert_that(value, equal_to(expected))
+
+        self._wait_for_sqs_counters(
+            assert_fn, attempts=attempts, sleep_sec=sleep_sec, node_index=node_index
+        )
+
+    def _wait_for_approximate_messages_count(self, queue_url, expected, attempts=None, sleep_sec=0.5):
+        attempts = self._async_metrics_retry_attempts(attempts)
+        last_count = None
+        while attempts:
+            attempts -= 1
+            attrs = self._sqs_api.get_queue_attributes(queue_url)
+            last_count = int(attrs.get('ApproximateNumberOfMessages', 0))
+            if last_count == expected:
+                return last_count
+            if not attempts:
+                assert_that(last_count, equal_to(expected))
+            time.sleep(sleep_sec)
+
+    def _wait_for_ymq_counters(self, assert_fn, cloud, folder, attempts=None, sleep_sec=0.5, node_index=0):
+        attempts = self._async_metrics_retry_attempts(attempts)
+        while attempts:
+            attempts -= 1
+            ymq_counters = self._get_ymq_counters(cloud=cloud, folder=folder, node_index=node_index)
+            try:
+                assert_fn(ymq_counters)
+                return ymq_counters
+            except AssertionError:
+                if not attempts:
+                    raise
+                time.sleep(sleep_sec)
 
     def _kick_tablets_from_node(self, node_index):
         mon_port = self._get_mon_port(0)

@@ -1,0 +1,11 @@
+USE plato;
+
+
+$list = AsList(
+    AsStruct(CAST(1 AS Int32) as jk, AsStruct(CAST(1 AS Int32) as x, CAST(2 AS Int32) as y) as a)
+);
+$input = (select cast(key as Int32) ?? 0 as jk, value from Input);
+$j = (select t.a as a, i.value as value from (select * from AS_TABLE($list)) as t join $input as i using(jk));
+
+insert into Output
+select value, a.x as ax from $j;

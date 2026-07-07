@@ -27,12 +27,6 @@
                 "effective_permissions": [
                     {
                         "permission_names": [
-                            "ydb.database.connect"
-                        ],
-                        "subject": "USERS"
-                    },
-                    {
-                        "permission_names": [
                             "ydb.generic.list"
                         ],
                         "subject": "METADATA-READERS"
@@ -1681,12 +1675,6 @@
                     "tx_id": "not-zero-number-text"
                 },
                 "effective_permissions": [
-                    {
-                        "permission_names": [
-                            "ydb.database.connect"
-                        ],
-                        "subject": "USERS"
-                    },
                     {
                         "permission_names": [
                             "ydb.generic.list"
@@ -3894,6 +3882,14 @@
             {
                 "ErasureSpecies": "block-4-2",
                 "PDiskFilter": "Type:SSD"
+            },
+            {
+                "ErasureSpecies": "none",
+                "PDiskFilter": "Type:ROT,Kind:0"
+            },
+            {
+                "ErasureSpecies": "none",
+                "PDiskFilter": "Type:ROT"
             }
         ],
         "StorageTotal": "not-zero-number-text",
@@ -5539,6 +5535,7 @@
             "DynamicNodeConfig": {},
             "FeatureFlags": {
                 "EnableAlterDatabaseCreateHiveFirst": true,
+                "EnableColumnStatistics": true,
                 "EnableDrainOnShutdown": false,
                 "EnableExtraSidsControlForHttpViewer": true,
                 "EnableLocalBloomFilterIndex": true,
@@ -6588,6 +6585,7 @@
             "DynamicNodeConfig": {},
             "FeatureFlags": {
                 "EnableAlterDatabaseCreateHiveFirst": true,
+                "EnableColumnStatistics": true,
                 "EnableDrainOnShutdown": false,
                 "EnableExtraSidsControlForHttpViewer": true,
                 "EnableLocalBloomFilterIndex": true,
@@ -7637,6 +7635,7 @@
             "DynamicNodeConfig": {},
             "FeatureFlags": {
                 "EnableAlterDatabaseCreateHiveFirst": true,
+                "EnableColumnStatistics": true,
                 "EnableDrainOnShutdown": false,
                 "EnableExtraSidsControlForHttpViewer": true,
                 "EnableLocalBloomFilterIndex": true,

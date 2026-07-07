@@ -20,7 +20,7 @@ using namespace NKikimrClient;
 // Each request can contain data for writing to several topics, and in each topic to several partitions.
 // When a request to write to an unknown topic arrives, the actor changes the state to Init until it receives
 // information about all the topics needed to process the request.
-// 
+//
 // Requests are processed in parallel, but it is guaranteed that the recording order will be preserved.
 // The order of responses to requests is also guaranteed.
 //
@@ -63,6 +63,9 @@ private:
     void HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
 
     STATEFN(StateInit) {
+        YDB_LOG_CREATE_CONTEXT(
+            {"selfId", SelfId()},
+            {"state", "init"});
         LogEvent(*ev.Get());
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleInit);
@@ -86,6 +89,9 @@ private:
     void Handle(TEvKafka::TEvProduceRequest::TPtr request, const TActorContext& ctx);
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(
+            {"selfId", SelfId()},
+            {"state", "work"});
         LogEvent(*ev.Get());
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvKafka::TEvProduceRequest, Handle);
@@ -116,7 +122,6 @@ private:
     std::pair<ETopicStatus, TActorId> PartitionWriter(const TTopicPartition& topicPartition, const TProducerInstanceId& producerInstanceId, const TMaybe<TString>& transactionalId, const TActorContext& ctx);
     bool WriterDied(const TActorId& writerId, EKafkaErrors errorCode, TStringBuf errorMessage);
 
-    TString LogPrefix();
     void LogEvent(IEventHandle& ev);
     void SendMetrics(const TString& topicName, size_t delta, const TString& name, const TActorContext& ctx);
 

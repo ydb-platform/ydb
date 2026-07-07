@@ -1,9 +1,11 @@
+import logging
+
 import pytest
 import ydb
 from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -39,19 +41,65 @@ class TestUpgradeToInternalPathId:
     def restart_cluster(self, generate_internal_path_id):
         self.config.yaml_config["column_shard_config"]["generate_internal_path_id"] = generate_internal_path_id
         self.cluster.update_configurator_and_restart(self.config)
-        driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
-        driver.wait(timeout=60)
-        self.session = ydb.QuerySessionPool(driver)
+
+        driver_holder = {}
+
+        def driver_ready():
+            driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
+            try:
+                driver.wait(timeout=5, fail_fast=True)
+                driver_holder["driver"] = driver
+                return True
+            except Exception as exc:
+                logger.info("Driver not ready yet after cluster restart: %s", exc)
+                driver.stop()
+                return False
+
+        if not wait_for(driver_ready, timeout_seconds=120, step_seconds=1):
+            raise AssertionError("Driver didn't become ready after cluster restart")
+
+        self.session = ydb.QuerySessionPool(driver_holder["driver"])
+        self._wait_for_cluster_resources()
+
+    def _wait_for_cluster_resources(self, timeout_seconds=120):
+        def predicate():
+            try:
+                self.session.execute_with_retries(
+                    "SELECT 1",
+                    retry_settings=ydb.RetrySettings(max_retries=0),
+                )
+
+                return True
+            except ydb.issues.PreconditionFailed as ex:
+                if "Not enough resources" in ex.message:
+                    logger.info("Cluster resources not ready yet: %s", ex.message)
+                    return False
+                raise
+
+        if not wait_for(predicate, timeout_seconds=timeout_seconds, step_seconds=1):
+            raise AssertionError("Cluster resources didn't become available within timeout")
+
+    def _execute_with_retries(self, query):
+        try:
+            return self.session.execute_with_retries(query)
+        except ydb.issues.PreconditionFailed as ex:
+            if "Not enough resources" not in ex.message:
+                raise
+
+            logger.info("Query failed due to transient resource unavailability, retrying: %s", ex.message)
+            self._wait_for_cluster_resources()
+            return self.session.execute_with_retries(query)
 
     def create_table_with_data(self, table_name, start_value):
-        self.session.execute_with_retries(f"""
+        self._execute_with_retries(f"""
                 CREATE TABLE `{table_name}` (
                     k Int32 NOT NULL,
                     v String,
                     PRIMARY KEY (k)
                 ) WITH (STORE = COLUMN, PARTITION_COUNT = {self.partition_count}    )
             """)
-        self.session.execute_with_retries(f"""
+
+        self._execute_with_retries(f"""
             $keys = ListFromRange({start_value}, {start_value} + {self.num_rows});
             $rows = ListMap($keys, ($i)->(<|k:$i, v: "value_" || CAST($i as String)|>));
             INSERT INTO `{table_name}`
@@ -59,13 +107,13 @@ class TestUpgradeToInternalPathId:
             """)
 
     def validate_table(self, table_name, start_value):
-        result = self.session.execute_with_retries(f"""
+        result = self._execute_with_retries(f"""
             SELECT sum(k) AS c FROM `{table_name}`
         """)
         assert result[0].rows[0]["c"] == (2 * start_value + self.num_rows - 1) * self.num_rows / 2
 
     def get_path_ids(self, table_name):
-        result = self.session.execute_with_retries(f"""
+        result = self._execute_with_retries(f"""
             SELECT TabletId, PathId, InternalPathId FROM `{table_name}/.sys/primary_index_granule_stats`
         """)
         rows = [row for result_set in result for row in result_set.rows]

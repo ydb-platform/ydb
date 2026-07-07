@@ -170,28 +170,26 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         ui8 level = 0;
         ui64 measure = 0;
 
-        if (accumulatorAllowed && p->GetTotalBlobBytes() < Settings.AccumulatorPortionSizeLimit) {
+        if (p->GetCompactionLevel() == 1 && State != EState::COMPATIBILITY) {
+            level = 1;
+        } else if (accumulatorAllowed && p->GetTotalBlobBytes() < Settings.AccumulatorPortionSizeLimit) {
             level = 0;
+        } else if (forcedLevel.has_value()) {
+            level = *forcedLevel;
         } else {
             measure = LastLevel.Measure(p);
-            if (p->GetCompactionLevel() == 1 && State != EState::COMPATIBILITY) {
+            ui8 measuredLevel = 1;
+            if (measure > 0) {
+                ui64 threshold = 1;
+                while (threshold * Settings.K <= measure) {
+                    threshold *= Settings.K;
+                    ++measuredLevel;
+                }
+            }
+            if (measuredLevel <= 1) {
                 level = 1;
-            } else if (forcedLevel.has_value()) {
-                level = *forcedLevel;
             } else {
-                ui8 measuredLevel = 1;
-                if (measure > 0) {
-                    ui64 threshold = 1;
-                    while (threshold * Settings.K <= measure) {
-                        threshold *= Settings.K;
-                        ++measuredLevel;
-                    }
-                }
-                if (measuredLevel <= 1) {
-                    level = 1;
-                } else {
-                    level = std::min(measuredLevel, static_cast<ui8>(Settings.MiddleLevelCount - 1));
-                }
+                level = std::min(measuredLevel, static_cast<ui8>(Settings.MiddleLevelCount - 1));
             }
         }
 

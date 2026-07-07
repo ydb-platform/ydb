@@ -1031,6 +1031,55 @@ Y_UNIT_TEST_SUITE(TilingAccumulatorCompactionGating) {
         UNIT_ASSERT_VALUES_EQUAL(ids[0], 1);
         UNIT_ASSERT_VALUES_EQUAL(ids[1], 2);
     }
+
+    // 12) Convergence: a promoted lone portion compacted solo must NOT be re-promoted and
+    //     re-compacted forever. Simulates the engine's apply loop — each task removes its inputs
+    //     and re-adds one SPLIT_COMPACTED result at the task's target level (see
+    //     wrapper.cpp: SetTargetCompactionLevel(task->TargetLevel)). Before the fix, the small
+    //     compacted result routes back to the accumulator, is promoted again, and loops (which
+    //     spins compaction and hangs WaitCompactions -> KqpOlapScheme::DropThenAddColumnCompaction).
+    Y_UNIT_TEST(PromotedLonePortionConverges) {
+        auto settings = MakeGatingSettings();
+        settings.AgingSettings.Enabled = true;
+
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+
+        // One small INSERTED portion, nothing else -> accumulator.
+        tiling.AddPortion(MakePortion(1, 0, 10, 100));
+
+        ui64 nextId = 100;
+        ui32 compactions = 0;
+        constexpr ui32 maxIterations = 25;
+        ui32 iter = 0;
+        for (; iter < maxIterations; ++iter) {
+            tiling.PromoteExpiredPortions(TInstant::Now());
+            const auto task = tiling.GetNextOptimizationTask(NeverLocked());
+            if (!task) {
+                break;
+            }
+            ++compactions;
+
+            // Apply the task as the real engine does: drop the inputs, add one compacted result
+            // spanning them, tagged with the task's target compaction level.
+            ui64 minStart = Max<ui64>();
+            ui64 maxFinish = 0;
+            ui64 bytes = 0;
+            for (const auto& p : task->Portions) {
+                minStart = std::min(minStart, p->IndexKeyStart());
+                maxFinish = std::max(maxFinish, p->IndexKeyEnd());
+                bytes += p->GetTotalBlobBytes();
+            }
+            std::vector<TTestPortion::TConstPtr> inputs(task->Portions.begin(), task->Portions.end());
+            for (const auto& p : inputs) {
+                tiling.RemovePortion(p);
+            }
+            tiling.AddPortion(
+                std::make_shared<TTestPortion>(nextId++, minStart, maxFinish, bytes, 1, NPortion::SPLIT_COMPACTED, task->TargetLevel));
+        }
+
+        UNIT_ASSERT_C(iter < maxIterations, "compaction never converged (looped " << compactions << " times)");
+    }
 }
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

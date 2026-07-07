@@ -241,7 +241,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMaxWithBSStorage)).Execute(settings);
     }
 
-    Y_UNIT_TEST(CannotHaveTwoMinMaxIndexesOnOneColumn, EUseQueryService, ELocalIndexAsSchemeObject) {
+    Y_UNIT_TEST(CannotHaveTwoMinMaxAndBloomFilterIndexesOnOneColumn, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
@@ -285,7 +285,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         assertDDLQueryOk(R"(
             CREATE TABLE `/Root/test_cannot_have_two_indexes_on_one_column` (
                 `key` Int32 NOT NULL,
-                `value` String NOT NULL,
+                `value` Utf8 NOT NULL,
                 PRIMARY KEY (`key`)
             )
             PARTITION BY HASH (`key`)
@@ -301,8 +301,18 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         assertDDLQueryOk(R"(
                 ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_bloom` LOCAL USING bloom_filter ON(`value`);
             )");
-        assertDDLQueryOk(R"(
+        assertDDLQueryNotOk(R"(
                 ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_bloom2` LOCAL USING bloom_filter ON(`value`);
+            )");
+        
+        assertDDLQueryOk(R"(
+                ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_bloom_ngram` LOCAL USING bloom_ngram_filter ON(`value`)
+                            WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true);
+
+                )");
+        assertDDLQueryOk(R"(
+                ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_bloom_ngram2` LOCAL USING bloom_ngram_filter ON(`value`)
+                                WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true);
             )");
         
         assertDDLQueryNotOk(R"(

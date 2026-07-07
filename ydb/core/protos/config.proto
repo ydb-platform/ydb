@@ -2773,7 +2773,7 @@ message TColumnShardConfig {
     }
 
     optional TReadRetryPolicy ReadRetryPolicy = 70;
-    
+    optional uint64 BulkUpsertShardWriteChunkLimitBytes = 71 [default = 50331648]; // 48 MiB
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

@@ -124,6 +124,15 @@ namespace NKikimr::NSqsTopic::V1 {
                 }
             }
 
+            if (request.has_receive_request_attempt_id()) {
+                const auto& attemptId = request.receive_request_attempt_id();
+                if (attemptId.size() > 128 || !NSQS::IsAlphaNumAndPunctuation(attemptId)) {
+                    ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE,
+                        R"(Invalid parameter "ReceiveRequestAttemptId". It is expected to be no longer than 128 characters and consist of alphanum and punctuation characters.)"));
+                    return Nothing();
+                }
+            }
+
             NKikimr::NPQ::NMLP::TReaderSettings settings{
                 .DatabasePath = this->QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
@@ -133,6 +142,11 @@ namespace NKikimr::NSqsTopic::V1 {
                 .MaxNumberOfMessage = static_cast<ui32>(maxNumberOfMessages),
                 .UserToken = this->Request_->GetInternalToken(),
             };
+            // Only client-supplied receive-request-attempt-id enables replay semantics; an
+            // auto-generated id would be unique per request and never replayed.
+            if (this->QueueUrl_->Fifo && request.has_receive_request_attempt_id()) {
+                settings.ReceiveAttemptId = request.receive_request_attempt_id();
+            }
             return settings;
         }
 

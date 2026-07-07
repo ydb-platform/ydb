@@ -350,15 +350,26 @@ public:
 
 class TOpRead: public IOperator {
 public:
+    // Everything the read carries about pushed-down key ranges. ComputeNode is the source of
+    // truth for the ranges themselves; the other fields are range extractor outputs that cannot
+    // be recovered from the expression later (explain has no access to table metadata or the
+    // extractor settings).
+    struct TRangeInfo {
+        TExprNode::TPtr ComputeNode;  // ranges expression pushed into the read
+        TVector<TString> KeyColumns;  // all table key columns (with or without alias prefix)
+        size_t UsedPrefixLen = 0;     // how many leading key columns are range-constrained
+        TMaybe<size_t> ExpectedMaxRanges;
+    };
+
     TOpRead(TExprNode::TPtr node);
     TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
-            const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TExprNode::TPtr& ranges,
+            const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, std::optional<TRangeInfo> ranges,
             const std::optional<TExpression>& originalPredicate, const ESortDir sortDireciont, const TPhysicalOpProps& props, TPositionHandle pos);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual TString ToString(TExprContext& ctx) override;
-    virtual TString GetExplainName() const override { return "TableFullScan"; }
+    virtual TString GetExplainName() const override { return RangeInfo.has_value() ? "TableRangeScan" : "TableFullScan"; }
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
 
     void RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
@@ -368,7 +379,7 @@ public:
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
     NYql::EStorageType GetTableStorageType() const;
 
-    TExprNode::TPtr GetRanges() const { return Ranges; }
+    TExprNode::TPtr GetRanges() const { return RangeInfo ? RangeInfo->ComputeNode : nullptr; }
     TExprNode::TPtr GetTable() const { return TableCallable; }
 
     // TODO: make it private members, we should not access it directly
@@ -381,9 +392,9 @@ public:
     TExprNode::TPtr TableCallable;
     TExprNode::TPtr OlapFilterLambda;
     TExprNode::TPtr Limit;
-    TExprNode::TPtr Ranges;
     std::optional<TExpression> OriginalPredicate;
     ESortDir SortDir{ESortDir::None};
+    std::optional<TRangeInfo> RangeInfo;
 };
 
 class TMapElement {
@@ -771,12 +782,84 @@ struct TOpIterator {
     };
 
 private:
-    void BuildDfsList(TIntrusivePtr<IOperator> current, TIntrusivePtr<IOperator> parent, size_t childIdx, std::unordered_set<IOperator*>& visited,
-                        std::shared_ptr<TInfoUnit> subplanIU, bool recurseIntoSubplans = false);
+    friend class TOpTraversal;
+
+    static void BuildDfsList(TVector<TIteratorItem>& dfsList, TIntrusivePtr<IOperator> current, TIntrusivePtr<IOperator> parent, size_t childIdx,
+        std::unordered_set<IOperator*>& visited, TPlanProps* planProps, std::shared_ptr<TInfoUnit> subplanIU, bool recurseIntoSubplans = false);
 
     TVector<TIteratorItem> DfsList;
     size_t CurrElement;
-    TPlanProps* PlanProps;
+};
+
+class TOpTraversal {
+public:
+    class TIterator {
+    public:
+        using iterator_category = std::forward_iterator_tag;
+        using difference_type = std::ptrdiff_t;
+        using value_type = TOpIterator::TIteratorItem;
+        using reference = const value_type&;
+        using pointer = const value_type*;
+
+        TIterator(const TVector<TOpIterator::TIteratorItem>* items, size_t index)
+            : Items(items)
+            , Index(index) {
+        }
+
+        reference operator*() const {
+            return (*Items)[Index];
+        }
+
+        pointer operator->() const {
+            return &(*Items)[Index];
+        }
+
+        TIterator& operator++() {
+            ++Index;
+            return *this;
+        }
+
+        TIterator operator++(int) {
+            TIterator tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        friend bool operator==(const TIterator& lhs, const TIterator& rhs) {
+            return lhs.Items == rhs.Items && lhs.Index == rhs.Index;
+        }
+
+        friend bool operator!=(const TIterator& lhs, const TIterator& rhs) {
+            return !(lhs == rhs);
+        }
+
+    private:
+        const TVector<TOpIterator::TIteratorItem>* Items;
+        size_t Index;
+    };
+
+    using TReverseIterator = TVector<TOpIterator::TIteratorItem>::const_reverse_iterator;
+
+    explicit TOpTraversal(TOpRoot* root);
+
+    TIterator begin() const {
+        return TIterator(&Items, 0);
+    }
+
+    TIterator end() const {
+        return TIterator(&Items, Items.size());
+    }
+
+    TReverseIterator rbegin() const {
+        return Items.rbegin();
+    }
+
+    TReverseIterator rend() const {
+        return Items.rend();
+    }
+
+private:
+    TVector<TOpIterator::TIteratorItem> Items;
 };
 
 class TOpRoot: public IUnaryOperator {
@@ -801,6 +884,10 @@ public:
 
     TOpIterator end() {
         return TOpIterator(nullptr);
+    }
+
+    TOpTraversal PostOrder() {
+        return TOpTraversal(this);
     }
 
     NJson::TJsonValue GetExecutionJson(ui64 & nodeCounter, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags = 0x00);

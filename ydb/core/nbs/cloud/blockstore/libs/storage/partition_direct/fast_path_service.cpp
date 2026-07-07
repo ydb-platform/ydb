@@ -40,6 +40,7 @@ namespace {
 void DumpToFile(
     const TString& diskId,
     size_t index,
+    const TString& config,
     TMap<size_t, TDBGDumpResponse> debugDumps)
 {
     TVector<TDBGDumpResponse::TVChunkDump> dumps;
@@ -63,6 +64,9 @@ void DumpToFile(
 
     auto path = TStringBuilder() << dirPath << diskId << "." << index;
     TFile file(path, EOpenModeFlag::CreateAlways);
+
+    file.Write(config.data(), config.size());
+    file.Write("\n", 1);
 
     for (const auto& [dbgIndex, dump]: debugDumps) {
         file.Write(dump.Dump.data(), dump.Dump.size());
@@ -501,7 +505,11 @@ void TFastPathService::OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump)
     }
 
     try {
-        DumpToFile(DiskId, DumpCount, std::move(DebugDumps));
+        DumpToFile(
+            DiskId,
+            DumpCount,
+            StorageConfig->Dump(),
+            std::move(DebugDumps));
     } catch (const std::exception& e) {
         LOG_ERROR(
             *ActorSystem,

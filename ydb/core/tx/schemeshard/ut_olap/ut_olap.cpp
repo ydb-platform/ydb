@@ -1816,6 +1816,25 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         )";
     }
 
+    static TString AlterUpsertBloomNGrammFilterIndex(const TString& tableName, const TString& indexName,
+            const TString& columnName, double falsePositiveProbability) {
+        return TStringBuilder() << R"(
+            Name: ")" << tableName << R"("
+            AlterSchema {
+                UpsertIndexes {
+                    Name: ")" << indexName << R"("
+                    ClassName: "BLOOM_NGRAMM_FILTER"
+                    BloomNGrammFilter {
+                        NGrammSize: 3
+                        CaseSensitive: true
+                        ColumnName: ")" << columnName << R"("
+                        FalsePositiveProbability: )" << falsePositiveProbability << R"(
+                    }
+                }
+            }
+        )";
+    }
+
     Y_UNIT_TEST(CreateColumnTableOk) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -2250,7 +2269,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
         {
             auto descr = DescribePath(runtime, "/MyRoot/TestTableCreate");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0), NLs::ColumnTableIndexesCount(1)});
         }
 
         {
@@ -2280,7 +2299,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         env.TestWaitNotification(runtime, txId);
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot",
-            AlterUpsertBloomFilterIndex("TestTableAlter", "bloom_data", "data", 0.05));
+            AlterUpsertBloomNGrammFilterIndex("TestTableAlter", "bloom_data", "data", 0.05));
         env.TestWaitNotification(runtime, txId);
 
         {
@@ -2293,7 +2312,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
             bool foundBloom = false;
             for (const auto& idx : schema.GetIndexes()) {
-                if (idx.GetName() == "bloom_data" && idx.HasBloomFilter()) {
+                if (idx.GetName() == "bloom_data" && idx.HasBloomNGrammFilter()) {
                     foundBloom = true;
                     break;
                 }
@@ -2302,7 +2321,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         }
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot",
-            AlterUpsertBloomFilterIndex("TestTableAlter", "bloom_data_v2", "data", 0.01));
+            AlterUpsertBloomNGrammFilterIndex("TestTableAlter", "bloom_data_v2", "data", 0.01));
         env.TestWaitNotification(runtime, txId);
 
         {
@@ -2481,10 +2500,12 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
                     Indexes {
                         Id: %d
                         Name: "bloom_%d"
-                        ClassName: "BLOOM_FILTER"
-                        BloomFilter {
-                            ColumnIds: [2]
+                        ClassName: "BLOOM_NGRAMM_FILTER"
+                        BloomNGrammFilter {
+                            ColumnId: 3
                             FalsePositiveProbability: 0.01
+                            NGrammSize: 3
+                            CaseSensitive: false
                         }
                     }
                 )", 4 + i, i);
@@ -2495,10 +2516,10 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema);
             env.TestWaitNotification(runtime, txId);
 
-            // Before migration: no scheme object children
+            // Before migration: no scheme object children but still have 30 indexes
             {
                 auto descr = DescribePath(runtime, Sprintf("/MyRoot/%s", tableName.c_str()));
-                TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+                TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0), NLs::ColumnTableIndexesCount(30)});
             }
         }
 
@@ -2549,11 +2570,11 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
             // Verify a few sample indexes are ready
             NLocalIndexes::CheckLocalIndexReady(runtime, Sprintf("/MyRoot/%s", tableName.c_str()), "bloom_0",
-                NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+                NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, {"data"});
             NLocalIndexes::CheckLocalIndexReady(runtime, Sprintf("/MyRoot/%s", tableName.c_str()), "bloom_15",
-                NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+                NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, {"data"});
             NLocalIndexes::CheckLocalIndexReady(runtime, Sprintf("/MyRoot/%s", tableName.c_str()), "bloom_29",
-                NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+                NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, {"data"});
         }
 
         // Restart again to verify migration is idempotent (no duplicate scheme objects)

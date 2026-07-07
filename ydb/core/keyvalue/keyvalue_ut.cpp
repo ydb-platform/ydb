@@ -3230,6 +3230,40 @@ Y_UNIT_TEST(TestReadLimitUsesSingleQueueByDefault)
     CheckReadResponse(ReceiveKeyValueResponse(tc), 2, {"value-extra-wait"});
 }
 
+Y_UNIT_TEST(TestReadLimitDoesNotBlockGetStorageChannelStatus)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &){}, activeZone);
+
+    auto &icb = tc.Runtime->GetAppData().Icb;
+    TControlWrapper readRequestInFlightLimit(5, 1, 4096);
+    TControlBoard::RegisterSharedControl(readRequestInFlightLimit, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
+    readRequestInFlightLimit = 1;
+
+    constexpr ui32 mainBlobChannel = NKeyValue::BLOB_CHANNEL;
+
+    CmdWrite("main-hold", "value-main-hold",
+        NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
+    TGetBlocker gets(*tc.Runtime);
+    gets.BlockChannel(mainBlobChannel);
+
+    SendRequestEvent(MakeReadRequest(1, {"main-hold"}), tc);
+    tc.Runtime->WaitFor("blocked main read", [&] {
+        return gets.BlockedCount(mainBlobChannel) == 1;
+    }, TDuration::Seconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(mainBlobChannel), 1);
+
+    ExecuteGetStatus(tc, {1}, 0);
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(mainBlobChannel), 1);
+
+    gets.UnblockOne();
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 1, {"value-main-hold"});
+}
+
 Y_UNIT_TEST(TestPerChannelReadLimitDoesNotBlockWritesAndInlineReads)
 {
     TTestContext tc;

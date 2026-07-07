@@ -3621,16 +3621,10 @@ void TKeyValueState::OnEvGetStorageChannelStatus(TEvKeyValue::TEvGetStorageChann
     CountRequestIncoming(requestType);
 
     if (PrepareGetStorageChannelStatusRequest(ctx, ev, intermediate, info)) {
-        if (TryStartOrPostponeIntermediate(intermediate, ctx, info)) {
-            YDB_LOG_DEBUG("Create GetStorageChannelStatus request,",
-                {"keyValue", TabletId},
-                {"marker", "KV75"});
-            RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
-        } else {
-            YDB_LOG_DEBUG("Enqueue GetStorageChannelStatus request,",
-                {"keyValue", TabletId},
-                {"marker", "KV75"});
-        }
+        YDB_LOG_DEBUG("Create GetStorageChannelStatus request,",
+            {"keyValue", TabletId},
+            {"marker", "KV75"});
+        RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
         CountRequestTakeOffOrEnqueue(requestType);
     } else {
         intermediate->UpdateStat();

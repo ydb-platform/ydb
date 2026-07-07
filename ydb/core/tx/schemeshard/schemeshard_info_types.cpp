@@ -996,8 +996,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             // This key column isn't otherwise touched by this alter (e.g. an existing key
             // column simply re-listed alongside a newly added one) -- seed it from the
             // source column so FinishAlter's Name/DefaultKind/etc. copy-back doesn't clobber
-            // it with a default-constructed (empty-named) TColumn.
+            // it with a default-constructed (empty-named) TColumn. Reset KeyOrder to "unset":
+            // it's about to be recomputed below from this alter's own key column list, and the
+            // duplicate-entry check right after relies on it starting out unset.
             alterData->Columns[colId] = source->Columns.at(colId);
+            alterData->Columns[colId].KeyOrder = Max<ui32>();
         }
         TTableInfo::TColumn& column = alterData->Columns[colId];
         if (column.KeyOrder != (ui32)-1) {

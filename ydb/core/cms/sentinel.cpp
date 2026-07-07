@@ -1018,15 +1018,13 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     void StartUpdater(TUpdaterInfo& updater) {
         if (ConfigUpdater.Id || StateUpdater.Id) {
             YDB_LOG_INFO("[Sentinel] was delayed",
-                {"name", Name()},
-                {"TUpdaterName", TUpdater::Name()});
+                {"name", Name()});
             updater.Delayed = true;
             return;
         }
 
         YDB_LOG_DEBUG("[Sentinel] Start",
-            {"name", Name()},
-            {"TUpdaterName", TUpdater::Name()});
+            {"name", Name()});
         updater.Start(RegisterWithSameMailbox(new TUpdater(SelfId(), CmsState, SentinelState)), Now());
     }
 
@@ -1186,7 +1184,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             info->ApplyChanges(reason);
             const EPDiskStatus requiredStatus = info->GetStatus();
 
-            YDB_LOG_NOTICE("[Sentinel] PDisk status changed, required",
+            YDB_LOG_NOTICE("[Sentinel] PDisk status changed",
                 {"name", Name()},
                 {"pdiskId", id},
                 {"status", status},

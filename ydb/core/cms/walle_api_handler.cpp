@@ -100,7 +100,7 @@ private:
         default:
             YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleApiHandler::StateCreateTask ignored event",
                 {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString().data()});
+                {"ev", ev->ToString()});
         }
     }
 
@@ -144,7 +144,7 @@ private:
         default:
             YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleApiHandler::StateListTasks ignored event",
                 {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString().data()});
+                {"ev", ev->ToString()});
         }
     }
 
@@ -192,7 +192,7 @@ private:
         default:
             YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleApiHandler::StateCheckTask ignored event",
                 {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString().data()});
+                {"ev", ev->ToString()});
         }
     }
 
@@ -237,7 +237,7 @@ private:
         default:
             YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleApiHandler::StateRemoveTask ignored event",
                 {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString().data()});
+                {"ev", ev->ToString()});
         }
     }
 

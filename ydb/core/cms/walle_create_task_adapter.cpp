@@ -29,7 +29,7 @@ public:
         auto &rec = RequestEvent->Get()->Record;
 
         YDB_LOG_INFO_CTX(ctx, "Processing Wall-E request",
-            {"request", rec});
+            {"ev", rec.ShortDebugString()});
 
         if (!Actions.contains(rec.GetAction())) {
             ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "Unsupported action", ctx);
@@ -56,7 +56,7 @@ private:
         default:
             YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleCreateTaskAdapter::StateWork ignored event",
                 {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString().data()});
+                {"ev", ev->ToString()});
         }
     }
 

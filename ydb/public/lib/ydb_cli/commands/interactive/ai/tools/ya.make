@@ -30,7 +30,7 @@ PEERDIR(
 )
 
 # Embed YDB documentation archive when building release CLI binaries.
-# Build with `-D YDB_CLI_AI_INCLUDE_DOCS=yes` to enable.
+# Build with `-DYDB_CLI_AI_INCLUDE_DOCS=yes` to enable.
 IF(YDB_CLI_AI_INCLUDE_DOCS)
     INCLUDE(${ARCADIA_ROOT}/ydb/public/lib/ydb_cli/commands/interactive/ai/tools/docs_generate/ya.make.inc)
 ENDIF()

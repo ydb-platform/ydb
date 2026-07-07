@@ -297,7 +297,7 @@ void TMapElement::SetElementName(const TInfoUnit& elementName) {
     ElementName = elementName;
 }
 
-TExpression TMapElement::GetExpression() const {
+const TExpression& TMapElement::GetExpression() const {
     return Expr;
 }
 

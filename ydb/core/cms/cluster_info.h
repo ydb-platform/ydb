@@ -694,6 +694,7 @@ class TClusterInfo : public TThrRefBase {
 public:
     using TNodes = THashMap<ui32, TNodeInfoPtr>;
     using TTablets = THashMap<ui64, TTabletInfo>;
+    using TNodeTabletsMap = THashMap<ui32, TTablets>;
     using TPDisks = THashMap<TPDiskID, TPDiskInfoPtr, TPDiskIDHash>;
     using TVDisks = THashMap<TVDiskID, TVDiskInfoPtr>;
     using TBSGroups = THashMap<ui32, TBSGroupInfo>;
@@ -842,6 +843,12 @@ public:
 
     const TTablets &AllTablets() const {
         return Tablets;
+    }
+
+    const TTablets &NodeTablets(ui32 nodeId) const {
+        static const TTablets empty;
+        auto it = NodeTabletsByNode.find(nodeId);
+        return it != NodeTabletsByNode.end() ? it->second : empty;
     }
 
     bool NodeHasRunningSystemTablet(ui32 nodeId) const;
@@ -1089,6 +1096,7 @@ private:
 
     TNodes Nodes;
     TTablets Tablets;
+    TNodeTabletsMap NodeTabletsByNode;
     TPDisks PDisks;
     TVDisks VDisks;
     TBSGroups BSGroups;

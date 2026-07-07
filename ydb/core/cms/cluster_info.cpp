@@ -431,9 +431,23 @@ void TClusterInfo::ClearNode(ui32 nodeId)
         return;
 
     auto &node = NodeRef(nodeId);
-    for (auto tablet : node.Tablets)
-        Tablets.erase(tablet);
+    const TSet<ui64> tabletsToCheck(node.Tablets);
+    NodeTabletsByNode.erase(nodeId);
     node.Tablets.clear();
+
+    for (ui64 tabletId : tabletsToCheck) {
+        bool existsOnOtherNode = false;
+        for (const auto &[otherNodeId, tablets] : NodeTabletsByNode) {
+            if (tablets.contains(tabletId)) {
+                Tablets[tabletId] = tablets.at(tabletId);
+                existsOnOtherNode = true;
+                break;
+            }
+        }
+        if (!existsOnOtherNode) {
+            Tablets.erase(tabletId);
+        }
+    }
     node.HasTenantInfo = false;
     node.State = NKikimrCms::DOWN;
     node.UpdateNodeState();
@@ -466,12 +480,14 @@ void TClusterInfo::AddTablet(ui32 nodeId, const NKikimrWhiteboard::TTabletStateI
     if (!HasNode(nodeId))
         return;
 
-    TTabletInfo &tablet = Tablets[info.GetTabletId()];
+    TTabletInfo &tablet = NodeTabletsByNode[nodeId][info.GetTabletId()];
     tablet.TabletId = info.GetTabletId();
     tablet.Type = info.GetType();
     tablet.State = info.GetState();
     tablet.Leader = info.GetLeader();
     tablet.NodeId = nodeId;
+
+    Tablets[info.GetTabletId()] = tablet;
 
     auto &node = NodeRef(nodeId);
     node.Tablets.insert(tablet.TabletId);
@@ -1036,22 +1052,17 @@ void TClusterInfo::GenerateSysTabletsNodesCheckers() {
 }
 
 void TClusterInfo::GenerateNodesWithRunningSystemTablet() {
-    for (const auto &[nodeId, _] : NodeToTabletTypes) {
-        auto nodeIt = Nodes.find(nodeId);
-        if (nodeIt == Nodes.end()) {
+    NodesWithRunningSystemTablet.clear();
+
+    for (const auto &[nodeId, tablets] : NodeTabletsByNode) {
+        if (!HasNode(nodeId)) {
             continue;
         }
 
-        for (const ui64 tabletId : nodeIt->second->Tablets) {
-            auto tabletIt = Tablets.find(tabletId);
-            if (tabletIt == Tablets.end()) {
-                continue;
-            }
-
-            const TTabletInfo &tablet = tabletIt->second;
+        for (const auto &[_, tablet] : tablets) {
             if (tablet.Leader
                 && tablet.State == NKikimrWhiteboard::TTabletStateInfo::Active
-                && SystemTabletTypes.contains(tablet.Type)) 
+                && SystemTabletTypes.contains(tablet.Type))
             {
                 NodesWithRunningSystemTablet.insert(nodeId);
                 break;

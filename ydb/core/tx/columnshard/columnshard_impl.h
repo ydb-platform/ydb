@@ -546,7 +546,6 @@ private:
     ui64 LastExportNo = 0;
     THashMap<TSchemeShardLocalPathId, NKikimrTxColumnShard::TCompletedBackupTransaction> LastCompletedBackupTransactions;
     THashMap<ui64, NKikimrTxColumnShard::TCompletedBackupTransaction> LastCompletedBackupTransactionsByTxId;   // TxId -> BackupTransaction
-
     ui64 StatsReportRound = 0;
     TString OwnerPath;
 

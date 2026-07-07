@@ -469,8 +469,7 @@ void TKqpQueryState::FillDeferredPublicationOperations() {
     YQL_ENSURE(HasDeferredPublication());
 
     const auto& request = GetDeferredPublicationFromRequest();
-    YQL_ENSURE(request.HasOp());
-    YQL_ENSURE(request.HasIntPublicationId());
+    NTopic::ValidateDeferredPublicationRequest(request);
 
     TopicOperations = NTopic::TTopicOperations();
 

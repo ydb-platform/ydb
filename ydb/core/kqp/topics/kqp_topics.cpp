@@ -838,4 +838,11 @@ bool TTopicOperations::ShouldOmitPeerTopicTabletsForPredicateExchange() const
     return CalcSkipConflictCheck() && !HasReadOperations();
 }
 
+void ValidateDeferredPublicationRequest(const NKikimrKqp::TTopicDeferredPublicationRequest& request)
+{
+    Y_ENSURE(request.HasOp());
+    Y_ENSURE(request.HasIntPublicationId());
+    Y_ENSURE(!request.GetDestinations().empty(), "DeferredPublication request must have at least one destination");
+}
+
 }

@@ -233,4 +233,6 @@ private:
     bool TrackProducerId_ = false;
 };
 
+void ValidateDeferredPublicationRequest(const NKikimrKqp::TTopicDeferredPublicationRequest& request);
+
 }

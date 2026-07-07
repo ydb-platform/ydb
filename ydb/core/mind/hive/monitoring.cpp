@@ -1246,7 +1246,7 @@ public:
         }) {
             const TVector<i64>& allowedMetrics = Self->GetTabletTypeAllowedMetricIds(tabletType);
             out << "<tr>"
-                   "<td>" << GetTabletTypeShortName(tabletType) << "</td>";
+                   "<td title='" << TTabletTypes::EType_Name(tabletType) << "'>" << GetTabletTypeShortName(tabletType) << "</td>";
             out << "<td><input id='cpu' class='form-control' type='checkbox' checked='' disabled='' style='width:20px;height:20px;margin:2px auto'</input></td>";
             out << "<td><input id='cpu' class='form-control' type='checkbox'";
             if (Find(allowedMetrics, NKikimrTabletBase::TMetrics::kCPUFieldNumber) != allowedMetrics.end()) {
@@ -2420,10 +2420,11 @@ public:
         TString ToHTML() const {
             auto totalCount = LeaderCount + FollowerCount;
             TStringBuilder str;
+            str << "<span title='" << TTabletTypes::EType_Name(TabletType) << "' ";
             if (MaxCount > 0) {
-                str << "<span class='box' ";
+                str << " class='box' ";
             } else {
-                str << "<span class='box box-disabled' ";
+                str << " class='box box-disabled' ";
             }
             if (totalCount > MaxCount) {
                 str << " style='color: red' ";

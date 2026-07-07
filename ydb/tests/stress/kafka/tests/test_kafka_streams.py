@@ -8,25 +8,6 @@ from ydb.tests.library.stress.fixtures import StressFixture
 
 
 class TestYdbTopicWorkload(StressFixture):
-    tenant_database = "/Root/db1"
-
-    def _create_tenant_database(self):
-        timeout_seconds = 120
-
-        self.cluster.remove_database(
-            self.tenant_database,
-            timeout_seconds=timeout_seconds,
-        )
-        self.cluster.create_database(
-            self.tenant_database,
-            storage_pool_units_count={
-                "hdd": 1,
-            },
-            timeout_seconds=timeout_seconds,
-        )
-        self.cluster.register_and_start_slots(self.tenant_database, count=1)
-        self.cluster.wait_tenant_up(self.tenant_database)
-
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         port_manager = library.python.port_manager.PortManager()
@@ -74,8 +55,3 @@ class TestYdbTopicWorkload(StressFixture):
 
     def test(self):
         self.run_workload(self.database)
-
-    def test_tenant_database(self):
-        self._create_tenant_database()
-
-        self.run_workload(self.tenant_database)

@@ -2904,26 +2904,34 @@ private:
                     .AddAttribute(TString{YqlRowSpecAttribute})
                 );
             for (auto& idx: idxs) {
-                batchRes.push_back(batchGet->Get(tables[idx.first].Table() + "&/@", getOpts).Apply([idx, &attributes](const TFuture<NYT::TNode>& f) {
-                    try {
-                        NYT::TNode attrs = f.GetValue();
-                        if (GetTypeFromAttributes(attrs, false) == "link") {
-                            // override some attributes by the link ones
-                            if (attrs.HasKey(QB2Premapper)) {
-                                attributes[idx.first][QB2Premapper] = attrs[QB2Premapper];
+                auto tablePath = tables[idx.first].Table();
+                batchRes.push_back(batchGet->Get(tablePath + "&/@", getOpts).Apply(
+                    [idx, tablePath, &attributes] (const TFuture<NYT::TNode>& f) {
+                        try {
+                            NYT::TNode attrs = f.GetValue();
+                            if (GetTypeFromAttributes(attrs, false) == "link") {
+                                // override some attributes by the link ones
+                                if (attrs.HasKey(QB2Premapper)) {
+                                    attributes[idx.first][QB2Premapper] = attrs[QB2Premapper];
+                                }
+                                if (attrs.HasKey(YqlRowSpecAttribute)) {
+                                    attributes[idx.first][YqlRowSpecAttribute] = attrs[YqlRowSpecAttribute];
+                                }
                             }
-                            if (attrs.HasKey(YqlRowSpecAttribute)) {
-                                attributes[idx.first][YqlRowSpecAttribute] = attrs[YqlRowSpecAttribute];
+                        } catch (const TErrorResponse& e) {
+                            if (e.IsAccessDenied()) {
+                                YQL_LOG_CTX_THROW TErrorException(TIssuesIds::YT_ACCESS_DENIED)
+                                    << "Access denied while fetching additional attributes for symbolic link " << tablePath << ".\n"
+                                    << "Make sure read access to the parent directory is granted; full error: " << e.GetError().GetYsonText();
                             }
+                            // Yt returns NoSuchTransaction as inner issue for ResolveError
+                            if (!e.IsResolveError() || e.IsNoSuchTransaction()) {
+                                throw;
+                            }
+                            // Just ignore. Original table path may be deleted at this time
                         }
-                    } catch (const TErrorResponse& e) {
-                        // Yt returns NoSuchTransaction as inner issue for ResolveError
-                        if (!e.IsResolveError() || e.IsNoSuchTransaction()) {
-                            throw;
-                        }
-                        // Just ignore. Original table path may be deleted at this time
                     }
-                }));
+                ));
             }
             batchGet->ExecuteBatch();
             WaitExceptionOrAll(batchRes).GetValue();

@@ -359,7 +359,7 @@ public:
         Send(IntermediateResult->KeyValueActorId, new TEvKeyValue::TEvNotify(
             IntermediateResult->RequestUid,
             IntermediateResult->CreatedAtGeneration, IntermediateResult->CreatedAtStep,
-            IntermediateResult->Stat, status, IntermediateResult->AcquiredChannels,
+            IntermediateResult->Stat, status, std::move(IntermediateResult->AcquiredChannels),
             std::move(IntermediateResult->RefCountsIncr)));
     }
 

@@ -25,6 +25,8 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         , Settings(std::move(settings))
         , Accumulator(Settings.AccumulatorSettings, counters)
         , LastLevel(Settings.LastLevelSettings, counters)
+        , TasksSkippedByPriorityGap(counters.TasksSkippedByPriorityGap)
+        , GeneratedTasksPriorityLevel(counters.GeneratedTasksPriorityLevel)
     {
         for (ui64 i = 2; i < Settings.MiddleLevelCount; ++i) {
             MiddleLevels.emplace(i, MiddleLevel<TKey, TPortion>(Settings.MiddleLevelSettings, i, counters));
@@ -35,6 +37,8 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
     Accumulator<TKey, TPortion> Accumulator;
     LastLevel<TKey, TPortion> LastLevel;
     THashMap<ui64, MiddleLevel<TKey, TPortion>> MiddleLevels;
+    const NMonitoring::TDynamicCounters::TCounterPtr TasksSkippedByPriorityGap;
+    const std::shared_ptr<NColumnShard::TDeriviativeHistogram> GeneratedTasksPriorityLevel;
 
     struct TPortionPlacement {
         ui8 Level = 0;
@@ -103,6 +107,10 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         }
     }
 
+    void UpdatePriority() {
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+    }
+
     void ModifyPortions(const std::vector<typename TPortion::TPtr>& add, const std::vector<typename TPortion::TConstPtr>& remove) {
         for (const auto& p : remove) {
             this->RemovePortion(p);
@@ -116,6 +124,8 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
                 this->AddPortion(p);
             }
         }
+
+        UpdatePriority();
     }
 
     void DoActualize(const TInstant currentInstant) override {
@@ -137,7 +147,9 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
                 OverloadPriority = TOptimizationPriority::Critical(0);
             }
         }
+
         PromoteExpiredPortions(currentInstant);
+        UpdatePriority();
     }
 
     void DoAddPortion(typename TPortion::TPtr p) override {
@@ -317,6 +329,15 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         consider(LastLevel.DoGetNextOptimizationTask(isLocked));
         for (const auto& [_, middleLevel] : MiddleLevels) {
             consider(middleLevel.DoGetNextOptimizationTask(isLocked));
+        }
+
+        if (result) {
+            const i64 maxOverloadLevel = this->Counters.Portions->GetMaxOverloadLevel();
+            if (result->Priority.GetLevel() < maxOverloadLevel - Settings.MaxPriorityGap) {
+                TasksSkippedByPriorityGap->Inc();
+                return std::nullopt;
+            }
+            GeneratedTasksPriorityLevel->Collect(result->Priority.GetLevel());
         }
 
         return result;

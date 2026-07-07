@@ -3897,6 +3897,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(rewrittenAggregate->KeyColumns.size(), 1);
         UNIT_ASSERT(rewrittenAggregate->KeyColumns.front() == TInfoUnit("key"));
 
+        ComputeRequiredProps(root, /*props=*/0, testContext.RboCtx, "Focused push rename");
         const auto aggregateOutput = rewrittenAggregate->GetOutputIUs();
         UNIT_ASSERT(std::find(aggregateOutput.begin(), aggregateOutput.end(), TInfoUnit("total")) != aggregateOutput.end());
         UNIT_ASSERT(std::find(aggregateOutput.begin(), aggregateOutput.end(), TInfoUnit("sum_value")) == aggregateOutput.end());

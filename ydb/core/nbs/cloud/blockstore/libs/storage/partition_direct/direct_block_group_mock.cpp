@@ -33,6 +33,22 @@ void TOracleMock::OnRequestFailed(
     Y_UNUSED(hostIndex, operation, now);
 }
 
+void TOracleMock::OnDDiskDisconnected(THostIndex hostIndex, TInstant now)
+{
+    Y_UNUSED(hostIndex, now);
+}
+
+TDuration TOracleMock::GetDDiskReconnectDelay(THostIndex hostIndex)
+{
+    Y_UNUSED(hostIndex);
+    return TDuration::MilliSeconds(1);
+}
+
+void TOracleMock::OnDDiskConnected(THostIndex hostIndex, TInstant now)
+{
+    Y_UNUSED(hostIndex, now);
+}
+
 void TOracleMock::OnRequestCancelled(
     THostIndex hostIndex,
     EOperation operation,

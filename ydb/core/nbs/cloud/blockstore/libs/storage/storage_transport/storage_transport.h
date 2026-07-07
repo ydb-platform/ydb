@@ -52,14 +52,20 @@ public:
     // May be called multiple times if the underlying transport delivers more
     // than one response for the same request.
     using TWriteToManyPBuffersCallback = std::function<void(
-        TEvWriteToManyPersistentBuffersResult,
-        std::shared_ptr<NWilson::TSpan>)>;
+        const TEvWriteToManyPersistentBuffersResult& result,
+        std::shared_ptr<NWilson::TSpan> span)>;
 
     IStorageTransport() = default;
 
     virtual ~IStorageTransport() = default;
 
-    virtual NThreading::TFuture<TEvConnectResult> Connect(
+    struct TConnectResultFutures
+    {
+        NThreading::TFuture<TEvConnectResult> ConnectFuture;
+        NThreading::TFuture<ui32> DisconnectFuture;
+    };
+
+    virtual TConnectResultFutures Connect(
         const THostConnection& connection) = 0;
 
     virtual NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(

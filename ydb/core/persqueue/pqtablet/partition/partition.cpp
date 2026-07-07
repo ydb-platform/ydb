@@ -5061,6 +5061,9 @@ IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const
 }
 
 ::NMonitoring::TDynamicCounterPtr TPartition::GetPerPartitionCounterSubgroup() const {
+    if (IsSupportive()) {
+        return nullptr;
+    }
     auto counters = AppData(ActorContext())->Counters;
     if (!counters) {
         return nullptr;

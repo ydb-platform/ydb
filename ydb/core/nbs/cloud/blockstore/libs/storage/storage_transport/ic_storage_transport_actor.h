@@ -54,6 +54,9 @@ private:
 
     THashMap<ui64, TWriteToManyPBuffersReqInfo> WriteToManyPBuffersRequests;
 
+    // Subscribed nodes with disconnect promises
+    THashMap<ui64, TVector<NThreading::TPromise<ui32>>> ICSubscribedNodes;
+
 public:
     TICStorageTransportActor() = default;
 
@@ -156,6 +159,15 @@ private:
         const NActors::TActorContext& ctx);
     void HandleListPersistentBufferResult(
         const NKikimr::NDDisk::TEvListPersistentBufferResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void PassAway() override;
+    void RejectAllSessionRequestsForNode(
+        ui32 nodeId,
+        const NActors::TActorContext& ctx);
+
+    void HandleICNodeDisconnected(
+        const NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev,
         const NActors::TActorContext& ctx);
 };
 

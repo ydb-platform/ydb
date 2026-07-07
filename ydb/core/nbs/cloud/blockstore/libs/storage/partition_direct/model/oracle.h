@@ -50,6 +50,10 @@ public:
         EOperation operation,
         TInstant now) = 0;
 
+    virtual void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) = 0;
+    virtual void OnDDiskConnected(THostIndex hostIndex, TInstant now) = 0;
+    virtual TDuration GetDDiskReconnectDelay(THostIndex hostIndex) = 0;
+
     // Picks the best host (by lowest inflight count) out of the provided set
     // of hosts. Ties are broken uniformly at random.
     [[nodiscard]] virtual THostIndex SelectBestPBufferHost(
@@ -104,6 +108,10 @@ public:
         EOperation operation,
         TInstant now) override;
 
+    void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) override;
+    void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
+    TDuration GetDDiskReconnectDelay(THostIndex hostIndex) override;
+
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,
         EOperation operation) const override;
@@ -146,6 +154,7 @@ private:
     TVector<THostStat> HostStatistics;
     TVector<THostState> HostStates;
     TVector<EHostHealth> HostsHealths;
+    TVector<TDuration> HostsReconnectDelays;
     TVector<TTimePredictor> TimePredictors;
 };
 

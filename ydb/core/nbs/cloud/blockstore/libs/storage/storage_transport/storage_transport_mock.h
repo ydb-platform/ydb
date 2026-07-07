@@ -2,11 +2,14 @@
 
 #include "storage_transport.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 
 #include <library/cpp/threading/future/future.h>
 
 #include <util/generic/map.h>
+#include <util/generic/vector.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
@@ -31,6 +34,8 @@ public:
     using TReplyStatusE = NKikimrBlobStorage::NDDisk::TReplyStatus_E;
     using TDDiskId = NKikimr::NBsController::TDDiskId;
     using TConnectPromise = NThreading::TPromise<TEvConnectResult>;
+    using TReadPromise = NThreading::TPromise<TEvReadResult>;
+    using TWritePromise = NThreading::TPromise<TEvWriteResult>;
 
     // Default reply status used for immediate (non-pending) responses.
     TReplyStatusE DefaultConnectStatus = TReplyStatus::OK;
@@ -44,8 +49,18 @@ public:
     // DDiskInstanceGuid reported in an immediate successful connect.
     ui64 DefaultDDiskInstanceGuid = 1;
 
-    TStorageTransportMock() = default;
+    explicit TStorageTransportMock(ui32 baseNodeId = 100);
     ~TStorageTransportMock() override = default;
+
+    [[nodiscard]] const TVector<TDDiskId>& GetDDiskIds() const
+    {
+        return DDiskIds;
+    }
+
+    [[nodiscard]] const TVector<TDDiskId>& GetPBufferIds() const
+    {
+        return PBufferIds;
+    }
 
     // Builds a successful connect result with the given instance guid.
     [[nodiscard]] static TEvConnectResult MakeConnectResult(
@@ -62,8 +77,21 @@ public:
     [[nodiscard]] TVector<NKikimr::NDDisk::TQueryCredentials>
     GetConnectCredentials(EConnectionType type, const TDDiskId& ddiskId) const;
 
-    NThreading::TFuture<TEvConnectResult> Connect(
-        const THostConnection& connection) override;
+    // Simulates an IC break for the given host.
+    void FireDisconnect(
+        EConnectionType type,
+        const TDDiskId& ddiskId,
+        ui32 nodeId = 1);
+
+    TReadPromise SetPendingReadFromDDisk(
+        EConnectionType type,
+        const TDDiskId& ddiskId);
+
+    TWritePromise SetPendingWriteToDDisk(
+        EConnectionType type,
+        const TDDiskId& ddiskId);
+
+    TConnectResultFutures Connect(const THostConnection& connection) override;
 
     NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(
         const THostConnection& connection,
@@ -144,10 +172,20 @@ private:
 
     [[nodiscard]] static TKey MakeKey(const THostConnection& connection);
 
+    TVector<TDDiskId> DDiskIds;
+    TVector<TDDiskId> PBufferIds;
+
     TMap<TKey, TConnectPromise> PendingConnects;
     // ConnectCredentials stores the credentials of every Connect() call
     // observed for the given (type, ddiskId), ordered by call.
     TMap<TKey, TVector<NKikimr::NDDisk::TQueryCredentials>> ConnectCredentials;
+
+    // disconnectCB stored per host during Connect().
+    TMap<TKey, NThreading::TPromise<ui32>> StoredDisconnectFutures;
+
+    // In-flight pending DDisk reads/writes.
+    TMap<TKey, TReadPromise> PendingReadsFromDDisk;
+    TMap<TKey, TWritePromise> PendingWritesToDDisk;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

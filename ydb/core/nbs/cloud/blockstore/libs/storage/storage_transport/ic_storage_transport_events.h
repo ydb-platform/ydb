@@ -24,8 +24,10 @@ struct TEvTransportPrivate
 
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
-        NThreading::TPromise<TResult> Promise =
+        NThreading::TPromise<TResult> ConnectPromise =
             NThreading::NewPromise<TResult>();
+        NThreading::TPromise<ui32> DisconnectPromise =
+            NThreading::NewPromise<ui32>();
 
         TConnect(
             const NActors::TActorId& serviceId,

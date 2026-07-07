@@ -810,7 +810,7 @@ ui32 GetKMeansTreeSearchTopSize(const TKqpOptimizeContext& kqpCtx, const bool wi
 }
 
 // Legacy lowering: rewrites the kmeans-tree vector search into a StreamLookup chain
-// (level lookup -> posting scan -> main read). Used when TableServiceConfig.EnableVectorSearch
+// (level lookup -> posting scan -> main read). Used when TableServiceConfig.EnableVectorSearchActor
 // is off; the new read-actor lowering lives in DoRewriteTopSortOverKMeansTree.
 TExprBase DoRewriteTopSortOverKMeansTreeLegacy(
     const TReadMatch& match, const TMaybeNode<TCoFlatMap>& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
@@ -1000,7 +1000,7 @@ TExprBase FilterLeafRows(const TExprBase& read, TExprContext& ctx, TPositionHand
 }
 
 // Legacy lowering for prefixed kmeans-tree vector search into a StreamLookup chain.
-// Used when TableServiceConfig.EnableVectorSearch is off; the new read-actor
+// Used when TableServiceConfig.EnableVectorSearchActor is off; the new read-actor
 // lowering lives in DoRewriteTopSortOverPrefixedKMeansTree.
 TExprBase DoRewriteTopSortOverPrefixedKMeansTreeLegacy(
     const TReadMatch& match, const TCoFlatMap& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
@@ -3555,7 +3555,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
             if (!maybeFlatMap.Lambda().Body().Maybe<TCoOptionalIf>()) {
                 return reject("only simple conditions supported for now");
             }
-            if (kqpCtx.Config->GetEnableVectorSearch()) {
+            if (kqpCtx.Config->GetEnableVectorSearchActor()) {
                 return DoRewriteTopSortOverPrefixedKMeansTree(readTableIndex, maybeFlatMap.Cast(), lambdaArgs, lambdaBody, topBase,
                                                               ctx, kqpCtx, tableDesc, *indexDesc, *implTable);
             }
@@ -3603,7 +3603,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
             }
             lambdaArgs = maybeFlatMap.Cast().Lambda().Args();
         }
-        if (kqpCtx.Config->GetEnableVectorSearch()) {
+        if (kqpCtx.Config->GetEnableVectorSearchActor()) {
             return DoRewriteTopSortOverKMeansTree(readTableIndex, maybeFlatMap, lambdaArgs, lambdaBody, topBase,
                                                   ctx, kqpCtx, tableDesc, *indexDesc, *implTable);
         }

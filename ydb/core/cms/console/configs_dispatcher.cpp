@@ -5,12 +5,8 @@
 #include "http.h"
 #include "util.h"
 
-<<<<<<< HEAD
-=======
-#include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 >>>>>>> 172180913b7 (Make better config version check (#43081))
-#include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/library/yaml_config/util.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -335,12 +331,7 @@ private:
     TString ResolvedJsonConfig;
     NKikimrConfig::TAppConfig YamlProtoConfig;
     bool YamlConfigEnabled = false;
-<<<<<<< HEAD
-=======
-    // Unknown/deprecated fields detected in the resolved config (recomputed on each change).
-    NKikimrConsole::TYamlConfigUnknownFields ResolvedConfigUnknownFields;
     std::optional<TString> ConfigurationVersion;
->>>>>>> 172180913b7 (Make better config version check (#43081))
 
 };
 

@@ -47,11 +47,12 @@ struct Schema : NIceDb::Schema {
         struct MaintenanceStatus : Column<20, NScheme::NTypeIds::Uint8> { using Type = NKikimrBlobStorage::TMaintenanceStatus::E; static constexpr Type Default = NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST; };
         // struct InferPDiskSlotCountFromUnitSize : Column<21, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
         // struct InferPDiskSlotCountMax : Column<22, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
+        struct DiskScope : Column<23, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<NodeID, PDiskID>; // order is important
         using TColumns = TableColumns<NodeID, PDiskID, Path, Category, Guid, SharedWithOs, ReadCentric, NextVSlotId,
               Status, Timestamp, PDiskConfig, ExpectedSerial, LastSeenSerial, LastSeenPath, DecommitStatus, Mood,
-              ShredComplete, MaintenanceStatus>;
+              ShredComplete, MaintenanceStatus, DiskScope>;
     };
 
     struct Group : Table<4> {
@@ -256,9 +257,10 @@ struct Schema : NIceDb::Schema {
         struct PDiskConfig : Column<7, NScheme::NTypeIds::String> {};
         // struct InferPDiskSlotCountFromUnitSize : Column<8, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
         // struct InferPDiskSlotCountMax : Column<9, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
+        struct DiskScope : Column<10, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<HostConfigId, Path>;
-        using TColumns = TableColumns<HostConfigId, Path, TypeCol, SharedWithOs, ReadCentric, Kind, PDiskConfig>;
+        using TColumns = TableColumns<HostConfigId, Path, TypeCol, SharedWithOs, ReadCentric, Kind, PDiskConfig, DiskScope>;
     };
 
     struct BoxHostV2 : Table<105> {

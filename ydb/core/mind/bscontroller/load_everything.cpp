@@ -359,9 +359,9 @@ public:
             if (!disks.IsReady())
                 return false;
             while (!disks.EndOfSet()) {
-                auto getOpt = [&](auto col) {
+                auto getOpt = [&]<template<typename> class TOptional>(auto col) {
                     using TCol = decltype(col);
-                    TMaybe<typename TCol::Type> res;
+                    TOptional<typename TCol::Type> res;
                     if (disks.HaveValue<TCol>()) {
                         res = disks.GetValue<TCol>();
                     }
@@ -402,7 +402,8 @@ public:
 
                 // construct PDisk item
                 Self->AddPDisk(disks.GetKey(), hostId, disks.GetValue<T::Path>(), disks.GetValue<T::Category>(),
-                    disks.GetValue<T::Guid>(), getOpt(T::SharedWithOs()), getOpt(T::ReadCentric()),
+                    disks.GetValue<T::Guid>(), getOpt.operator()<TMaybe>(T::SharedWithOs()),
+                    getOpt.operator()<TMaybe>(T::ReadCentric()), getOpt.operator()<std::optional>(T::DiskScope()),
                     disks.GetValueOrDefault<T::NextVSlotId>(), disks.GetValue<T::PDiskConfig>(), boxId,
                     Self->DefaultMaxSlots, disks.GetValue<T::Status>(), disks.GetValue<T::Timestamp>(),
                     disks.GetValue<T::DecommitStatus>(), disks.GetValue<T::Mood>(), disks.GetValue<T::ExpectedSerial>(),

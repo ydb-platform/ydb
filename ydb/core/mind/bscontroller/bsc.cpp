@@ -113,7 +113,8 @@ void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageContr
             TPDiskId pdiskId = slot->VSlotId.ComprisingPDiskId();
             const auto& location = self->HostRecords->GetLocation(pdiskId.NodeId);
             const bool decommitted = slot->PDisk && slot->PDisk->Decommitted();
-            layout.AddDisk({mapper, location, pdiskId, geom}, index, decommitted);
+            const std::optional<TString> diskScope = slot->PDisk ? slot->PDisk->DiskScope : std::nullopt;
+            layout.AddDisk({mapper, location, diskScope, pdiskId, geom}, index, decommitted);
         }
 
         LayoutCorrect = layout.IsCorrect();
@@ -447,6 +448,14 @@ bool TBlobStorageController::HostConfigEquals(const THostConfigInfo& left, const
                 drive.GetSharedWithOs() != it->second->SharedWithOs ||
                 drive.GetReadCentric() != it->second->ReadCentric ||
                 drive.GetKind() != it->second->Kind) {
+            return false;
+        }
+
+        std::optional<TString> diskScope;
+        if (drive.HasDiskScope()) {
+            diskScope = drive.GetDiskScope();
+        }
+        if (diskScope != it->second->DiskScope) {
             return false;
         }
 
@@ -1258,7 +1267,8 @@ void TBlobStorageController::TStaticGroupInfo::UpdateLayoutCorrect(TBlobStorageC
 
     for (size_t i = 0; i < Info->GetTotalVDisksNum(); ++i) {
         const auto& [nodeId, pdiskId, vdiskSlotId] = DecomposeVDiskServiceId(Info->GetDynamicInfo().ServiceIdForOrderNumber[i]);
-        layout.AddDisk({mapper, controller->HostRecords->GetLocation(nodeId), {nodeId, pdiskId}, geom}, i, false);
+        layout.AddDisk({mapper, controller->HostRecords->GetLocation(nodeId), std::nullopt /* TODO: fill scope info */,
+            {nodeId, pdiskId}, geom}, i, false);
     }
 
     LayoutCorrect = layout.IsCorrect();

@@ -540,6 +540,7 @@ namespace NKikimr::NBsController {
                 if (HostRecords->GetHostId(nodeId)) {
                     pdisks[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(domainMapper,
                             HostRecords->GetLocation(nodeId),
+                            std::nullopt, // TODO: fill scope info
                             pdiskId,
                             *group.Content.Geometry);
                 } else {

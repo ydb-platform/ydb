@@ -4837,8 +4837,8 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
                 Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
-                MultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
             }
+            MultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
         )");
         Env().TestWaitNotification(Runtime(), txId);
 

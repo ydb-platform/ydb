@@ -63,6 +63,17 @@ message TAuthConfig {
     optional string AccessServiceSslTargetNameOverride = 87;
     optional string UserAccountServiceSslTargetNameOverride = 88;
     optional string ServiceAccountServiceSslTargetNameOverride = 89;
+<<<<<<< HEAD
+=======
+    optional string ExternalIdpAuthenticationDomain = 90 [default = "sso"];
+    optional TExternalIdpConfig ExternalIdpConfig = 91;
+    optional TLocalMetadataService LocalMetadataService = 92;
+}
+
+message TLocalMetadataService {
+    optional string Host = 1 [default = "169.254.169.254"];
+    optional uint64 Port = 2 [default = 80];
+>>>>>>> 997c9c62119 (YQ-5434 streaming queries: iam auth test (#45289))
 }
 
 message TUserRegistryConfig {

@@ -27,9 +27,9 @@ struct TKesusTablet::TTxConfigSet : public TTxBase {
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxConfigSet::Execute",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie},
-            {"path", Record.GetConfig().path().Quote()});
+            {"path", Record.GetConfig().path()});
 
         Reply = MakeHolder<TEvKesus::TEvSetConfigResult>(Record.GetTxId(), Self->TabletID());
 
@@ -95,7 +95,7 @@ struct TKesusTablet::TTxConfigSet : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxConfigSet::Complete",
             {"tabletId", Self->TabletID()},
-           {"sender", Sender},
+            {"sender", Sender},
             {"cookie", Cookie},
             {"status", Reply->Record.GetError().GetStatus()});
 

@@ -31,7 +31,7 @@ void TKesusTablet::DoDeleteSession(
 {
     ui64 sessionId = session->Id;
     YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Deleting session",
-        {"tabletID", TabletID()},
+        {"tabletId", TabletID()},
         {"sessionId", sessionId});
     if (session->DetachProxy()) {
         TabletCounters->Simple()[COUNTER_SESSION_ACTIVE_COUNT].Add(-1);
@@ -58,9 +58,9 @@ void TKesusTablet::DoDeleteSemaphore(
 {
     ui64 semaphoreId = semaphore->Id;
     YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Deleting semaphore",
-        {"tabletID", TabletID()},
+        {"tabletId", TabletID()},
         {"semaphoreId", semaphoreId},
-        {"nameQuote", semaphore->Name.Quote()});
+        {"name", semaphore->Name});
     for (auto* owner : semaphore->Owners) {
         auto* session = Sessions.FindPtr(owner->SessionId);
         Y_ABORT_UNLESS(session);
@@ -98,11 +98,11 @@ void TKesusTablet::DoDeleteSessionSemaphore(
 {
     ui64 semaphoreId = semaphore->Id;
     ui64 sessionId = owner->SessionId;
-    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Deleting session / semaphore owner link",
-        {"tabletID", TabletID()},
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Deleting session / semaphore: owner link",
+        {"tabletId", TabletID()},
         {"sessionId", sessionId},
         {"semaphoreId", semaphoreId},
-        {"semaphoreNameQuote", semaphore->Name.Quote()});
+        {"semaphoreName", semaphore->Name});
     Y_ABORT_UNLESS(semaphore->Owners.contains(owner));
     semaphore->Count -= owner->Count;
     semaphore->Owners.erase(owner);
@@ -126,11 +126,11 @@ void TKesusTablet::DoDeleteSessionSemaphore(
     ui64 semaphoreId = semaphore->Id;
     ui64 orderId = waiter->OrderId;
     ui64 sessionId = waiter->SessionId;
-    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Deleting session / semaphore waiter link",
-        {"tabletID", TabletID()},
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Deleting session / semaphore: waiter link",
+        {"tabletId", TabletID()},
         {"sessionId", sessionId},
         {"semaphoreId", semaphoreId},
-        {"semaphoreNameQuote", semaphore->Name.Quote()});
+        {"semaphoreName", semaphore->Name});
     Y_ABORT_UNLESS(semaphore->Waiters.Value(orderId, nullptr) == waiter);
     bool needProcessSemaphoreQueue = semaphore->GetFirstOrderId() == orderId;
     semaphore->Waiters.erase(orderId);
@@ -156,10 +156,10 @@ void TKesusTablet::DoProcessSemaphoreQueue(
 
         ui64 orderId = waiter->OrderId;
         ui64 sessionId = waiter->SessionId;
-        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Processing semaphore queue: next order session",
-            {"tabletID", TabletID()},
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Processing semaphore queue",
+            {"tabletId", TabletID()},
             {"semaphoreId", semaphoreId},
-            {"semaphoreNameQuote", semaphore->Name.Quote()},
+            {"semaphoreName", semaphore->Name},
             {"orderId", orderId},
             {"sessionId", sessionId});
 

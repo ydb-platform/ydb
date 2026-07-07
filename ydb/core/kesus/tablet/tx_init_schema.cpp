@@ -13,7 +13,7 @@ struct TKesusTablet::TTxInitSchema : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_INIT_SCHEMA; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "[u] TTxInitSchema::Execute",
+        YDB_LOG_DEBUG_CTX(ctx, "TTxInitSchema::Execute",
             {"tabletId", Self->TabletID()});
         NIceDb::TNiceDb db(txc.DB);
         db.Materialize<Schema>();
@@ -21,7 +21,7 @@ struct TKesusTablet::TTxInitSchema : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "[u] TTxInitSchema::Complete",
+        YDB_LOG_DEBUG_CTX(ctx, "TTxInitSchema::Complete",
             {"tabletId", Self->TabletID()});
         Self->Execute(Self->CreateTxInit(), ctx);
     }

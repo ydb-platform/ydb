@@ -71,7 +71,7 @@ void TKesusTablet::OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActor
 
 void TKesusTablet::OnActivateExecutor(const TActorContext& ctx) {
     YDB_LOG_INFO_CTX(ctx, "OnActivateExecutor",
-        {"tabletID", TabletID()});
+        {"tabletId", TabletID()});
 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr.Release());
     Execute(CreateTxInitSchema(), ctx);
@@ -314,8 +314,8 @@ STFUNC(TKesusTablet::StateWork) {
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                YDB_LOG_WARN_CTX(*TActivationContext::ActorSystem(), "Unexpected event 0x",
-                    {"typeRewrite", ev->GetTypeRewrite()});
+                YDB_LOG_WARN_CTX(*TActivationContext::ActorSystem(), "Unexpected event",
+                    {"type", ev->GetTypeRewrite()});
             }
             break;
     }

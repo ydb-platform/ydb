@@ -29,7 +29,7 @@ struct TKesusTablet::TTxInit : public TTxBase {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "[u] TTxInit::Execute",
+        YDB_LOG_DEBUG_CTX(ctx, "TTxInit::Execute",
             {"tabletId", Self->TabletID()});
 
         Reset();
@@ -242,7 +242,7 @@ struct TKesusTablet::TTxInit : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "[u] TTxInit::Complete",
+        YDB_LOG_DEBUG_CTX(ctx, "TTxInit::Complete",
             {"tabletId", Self->TabletID()});
 
         if (PreviousTabletActorID && PreviousTabletActorID != ctx.SelfID) {

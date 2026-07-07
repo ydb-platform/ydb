@@ -1,8 +1,6 @@
 #include "pqtablet_mock.h"
 #include <ydb/core/testlib/tablet_helpers.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
-
 namespace NKikimr::NPQ::NHelpers {
 
 TPQTabletMock::TPQTabletMock(const TActorId& tablet, TTabletStorageInfo* info) :
@@ -70,16 +68,14 @@ void TPQTabletMock::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TA
     Y_ABORT_UNLESS(ev->Get()->Leader, "Unexpectedly connected to follower of tablet %" PRIu64, ev->Get()->TabletId);
 
     if (PipeClientCache->OnConnect(ev)) {
-        YDB_LOG_DEBUG_CTX(ctx, "Connected to tablet from tablet",
-            {"TabletId", ev->Get()->TabletId},
-            {"tabletID", TabletID()});
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                    "Connected to tablet " << ev->Get()->TabletId << " from tablet " << TabletID());
     } else {
         if (ev->Get()->Dead) {
             //AckRSToDeletedTablet(ev->Get()->TabletId, ctx);
         } else {
-            YDB_LOG_NOTICE_CTX(ctx, "Failed to connect to tablet from tablet",
-                {"TabletId", ev->Get()->TabletId},
-                {"tabletID", TabletID()});
+            LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE,
+                         "Failed to connect to tablet " << ev->Get()->TabletId << " from tablet " << TabletID());
             //RestartPipeRS(ev->Get()->TabletId, ctx);
         }
     }
@@ -87,9 +83,8 @@ void TPQTabletMock::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TA
 
 void TPQTabletMock::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx)
 {
-    YDB_LOG_DEBUG_CTX(ctx, "Client pipe to tablet from is reset",
-        {"TabletId", ev->Get()->TabletId},
-        {"tabletID", TabletID()});
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                "Client pipe to tablet " << ev->Get()->TabletId << " from " << TabletID() << " is reset");
 
     PipeClientCache->OnDisconnect(ev);
     //RestartPipeRS(ev->Get()->TabletId, ctx);

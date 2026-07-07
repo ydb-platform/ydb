@@ -7,8 +7,6 @@
 
 #include <utility>
 
-#define YDB_LOG_THIS_FILE_COMPONENT Service
-
 namespace NKikimr::NPQ::NBatching {
 
 namespace {
@@ -192,10 +190,7 @@ STFUNC(TConsumerBatchProcessor::StateWork) {
             HFunc(NActors::TEvents::TEvWakeup, Handle);
             HFunc(NActors::TEvents::TEvPoisonPill, Handle);
         default:
-            YDB_LOG_WARN("Unexpected event in TConsumerBatchProcessor",
-                {"logPrefix", GetLogPrefix()},
-                {"user", User},
-                {"eventType", ev->GetTypeRewrite()});
+            LOG_W("Unexpected event in TConsumerBatchProcessor for user " << User << ": " << ev->GetTypeRewrite());
             break;
         }
     }

@@ -6,8 +6,6 @@
 
 #include <util/string/builder.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT service
-
 namespace NKikimr {
 namespace NPQ {
 
@@ -39,10 +37,9 @@ void ReplyPersQueueError(
     logStr << " error: " << error;
 
     if (logDebug) {
-        YDB_LOG_DEBUG_CTX(ctx, "Dump logStr",
-            {"logStr", logStr});
+        LOG_DEBUG_S(ctx, service, logStr);
     } else {
-        YDB_LOG_WARN_CTX(ctx, logStr);
+        LOG_WARN_S(ctx, service, logStr);
     }
     ctx.Send(dstActor, new TEvPQ::TEvError(errorCode, error, responseCookie, isInternal));
 }

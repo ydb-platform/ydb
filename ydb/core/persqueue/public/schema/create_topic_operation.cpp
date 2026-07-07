@@ -8,8 +8,6 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT Service
-
 namespace NKikimr::NPQ::NSchema {
 
 namespace {
@@ -44,15 +42,13 @@ public:
 
 private:
     void DoGetClustersList() {
-        YDB_LOG_DEBUG("DoGetClustersList",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("DoGetClustersList");
         Become(&TCreateTopicOperationActor::GetClustersListState);
         Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList());
     }
 
     void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse");
 
         auto& response = *ev->Get();
         if (response.Success) {
@@ -71,9 +67,7 @@ private:
 
 private:
     void DoCreate() {
-        YDB_LOG_DEBUG("DoCreate",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"ifNotExists", Settings.IfNotExists});
+        LOG_D("DoCreate IfNotExists: " << Settings.IfNotExists);
         Become(&TCreateTopicOperationActor::CreateState);
 
         auto database = CanonizePath(Settings.Database);
@@ -123,8 +117,7 @@ private:
     }
 
     void Handle(TEvSchemaOperationResponse::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle TEvSchemaOperationResponse",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("Handle TEvSchemaOperationResponse");
         auto& response = *ev->Get();
         return ReplyAndDie(response.Status, std::move(response.ErrorMessage));
     }
@@ -138,10 +131,7 @@ private:
 
 private:
     void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-        YDB_LOG_DEBUG("ReplyAndDie",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"errorCode", errorCode},
-            {"errorMessage", errorMessage});
+        LOG_D("ReplyAndDie " << errorCode << " '" << errorMessage << "'");
         if ((errorCode == Ydb::StatusIds::SUCCESS || errorCode == Ydb::StatusIds::ALREADY_EXISTS) && !Settings.PrepareOnly) {
             ModifyScheme = {};
         }

@@ -18,8 +18,6 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT Service
-
 using namespace NKikimr::NReplication::NService;
 using namespace NKikimr::NReplication;
 
@@ -91,9 +89,7 @@ public:
     }
 
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"ToString", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         if (ev->Get()->Status == TEvWorker::TEvGone::DONE) {
             NotifySchemeShard();
         }
@@ -117,18 +113,14 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"ToString", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         if (SchemeShardPipe == ev->Get()->ClientId) {
             OnPipeDestroyed();
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"ToString", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
 
         if (SchemeShardPipe == ev->Get()->ClientId && ev->Get()->Status != NKikimrProto::OK) {
             NTabletPipe::CloseClient(SelfId(), SchemeShardPipe);
@@ -155,10 +147,7 @@ public:
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         default:
-            YDB_LOG_WARN("Unhandled event",
-                {"logPrefix", NPQ_LOG_PREFIX},
-                {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString()});
+            LOG_W("Unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
         }
     }
 };

@@ -4,8 +4,6 @@
 
 #include <ydb/library/actors/core/log.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT Service
-
 namespace NKikimr::NPQ::NBatching {
 
 namespace {
@@ -65,9 +63,7 @@ STFUNC(TBatchProcessor::StateWork) {
         HFunc(TEvPQ::TEvConsumerRemoved, HandleConsumerRemoved);
         HFunc(NActors::TEvents::TEvPoisonPill, Handle);
     default:
-        YDB_LOG_WARN("Unexpected event",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"inTBatchProcessor", ev->GetTypeRewrite()});
+        LOG_W("Unexpected event in TBatchProcessor: " << ev->GetTypeRewrite());
         break;
     }
 }

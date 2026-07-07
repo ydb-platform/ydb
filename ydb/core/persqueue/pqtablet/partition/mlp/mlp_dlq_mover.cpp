@@ -3,8 +3,6 @@
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/ymq/actor/serviceid.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT Service
-
 namespace NKikimr::NPQ::NMLP {
 
 namespace {
@@ -47,10 +45,7 @@ void TDLQMoverActor::Bootstrap() {
         TopicName = Settings.DestinationTopic;
         RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { TopicName }));
     }
-    YDB_LOG_DEBUG("Dump NPQLOGPREFIX, QUEUE, #_num_0",
-        {"logPrefix", NPQ_LOG_PREFIX},
-        {"QUEUE", Queue.size()},
-        {"queueItems", JoinRange(", ", Queue.begin(), Queue.end())});
+    LOG_D("QUEUE: " << Queue.size() << " " << JoinRange(", ", Queue.begin(), Queue.end()));
 }
 
 void TDLQMoverActor::PassAway() {
@@ -69,8 +64,7 @@ TString TDLQMoverActor::BuildLogPrefix() const  {
 }
 
 void TDLQMoverActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
 
     auto& topics = ev->Get()->Topics;
     if (topics.size() != 1) {
@@ -85,16 +79,13 @@ void TDLQMoverActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             return CreateWriter();
 
         default:
-            YDB_LOG_DEBUG("Dump NPQLOGPREFIX, #_NDescriber::Description(Settings.DestinationTopic, topic.Status)",
-                {"logPrefix", NPQ_LOG_PREFIX},
-                {"nDescriberDescriptionSettingsDestinationTopicTopicStatus", NDescriber::Description(Settings.DestinationTopic, topic.Status)});
+            LOG_D(NDescriber::Description(Settings.DestinationTopic, topic.Status));
             return ReplyError(NDescriber::Convert(topic.Status), NDescriber::Description(Settings.DestinationTopic, topic.Status));
     }
 }
 
 void TDLQMoverActor::Handle(NSQS::TSqsEvents::TEvConfiguration::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle NSQS::TSqsEvents::TEvConfiguration",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle NSQS::TSqsEvents::TEvConfiguration");
     const auto& result = *ev->Get();
     if (!result.UserExists || !result.QueueExists) {
         return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "SQS DLQ '" << Settings.DestinationTopic << "' queue does not exist");
@@ -108,15 +99,12 @@ void TDLQMoverActor::Handle(NSQS::TSqsEvents::TEvConfiguration::TPtr& ev) {
     auto queueVersion = result.QueueVersion;
 
     TopicName = Join("/", AppData()->SqsConfig.GetRoot(), SQSUserName, queueName, TStringBuilder() << "v" << queueVersion, "streamImpl");
-    YDB_LOG_DEBUG("SQS topic",
-        {"logPrefix", NPQ_LOG_PREFIX},
-        {"name", TopicName});
+    LOG_D("SQS topic name: " << TopicName);
     RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { TopicName }));
 }
 
 void TDLQMoverActor::CreateWriter() {
-    YDB_LOG_DEBUG("Writer creating",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Writer creating");
     Become(&TDLQMoverActor::StateInit);
 
     ProducerId = TStringBuilder() << "DLQMover/" << Settings.TabletId
@@ -141,14 +129,11 @@ void TDLQMoverActor::CreateWriter() {
 }
 
 void TDLQMoverActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvPartitionWriter::TEvInitResult",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle TEvPartitionWriter::TEvInitResult");
 
     const auto* result = ev->Get();
     if (!result->IsSuccess()) {
-        YDB_LOG_ERROR("The error of creating a",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"writer", result->GetError().Reason});
+        LOG_E(TStringBuilder() << "The error of creating a writer: " << result->GetError().Reason);
         return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "The error of creating a writer: " << result->GetError().Reason);
     }
 
@@ -167,8 +152,7 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr& ev) {
 }
 
 void TDLQMoverActor::Handle(TEvPartitionWriter::TEvDisconnected::TPtr&) {
-    YDB_LOG_DEBUG("Handle TEvPartitionWriter::TEvDisconnected",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle TEvPartitionWriter::TEvDisconnected");
     ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "The writer disconnected");
 }
 
@@ -177,16 +161,12 @@ void TDLQMoverActor::ProcessQueue() {
         return;
     }
 
-    YDB_LOG_DEBUG("ProcessQueue",
-        {"logPrefix", NPQ_LOG_PREFIX},
-        {"size", Queue.size()},
-        {"pendingMessagesSize", PendingMessagesSize});
+    LOG_D("ProcessQueue Size=" << Queue.size() << ", PendingMessagesSize=" << PendingMessagesSize);
     SendToPQTablet(MakeEvPQRead(Settings.ConsumerName, Settings.PartitionId, Queue.front().Offset, 1));
 }
 
 void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvPersQueue::TEvResponse",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle TEvPersQueue::TEvResponse");
 
     if (!IsSucess(ev)) {
         return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Fetch message failed: " << ev->Get()->Record.DebugString());
@@ -197,10 +177,7 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     auto* result = response.MutablePartitionResponse()->MutableCmdReadResult()->MutableResult(0);
     auto messageSize = result->GetData().size();
 
-    YDB_LOG_DEBUG("Move message with offset seqNo",
-        {"logPrefix", NPQ_LOG_PREFIX},
-        {"offset", result->GetOffset()},
-        {"queueFrontSeqNo", Queue.front().SeqNo});
+    LOG_D("Move message with offset " << result->GetOffset() << " seqNo " << Queue.front().SeqNo);
 
     auto writeRequest = std::make_unique<TEvPartitionWriter::TEvWriteRequest>(++WriteCookie);
     auto* request = writeRequest->Record.MutablePartitionRequest();
@@ -227,25 +204,20 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 }
 
 void TDLQMoverActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
-    YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
     ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "Source topic unavailable");
 }
 
 void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr&) {
-    YDB_LOG_DEBUG("Handle TEvPartitionWriter::TEvWriteAccepted",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle TEvPartitionWriter::TEvWriteAccepted");
 }
 
 void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvPartitionWriter::TEvWriteResponse",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle TEvPartitionWriter::TEvWriteResponse");
 
     auto* result = ev->Get();
     if (!result->IsSuccess()) {
-        YDB_LOG_ERROR("Write",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"error", result->GetError().Reason});
+        LOG_E("Write error: " << result->GetError().Reason);
         return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Write error: " << result->GetError().Reason);
     }
 
@@ -257,11 +229,7 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
     Processed.emplace_back(message.Offset, message.SeqNo);
     Pending.pop_front();
 
-    YDB_LOG_DEBUG("Dump NPQLOGPREFIX, queue, pending, processed",
-        {"logPrefix", NPQ_LOG_PREFIX},
-        {"queue", Queue.size()},
-        {"pending", Pending.size()},
-        {"processed", Processed.size()});
+    LOG_D("Queue: " << Queue.size() << " Pending: " << Pending.size() << " Processed: " << Processed.size());
     if (Queue.empty() && Pending.empty()) {
         return ReplySuccess();
     }
@@ -302,9 +270,7 @@ STFUNC(TDLQMoverActor::StateDescribe) {
         hFunc(NSQS::TSqsEvents::TEvConfiguration, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            YDB_LOG_ERROR("Unexpected",
-                {"logPrefix", NPQ_LOG_PREFIX},
-                {"event", EventStr("StateDescribe", ev)});
+            LOG_E("Unexpected " << EventStr("StateDescribe", ev));
             AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateDescribe", ev));
     }
 }
@@ -315,9 +281,7 @@ STFUNC(TDLQMoverActor::StateInit) {
         hFunc(TEvPartitionWriter::TEvDisconnected, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            YDB_LOG_ERROR("Unexpected",
-                {"logPrefix", NPQ_LOG_PREFIX},
-                {"event", EventStr("StateInit", ev)});
+            LOG_E("Unexpected " << EventStr("StateInit", ev));
             AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateInit", ev));
     }
 }
@@ -331,9 +295,7 @@ STFUNC(TDLQMoverActor::StateWork) {
         hFunc(TEvPartitionWriter::TEvDisconnected, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            YDB_LOG_ERROR("Unexpected",
-                {"logPrefix", NPQ_LOG_PREFIX},
-                {"event", EventStr("StateWork", ev)});
+            LOG_E("Unexpected " << EventStr("StateWork", ev));
             AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateWork", ev));
     }
 }

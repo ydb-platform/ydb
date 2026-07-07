@@ -11,15 +11,19 @@
 
 namespace NKikimr::NPQ::NPartitionChooser {
 
-#if defined(LOG_PREFIX)
-#error "Already defined LOG_PREFIX"
+#if defined(LOG_PREFIX) || defined(TRACE) || defined(DEBUG) || defined(INFO) || defined(ERROR)
+#error "Already defined LOG_PREFIX or TRACE or DEBUG or INFO or ERROR"
 #endif
 
 
-#define LOG_PREFIX TStringBuilder() << "TPartitionChooser " << SelfId()                  \
+#define LOG_PREFIX "TPartitionChooser " << SelfId()                  \
                     << " (SourceId=" << SourceId                     \
                     << ", PreferedPartition=" << PreferedPartition   \
                     << ") "
+#define TRACE(message) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
+#define DEBUG(message) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
+#define INFO(message)  LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
+#define ERROR(message) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
 
 using TPartitionInfo = typename IPartitionChooser::TPartitionInfo;
 
@@ -79,11 +83,9 @@ protected:
     void InitTable(const NActors::TActorContext& ctx) {
         TThis::Become(&TThis::StateInitTable);
         const auto& pqConfig = AppData(ctx)->PQConfig;
-        YDB_LOG_TRACE_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "InitTable",
-            {"logPrefix", LOG_PREFIX},
-            {"sourceId", SourceId},
-            {"topicsAreFirstClassCitizen", pqConfig.GetTopicsAreFirstClassCitizen()},
-            {"useSrcIdMetaMappingInFirstClass", pqConfig.GetUseSrcIdMetaMappingInFirstClass()});
+        TRACE("InitTable: SourceId="<< SourceId
+              << " TopicsAreFirstClassCitizen=" << pqConfig.GetTopicsAreFirstClassCitizen()
+              << " UseSrcIdMetaMappingInFirstClass=" <<pqConfig.GetUseSrcIdMetaMappingInFirstClass());
         if (SourceId && pqConfig.GetTopicsAreFirstClassCitizen() && pqConfig.GetUseSrcIdMetaMappingInFirstClass()) {
             TableHelper.SendInitTableRequest(ctx);
         } else {
@@ -106,8 +108,7 @@ protected:
 protected:
     void StartKqpSession(const NActors::TActorContext& ctx) {
         if (NeedTable(ctx)) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "StartKqpSession",
-                {"logPrefix", LOG_PREFIX});
+            DEBUG("StartKqpSession")
             TThis::Become(&TThis::StateCreateKqpSession);
             TableHelper.SendCreateSessionRequest(ctx);
         } else {
@@ -138,8 +139,7 @@ protected:
 protected:
     void SendSelectRequest(const NActors::TActorContext& ctx) {
         TThis::Become(&TThis::StateSelect);
-        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "Select from the table",
-            {"logPrefix", LOG_PREFIX});
+        DEBUG("Select from the table");
         TableHelper.SendSelectRequest(ctx);
     }
 
@@ -148,10 +148,7 @@ protected:
             return ReplyError(ErrorCode::INITIALIZING, TStringBuilder() << "kqp error Marker# PQ50 : " <<  ev->Get()->Record.DebugString(), ctx);
         }
 
-        YDB_LOG_TRACE_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "Selected from table",
-            {"logPrefix", LOG_PREFIX},
-            {"partitionId", TableHelper.PartitionId()},
-            {"seqNo", TableHelper.SeqNo()});
+        TRACE("Selected from table PartitionId=" << TableHelper.PartitionId() << " SeqNo=" << TableHelper.SeqNo());
         if (TableHelper.PartitionId()) {
             Partition = Chooser->GetPartition(TableHelper.PartitionId().value());
         }
@@ -174,8 +171,7 @@ protected:
     void SendUpdateRequests(const TActorContext& ctx) {
         if (NeedTable(ctx)) {
             TThis::Become(&TThis::StateUpdate);
-            YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "Update the table",
-                {"logPrefix", LOG_PREFIX});
+            DEBUG("Update the table");
             TableHelper.SendUpdateRequest(Partition->PartitionId, SeqNo, ctx);
         } else {
             ReplyResult(ctx);
@@ -184,10 +180,7 @@ protected:
 
     void HandleUpdate(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
-        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "HandleUpdate",
-            {"logPrefix", LOG_PREFIX},
-            {"partitionPersisted", PartitionPersisted},
-            {"status", record.GetYdbStatus()});
+        DEBUG("HandleUpdate PartitionPersisted=" << PartitionPersisted << " Status=" << record.GetYdbStatus());
 
         if (record.GetYdbStatus() == Ydb::StatusIds::ABORTED) {
             if (!PartitionPersisted) {
@@ -272,8 +265,7 @@ protected:
 protected:
     void StartIdle() {
         TThis::Become(&TThis::StateIdle);
-        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "Start idle",
-            {"logPrefix", LOG_PREFIX});
+        DEBUG("Start idle");
     }
 
     void HandleIdle(TEvPartitionChooser::TEvRefreshRequest::TPtr&, const TActorContext& ctx) {
@@ -310,19 +302,14 @@ protected:
             return;
         }
         ResultWasSent = true;
-        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "ReplyResult",
-            {"logPrefix", LOG_PREFIX},
-            {"partition", Partition->PartitionId},
-            {"seqNo", SeqNo});
+        DEBUG("ReplyResult: Partition=" << Partition->PartitionId << ", SeqNo=" << SeqNo);
         Span.EndOk();
         Span = {};
         ctx.Send(Parent, new TEvPartitionChooser::TEvChooseResult(Partition->PartitionId, Partition->TabletId, SeqNo));
     }
 
     void ReplyError(ErrorCode code, TString&& errorMessage, const NActors::TActorContext& ctx) {
-        YDB_LOG_INFO_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "Reply error",
-            {"logPrefix", LOG_PREFIX},
-            {"replyError", errorMessage});
+        INFO("ReplyError: " << errorMessage);
         Span.EndError(errorMessage);
         ctx.Send(Parent, new TEvPartitionChooser::TEvChooseError(code, std::move(errorMessage)));
 
@@ -349,5 +336,9 @@ protected:
 };
 
 #undef LOG_PREFIX
+#undef TRACE
+#undef DEBUG
+#undef INFO
+#undef ERROR
 
 } // namespace NKikimr::NPQ::NPartitionChooser

@@ -14,8 +14,6 @@
 
 #include <util/generic/strbuf.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
-
 namespace NKikimr::NPQ {
 
 using TSlidingWindow = NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>;
@@ -92,14 +90,13 @@ public:
 
 protected:
     void OnWriteImpl(const TString& sourceId, ui64 delta, const TString& key = "") {
-        YDB_LOG_DEBUG("TAutopartitioningManager::OnWrite",
-            {"logPrefix", LogPrefix()},
-            {"sourceId", sourceId},
-            {"delta", delta},
-            {"key", key},
-            {"isEnabled", IsEnabled()},
-            {"sumMetric", SumMetric->GetValue()},
-            {"tag", static_cast<int>(Tag)});
+        PQ_LOG_D("TAutopartitioningManager::OnWrite"
+            << " sourceId# " << sourceId
+            << " delta# " << delta
+            << " key# " << key
+            << " isEnabled# " << IsEnabled()
+            << " SumMetric# " << SumMetric->GetValue()
+            << " Tag# " << static_cast<int>(Tag));
         if (!IsEnabled()) {
             return;
         }
@@ -171,8 +168,9 @@ protected:
             auto* partition = GetPartition();
             const auto& keyRange = partition->GetKeyRange();
 
-            YDB_LOG_DEBUG("TAutopartitioningManager::SplitBoundary KLL sketch enabled, no median key found, will split by middle of key range",
-                {"logPrefix", LogPrefix()});
+            PQ_LOG_D(
+                TStringBuilder()
+                << "TAutopartitioningManager::SplitBoundary KLL sketch enabled, no median key found, will split by middle of key range");
             return MiddleOf(keyRange.GetFromBound(), keyRange.GetToBound());
         }
 
@@ -197,28 +195,26 @@ protected:
             || Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
         auto mergeEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
 
-        YDB_LOG_DEBUG("TPartition::CheckScaleStatus",
-            {"logPrefix", LogPrefix()},
-            {"splitMergeAvgWriteBytes", SumMetric->GetValue()},
-            {"usagePercent", usagePercent},
-            {"scaleThresholdSeconds", Config.GetPartitionStrategy().GetScaleThresholdSeconds()},
-            {"totalPartitionWriteSpeed", MaxUsagePerSec},
-            {"sourceIdCount", sourceIdCount},
-            {"canSplit", canSplit},
-            {"tag", static_cast<int>(Tag)},
-            {"verdict", (splitEnabled && canSplit && usagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent() ? "NEED_SPLIT" : "NORMAL")});
+        PQ_LOG_D("TPartition::CheckScaleStatus"
+            << " splitMergeAvgWriteBytes# " << SumMetric->GetValue()
+            << " usagePercent# " << usagePercent
+            << " scaleThresholdSeconds# " << Config.GetPartitionStrategy().GetScaleThresholdSeconds()
+            << " totalPartitionWriteSpeed# " << MaxUsagePerSec
+            << " sourceIdCount=" << sourceIdCount
+            << " canSplit=" << canSplit
+            << " tag# " << static_cast<int>(Tag)
+            << " verdict=" << (splitEnabled && canSplit && usagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent() ? "NEED_SPLIT" : "NORMAL")
+        );
 
         auto shouldSplit = usagePercent
                 >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent();
 
         if (splitEnabled && canSplit && shouldSplit) {
-            YDB_LOG_DEBUG("TPartition::CheckScaleStatus NEED_SPLIT",
-                {"logPrefix", LogPrefix()});
+            PQ_LOG_D("TPartition::CheckScaleStatus NEED_SPLIT.");
             return NKikimrPQ::EScaleStatus::NEED_SPLIT;
         } else if (mergeEnabled && usagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
-            YDB_LOG_DEBUG("TPartition::CheckScaleStatus NEED_MERGE",
-                {"logPrefix", LogPrefix()},
-                {"usagePercent", usagePercent});
+            PQ_LOG_D("TPartition::CheckScaleStatus NEED_MERGE."
+                << " usagePercent: " << usagePercent);
             return NKikimrPQ::EScaleStatus::NEED_MERGE;
         }
         return NKikimrPQ::EScaleStatus::NORMAL;

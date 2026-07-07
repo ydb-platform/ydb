@@ -2,6 +2,8 @@
 
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_countedqueueoneone.h>
 
+#include <library/cpp/deprecated/atomic/atomic.h>
+
 #include <util/random/random.h>
 #include <util/system/spinlock.h>
 #include <util/thread/pool.h>
@@ -138,6 +140,8 @@ class TDelayedThreadPool : public IThreadPool {
     std::atomic<bool> StopFlag;
     bool UseRandomWait = false;
     std::pair<TDuration, TDuration> WaitParams = {TDuration::Zero(), TDuration::Zero()};
+    ui64 MaxEvents = 0;
+    TAtomic InFlight = 0;
     TSpinLock DeadlineLock;
     TInstant LatestDeadline;
 
@@ -169,6 +173,7 @@ class TDelayedThreadPool : public IThreadPool {
             while (it != WaitQueue.end() && it->first <= now) {
                 TAsyncIoOperationMap *op = it->second;
                 op->ProcessNoThrottle();
+                ReleaseSlot();
                 auto curr = it;
                 ++it;
                 WaitQueue.erase(curr);
@@ -185,6 +190,7 @@ class TDelayedThreadPool : public IThreadPool {
     void Cleanup(bool receiveNull) {
         for (auto& op : WaitQueue) {
             delete op.second;
+            ReleaseSlot();
         }
         WaitQueue.clear();
         while (!receiveNull) {
@@ -193,6 +199,7 @@ class TDelayedThreadPool : public IThreadPool {
                 TAsyncIoOperationMap *op = IncomingQueue.Pop();
                 if (op) {
                     delete op;
+                    ReleaseSlot();
                 } else {
                     receiveNull = true;
                 }
@@ -205,6 +212,9 @@ class TDelayedThreadPool : public IThreadPool {
         if (StopFlag.load()) {
             return false;
         }
+        if (!AcquireSlot()) {
+            return false;
+        }
         auto op = static_cast<TAsyncIoOperationMap*>(obj);
         {
             TGuard<TSpinLock> guard(DeadlineLock);
@@ -213,14 +223,36 @@ class TDelayedThreadPool : public IThreadPool {
                 delay += WaitParams.first + TDuration::MicroSeconds(RandomNumber<ui32>(WaitParams.second.MicroSeconds()));
             }
             const TInstant now = TInstant::Now();
-            const TInstant baseDeadline = UseRandomWait ? Max(LatestDeadline, now) : now;
+            const bool serialize = UseRandomWait || !MaxEvents;
+            const TInstant baseDeadline = serialize ? Max(LatestDeadline, now) : now;
             op->Deadline = baseDeadline + delay;
-            if (UseRandomWait) {
+            if (serialize) {
                 LatestDeadline = op->Deadline;
             }
             IncomingQueue.Push(op);
         }
         return true;
+    }
+
+    bool AcquireSlot() {
+        if (!MaxEvents) {
+            return true;
+        }
+        for (;;) {
+            const ui64 inFlight = AtomicGet(InFlight);
+            if (inFlight >= MaxEvents) {
+                return false;
+            }
+            if (AtomicCas(&InFlight, inFlight + 1, inFlight)) {
+                return true;
+            }
+        }
+    }
+
+    void ReleaseSlot() {
+        if (MaxEvents) {
+            AtomicDecrement(InFlight);
+        }
     }
 
     size_t Size() const noexcept override {
@@ -239,19 +271,21 @@ class TDelayedThreadPool : public IThreadPool {
 
 
 public:
-    TDelayedThreadPool()
+    TDelayedThreadPool(ui64 maxEvents)
         : WorkThread(TThread::TParams(Proc, this))
         , StopFlag(false)
+        , MaxEvents(maxEvents)
         , LatestDeadline(TInstant::Now())
     {
         WorkThread.Start();
     }
 
-    TDelayedThreadPool(const std::pair<TDuration, TDuration>& waitParams)
+    TDelayedThreadPool(ui64 maxEvents, const std::pair<TDuration, TDuration>& waitParams)
         : WorkThread(TThread::TParams(Proc, this))
         , StopFlag(false)
         , UseRandomWait(true)
         , WaitParams(waitParams)
+        , MaxEvents(maxEvents)
         , LatestDeadline(TInstant::Now())
     {
         WorkThread.Start();
@@ -271,7 +305,7 @@ class TAsyncIoContextMap : public IAsyncIoContext {
     TPDiskDebugInfo PDiskInfo;
 
     TSpinLock SpinLock;
-    IAsyncIoOperation* LastOngoingAsyncIoOperation = nullptr;
+    ui64 OngoingAsyncIoOperationCount = 0;
     std::atomic<ui64> GlobalCounter = 0;
 
 public:
@@ -403,9 +437,9 @@ public:
         }
         MaxEvents = maxEvents;
         if (SectorMap->ImitateRandomWait) {
-            Queue = new TDelayedThreadPool(*SectorMap->ImitateRandomWait);
+            Queue = new TDelayedThreadPool(MaxEvents, *SectorMap->ImitateRandomWait);
         } else if (SectorMap->GetDiskModeParams()) {
-            Queue = new TDelayedThreadPool();
+            Queue = new TDelayedThreadPool(MaxEvents);
         } else {
             Queue = new TThreadPool();
             Queue->Start(1, MaxEvents);
@@ -417,15 +451,16 @@ public:
         op->SetCallback(callback);
         TAsyncIoOperationMap *operation = static_cast<TAsyncIoOperationMap*>(op);
 
+        bool isOk = false;
         {
             TGuard<TSpinLock> guard(SpinLock);
-            if (LastOngoingAsyncIoOperation != nullptr) {
-                operation->PrevAsyncIoOperationIsInProgress = true;
+            operation->PrevAsyncIoOperationIsInProgress = OngoingAsyncIoOperationCount != 0;
+            isOk = Queue->Add(operation);
+            if (isOk) {
+                ++OngoingAsyncIoOperationCount;
             }
-            LastOngoingAsyncIoOperation = operation;
         }
 
-        bool isOk = Queue->Add(operation);
         return isOk ? EIoResult::Ok : EIoResult::TryAgain;
     }
 
@@ -445,10 +480,10 @@ public:
     }
 
     void OnAsyncIoOperationCompletion(IAsyncIoOperation *op) override {
+        Y_UNUSED(op);
         TGuard<TSpinLock> guard(SpinLock);
-        if (LastOngoingAsyncIoOperation == op) {
-            LastOngoingAsyncIoOperation = nullptr;
-        }
+        Y_ABORT_UNLESS(OngoingAsyncIoOperationCount);
+        --OngoingAsyncIoOperationCount;
     }
 };
 

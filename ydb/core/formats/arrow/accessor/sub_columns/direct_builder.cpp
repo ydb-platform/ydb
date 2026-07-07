@@ -2,6 +2,7 @@
 #include "columns_storage.h"
 #include "direct_builder.h"
 
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <util/string/escape.h>
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
@@ -38,6 +39,15 @@ void TColumnElements::BuildDictionaryAccessor(const ui32 recordsCount) {
     const TChunkConstructionData cData(
         recordsCount, nullptr, arrow::binary(), NSerialization::TSerializerContainer::GetDefaultSerializer());
     Accessor = NDictionary::TConstructor().Construct(Accessor, cData).DetachResult();
+}
+
+ui32 TColumnElements::GetDistinctCount() const {
+    absl::flat_hash_set<std::string_view> seen;
+    seen.reserve(Values.size());
+    for (const auto& v : Values) {
+        seen.emplace(std::string_view(v.data(), v.size()));
+    }
+    return seen.size();
 }
 
 std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {

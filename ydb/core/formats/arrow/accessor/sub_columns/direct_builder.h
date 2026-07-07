@@ -15,6 +15,7 @@
 #include <yql/essentials/types/binary_json/format.h>
 #include <yql/essentials/types/binary_json/write.h>
 
+
 namespace NKikimr::NArrow::NAccessor {
 class TSubColumnsArray;
 }
@@ -39,14 +40,7 @@ public:
     void BuildPlainAccessor(const ui32 recordsCount);
     void BuildDictionaryAccessor(const ui32 recordsCount);
 
-    ui32 GetDistinctCount() const {
-        THashSet<std::string_view> seen;
-        seen.reserve(Values.size());
-        for (const auto& v : Values) {
-            seen.emplace(std::string_view(v.data(), v.size()));
-        }
-        return seen.size();
-    }
+    ui32 GetDistinctCount() const;
 
     TColumnElements(const TStringBuf key)
         : KeyName(key) {

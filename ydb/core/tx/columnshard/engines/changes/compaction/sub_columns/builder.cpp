@@ -8,13 +8,15 @@
 #include <ydb/core/tx/columnshard/engines/changes/compaction/abstract/merger.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 namespace NKikimr::NOlap::NCompaction::NSubColumns {
 
 namespace {
 
 ui32 CountDistinctNotNull(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor) {
-    THashSet<std::string_view> seen;
+    absl::flat_hash_set<std::string_view> seen;
+    seen.reserve(accessor->GetRecordsCount());
     auto chunked = accessor->GetChunkedArray();
     for (int c = 0; c < chunked->num_chunks(); ++c) {
         const auto* binary = dynamic_cast<const arrow::BinaryArray*>(chunked->chunk(c).get());

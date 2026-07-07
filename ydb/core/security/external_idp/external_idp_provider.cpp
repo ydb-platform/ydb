@@ -756,14 +756,16 @@ void TExternalIdpProvider::HandleDiscoveryResponse(
     };
 
     if (resp.Response == nullptr) {
-        YDB_LOG_ERROR("IdP message=Discovery",
+        YDB_LOG_ERROR("IdP",
             {"issuer", Config.GetIssuer()},
+            {"message", "Discovery"},
             {"failed", resp.Error});
         return;
     }
 
     if (resp.Response->Status != "200") {
-        YDB_LOG_ERROR("IdP message=Discovery fetch network error",
+        YDB_LOG_ERROR("IdP fetch network error",
+            {"message", "Discovery"},
             {"issuer", Config.GetIssuer()},
             {"responseStatus", resp.Response->Status},
             {"responseMessage", resp.Response->Message});
@@ -777,18 +779,21 @@ void TExternalIdpProvider::HandleDiscoveryResponse(
         return;
     }
     if (!Config.HasIssuer() || Config.GetIssuer().empty()) {
-        YDB_LOG_ERROR("IdP message=Discovery failed with empty issuer in config",
+        YDB_LOG_ERROR("IdP failed with empty issuer in config",
+            {"message", "Discovery"},
             {"issuer", Config.GetIssuer()});
         return;
     }
     if (!json.Has(ISSUER) || !json[ISSUER].IsString() || Config.GetIssuer() != json[ISSUER].GetString()) {
-        YDB_LOG_ERROR("IdP message=Discovery document mismatch",
+        YDB_LOG_ERROR("IdP mismatch",
+            {"message", "Discovery"},
             {"issuer", Config.GetIssuer()},
             {"ISSUER", ISSUER});
         return;
     }
     if (!json.Has(JWKS_URI) || !json[JWKS_URI].IsString() || json[JWKS_URI].GetString().empty()) {
-        YDB_LOG_ERROR("IdP message=Discovery document missing",
+        YDB_LOG_ERROR("IdP document missing",
+            {"message", "Discovery"},
             {"issuer", Config.GetIssuer()},
             {"JWKSURI", JWKS_URI});
         return;
@@ -796,7 +801,8 @@ void TExternalIdpProvider::HandleDiscoveryResponse(
 
     const auto jwksUri = json[JWKS_URI].GetString();
     if (!IsHttpsUrl(jwksUri)) {
-        YDB_LOG_ERROR("IdP message=Discovery document must use https:// scheme",
+        YDB_LOG_ERROR("IdP document must use https:// scheme",
+            {"message", "Discovery"},
             {"issuer", Config.GetIssuer()},
             {"JWKSURI", JWKS_URI},
             {"jwksUri", jwksUri});

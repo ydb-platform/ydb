@@ -787,6 +787,84 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 5.0, 1e-6);
     }
 
+    Y_UNIT_TEST(StorageGroupUsageAboveHundredWhenVDiskOvergrowsSlot)
+    {
+        // A VDisk can overgrow its nominal per-slot share (soft-partitioned PDisk with
+        // empty neighbour slots). Usage is intentionally allowed to exceed 100% as an
+        // over-subscription signal, and the disk's real AvailableSize must be preserved
+        // (not clobbered to 0). nominal slot = 1890/10 = 189, weight = GetOwnerWeight(0,0) = 1.
+        TStorageGroups::TGroup group;
+        auto& vdisk = group.VDisks.emplace_back();
+        vdisk.VSlotId = TVSlotId(1, 1, 1);
+        vdisk.AllocatedSize = 346;   // overgrown past the 189 nominal slot
+        vdisk.AvailableSize = 100;   // real headroom the disk still reports
+
+        TStorageGroups::TPDisk pdisk;
+        pdisk.TotalSize = 1890;
+        pdisk.SlotCount = 10;
+
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+
+        // Usage stays honest and above 100% (346/189 ~= 183%).
+        UNIT_ASSERT_VALUES_EQUAL(group.Used, 346);
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 189);
+        UNIT_ASSERT_GT(group.Usage, 100.0);
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 100.0 * 346 / 189, 1e-3);
+        // Bug fix: real headroom preserved instead of forced to 0.
+        UNIT_ASSERT_VALUES_EQUAL(group.Available, 100);
+    }
+
+    Y_UNIT_TEST(StorageGroupUsageAtNominalSlotBoundary)
+    {
+        // Boundary: AllocatedSize == nominal slotSize. Fully-used slot: Usage == 100%.
+        TStorageGroups::TGroup group;
+        auto& vdisk = group.VDisks.emplace_back();
+        vdisk.VSlotId = TVSlotId(1, 1, 1);
+        vdisk.AllocatedSize = 189;
+        vdisk.AvailableSize = 0;
+
+        TStorageGroups::TPDisk pdisk;
+        pdisk.TotalSize = 1890;
+        pdisk.SlotCount = 10;   // slot = 189
+
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 189);
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 100.0, 1e-6);
+    }
+
+    Y_UNIT_TEST(StorageGroupUsageAboveHundredWithMixedVDisks)
+    {
+        // Aggregate case: one overgrown vdisk (alloc 900 > slot 100, real avail 50) and one
+        // under-filled (alloc 10, avail 90). Usage stays honest: Limit=200, Used=910 -> 455%.
+        // Group Available sums real headroom (50 + 90), with the overgrown disk's 50 kept.
+        TStorageGroups::TGroup group;
+        auto& v0 = group.VDisks.emplace_back();
+        v0.VSlotId = TVSlotId(1, 1, 1);
+        v0.AllocatedSize = 900;   // overgrown
+        v0.AvailableSize = 50;    // real headroom kept (was clobbered to 0)
+        auto& v1 = group.VDisks.emplace_back();
+        v1.VSlotId = TVSlotId(1, 2, 1);
+        v1.AllocatedSize = 10;    // under-filled
+        v1.AvailableSize = 90;
+
+        TStorageGroups::TPDisk pd0;
+        pd0.TotalSize = 1000;
+        pd0.SlotCount = 10;       // slot = 100
+        TStorageGroups::TPDisk pd1;
+        pd1.TotalSize = 1000;
+        pd1.SlotCount = 10;       // slot = 100
+
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pd0}, {TPDiskId(1, 2), pd1}});
+
+        UNIT_ASSERT_VALUES_EQUAL(group.Used, 910);
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 200);
+        UNIT_ASSERT_GT(group.Usage, 100.0);
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 100.0 * 910 / 200, 1e-6);
+        // Bug fix: overgrown disk's real 50 preserved -> Available = 50 + 90.
+        UNIT_ASSERT_VALUES_EQUAL(group.Available, 140);
+    }
+
     const TPathId SHARED_DOMAIN_KEY = {7000000000, 1};
     const TPathId SERVERLESS_DOMAIN_KEY = {7000000000, 2};
     const TPathId SERVERLESS_TABLE = {7000000001, 2};

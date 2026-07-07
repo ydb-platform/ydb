@@ -23,6 +23,9 @@ class TestViewer(object):
         'ImmediateGroupsToCreate',
         'ImmediateSizeToCreate',
     }
+    # Pool-derived "none" rows depend on the async BSC snapshot; keep only
+    # calculator-prefilled rows in canonical /viewer/cluster output.
+    BSC_STORAGE_STATS_STABLE_ERASURE_SPECIES = {'mirror-3-dc', 'block-4-2'}
 
     @pytest.fixture(autouse=True, scope='class')
     @classmethod
@@ -924,6 +927,11 @@ class TestViewer(object):
         result = cls.get_viewer_cluster_with_calculated_storage_stats()
         result = cls.normalize_result(result)
         cls.delete_keys_recursively(result, cls.BSC_STORAGE_STATS_VALUE_FIELDS)
+        if 'StorageStats' in result:
+            result['StorageStats'] = [
+                entry for entry in result['StorageStats']
+                if entry.get('ErasureSpecies') in cls.BSC_STORAGE_STATS_STABLE_ERASURE_SPECIES
+            ]
         return result
 
     @classmethod

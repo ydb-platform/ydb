@@ -55,7 +55,7 @@ def prepare_feature_flags(extra_feature_flags, disabled_feature_flags):
 
 
 def prepare_table_service_config(table_service_config):
-    table_service_config = copy.copy(table_service_config)
+    table_service_config = copy.copy(table_service_config or {})
 
     if "enable_compile_cache_warmup" not in table_service_config:
         table_service_config["enable_compile_cache_warmup"] = False
@@ -143,7 +143,7 @@ class RestartToAnotherVersionFixture:
             use_in_memory_pdisks=kwargs.pop("use_in_memory_pdisks", False),
             extra_feature_flags=extra_feature_flags,
             disabled_feature_flags=disabled_feature_flags,
-            table_service_config=kwargs.pop("table_service_config", {}),
+            table_service_config=prepare_table_service_config(kwargs.pop("table_service_config", {})),
             **kwargs,
         )
 
@@ -229,7 +229,7 @@ class MixedClusterFixture:
             suppress_version_check=not all_versions_numbered,
             extra_feature_flags=extra_feature_flags,
             disabled_feature_flags=disabled_feature_flags,
-            table_service_config=kwargs.pop("table_service_config", {}),
+            table_service_config=prepare_table_service_config(kwargs.pop("table_service_config", {})),
             **kwargs,
         )
 
@@ -320,7 +320,7 @@ class RollingUpgradeAndDowngradeFixture:
             use_in_memory_pdisks=kwargs.pop("use_in_memory_pdisks", False),
             extra_feature_flags=extra_feature_flags,
             disabled_feature_flags=disabled_feature_flags,
-            table_service_config=kwargs.pop("table_service_config", {}),
+            table_service_config=prepare_table_service_config(kwargs.pop("table_service_config", {})),
             **kwargs,
         )
 

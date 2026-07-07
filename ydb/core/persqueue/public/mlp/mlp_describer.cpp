@@ -3,6 +3,8 @@
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NMLP {
 
 TDescriberActor::TDescriberActor(const TActorId& parentId, const TDescribeSettings& settings)
@@ -17,7 +19,8 @@ void TDescriberActor::Bootstrap() {
 }
 
 void TDescriberActor::DoDescribe() {
-    LOG_D("Start describe");
+    YDB_LOG_DEBUG("Start describe",
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TDescriberActor::DescribeState);
 
     NDescriber::TDescribeSettings settings = {
@@ -28,7 +31,8 @@ void TDescriberActor::DoDescribe() {
 }
 
 void TDescriberActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-    LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
+    YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     ChildActorId = {};
 
@@ -61,13 +65,16 @@ STFUNC(TDescriberActor::DescribeState) {
 }
 
 void TDescriberActor::DoRuntimeAttributes() {
-    LOG_D("Start DoRuntimeAttributes");
+    YDB_LOG_DEBUG("Start DoRuntimeAttributes",
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TDescriberActor::RuntimeAttributesState);
     SendToTablet(TopicInfo.Info->Description.GetBalancerTabletID(), new TEvPQ::TEvMLPGetRuntimeAttributesRequest(Settings.TopicName, Settings.Consumer));
 }
 
 void TDescriberActor::Handle(TEvPQ::TEvMLPGetRuntimeAttributesResponse::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvMLPGetRuntimeAttributesResponse " << ev->Get()->Record.ShortDebugString());
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPGetRuntimeAttributesResponse",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"ev", ev->Get()->Record});
     auto* result = ev->Get();
 
     auto response = std::make_unique<TEvDescribeResponse>();
@@ -84,7 +91,8 @@ void TDescriberActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     if (ev->Cookie != Cookie) {
         return;
     }
-    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
+    YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
+        {"logPrefix", NPQ_LOG_PREFIX});
     if (Backoff.HasMore()) {
         Backoff.Next();
         return DoRuntimeAttributes();
@@ -103,7 +111,9 @@ STFUNC(TDescriberActor::RuntimeAttributesState) {
 
 
 void TDescriberActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPErrorResponse",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"ev", ev->Get()->Record});
     ReplyErrorAndDie(ev->Get()->GetStatus(), std::move(ev->Get()->GetErrorMessage()));
 }
 
@@ -113,7 +123,9 @@ void TDescriberActor::SendToTablet(ui64 tabletId, IEventBase *ev) {
 }
 
 void TDescriberActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-    LOG_I("Reply error " << Ydb::StatusIds::StatusCode_Name(errorCode));
+    YDB_LOG_INFO("Reply error",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"statusCodeName", Ydb::StatusIds::StatusCode_Name(errorCode)});
     Send(ParentId, new TEvDescribeResponse(errorCode, std::move(errorMessage)));
     PassAway();
 }

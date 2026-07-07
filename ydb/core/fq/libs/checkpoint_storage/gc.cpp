@@ -30,21 +30,34 @@ struct TContext : public TThrRefBase {
     TCheckpointStoragePtr CheckpointStorage;
     TStateStoragePtr StateStorage;
 
-    TString GraphId;
+    NActors::TActorId CheckpointCoordinatorId;
+    TCoordinatorId CoordinatorId;
     TCheckpointId UpperBound;
+    TActorId StorageProxy;
 
     EStage Stage = StageOk;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr GcErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr GcSuccess;
 
     TContext(TActorSystem* actorSystem,
              const TCheckpointStoragePtr& checkpointStorage,
              const TStateStoragePtr& stateStorage,
-             const TString& graphId,
-             const TCheckpointId& upperBound)
+            NActors::TActorId checkpointCoordinatorId,
+             const TCoordinatorId& coordinatorId,
+             const TCheckpointId& upperBound,
+             const TActorId& storageProxy,
+             const ::NMonitoring::TDynamicCounters::TCounterPtr& gcErrors,
+             const ::NMonitoring::TDynamicCounters::TCounterPtr& gcSuccess)
         : ActorSystem(actorSystem)
         , CheckpointStorage(checkpointStorage)
         , StateStorage(stateStorage)
-        , GraphId(graphId)
+        , CheckpointCoordinatorId(checkpointCoordinatorId)
+        , CoordinatorId(coordinatorId)
         , UpperBound(upperBound)
+        , StorageProxy(storageProxy)
+        , GcErrors(gcErrors)
+        , GcSuccess(gcSuccess)
     {
     }
 };
@@ -56,9 +69,13 @@ using TContextPtr = TIntrusivePtr<TContext>;
 class TActorGC : public TActorBootstrapped<TActorGC> {
     TCheckpointStoragePtr CheckpointStorage;
     TStateStoragePtr StateStorage;
+    ::NMonitoring::TDynamicCounters::TCounterPtr GcErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr GcSuccess;
 
 public:
-    TActorGC(const TCheckpointStoragePtr& checkpointStorage, const TStateStoragePtr& stateStorage);
+    TActorGC(const TCheckpointStoragePtr& checkpointStorage,
+             const TStateStoragePtr& stateStorage,
+             const ::NMonitoring::TDynamicCounterPtr& counters);
 
     void Bootstrap();
 
@@ -72,9 +89,13 @@ private:
     void Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev);
 };
 
-TActorGC::TActorGC(const TCheckpointStoragePtr& checkpointStorage, const TStateStoragePtr& stateStorage)
+TActorGC::TActorGC(const TCheckpointStoragePtr& checkpointStorage,
+                   const TStateStoragePtr& stateStorage,
+                   const ::NMonitoring::TDynamicCounterPtr& counters)
     : CheckpointStorage(checkpointStorage)
     , StateStorage(stateStorage)
+    , GcErrors(counters->GetCounter("GcErrors", true))
+    , GcSuccess(counters->GetCounter("GcSuccess", true))
 {
 }
 
@@ -96,9 +117,16 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
         {"checkpointUpperBound", checkpointUpperBound},
         {"graphId", graphId});
 
+    const TActorId storageProxy = ev->Sender;
+
     if (event->Type != NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT) {
         YDB_LOG_DEBUG("GC skip increment checkpoint for graph",
             {"graphId", graphId});
+        // Notify StorageProxy that this (non-snapshot) checkpoint cycle is done.
+        Send(storageProxy, new TEvCheckpointStorage::TEvGcFinished(
+            event->CheckpointCoordinatorId,
+            event->CoordinatorId,
+            event->CheckpointId));
         return;
     }
 
@@ -111,8 +139,12 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
         TActivationContext::ActorSystem(),
         CheckpointStorage,
         StateStorage,
-        graphId,
-        checkpointUpperBound);
+        event->CheckpointCoordinatorId,
+        event->CoordinatorId,
+        checkpointUpperBound,
+        storageProxy,
+        GcErrors,
+        GcSuccess);
 
     // 1-2.
     auto future = CheckpointStorage->MarkCheckpointsGC(graphId, checkpointUpperBound).Apply(
@@ -120,15 +152,16 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
             auto issues = future.GetValue();
             if (!issues.Empty()) {
                 TStringStream ss;
-                ss << "GC failed to mark checkpoints of graph '" << context->GraphId
+                ss << "GC failed to mark checkpoints of graph '" << context->CoordinatorId.GraphId
                    << "' up to " << context->UpperBound << ", issues:";
                 issues.PrintTo(ss);
                 YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
                 context->Stage = TContext::StageFailed;
+                context->GcErrors->Inc();
                 return future;
             }
 
-            return context->StateStorage->DeleteCheckpoints(context->GraphId, context->UpperBound);
+            return context->StateStorage->DeleteCheckpoints(context->CoordinatorId.GraphId, context->UpperBound);
         });
 
     // 2-3. check StateStorage->DeleteCheckpoints and if OK DeleteMarkedCheckpoints
@@ -141,38 +174,44 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
             auto issues = future.GetValue();
             if (!issues.Empty()) {
                 TStringStream ss;
-                ss << "GC failed to delete states of checkpoints of graph '" << context->GraphId
+                ss << "GC failed to delete states of checkpoints of graph '" << context->CoordinatorId.GraphId
                    << "' up to " << context->UpperBound << ", issues:";
                 issues.PrintTo(ss);
                 YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
                 context->Stage = TContext::StageFailed;
+                context->GcErrors->Inc();
                 return future;
             }
 
-            return context->CheckpointStorage->DeleteMarkedCheckpoints(context->GraphId, context->UpperBound);
+            return context->CheckpointStorage->DeleteMarkedCheckpoints(context->CoordinatorId.GraphId, context->UpperBound);
          });
 
-    // this one just to debug log result
+    // Final step: log result and always notify StorageProxy that GC cycle is done.
     future.Apply(
         [context] (const TFuture<TIssues>& future) {
             if (context->Stage == TContext::StageFailed) {
+                context->ActorSystem->Send(context->StorageProxy,
+                    new TEvCheckpointStorage::TEvGcFinished(context->CheckpointCoordinatorId, context->CoordinatorId, context->UpperBound));
                 return future;
             }
 
             auto issues = future.GetValue();
             if (!issues.Empty()) {
                 TStringStream ss;
-                ss << "GC failed to delete marked checkpoints of graph '" << context->GraphId
+                ss << "GC failed to delete marked checkpoints of graph '" << context->CoordinatorId.GraphId
                    << "' up to " << context->UpperBound << ", issues:";
                 issues.PrintTo(ss);
                 YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
-                context->Stage = TContext::StageFailed;
-                return future;
+                context->GcErrors->Inc();
+            } else {
+                TStringStream ss;
+                ss << "GC deleted checkpoints of graph '" << context->CoordinatorId.GraphId
+                   << "' up to " << context->UpperBound;
+                YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
+                context->GcSuccess->Inc();
             }
-            TStringStream ss;
-            ss << "GC deleted checkpoints of graph '" << context->GraphId
-               << "' up to " << context->UpperBound;
-            YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
+            context->ActorSystem->Send(context->StorageProxy,
+                new TEvCheckpointStorage::TEvGcFinished(context->CheckpointCoordinatorId, context->CoordinatorId, context->UpperBound));
             return future;
         });
 }
@@ -184,9 +223,10 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
 std::unique_ptr<NActors::IActor> NewGC(
     const TCheckpointStorageSettings::TGcSettings&,
     const TCheckpointStoragePtr& checkpointStorage,
-    const TStateStoragePtr& stateStorage)
+    const TStateStoragePtr& stateStorage,
+    const ::NMonitoring::TDynamicCounterPtr& counters)
 {
-    return std::unique_ptr<NActors::IActor>(new TActorGC(checkpointStorage, stateStorage));
+    return std::unique_ptr<NActors::IActor>(new TActorGC(checkpointStorage, stateStorage, counters));
 }
 
 } // namespace NFq

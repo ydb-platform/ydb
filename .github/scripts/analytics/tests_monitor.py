@@ -346,10 +346,19 @@ def main():
             date_str = target_date.strftime('%Y-%m-%d')
             query = f"""
                 SELECT *
-                FROM `{read_table_path}`
-                WHERE build_type = '{build_type}'
-                AND branch = '{branch}'
-                AND date_window = Date('{date_str}')
+                FROM (
+                    SELECT
+                        t.*,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY t.full_name
+                            ORDER BY Length(t.suite_folder) DESC
+                        ) AS _dedup_rn
+                    FROM `{read_table_path}` AS t
+                    WHERE t.build_type = '{build_type}'
+                    AND t.branch = '{branch}'
+                    AND t.date_window = Date('{date_str}')
+                )
+                WHERE _dedup_rn = 1
             """
             _max_retries = 5
             _retry_delay = 10  # seconds

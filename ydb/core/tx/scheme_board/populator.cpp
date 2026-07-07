@@ -798,7 +798,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                 {"selfId", SelfId()},
                 {"sender", ev->Sender},
                 {"cookie", ev->Cookie},
-                {"reason", "config changed");
+                {"reason", "config changed"});
             return;
         }
         const TPathId pathId = ev->Get()->GetPathId();

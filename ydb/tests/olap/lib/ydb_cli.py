@@ -456,7 +456,7 @@ class YdbCliHelper:
         if compact:
             cmd.append('--compact')
 
-        with remote_execution.LongRemoteExecution(YdbCluster.get_client_host(), *cmd) as exec:
+        with remote_execution.LongRemoteExecution(YdbCluster.get_client_host(), *cmd, env={'GRPC_DNS_RESOLVER': 'native'}) as exec:
             while exec.is_running():
                 sleep(10)
             assert exec.return_code == 0, f'import fails with code {exec.return_code}\nerrors: {exec.stderr}\noutput: {exec.stdout}'
@@ -477,7 +477,7 @@ class YdbCliHelper:
             if threads:
                 cmd += ['--threads', str(threads)]
 
-            executions.append((user, remote_execution.LongRemoteExecution(YdbCluster.get_client_host(), *cmd)))
+            executions.append((user, remote_execution.LongRemoteExecution(YdbCluster.get_client_host(), *cmd, env={'GRPC_DNS_RESOLVER': 'native'})))
         return executions
 
     @classmethod

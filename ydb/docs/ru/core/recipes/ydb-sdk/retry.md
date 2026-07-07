@@ -782,7 +782,7 @@
 
 - Rust
 
-  Повторные попытки для запросов через Query Service выполняет `QueryClient`: вспомогательные методы для выполнения одного транзакционного SQL-запроса (`query_row`, `exec` и т.д.) ретраятся автоматически; для нескольких операций в одной транзакции — `retry_transaction`.
+  Повторные попытки для запросов через Query Service выполняет `QueryClient`: вспомогательные методы для выполнения одного транзакционного SQL-запроса (`query_row`, `exec` и т.д.) ретраятся автоматически; для нескольких операций в одной транзакции — [`retry_tx`](https://docs.rs/ydb/latest/ydb/struct.QueryClient.html#method.retry_tx).
 
   ```rust
   use ydb::{AccessTokenCredentials, ClientBuilder, YdbResult};
@@ -797,21 +797,23 @@
 
       client.wait().await?;
 
-      let mut qc = client.query_client().clone_with_idempotent_operations(true);
+      let mut qc = client.query_client();
 
       // один SQL-запрос на query-клиенте: внутренние повторные попытки
       let mut row = qc
           .query_row("SELECT series_id, title FROM series WHERE series_id = 1")
+          .idempotent(true)
           .await?;
 
       // несколько операций в одной транзакции с ретраями
       let title: String = qc
-          .retry_transaction(async |tx| {
+          .retry_tx(async |tx| {
               let mut row = tx
                   .query_row("SELECT series_id, title FROM series WHERE series_id = 1")
                   .await?;
               Ok(row.remove_field_by_name("title")?.try_into()?)
           })
+          .idempotent(true)
           .await?;
 
       Ok(())

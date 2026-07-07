@@ -79,6 +79,25 @@ void ReplyOk(const TActorIdentity selfActorId, ui32 partitionId, std::deque<T>& 
     queue.clear();
 }
 
+template<typename R>
+void ReplyOffsetsOk(const TActorIdentity selfActorId, const NActors::TActorId& sender, ui64 cookie,
+    const absl::flat_hash_map<ui64, EOperationResult>& offsetResults) {
+    auto* response = new R();
+    auto& protoResults = *response->Record.MutableOffsetResults();
+    for (const auto& [offset, status] : offsetResults) {
+        protoResults[offset] = ToProto(status);
+    }
+    selfActorId.Send(sender, response, 0, cookie);
+}
+
+template<typename R>
+void ReplyOffsetsOkAll(const TActorIdentity selfActorId, std::deque<TOffsetsResult>& queue) {
+    for (auto& ev : queue) {
+        ReplyOffsetsOk<R>(selfActorId, ev.Sender, ev.Cookie, ev.OffsetResults);
+    }
+    queue.clear();
+}
+
 }
 
 TString MakeSnapshotKey(ui32 partitionId, const TString& consumerName) {
@@ -414,9 +433,9 @@ void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
         auto msgs = std::exchange(PendingReadQueue, {});
         RegisterWithSameMailbox(CreateMessageEnricher(TabletId, PartitionId, Config.GetName(), std::move(msgs)));
     }
-    ReplyOk<TEvPQ::TEvMLPCommitResponse>(SelfId(), PartitionId, PendingCommitQueue);
-    ReplyOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PartitionId, PendingUnlockQueue);
-    ReplyOk<TEvPQ::TEvMLPChangeMessageDeadlineResponse>(SelfId(), PartitionId, PendingChangeMessageDeadlineQueue);
+    ReplyOffsetsOkAll<TEvPQ::TEvMLPCommitResponse>(SelfId(), PendingCommitQueue);
+    ReplyOffsetsOkAll<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PendingUnlockQueue);
+    ReplyOffsetsOkAll<TEvPQ::TEvMLPChangeMessageDeadlineResponse>(SelfId(), PendingChangeMessageDeadlineQueue);
     ReplyOk<TEvPQ::TEvMLPPurgeResponse>(SelfId(), PartitionId, PendingPurgeQueue);
 
     MoveToDLQIfPossible();
@@ -458,6 +477,7 @@ void TConsumerActor::UpdateStorageConfig() {
     AFL_ENSURE(Storage->GetKeepMessageOrder() == Config.GetKeepMessageOrder())("initial", Storage->GetKeepMessageOrder())("new", Config.GetKeepMessageOrder());
     Storage->SetMaxMessageProcessingCount(Config.GetMaxProcessingAttempts());
     Storage->SetRetentionPeriod(RetentionPeriod);
+    Storage->SetReceiveAttemptIdPeriod(TDuration::MilliSeconds(Config.GetReadRequestAttemptIdPeriodMs()));
     if (Config.GetDeadLetterPolicyEnabled() && Config.GetDeadLetterPolicy() != NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED) {
         Storage->SetDeadLetterPolicy(Config.GetDeadLetterPolicy());
     } else {
@@ -487,6 +507,10 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr& ev) {
     UpdateStorageConfig();
     InitializeDetailedMetrics();
     UpdateLockedGroupsIdInChildPartitions(false);
+
+    if (CurrentStateFunc() == &TConsumerActor::StateWork) {
+        ScheduleProcessing();
+    }
 }
 
 void TConsumerActor::HandleInit(TEvPQ::TEvEndOffsetChanged::TPtr& ev) {
@@ -625,8 +649,10 @@ void TConsumerActor::ScheduleProcessing() {
         return;
     }
 
+    const bool force = NextForcedProcessingTime <= TInstant::Now();
     const bool dlqEmptyOrAlreadyProcessing = DLQMoverActorId || Storage->DLQEmpty();
-    if (ReadRequestsQueue.empty() &&
+    if (!force &&
+        ReadRequestsQueue.empty() &&
         CommitRequestsQueue.empty() &&
         UnlockRequestsQueue.empty() &&
         ChangeMessageDeadlineRequestsQueue.empty() &&
@@ -649,42 +675,51 @@ void TConsumerActor::ProcessEventQueue() {
     LOG_D("ProcessEventQueue");
 
     NextProcessingTime = TInstant::Now() + TDuration::MilliSeconds(AppData()->PQConfig.GetMLPBatchWindowMilliSeconds());
+    NextForcedProcessingTime = TInstant::Now() + TDuration::Seconds(1);
 
     for (auto& ev : CommitRequestsQueue) {
+        absl::flat_hash_map<ui64, EOperationResult> offsetResults;
+        offsetResults.reserve(ev->Get()->Record.GetOffset().size());
         for (auto offset : ev->Get()->Record.GetOffset()) {
-            Storage->Commit(offset);
+            offsetResults.emplace(offset, Storage->Commit(offset));
         }
 
         if (Storage->IsBatchEmpty()) {
-            ReplyOk<TEvPQ::TEvMLPCommitResponse>(SelfId(), PartitionId, *ev);
+            ReplyOffsetsOk<TEvPQ::TEvMLPCommitResponse>(SelfId(), ev->Sender, ev->Cookie, offsetResults);
         } else {
-            PendingCommitQueue.emplace_back(ev->Sender, ev->Cookie);
+            PendingCommitQueue.emplace_back(ev->Sender, ev->Cookie, std::move(offsetResults));
         }
     }
     CommitRequestsQueue.clear();
 
     for (auto& ev : UnlockRequestsQueue) {
+        absl::flat_hash_map<ui64, EOperationResult> offsetResults;
+        offsetResults.reserve(ev->Get()->Record.GetOffset().size());
         for (auto offset : ev->Get()->Record.GetOffset()) {
-            Storage->Unlock(offset);
+            offsetResults.emplace(offset, Storage->Unlock(offset));
         }
 
         if (Storage->IsBatchEmpty()) {
-            ReplyOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PartitionId, *ev);
+            ReplyOffsetsOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), ev->Sender, ev->Cookie, offsetResults);
         } else {
-            PendingUnlockQueue.emplace_back(ev->Sender, ev->Cookie);
+            PendingUnlockQueue.emplace_back(ev->Sender, ev->Cookie, std::move(offsetResults));
         }
     }
     UnlockRequestsQueue.clear();
 
     for (auto& ev : ChangeMessageDeadlineRequestsQueue) {
-        for (const auto &message : ev->Get()->Record.GetMessage()) {
-            Storage->ChangeMessageDeadline(message.GetOffset(), TInstant::Seconds(message.GetDeadlineTimestampSeconds()));
+        absl::flat_hash_map<ui64, EOperationResult> offsetResults;
+        offsetResults.reserve(ev->Get()->Record.GetMessage().size());
+        for (const auto& message : ev->Get()->Record.GetMessage()) {
+            offsetResults.emplace(
+                message.GetOffset(),
+                Storage->ChangeMessageDeadline(message.GetOffset(), TInstant::Seconds(message.GetDeadlineTimestampSeconds())));
         }
 
         if (Storage->IsBatchEmpty()) {
-            ReplyOk<TEvPQ::TEvMLPChangeMessageDeadlineResponse>(SelfId(), PartitionId, *ev);
+            ReplyOffsetsOk<TEvPQ::TEvMLPChangeMessageDeadlineResponse>(SelfId(), ev->Sender, ev->Cookie, offsetResults);
         } else {
-            PendingChangeMessageDeadlineQueue.emplace_back(ev->Sender, ev->Cookie);
+            PendingChangeMessageDeadlineQueue.emplace_back(ev->Sender, ev->Cookie, std::move(offsetResults));
         }
     }
     ChangeMessageDeadlineRequestsQueue.clear();
@@ -713,8 +748,9 @@ void TConsumerActor::ProcessEventQueue() {
     TStorage::TPosition position;
     std::deque<TEvPQ::TEvMLPReadRequest::TPtr> readRequestsQueue;
     for (auto& ev : ReadRequestsQueue) {
-        size_t count = ev->Get()->GetMaxNumberOfMessages();
-        auto visibilityDeadline = ev->Get()->GetProcessingTimeout().ToDeadLine();
+        // Use the same `now` reference for the whole batch so that a zero VisibilityTimeout yields
+        // visibilityDeadline == now (i.e. the message is delivered but unlocked immediately).
+        auto visibilityDeadline = now + ev->Get()->GetProcessingTimeout();
 
         absl::flat_hash_set<ui32> skipMessageGroups; // TODO: remove after SQS migration finished
         skipMessageGroups.reserve(ev->Get()->Record.GetSkipMessageGroup().size());
@@ -722,15 +758,14 @@ void TConsumerActor::ProcessEventQueue() {
             skipMessageGroups.insert(static_cast<ui32>(Hash(skipMessageGroup)) & 0x7FFFFFFF);
         }
 
-        std::deque<TReadMessage> messages;
-        for (; count; --count) {
-            auto result = Storage->Next(visibilityDeadline, position, skipMessageGroups);
-            if (!result) {
-                break;
-            }
-
-            messages.push_back(std::move(result.value()));
-        }
+        auto messages = Storage->Read(
+            now,
+            visibilityDeadline,
+            position,
+            skipMessageGroups,
+            ev->Get()->GetMaxNumberOfMessages(),
+            ev->Get()->GetReceiveAttemptId()
+        );
 
         if (messages.empty() && ev->Get()->GetWaitDeadline() <= now) {
             // Optimization: do not need to upload the message body.
@@ -984,6 +1019,7 @@ void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr& ev) {
             }
             NotifyPQRB(true);
             UpdateMetrics();
+            ScheduleProcessing();
             Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
             break;
         }
@@ -1034,6 +1070,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
 
     if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
         LOG_W("Error moving messages to the DLQ: " << ev->Get()->ErrorDescription);
+        Storage->WakeUpDLQ();
     }
 
     auto& moved = ev->Get()->MovedMessages;
@@ -1048,10 +1085,6 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
         AFL_ENSURE(result)("o", offset)("s", seqNo);
     }
 
-    if (ev->Get()->Status == Ydb::StatusIds::NOT_FOUND) {
-        Storage->WakeUpDLQ();
-    }
-
     if (CurrentStateFunc() == &TConsumerActor::StateWork) {
         ScheduleProcessing();
     }
@@ -1063,8 +1096,8 @@ void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
         UpdateLockedGroupsIdInChildPartitions(false);
         return;
     }
-    NotifyPQRB(true);
     UpdateMetrics();
+    NotifyPQRB(true);
     Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
 }
 

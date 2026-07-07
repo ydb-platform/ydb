@@ -34,6 +34,8 @@ const size_t DEFAULT_NUM_THREADS = 2;
 
 void EnableGRpcTracing();
 
+bool IsGRpcCompletionThread();
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TTcpKeepAliveSettings {

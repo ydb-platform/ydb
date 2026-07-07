@@ -3,6 +3,10 @@
 namespace NKikimr {
 namespace NKqp {
 
+bool TRewriteRightJoinRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Join;
+}
+
 TIntrusivePtr<IOperator> TRewriteRightJoinRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);

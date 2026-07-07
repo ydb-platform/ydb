@@ -248,7 +248,7 @@ RESOURCE(
 
 PEERDIR(
     contrib/libs/zstd
-    library/cpp/containers/absl_flat_hash
+    library/cpp/containers/absl
     library/cpp/containers/stack_vector
     library/cpp/digest/md5
     library/cpp/html/pcdata

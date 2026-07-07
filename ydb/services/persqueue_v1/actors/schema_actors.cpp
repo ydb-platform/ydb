@@ -9,6 +9,8 @@
 
 #include <library/cpp/json/json_writer.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
+
 namespace NKikimr::NGRpcProxy::V1 {
 
 constexpr TStringBuf GRPCS_ENDPOINT_PREFIX = "grpcs://";
@@ -194,7 +196,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         if (consumersAdvancedMonitoringSettings.IsDefined()) { // at least one consumer has custom monitoring settings
              (*settings->mutable_attributes())["_advanced_monitoring"] = WriteJson(consumersAdvancedMonitoringSettings, false, true);
         }
-        
+
         if (NPQ::MirroringEnabled(config)) {
             auto rmr = settings->mutable_remote_mirror_rule();
             TStringBuilder endpoint;
@@ -248,7 +250,8 @@ TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::TEvDescribeTopic
             request->GetProtoRequest()->include_stats(),
             request->GetProtoRequest()->include_location()))
 {
-    ALOG_DEBUG(NKikimrServices::PQ_READ_PROXY, "TDescribeTopicActor for request " << request->GetProtoRequest()->DebugString());
+    YDB_LOG_DEBUG("TDescribeTopicActor for request",
+        {"request", request->GetProtoRequest()->DebugString()});
 }
 
 TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::IRequestOpCtx * ctx)
@@ -421,7 +424,8 @@ void TDescribeTopicActorImpl::RequestPartitionStatus(const TTabletInfo& tablet, 
 }
 
 void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "DescribeTopicImpl " << ctx.SelfID.ToString() << ": Request location");
+    YDB_LOG_DEBUG_CTX(ctx, "DescribeTopicImpl Request location",
+        {"selfId", ctx.SelfID});
 
     THashSet<ui64> partIds;
     TVector<ui64> partsVector;
@@ -450,7 +454,8 @@ void TDescribeTopicActorImpl::RequestReadSessionsInfo(const TActorContext& ctx) 
             ctx, Tablets[BalancerTabletId].Pipe,
                     new TEvPersQueue::TEvGetReadSessionsInfo(NPersQueue::ConvertNewConsumerName(Settings.Consumer, ctx))
             );
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "DescribeTopicImpl " << ctx.SelfID.ToString() << ": Request sessions");
+    YDB_LOG_DEBUG_CTX(ctx, "DescribeTopicImpl Request sessions",
+        {"selfId", ctx.SelfID});
     ++RequestsInfly;
 }
 
@@ -493,7 +498,8 @@ void TDescribeTopicActorImpl::Handle(NKikimr::TEvPersQueue::TEvStatusResponse::T
 
 
 void TDescribeTopicActorImpl::Handle(NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "DescribeTopicImpl " << ctx.SelfID.ToString() << ": Got sessions");
+    YDB_LOG_DEBUG_CTX(ctx, "DescribeTopicImpl Got sessions",
+        {"selfId", ctx.SelfID});
 
     if (GotReadSessions)
         return;
@@ -514,7 +520,8 @@ void TDescribeTopicActorImpl::Handle(NKikimr::TEvPersQueue::TEvReadSessionsInfoR
 }
 
 void TDescribeTopicActorImpl::Handle(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "DescribeTopicImpl " << ctx.SelfID.ToString() << ": Got location");
+    YDB_LOG_DEBUG_CTX(ctx, "DescribeTopicImpl Got location",
+        {"selfId", ctx.SelfID});
 
     if (GotLocation)
         return;
@@ -539,7 +546,9 @@ void TDescribeTopicActorImpl::Handle(TEvPersQueue::TEvGetPartitionsLocationRespo
         }
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "DescribeTopicImpl " << ctx.SelfID.ToString() << ": Something wrong on location, retry. Response: " << record.DebugString());
+    YDB_LOG_DEBUG_CTX(ctx, "DescribeTopicImpl Something wrong on location, retry",
+        {"selfId", ctx.SelfID},
+        {"response", record.DebugString()});
     //Something gone wrong, retry
     ctx.Schedule(TDuration::MilliSeconds(200), new TEvPQProxy::TEvRequestTablet(BalancerTabletId));
 }
@@ -790,7 +799,8 @@ void TDescribeTopicActor::Bootstrap(const NActors::TActorContext& ctx)
 
     SendDescribeProposeRequest(ctx);
     Become(&TDescribeTopicActor::StateWork);
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "Describe topic actor for path " << GetProtoRequest()->path());
+    YDB_LOG_DEBUG_CTX(ctx, "Describe topic actor for path",
+        {"path", GetProtoRequest()->path()});
 }
 
 using namespace NIcNodeCache;
@@ -879,9 +889,10 @@ void TPartitionsLocationActor::RaiseError(const TString& error, const Ydb::PersQ
 }
 
 bool TPartitionsLocationActor::OnUnhandledException(const std::exception& exc) {
-    ALOG_ERROR(NKikimrServices::PQ_READ_PROXY, "unhandled exception "
-        << TypeName(exc) << ": " << exc.what() << Endl
-        << TBackTrace::FromCurrentException().PrintToString());
+    YDB_LOG_ERROR("Unhandled exception",
+        {"typeName", TypeName(exc)},
+        {"exception", exc.what()},
+        {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
 
     this->RaiseError("Unhandled exception", Ydb::PersQueue::ErrorCode::ERROR, Ydb::StatusIds::UNAVAILABLE, ActorContext());
 

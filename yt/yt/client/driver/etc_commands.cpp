@@ -114,7 +114,7 @@ void TGetSupportedFeaturesCommand::DoExecute(ICommandContextPtr context)
     }
     auto features = meta.Features;
     for (auto staticFeature : StaticFeatures) {
-        features->AddChild(TString(staticFeature.first), BuildYsonNodeFluently().Value(staticFeature.second));
+        features->AddChild(staticFeature.first, BuildYsonNodeFluently().Value(staticFeature.second));
     }
     features->AddChild(
         "flow_pipelines",

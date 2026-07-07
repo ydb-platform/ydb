@@ -195,11 +195,33 @@ struct TUtils {
     }
 
     bool Commit(ui64 offset) {
-        return Storage.Commit(offset);
+        return Storage.Commit(offset) == EOperationResult::Success;
     }
 
     bool Unlock(ui64 offset) {
-        return Storage.Unlock(offset);
+        return Storage.Unlock(offset) == EOperationResult::Success;
+    }
+
+    void AddMessageWithGroup(ui64 offset, ui32 groupHash) {
+        Storage.AddMessage(offset, true, groupHash, BaseWriteTimestamp + TDuration::Seconds(offset));
+        Offset = Max(Offset, offset + 1);
+    }
+
+    std::deque<TReadMessage> ReadMessages(
+        size_t maxCount,
+        const TString& receiveAttemptId = {},
+        TDuration visibilityTimeout = TDuration::Seconds(8)
+    ) {
+        TStorage::TPosition position;
+        absl::flat_hash_set<ui32> skipMessageGroups;
+        return Storage.Read(
+            TimeProvider->Now(),
+            TimeProvider->Now() + visibilityTimeout,
+            position,
+            skipMessageGroups,
+            maxCount,
+            receiveAttemptId
+        );
     }
 
     void AssertEquals(TUtils& other) {
@@ -282,7 +304,7 @@ Y_UNIT_TEST(CommitToEmptyStorage) {
     TStorage storage(CreateDefaultTimeProvider(), {});
 
     auto result = storage.Commit(123);
-    UNIT_ASSERT(!result);
+    UNIT_ASSERT(result == EOperationResult::NotFound);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
@@ -308,7 +330,7 @@ Y_UNIT_TEST(UnlockToEmptyStorage) {
     TStorage storage(CreateDefaultTimeProvider(), {});
 
     auto result = storage.Unlock(123);
-    UNIT_ASSERT(!result);
+    UNIT_ASSERT(result == EOperationResult::NotFound);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
@@ -334,7 +356,7 @@ Y_UNIT_TEST(ChangeDeadlineEmptyStorage) {
     TStorage storage(CreateDefaultTimeProvider(), {});
 
     auto result = storage.ChangeMessageDeadline(123, TInstant::Now());
-    UNIT_ASSERT(!result);
+    UNIT_ASSERT(result == EOperationResult::NotFound);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
@@ -427,7 +449,7 @@ Y_UNIT_TEST(AddBatchedMessageToEmptyStorage) {
         auto empty = storage.Next(timeProvider->Now() + TDuration::Seconds(30), position);
         UNIT_ASSERT(!empty);
 
-        UNIT_ASSERT(storage.Commit(3));
+        UNIT_ASSERT(storage.Commit(3) == EOperationResult::Success);
         UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), 7);
     };
 
@@ -976,7 +998,7 @@ Y_UNIT_TEST(CommitLockedMessage_WithoutKeepMessageOrder) {
     }
     {
         auto result = storage.Commit(3);
-        UNIT_ASSERT(result);
+        UNIT_ASSERT(result == EOperationResult::Success);
     }
 
     auto it = storage.begin();
@@ -1020,7 +1042,7 @@ Y_UNIT_TEST(CommitLockedMessage_WithKeepMessageOrder) {
     }
 
     auto result = storage.Commit(3);
-    UNIT_ASSERT(result);
+    UNIT_ASSERT(result == EOperationResult::Success);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
@@ -1049,7 +1071,7 @@ Y_UNIT_TEST(CommitUnlockedMessage) {
     storage.AddMessage(3, true, 5, writeTimestamp);
 
     auto result = storage.Commit(3);
-    UNIT_ASSERT(result);
+    UNIT_ASSERT(result == EOperationResult::Success);
 
     auto it = storage.begin();
     UNIT_ASSERT(it != storage.end());
@@ -1090,11 +1112,11 @@ Y_UNIT_TEST(CommitCommittedMessage) {
 
     {
         auto result = storage.Commit(3);
-        UNIT_ASSERT(result);
+        UNIT_ASSERT(result == EOperationResult::Success);
     }
     {
         auto result = storage.Commit(3);
-        UNIT_ASSERT(!result);
+        UNIT_ASSERT(result == EOperationResult::NotFound);
     }
 
     auto it = storage.begin();
@@ -1141,7 +1163,7 @@ Y_UNIT_TEST(UnlockLockedMessage_WithoutKeepMessageOrder) {
     }
 
     auto result = storage.Unlock(3);
-    UNIT_ASSERT(result);
+    UNIT_ASSERT(result == EOperationResult::Success);
 
     auto it = storage.begin();
     UNIT_ASSERT(it != storage.end());
@@ -1183,7 +1205,7 @@ Y_UNIT_TEST(UnlockLockedMessage_WithKeepMessageOrder) {
     }
 
     auto result = storage.Unlock(3);
-    UNIT_ASSERT(result);
+    UNIT_ASSERT(result == EOperationResult::Success);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
@@ -1209,7 +1231,7 @@ Y_UNIT_TEST(UnlockUnlockedMessage) {
     storage.AddMessage(3, true, 5, TInstant::Now());
 
     auto result = storage.Unlock(3);
-    UNIT_ASSERT(!result);
+    UNIT_ASSERT(result == EOperationResult::NotInFlight);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
@@ -1239,11 +1261,11 @@ Y_UNIT_TEST(UnlockCommittedMessage) {
 
     {
         auto result = storage.Commit(3);
-        UNIT_ASSERT(result);
+        UNIT_ASSERT(result == EOperationResult::Success);
     }
 
     auto result = storage.Unlock(3);
-    UNIT_ASSERT(!result);
+    UNIT_ASSERT(result == EOperationResult::NotFound);
 
     auto it = storage.begin();
     UNIT_ASSERT(it != storage.end());
@@ -1291,7 +1313,7 @@ Y_UNIT_TEST(ChangeDeadlineLockedMessage) {
     timeProvider->Tick(TDuration::Seconds(1));
 
     auto result = storage.ChangeMessageDeadline(3, timeProvider->Now() + TDuration::Seconds(7));
-    UNIT_ASSERT(result);
+    UNIT_ASSERT(result == EOperationResult::Success);
 
     auto it = storage.begin();
     UNIT_ASSERT(it != storage.end());
@@ -1323,7 +1345,7 @@ Y_UNIT_TEST(ChangeDeadlineUnlockedMessage) {
     storage.AddMessage(3, true, 5, TInstant::Now());
 
     auto result = storage.ChangeMessageDeadline(3, now + TDuration::Seconds(5));
-    UNIT_ASSERT(!result);
+    UNIT_ASSERT(result == EOperationResult::NotInFlight);
 
     auto deadline = storage.GetMessageDeadline(3);
     UNIT_ASSERT_VALUES_EQUAL(deadline, TInstant::Zero());
@@ -1593,7 +1615,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Committed) {
         storage.AddMessage(3, true, 5, writeTimestamp);
 
         auto r = storage.Commit(3);
-        UNIT_ASSERT(r);
+        UNIT_ASSERT(r == EOperationResult::Success);
 
         auto batch = storage.ExtractBatch();
         UNIT_ASSERT_VALUES_EQUAL(batch.AddedMessageCount(), 1);
@@ -3311,7 +3333,7 @@ Y_UNIT_TEST(FairnessWithRetention) {
         UNIT_ASSERT_C(result.has_value(), LabeledOutput(i));
         UNIT_ASSERT_C(result->Offset != 0, "expired offset 0 must never be returned");
         seen.insert(result->Offset);
-        UNIT_ASSERT(storage.Commit(result->Offset));
+        UNIT_ASSERT(storage.Commit(result->Offset) == EOperationResult::Success);
     }
     UNIT_ASSERT_VALUES_EQUAL(seen.size(), 2);
     UNIT_ASSERT(seen.contains(1) && seen.contains(2));
@@ -3348,7 +3370,7 @@ Y_UNIT_TEST(FairnessWithDlq) {
     }
 
     // Commit the DLQ head; group A unblocks and its next message (offset 1) becomes eligible.
-    UNIT_ASSERT(storage.Commit(0));
+    UNIT_ASSERT(storage.Commit(0) == EOperationResult::Success);
     {
         auto candidates = ProbeCandidates(storage);
         UNIT_ASSERT_C(candidates.contains(1), "group A must be eligible after DLQ head committed");
@@ -3406,7 +3428,7 @@ Y_UNIT_TEST(FairnessSkipThenNoSkip) {
         ui32 g = group.at(offset);
         UNIT_ASSERT_VALUES_EQUAL_C(offset, nextExpectedInGroup.at(g), "FIFO within group violated");
         ++nextExpectedInGroup[g];
-        UNIT_ASSERT(storage.Commit(offset));
+        UNIT_ASSERT(storage.Commit(offset) == EOperationResult::Success);
     };
 
     // Phase 1: skip groups A and B, so only group C is served.
@@ -3537,6 +3559,266 @@ Y_UNIT_TEST(FairnessAddMessageDuringReadMixed) {
 
     DrainWithCommit(model);
     UNIT_ASSERT_VALUES_EQUAL(model.Committed.size(), model.Offset);
+}
+
+std::vector<ui64> GetReadOffsets(const std::deque<TReadMessage>& messages) {
+    std::vector<ui64> offsets;
+    offsets.reserve(messages.size());
+    for (const auto& message : messages) {
+        offsets.push_back(message.Offset);
+    }
+    return offsets;
+}
+
+Y_UNIT_TEST(ReadAttemptReplayReturnsSameMessages) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    for (ui32 group = 0; group < 5; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    const TString attemptId = "my_attempt";
+    const auto first = utils.ReadMessages(10, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(first.size(), 5);
+
+    const auto second = utils.ReadMessages(10, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(second.size(), 5);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), GetReadOffsets(second));
+}
+
+Y_UNIT_TEST(ReadAttemptDifferentIdsDoNotShareState) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    for (ui32 group = 0; group < 5; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    const auto first = utils.ReadMessages(1, "attempt_a");
+    UNIT_ASSERT_VALUES_EQUAL(first.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(first.front().Offset, 0u);
+
+    const auto second = utils.ReadMessages(10, "attempt_b");
+    UNIT_ASSERT_VALUES_EQUAL(second.size(), 4);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(second), (std::vector<ui64>{1, 2, 3, 4}));
+}
+
+Y_UNIT_TEST(ReadAttemptExpiresAfterPeriod) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(2));
+    for (ui32 group = 0; group < 5; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    const TString attemptId = "my_attempt";
+    const auto first = utils.ReadMessages(1, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(first.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(first.front().Offset, 0u);
+
+    utils.TimeProvider->Tick(TDuration::Seconds(3));
+    utils.Storage.ProccessDeadlines();
+
+    const auto second = utils.ReadMessages(10, attemptId);
+    UNIT_ASSERT(second.size() > 0);
+    UNIT_ASSERT_VALUES_UNEQUAL(GetReadOffsets(first), GetReadOffsets(second));
+}
+
+Y_UNIT_TEST(ReadAttemptReplayExtendsExpiry) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(2));
+    utils.AddMessageWithGroup(0, 0);
+    utils.AddMessageWithGroup(1, 1);
+
+    const TString attemptId = "my_attempt";
+    const auto first = utils.ReadMessages(2, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1}));
+
+    utils.TimeProvider->Tick(TDuration::Seconds(1));
+    const auto replay = utils.ReadMessages(2, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(replay), (std::vector<ui64>{0, 1}));
+
+    utils.TimeProvider->Tick(TDuration::Seconds(2));
+    utils.CheckNoNext();
+}
+
+Y_UNIT_TEST(ReadAttemptCommitInvalidatesReplay) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    for (ui32 group = 0; group < 3; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    const TString attemptId = "my_attempt";
+    const auto first = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1, 2}));
+
+    UNIT_ASSERT(utils.Commit(1));
+    utils.Storage.ProccessDeadlines();
+
+    const auto second = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(second.size(), 0);
+}
+
+Y_UNIT_TEST(ReadAttemptChangeMessageDeadlineInvalidatesReplay) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    for (ui32 group = 0; group < 3; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    const TString attemptId = "my_attempt";
+    const auto first = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1, 2}));
+
+    UNIT_ASSERT(
+        utils.Storage.ChangeMessageDeadline(1, utils.TimeProvider->Now() + TDuration::Seconds(15))
+        == EOperationResult::Success);
+    utils.Storage.ProccessDeadlines();
+
+    const auto second = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(second.size(), 0);
+}
+
+Y_UNIT_TEST(ReadAttemptUnlockInvalidatesReplay) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    for (ui32 group = 0; group < 3; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    const TString attemptId = "my_attempt";
+    const auto first = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1, 2}));
+
+    UNIT_ASSERT(utils.Unlock(1));
+    utils.Storage.ProccessDeadlines();
+
+    const auto second = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(second.size(), 0);
+}
+
+Y_UNIT_TEST(ReadAttemptPurgeClearsReplayState) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    for (ui32 group = 0; group < 3; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    const TString attemptId = "my_attempt";
+    const auto first = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1, 2}));
+
+    UNIT_ASSERT(utils.Storage.Purge(3));
+
+    for (ui32 group = 0; group < 3; ++group) {
+        utils.AddMessageWithGroup(group + 10, group);
+    }
+
+    const auto second = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(second), (std::vector<ui64>{10, 11, 12}));
+}
+
+Y_UNIT_TEST(ReadAttemptSnapshotPersistence) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    for (ui32 group = 0; group < 3; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    const TString attemptId = "my_attempt";
+    const auto first = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1, 2}));
+
+    const auto snapshot = utils.CreateSnapshot();
+
+    TUtils loaded(TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 8, .KeepMessageOrder = true});
+    loaded.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    loaded.LoadSnapshot(snapshot);
+
+    const auto second = loaded.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(second), GetReadOffsets(first));
+}
+
+Y_UNIT_TEST(ReadAttemptWALPersistence) {
+    TUtils utils;
+    utils.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    for (ui32 group = 0; group < 3; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    utils.Begin();
+    const TString attemptId = "my_attempt";
+    const auto first = utils.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1, 2}));
+    utils.End();
+
+    TUtils loaded(TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 8, .KeepMessageOrder = true});
+    loaded.Storage.SetReceiveAttemptIdPeriod(TDuration::Seconds(30));
+    loaded.LoadSnapshot(utils.BeginSnapshot);
+    loaded.LoadWAL(utils.WAL);
+
+    const auto second = loaded.ReadMessages(3, attemptId);
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(second), GetReadOffsets(first));
+}
+
+Y_UNIT_TEST(ReadWithZeroVisibilityTimeoutUnlocksImmediately) {
+    // SQS VisibilityTimeout=0: messages are handed to the client but their lock is released right away,
+    // so they stay Unprocessed and can be received again immediately (with a growing receive count).
+    TUtils utils;
+    utils.Storage.SetMaxMessageProcessingCount(100);
+    utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED);
+    for (ui32 group = 0; group < 3; ++group) {
+        utils.AddMessageWithGroup(group, group);
+    }
+
+    const auto first = utils.ReadMessages(10, {}, TDuration::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(GetReadOffsets(first), (std::vector<ui64>{0, 1, 2}));
+    UNIT_ASSERT_VALUES_EQUAL(first.front().ApproximateReceiveCount, 1u);
+
+    // Nothing is left in flight after the read.
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().LockedMessageCount, 0);
+    for (ui64 offset = 0; offset < 3; ++offset) {
+        auto message = utils.GetMessage(offset);
+        UNIT_ASSERT(message.has_value());
+        UNIT_ASSERT_VALUES_EQUAL_C(static_cast<int>(message->Status),
+            static_cast<int>(TStorage::EMessageStatus::Unprocessed), offset);
+    }
+
+    // The same messages are immediately available again; the receive count keeps growing.
+    const auto second = utils.ReadMessages(10, {}, TDuration::Zero());
+    auto secondOffsets = GetReadOffsets(second);
+    std::sort(secondOffsets.begin(), secondOffsets.end());
+    UNIT_ASSERT_VALUES_EQUAL(secondOffsets, (std::vector<ui64>{0, 1, 2}));
+    for (const auto& message : second) {
+        UNIT_ASSERT_VALUES_EQUAL(message.ApproximateReceiveCount, 2u);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().LockedMessageCount, 0);
+}
+
+Y_UNIT_TEST(ReadWithZeroVisibilityTimeoutMovesToDLQ) {
+    // Even with immediate unlock, the receive count still advances the message towards the DLQ once the
+    // configured receive limit is reached. The read that reaches the limit still returns the message.
+    TUtils utils;
+    utils.Storage.SetMaxMessageProcessingCount(3);
+    utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+    utils.AddMessageWithGroup(0, 0);
+
+    for (ui32 attempt = 1; attempt <= 3; ++attempt) {
+        const auto read = utils.ReadMessages(10, {}, TDuration::Zero());
+        UNIT_ASSERT_VALUES_EQUAL_C(GetReadOffsets(read), (std::vector<ui64>{0}), attempt);
+        UNIT_ASSERT_VALUES_EQUAL_C(read.front().ApproximateReceiveCount, attempt, attempt);
+    }
+
+    // After hitting the receive limit the message is scheduled to the DLQ and is no longer delivered.
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetDLQMessages().size(), 1);
+    {
+        auto message = utils.GetMessage(0);
+        UNIT_ASSERT(message.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(message->Status),
+            static_cast<int>(TStorage::EMessageStatus::DLQ));
+    }
+
+    const auto afterDlq = utils.ReadMessages(10, {}, TDuration::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(afterDlq.size(), 0);
 }
 
 }

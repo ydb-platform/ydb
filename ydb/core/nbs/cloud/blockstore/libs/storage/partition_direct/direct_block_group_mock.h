@@ -42,9 +42,13 @@ struct TOracleMock: public IOracle
         THostMask hosts,
         EOperation operation) const override;
 
-    [[nodiscard]] TDuration GetReadHedgingDelay() const override;
+    [[nodiscard]] TDuration GetReadHedgingDelay(
+        THostIndex host,
+        EDataLocation dataLocation) const override;
     [[nodiscard]] TDuration GetReadRequestTimeout() const override;
-    [[nodiscard]] TDuration GetWriteHedgingDelay() const override;
+    [[nodiscard]] TDuration GetWriteHedgingDelay(
+        THostMask hosts,
+        bool indirect) const override;
     [[nodiscard]] TDuration GetWriteRequestTimeout() const override;
     [[nodiscard]] TDuration GetIndirectWriteReplyTimeout() const override;
     [[nodiscard]] TDuration GetFlushRequestTimeout() const override;

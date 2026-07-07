@@ -23,6 +23,12 @@ constexpr ui32 HtmlTraceProps =
     ERuleProperties::RequireNameConstraints |
     ERuleProperties::RequireAliases;
 
+constexpr ui32 HtmlRuleTraceRefreshProps =
+    ERuleProperties::RequireParents |
+    ERuleProperties::RequireLiveness |
+    ERuleProperties::RequireNameConstraints |
+    ERuleProperties::RequireAliases;
+
 constexpr ui32 HtmlPlanOpts =
     EPrintPlanOptions::PrintFullMetadata |
     EPrintPlanOptions::PrintBasicStatistics;
@@ -33,6 +39,12 @@ std::string ToStdString(TStringBuf value) {
 
 void ComputeHtmlTraceProps(TOpRoot& root, TRBOContext& ctx, TStringBuf stageName) {
     ComputeRequiredProps(root, HtmlTraceProps, ctx, TStringBuilder() << stageName << " HTML trace");
+}
+
+void RefreshHtmlRuleTraceProps(TOpRoot& root, TRBOContext& ctx, TStringBuf stageName) {
+    // Per-rule trace must not add type/stat requirements: some stages intentionally
+    // repair temporary map/alias inconsistencies with a later rule in the same stage.
+    ComputeRequiredProps(root, HtmlRuleTraceRefreshProps, ctx, TStringBuilder() << stageName << " HTML trace");
 }
 
 void SubmitTextTile(TRBOContext& ctx, optimizer_trace::Trace::Stage& stage, const std::string& title, const std::string& body) {
@@ -119,7 +131,7 @@ void TRuleTraceAttempt::SubmitApplied(TOpRoot& root, TStringBuf stageName) {
 }
 
 void TRuleTraceAttempt::Submit(TOpRoot& root, TStringBuf stageName) {
-    ComputeHtmlTraceProps(root, Ctx, stageName);
+    RefreshHtmlRuleTraceProps(root, Ctx, stageName);
 
     TTraceBuildState traceBuildState;
     Tile->setTree(BuildPlanNodeFromRoot(root, Ctx.ExprCtx, HtmlPlanOpts, &traceBuildState));

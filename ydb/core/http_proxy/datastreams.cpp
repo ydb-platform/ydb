@@ -592,7 +592,7 @@ namespace NKikimr::NHttpProxy {
         }
 
         bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig&) const override {
-            return apiVersion == "kinesisApi";
+            return apiVersion != "AmazonSQS";
         }
     };
 
@@ -605,4 +605,3 @@ namespace NKikimr::NHttpProxy {
     }
 
 } // namespace NKikimr::NHttpProxy
-

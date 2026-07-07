@@ -1,5 +1,6 @@
 #include <ydb/core/ymq/base/helpers.h>
 
+#include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NSQS {
@@ -117,6 +118,46 @@ Y_UNIT_TEST_SUITE(MessageBodyValidationTest) {
         UNIT_ASSERT(!ValidateMessageBody("\u0002", desc));
         UNIT_ASSERT(!ValidateMessageBody("\u0019", desc));
         UNIT_ASSERT(!ValidateMessageBody("\uFFFF", desc));
+    }
+}
+
+Y_UNIT_TEST_SUITE(ReceiptHandleTest) {
+    Y_UNIT_TEST(EncodeDecodeRoundTrip) {
+        TReceipt receipt;
+        receipt.SetSource(TReceipt::Table);
+        receipt.SetShard(3);
+        receipt.SetOffset(42);
+        receipt.SetLockTimestamp(1234567890);
+
+        const TString handle = EncodeReceiptHandle(receipt);
+        TReceipt decoded;
+        UNIT_ASSERT(TryDecodeReceiptHandle(handle, decoded));
+        UNIT_ASSERT(decoded.GetSource() == receipt.GetSource());
+        UNIT_ASSERT_VALUES_EQUAL(decoded.GetShard(), receipt.GetShard());
+        UNIT_ASSERT_VALUES_EQUAL(decoded.GetOffset(), receipt.GetOffset());
+        UNIT_ASSERT_VALUES_EQUAL(decoded.GetLockTimestamp(), receipt.GetLockTimestamp());
+    }
+
+    Y_UNIT_TEST(NonCanonicalHandleIsRejected) {
+        TReceipt receipt;
+        receipt.SetSource(TReceipt::Table);
+        receipt.SetShard(0);
+        receipt.SetOffset(1);
+        receipt.SetLockTimestamp(100);
+
+        const TString handle = EncodeReceiptHandle(receipt);
+        const TString decoded = Base64DecodeUneven(handle);
+        const TString nonCanonical = decoded + '\0';
+        const TString badHandle = Base64EncodeUrl(nonCanonical);
+
+        TReceipt out;
+        UNIT_ASSERT(!TryDecodeReceiptHandle(badHandle, out));
+    }
+
+    Y_UNIT_TEST(InvalidHandleIsRejected) {
+        TReceipt out;
+        UNIT_ASSERT(!TryDecodeReceiptHandle("not-a-valid-handle", out));
+        UNIT_ASSERT(!TryDecodeReceiptHandle("", out));
     }
 }
 

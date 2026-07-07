@@ -626,9 +626,9 @@
     ],
     "test.test[join-prune_keys_YQL-19979-default.txt-Debug]": [
         {
-            "checksum": "b96a18e5e334ac232f7c5ccebb12f7d8",
+            "checksum": "d8d2b23acc447a07319e7aa2b9dda8b0",
             "size": 1066,
-            "uri": "https://{canondata_backend}/1903280/4f6e0c5dc35f2b3e1f2d53ba860291d66f7871d7/resource.tar.gz#test.test_join-prune_keys_YQL-19979-default.txt-Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1942278/4bb9cb4d8c85fd05c7c2801b231931fa7a66482e/resource.tar.gz#test.test_join-prune_keys_YQL-19979-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[join-prune_keys_YQL-19979-default.txt-Results]": [

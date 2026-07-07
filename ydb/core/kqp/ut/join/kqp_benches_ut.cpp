@@ -1,6 +1,6 @@
-#include "kqp_join_topology_generator.h"
+#include <ydb/core/kqp/opt/cbo/bench/kqp_join_topology_generator.h>
 
-#include <ydb/core/kqp/ut/common/kqp_benches.h>
+#include <ydb/core/kqp/opt/cbo/bench/kqp_benches.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp {

@@ -666,6 +666,59 @@ private:
     std::atomic<size_t> Received;
 };
 
+struct TEvTcpEmptyRecordWithPayload
+    : TEventPB<TEvTcpEmptyRecordWithPayload, NInterconnectTest::TEvTestSerialization, 0x10002>
+{};
+
+class TSingleEventSenderActor : public TActorBootstrapped<TSingleEventSenderActor> {
+public:
+    TSingleEventSenderActor(TActorId recipient, IEventBase* event)
+        : Recipient(recipient)
+        , Event(event)
+    {}
+
+    void Bootstrap() {
+        Send(Recipient, Event);
+        PassAway();
+    }
+
+private:
+    const TActorId Recipient;
+    IEventBase* const Event;
+};
+
+class TEmptyRecordWithPayloadReceiverActor : public TActorBootstrapped<TEmptyRecordWithPayloadReceiverActor> {
+public:
+    TEmptyRecordWithPayloadReceiverActor(TString expectedPayload)
+        : ExpectedPayload(std::move(expectedPayload))
+    {}
+
+    void Bootstrap() {
+        Become(&TThis::StateFunc);
+    }
+
+    void Handle(TEvTcpEmptyRecordWithPayload::TPtr& ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.ByteSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), ExpectedPayload.size());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), ExpectedPayload);
+        Received.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    size_t GetReceived() const noexcept {
+        return Received.load(std::memory_order_relaxed);
+    }
+
+private:
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvTcpEmptyRecordWithPayload, Handle);
+    )
+
+private:
+    const TString ExpectedPayload;
+    std::atomic<size_t> Received = 0;
+};
+
 namespace {
 
 TTestICCluster::Flags GetKernelLivenessFlags(bool withRdma) {
@@ -689,6 +742,39 @@ void WaitForRdmaQpRts(TTestICCluster& cluster, ui32 nodeId, ui32 peerNodeId, TSt
             return false;
         }
     }, description);
+}
+
+void RunTcpEmptyProtoRecordWithPayloadRoundTrip(bool enableExternalDataChannel) {
+    const TString payload(5000, 'x');
+    auto settingsCustomizer = [enableExternalDataChannel](ui32, TInterconnectSettings& settings) {
+        settings.EnableExternalDataChannel = enableExternalDataChannel;
+    };
+
+    TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, TTestICCluster::DISABLE_RDMA,
+        {}, TDuration::Seconds(30), TNode::DefaultInflight(), settingsCustomizer);
+
+    auto* receiverPtr = new TEmptyRecordWithPayloadReceiverActor(payload);
+    const TActorId recipient = cluster.RegisterActor(receiverPtr, 1);
+
+    auto* event = new TEvTcpEmptyRecordWithPayload;
+    event->AddPayload(TRope(payload));
+    UNIT_ASSERT_VALUES_EQUAL(event->Record.ByteSize(), 0);
+    UNIT_ASSERT(event->AllowExternalDataChannel());
+
+    cluster.RegisterActor(new TSingleEventSenderActor(recipient, event), 2);
+
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        return receiverPtr->GetReceived() == 1;
+    }, "TCP empty protobuf record with payload delivery");
+
+    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseExternalDataChannel"),
+        enableExternalDataChannel ? 1ULL : 0ULL);
+    if (enableExternalDataChannel) {
+        UNIT_ASSERT_C(WaitForSessionCounter(cluster, 1, 2, "XdcSections") > 0,
+            "payload was not received through XDC sections");
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 1, 2, "XdcSections"), 0ULL);
+    }
 }
 
 ui64 MeasureIdleGeneratedPackets(bool enableKernelLiveness, bool withRdma) {
@@ -1236,6 +1322,14 @@ Y_UNIT_TEST_SUITE(Interconnect) {
             return recipientOnNode1Ptr->GetReceived() > receivedOnNode1Before
                 && recipientOnNode2Ptr->GetReceived() > receivedOnNode2Before;
         }, "bidirectional delivery after simultaneous RDMA reconnect");
+    }
+
+    Y_UNIT_TEST(TcpXdcEmptyProtoRecordWithPayloadRoundTrip) {
+        RunTcpEmptyProtoRecordWithPayloadRoundTrip(true);
+    }
+
+    Y_UNIT_TEST(TcpInlineEmptyProtoRecordWithPayloadRoundTrip) {
+        RunTcpEmptyProtoRecordWithPayloadRoundTrip(false);
     }
 
     Y_UNIT_TEST(KernelLivenessMixedConfigFallback) {

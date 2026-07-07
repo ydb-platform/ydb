@@ -38,6 +38,7 @@ from mute.constants import (
 from mute.naming import mute_file_line_to_tests_monitor_full_name
 from mute.mute_utils import dedicated_relative
 from mute.llm_debug_comment import post_llm_debug_comment
+from mute.fast_unmute_pipeline import enter_fast_unmute_grace_for_unmuted_tests
 from ydb_wrapper import YDBWrapper
 from github_issue_utils import DEFAULT_BUILD_TYPE, canonical_team_slug, make_profile_id
 
@@ -1464,6 +1465,22 @@ def mute_worker(args):
             return 1
 
         build_type = getattr(args, 'build_type', DEFAULT_BUILD_TYPE)
+
+        if args.mode == 'enter_fast_unmute_grace':
+            logging.info(
+                'Starting enter_fast_unmute_grace for branch=%s build_type=%s',
+                args.branch,
+                build_type,
+            )
+            enter_fast_unmute_grace_for_unmuted_tests(ydb_wrapper, args.branch, build_type)
+            logging.info(
+                'enter_fast_unmute_grace step finished for branch=%s build_type=%s '
+                '(see log above for recorded/skipped rows and any warnings)',
+                args.branch,
+                build_type,
+            )
+            return 0
+
         logging.info(f"Starting mute worker with mode: {args.mode}")
         logging.info(f"Branch: {args.branch}")
         logging.info(f"build_type: {build_type}")
@@ -1607,6 +1624,18 @@ if __name__ == "__main__":
     )
     sync_fast_unmute_grace_parser.add_argument('--branch', default='main', help='Branch to get history')
     sync_fast_unmute_grace_parser.add_argument(
+        '--build-type',
+        default=DEFAULT_BUILD_TYPE,
+        dest='build_type',
+        help='tests_monitor build_type slice (default: relwithdebinfo)',
+    )
+
+    enter_fast_unmute_grace_parser = subparsers.add_parser(
+        'enter_fast_unmute_grace',
+        help='start fast_unmute_grace when tests left mute on branch (after tests_monitor refresh)',
+    )
+    enter_fast_unmute_grace_parser.add_argument('--branch', default='main', help='Branch to get history')
+    enter_fast_unmute_grace_parser.add_argument(
         '--build-type',
         default=DEFAULT_BUILD_TYPE,
         dest='build_type',

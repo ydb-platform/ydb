@@ -564,19 +564,17 @@ const char* const InternalGetQueueAttributesQuery = R"__(
 
         (let attrsRead (SelectRow attrsTable attrsRow attrsSelect))
 
+        (let queuesTable ')__" ROOT_PARAM R"__(/.Queues)
+        (let queuesRow '(
+            '('Account userName)
+            '('QueueName (Utf8String '")__" QUEUE_NAME_PARAM R"__("))))
+        (let queuesRowSelect '('QueueName 'Tags 'CreatedTimestamp))
+        (let queuesRowRead (SelectRow queuesTable queuesRow queuesRowSelect))
+
         (let tags
             (If (Not (Exists attrsRead))
                 (Utf8 '"{}")
                 (block '(
-                    (let queuesTable ')__" ROOT_PARAM R"__(/.Queues)
-
-                    (let queuesRow '(
-                        '('Account userName)
-                        '('QueueName (Utf8String '")__" QUEUE_NAME_PARAM R"__("))))
-
-                    (let queuesRowSelect '('QueueName 'Tags))
-                    (let queuesRowRead (SelectRow queuesTable queuesRow queuesRowSelect))
-
                     (let str (Coalesce (Member queuesRowRead 'Tags) (Utf8 '"{}")))
                     (return (If (Equal (Utf8 '"") str)
                                 (Utf8 '"{}")
@@ -585,6 +583,7 @@ const char* const InternalGetQueueAttributesQuery = R"__(
         (return (AsList
             (SetResult 'queueExists (Exists attrsRead))
             (SetResult 'attrs attrsRead)
+            (SetResult 'createdTimestamp (Member queuesRowRead 'CreatedTimestamp))
             (SetResult 'tags tags)))
     )
 )__";

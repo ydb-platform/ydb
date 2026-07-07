@@ -139,6 +139,12 @@ public:
         return std::make_shared<TIAMCredentialsProvider>(Params_);
     }
 
+    std::string GetClientIdentity() const final {
+        return TStringBuilder() <<
+                "TIamCredentialsProviderFactory" << '\t' <<
+                Params_.Host << ':' << Params_.Port << '@' << Params_.RefreshPeriod;
+    }
+
 private:
     TIamHost Params_;
 };

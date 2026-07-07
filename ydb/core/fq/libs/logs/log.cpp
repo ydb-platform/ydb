@@ -6,6 +6,7 @@
 #include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_LOG_UPDATER
 

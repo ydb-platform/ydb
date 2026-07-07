@@ -36,6 +36,7 @@ private:
 };
 
 TString EncodeReceiptHandle(const TReceipt& receipt);
+bool TryDecodeReceiptHandle(const TString& receipt, TReceipt& out);
 TReceipt DecodeReceiptHandle(const TString& receipt);
 
 } // namespace NKikimr::NSQS

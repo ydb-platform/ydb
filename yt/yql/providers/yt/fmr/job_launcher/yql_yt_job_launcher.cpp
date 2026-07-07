@@ -5,6 +5,8 @@
 #include <util/system/shellcommand.h>
 #include <util/folder/tempdir.h>
 #include <util/stream/file.h>
+#include <util/system/condvar.h>
+#include <util/system/thread.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql::NFmr {
@@ -54,7 +56,8 @@ std::variant<TFmrError, TStatistics> TFmrUserJobLauncher::LaunchJob(
     const TMaybe<TString>& jobEnvironmentDir,
     const std::vector<TFileInfo>& jobFiles,
     const std::vector<TYtResourceInfo>& jobYtResources,
-    const std::vector<TFmrResourceTaskInfo>& jobFmrResources)
+    const std::vector<TFmrResourceTaskInfo>& jobFmrResources,
+    std::shared_ptr<std::atomic<bool>> cancelFlag)
 {
     if (!RunInSeparateProcess_) {
         bool hasFmrJobResource = AnyOf(jobYtResources, [](const auto& r) {
@@ -109,7 +112,50 @@ std::variant<TFmrError, TStatistics> TFmrUserJobLauncher::LaunchJob(
 
     TShellCommand command(binaryPath, {}, opts, jobtmpDir);
     command.Run();
+
+    // Monitor cancel flag in a background thread; terminate the process if set.
+    // The main thread calls Wait() so it wakes immediately when the process exits.
+    // A TCondVar lets the watcher wake immediately once Wait() returns instead of
+    // sleeping out the rest of its poll interval.
+    TMutex mutex;
+    TCondVar processFinished;
+    bool finished = false;
+    bool cancelled = false;
+    THolder<TThread> cancelWatcher;
+    if (cancelFlag) {
+        cancelWatcher = MakeHolder<TThread>([&] {
+            TGuard<TMutex> guard(mutex);
+            while (!finished) {
+                processFinished.WaitT(mutex, TDuration::MilliSeconds(50));
+                if (finished) {
+                    break;
+                }
+                if (cancelFlag->load()) {
+                    cancelled = true;
+                    command.Terminate();
+                    break;
+                }
+            }
+        });
+        cancelWatcher->Start();
+    }
+
     command.Wait();
+
+    {
+        TGuard<TMutex> guard(mutex);
+        finished = true;
+        processFinished.BroadCast();
+    }
+    if (cancelWatcher) {
+        cancelWatcher->Join();
+    }
+    if (cancelled) {
+        return TFmrError{
+            .Reason = EFmrErrorReason::Unknown,
+            .ErrorMessage = "Job process terminated due to cancellation"
+        };
+    }
 
     auto code = command.GetExitCode();
     if (code != 0) {

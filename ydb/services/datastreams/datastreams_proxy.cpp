@@ -25,6 +25,8 @@
 
 #include <iterator>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
+
 using namespace NActors;
 using namespace NKikimrClient;
 
@@ -330,7 +332,9 @@ namespace NKikimr::NDataStreams::V1 {
                                                 const TActorContext& ctx, const TString& workingDir,
                                                 const TString& name)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "WorkingDir = " << workingDir << ", name = " << name);
+        YDB_LOG_DEBUG_CTX(ctx, "Fill propose request",
+            {"workingDir", workingDir},
+            {"name", name});
         NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
         modifyScheme.SetWorkingDir(workingDir);
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);

@@ -172,6 +172,7 @@ void TKafkaBatchCodec::CompressWriteBlock(TWriteBlockCompression& ctx) const {
     using namespace NKafka;
 
     Y_ABORT_UNLESS(ctx.Payloads.size() == ctx.CreatedAt.size());
+    Y_ABORT_UNLESS(ctx.Payloads.size() == ctx.MessageKeys.size());
     Y_ABORT_UNLESS(!ctx.Payloads.empty());
 
     TKafkaRecordBatch kafkaBatch;
@@ -192,6 +193,9 @@ void TKafkaBatchCodec::CompressWriteBlock(TWriteBlockCompression& ctx) const {
         record.OffsetDelta = static_cast<TKafkaRecord::OffsetDeltaMeta::Type>(i);
         record.TimestampDelta = ctx.CreatedAt[i].MilliSeconds() - baseTimestamp;
         kafkaBatch.MaxTimestamp = Max<i64>(kafkaBatch.MaxTimestamp, static_cast<i64>(ctx.CreatedAt[i].MilliSeconds()));
+        if (ctx.MessageKeys[i]) {
+            record.SetKey(TString{ctx.MessageKeys[i]->data(), ctx.MessageKeys[i]->size()});
+        }
         record.Value = TKafkaRawBytes(ctx.Payloads[i].data(), ctx.Payloads[i].size());
         record.Length = record.Size(2) - NKafka::NPrivate::SizeOfVarint<TKafkaRecord::LengthMeta::Type>(0);
         kafkaBatch.Records.push_back(std::move(record));

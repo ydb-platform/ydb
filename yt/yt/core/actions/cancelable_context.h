@@ -56,12 +56,38 @@ private:
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
     std::atomic<bool> Canceled_ = false;
     TError CancelationError_;
-    TCallbackList<void(const TError&)> Handlers_;
+    TSingleShotCallbackList<void(const TError&)> Handlers_;
     THashSet<TWeakPtr<TCancelableContext>> PropagateToContexts_;
     THashSet<TFuture<void>> PropagateToFutures_;
 };
 
 DEFINE_REFCOUNTED_TYPE(TCancelableContext)
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Returns the cancelable context installed for the current fiber (or null if none).
+TCancelableContext* TryGetCurrentCancelableContext();
+//! Installs #newContext for the current fiber, returning the previously installed one.
+TCancelableContextPtr SwitchCurrentCancelableContext(TCancelableContextPtr newContext);
+
+//! Installs the given context into the current fiber slot for the guard's lifetime.
+//! Move-only; a moved-from guard restores nothing.
+class TCurrentCancelableContextGuard
+{
+public:
+    explicit TCurrentCancelableContextGuard(TCancelableContextPtr context);
+    TCurrentCancelableContextGuard(TCurrentCancelableContextGuard&& other) noexcept;
+
+    TCurrentCancelableContextGuard(const TCurrentCancelableContextGuard&) = delete;
+    TCurrentCancelableContextGuard& operator=(const TCurrentCancelableContextGuard&) = delete;
+    TCurrentCancelableContextGuard& operator=(TCurrentCancelableContextGuard&&) = delete;
+
+    ~TCurrentCancelableContextGuard();
+
+private:
+    bool Active_;
+    TCancelableContextPtr OldContext_;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/blobstorage_tablet_types.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/tablet_types.h>

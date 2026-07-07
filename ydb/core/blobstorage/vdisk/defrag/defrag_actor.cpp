@@ -120,16 +120,19 @@ namespace NKikimr {
 
             void StartFullCompaction() {
                 if (CompInProgress) {
-                    STLOG(PRI_DEBUG, BS_HULLCOMP, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragCompactionManager can't start new compaction because previous compaction is still in progress"));
+                    YDB_LOG_DEBUG_COMP(BS_HULLCOMP, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragCompactionManager can't start new compaction because previous compaction is still in progress"),
+                        {"marker", "BSVDD10"});
                     return;
                 }
-                STLOG(PRI_INFO, BS_HULLCOMP, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragCompactionManager starts new compaction"));
+                YDB_LOG_INFO_COMP(BS_HULLCOMP, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragCompactionManager starts new compaction"),
+                    {"marker", "BSVDD10"});
                 CompInProgress = true;
                 Send(DCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::LogoBlobs, TEvCompactVDisk::EMode::FULL, false));
             }
 
             void Handle(TEvCompactVDiskResult::TPtr&) {
-                STLOG(PRI_INFO, BS_HULLCOMP, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragCompactionManager full compaction has finished"));
+                YDB_LOG_INFO_COMP(BS_HULLCOMP, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragCompactionManager full compaction has finished"),
+                    {"marker", "BSVDD10"});
                 CompInProgress = false;
             }
 
@@ -168,7 +171,8 @@ namespace NKikimr {
             {}
 
             void Bootstrap(const TActorId parentId) {
-                STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD01, VDISKP(DCtx->VCtx->VDiskLogPrefix, "Bootstrap"));
+                YDB_LOG_DEBUG_COMP(BS_VDISK_DEFRAG, VDISKP(DCtx->VCtx->VDiskLogPrefix, "Bootstrap"),
+                    {"marker", "BSVDD01"});
                 ParentId = parentId;
                 Send(DCtx->SkeletonId, new TEvTakeHullSnapshot(false));
                 Become(&TThis::StateFunc);
@@ -178,7 +182,8 @@ namespace NKikimr {
                 TDefragCalcStat calcStat(std::move(ev->Get()->Snap), DCtx->HugeBlobCtx);
                 std::unique_ptr<TEvDefragStartQuantum> res;
                 if (calcStat.Scan(NDefrag::MaxSnapshotHoldDuration)) {
-                    STLOG(PRI_ERROR, BS_VDISK_DEFRAG, BSVDD05, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan timed out"));
+                    YDB_LOG_ERROR_COMP(BS_VDISK_DEFRAG, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan timed out"),
+                        {"marker", "BSVDD05"});
                 } else {
                     const ui32 totalChunks = calcStat.GetTotalChunks();
                     const ui32 usefulChunks = calcStat.GetUsefulChunks();
@@ -198,9 +203,10 @@ namespace NKikimr {
 
                     // check if we need to run compaction
                     if (garbageThresholdToRunCompaction > 0 && spaceCouldBeFreedViaCompaction > garbageThresholdToRunCompaction) {
-                        STLOG(PRI_INFO, BS_HULLCOMP, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "DefragPlannerActor finished scan and trying to run a full compaction"),
-                            (SpaceCouldBeFreedViaCompaction, spaceCouldBeFreedViaCompaction),
-                            (GarbageThresholdToRunCompaction, garbageThresholdToRunCompaction));
+                        YDB_LOG_INFO_COMP(BS_HULLCOMP, VDISKP(DCtx->VCtx->VDiskLogPrefix, "DefragPlannerActor finished scan and trying to run a full compaction"),
+                            {"marker", "BSVDD10"},
+                            {"spaceCouldBeFreedViaCompaction", spaceCouldBeFreedViaCompaction},
+                            {"garbageThresholdToRunCompaction", garbageThresholdToRunCompaction});
                         Send(CompactionManagerId, new TEvStartCompactionFromDefrag());
                     }
 
@@ -210,13 +216,15 @@ namespace NKikimr {
                         res = std::make_unique<TEvDefragStartQuantum>(std::move(chunksToDefrag));
                     }
 
-                    STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD03, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
-                        (TotalChunks, totalChunks), (UsefulChunks, usefulChunks), (FreedChunks, freedChunks),
-                        (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())),
-                        (ChunksToDefrag, res ? res->ChunksToDefrag.ToString() : "nothing"),
-                        (SpaceCouldBeFreedViaCompaction, spaceCouldBeFreedViaCompaction),
-                        (GarbageThresholdToRunCompaction, garbageThresholdToRunCompaction)
-                    );
+                    YDB_LOG_INFO_COMP(BS_VDISK_DEFRAG, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
+                        {"marker", "BSVDD03"},
+                        {"totalChunks", totalChunks},
+                        {"usefulChunks", usefulChunks},
+                        {"freedChunks", freedChunks},
+                        {"localColor", NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())},
+                        {"chunksToDefrag", res ? res->ChunksToDefrag.ToString() : "nothing"},
+                        {"spaceCouldBeFreedViaCompaction", spaceCouldBeFreedViaCompaction},
+                        {"garbageThresholdToRunCompaction", garbageThresholdToRunCompaction});
                 }
                 if (!res) {
                     res = std::make_unique<TEvDefragStartQuantum>(TChunksToDefrag());
@@ -226,7 +234,8 @@ namespace NKikimr {
             }
 
             void PassAway() override {
-                STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD02, VDISKP(DCtx->VCtx->VDiskLogPrefix, "PassAway"));
+                YDB_LOG_DEBUG_COMP(BS_VDISK_DEFRAG, VDISKP(DCtx->VCtx->VDiskLogPrefix, "PassAway"),
+                    {"marker", "BSVDD02"});
                 TActorBootstrapped::PassAway();
             }
 

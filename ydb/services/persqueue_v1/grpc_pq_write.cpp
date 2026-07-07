@@ -37,7 +37,7 @@ TPQWriteService::TPQWriteService(const TActorId& schemeCache,
 void TPQWriteService::Bootstrap(const TActorContext& ctx) {
     HaveClusters = !AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen(); // ToDo[migration]: switch to proper option
     if (HaveClusters) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "TPQWriteService: send TEvClusterTracker::TEvSubscribe");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "TPQWriteService: send TEvClusterTracker::TEvSubscribe");
 
         ctx.Send(NPQ::NClusterTracker::MakeClusterTrackerID(),
                  new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
@@ -132,7 +132,8 @@ void TPQWriteService::Handle(TEvPQProxy::TEvSessionSetPreferredCluster::TPtr& ev
     const auto& cookie = ev->Get()->Cookie;
     const auto& preferredCluster = ev->Get()->PreferredCluster;
     if (!Sessions.contains(cookie)) {
-        LOG_ERROR_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "Got TEvSessionSetPreferredCluster message from session with cookie " << cookie << " that is not in session collection");
+        YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "Got TEvSessionSetPreferredCluster message from session with cookie that is not in session collection",
+            {"cookie", cookie});
         return;
     }
     if (!preferredCluster.empty() && *LocalCluster != preferredCluster) {

@@ -82,6 +82,32 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         }
     }
 
+    Y_UNIT_TEST(CoroutineSerializerChunkSizesAroundSlopBoundary) {
+        TEvMessageWithPayload msg;
+        msg.Record.SetMeta("hello, world!");
+        msg.Record.AddPayloadId(msg.AddPayload(MakeStringRope(MakeString(256))));
+        msg.Record.AddSomeData(MakeString(128));
+
+        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        UNIT_ASSERT(msg.SerializeToArcadiaStream(serializer.Get()));
+        const TString expected = serializer->Release(msg.CreateSerializationInfo(false))->GetString();
+        UNIT_ASSERT_VALUES_EQUAL(expected.size(), msg.CalculateSerializedSize());
+
+        for (size_t chunkSize = 1; chunkSize <= 32; ++chunkSize) {
+            TString actual;
+            TCoroutineChunkSerializer chunker;
+            chunker.SetSerializingEvent(&msg);
+            while (!chunker.IsComplete()) {
+                TString buffer(chunkSize, '\0');
+                for (const auto& [data, size] : chunker.FeedBuf(buffer.begin(), buffer.size())) {
+                    actual.append(data, size);
+                }
+            }
+            UNIT_ASSERT(chunker.IsSuccessfull());
+            UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, "chunkSize# " << chunkSize);
+        }
+    }
+
 #if (!defined(_tsan_enabled_))
     Y_UNIT_TEST(SerializeDeserialize) {
         TestAllSizes<TEvMessageWithPayload>();

@@ -8,16 +8,9 @@ namespace NKqp {
 class IOperator;
 class TOpRoot;
 
-bool HasOutputConflicts(const TVector<TInfoUnit>& outputIUs);
-bool CanExposeOutput(IOperator* op, const TVector<TInfoUnit>& outputIUs, const TPlanProps& props);
-bool CanExposeOutput(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& outputIUs, const TPlanProps& props);
-bool CanExposeToParents(IOperator* op, const TPlanProps& props);
-bool CanReplaceInParents(
-    const TIntrusivePtr<IOperator>& oldOp,
-    const TIntrusivePtr<IOperator>& replacement,
-    const TPlanProps& props);
-
 void ComputePlanNameConstraints(TOpRoot& root);
+
+const TInfoUnitConstraintSet& GetForbidden(IOperator* op);
 
 } // namespace NKqp
 } // namespace NKikimr

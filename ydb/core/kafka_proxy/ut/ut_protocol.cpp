@@ -2855,12 +2855,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 {TTopicConfig(topic, 1, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}})});
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, NONE_ERROR);
             WriteMessagesWithKeys(writeSession, {{"key-1", 6_MB}}, 10);
-            Sleep(TDuration::Seconds(10));
-            for (ui32 triesCount = 3; triesCount != 0;) {
+            for (ui32 triesCount = 30; triesCount != 0;) {
                 auto results = Read(readSession, false);
                 if (results.empty()) {
                     triesCount--;
-                    Sleep(TDuration::MilliSeconds(250));
+                    Sleep(TDuration::MilliSeconds(500));
                     continue;
                 }
                 for (auto& dataEvent : results) {

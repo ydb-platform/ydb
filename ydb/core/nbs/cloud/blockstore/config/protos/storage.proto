@@ -42,6 +42,15 @@ message TOracleConfig
     // The total size of failed requests after which the host is taken offline.
     // Required to protect PBuffer from overflow.
     optional uint64 ErrorsTotalSizeForGoingOffline = 6;
+
+    // Time prediction history size.
+    // 0 - means do not use time prediction through history.
+    optional uint32 TimePredictionHistorySize = 7;
+
+    // Which element number from the end of the list to use. If take pre-last one
+    // with a queue size of 10, then it is equivalent to the 90th percentile.
+    // 0 - means the last (100th percentile).
+    optional uint32 TimePredictionNthFromEnd = 8;
 }
 
 message TStorageServiceConfig

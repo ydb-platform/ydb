@@ -132,13 +132,14 @@ private:
     std::deque<TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr> UpdateExternalLockedMessageGroupsIdRequestsQueue;
 
     std::deque<TReadResult> PendingReadQueue;
-    std::deque<TResult> PendingCommitQueue;
-    std::deque<TResult> PendingUnlockQueue;
-    std::deque<TResult> PendingChangeMessageDeadlineQueue;
+    std::deque<TCommitResult> PendingCommitQueue;
+    std::deque<TUnlockResult> PendingUnlockQueue;
+    std::deque<TChangeMessageDeadlineResult> PendingChangeMessageDeadlineQueue;
     std::deque<TResult> PendingPurgeQueue;
 
     bool ProcessingScheduled = false;
     TInstant NextProcessingTime;
+    TInstant NextForcedProcessingTime;
 
     ui64 LastWALIndex = 0;
     bool HasSnapshot = false;

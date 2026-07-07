@@ -10,7 +10,7 @@
 #include <ydb/library/actors/async/event.h>
 
 #include <library/cpp/cache/cache.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <util/generic/list.h>
 #include <util/generic/queue.h>
 #include <util/generic/set.h>

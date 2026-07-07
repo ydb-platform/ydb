@@ -13,6 +13,7 @@ SRCS(
     guarded_sglist.cpp
     helpers.cpp
     page_size.cpp
+    ring_buffer.cpp
     scheduler_test.cpp
     scheduler.cpp
     sglist_iter.cpp

@@ -30,7 +30,7 @@ static const std::map<TString, TAttributeInfo> AttributesInfo = {
     { "ApproximateNumberOfMessages",           {  true, false, false, false } },
     { "ApproximateNumberOfMessagesDelayed",    {  true, false, false, false } },
     { "ApproximateNumberOfMessagesNotVisible", {  true, false, false, false } },
-    { "CreatedTimestamp",                      {  true, false, false, false } },
+    { "CreatedTimestamp",                      { false,  true, false, false } },
     { "DelaySeconds",                          { false,  true, false, false } },
     { "MaximumMessageSize",                    { false,  true, false, false } },
     { "MessageRetentionPeriod",                { false,  true, false, false } },
@@ -197,14 +197,17 @@ private:
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             RLOG_SQS_ERROR("Get runtime queue attributes failed: " << ev->Get()->ErrorDescription);
-            MakeError(result, NErrors::INTERNAL_FAILURE, ev->Get()->ErrorDescription);
+            if (ev->Get()->Status == Ydb::StatusIds::SCHEME_ERROR) {
+                // The topic (and therefore the queue) no longer exists: the queue is being
+                // deleted. Report it as a non-existent queue instead of an internal failure.
+                MakeError(result, NErrors::NON_EXISTENT_QUEUE);
+            } else {
+                MakeError(result, NErrors::INTERNAL_FAILURE, ev->Get()->ErrorDescription);
+            }
             SendReplyAndDie();
             return;
         }
 
-        if (HasAttributeName("CreatedTimestamp")) {
-            result->SetCreatedTimestamp(ev->Get()->TopicCreated.Seconds());
-        }
         if (HasAttributeName("ApproximateNumberOfMessages")) {
             result->SetApproximateNumberOfMessages(ev->Get()->ApproximateMessageCount + result->GetApproximateNumberOfMessages());
         }
@@ -231,6 +234,12 @@ private:
             if (queueExists) {
                 const TValue& attrs(val["attrs"]);
 
+                if (HasAttributeName("CreatedTimestamp")) {
+                    const TValue& createdTimestamp(val["createdTimestamp"]);
+                    if (createdTimestamp.HaveValue()) {
+                        result->SetCreatedTimestamp(TInstant::MilliSeconds(ui64(createdTimestamp)).Seconds());
+                    }
+                }
                 if (HasAttributeName("ContentBasedDeduplication")) {
                     result->SetContentBasedDeduplication(bool(attrs["ContentBasedDeduplication"]));
                 }
@@ -284,9 +293,6 @@ private:
             return;
         }
 
-        if (HasAttributeName("CreatedTimestamp")) {
-            result->SetCreatedTimestamp(ev->Get()->CreatedTimestamp.Seconds());
-        }
         if (HasAttributeName("ApproximateNumberOfMessages")) {
             result->SetApproximateNumberOfMessages(ev->Get()->MessagesCount + result->GetApproximateNumberOfMessages());
         }

@@ -11,10 +11,12 @@ SRCS(
     ordered_hash_map_ut.cpp
     sentinel_optional_ut.cpp
     sharded_set_ut.cpp
+    slot_map_ut.cpp
 )
 
 PEERDIR(
     library/cpp/yt/containers
+    library/cpp/yt/compact_containers
 
     library/cpp/testing/gtest
 )

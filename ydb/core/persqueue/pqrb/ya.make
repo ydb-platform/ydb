@@ -8,6 +8,7 @@ SRCS(
     read_balancer__balancing_app.cpp
     read_balancer__balancing.cpp
     read_balancer__metrics.cpp
+    read_balancer__sqs_metrics.cpp
     read_balancer__mlp_balancing.cpp
     read_balancer_app.cpp
     read_balancer.cpp
@@ -17,6 +18,7 @@ GENERATE_ENUM_SERIALIZATION(read_balancer__balancing.h)
 
 PEERDIR(
     contrib/libs/fmt
+    ydb/core/base
     ydb/core/engine/minikql
     ydb/core/persqueue/events
     ydb/core/persqueue/common

@@ -131,6 +131,12 @@ jobs:
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
+      - name: Record fast-unmute grace for tests unmuted on branch
+        run: |
+          .github/scripts/tests/mute/create_new_muted_ya.py enter_fast_unmute_grace \
+            --branch=${{ env.BASE_BRANCH }} \
+            --build-type=${{ env.BUILD_TYPE }}
+
       - name: Sync fast-unmute grace for re-muted tests
         run: |
           .github/scripts/tests/mute/create_new_muted_ya.py sync_fast_unmute_grace \

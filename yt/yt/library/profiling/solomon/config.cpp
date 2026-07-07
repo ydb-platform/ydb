@@ -48,6 +48,9 @@ void TShardConfig::Register(TRegistrar registrar)
 
 void TSolomonExporterConfig::Register(TRegistrar registrar)
 {
+    registrar.Parameter("enable", &TThis::Enable)
+        .Default(true);
+
     registrar.Parameter("grid_step", &TThis::GridStep)
         .Default(TDuration::Seconds(5));
 

@@ -3,6 +3,7 @@
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/algorithm.h>
 #include <util/string/join.h>
 
 #include <ranges>
@@ -47,6 +48,10 @@ void TStorage::SetMaxMessageProcessingCount(ui32 maxMessageProcessingCount) {
 
 void TStorage::SetRetentionPeriod(std::optional<TDuration> retentionPeriod) {
     RetentionPeriod = retentionPeriod;
+}
+
+void TStorage::SetReceiveAttemptIdPeriod(TDuration receiveAttemptIdPeriod) {
+    ReceiveAttemptIdPeriod = receiveAttemptIdPeriod;
 }
 
 void TStorage::SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy> deadLetterPolicy) {
@@ -322,18 +327,178 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
     return std::nullopt;
 }
 
-bool TStorage::Commit(ui64 messageId) {
-    return DoCommit(messageId, Metrics.TotalCommittedMessageCount);
+std::optional<TReadMessage> TStorage::ReadForReplay(ui64 offset, TInstant deadline) {
+    auto [message, _] = GetMessageInt(offset);
+    if (!message) {
+        return std::nullopt;
+    }
+
+    switch (message->GetStatus()) {
+        case EMessageStatus::Unprocessed: {
+            // The message returned to the queue (deadline expired) between reads. Re-lock it,
+            // unless its group is currently blocked by another in-flight message.
+            if (IsMessageGroupLocked(*message, {})) {
+                return std::nullopt;
+            }
+            DoLock(offset, *message, deadline);
+            return ConvertToReadMessage(offset, *message);
+        }
+        case EMessageStatus::Locked: {
+            Batch.AddChange(offset);
+            message->DeadlineDelta = NormalizeDeadline(deadline);
+            return ConvertToReadMessage(offset, *message);
+        }
+        default:
+            return std::nullopt;
+    }
 }
 
-bool TStorage::Unlock(ui64 messageId) {
-    return DoUnlock(messageId);
+void TStorage::MarkReceiveAttemptOffsetInvalid(ui64 offset) {
+    InvalidatedReceiveAttemptOffsets_.insert(offset);
 }
 
-bool TStorage::ChangeMessageDeadline(ui64 messageId, TInstant deadline) {
+void TStorage::CleanupReceiveAttempts(TInstant now) {
+    if (ReceiveAttempts_.empty() && InvalidatedReceiveAttemptOffsets_.empty()) {
+        return;
+    }
+
+    std::vector<TString> receiveAttemptIdsToDelete;
+    for (const auto& [receiveAttemptId, attempt] : ReceiveAttempts_) {
+        const bool expired = attempt.Expiry <= now;
+        bool invalidated = false;
+        if (!expired) {
+            for (ui64 attemptOffset : attempt.Offsets) {
+                if (InvalidatedReceiveAttemptOffsets_.contains(attemptOffset)) {
+                    invalidated = true;
+                    break;
+                }
+            }
+        }
+        if (expired || invalidated) {
+            receiveAttemptIdsToDelete.push_back(receiveAttemptId);
+        }
+    }
+    for (const auto& receiveAttemptId : receiveAttemptIdsToDelete) {
+        RecordReceiveAttemptDelete(receiveAttemptId);
+        ReceiveAttempts_.erase(receiveAttemptId);
+    }
+
+    InvalidatedReceiveAttemptOffsets_.clear();
+}
+
+void TStorage::ClearReceiveAttempts() {
+    for (const auto& [receiveAttemptId, _] : ReceiveAttempts_) {
+        RecordReceiveAttemptDelete(receiveAttemptId);
+    }
+    ReceiveAttempts_.clear();
+    InvalidatedReceiveAttemptOffsets_.clear();
+}
+
+void TStorage::RecordReceiveAttemptUpsert(const TString& receiveAttemptId, const TReceiveAttempt& attempt) {
+    Batch.AddReceiveAttemptUpsert(receiveAttemptId, attempt);
+}
+
+void TStorage::RecordReceiveAttemptDelete(const TString& receiveAttemptId) {
+    Batch.AddReceiveAttemptDelete(receiveAttemptId);
+}
+
+std::deque<TReadMessage> TStorage::Read(
+    TInstant now,
+    TInstant visibilityDeadline,
+    TPosition& position,
+    const absl::flat_hash_set<ui32>& skipMessageGroups,
+    size_t maxCount,
+    const TString& receiveAttemptId
+) {
+    std::deque<TReadMessage> messages;
+
+    // SQS VisibilityTimeout=0 semantics: the messages are still delivered to the client (their receive
+    // count is incremented and they may be moved to the DLQ once the limit is reached), but their lock is
+    // released immediately so they become visible again right away instead of staying in flight.
+    const bool immediateUnlock = visibilityDeadline <= now;
+
+    if (receiveAttemptId) {
+        if (auto it = ReceiveAttempts_.find(receiveAttemptId); it != ReceiveAttempts_.end()) {
+            auto& attempt = it->second;
+            for (ui64 offset : attempt.Offsets) {
+                if (auto result = ReadForReplay(offset, visibilityDeadline)) {
+                    messages.push_back(std::move(result.value()));
+                }
+            }
+            attempt.Expiry = now + ReceiveAttemptIdPeriod;
+            RecordReceiveAttemptUpsert(receiveAttemptId, attempt);
+            if (immediateUnlock) {
+                for (const auto& message : messages) {
+                    DoUnlock(message.Offset);
+                }
+            }
+            return messages;
+        }
+    }
+
+    for (size_t count = maxCount; count; --count) {
+        auto result = Next(visibilityDeadline, position, skipMessageGroups);
+        if (!result) {
+            break;
+        }
+        messages.push_back(std::move(result.value()));
+    }
+
+    if (immediateUnlock) {
+        // Replaying via receive-attempt-id is meaningless when the messages are unlocked right away,
+        // so we do not record the attempt in that case.
+        for (const auto& message : messages) {
+            DoUnlock(message.Offset);
+        }
+        return messages;
+    }
+
+    if (receiveAttemptId && !messages.empty()) {
+        TReceiveAttempt attempt;
+        attempt.Expiry = now + ReceiveAttemptIdPeriod;
+        attempt.Offsets.reserve(messages.size());
+        for (const auto& message : messages) {
+            attempt.Offsets.push_back(message.Offset);
+        }
+        ReceiveAttempts_[receiveAttemptId] = std::move(attempt);
+        RecordReceiveAttemptUpsert(receiveAttemptId, ReceiveAttempts_[receiveAttemptId]);
+    }
+
+    return messages;
+}
+
+EOperationResult TStorage::Commit(ui64 messageId) {
+    auto result = DoCommit(messageId, Metrics.TotalCommittedMessageCount);
+    if (result == EOperationResult::Success) {
+        MarkReceiveAttemptOffsetInvalid(messageId);
+    }
+    return result;
+}
+
+EOperationResult TStorage::Unlock(ui64 messageId) {
     auto [message, _] = GetMessageInt(messageId);
     if (!message) {
-        return false;
+        return EOperationResult::NotFound;
+    }
+
+    switch (message->GetStatus()) {
+        case EMessageStatus::Locked:
+            DoUnlock(messageId, *message);
+            MarkReceiveAttemptOffsetInvalid(messageId);
+            return EOperationResult::Success;
+        case EMessageStatus::Committed:
+            return EOperationResult::NotFound;
+        case EMessageStatus::Unprocessed:
+            return EOperationResult::NotInFlight;
+        default:
+            return EOperationResult::Failed;
+    }
+}
+
+EOperationResult TStorage::ChangeMessageDeadline(ui64 messageId, TInstant deadline) {
+    auto [message, _] = GetMessageInt(messageId);
+    if (!message) {
+        return EOperationResult::NotFound;
     }
 
     switch (message->GetStatus()) {
@@ -344,10 +509,15 @@ bool TStorage::ChangeMessageDeadline(ui64 messageId, TInstant deadline) {
             auto newDeadlineDelta = NormalizeDeadline(deadline);
             message->DeadlineDelta = newDeadlineDelta;
 
-            return true;
+            MarkReceiveAttemptOffsetInvalid(messageId);
+            return EOperationResult::Success;
         }
+        case EMessageStatus::Unprocessed:
+            return EOperationResult::NotInFlight;
+        case EMessageStatus::Committed:
+            return EOperationResult::NotFound;
         default:
-            return false;
+            return EOperationResult::Failed;
     }
 }
 
@@ -371,6 +541,7 @@ bool TStorage::Purge(ui64 endOffset) {
     DLQQueue.clear();
     DLQMessages.clear();
     MessageGroups.Clear();
+    ClearReceiveAttempts();
 
     FirstOffset = endOffset;
     FirstUncommittedOffset = endOffset;
@@ -480,6 +651,8 @@ TInstant TStorage::GetMessageDeadline(ui64 messageId) {
 
 size_t TStorage::ProccessDeadlines() {
     auto now = TimeProvider->Now();
+
+    CleanupReceiveAttempts(now);
 
     if (now < NextVacuumRun) {
         return 0;
@@ -1204,10 +1377,14 @@ void TStorage::UpdateMessageLockingDurationMetrics(const TMessage& message) {
     Metrics.MessageLockingDuration.IncrementFor(lockingDuration.MilliSeconds());
 }
 
-bool TStorage::DoCommit(ui64 offset, size_t& totalMetrics) {
+EOperationResult TStorage::DoCommit(ui64 offset, size_t& totalMetrics) {
     auto [message, slowZone] = GetMessageInt(offset);
     if (!message) {
-        return false;
+        return EOperationResult::NotFound;
+    }
+
+    if (message->GetStatus() == EMessageStatus::Committed) {
+        return EOperationResult::NotFound;
     }
 
     UpdateMessageGroupOnMessageStatusChange(offset, *message, EMessageStatus::Committed);
@@ -1242,7 +1419,7 @@ bool TStorage::DoCommit(ui64 offset, size_t& totalMetrics) {
             ++totalMetrics;
             break;
         case EMessageStatus::Committed:
-            return false;
+            return EOperationResult::NotFound;
         case EMessageStatus::DLQ:
             ++Metrics.CommittedMessageCount;
             DLQMessages.erase(offset);
@@ -1263,18 +1440,18 @@ bool TStorage::DoCommit(ui64 offset, size_t& totalMetrics) {
 
     UpdateFirstUncommittedOffset();
 
-    return true;
+    return EOperationResult::Success;
 }
 
-bool TStorage::DoUnlock(ui64 offset) {
+EOperationResult TStorage::DoUnlock(ui64 offset) {
     auto [message, _] = GetMessageInt(offset, EMessageStatus::Locked);
     if (!message) {
-        return false;
+        return EOperationResult::Failed;
     }
 
     DoUnlock(offset, *message);
 
-    return true;
+    return EOperationResult::Success;
 }
 
 void TStorage::DoUnlock(ui64 offset, TMessage& message) {
@@ -1523,6 +1700,16 @@ void TStorage::TBatch::SetUpdateExternalLockedMessageGroupsId(ui32 parentPartiti
     UpdateExternalLockedMessageGroupsId.insert(parentPartitionId);
 }
 
+void TStorage::TBatch::AddReceiveAttemptUpsert(const TString& receiveAttemptId, const TReceiveAttempt& attempt) {
+    ReceiveAttemptDeletes.erase(receiveAttemptId);
+    ReceiveAttemptUpserts[receiveAttemptId] = attempt;
+}
+
+void TStorage::TBatch::AddReceiveAttemptDelete(const TString& receiveAttemptId) {
+    ReceiveAttemptUpserts.erase(receiveAttemptId);
+    ReceiveAttemptDeletes.insert(receiveAttemptId);
+}
+
 void TStorage::TBatch::Compacted(size_t count) {
     CompactedMessages += count;
 }
@@ -1542,7 +1729,9 @@ bool TStorage::TBatch::Empty() const {
         && DeletedFromSlowZone.empty()
         && CompactedMessages == 0
         && !Purged
-        && UpdateExternalLockedMessageGroupsId.empty();
+        && UpdateExternalLockedMessageGroupsId.empty()
+        && ReceiveAttemptUpserts.empty()
+        && ReceiveAttemptDeletes.empty();
 }
 
 size_t TStorage::TBatch::AddedMessageCount() const {

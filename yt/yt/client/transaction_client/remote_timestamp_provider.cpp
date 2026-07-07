@@ -30,7 +30,7 @@ IChannelPtr CreateTimestampProviderChannel(
     TRemoteTimestampProviderConfigPtr config,
     IChannelFactoryPtr channelFactory)
 {
-    auto endpointDescription = TString("TimestampProvider");
+    auto endpointDescription = std::string("TimestampProvider");
     auto endpointAttributes = ConvertToAttributes(BuildYsonStringFluently()
         .BeginMap()
             .Item("timestamp_provider").Value(true)

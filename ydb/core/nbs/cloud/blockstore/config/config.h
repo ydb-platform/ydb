@@ -41,6 +41,8 @@ public:
     [[nodiscard]] ui32 GetVhostQueuesCount() const;
     [[nodiscard]] ui64 GetPBufferCleanupLsnStep() const;
 
+    [[nodiscard]] TString Dump() const;
+
 private:
     NProto::TStorageServiceConfig StorageServiceConfig;
 };

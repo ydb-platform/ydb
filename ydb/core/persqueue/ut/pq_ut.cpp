@@ -34,6 +34,12 @@ void SetEnableTopicMessagesBatching(TTestContext& tc) {
     }
 }
 
+void SetEnableTopicCompactificationByKey(TTestContext& tc) {
+    for (ui32 nodeIdx = 0; nodeIdx < tc.Runtime->GetNodeCount(); ++nodeIdx) {
+        tc.Runtime->GetAppData(nodeIdx).FeatureFlags.SetEnableTopicCompactificationByKey(true);
+    }
+}
+
 void SetEnableTopicRetentionDeleteLastBlob(TTestContext& tc) {
     for (ui32 nodeIdx = 0; nodeIdx < tc.Runtime->GetNodeCount(); ++nodeIdx) {
         tc.Runtime->GetAppData(nodeIdx).FeatureFlags.SetEnableTopicRetentionDeleteLastBlob(true);
@@ -72,8 +78,11 @@ void TestPartitionMetaOffsetsSurviveRestart(TTestContext& tc, bool enableRetenti
 
 TString MakeKafkaBatchPayload(
     const TVector<TString>& values,
-    NKafka::ECompressionType compression = NKafka::ECompressionType::NONE)
+    NKafka::ECompressionType compression = NKafka::ECompressionType::NONE,
+    const TVector<TString>& keys = {})
 {
+    UNIT_ASSERT(keys.empty() || keys.size() == values.size());
+
     NKafka::TKafkaRecordBatch batch;
     batch.BaseOffset = 0;
     batch.Magic = 2;
@@ -90,6 +99,9 @@ TString MakeKafkaBatchPayload(
         NKafka::TKafkaRecord record;
         record.TimestampDelta = i;
         record.OffsetDelta = i;
+        if (!keys.empty()) {
+            record.SetKey(TString{keys[i]});
+        }
         record.SetValue(TString{values[i]});
         record.Length = record.Size(2)
             - NKafka::NPrivate::SizeOfVarint<NKafka::TKafkaRecord::LengthMeta::Type>(0);
@@ -107,7 +119,8 @@ void CmdWriteKafkaBatch(
     const TVector<TString>& values,
     TTestContext& tc,
     i64 offset = -1,
-    NKafka::ECompressionType batchCompression = NKafka::ECompressionType::NONE)
+    NKafka::ECompressionType batchCompression = NKafka::ECompressionType::NONE,
+    const TVector<TString>& keys = {})
 {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse* result = nullptr;
@@ -129,7 +142,7 @@ void CmdWriteKafkaBatch(
             auto* write = req->AddCmdWrite();
             write->SetSourceId(sourceId);
             write->SetSeqNo(seqNo);
-            const TString kafkaBatchPayload = MakeKafkaBatchPayload(values, batchCompression);
+            const TString kafkaBatchPayload = MakeKafkaBatchPayload(values, batchCompression, keys);
             NKikimrPQClient::TDataChunk dataChunk;
             dataChunk.SetChunkType(NKikimrPQClient::TDataChunk::REGULAR);
             dataChunk.SetCodec(static_cast<NPersQueueCommon::ECodec>(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1));
@@ -906,6 +919,82 @@ Y_UNIT_TEST(BatchedMessagesCompaction) {
     readSettings.PartitionSessionId = 1;
 
     CmdReadAndAssertBatched(readSettings, tc, writes, dataSize);
+}
+
+void WaitCompactionConsumerOffset(TTestContext& tc, ui64 expectedOffset) {
+    i64 consumerOffset = -1;
+    for (ui32 attempt = 0; attempt < 20 && consumerOffset < static_cast<i64>(expectedOffset); ++attempt) {
+        try {
+            consumerOffset = CmdGetOffset(0, CLIENTID_COMPACTION_CONSUMER, Nothing(), tc);
+        } catch (const NActors::TSchedulingLimitReachedException&) {
+            tc.Runtime->ResetScheduledCount();
+        }
+    }
+    UNIT_ASSERT_GE_C(consumerOffset, static_cast<i64>(expectedOffset),
+        "compaction consumer did not reach expected offset");
+}
+
+TVector<ui64> ReadKafkaBatchOffsets(TTestContext& tc, ui64 offset, ui32 count) {
+    TPQCmdReadSettings readSettings{"", 0, static_cast<i64>(offset), count, 16_MB, count, false, {}, 0, 0, "user1"};
+    readSettings.CanReadBatches = false;
+
+    const auto readResult = CmdReadAndGetResult(readSettings, tc);
+    TVector<ui64> offsets;
+    offsets.reserve(readResult.ResultSize());
+    for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
+        offsets.push_back(readResult.GetResult(i).GetOffset());
+    }
+    return offsets;
+}
+
+void RunKafkaBatchKeyCompactificationTest(bool overwriteAllKeys) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(50000);
+    SetEnableTopicCompactificationByKey(tc);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+    SetEnableTopicMessagesBatching(tc);
+
+    PQTabletPrepare({.partitions = 1, .lowWatermark = 1, .writeSpeed = 50_MB, .enableCompactificationByKey = true}, {{"user1", true}}, tc);
+
+    CmdWriteKafkaBatch(0, "sourceid_key_compaction_old", 1, {"old-k0", "old-k1"}, tc, 0, NKafka::ECompressionType::NONE, {"k0", "k1"});
+    PQGetPartInfo(0, 2, tc);
+
+    CmdRunCompaction(0, tc);
+    PQTabletRestart(tc);
+    PQGetPartInfo(0, 2, tc);
+
+    const TVector<TString> newValues = overwriteAllKeys
+        ? TVector<TString>{"new-k0", "new-k1"}
+        : TVector<TString>{"new-k0"};
+    const TVector<TString> newKeys = overwriteAllKeys
+        ? TVector<TString>{"k0", "k1"}
+        : TVector<TString>{"k0"};
+
+    CmdWriteKafkaBatch(0, "sourceid_key_compaction_new", 3, newValues, tc, 2, NKafka::ECompressionType::NONE, newKeys);
+    const ui64 endOffset = overwriteAllKeys ? 4 : 3;
+    PQGetPartInfo(0, endOffset, tc);
+
+    WaitCompactionConsumerOffset(tc, endOffset);
+    PQTabletRestart(tc);
+
+    if (overwriteAllKeys) {
+        PQGetPartInfo(0, endOffset, tc);
+        UNIT_ASSERT_VALUES_EQUAL(ReadKafkaBatchOffsets(tc, 0, 2), TVector<ui64>{});
+        UNIT_ASSERT_VALUES_EQUAL(ReadKafkaBatchOffsets(tc, 2, 2), (TVector<ui64>{2, 3}));
+    } else {
+        PQGetPartInfo(0, endOffset, tc);
+        UNIT_ASSERT_VALUES_EQUAL(ReadKafkaBatchOffsets(tc, 0, 2), (TVector<ui64>{0, 1}));
+    }
+}
+
+Y_UNIT_TEST(KafkaBatchKeyCompactificationKeepsPhysicalBatchIfAnyRecordIsActual) {
+    RunKafkaBatchKeyCompactificationTest(false);
+}
+
+Y_UNIT_TEST(KafkaBatchKeyCompactificationDropsPhysicalBatchWhenAllRecordsAreStale) {
+    RunKafkaBatchKeyCompactificationTest(true);
 }
 
 Y_UNIT_TEST(OffsetDeltaInKeysCanBeDisabledAfterWrites) {

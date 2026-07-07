@@ -24,7 +24,10 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/scheme/column
     ydb/core/tx/columnshard/engines/scheme/common
     ydb/core/tx/columnshard/engines/scheme/defaults
-    ydb/core/formats/arrow/accessor
+    ydb/core/formats/arrow/accessor/abstract
+    ydb/core/formats/arrow/accessor/common
+    ydb/core/formats/arrow/accessor/dictionary
+    ydb/core/formats/arrow/accessor/plain
     ydb/core/tx/columnshard/blobs_action/abstract
 )
 

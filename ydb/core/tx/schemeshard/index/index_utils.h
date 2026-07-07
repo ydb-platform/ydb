@@ -126,6 +126,7 @@ NKikimrSchemeOp::TTableDescription CalcFulltextRowIdSrcImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
+    const TString& indexColumn,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
 
@@ -133,6 +134,7 @@ NKikimrSchemeOp::TTableDescription CalcFulltextRowIdSrcImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
+    const TString& indexColumn,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
 

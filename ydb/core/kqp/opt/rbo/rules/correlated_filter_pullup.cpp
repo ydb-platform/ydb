@@ -6,6 +6,11 @@ namespace NKqp {
 // Pull up correlated filter inside a subplan
 // We match the parent of the filter, currently we support only Map and Aggregate
 
+bool TPullUpCorrelatedFilterRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return (input->Kind == EOperator::Map || input->Kind == EOperator::Aggregate) &&
+        input->Children.front()->Kind == EOperator::Filter;
+}
+
 bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);

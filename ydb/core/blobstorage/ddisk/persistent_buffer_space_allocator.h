@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "persistent_buffer_header.h"
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
 namespace NKikimr::NDDisk {
 

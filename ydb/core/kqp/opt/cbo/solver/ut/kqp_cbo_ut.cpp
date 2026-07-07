@@ -12,6 +12,10 @@ using namespace NYql::NNodes;
 
 namespace {
 
+using TKqpOptimizerStatistics = NKikimr::NKqp::TOptimizerStatistics;
+using TKqpJoinAlgoType = NKikimr::NKqp::EJoinAlgoType;
+constexpr auto KqpBaseTable = NKikimr::NKqp::BaseTable;
+
 NYql::TExprNode::TPtr MakeLabel(NYql::TExprContext& ctx, const std::vector<TStringBuf>& vars) {
     TVector<NYql::TExprNodePtr> label; label.reserve(vars.size());
 
@@ -47,11 +51,11 @@ Y_UNIT_TEST(JoinSearch2Rels) {
 
     auto rel1 = std::make_shared<TRelOptimizerNode>(
         "a",
-        TOptimizerStatistics(BaseTable, 100000, 1, 0, 1000000)
+        TKqpOptimizerStatistics(KqpBaseTable, 100000, 1, 0, 1000000)
     );
     auto rel2 = std::make_shared<TRelOptimizerNode>(
         "b",
-        TOptimizerStatistics(BaseTable, 1000000, 1, 0, 9000009)
+        TKqpOptimizerStatistics(KqpBaseTable, 1000000, 1, 0, 9000009)
     );
 
     TVector<TJoinColumn> leftKeys = {TJoinColumn("a", "1")};
@@ -63,7 +67,7 @@ Y_UNIT_TEST(JoinSearch2Rels) {
         leftKeys,
         rightKeys,
         InnerJoin,
-        EJoinAlgoType::GraceJoin,
+        TKqpJoinAlgoType::GraceJoin,
         true,
         false
         );
@@ -82,11 +86,11 @@ Y_UNIT_TEST(JoinSearch3Rels) {
     std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, settings, dummyCtx, false));
 
     auto rel1 = std::make_shared<TRelOptimizerNode>("a",
-        TOptimizerStatistics(BaseTable, 100000, 1, 0, 1000000));
+        TKqpOptimizerStatistics(KqpBaseTable, 100000, 1, 0, 1000000));
     auto rel2 = std::make_shared<TRelOptimizerNode>("b",
-        TOptimizerStatistics(BaseTable, 1000000, 1, 0, 9000009));
+        TKqpOptimizerStatistics(KqpBaseTable, 1000000, 1, 0, 9000009));
     auto rel3 = std::make_shared<TRelOptimizerNode>("c",
-        TOptimizerStatistics(BaseTable, 10000, 1, 0, 9009));
+        TKqpOptimizerStatistics(KqpBaseTable, 10000, 1, 0, 9009));
 
     TVector<TJoinColumn> leftKeys = {TJoinColumn("a", "1")};
     TVector<TJoinColumn> rightKeys ={TJoinColumn("b", "1")};
@@ -97,7 +101,7 @@ Y_UNIT_TEST(JoinSearch3Rels) {
         leftKeys,
         rightKeys,
         InnerJoin,
-        EJoinAlgoType::GraceJoin,
+        TKqpJoinAlgoType::GraceJoin,
         false,
         false
     );
@@ -111,7 +115,7 @@ Y_UNIT_TEST(JoinSearch3Rels) {
         leftKeys,
         rightKeys,
         InnerJoin,
-        EJoinAlgoType::GraceJoin,
+        TKqpJoinAlgoType::GraceJoin,
         true,
         false
     );
@@ -136,9 +140,9 @@ Y_UNIT_TEST(JoinSearchYQL19363) {
     TString colName2 = "b.y";
 
     auto rel1 = std::make_shared<TRelOptimizerNode>(relName1,
-        TOptimizerStatistics(BaseTable, 1, 1, 0, 1));
+        TKqpOptimizerStatistics(KqpBaseTable, 1, 1, 0, 1));
     auto rel2 = std::make_shared<TRelOptimizerNode>(relName2,
-        TOptimizerStatistics(BaseTable, 1, 1, 0, 1));
+        TKqpOptimizerStatistics(KqpBaseTable, 1, 1, 0, 1));
 
     TVector<TJoinColumn> leftKeys = {TJoinColumn(relName1, colName1)};
     TVector<TJoinColumn> rightKeys ={TJoinColumn(relName2, colName2)};
@@ -149,7 +153,7 @@ Y_UNIT_TEST(JoinSearchYQL19363) {
         leftKeys,
         rightKeys,
         InnerJoin,
-        EJoinAlgoType::GraceJoin,
+        TKqpJoinAlgoType::GraceJoin,
         false,
         false
     );
@@ -174,9 +178,9 @@ Y_UNIT_TEST(JoinSearchYQL19363) {
 
     // Verify that arbitrary characters are correctly handled and preserved
     rel1 = std::make_shared<TRelOptimizerNode>(relName1,
-        TOptimizerStatistics(BaseTable, 1, 1, 0, 1));
+        TKqpOptimizerStatistics(KqpBaseTable, 1, 1, 0, 1));
     rel2 = std::make_shared<TRelOptimizerNode>(relName2,
-        TOptimizerStatistics(BaseTable, 1, 1, 0, 1));
+        TKqpOptimizerStatistics(KqpBaseTable, 1, 1, 0, 1));
 
     colName1 = colName2 = generateSpecialCharacters();
 
@@ -189,7 +193,7 @@ Y_UNIT_TEST(JoinSearchYQL19363) {
         leftKeys,
         rightKeys,
         InnerJoin,
-        EJoinAlgoType::GraceJoin,
+        TKqpJoinAlgoType::GraceJoin,
         false,
         false
     );
@@ -208,19 +212,19 @@ struct TMockProviderContextYT24403 : public TBaseProviderContext {
         const std::shared_ptr<IBaseOptimizerNode>&,
         const TVector<TJoinColumn>&,
         const TVector<TJoinColumn>&,
-        EJoinAlgoType joinAlgo,
+        TKqpJoinAlgoType joinAlgo,
         EJoinKind
     ) override {
         CalledIsJoinApplicable.insert(joinAlgo);
         return true;
     }
 
-    TOptimizerStatistics ComputeJoinStats(
-        const TOptimizerStatistics& leftStats,
-        const TOptimizerStatistics& rightStats,
+    TKqpOptimizerStatistics ComputeJoinStats(
+        const TKqpOptimizerStatistics& leftStats,
+        const TKqpOptimizerStatistics& rightStats,
         const TVector<TJoinColumn>& leftJoinKeys,
         const TVector<TJoinColumn>& rightJoinKeys,
-        EJoinAlgoType joinAlgo,
+        TKqpJoinAlgoType joinAlgo,
         EJoinKind joinKind,
         TCardinalityHints::TCardinalityHint* maybeHint
     ) const override {
@@ -228,8 +232,8 @@ struct TMockProviderContextYT24403 : public TBaseProviderContext {
         return TBaseProviderContext::ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint);
     }
 
-    THashSet<EJoinAlgoType> CalledIsJoinApplicable;
-    mutable THashSet<EJoinAlgoType> CalledComputeJoinStats;
+    THashSet<TKqpJoinAlgoType> CalledIsJoinApplicable;
+    mutable THashSet<TKqpJoinAlgoType> CalledComputeJoinStats;
 };
 
 Y_UNIT_TEST(JoinSearchYT24403) {
@@ -245,9 +249,9 @@ Y_UNIT_TEST(JoinSearchYT24403) {
     const TString colName2 = "x";
 
     auto rel1 = std::make_shared<TRelOptimizerNode>(relName1,
-        TOptimizerStatistics(BaseTable, 1, 1, 0, 1));
+        TKqpOptimizerStatistics(KqpBaseTable, 1, 1, 0, 1));
     auto rel2 = std::make_shared<TRelOptimizerNode>(relName2,
-        TOptimizerStatistics(BaseTable, 1, 1, 0, 1));
+        TKqpOptimizerStatistics(KqpBaseTable, 1, 1, 0, 1));
 
     TVector<TJoinColumn> leftKeys = {TJoinColumn(relName1, colName1)};
     TVector<TJoinColumn> rightKeys ={TJoinColumn(relName2, colName2)};
@@ -258,14 +262,14 @@ Y_UNIT_TEST(JoinSearchYT24403) {
         leftKeys,
         rightKeys,
         InnerJoin,
-        EJoinAlgoType::GraceJoin,
+        TKqpJoinAlgoType::GraceJoin,
         false,
         false
     );
 
     auto res = optimizer->JoinSearch(op);
 
-    for (auto joinAlgo : AllJoinAlgos) {
+    for (auto joinAlgo : NKikimr::NKqp::AllJoinAlgos) {
         UNIT_ASSERT(pctx.CalledIsJoinApplicable.count(joinAlgo) > 0);
         UNIT_ASSERT(pctx.CalledComputeJoinStats.count(joinAlgo) > 0);
     }
@@ -281,11 +285,11 @@ Y_UNIT_TEST(ReverseBlockJoinHint) {
 
     auto left = std::make_shared<TRelOptimizerNode>(
         "left",
-        TOptimizerStatistics(BaseTable, 1000, 1, 0, 1000)
+        TKqpOptimizerStatistics(KqpBaseTable, 1000, 1, 0, 1000)
     );
     auto right = std::make_shared<TRelOptimizerNode>(
         "right",
-        TOptimizerStatistics(BaseTable, 10, 1, 0, 10)
+        TKqpOptimizerStatistics(KqpBaseTable, 10, 1, 0, 10)
     );
     auto input = std::make_shared<TJoinOptimizerNode>(
         std::static_pointer_cast<IBaseOptimizerNode>(left),
@@ -293,17 +297,17 @@ Y_UNIT_TEST(ReverseBlockJoinHint) {
         TVector<TJoinColumn>{TJoinColumn("left", "key")},
         TVector<TJoinColumn>{TJoinColumn("right", "key")},
         EJoinKind::LeftJoin,
-        EJoinAlgoType::Undefined,
+        TKqpJoinAlgoType::Undefined,
         false,
         false
     );
 
     TOptimizerHints hints;
-    hints.JoinAlgoHints->PushBack({"left", "right"}, EJoinAlgoType::ReverseBlockJoin, "ReverseBlockJoin(left right)");
+    hints.JoinAlgoHints->PushBack({"left", "right"}, TKqpJoinAlgoType::ReverseBlockJoin, "ReverseBlockJoin(left right)");
 
     auto join = optimizer->JoinSearch(input, hints);
 
-    UNIT_ASSERT_VALUES_EQUAL(join->JoinAlgo, EJoinAlgoType::ReverseBlockJoin);
+    UNIT_ASSERT_VALUES_EQUAL(join->JoinAlgo, TKqpJoinAlgoType::ReverseBlockJoin);
     UNIT_ASSERT_VALUES_EQUAL(join->ShuffleLeftSideBy.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(join->ShuffleRightSideBy.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(join->ShuffleLeftSideBy[0].RelName, "left");
@@ -355,14 +359,14 @@ Y_UNIT_TEST(DqPhyMapJoinStatsUsesMapJoinAlgo) {
         .Done();
 
     TKqpStatsStore kqpStats;
-    kqpStats.SetStats(leftInput.Raw(), std::make_shared<TOptimizerStatistics>(BaseTable, 100, 1, 1));
-    kqpStats.SetStats(rightInput.Raw(), std::make_shared<TOptimizerStatistics>(BaseTable, 10, 1, 1));
+    kqpStats.SetStats(leftInput.Raw(), std::make_shared<TKqpOptimizerStatistics>(KqpBaseTable, 100, 1, 1));
+    kqpStats.SetStats(rightInput.Raw(), std::make_shared<TKqpOptimizerStatistics>(KqpBaseTable, 10, 1, 1));
 
     InferStatisticsForDqJoinBase(join.Ptr(), &kqpStats, pctx);
 
     UNIT_ASSERT(kqpStats.GetStats(join.Raw()));
-    UNIT_ASSERT_VALUES_EQUAL(pctx.CalledComputeJoinStats.count(EJoinAlgoType::MapJoin), 1);
-    UNIT_ASSERT_VALUES_EQUAL(pctx.CalledComputeJoinStats.count(EJoinAlgoType::Undefined), 0);
+    UNIT_ASSERT_VALUES_EQUAL(pctx.CalledComputeJoinStats.count(TKqpJoinAlgoType::MapJoin), 1);
+    UNIT_ASSERT_VALUES_EQUAL(pctx.CalledComputeJoinStats.count(TKqpJoinAlgoType::Undefined), 0);
 }
 
 Y_UNIT_TEST(RelCollector) {
@@ -389,11 +393,11 @@ Y_UNIT_TEST(RelCollector) {
     TVector<std::shared_ptr<TRelOptimizerNode>> rels;
     UNIT_ASSERT(KqpCollectJoinRelationsWithStats(rels, kqpStats, equiJoin, [&](auto, auto, auto, auto) {}) == false);
 
-    kqpStats.SetStats(tables[1].Ptr()->Child(0), std::make_shared<TOptimizerStatistics>(BaseTable, 1, 1, 1));
+    kqpStats.SetStats(tables[1].Ptr()->Child(0), std::make_shared<TKqpOptimizerStatistics>(KqpBaseTable, 1, 1, 1));
     UNIT_ASSERT(KqpCollectJoinRelationsWithStats(rels, kqpStats, equiJoin, [&](auto, auto, auto, auto) {}) == false);
 
-    kqpStats.SetStats(tables[0].Ptr()->Child(0), std::make_shared<TOptimizerStatistics>(BaseTable, 1, 1, 1));
-    kqpStats.SetStats(tables[2].Ptr()->Child(0), std::make_shared<TOptimizerStatistics>(BaseTable, 1, 1, 1));
+    kqpStats.SetStats(tables[0].Ptr()->Child(0), std::make_shared<TKqpOptimizerStatistics>(KqpBaseTable, 1, 1, 1));
+    kqpStats.SetStats(tables[2].Ptr()->Child(0), std::make_shared<TKqpOptimizerStatistics>(KqpBaseTable, 1, 1, 1));
 
     TVector<TString> labels;
     UNIT_ASSERT(KqpCollectJoinRelationsWithStats(rels, kqpStats, equiJoin, [&](auto, auto label, auto, auto) { labels.emplace_back(label); }) == true);
@@ -442,15 +446,15 @@ void _KqpOptimizeEquiJoinWithCosts(const std::function<IOptimizerNew*()>& optFac
     joinArgs.emplace_back(joinTree);
     joinArgs.emplace_back(settings);
 
-    kqpStats.SetStats(tables[0].Ptr()->Child(0), std::make_shared<TOptimizerStatistics>(BaseTable, 1, 1, 1));
-    kqpStats.SetStats(tables[1].Ptr()->Child(0), std::make_shared<TOptimizerStatistics>(BaseTable, 1, 1, 1));
+    kqpStats.SetStats(tables[0].Ptr()->Child(0), std::make_shared<TKqpOptimizerStatistics>(KqpBaseTable, 1, 1, 1));
+    kqpStats.SetStats(tables[1].Ptr()->Child(0), std::make_shared<TKqpOptimizerStatistics>(KqpBaseTable, 1, 1, 1));
 
     TCoEquiJoin equiJoin = Build<TCoEquiJoin>(ctx, pos)
         .Add(joinArgs)
         .Done();
 
     auto opt = std::unique_ptr<IOptimizerNew>(optFactory());
-    std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const NYql::TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)> providerCollect = [](auto& rels, auto label, auto node, auto stats) {
+    std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const NYql::TExprNode::TPtr, const std::shared_ptr<TKqpOptimizerStatistics>&)> providerCollect = [](auto& rels, auto label, auto node, auto stats) {
         Y_UNUSED(node);
         auto rel = std::make_shared<TRelOptimizerNode>(TString(label), *stats);
         rels.push_back(rel);

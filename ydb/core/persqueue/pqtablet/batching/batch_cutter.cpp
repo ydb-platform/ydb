@@ -116,4 +116,34 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const 
     return result;
 }
 
+THashMap<TString, ui64> TKafkaBatchCutter::GetKeys(const TBatchCutterData& data, const ui64 readStartOffset) const {
+    THashMap<TString, ui64> result;
+
+    const auto& dataChunk = data.DataChunk;
+    if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
+        return result;
+    }
+
+    Y_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec());
+
+    const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
+    const ui64 baseOffset = data.ReadResult.GetOffset();
+    for (const auto& record : batch.Records) {
+        const auto offset = baseOffset + record.OffsetDelta;
+        if (offset < readStartOffset) {
+            continue;
+        }
+
+        if (!record.Key) {
+            continue;
+        }
+
+        TString key;
+        key.assign(record.Key->data(), record.Key->size());
+        result[key] = offset;
+    }
+
+    return result;
+}
+
 } // namespace NKikimr::NPQ::NBatching

@@ -3,7 +3,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/vdisk/query/query_stream.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/streams/bzip2/bzip2.h>
 #include <util/generic/buffer.h>
 #include <util/generic/hash.h>

@@ -87,6 +87,7 @@ struct TCoCallableRules {
     enum {
         FLOW_STEP_1,
         FLOW_STEP_2,
+        FLOW_STEP_3,
         FLOW_STEPS
     };
 
@@ -109,6 +110,7 @@ void RegisterCoSimpleCallables2(TCallableOptimizerMap& map);
 void RegisterCoSimpleCallables3(TCallableOptimizerMap& map);
 void RegisterCoFlowCallables1(TCallableOptimizerMap& map);
 void RegisterCoFlowCallables2(TCallableOptimizerMap& map);
+void RegisterCoFlowCallables3(TCallableOptimizerMap& map);
 void RegisterCoFinalizers(TFinalizingOptimizerMap& map);
 void RegisterCoFinalCallables(TCallableOptimizerMap& map);
 

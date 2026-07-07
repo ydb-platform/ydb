@@ -37,6 +37,8 @@
 
 #include <library/cpp/testing/common/network.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NYT::NHttp {
@@ -137,9 +139,8 @@ TEST(THeadersTest, HeaderCaseIsIrrelevant)
     ASSERT_EQ(std::string("F"), headers->GetOrThrow("x-test"));
     ASSERT_EQ(std::string("F"), headers->GetOrThrow("X-Test"));
 
-    // TODO(babenko): migrate to std::string
-    TString buffer;
-    TStringOutput output(buffer);
+    std::string buffer;
+    TStdStringOutput output(buffer);
     headers->WriteTo(&output);
 
     std::string expected = "x-tEsT: F\r\n";

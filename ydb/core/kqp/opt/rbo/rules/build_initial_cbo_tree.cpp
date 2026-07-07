@@ -3,6 +3,10 @@
 namespace NKikimr {
 namespace NKqp {
 
+bool TBuildInitialCBOTreeRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Join;
+}
+
 /**
  * Initially we build CBO only for joins that don't have other joins or CBO trees as arguments
  * There could be an intermediate filter in between, we also check that

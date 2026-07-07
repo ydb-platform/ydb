@@ -27,7 +27,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/helpers
     ydb/library/actors/interconnect
-    library/cpp/containers/absl_flat_hash
+    library/cpp/containers/absl
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/engine/minikql

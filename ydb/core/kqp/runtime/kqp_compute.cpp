@@ -10,7 +10,7 @@
 #include <yql/essentials/public/udf/udf_terminator.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

@@ -460,7 +460,13 @@ namespace NKikimr::NDDisk {
                     << PersistentBufferFormat.MinFreeSectorsReserve << " required as reserve"));
             return false;
         }
+        ui64 freeSpace = PersistentBufferSpaceAllocator.GetFreeSpace();
+        ui64 ownedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
 
+        if (freeSpace * 100 < ownedChunks * SectorInChunk * PersistentBufferFormat.PreallocateFreeSpaceThresholdPercent
+            && ownedChunks < PersistentBufferFormat.MaxChunks) {
+            IssuePersistentBufferChunkAllocation();
+        }
         return true;
     }
 

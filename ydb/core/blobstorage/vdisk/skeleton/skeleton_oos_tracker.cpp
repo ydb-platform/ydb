@@ -8,6 +8,8 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_SKELETON
+
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
@@ -58,8 +60,10 @@ namespace NKikimr {
                     break;
             }
 
-            LOG_LOG_S(ctx, priority, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                    << "TDskSpaceTrackerActor: " << zone << " ZONE" << " Marker# BSVSOOST01");
+            YDB_LOG_CTX(ctx, priority, "ZONE",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"TDskSpaceTrackerActor", zone},
+                {"marker", "BSVSOOST01"});
             // send message to PDisk
             Become(&TThis::AskFunc);
             ctx.Send(PDiskCtx->PDiskId,
@@ -76,9 +80,10 @@ namespace NKikimr {
 
         void Handle(NPDisk::TEvCheckSpaceResult::TPtr &ev, const TActorContext &ctx) {
             const auto *msg = ev->Get();
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                    << "TDskSpaceTrackerActor:handle TEvCheckSpaceResult; msg# " << msg->ToString()
-                    << " Marker# BSVSOOST02");
+            YDB_LOG_DEBUG_CTX(ctx, "TDskSpaceTrackerActor:handle TEvCheckSpaceResult;",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"msg", msg->ToString()},
+                {"marker", "BSVSOOST02"});
 
             CHECK_PDISK_RESPONSE(VCtx, ev, ctx);
 

@@ -113,6 +113,8 @@ class QueuesManagingTest(KikimrSqsTestBase):
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_delete_queue(self, is_fifo, tables_format):
+        if self._is_topic_migration_stage():
+            pytest.skip('Legacy table checks are not applicable after topic migration')
         self._init_with_params(is_fifo, tables_format)
 
         another_queue_std_name = self.queue_name.replace('.', '_') + '_another_std'

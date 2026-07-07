@@ -216,6 +216,8 @@ namespace NKikimr::NSqsTopic::V1 {
             if (QueueAttributes.DeadLetterQueue.Defined()) {
                 consumerType->mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue(*QueueAttributes.DeadLetterQueue);
             }
+
+            (*consumer->mutable_attributes())["_sqs_read_request_attempt_id_period_ms"] = ToString(Cfg().GetGroupsReadAttemptIdsPeriodMs());
         }
 
         void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {

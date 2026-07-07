@@ -77,7 +77,7 @@ public:
         std::unique_ptr<ILogFormatter> formatter,
         std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
         const TDynamicTableLogWriterConfigPtr& config,
-        const TString& name,
+        const std::string& name,
         IInvokerPtr invoker)
         : TRateLimitingLogWriterBase(
             std::move(systemEventProvider),

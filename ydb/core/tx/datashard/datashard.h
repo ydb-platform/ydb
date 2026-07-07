@@ -18,7 +18,7 @@
 
 #include <library/cpp/lwtrace/shuttle.h>
 #include <library/cpp/time_provider/time_provider.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 namespace arrow {
 
@@ -27,6 +27,11 @@ class RecordBatch;
 }
 
 namespace NKikimr {
+
+// Only used below as a pointer in a factory-function declaration; a
+// forward declaration avoids pulling the heavy ydb/core/base/blobstorage.h
+// into this widely-included header.
+class TTabletStorageInfo;
 
 namespace NDataShard {
     using TShardState = NKikimrTxDataShard::EDatashardState;
@@ -652,14 +657,7 @@ namespace TEvDataShard {
             AddError(error, message);
         }
 
-        void SetStepOrderId(const std::pair<ui64, ui64>& stepOrderId) {
-            Record.SetStep(stepOrderId.first);
-            Record.SetOrderId(stepOrderId.second);
-            // Note: this method is used by schema operations where stepOrderId == commitVersion
-            auto* commitVersion = Record.MutableCommitVersion();
-            commitVersion->SetStep(stepOrderId.first);
-            commitVersion->SetTxId(stepOrderId.second);
-        }
+        void SetStepOrderId(const std::pair<ui64, ui64>& stepOrderId);
 
         void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites) {
             auto entry = Record.AddTxLocks();

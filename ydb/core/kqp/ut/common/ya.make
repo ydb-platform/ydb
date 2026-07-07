@@ -5,7 +5,6 @@ SRCS(
     kqp_ut_common.cpp
     kqp_ut_common.h
     columnshard.cpp
-    kqp_benches.cpp
 )
 
 PEERDIR(

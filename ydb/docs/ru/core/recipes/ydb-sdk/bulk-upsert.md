@@ -532,7 +532,8 @@
 
       client
           .table_client()
-          .retry_execute_bulk_upsert("/local/tablename".into(), rows)
+          .bulk_upsert("/local/tablename", rows)
+          .idempotent(true)
           .await?;
 
       Ok(())

@@ -2,7 +2,12 @@
 
 namespace NKikimr {
 namespace NKqp {
-    
+
+bool TFuseFiltersRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Filter &&
+        input->Children.front()->Kind == EOperator::Filter;
+}
+
 // Match two consequtive filters and fuse them into a single conjunction
 
 TIntrusivePtr<IOperator> TFuseFiltersRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {

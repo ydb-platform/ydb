@@ -33,7 +33,7 @@ async fn main() -> YdbResult<()> {
     let client = ClientBuilder::new_from_connection_string(connection_string)?.client()?;
     client.wait().await?;
 
-    let mut qc = client.query_client().clone_with_idempotent_operations(true);
+    let mut qc = client.query_client();
     // ...
     Ok(())
 }
@@ -51,7 +51,7 @@ async fn main() -> YdbResult<()> {
 - `qc.query_row(yql)` — одна строка.
 - `qc.query(yql).await?` — потоковый [`QueryStream`](https://docs.rs/ydb/latest/ydb/struct.QueryStream.html).
 
-Повторы при ошибках: `clone_with_idempotent_operations(true)` для идемпотентных чтений и DDL.
+Повторы при ошибках: `.idempotent(true)` на builder каждого идемпотентного запроса (чтения, DDL).
 
 {% include [steps/02_create_table.md](../_includes/steps/02_create_table.md) %}
 
@@ -91,11 +91,11 @@ qc.exec("UPSERT INTO ... FROM AS_TABLE($seriesData);")
 Чтение материализованного результата в режиме изоляции snapshot read-only:
 
 ```rust
-use ydb::QueryTxMode;
+use ydb::TxMode;
 
 let mut result = qc
     .query("SELECT series_id, title, release_date FROM `native/query/series`")
-    .with_tx_mode(QueryTxMode::SnapshotReadOnly)
+    .with_tx_mode(TxMode::SnapshotReadOnly)
     .idempotent(true)
     .await?;
 
@@ -131,17 +131,17 @@ qc.exec("UPSERT INTO `native/query/series` (series_id, title) VALUES ($id, $titl
 
 {% include [steps/10_transaction_control.md](../_includes/steps/10_transaction_control.md) %}
 
-В Rust SDK явное управление транзакциями (через `Begin` и `Commit`) недоступно для клиентского кода. Вместо этого используйте `retry_transaction` с [`QueryTransactionOptions`](https://docs.rs/ydb/latest/ydb/struct.QueryTransactionOptions.html) для интерактивных транзакций. Для одиночного SQL-запроса режим изоляции задаётся через `.with_tx_mode(...)`.
+В Rust SDK явное управление транзакциями (через `Begin` и `Commit`) недоступно для клиентского кода. Вместо этого используйте [`retry_tx`](https://docs.rs/ydb/latest/ydb/struct.QueryClient.html#method.retry_tx) с `.isolation(TxMode::…)` для интерактивных транзакций. Для одиночного SQL-запроса режим изоляции задаётся через `.with_tx_mode(...)`.
 
 Один запрос в режиме snapshot read-only:
 
 ```rust
-use ydb::QueryTxMode;
+use ydb::TxMode;
 
 let mut row = qc
     .query_row("SELECT title FROM `native/query/series` WHERE series_id = $id")
     .param("$id", b"series-1".to_vec())
-    .with_tx_mode(QueryTxMode::SnapshotReadOnly)
+    .with_tx_mode(TxMode::SnapshotReadOnly)
     .idempotent(true)
     .await?;
 ```
@@ -149,20 +149,18 @@ let mut row = qc
 Интерактивная транзакция с несколькими операциями:
 
 ```rust
-use ydb::{QueryTransactionOptions, QueryTxMode};
-
-let mut qc = qc.clone_with_transaction_options(
-    QueryTransactionOptions::new().with_mode(QueryTxMode::SerializableReadWrite),
-);
+use ydb::TxMode;
 
 let title: String = qc
-    .retry_transaction(async |tx| {
+    .retry_tx(async |tx| {
         let mut row = tx
             .query_row("SELECT title FROM `native/query/series` WHERE series_id = $id")
             .param("$id", b"series-1".to_vec())
             .await?;
         Ok(row.remove_field_by_name("title")?.try_into()?)
     })
+    .isolation(TxMode::SerializableReadWrite)
+    .idempotent(true)
     .await?;
 ```
 

@@ -21,14 +21,6 @@
 
 namespace NKikimr::NKqp {
 
-#define LOG_T(stream) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::YDB_SDK, LogPrefix() << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::YDB_SDK, LogPrefix() << stream)
-#define LOG_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::YDB_SDK, LogPrefix() << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::YDB_SDK, LogPrefix() << stream)
-#define LOG_W(stream) LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::YDB_SDK, LogPrefix() << stream)
-#define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::YDB_SDK, LogPrefix() << stream)
-#define LOG_C(stream) LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::YDB_SDK, LogPrefix() << stream)
-
 template <typename TDerived, typename TRpcProtoIn, typename TRpcProtoOut, typename TEventVariant, typename TCounters>
 class TLocalTopicIoSessionActor : public NActors::TActorBootstrapped<TDerived>, public NActors::IActorExceptionHandler {
     static constexpr TDuration COUNTERS_REFRESH_INTERVAL = TDuration::Seconds(1);
@@ -108,14 +100,18 @@ public:
     }
 
     void Bootstrap() {
-        LOG_I("Start local topic session, MaxMemoryUsage: " << MaxMemoryUsage);
+        YDB_LOG_INFO_COMP(NKikimrServices::YDB_SDK, "Start local topic session",
+            {"logPrefix", LogPrefix()},
+            {"maxMemoryUsage", MaxMemoryUsage});
         StartSession();
         TBase::Become(&TDerived::StateFunc);
         TBase::Schedule(COUNTERS_REFRESH_INTERVAL, new TEvents::TEvWakeup());
     }
 
     bool OnUnhandledException(const std::exception& e) final {
-        LOG_E("Got unexpected exception: " << e.what());
+        YDB_LOG_ERROR_COMP(NKikimrServices::YDB_SDK, "Got unexpected",
+            {"logPrefix", LogPrefix()},
+            {"exception", e.what()});
         CloseSession(NYdb::EStatus::INTERNAL_ERROR, TStringBuilder() << "Got unexpected exception: " << e.what());
         return true;
     }
@@ -161,13 +157,20 @@ protected:
         const bool success = status == NYdb::EStatus::SUCCESS;
         if (!success) {
             Counters->Errors->Inc();
-            LOG_E("Closing session with status " << status << " and issues: " << issues.ToOneLineString());
+            YDB_LOG_ERROR_COMP(NKikimrServices::YDB_SDK, "Closing session with status",
+                {"logPrefix", LogPrefix()},
+                {"status", status},
+                {"issues", issues.ToOneLineString()});
         } else {
-            LOG_I("Closing session with success status");
+            YDB_LOG_INFO_COMP(NKikimrServices::YDB_SDK, "Closing session with success status",
+                {"logPrefix", LogPrefix()});
         }
 
         if (SessionClosed) {
-            LOG_W("Session already closed, but got status " << status << " and issues: " << issues.ToOneLineString());
+            YDB_LOG_WARN_COMP(NKikimrServices::YDB_SDK, "Session already closed, but got status",
+                {"logPrefix", LogPrefix()},
+                {"status", status},
+                {"issues", issues.ToOneLineString()});
             return;
         }
         SessionClosed = true;
@@ -255,7 +258,9 @@ protected:
     // Events from local sdk topic session
 
     void Handle(TSessionEvents::TEvExtractReadyEvents::TPtr& ev) {
-        LOG_T("Got extract ready events request, OutgoingEvents #" << OutgoingEvents.size());
+        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Got extract ready events request",
+            {"logPrefix", LogPrefix()},
+            {"outgoingEvents", OutgoingEvents.size()});
 
         Y_VALIDATE(!EventsPromise, "Can not handle extract event in parallel");
         EventsPromise = std::move(ev->Get()->EventsPromise);
@@ -265,12 +270,16 @@ protected:
     void Handle(TSessionEvents::TEvEventsConsumed::TPtr& ev) {
         const auto eventsCount = ev->Get()->EventsCount;
         Counters->MessagesInflight->Sub(eventsCount);
-        LOG_T("Handled #" << eventsCount << " events");
+        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Events",
+            {"logPrefix", LogPrefix()},
+            {"handled", eventsCount});
     }
 
     void Handle(TSessionEvents::TEvSessionFinished::TPtr& ev) {
         const bool force = ev->Get()->Force;
-        LOG_I("Local topic session finished from client side, force: " << force);
+        YDB_LOG_INFO_COMP(NKikimrServices::YDB_SDK, "Local topic session finished from client side",
+            {"logPrefix", LogPrefix()},
+            {"force", force});
 
         CloseSession(NYdb::EStatus::SUCCESS);
 
@@ -285,7 +294,9 @@ protected:
         Y_VALIDATE(!RpcActor, "RpcActor is already set");
         RpcActor = ev->Get()->RpcActor;
 
-        LOG_I("RpcActor attached: " << RpcActor);
+        YDB_LOG_INFO_COMP(NKikimrServices::YDB_SDK, "RpcActor",
+            {"logPrefix", LogPrefix()},
+            {"attached", RpcActor});
         SendInitMessage();
     }
 
@@ -293,12 +304,14 @@ protected:
         PendingRpcResponses++;
 
         if (SessionClosed) {
-            LOG_D("Rpc read request skipped, session is closed");
+            YDB_LOG_DEBUG_COMP(NKikimrServices::YDB_SDK, "Rpc read request skipped, session is closed",
+                {"logPrefix", LogPrefix()});
             SendSessionEventFail();
             return;
         }
 
-        LOG_T("Rpc read request");
+        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Rpc read request",
+            {"logPrefix", LogPrefix()});
         SendSessionEvents();
     }
 
@@ -307,7 +320,8 @@ protected:
         auto response = std::make_unique<typename TLocalRpcCtx::TEvWriteFinished>();
 
         if (SessionClosed) {
-            LOG_D("Rpc write request skipped, session is closed");
+            YDB_LOG_DEBUG_COMP(NKikimrServices::YDB_SDK, "Rpc write request skipped, session is closed",
+                {"logPrefix", LogPrefix()});
             response->Success = false;
             TBase::Send(RpcActor, response.release());
             return;
@@ -321,20 +335,29 @@ protected:
         if (status != Ydb::StatusIds::SUCCESS) {
             NYql::TIssues issues;
             IssuesFromMessage(message.issues(), issues);
-            LOG_E("Rpc write request, got error " << status << ", reason: " << issues.ToOneLineString());
+            YDB_LOG_ERROR_COMP(NKikimrServices::YDB_SDK, "Rpc write request, got error",
+                {"logPrefix", LogPrefix()},
+                {"status", status},
+                {"reason", issues.ToOneLineString()});
             return CloseSession(status, issues);
         }
 
-        LOG_T("Rpc write request: " << static_cast<i64>(message.server_message_case()));
+        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Rpc write",
+            {"logPrefix", LogPrefix()},
+            {"request", static_cast<i64>(message.server_message_case())});
         HandleRpcMessage(message);
     }
 
     void Handle(TLocalRpcCtx::TRpcEvents::TEvFinishRequest::TPtr& ev) {
         const auto& status = ev->Get()->Status;
         if (!status.ok()) {
-            LOG_E("Rpc session finished with error status code: " << static_cast<ui64>(status.error_code()) << ", message: " << status.error_message());
+            YDB_LOG_ERROR_COMP(NKikimrServices::YDB_SDK, "Rpc session finished with error status",
+                {"logPrefix", LogPrefix()},
+                {"code", static_cast<ui64>(status.error_code())},
+                {"message", status.error_message()});
         } else {
-            LOG_I("Rpc session successfully finished");
+            YDB_LOG_INFO_COMP(NKikimrServices::YDB_SDK, "Rpc session successfully finished",
+                {"logPrefix", LogPrefix()});
         }
 
         CloseSession(status, "Session closed");
@@ -349,12 +372,15 @@ protected:
 
     void AddSessionEvent(TRpcIn&& message) {
         if (SessionClosed) {
-            LOG_D("Session already closed, skip session event");
+            YDB_LOG_DEBUG_COMP(NKikimrServices::YDB_SDK, "Session already closed, skip session event",
+                {"logPrefix", LogPrefix()});
             return;
         }
 
         RpcResponses.emplace(std::move(message));
-        LOG_T("Added session event: " << static_cast<i64>(RpcResponses.back().client_message_case()));
+        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Added session",
+            {"logPrefix", LogPrefix()},
+            {"event", static_cast<i64>(RpcResponses.back().client_message_case())});
 
         if (RpcActor) {
             SendSessionEvents();            
@@ -367,7 +393,9 @@ protected:
         Counters->MessagesInflight->Inc();
 
         OutgoingEvents.emplace(std::move(event), size);
-        LOG_T("Added outgoing event: " << OutgoingEvents.back().Event.index());
+        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Added outgoing",
+            {"logPrefix", LogPrefix()},
+            {"event", OutgoingEvents.back().Event.index()});
 
         SendOutgoingEvents();
     }
@@ -381,7 +409,10 @@ protected:
 private:
     void SendSessionEvents() {
         Y_VALIDATE(RpcActor, "RpcActor is not set before read request");
-        LOG_T("Going to send session events, PendingRpcResponses: " << PendingRpcResponses << ", RpcResponses #" << RpcResponses.size());
+        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Going to send session events",
+            {"logPrefix", LogPrefix()},
+            {"pendingRpcResponses", PendingRpcResponses},
+            {"rpcResponses", RpcResponses.size()});
 
         while (PendingRpcResponses && !RpcResponses.empty()) {
             SendSessionEvent(std::move(RpcResponses.front()));
@@ -390,7 +421,10 @@ private:
     }
 
     void SendSessionEvent(TRpcIn&& message, bool success = true) {
-        LOG_T("Sending session event: " << static_cast<i64>(message.client_message_case()) << ", success: " << success);
+        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Sending session",
+            {"logPrefix", LogPrefix()},
+            {"event", static_cast<i64>(message.client_message_case())},
+            {"success", success});
         Y_VALIDATE(PendingRpcResponses > 0, "Rpc read is not expected");
         PendingRpcResponses--;
 
@@ -411,7 +445,9 @@ private:
             return;
         }
 
-        LOG_T("Going to send outgoing events, OutgoingEvents #" << OutgoingEvents.size());
+        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Going to send outgoing events",
+            {"logPrefix", LogPrefix()},
+            {"outgoingEvents", OutgoingEvents.size()});
 
         bool closeEventSent = false;
         std::vector<TEvent> result;
@@ -421,7 +457,8 @@ private:
             OutgoingEvents.pop();
 
             if (std::holds_alternative<NYdb::NTopic::TSessionClosedEvent>(result.back().Event)) {
-                LOG_I("Sent close session event, finishing");
+                YDB_LOG_INFO_COMP(NKikimrServices::YDB_SDK, "Sent close session event, finishing",
+                    {"logPrefix", LogPrefix()});
                 closeEventSent = true;
             }
         }

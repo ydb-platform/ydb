@@ -16,20 +16,20 @@ EFmrErrorReason ParseFmrReasonFromErrorMessage(const TString& errorMessage) {
     return EFmrErrorReason::Unknown;
 }
 
+void TFmrWriterSettings::Save(IOutputStream* buffer) const {
+    ::SaveMany(buffer, ChunkSize, MaxInflightChunks, MaxRowWeight, SkipSortedCheck);
+}
+
+void TFmrWriterSettings::Load(IInputStream* buffer) {
+    ::LoadMany(buffer, ChunkSize, MaxInflightChunks, MaxRowWeight, SkipSortedCheck);
+}
+
 void TFmrUserJobSettings::Save(IOutputStream* buffer) const {
-    ::SaveMany(
-        buffer,
-        ThreadPoolSize,
-        QueueSizeLimit
-    );
+    ::SaveMany(buffer, ThreadPoolSize, QueueSizeLimit, WriterSettings);
 }
 
 void TFmrUserJobSettings::Load(IInputStream* buffer) {
-    ::LoadMany(
-        buffer,
-        ThreadPoolSize,
-        QueueSizeLimit
-    );
+    ::LoadMany(buffer, ThreadPoolSize, QueueSizeLimit, WriterSettings);
 }
 
 void TFmrTvmJobSettings::Save(IOutputStream* buffer) const {

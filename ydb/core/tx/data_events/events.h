@@ -104,7 +104,11 @@ struct TDataEvents {
 
         static std::unique_ptr<TEvWriteResult> BuildError(const ui64 origin, const ui64 txId, const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {
             auto result = std::make_unique<TEvWriteResult>();
-            ACFL_WARN("event", "ev_write_error")("status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(status))("details", errorMsg)("tx_id", txId);
+            YDB_LOG_WARN_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+                {"event", "ev_write_error"},
+                {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(status)},
+                {"details", errorMsg},
+                {"txId", txId});
             result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
             result->Record.SetStatus(status);

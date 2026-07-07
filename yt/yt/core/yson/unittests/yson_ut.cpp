@@ -10,6 +10,8 @@
 
 #include <yt/yt/core/misc/serialize.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/stream/mem.h>
 
 namespace NYT::NYson {
@@ -475,12 +477,11 @@ class TYsonStringSerializationTest
 TEST_P(TYsonStringSerializationTest, Do)
 {
     auto str = GetParam();
-    // TODO(babenko): migrate to std::string
-    TString buffer;
-    TStringOutput output(buffer);
+    std::string buffer;
+    TStdStringOutput output(buffer);
     TStreamSaveContext saveContext(&output);
     Save(saveContext, str);
-    TStringInput input(buffer);
+    TMemoryInput input(buffer);
     TStreamLoadContext loadContext(&input);
     EXPECT_EQ(str, Load<TYsonString>(loadContext));
 }

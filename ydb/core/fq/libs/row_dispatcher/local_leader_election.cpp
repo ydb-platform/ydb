@@ -349,6 +349,9 @@ void TLocalLeaderElection::StartSession() {
 
 void TLocalLeaderElection::PassAway() {
     LOG_ROW_DISPATCHER_DEBUG("PassAway");
+    if (RpcActor) {
+        CloseSession(NYdb::EStatus::ABORTED, {NYql::TIssue("Actor is shutting down")});
+    }
     TActorBootstrapped::PassAway();
 }
 

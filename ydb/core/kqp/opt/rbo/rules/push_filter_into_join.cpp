@@ -59,6 +59,11 @@ bool IsNullRejectingPredicate(const TExpression& filter) {
 namespace NKikimr {
 namespace NKqp {
 
+bool TPushFilterIntoJoinRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Filter &&
+        input->Children.front()->Kind == EOperator::Join;
+}
+
 // FIXME: We currently support pushing filter into Inner, Cross and Left Join
 TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);

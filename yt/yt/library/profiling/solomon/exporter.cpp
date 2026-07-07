@@ -141,6 +141,12 @@ void TSolomonExporter::Register(TStringBuf prefix, const NYT::NHttp::IRequestPat
 
 void TSolomonExporter::Start()
 {
+    if (!Config_->Enable) {
+        YT_LOG_INFO("Solomon exporter is disabled, disabling registry and skipping sensor collection");
+        Registry_->Disable();
+        return;
+    }
+
     CollectorFuture_ = BIND([this, this_ = MakeStrong(this)] {
         try {
             DoCollect();

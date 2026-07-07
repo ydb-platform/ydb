@@ -3,7 +3,7 @@
 #include "hive.h"
 #include "leader_tablet_info.h"
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 namespace NKikimr {
 namespace NHive {

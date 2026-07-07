@@ -83,7 +83,7 @@ private:
             YDB_LOG_INFO_CTX(ctx, "Authentication",
                 {"actorName", ActorName},
                 {"selfId", ctx.SelfID},
-                {"failed", error.str();});
+                {"failed", error.str()});
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error.str());
             return CleanupAndDie(ctx);
         }
@@ -159,7 +159,7 @@ private:
                         {"actorName", ActorName},
                         {"selfId", ctx.SelfID},
                         {"authcId", AuthcId},
-                        {"failureReason", "' has broken Argon hash";});
+                        {"failureReason", "has broken Argon hash"});
                     SendError(NKikimrIssues::TIssuesIds::UNEXPECTED, "");
                     CleanupAndDie(ctx);
                     return false;
@@ -189,7 +189,7 @@ private:
                         {"actorName", ActorName},
                         {"selfId", ctx.SelfID},
                         {"authcId", AuthcId},
-                        {"failureReason", "' has broken Scram hash";});
+                        {"failureReason", "has broken Scram hash"});
                     SendError(NKikimrIssues::TIssuesIds::UNEXPECTED, "");
                     CleanupAndDie(ctx);
                     return false;
@@ -222,7 +222,7 @@ private:
                 {"actorName", ActorName},
                 {"selfId", ctx.SelfID},
                 {"authcId", AuthcId},
-                {"failureReason", "' has no allowed hashes";}
+                {"failureReason", "has no allowed hashes"}
             );
             SendError(NKikimrIssues::TIssuesIds::UNEXPECTED, "");
             CleanupAndDie(ctx);

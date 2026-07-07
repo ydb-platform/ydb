@@ -212,7 +212,7 @@ private:
             YDB_LOG_INFO_CTX(ctx, "Authentication",
                 {"actorName", ActorName},
                 {"selfId", ctx.SelfID},
-                {"failed", error.str();});
+                {"failed", error.str()});
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error.str(), EScramServerError::UnknownUser);
             return CleanupAndDie(ctx);
         }
@@ -237,7 +237,7 @@ private:
             YDB_LOG_INFO_CTX(ctx, "Authentication",
                 {"actorName", ActorName},
                 {"selfId", ctx.SelfID},
-                {"failed", error.str();});
+                {"failed", error.str()});
             error << ". Needed password change to use SASL SCRAM";
             SendError(NKikimrIssues::TIssuesIds::WARNING, error.str());
             return CleanupAndDie(ctx);
@@ -249,7 +249,7 @@ private:
                 {"actorName", ActorName},
                 {"selfId", ctx.SelfID},
                 {"authcId", AuthcId},
-                {"failureReason", "' has broken Scram hash";});
+                {"failureReason", "' has broken Scram hash"});
             SendError(NKikimrIssues::TIssuesIds::UNEXPECTED, "");
             return CleanupAndDie(ctx);
         }

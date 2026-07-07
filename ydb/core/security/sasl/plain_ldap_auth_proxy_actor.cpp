@@ -46,7 +46,7 @@ public:
             {"actorName", ActorName},
             {"selfId", ctx.SelfID},
             {"status", static_cast<ui64>(response.Status)},
-            {"error", response.Error;});
+            {"error", response.Error});
 
         if (response.Status == TEvLdapAuthProvider::EStatus::SUCCESS) {
             ResolveSchemeShard(ctx);

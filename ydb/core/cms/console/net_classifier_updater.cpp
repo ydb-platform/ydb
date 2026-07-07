@@ -116,8 +116,8 @@ private:
             YDB_LOG_DEBUG("NetClassifierUpdater created a new distributable config item");
             CompleteInitialization();
         } else {
-            YDB_LOG_ERROR("NetClassifierUpdater failed to add config",
-                {"item", record});
+            YDB_LOG_ERROR("NetClassifierUpdater failed to add config item",
+                {"ev", record.ShortDebugString()});
             InitializeAgain();
         }
     }
@@ -136,8 +136,8 @@ private:
                 CompleteInitialization();
             }
         } else {
-            YDB_LOG_ERROR("NetClassifierUpdater failed get current distributable config",
-                {"version", record});
+            YDB_LOG_ERROR("NetClassifierUpdater failed get current distributable config version",
+                {"ev", record.ShortDebugString()});
             InitializeAgain();
         }
     }
@@ -269,8 +269,8 @@ private:
                     {"httpStatus", ev->Get()->Response->Status});
             }
         } else {
-            YDB_LOG_ERROR("NetClassifierUpdater failed to get",
-                {"subnets", ev->Get()->Error});
+            YDB_LOG_ERROR("NetClassifierUpdater failed to get subnets",
+                {"error", ev->Get()->Error});
         }
         InitializeAgain();
     }
@@ -281,8 +281,8 @@ private:
             // hurray! the update is finished
             ScheduleNextUpdate();
         } else {
-            YDB_LOG_ERROR("NetClassifierUpdater failed to update distributable",
-                {"config", record});
+            YDB_LOG_ERROR("NetClassifierUpdater failed to update distributable config",
+                {"ev", record.ShortDebugString()});
             InitializeAgain();
         }
     }
@@ -306,8 +306,8 @@ private:
 
             Send(LocalConsole, event.Release());
         } else {
-            YDB_LOG_ERROR("NetClassifierUpdater failed to get current distributable config",
-                {"version", record});
+            YDB_LOG_ERROR("NetClassifierUpdater failed to get current distributable config version",
+                {"ev", record.ShortDebugString()});
             InitializeAgain();
         }
     }

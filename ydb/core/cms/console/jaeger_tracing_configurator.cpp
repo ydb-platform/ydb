@@ -64,8 +64,8 @@ void TJaegerTracingConfigurator::Bootstrap(const TActorContext& ctx) {
 void TJaegerTracingConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
     auto& rec = ev->Get()->Record;
 
-    YDB_LOG_INFO_CTX(ctx, "TJaegerTracingConfigurator: got new",
-        {"config", rec.GetConfig()});
+    YDB_LOG_INFO_CTX(ctx, "TJaegerTracingConfigurator: got new config",
+        {"config", rec.GetConfig().ShortDebugString()});
 
     ApplyConfigs(rec.GetConfig().GetTracingConfig());
 

@@ -72,7 +72,7 @@ void TConfigurationInfoCollector::Handle(TEvConsole::TEvGetNodeConfigurationVers
             YDB_LOG_DEBUG("Received unknown configuration version",
                 {"marker", "CIG3"},
                 {"version", record.GetVersion()},
-                {"fromNodeId", nodeId});
+                {"nodeId", nodeId});
             UnknownNodes++;
             UnknownNodesList.push_back(nodeId);
         }
@@ -83,7 +83,7 @@ void TConfigurationInfoCollector::Handle(TEvConsole::TEvGetNodeConfigurationVers
     } else {
         YDB_LOG_WARN("Received unexpected TEvGetNodeConfigurationVersionResponse",
             {"marker", "CIG4"},
-            {"fromNodeId", nodeId},
+            {"nodeId", nodeId},
             {"sender", ev->Sender});
     }
 }

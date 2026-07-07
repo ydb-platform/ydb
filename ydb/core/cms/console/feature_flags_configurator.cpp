@@ -41,8 +41,8 @@ namespace NKikimr::NConsole {
 
         void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
             const auto& record = ev->Get()->Record;
-            YDB_LOG_INFO("TFeatureFlagsConfigurator: new",
-                {"config", record.GetConfig()});
+            YDB_LOG_INFO("TFeatureFlagsConfigurator: new config",
+                {"config", record.GetConfig().ShortDebugString()});
 
             // Atomically replace runtime feature flags with the new config
             AppDataVerified().UpdateRuntimeFlags(record.GetConfig().GetFeatureFlags());

@@ -427,7 +427,7 @@ public:
 
     TInfoUnit GetElementName() const;
     void SetElementName(const TInfoUnit& elementName);
-    TExpression GetExpression() const;
+    const TExpression& GetExpression() const;
     TExpression& GetExpressionRef();
     bool DependsOnlyOn(const TVector<TInfoUnit>& availableIUs) const;
     void SetExpression(TExpression expr);

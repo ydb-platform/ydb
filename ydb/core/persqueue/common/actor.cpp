@@ -2,12 +2,17 @@
 
 #include <ydb/core/base/counters.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT service
+
 namespace NKikimr::NPQ {
 
 void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const TStringBuf prefix, const std::exception& exc) {
-    LOG_CRIT_S(*NActors::TlsActivationContext, service,
-        prefix << "unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
-        << TBackTrace::FromCurrentException().PrintToString());
+    YDB_LOG_CRIT("Unhandled exception",
+        {"prefix", prefix},
+        {"exceptionType", TypeName(exc)},
+        {"exceptionMessage", exc.what()},
+        {"endl", Endl},
+        {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
 }
 
 const TString& TConstantLogPrefix::GetLogPrefix() const {

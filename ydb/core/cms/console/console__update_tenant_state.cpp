@@ -21,14 +21,14 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateTenantState for tenant",
-            {"path", Path},
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateTenantState execute",
+            {"tenantPath", Path},
             {"state", State});
 
         Tenant = Self->GetTenant(Path);
         if (!Tenant) {
             YDB_LOG_ERROR_CTX(ctx, "TTxUpdateTenantState cannot find tenant",
-                {"path", Path});
+                {"tenantTath", Path});
             return true;
         }
 
@@ -45,7 +45,7 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateTenantState complete",
-            {"path", Path});
+            {"tenantPath", Path});
 
         if (Tenant && PrevState != State) {
             if (Tenant->Worker == Worker)

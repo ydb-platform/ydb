@@ -39,7 +39,7 @@ public:
 
     void Die(const TActorContext &ctx) override
     {
-        YDB_LOG_TRACE_CTX(ctx, "TTabletConfigSender( Die",
+        YDB_LOG_TRACE_CTX(ctx, "TTabletConfigSender Die",
             {"subscriptionId", Subscription->Id});
 
         if (Pipe)
@@ -76,15 +76,15 @@ public:
         Subscription->CurrentConfigId.Serialize(*request->Record.MutableConfigId());
         request->Record.MutableConfig()->CopyFrom(Subscription->CurrentConfig);
 
-        YDB_LOG_TRACE_CTX(ctx, "TTabletConfigSender( send",
+        YDB_LOG_TRACE_CTX(ctx, "TTabletConfigSender Send",
             {"subscriptionId", Subscription->Id},
-            {"TEvConfigNotificationRequest", request->Record});
+            {"ev", request->Record.ShortDebugString()});
 
         NTabletPipe::SendData(ctx, Pipe, request.Release(), Subscription->Cookie);
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "TTabletConfigSender( Bootstrap",
+        YDB_LOG_DEBUG_CTX(ctx, "TTabletConfigSender Bootstrap",
             {"subscriptionId", Subscription->Id});
         Become(&TThis::StateWork);
 
@@ -105,7 +105,7 @@ public:
 
     void Handle(TEvents::TEvPoisonPill::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG_CTX(ctx, "TTabletConfigSender( die to poison pill",
+        YDB_LOG_DEBUG_CTX(ctx, "TTabletConfigSender die to poison pill",
             {"subscriptionId", Subscription->Id});
         ctx.Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvSenderDied(Subscription));
         Die(ctx);
@@ -113,14 +113,14 @@ public:
 
     void Handle(TConfigsProvider::TEvPrivate::TEvNotificationTimeout::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG_CTX(ctx, "TTabletConfigSender( die to timeout",
+        YDB_LOG_DEBUG_CTX(ctx, "TTabletConfigSender die to timeout",
             {"subscriptionId", Subscription->Id});
         ctx.Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvNotificationTimeout(Subscription));
         Die(ctx);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "TTabletConfigSender( connection",
+        YDB_LOG_DEBUG_CTX(ctx, "TTabletConfigSender connection status",
             {"subscriptionId", Subscription->Id},
             {"status", ((ev->Get()->Status == NKikimrProto::OK) ? "established" : "failed")});
 
@@ -130,7 +130,7 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& /*ev*/, const TActorContext& ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "TTabletConfigSender( TEvTabletPipe::TEvClientDestroyed",
+        YDB_LOG_DEBUG_CTX(ctx, "TTabletConfigSender TEvTabletPipe::TEvClientDestroyed",
             {"subscriptionId", Subscription->Id});
 
         OnPipeDestroyed(ctx);
@@ -178,7 +178,7 @@ public:
 
     void Die(const TActorContext &ctx) override
     {
-        YDB_LOG_TRACE_CTX(ctx, "TServiceConfigSender( Die",
+        YDB_LOG_TRACE_CTX(ctx, "TServiceConfigSender Die",
             {"subscriptionId", Subscription->Id});
 
         auto nodeId = Subscription->Subscriber.ServiceId.NodeId();
@@ -194,9 +194,9 @@ public:
         Subscription->CurrentConfigId.Serialize(*request->Record.MutableConfigId());
         request->Record.MutableConfig()->CopyFrom(Subscription->CurrentConfig);
 
-        YDB_LOG_TRACE_CTX(ctx, "TServiceConfigSender( send",
+        YDB_LOG_TRACE_CTX(ctx, "TServiceConfigSender Send",
             {"subscriptionId", Subscription->Id},
-            {"TEvConfigNotificationRequest", request->Record});
+            {"ev", request->Record.ShortDebugString()});
 
         ctx.Send(Subscription->Subscriber.ServiceId, request.Release(),
                  IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
@@ -206,7 +206,7 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "TServiceConfigSender( Bootstrap",
+        YDB_LOG_DEBUG_CTX(ctx, "TServiceConfigSender Bootstrap",
             {"subscriptionId", Subscription->Id});
         Become(&TThis::StateWork);
 
@@ -227,7 +227,7 @@ public:
 
     void Handle(TEvents::TEvPoisonPill::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG_CTX(ctx, "TServiceConfigSender( die to poison pill",
+        YDB_LOG_DEBUG_CTX(ctx, "TServiceConfigSender die to poison pill",
             {"subscriptionId", Subscription->Id});
         ctx.Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvSenderDied(Subscription));
         Die(ctx);
@@ -238,7 +238,7 @@ public:
         RetryInterval += RetryInterval;
         RetryInterval = Min(RetryInterval, TDuration::Minutes(1));
 
-        YDB_LOG_DEBUG_CTX(ctx, "TServiceConfigSender( undelivered notification (retry in seconds)",
+        YDB_LOG_DEBUG_CTX(ctx, "TServiceConfigSender undelivered notification",
             {"subscriptionId", Subscription->Id},
             {"retryInterval", RetryInterval.Seconds()});
 
@@ -253,7 +253,7 @@ public:
         RetryInterval += RetryInterval;
         RetryInterval = Min(RetryInterval, TDuration::Minutes(1));
 
-        YDB_LOG_DEBUG_CTX(ctx, "TServiceConfigSender( disconnected (retry in seconds)",
+        YDB_LOG_DEBUG_CTX(ctx, "TServiceConfigSender disconnected",
             {"subscriptionId", Subscription->Id},
             {"retryInterval", RetryInterval.Seconds()});
 
@@ -265,7 +265,7 @@ public:
 
     void Handle(TConfigsProvider::TEvPrivate::TEvNotificationTimeout::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG_CTX(ctx, "TServiceConfigSender( die to timeout",
+        YDB_LOG_DEBUG_CTX(ctx, "TServiceConfigSender die to timeout",
             {"subscriptionId", Subscription->Id});
         ctx.Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvNotificationTimeout(Subscription));
         Die(ctx);
@@ -307,7 +307,7 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        YDB_LOG_TRACE_CTX(ctx, "TSubscriptionClientSender( send TEvConfigSubscriptionResponse",
+        YDB_LOG_TRACE_CTX(ctx, "TSubscriptionClientSender send TEvConfigSubscriptionResponse",
             {"subscriber", Subscription->Subscriber});
 
         Send(Subscription->Subscriber, new TEvConsole::TEvConfigSubscriptionResponse(Subscription->Generation, Ydb::StatusIds::SUCCESS),
@@ -335,14 +335,14 @@ public:
 
     void Handle(TEvents::TEvPoisonPill::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG_CTX(ctx, "TSubscriptionClientSender( received poison pill, will die",
+        YDB_LOG_DEBUG_CTX(ctx, "TSubscriptionClientSender received poison pill, will die",
             {"subscriber", Subscription->Subscriber});
         Die(ctx);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG_CTX(ctx, "TSubscriptionClientSender( received undelivered notification, will disconnect",
+        YDB_LOG_DEBUG_CTX(ctx, "TSubscriptionClientSender received undelivered notification, will disconnect",
             {"subscriber", Subscription->Subscriber});
 
         Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvWorkerDisconnected(Subscription));
@@ -351,14 +351,14 @@ public:
 
     void Handle(TEvents::TEvWakeup::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG_CTX(ctx, "TSubscriptionClientSender( received wake up",
+        YDB_LOG_DEBUG_CTX(ctx, "TSubscriptionClientSender received wake up",
             {"subscriber", Subscription->Subscriber});
         Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvWorkerCoolDown(Subscription));
     }
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG_CTX(ctx, "TSubscriptionClientSender( received node disconnected notification, will disconnect",
+        YDB_LOG_DEBUG_CTX(ctx, "TSubscriptionClientSender received node disconnected notification, will disconnect",
             {"subscriber", Subscription->Subscriber});
 
         Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvWorkerDisconnected(Subscription));
@@ -370,9 +370,9 @@ public:
         TAutoPtr<NConsole::TEvConsole::TEvConfigSubscriptionNotification> notification = ev->Release();
         notification.Get()->Record.SetOrder(NextOrder++);
 
-        YDB_LOG_TRACE_CTX(ctx, "TSubscriptionClientSender( send",
+        YDB_LOG_TRACE_CTX(ctx, "TSubscriptionClientSender send",
             {"subscriber", Subscription->Subscriber},
-            {"TEvConfigSubscriptionNotificationRequest", notification.Get()->Record});
+            {"ev", notification.Get()->Record.ShortDebugString()});
 
         const float mbytes = notification.Get()->GetCachedByteSize() / 1'000'000.f;
         Schedule(TDuration::MilliSeconds(100) * mbytes, new TEvents::TEvWakeup());
@@ -489,15 +489,15 @@ void TConfigsProvider::ApplySubscriptionModifications(const TSubscriptionModific
     }
     for (auto &pr : modifications.ModifiedLastProvided) {
         YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: update last provided config for subscription",
-            {"id", pr.first},
-            {"lastprovidedconfig", pr.second});
+            {"subscriptionId", pr.first},
+            {"lastProvidedConfig", pr.second});
         auto subscription = SubscriptionIndex.GetSubscription(pr.first);
         subscription->LastProvidedConfig = pr.second;
         subscriptions.insert(subscription);
     }
     for (auto &pr : modifications.ModifiedCookies) {
         YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: update cookie for subscription",
-            {"id", pr.first},
+            {"subscriptionId", pr.first},
             {"cookie", pr.second});
         auto subscription = SubscriptionIndex.GetSubscription(pr.first);
         subscription->Cookie = pr.second;
@@ -569,7 +569,7 @@ void TConfigsProvider::CheckSubscription(TSubscription::TPtr subscription,
                                          const TActorContext &ctx)
 {
     YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: check if update is required for subscription",
-        {"id", subscription->Id});
+        {"subscriptionId", subscription->Id});
 
     auto config = ConfigIndex.BuildConfig(subscription->NodeId, subscription->Host,
                                           subscription->Tenant, subscription->NodeType,
@@ -586,21 +586,21 @@ void TConfigsProvider::CheckSubscription(TSubscription::TPtr subscription,
 
     if (subscription->LastProvidedConfig == configId) {
         YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: no changes found for subscription",
-            {"id", subscription->Id});
+            {"subscriptionId", subscription->Id});
         return;
     }
 
     if (configId != subscription->CurrentConfigId) {
         if (subscription->Worker) {
             YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: killing outdated worker for subscription",
-                {"id", subscription->Id});
+                {"subscriptionId", subscription->Id});
             ctx.Send(subscription->Worker, new TEvents::TEvPoisonPill);
             return;
         }
 
         YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: new config found for subscription",
-            {"id", subscription->Id},
-            {"configid", configId});
+            {"subscriptionId", subscription->Id},
+            {"configId", configId});
 
         subscription->CurrentConfigId = std::move(configId);
         subscription->CurrentConfig.Clear();
@@ -608,7 +608,7 @@ void TConfigsProvider::CheckSubscription(TSubscription::TPtr subscription,
     }
 
     YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: create new worker to update config for subscription",
-        {"id", subscription->Id});
+        {"subscriptionId", subscription->Id});
 
     IActor *worker;
     if (subscription->Subscriber.ServiceId)
@@ -947,7 +947,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvCheckConfigUpdatesRequest::TPtr &ev
     }
 
     YDB_LOG_TRACE_CTX(ctx, "Send",
-        {"TEvCheckConfigUpdatesResponse", response->Record});
+        {"ev", response->Record.ShortDebugString()});
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
@@ -1040,7 +1040,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetConfigItemsRequest::TPtr &ev, co
         item->Serialize(*response->Record.AddConfigItems());
 
     YDB_LOG_TRACE_CTX(ctx, "Send",
-        {"TEvGetConfigItemsResponse", response->Record});
+        {"ev", response->Record.ShortDebugString()});
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
@@ -1052,13 +1052,13 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr &e
     // Subscription was removed
     if (!subscription) {
         YDB_LOG_DEBUG_CTX(ctx, "Config notification response for missing subscription",
-            {"id", rec.GetSubscriptionId()});
+            {"subscriptionId", rec.GetSubscriptionId()});
         return;
     }
     // Service was restarted.
     if (ev->Cookie != subscription->Cookie) {
         YDB_LOG_DEBUG_CTX(ctx, "Config notification response cookie mismatch for subscription",
-            {"id", rec.GetSubscriptionId()});
+            {"subscriptionId", rec.GetSubscriptionId()});
         Y_ABORT_UNLESS(subscription->Subscriber.ServiceId);
         return;
     }
@@ -1086,7 +1086,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetConfigSubscriptionRequest::TPtr 
     }
 
     YDB_LOG_TRACE_CTX(ctx, "Send",
-        {"TEvGetConfigSubscriptionResponse", resp->Record});
+        {"ev", resp->Record.ShortDebugString()});
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
@@ -1109,7 +1109,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigItemsRequest::TPtr &ev
         item->Serialize(*response->Record.AddConfigItems());
 
     YDB_LOG_TRACE_CTX(ctx, "Send",
-        {"TEvGetNodeConfigItemsResponse", response->Record});
+        {"ev", response->Record.ShortDebugString()});
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
@@ -1146,7 +1146,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigRequest::TPtr &ev, con
     }
 
     YDB_LOG_TRACE_CTX(ctx, "Send",
-        {"TEvGetNodeConfigResponse", response->Record});
+        {"ev", response->Record.ShortDebugString()});
 
     if (rec.HasServeYaml() && rec.GetServeYaml() && rec.HasYamlApiVersion() && rec.GetYamlApiVersion() == 1) {
         response->Record.SetMainYamlConfig(MainYamlConfig);
@@ -1183,7 +1183,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvListConfigSubscriptionsRequest::TPt
     }
 
     YDB_LOG_TRACE_CTX(ctx, "Send",
-        {"TEvListConfigSubscriptionsResponse", response->Record});
+        {"ev", response->Record.ShortDebugString()});
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
@@ -1198,13 +1198,13 @@ void TConfigsProvider::Handle(TEvPrivate::TEvNotificationTimeout::TPtr &ev, cons
     // Subscription was removed
     if (!SubscriptionIndex.GetSubscription(subscription->Id)) {
         YDB_LOG_DEBUG_CTX(ctx, "Config notification timeout for missing subscription",
-            {"id", subscription->Id});
+            {"subscriptionId", subscription->Id});
         return;
     }
     // Worker has changed.
     if (ev->Sender != subscription->Worker) {
         YDB_LOG_ERROR_CTX(ctx, "Config notification timeout from unexpected worker for subscription",
-            {"id", subscription->Id});
+            {"subscriptionId", subscription->Id});
         return;
     }
     subscription->Worker = TActorId();
@@ -1217,13 +1217,13 @@ void TConfigsProvider::Handle(TEvPrivate::TEvSenderDied::TPtr &ev, const TActorC
     // Subscription was removed
     if (!SubscriptionIndex.GetSubscription(subscription->Id)) {
         YDB_LOG_DEBUG_CTX(ctx, "Config sender died for missing subscription",
-            {"id", subscription->Id});
+            {"subscriptionId", subscription->Id});
         return;
     }
     // Worker has changed.
     if (ev->Sender != subscription->Worker) {
         YDB_LOG_ERROR_CTX(ctx, "Unexpected config sender died for subscription",
-            {"id", subscription->Id});
+            {"subscriptionId", subscription->Id});
         return;
     }
     subscription->Worker = TActorId();
@@ -1258,8 +1258,8 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateConfigs::TPtr &ev, const TAct
 {
     auto &event = ev->Get()->Event;
     if (event) {
-        YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider",
-            {"send", ev->ToString()});
+        YDB_LOG_TRACE_CTX(ctx, "Send",
+            {"ev", ev->ToString()});
         ctx.Send(event.Release());
     }
 

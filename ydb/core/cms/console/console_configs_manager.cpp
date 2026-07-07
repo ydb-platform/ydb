@@ -368,13 +368,13 @@ void TConfigsManager::ApplyPendingSubscriptionModifications(const TActorContext 
     }
     for (auto &pr : PendingSubscriptionModifications.ModifiedLastProvided) {
         YDB_LOG_DEBUG_CTX(ctx, "Modify last provided config for subscription",
-            {"id", pr.first},
-            {"lastprovidedconfig", pr.second});
+            {"subscriptionId", pr.first},
+            {"lastProvidedConfig", pr.second});
         SubscriptionIndex.GetSubscription(pr.first)->LastProvidedConfig = pr.second;
     }
     for (auto &pr : PendingSubscriptionModifications.ModifiedCookies) {
         YDB_LOG_DEBUG_CTX(ctx, "Modify cookie for subscription",
-            {"id", pr.first},
+            {"subscriptionId", pr.first},
             {"cookie", pr.second});
         SubscriptionIndex.GetSubscription(pr.first)->Cookie = pr.second;
     }
@@ -738,7 +738,7 @@ void TConfigsManager::DbRemoveSubscription(ui64 id,
                                            const TActorContext &ctx) const
 {
     YDB_LOG_TRACE_CTX(ctx, "Database: removing subscription",
-        {"id", id});
+        {"subscriptionId", id});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::ConfigSubscriptions>().Key(id).Delete();
@@ -748,8 +748,7 @@ void TConfigsManager::DbUpdateItem(TConfigItem::TPtr item,
                                    TTransactionContext &txc,
                                    const TActorContext &ctx) const
 {
-    YDB_LOG_TRACE_CTX(ctx, "Dump database, item",
-        {"database", (ConfigIndex.GetItem(item->Id) ? "updating " : "adding ")},
+    YDB_LOG_TRACE_CTX(ctx, TStringBuilder() << "Database " << (ConfigIndex.GetItem(item->Id) ? "updating" : "adding") << " item",
         {"item", item->ToString()});
 
     TString config;
@@ -816,8 +815,8 @@ void TConfigsManager::DbUpdateSubscriptionLastProvidedConfig(ui64 id,
                                                              const TActorContext &ctx) const
 {
     YDB_LOG_TRACE_CTX(ctx, "Database: update last provided config for subscription",
-        {"id", id},
-        {"lastprovidedconfig", configId});
+        {"subscriptionId", id},
+        {"lastProvidedConfig", configId});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::ConfigSubscriptions>().Key(id)
@@ -860,7 +859,7 @@ void TConfigsManager::Handle(TEvConsole::TEvListConfigValidatorsRequest::TPtr &e
     }
 
     YDB_LOG_TRACE_CTX(ctx, "Send",
-        {"TEvListConfigValidatorsResponse", response->Record});
+        {"ev", response->Record.ShortDebugString()});
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }

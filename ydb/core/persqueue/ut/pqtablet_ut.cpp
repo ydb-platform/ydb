@@ -281,6 +281,7 @@ protected:
     void SendSaveTxState(TAutoPtr<IEventHandle>& event);
 
     void WaitForTheTransactionToBeDeleted(ui64 txId);
+    void AssertTransactionInKV(ui64 txId);
 
     TVector<TString> WaitForExactSupportivePartitionsCount(ui32 expectedCount);
     TVector<TString> GetSupportivePartitionsKeysFromKV();
@@ -1263,19 +1264,48 @@ void TPQTabletFixture::SendSaveTxState(TAutoPtr<IEventHandle>& event)
     Ctx->Runtime->Send(event);
 }
 
+void TPQTabletFixture::AssertTransactionInKV(ui64 txId)
+{
+    EnsurePipeExist();
+
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    request->Record.SetCookie(12345);
+    auto cmd = request->Record.AddCmdReadRange();
+    auto range = cmd->MutableRange();
+    range->SetFrom(GetTxKey(txId));
+    range->SetIncludeFrom(true);
+    range->SetTo(GetTxKey(txId + 1));
+    range->SetIncludeTo(false);
+    cmd->SetIncludeData(false);
+    SendToPipe(Ctx->Edge, request.release());
+
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+    const auto& result = response->Record.GetReadRangeResult(0);
+    if (result.GetStatus() == static_cast<ui32>(NKikimrProto::OK)) {
+        UNIT_ASSERT(result.PairSize() > 0);
+        return;
+    }
+
+    if (result.GetStatus() == NKikimrProto::NODATA) {
+        UNIT_FAIL("Transaction " << txId << " was not found in KV");
+    }
+
+    UNIT_FAIL("Unexpected status from KV tablet " << result.GetStatus());
+}
+
 void TPQTabletFixture::WaitForTheTransactionToBeDeleted(ui64 txId)
 {
-    const TString key = GetTxKey(txId);
-
     for (size_t i = 0; i < 200; ++i) {
         auto request = std::make_unique<TEvKeyValue::TEvRequest>();
         request->Record.SetCookie(12345);
         auto cmd = request->Record.AddCmdReadRange();
         auto range = cmd->MutableRange();
-        range->SetFrom(key);
+        range->SetFrom(GetTxKey(txId));
         range->SetIncludeFrom(true);
-        range->SetTo(key);
-        range->SetIncludeTo(true);
+        range->SetTo(GetTxKey(txId + 1));
+        range->SetIncludeTo(false);
         cmd->SetIncludeData(false);
         SendToPipe(Ctx->Edge, request.release());
 
@@ -1283,14 +1313,16 @@ void TPQTabletFixture::WaitForTheTransactionToBeDeleted(ui64 txId)
         UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
 
         const auto& result = response->Record.GetReadRangeResult(0);
+        if (result.GetStatus() == NKikimrProto::NODATA) {
+            return;
+        }
+
         if (result.GetStatus() == static_cast<ui32>(NKikimrProto::OK)) {
             Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(300));
             continue;
         }
 
-        if (result.GetStatus() == NKikimrProto::NODATA) {
-            return;
-        }
+        UNIT_FAIL("Unexpected status from KV tablet " << result.GetStatus());
     }
 
     UNIT_FAIL("Too many attempts");
@@ -2301,6 +2333,68 @@ Y_UNIT_TEST_F(Huge_ProposeTransacton, TPQTabletFixture)
 
     //WaitPlanStepAck({.Step=100, .TxIds={txId_1, txId_2}});
     //WaitPlanStepAccepted({.Step=100});
+}
+
+Y_UNIT_TEST_F(Duplicate_ReadSetAck_From_Same_Recipient, TPQTabletFixture)
+{
+    const ui64 txId = 67890;
+    const ui64 tabletB = 22222;
+    const ui64 tabletC = 33333;
+
+    NHelpers::TPQTabletMock* mockB = CreatePQTabletMock(tabletB);
+    NHelpers::TPQTabletMock* mockC = CreatePQTabletMock(tabletC);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Receivers={tabletB, tabletC},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+    WaitForCalcPredicateResult();
+
+    WaitReadSet(*mockB, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=tabletB,
+                         .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    WaitReadSet(*mockC, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=tabletC,
+                         .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    auto sendReadSetAck = [&](ui64 consumerTabletId) {
+        auto event = std::make_unique<TEvTxProcessing::TEvReadSetAck>(
+            100, txId, Ctx->TabletId, consumerTabletId, consumerTabletId, 0);
+        SendToPipe(Ctx->Edge, event.release());
+    };
+
+    sendReadSetAck(tabletB);
+    sendReadSetAck(tabletB);
+
+    AssertTransactionInKV(txId);
+
+    // Without dedup, two acks from B satisfy HaveAllRecipientsReceive (2/2) even though C
+    // has not acked. DeleteTx is queued in memory; the next ProposeTransaction persists it.
+    SendProposeTransactionRequest({.TxId=txId + 1,
+                                  .Receivers={tabletB, tabletC},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId + 1,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+    AssertTransactionInKV(txId);
+
+    sendReadSetAck(tabletC);
+
+    SendProposeTransactionRequest({.TxId=txId + 2,
+                                  .Receivers={tabletB, tabletC},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+
+    WaitForTheTransactionToBeDeleted(txId);
 }
 
 Y_UNIT_TEST_F(TEvReadSet_For_A_Non_Existent_Tablet, TPQTabletFixture)

@@ -1204,7 +1204,7 @@ bool FillUsedFiles(
         const auto& e = NPg::LookupExtension(extensionIndex);
         needFullPgCatalog = true;
         auto alias = TFsPath(e.LibraryPath).GetName();
-        if (!AddPgFile(true, e.LibraryPath, e.LibraryMD5, alias, files, types, node.Pos(), ctx)) {
+        if (!AddPgFile(/*isPath=*/true, e.LibraryPath, e.LibraryMD5, alias, files, types, node.Pos(), ctx)) {
             return false;
         }
     }
@@ -1215,7 +1215,7 @@ bool FillUsedFiles(
     }
 
     TString content = NPg::ExportExtensions(filter);
-    return AddPgFile(false, content, "", TString(PgCatalogFileName), files, types, node.Pos(), ctx);
+    return AddPgFile(/*isPath=*/false, content, "", TString(PgCatalogFileName), files, types, node.Pos(), ctx);
 }
 
 std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> FreezeUsedFiles(const TExprNode& node, TUserDataTable& files, const TTypeAnnotationContext& types, TExprContext& ctx, const std::function<bool(const TString&)>& urlDownloadFilter, const TUserDataTable& crutches) {
@@ -1301,7 +1301,7 @@ TString SerializeExpr(TExprContext& ctx, const TExprNode& expr, bool withTypes) 
         typeFlags |= TExprAnnotationFlags::Types;
     }
 
-    auto ast = ConvertToAst(expr, ctx, typeFlags, true);
+    auto ast = ConvertToAst(expr, ctx, typeFlags, /*refAtoms=*/true);
     YQL_ENSURE(ast.Root);
     return ast.Root->ToString();
 }

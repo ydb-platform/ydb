@@ -8,58 +8,174 @@ namespace {
 using TCandidates = TPlanAliases::TCandidates;
 using TRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>;
 
-std::optional<TInfoUnit> ChoosePreferredAlias(const TCandidates& candidates, const TInfoUnitSet& liveOut) {
-    if (candidates.empty()) {
-        return std::nullopt;
+// Pinned names are forced to stay alive by contracts this rule can never
+// rewrite: root output names (hard), aggregate keys and UnionAll columns
+// (soft; only their dedicated push rules may rename them). An unpinned class
+// member can always lose all its uses and fold into its producer, so uses
+// must converge onto the pinned name — converging onto an unpinned one keeps
+// two names of the same class alive forever.
+enum class EPinRank : ui8 {
+    Hard = 0,
+    Soft = 1,
+    None = 2,
+};
+
+// Hard pins apply only in the root alias region: below an alias-class cut a
+// coinciding name is a different incarnation of the class and root does not
+// consume it directly.
+EPinRank GetPinRank(const TPinnedNames& pinned, const TInfoUnit& iu, bool inRootRegion) {
+    if (inRootRegion && pinned.Hard.contains(iu)) {
+        return EPinRank::Hard;
+    }
+    if (pinned.Soft.contains(iu)) {
+        return EPinRank::Soft;
+    }
+    return EPinRank::None;
+}
+
+// Preference order inside a class: hard pins, then soft pins, then free names.
+//
+// Among free names prefer the oldest: it is defined lowest in the plan, so its
+// scope dominates every use site and all uses can converge to it, letting the
+// newer aliases lose their uses and get pruned. It is also stable under
+// rewrites (appending new aliases never changes which candidate is oldest),
+// which makes the rewrite terminate.
+//
+// Among soft pins prefer the newest: alias classes are cut at aggregates and
+// unions, so within one class a newer soft pin belongs to the consumer that
+// terminates the region above (an aggregate key), while an older one belongs
+// to the producer that starts it below (a UnionAll column). Converging uses
+// onto the consumer's name lets the producer-side binding fold downward; the
+// reverse leaves both names alive.
+bool IsBetterCandidate(const TAliasCandidate& candidate, const TAliasCandidate& best, const TPinnedNames& pinned, bool inRootRegion) {
+    const auto candidateRank = GetPinRank(pinned, candidate.IU, inRootRegion);
+    const auto bestRank = GetPinRank(pinned, best.IU, inRootRegion);
+    if (candidateRank != bestRank) {
+        return candidateRank < bestRank;
     }
 
-    const TAliasCandidate* bestLive = nullptr;
-    const TAliasCandidate* bestGeneratedLive = nullptr;
-    const TAliasCandidate* bestBase = nullptr;
-    const TAliasCandidate* bestGeneratedBase = nullptr;
+    if (candidate.Priority != best.Priority) {
+        if (candidateRank == EPinRank::Soft) {
+            return candidate.Priority > best.Priority;
+        }
+        return candidate.Priority < best.Priority;
+    }
+
+    return candidate.IU.GetFullName() < best.IU.GetFullName();
+}
+
+std::optional<TInfoUnit> ChoosePreferredAlias(const TCandidates& candidates, const TPinnedNames& pinned, bool inRootRegion) {
+    const TAliasCandidate* best = nullptr;
     for (const auto& candidate : candidates) {
-        const bool isGenerated = IsGeneratedIgnoreIU(candidate.IU);
-        if (liveOut.contains(candidate.IU)) {
-            const auto*& target = isGenerated ? bestGeneratedLive : bestLive;
-            if (!target || candidate.Priority > target->Priority ||
-                (candidate.Priority == target->Priority && candidate.IU.GetFullName() < target->IU.GetFullName())) {
-                target = &candidate;
-            }
+        if (IsGeneratedIgnoreIU(candidate.IU)) {
+            continue;
         }
 
-        const auto*& targetBase = isGenerated ? bestGeneratedBase : bestBase;
-        if (!targetBase || candidate.Priority < targetBase->Priority ||
-            (candidate.Priority == targetBase->Priority && candidate.IU.GetFullName() < targetBase->IU.GetFullName())) {
-            targetBase = &candidate;
+        if (!best || IsBetterCandidate(candidate, *best, pinned, inRootRegion)) {
+            best = &candidate;
         }
     }
 
-    if (bestLive) {
-        return bestLive->IU;
+    return best ? std::optional<TInfoUnit>(best->IU) : std::nullopt;
+}
+
+TIntrusivePtr<IOperator> FindUsedIUOwner(IOperator& op, const TInfoUnit& iu) {
+    TIntrusivePtr<IOperator> owner;
+    for (const auto& child : op.GetChildren()) {
+        if (!ContainsInfoUnit(child->GetOutputIUs(), iu)) {
+            continue;
+        }
+
+        if (owner) {
+            return {};
+        }
+        owner = child;
     }
-    if (bestBase) {
-        return bestBase->IU;
+    return owner;
+}
+
+bool CanRenameUsedIUTo(IOperator& op, const TInfoUnit& from, const TInfoUnit& to) {
+    if (op.Kind != EOperator::Map) {
+        return true;
     }
-    if (bestGeneratedLive) {
-        return bestGeneratedLive->IU;
+
+    const auto& map = static_cast<const TOpMap&>(op);
+    for (const auto& mapElement : map.MapElements) {
+        if (mapElement.IsRename() || mapElement.GetElementName() != to) {
+            continue;
+        }
+
+        const auto usedIUs = mapElement.GetExpression().GetInputIUs(false, true);
+        if (ContainsInfoUnit(usedIUs, from)) {
+            return false;
+        }
     }
-    return bestGeneratedBase ? std::optional<TInfoUnit>(bestGeneratedBase->IU) : std::nullopt;
+    return true;
+}
+
+bool ContainsAliasCandidate(const TCandidates& candidates, const TInfoUnit& iu) {
+    for (const auto& candidate : candidates) {
+        if (candidate.IU == iu) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool IsRedundantAliasAppend(TOpMap& map, const TMapElement& mapElement) {
+    if (!mapElement.IsColumnAccess() || !ContainsInfoUnit(map.GetInput()->GetOutputIUs(), mapElement.GetElementName())) {
+        return false;
+    }
+
+    if (mapElement.GetColumnAccess() == mapElement.GetElementName()) {
+        return true;
+    }
+
+    const auto* candidates = GetAliases(map.GetInput().get(), mapElement.GetColumnAccess());
+    return candidates && ContainsAliasCandidate(*candidates, mapElement.GetElementName());
+}
+
+bool DropRedundantAliasAppends(IOperator& op) {
+    if (op.Kind != EOperator::Map) {
+        return false;
+    }
+
+    auto& map = static_cast<TOpMap&>(op);
+    TVector<TMapElement> elements;
+    elements.reserve(map.MapElements.size());
+
+    bool changed = false;
+    for (auto mapElement : map.MapElements) {
+        if (IsRedundantAliasAppend(map, mapElement)) {
+            changed = true;
+            continue;
+        }
+        elements.push_back(std::move(mapElement));
+    }
+
+    if (changed) {
+        map.MapElements = std::move(elements);
+    }
+    return changed;
 }
 
 void AddPreferredAliasRename(
     TRenameMap& renameMap,
-    const TPlanProps& props,
+    IOperator& op,
     const TIntrusivePtr<IOperator>& aliasesAt,
     const TInfoUnit& iu,
-    const TInfoUnitSet& liveOut)
+    const TPinnedNames& pinned)
 {
-    const auto* candidates = props.Aliases.GetAliases(aliasesAt.get(), iu);
+    const auto* candidates = GetAliases(aliasesAt.get(), iu);
     if (!candidates) {
         return;
     }
 
-    const auto preferred = ChoosePreferredAlias(*candidates, liveOut);
+    const auto preferred = ChoosePreferredAlias(*candidates, pinned, aliasesAt->Props.Analysis.InRootAliasRegion);
     if (!preferred || *preferred == iu || !ContainsInfoUnit(aliasesAt->GetOutputIUs(), *preferred)) {
+        return;
+    }
+    if (!CanRenameUsedIUTo(op, iu, *preferred)) {
         return;
     }
 
@@ -69,256 +185,39 @@ void AddPreferredAliasRename(
     }
 }
 
-TRenameMap BuildPreferredAliasRenameMap(
-    const TPlanProps& props,
-    const TIntrusivePtr<IOperator>& aliasesAt,
-    const TVector<TInfoUnit>& usedIUs,
-    const TInfoUnitSet& liveOut)
-{
+TRenameMap BuildPreferredAliasRenameMap(IOperator& op, const TVector<TInfoUnit>& usedIUs, const TPinnedNames& pinned) {
     TRenameMap renameMap;
     for (const auto& iu : usedIUs) {
-        AddPreferredAliasRename(renameMap, props, aliasesAt, iu, liveOut);
+        auto aliasesAt = FindUsedIUOwner(op, iu);
+        if (!aliasesAt) {
+            continue;
+        }
+
+        AddPreferredAliasRename(renameMap, op, aliasesAt, iu, pinned);
     }
     return renameMap;
-}
-
-bool RenameInfoUnit(TInfoUnit& iu, const TRenameMap& renameMap) {
-    const auto it = renameMap.find(iu);
-    if (it == renameMap.end()) {
-        return false;
-    }
-
-    iu = it->second;
-    return true;
-}
-
-bool HasDirectExpressionRename(const TExpression& expr, const TRenameMap& renameMap) {
-    for (const auto& iu : expr.GetInputIUs(true, false)) {
-        if (renameMap.contains(iu)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool RenameExpression(TExpression& expr, const TRenameMap& renameMap) {
-    if (renameMap.empty() || !HasDirectExpressionRename(expr, renameMap)) {
-        return false;
-    }
-
-    expr = expr.ApplyRenames(renameMap);
-    return true;
-}
-
-TVector<TInfoUnit> GetMapInputIUs(const TOpMap& map) {
-    TVector<TInfoUnit> usedIUs;
-    for (const auto& mapElement : map.MapElements) {
-        if (mapElement.IsRename()) {
-            continue;
-        }
-        const auto expressionIUs = mapElement.GetExpression().GetInputIUs(false, true);
-        usedIUs.insert(usedIUs.end(), expressionIUs.begin(), expressionIUs.end());
-    }
-    return usedIUs;
-}
-
-bool RewriteMapInputs(TOpMap& map, const TInfoUnitSet& liveOut, TRBOContext& ctx, TPlanProps& props) {
-    const auto renameMap = BuildPreferredAliasRenameMap(props, map.GetInput(), GetMapInputIUs(map), liveOut);
-    if (renameMap.empty()) {
-        return false;
-    }
-
-    bool changed = false;
-    TRenameMap mapRenameMap;
-    for (auto& mapElement : map.MapElements) {
-        if (mapElement.IsRename()) {
-            continue;
-        }
-
-        TRenameMap elementRenameMap;
-        for (const auto& [from, to] : renameMap) {
-            if (to == mapElement.GetElementName()) {
-                continue;
-            }
-            elementRenameMap.emplace(from, to);
-            mapRenameMap.emplace(from, to);
-        }
-
-        changed |= RenameExpression(mapElement.GetExpressionRef(), elementRenameMap);
-    }
-    const bool subplansChanged = props.Subplans.RenameIUs(mapRenameMap, ctx.ExprCtx);
-    return changed || subplansChanged;
-}
-
-bool RewriteFilterInputs(TOpFilter& filter, const TInfoUnitSet& liveOut, TRBOContext& ctx, TPlanProps& props) {
-    // Source-adjacent filters are the contract surface for range and OLAP predicate pushdown.
-    if (filter.GetInput()->Kind == EOperator::Source) {
-        return false;
-    }
-
-    const auto renameMap = BuildPreferredAliasRenameMap(props, filter.GetInput(), filter.FilterExpr.GetInputIUs(false, true), liveOut);
-    if (renameMap.empty()) {
-        return false;
-    }
-
-    bool changed = RenameExpression(filter.FilterExpr, renameMap);
-    const bool subplansChanged = props.Subplans.RenameIUs(renameMap, ctx.ExprCtx);
-    return changed || subplansChanged;
-}
-
-void MergeRenameMap(TRenameMap& target, const TRenameMap& source) {
-    for (const auto& [from, to] : source) {
-        const auto [it, inserted] = target.emplace(from, to);
-        if (!inserted && it->second != to) {
-            target.erase(it);
-        }
-    }
-}
-
-bool RewriteJoinInputs(TOpJoin& join, const TInfoUnitSet& liveOut, TRBOContext& ctx, TPlanProps& props) {
-    TVector<TInfoUnit> leftUsed;
-    TVector<TInfoUnit> rightUsed;
-    TVector<TInfoUnit> filterUsed;
-
-    for (const auto& [leftKey, rightKey] : join.JoinKeys) {
-        leftUsed.push_back(leftKey);
-        rightUsed.push_back(rightKey);
-    }
-    for (const auto& filter : join.JoinFilters) {
-        const auto filterIUs = filter.GetInputIUs(false, true);
-        filterUsed.insert(filterUsed.end(), filterIUs.begin(), filterIUs.end());
-    }
-
-    const auto leftRenameMap = BuildPreferredAliasRenameMap(props, join.GetLeftInput(), leftUsed, liveOut);
-    const auto rightRenameMap = BuildPreferredAliasRenameMap(props, join.GetRightInput(), rightUsed, liveOut);
-
-    TRenameMap filterRenameMap = BuildPreferredAliasRenameMap(props, join.GetLeftInput(), filterUsed, liveOut);
-    MergeRenameMap(filterRenameMap, BuildPreferredAliasRenameMap(props, join.GetRightInput(), filterUsed, liveOut));
-
-    bool changed = false;
-    for (auto& [leftKey, rightKey] : join.JoinKeys) {
-        changed |= RenameInfoUnit(leftKey, leftRenameMap);
-        changed |= RenameInfoUnit(rightKey, rightRenameMap);
-    }
-    for (auto& filter : join.JoinFilters) {
-        changed |= RenameExpression(filter, filterRenameMap);
-    }
-
-    TRenameMap subplanRenameMap = leftRenameMap;
-    MergeRenameMap(subplanRenameMap, rightRenameMap);
-    MergeRenameMap(subplanRenameMap, filterRenameMap);
-    const bool subplansChanged = props.Subplans.RenameIUs(subplanRenameMap, ctx.ExprCtx);
-    return changed || subplansChanged;
-}
-
-bool RewriteLimitInputs(TOpLimit& limit, const TInfoUnitSet& liveOut, TRBOContext& ctx, TPlanProps& props) {
-    TVector<TInfoUnit> usedIUs = limit.LimitCond.GetInputIUs(false, true);
-    if (const auto offset = limit.GetOffsetCond()) {
-        const auto offsetIUs = offset->GetInputIUs(false, true);
-        usedIUs.insert(usedIUs.end(), offsetIUs.begin(), offsetIUs.end());
-    }
-
-    const auto renameMap = BuildPreferredAliasRenameMap(props, limit.GetInput(), usedIUs, liveOut);
-    if (renameMap.empty()) {
-        return false;
-    }
-
-    bool changed = HasDirectExpressionRename(limit.LimitCond, renameMap);
-    if (const auto offset = limit.GetOffsetCond()) {
-        changed |= HasDirectExpressionRename(*offset, renameMap);
-    }
-    if (changed) {
-        limit.RenameIUs(renameMap, ctx.ExprCtx);
-    }
-    const bool subplansChanged = props.Subplans.RenameIUs(renameMap, ctx.ExprCtx);
-    return changed || subplansChanged;
-}
-
-bool RewriteSortInputs(TOpSort& sort, const TInfoUnitSet& liveOut, TRBOContext& ctx, TPlanProps& props) {
-    TVector<TInfoUnit> usedIUs;
-    for (const auto& sortElement : sort.SortElements) {
-        usedIUs.push_back(sortElement.SortColumn);
-    }
-    if (sort.LimitCond) {
-        const auto limitIUs = sort.LimitCond->GetInputIUs(false, true);
-        usedIUs.insert(usedIUs.end(), limitIUs.begin(), limitIUs.end());
-    }
-
-    const auto renameMap = BuildPreferredAliasRenameMap(props, sort.GetInput(), usedIUs, liveOut);
-    if (renameMap.empty()) {
-        return false;
-    }
-
-    bool changed = false;
-    for (auto& sortElement : sort.SortElements) {
-        changed |= RenameInfoUnit(sortElement.SortColumn, renameMap);
-    }
-    if (sort.LimitCond) {
-        changed |= RenameExpression(*sort.LimitCond, renameMap);
-    }
-    const bool subplansChanged = props.Subplans.RenameIUs(renameMap, ctx.ExprCtx);
-    return changed || subplansChanged;
-}
-
-bool RewriteAggregateInputs(TOpAggregate& aggregate, const TInfoUnitSet& liveOut, TRBOContext& ctx, TPlanProps& props) {
-    TVector<TInfoUnit> usedIUs = aggregate.KeyColumns;
-    for (const auto& traits : aggregate.AggregationTraitsList) {
-        usedIUs.push_back(traits.OriginalColName);
-    }
-
-    const auto renameMap = BuildPreferredAliasRenameMap(props, aggregate.GetInput(), usedIUs, liveOut);
-    if (renameMap.empty()) {
-        return false;
-    }
-
-    const auto oldKeys = aggregate.KeyColumns;
-    const auto oldTraits = aggregate.AggregationTraitsList;
-
-    bool changed = false;
-    for (auto& key : aggregate.KeyColumns) {
-        changed |= RenameInfoUnit(key, renameMap);
-    }
-    for (auto& traits : aggregate.AggregationTraitsList) {
-        changed |= RenameInfoUnit(traits.OriginalColName, renameMap);
-        if (aggregate.IsDistinctAll()) {
-            changed |= RenameInfoUnit(traits.ResultColName, renameMap);
-        }
-    }
-
-    if (HasOutputConflicts(aggregate.GetOutputIUs()) || !CanExposeToParents(&aggregate, props)) {
-        aggregate.KeyColumns = oldKeys;
-        aggregate.AggregationTraitsList = oldTraits;
-        return false;
-    }
-
-    const bool subplansChanged = props.Subplans.RenameIUs(renameMap, ctx.ExprCtx);
-    return changed || subplansChanged;
 }
 
 } // anonymous namespace
 
 bool TRewriteExpressionsToPreferredAliasesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    const auto liveIt = props.LiveOut.find(input.get());
-    if (liveIt == props.LiveOut.end()) {
-        return false;
+    const bool droppedRedundantAppends = DropRedundantAliasAppends(*input);
+
+    const auto usedIUs = input->GetUsedIUs(props);
+    if (usedIUs.empty()) {
+        return droppedRedundantAppends;
     }
 
-    switch (input->Kind) {
-        case EOperator::Map:
-            return RewriteMapInputs(*CastOperator<TOpMap>(input), liveIt->second, ctx, props);
-        case EOperator::Filter:
-            return RewriteFilterInputs(*CastOperator<TOpFilter>(input), liveIt->second, ctx, props);
-        case EOperator::Join:
-            return RewriteJoinInputs(*CastOperator<TOpJoin>(input), liveIt->second, ctx, props);
-        case EOperator::Aggregate:
-            return RewriteAggregateInputs(*CastOperator<TOpAggregate>(input), liveIt->second, ctx, props);
-        case EOperator::Limit:
-            return RewriteLimitInputs(*CastOperator<TOpLimit>(input), liveIt->second, ctx, props);
-        case EOperator::Sort:
-            return RewriteSortInputs(*CastOperator<TOpSort>(input), liveIt->second, ctx, props);
-        default:
-            return false;
+    Y_ENSURE(props.PinnedNames.has_value(), "Pinned names requested before plan aliases were computed");
+    const auto renameMap = BuildPreferredAliasRenameMap(*input, usedIUs, *props.PinnedNames);
+    if (renameMap.empty()) {
+        return droppedRedundantAppends;
     }
+
+    input->RenameUsedIUs(renameMap, ctx.ExprCtx);
+    const bool subplansChanged = props.Subplans.RenameReferences(renameMap, ctx.ExprCtx);
+    Y_UNUSED(subplansChanged);
+    return true;
 }
 
 } // namespace NKqp

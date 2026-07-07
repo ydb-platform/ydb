@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
 #include <util/generic/set.h>
@@ -406,17 +407,24 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                 success);
         DSP_LOG_LOG_S(success ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPG68", "Result# " << evResult->Print(false) <<" GroupId# " << Info->GroupID);
 
+        if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold)) {
+            if (PopAllowToken(handleClass)) {
+                YDB_LOG_WARN_COMP(BS_PROXY_GET, "Long TEvGet request detected",
+                    {"marker", "BPG71"},
+                    {"longRequestThreshold", LongRequestThreshold},
+                    {"groupId", Info->GroupID},
+                    {"subrequestsCount", evResult->ResponseSz},
+                    {"requestTotalSize", requestSize},
+                    {"handleClass", NKikimrBlobStorage::EGetHandleClass_Name(handleClass)},
+                    {"restartCounter", RestartCounter},
+                    {"history", GetImpl.PrintHistory()});
+            }
 
-        if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(handleClass)) {
-            YDB_LOG_WARN_COMP(BS_PROXY_GET, "Long TEvGet request detected",
-                {"marker", "BPG71"},
-                {"longRequestThreshold", LongRequestThreshold},
-                {"groupId", Info->GroupID},
-                {"subrequestsCount", evResult->ResponseSz},
-                {"requestTotalSize", requestSize},
-                {"handleClass", NKikimrBlobStorage::EGetHandleClass_Name(handleClass)},
-                {"restartCounter", RestartCounter},
-                {"history", GetImpl.PrintHistory()});
+            if (EnableStorageRetroTraceCollectionSlowRequests) {
+                if (TNamedSpan* retroSpan = Span.GetRetroSpanPtr()) {
+                    retroSpan->DemandTraceOnEnd();
+                }
+            }
         }
 
         auto resultStatusPriority = PriorityForStatusResult(evResult->Status);

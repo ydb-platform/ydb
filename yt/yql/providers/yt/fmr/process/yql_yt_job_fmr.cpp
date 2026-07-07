@@ -33,7 +33,8 @@ void TFmrUserJob::Save(IOutputStream& s) const {
         Settings_,
         TvmSettings_,
         VanillaInfo_,
-        ReduceOperationSpec_
+        ReduceOperationSpec_,
+        IsMapReduceReducer_
     );
 }
 
@@ -49,7 +50,8 @@ void TFmrUserJob::Load(IInputStream& s) {
         Settings_,
         TvmSettings_,
         VanillaInfo_,
-        ReduceOperationSpec_
+        ReduceOperationSpec_,
+        IsMapReduceReducer_
     );
 }
 
@@ -70,6 +72,28 @@ void TFmrUserJob::ChangeMkqlIOSpecIfNeeded() {
     MkqlIOSpecs->UseBlockInput_ = false;
     MkqlIOSpecs->UseBlockOutput_ = false;
     MkqlIOSpecs->UseSkiff_ = false;
+}
+
+void TFmrUserJob::PostInitMkqlIOSpec() {
+    if (!IsMapReduceReducer_) {
+        return;
+    }
+    // Register _yql_key_hash as a skip field in all input decoders so the
+    // codec silently discards it when present (inserted by MapReduceMap for
+    // n-way merge routing, irrelevant to the reducer's schema).
+    const TString keyHashName(YqlKeyHashColumn);
+    NKikimr::NMiniKQL::TDataType* uint64Type =
+        NKikimr::NMiniKQL::TDataType::Create(NUdf::TDataType<ui64>::Id, *Env);
+    for (auto& [tableName, decoder] : MkqlIOSpecs->Decoders) {
+        decoder.Fields.emplace(
+            keyHashName,
+            TMkqlIOSpecs::TDecoderSpec::TDecodeField{
+                .Name = keyHashName,
+                .StructIndex = Max<ui32>(),
+                .Type = uint64Type,
+            }
+        );
+    }
 }
 
 void TFmrUserJob::FillQueueFromSingleInputTable(ui64 curTableNum) {

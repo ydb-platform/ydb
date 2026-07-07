@@ -153,7 +153,7 @@ int TCommandSql::Run(TConfig& config) {
 }
 
 int TCommandSql::RunCommand(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     TExecuteGenericQuery executor(driver);
     SetInterruptHandlers();
 

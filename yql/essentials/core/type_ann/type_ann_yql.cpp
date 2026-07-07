@@ -966,7 +966,7 @@ IGraphTransformer::TStatus YqlWinWrapper(
         TExprNode::TPtr body = input->Child(4);
 
         TExprNode::TPtr resultType =
-            ExpandResultType(std::move(traits), std::move(body), ctx.Expr);
+            ExpandResultType(traits, body, ctx.Expr);
 
         // clang-format off
         resultExpr = ctx.Expr.Builder(input->Pos())

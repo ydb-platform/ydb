@@ -54,6 +54,15 @@ def prepare_feature_flags(extra_feature_flags, disabled_feature_flags):
     return extra_feature_flags, disabled_feature_flags
 
 
+def prepare_table_service_config(table_service_config):
+    table_service_config = copy.copy(table_service_config)
+
+    if "enable_compile_cache_warmup" not in table_service_config:
+        table_service_config["enable_compile_cache_warmup"] = False
+
+    return table_service_config
+
+
 current_binary_path = os.environ.get('YDB_CURRENT_BINARY_PATH', yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-target"))
 current_name = 'current'
 if current_binary_path is not None:
@@ -134,6 +143,7 @@ class RestartToAnotherVersionFixture:
             use_in_memory_pdisks=kwargs.pop("use_in_memory_pdisks", False),
             extra_feature_flags=extra_feature_flags,
             disabled_feature_flags=disabled_feature_flags,
+            table_service_config=kwargs.pop("table_service_config", {}),
             **kwargs,
         )
 
@@ -166,6 +176,7 @@ class RestartToAnotherVersionFixture:
         # TODO: remove sleep
         # without sleep there are errors like
         # ydb.issues.Unavailable: message: "Failed to resolve tablet: 72075186224037909 after several retries." severity: 1 (server_code: 400050)
+        logger.info("Waiting for cluster initialization")
         time.sleep(60)
 
 
@@ -218,6 +229,7 @@ class MixedClusterFixture:
             suppress_version_check=not all_versions_numbered,
             extra_feature_flags=extra_feature_flags,
             disabled_feature_flags=disabled_feature_flags,
+            table_service_config=kwargs.pop("table_service_config", {}),
             **kwargs,
         )
 
@@ -308,6 +320,7 @@ class RollingUpgradeAndDowngradeFixture:
             use_in_memory_pdisks=kwargs.pop("use_in_memory_pdisks", False),
             extra_feature_flags=extra_feature_flags,
             disabled_feature_flags=disabled_feature_flags,
+            table_service_config=kwargs.pop("table_service_config", {}),
             **kwargs,
         )
 

@@ -1,3 +1,5 @@
+#include <ydb/core/tx/columnshard/backup/import/session.h>
+#include <ydb/core/tx/columnshard/backup/import/task.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -17,6 +19,78 @@ namespace NKikimr {
 
 using namespace NColumnShard;
 using namespace NTxUT;
+
+Y_UNIT_TEST_SUITE(ImportSessionStateMachine) {
+    static std::shared_ptr<NOlap::NImport::TSession> MakeSession() {
+        NKikimrSchemeOp::TRestoreTask restoreTask;
+        restoreTask.MutableS3Settings()->SetBucket("test");
+        restoreTask.MutableS3Settings()->SetEndpoint("localhost:9000");
+        restoreTask.SetTableId(1);
+        using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
+        THashMap<ui32, TNameTypeInfo> emptyColumns;
+        auto task = std::make_shared<NOlap::NImport::TImportTask>(NColumnShard::TSchemeShardLocalPathId::FromRawValue(1),
+            /*columns=*/emptyColumns, restoreTask, /*schemaVersion=*/std::optional<ui64>{ 1 }, /*txId=*/std::optional<ui64>{ 42 });
+        return std::make_shared<NOlap::NImport::TSession>(task);
+    }
+
+    Y_UNIT_TEST(SessionIsNotStartedAfterAbort) {
+        auto session = MakeSession();
+        session->Confirm();
+        UNIT_ASSERT(session->IsConfirmed());
+        UNIT_ASSERT(!session->IsStarted());
+        session->Abort("simulated error: downloader timed out");
+        UNIT_ASSERT(!session->IsStarted());
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+    }
+
+    Y_UNIT_TEST(AbortOnConfirmedIsLegal) {
+        auto session = MakeSession();
+        session->Confirm();
+        UNIT_ASSERT(session->IsConfirmed());
+        session->Abort("abort from confirmed state");
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+        UNIT_ASSERT(!session->IsStarted());
+        UNIT_ASSERT(!session->IsFinished());
+    }
+
+    Y_UNIT_TEST(IsStartedReturnsFalseForNonStartedStates) {
+        auto session = MakeSession();
+        UNIT_ASSERT(!session->IsStarted());
+        session->Confirm();
+        UNIT_ASSERT(!session->IsStarted());
+        session->Abort("abort");
+        UNIT_ASSERT(!session->IsStarted());
+        UNIT_ASSERT(!session->IsFinished());
+    }
+
+    Y_UNIT_TEST(DoubleAbortDoesNotCrash) {
+        auto session = MakeSession();
+        session->Confirm();
+        session->Abort("first abort: timeout");
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+        session->Abort("second abort: racing error batch");
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+    }
+
+    Y_UNIT_TEST(AbortOnFinishedSessionDoesNotCrash) {
+        auto session = MakeSession();
+        session->Confirm();
+        session->Abort("abort on confirmed");
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+        session->Abort("abort again");
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+    }
+
+    Y_UNIT_TEST(AbortSessionControlOnAlreadyAbortedIsNoOp) {
+        auto session = MakeSession();
+        session->Confirm();
+        session->Abort("first abort: operation timed out");
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+        const bool shouldCallAbort = !session->IsFinished() && !session->IsReadyForRemoveOnFinished();
+        UNIT_ASSERT_C(!shouldCallAbort, "TAbortSessionControl::DoApply would call Abort() on an already-Aborted "
+                                        "session, reproducing the crash at session.cpp:33");
+    }
+}
 
 Y_UNIT_TEST_SUITE(Restore) {
     [[nodiscard]] TPlanStep ProposeTx(

@@ -1658,6 +1658,11 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
         HFunc(TEvPrivate::TEvNormalizerResult, Handle);
         HFunc(TEvPrivate::TEvAskTabletDataAccessors, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+<<<<<<< HEAD
+=======
+        HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);
+        HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
+>>>>>>> 100abeb292b (cancel on prepare has been fixed (#45578))
         default:
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "unexpected event in enqueue");
             return NTabletFlatExecutor::TTabletExecutedFlat::Enqueue(ev);

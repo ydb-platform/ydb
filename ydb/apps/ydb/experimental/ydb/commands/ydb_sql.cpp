@@ -338,7 +338,7 @@ void TCommandSqlExperimental::Parse(TConfig& config) {
 }
 
 int TCommandSqlExperimental::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     NQuery::TQueryClient client(driver);
     if (RunAsync || AsyncWait) {
         return ExecuteScriptAsync(config, driver, client);
@@ -482,7 +482,7 @@ void TCommandSqlOperationExecute::Parse(TConfig& config) {
 }
 
 int TCommandSqlOperationExecute::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     NQuery::TQueryClient client(driver);
     return ExecuteScriptAsync(config, driver, client);
 }
@@ -522,7 +522,7 @@ void TCommandSqlOperationFetch::Parse(TConfig& config) {
 }
 
 int TCommandSqlOperationFetch::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     NQuery::TQueryClient queryClient(driver);
     NOperation::TOperationClient operationClient(driver);
     return WaitAndPrintResults(queryClient, operationClient, OperationId);
@@ -559,7 +559,8 @@ namespace {
 }
 
 int TCommandSqlOperationGet::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     NQuery::TScriptExecutionOperation operation = client
         .Get<NQuery::TScriptExecutionOperation>(OperationId)
         .GetValueSync();
@@ -602,7 +603,8 @@ TCommandSqlOperationWait::TCommandSqlOperationWait()
 {}
 
 int TCommandSqlOperationWait::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     if (WaitForCompletion(client, OperationId)) {
         std::string quotedId = "\"" + OperationId.ToString() + "\"";
         Cerr << "Operation completed." << Endl
@@ -619,7 +621,8 @@ TCommandSqlOperationCancel::TCommandSqlOperationCancel()
 {}
 
 int TCommandSqlOperationCancel::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Cancel(OperationId).GetValueSync());
     Cerr << "Operation cancelled. To forget operation: " << MakeSqlOperationCommand(config, "forget")
          << " \"" << OperationId.ToString() << "\"" << Endl;
@@ -631,7 +634,8 @@ TCommandSqlOperationForget::TCommandSqlOperationForget()
 {}
 
 int TCommandSqlOperationForget::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Forget(OperationId).GetValueSync());
     return EXIT_SUCCESS;
 }
@@ -658,7 +662,8 @@ void TCommandSqlOperationList::Parse(TConfig& config) {
 }
 
 int TCommandSqlOperationList::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     NOperation::TOperationsList<NQuery::TScriptExecutionOperation> operations = client.List<NQuery::TScriptExecutionOperation>(
         PageSize, PageToken)
         .GetValueSync();

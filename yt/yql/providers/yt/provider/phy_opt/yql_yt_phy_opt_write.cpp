@@ -246,25 +246,49 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqMaterialize(TExprBase
 
     const auto dqUnion = materialize.Input().Cast<TDqCnUnionAll>();
 
-    auto result = State_->DqHelper->PushLambdaAndCreateCnResult(dqUnion.Ptr(), writeLambda.Ptr(), materialize.Pos(), ctx, optCtx);
-    if (!result) {
+    auto dqResult = State_->DqHelper->PushLambdaAndCreateCnResult(dqUnion.Ptr(), writeLambda.Ptr(), materialize.Pos(), ctx, optCtx);
+    if (!dqResult) {
         return {};
     }
 
-    result = YtCleanupWorld(result, ctx, State_);
+    dqResult = YtCleanupWorld(dqResult, ctx, State_);
 
-    auto writeOp = Build<TYtDqProcessWrite>(ctx, materialize.Pos())
-        .World(ApplySyncListToWorld(materialize.World().Ptr(), syncList, ctx))
-        .DataSink(materialize.DataSink().Ptr())
-        .Output()
-            .Add(outTable.ToExprNode(ctx, materialize.Pos()).Cast<TYtOutTable>())
+    auto outTableNode = outTable.ToExprNode(ctx, materialize.Pos()).Cast<TYtOutTable>();
+
+    TExprBase dqProcessOut = Build<TYtOutput>(ctx, materialize.Pos())
+        .Operation<TYtDqProcessWrite>()
+            .World(ApplySyncListToWorld(materialize.World().Ptr(), syncList, ctx))
+            .DataSink(materialize.DataSink().Ptr())
+            .Output()
+                .Add(outTableNode)
+            .Build()
+            .Input(dqResult)
         .Build()
-        .Input(result)
-        .Done().Ptr();
-
-    return Build<TYtOutput>(ctx, materialize.Pos())
-        .Operation(writeOp)
         .OutIndex().Value(0U).Build()
+        .Done();
+
+    return Build<TYtPersist>(ctx, materialize.Pos())
+        .World(ctx.NewWorld(materialize.Pos()))
+        .DataSink(materialize.DataSink())
+        .Input()
+            .Add()
+                .Paths()
+                    .Add()
+                        .Table(dqProcessOut)
+                        .Columns<TCoVoid>().Build()
+                        .Ranges<TCoVoid>().Build()
+                        .Stat<TCoVoid>().Build()
+                        .QLFilter<TCoVoid>().Build()
+                    .Build()
+                .Build()
+                .Settings<TCoNameValueTupleList>()
+                .Build()
+            .Build()
+        .Build()
+        .Output()
+            .Add(outTableNode)
+        .Build()
+        .Settings(materialize.Settings())
         .Done();
 }
 
@@ -872,14 +896,16 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FillToMaterialize(TExpr
 
     auto materializeWorld = keepWorld ? write.World().Ptr() : ctx.NewWorld(write.Pos());
 
-    content = Build<TYtMaterialize>(ctx, content.Pos())
-        .World(materializeWorld)
-        .DataSink(write.DataSink())
-        .Input(content)
-        .Settings().Build()
-        .Done();
+    auto newContent = Build<TCoRight>(ctx, content.Pos())
+        .Input<TYtMaterialize>()
+            .World(materializeWorld)
+            .DataSink(write.DataSink())
+            .Input(content)
+            .Settings().Build()
+        .Build()
+        .Done().Ptr();
 
-    return TExprBase(ctx.ChangeChild(node.Ref(), TYtWriteTable::idx_Content, content.Ptr()));
+    return TExprBase(ctx.ChangeChild(node.Ref(), TYtWriteTable::idx_Content, std::move(newContent)));
 }
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Materialize(TExprBase node, TExprContext& ctx) const {
@@ -889,8 +915,74 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Materialize(TExprBase n
 
     auto materialize = node.Cast<TYtMaterialize>();
     auto content = materialize.Input();
-    if (IsYtProviderInput(content)) {
-        return content;
+    if (auto out = content.Maybe<TYtOutput>()) {
+        return Build<TYtPersist>(ctx, node.Pos())
+            .World(materialize.World())
+            .DataSink(materialize.DataSink())
+            .Input()
+                .Add()
+                    .Paths()
+                        .Add()
+                            .Table(content)
+                            .Columns<TCoVoid>().Build()
+                            .Ranges<TCoVoid>().Build()
+                            .Stat<TCoVoid>().Build()
+                            .QLFilter<TCoVoid>().Build()
+                        .Build()
+                    .Build()
+                    .Settings<TCoNameValueTupleList>()
+                    .Build()
+                .Build()
+            .Build()
+            .Output()
+                .Add()
+                    .InitFrom(GetOutTable(out.Cast()).Cast<TYtOutTable>())
+                    .Name().Value(""_sb).Build()
+                .Build()
+            .Build()
+            .Settings(materialize.Settings())
+            .Done();
+    } else if (auto maybeRead = content.Maybe<TCoRight>().Input().Maybe<TYtReadTable>()) {
+        auto read = maybeRead.Cast();
+        YQL_ENSURE(read.Input().Size() == 1);
+        auto section = read.Input().Item(0);
+        auto scheme = section.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+
+        auto path = CopyOrTrivialMap(read.Pos(),
+            read.World(),
+            TYtDSink(ctx.RenameNode(read.DataSource().Ref(), "DataSink")),
+            *scheme,
+            Build<TYtSection>(ctx, section.Pos())
+                .Paths(section.Paths())
+                .Settings(NYql::RemoveSettings(section.Settings().Ref(), EYtSettingType::DirectRead | EYtSettingType::Unordered | EYtSettingType::NonUnique, ctx))
+                .Done(),
+            {}, ctx, State_,
+            TCopyOrTrivialMapOpts()
+                .SetTryKeepSortness(!NYql::HasSetting(section.Settings().Ref(), EYtSettingType::Unordered))
+                .SetSectionUniq(section.Ref().GetConstraint<TDistinctConstraintNode>())
+                .SetConstraints(read.Ref().GetConstraintSet())
+        );
+
+        return Build<TYtPersist>(ctx, node.Pos())
+            .World(materialize.World())
+            .DataSink(materialize.DataSink())
+            .Input()
+                .Add()
+                    .Paths()
+                        .Add(path)
+                    .Build()
+                    .Settings<TCoNameValueTupleList>()
+                    .Build()
+                .Build()
+            .Build()
+            .Output()
+                .Add()
+                    .InitFrom(GetOutTable(path.Table()).Cast<TYtOutTable>())
+                    .Name().Value(""_sb).Build()
+                .Build()
+            .Build()
+            .Settings(materialize.Settings())
+            .Done();
     }
 
     auto cluster = materialize.DataSink().Cluster().StringValue();
@@ -936,18 +1028,124 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Materialize(TExprBase n
         return {};
     }
 
-    return Build<TYtOutput>(ctx, materialize.Pos())
+    auto outTableNode = outTable.ToExprNode(ctx, materialize.Pos()).Cast<TYtOutTable>();
+
+    TExprBase fillOut = Build<TYtOutput>(ctx, materialize.Pos())
         .Operation<TYtFill>()
             .World(ApplySyncListToWorld(materialize.World().Ptr(), syncList, ctx))
             .DataSink(materialize.DataSink())
             .Content(MakeJobLambdaNoArg(cleanup.Cast(), ctx))
             .Output()
-                .Add(outTable.ToExprNode(ctx, materialize.Pos()).Cast<TYtOutTable>())
+                .Add(outTableNode)
             .Build()
             .Settings(GetFlowSettings(materialize.Pos(), *State_, ctx))
         .Build()
         .OutIndex().Value(0U).Build()
         .Done();
+
+    return Build<TYtPersist>(ctx, materialize.Pos())
+        .World(ctx.NewWorld(materialize.Pos()))
+        .DataSink(materialize.DataSink())
+        .Input()
+            .Add()
+                .Paths()
+                    .Add()
+                        .Table(fillOut)
+                        .Columns<TCoVoid>().Build()
+                        .Ranges<TCoVoid>().Build()
+                        .Stat<TCoVoid>().Build()
+                        .QLFilter<TCoVoid>().Build()
+                    .Build()
+                .Build()
+                .Settings<TCoNameValueTupleList>()
+                .Build()
+            .Build()
+        .Build()
+        .Output()
+            .Add(outTableNode)
+        .Build()
+        .Settings(materialize.Settings())
+        .Done();
+}
+
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassPersistBeforePublish(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
+    if (node.Ref().HasResult()) {
+        return node;
+    }
+
+    auto publish = node.Cast<TYtPublish>();
+
+    auto cluster = publish.DataSink().Cluster().StringValue();
+    YQL_ENSURE(cluster != YtUnspecifiedCluster);
+    auto path = publish.Publish().Name().StringValue();
+    auto commitEpoch = TEpochInfo::Parse(publish.Publish().CommitEpoch().Ref()).GetOrElse(0);
+
+    auto dstRowSpec = State_->TablesData->GetTable(cluster, path, commitEpoch).RowSpec;
+
+    bool hasUpdates = false;
+    TVector<TYtOutput> updateInputs;
+    for (auto out: publish.Input()) {
+        updateInputs.push_back(out);
+        if (auto maybePersist = out.Operation().Maybe<TYtPersist>()) {
+            auto persist = maybePersist.Cast();
+
+            if (!persist.World().Ref().IsWorld()) {
+                continue;
+            }
+
+            if (persist.Ref().StartsExecution() || persist.Ref().HasResult()) {
+                continue;
+            }
+
+            if (publish.DataSink().Cluster().Value() != persist.DataSink().Cluster().Value()) {
+                continue;
+            }
+
+            if (NYql::HasSettingsExcept(persist.Settings().Ref(), EYtSettingType::Unordered)) {
+                continue;
+            }
+
+            auto parentsMap = getParents();
+
+            const auto it = parentsMap->find(persist.Raw());
+            YQL_ENSURE(it != parentsMap->cend());
+
+            if (AnyOf(it->second, [&](auto parent) { return TCoLeft::Match(parent); })) {
+                continue;
+            }
+
+            auto persistSection = persist.Input().Item(0);
+
+            hasUpdates = true;
+            updateInputs.pop_back();
+            if (IsUnorderedOutput(out) || NYql::HasSetting(persist.Settings().Ref(), EYtSettingType::Unordered)) {
+                std::transform(persistSection.Paths().begin(), persistSection.Paths().end(), std::back_inserter(updateInputs),
+                    [&ctx](TYtPath path) {
+                        auto origOut = path.Table().Cast<TYtOutput>();
+                        return Build<TYtOutput>(ctx, origOut.Pos())
+                            .InitFrom(origOut)
+                            .Mode().Value(ToString(EYtSettingType::Unordered)).Build()
+                            .Done();
+                    }
+                );
+            } else {
+                std::transform(persistSection.Paths().begin(), persistSection.Paths().end(), std::back_inserter(updateInputs),
+                    [](TYtPath path) {
+                        return path.Table().Cast<TYtOutput>();
+                    }
+                );
+            }
+        }
+    }
+    if (hasUpdates) {
+        return Build<TYtPublish>(ctx, publish.Pos())
+            .InitFrom(publish)
+            .Input()
+                .Add(updateInputs)
+            .Build()
+            .Done().Ptr();
+    }
+    return node;
 }
 
 } // namespace NYql

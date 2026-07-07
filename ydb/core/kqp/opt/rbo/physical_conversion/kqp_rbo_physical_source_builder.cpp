@@ -1,6 +1,6 @@
 #include "kqp_rbo_physical_source_builder.h"
 
-#include <ydb/core/kqp/opt/physical/kqp_olap_filter_inspection.h>
+#include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 

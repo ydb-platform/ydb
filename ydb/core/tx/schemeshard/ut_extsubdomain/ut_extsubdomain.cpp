@@ -2343,4 +2343,80 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
             });
         }
     }
+
+    Y_UNIT_TEST(ConnectDatabaseRightInheritanceRules) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // Grant connect on the root database
+        {
+            NACLib::TDiffACL diffACL;
+            diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::ConnectDatabase, "user@builtin",
+                NACLib::DefaultInheritanceType);
+            TestModifyACL(runtime, ++txId, "/", "MyRoot", diffACL.SerializeAsString(), "");
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        // Create a tenant with its own SchemeShard.
+        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", R"(Name: "USER_0")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId, "/MyRoot",
+            R"(
+                Name: "USER_0"
+                ExternalSchemeShard: true
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "hdd"
+                }
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("USER_0"),
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+        });
+        UNIT_ASSERT(tenantSchemeShard != 0
+            && tenantSchemeShard != (ui64)-1
+            && tenantSchemeShard != TTestTxConfig::SchemeShard);
+
+
+        const TString connectRight = "+(ConnDB):user@builtin";
+
+        const auto extractEffectiveACL = [](const NKikimrScheme::TEvDescribeSchemeResult& record) -> TString {
+            return record.GetPathDescription().GetSelf().GetEffectiveACL();
+        };
+
+        // Describe the tenant root from BOTH SchemeShards.
+        const auto describeFromDomain = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/USER_0");
+        const auto describeFromTenant = DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0");
+
+        const TString effAclDomainSide = extractEffectiveACL(describeFromDomain);
+        const TString effAclTenantSide = extractEffectiveACL(describeFromTenant);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            NACLib::TACL(effAclDomainSide).DebugString(),
+            NACLib::TACL(effAclTenantSide).DebugString(),
+            "Tenant root EffectiveAcl must be the same from the domain SchemeShard and the tenant SchemeShard");
+
+        TestDescribeResult(describeFromDomain, {NLs::HasEffectiveRight(connectRight)});
+        TestDescribeResult(describeFromTenant, {NLs::HasEffectiveRight(connectRight)});
+
+        // Create an object INSIDE the tenant and verify connect is NOT inherited into it.
+        TestMkDir(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", "InsideDir");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/InsideDir"), {
+            NLs::PathExist,
+            NLs::HasNoEffectiveRight(connectRight),
+        });
+    }
 }

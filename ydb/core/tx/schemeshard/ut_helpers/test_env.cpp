@@ -20,6 +20,7 @@
 #include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/test_tablet/test_tablet.h>
 
 #include <ydb/services/metadata/ds_table/service.h>
 
@@ -642,6 +643,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnableOnlineAddUniqueIndex(true);
     app.FeatureFlags.SetEnableFulltextIndex(true);
     app.FeatureFlags.SetEnableFulltextIndexPrefix(opts.EnableFulltextIndexPrefix_);
+    app.FeatureFlags.SetEnableFulltextIndexRowId(opts.EnableFulltextIndexRowId_);
     app.FeatureFlags.SetEnableJsonIndex(true);
     app.FeatureFlags.SetEnableSetColumnConstraint(true);
     app.FeatureFlags.SetEnableColumnStore(true);
@@ -1070,6 +1072,9 @@ std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStora
         return [](const TActorId& tablet, TTabletStorageInfo* info) {
             return new TFakeFileStore(tablet, info);
         };
+    case TTabletTypes::TestShard:
+        return &NKikimr::NTestShard::CreateTestShard;
+
     default:
         return nullptr;
     }

@@ -350,7 +350,7 @@ namespace NKikimr::NKqp {
 
     // This prediction function is created by running symbolic
     // regression on a dataset of randomized join graphs
-    // (collected by kqp_join_topology_ut.cpp)
+    // (collected by tools/cbo_latency_dataset)
 
     // It is a subject to change if CBO's enumeration algorithm
     // changes. E.g. a different approach, pruning states,

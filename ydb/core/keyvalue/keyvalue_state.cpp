@@ -1901,8 +1901,7 @@ void TKeyValueState::OnUpdateWeights(TChannelBalancer::TEvUpdateWeights::TPtr ev
     WeightManager = std::move(ev->Get()->WeightManager);
 }
 
-TVector<ui32> TKeyValueState::GetAcquiredChannels(const TIntermediate &intermediate,
-        const TTabletStorageInfo *info) const {
+TVector<ui32> TKeyValueState::GetAcquiredChannels(const TIntermediate &intermediate) const {
     std::bitset<256> acquiredChannels;
 
     auto addAcquiredChannel = [&](ui32 channel) {
@@ -1928,17 +1927,6 @@ TVector<ui32> TKeyValueState::GetAcquiredChannels(const TIntermediate &intermedi
         addAcquiredChannel(patch.OriginalBlobId.Channel());
     };
 
-    auto addGetStatus = [&](const TIntermediate::TGetStatus& getStatus) {
-        if (getStatus.StorageChannel == NKikimrClient::TKeyValueRequest::INLINE) {
-            return;
-        }
-        ui32 channel = static_cast<ui32>(getStatus.StorageChannel) + BLOB_CHANNEL;
-        if (info && channel >= info->Channels.size()) {
-            channel = BLOB_CHANNEL;
-        }
-        addAcquiredChannel(channel);
-    };
-
     for (const TIntermediate::TRead& read : intermediate.Reads) {
         addRead(read);
     }
@@ -1947,9 +1935,6 @@ TVector<ui32> TKeyValueState::GetAcquiredChannels(const TIntermediate &intermedi
     }
     for (const TIntermediate::TPatch& patch : intermediate.Patches) {
         addPatch(patch);
-    }
-    for (const TIntermediate::TGetStatus& getStatus : intermediate.GetStatuses) {
-        addGetStatus(getStatus);
     }
     if (intermediate.ReadCommand) {
         std::visit([&](const auto& command) {
@@ -1992,12 +1977,11 @@ void TKeyValueState::StartChannelLimitedIntermediate(const TIntermediate &interm
     ++IntermediatesInFlight;
 }
 
-bool TKeyValueState::TryStartOrPostponeIntermediate(THolder<TIntermediate> &intermediate, const TActorContext &ctx,
-        const TTabletStorageInfo *info) {
+bool TKeyValueState::TryStartOrPostponeIntermediate(THolder<TIntermediate> &intermediate, const TActorContext &ctx) {
     Y_DEBUG_ABORT_UNLESS(intermediate->Stat.RequestType != TRequestType::WriteOnly);
     Y_DEBUG_ABORT_UNLESS(intermediate->Stat.RequestType != TRequestType::ReadOnlyInline);
     const TInstant now = ctx.Now();
-    intermediate->AcquiredChannels = GetAcquiredChannels(*intermediate, info);
+    intermediate->AcquiredChannels = GetAcquiredChannels(*intermediate);
     intermediate->PostponedQueuesLeft = 0;
     if (intermediate->AcquiredChannels.empty()) {
         return true;
@@ -2031,22 +2015,19 @@ bool TKeyValueState::TryStartOrPostponeIntermediate(THolder<TIntermediate> &inte
     return false;
 }
 
-TVector<ui32> TKeyValueState::ReleaseChannelLimitedIntermediate(const TVector<ui32> &acquiredChannels) {
-    TVector<ui32> channels;
+void TKeyValueState::ReleaseChannelLimitedIntermediate(const TVector<ui32> &acquiredChannels) {
     if (acquiredChannels.empty()) {
-        return channels;
+        return;
     }
 
-    channels = acquiredChannels;
     Y_DEBUG_ABORT_UNLESS(IntermediatesInFlight);
     --IntermediatesInFlight;
 
-    for (ui32 channel : channels) {
+    for (ui32 channel : acquiredChannels) {
         TPostponedChannel& channelState = PostponedChannels[channel];
         Y_DEBUG_ABORT_UNLESS(channelState.IntermediatesInFlight);
         --channelState.IntermediatesInFlight;
     }
-    return channels;
 }
 
 void TKeyValueState::ProcessPostponedChannel(ui32 channel, const TActorContext &ctx, const TTabletStorageInfo *info) {
@@ -2100,19 +2081,22 @@ void TKeyValueState::OnRequestComplete(ui64 requestUid, ui64 generation, ui64 st
 
     RequestInputTime.erase(requestUid);
 
-    TVector<ui32> releasedChannels;
+    const bool isChannelLimitedRequest = stat.RequestType != TRequestType::WriteOnly
+        && stat.RequestType != TRequestType::ReadOnlyInline;
     if (stat.RequestType != TRequestType::WriteOnly) {
         if (stat.RequestType == TRequestType::ReadOnlyInline) {
             RoInlineIntermediatesInFlight--;
         } else {
-            releasedChannels = ReleaseChannelLimitedIntermediate(acquiredChannels);
+            ReleaseChannelLimitedIntermediate(acquiredChannels);
         }
     }
 
     CountRequestComplete(status, stat, ctx);
     ResourceMetrics->TryUpdate(ctx);
 
-    ProcessPostponedChannels(releasedChannels, ctx, info);
+    if (isChannelLimitedRequest) {
+        ProcessPostponedChannels(acquiredChannels, ctx, info);
+    }
 
     CmdTrimLeakedBlobsUids.erase(requestUid);
     CancelInFlight(requestUid);
@@ -3525,7 +3509,7 @@ void TKeyValueState::OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActo
             RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             ++RoInlineIntermediatesInFlight;
         } else {
-            if (TryStartOrPostponeIntermediate(intermediate, ctx, info)) {
+            if (TryStartOrPostponeIntermediate(intermediate, ctx)) {
                 YDB_LOG_DEBUG("Create storage read request, /",
                     {"keyValue", TabletId},
                     {"inFlight", IntermediatesInFlight},
@@ -3564,7 +3548,7 @@ void TKeyValueState::OnEvReadRangeRequest(TEvKeyValue::TEvReadRange::TPtr &ev, c
             RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             ++RoInlineIntermediatesInFlight;
         } else {
-            if (TryStartOrPostponeIntermediate(intermediate, ctx, info)) {
+            if (TryStartOrPostponeIntermediate(intermediate, ctx)) {
                 YDB_LOG_DEBUG("Create storage read range request, /",
                     {"keyValue", TabletId},
                     {"inFlight", IntermediatesInFlight},
@@ -3710,7 +3694,7 @@ void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActor
                 RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
                 ++RoInlineIntermediatesInFlight;
             } else {
-                if (TryStartOrPostponeIntermediate(intermediate, ctx, info)) {
+                if (TryStartOrPostponeIntermediate(intermediate, ctx)) {
                     YDB_LOG_DEBUG("Create storage request for RO/RW, /",
                         {"keyValue", TabletId},
                         {"inFlight", IntermediatesInFlight},

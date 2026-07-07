@@ -5,7 +5,6 @@
 #include "keyvalue_state.h"
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/fast.h>
@@ -3262,6 +3261,69 @@ Y_UNIT_TEST(TestReadLimitDoesNotBlockGetStorageChannelStatus)
 
     gets.UnblockOne();
     CheckReadResponse(ReceiveKeyValueResponse(tc), 1, {"value-main-hold"});
+}
+
+Y_UNIT_TEST(TestPerChannelReadLimitDoesNotReserveGetStatusChannelInCompositeRequest)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &){}, activeZone);
+
+    auto &icb = tc.Runtime->GetAppData().Icb;
+    TControlWrapper readRequestInFlightLimit(5, 1, 4096);
+    TControlBoard::RegisterSharedControl(readRequestInFlightLimit, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
+    readRequestInFlightLimit = 1;
+    TControlWrapper usePerChannelReadQueues(0, 0, 1);
+    TControlBoard::RegisterSharedControl(usePerChannelReadQueues, icb->KeyValueVolumeControls.UsePerChannelReadQueues);
+    usePerChannelReadQueues = 1;
+
+    constexpr ui32 mainBlobChannel = NKeyValue::BLOB_CHANNEL;
+    constexpr ui32 extraBlobChannel = NKeyValue::BLOB_CHANNEL + 1;
+
+    CmdWrite("main-hold", "value-main-hold",
+        NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    CmdWrite("main-wait", "value-main-wait",
+        NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    CmdWrite("extra-free", "value-extra-free",
+        NKikimrClient::TKeyValueRequest::EXTRA,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
+    TGetBlocker gets(*tc.Runtime);
+    gets.BlockChannel(mainBlobChannel);
+
+    SendRequestEvent(MakeReadRequest(1, {"main-hold"}), tc);
+    tc.Runtime->WaitFor("blocked main read", [&] {
+        return gets.BlockedCount(mainBlobChannel) == 1;
+    }, TDuration::Seconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(mainBlobChannel), 1);
+
+    auto compositeRequest = MakeReadRequest(2, {"main-wait"});
+    compositeRequest->Record.AddCmdGetStatus()->SetStorageChannel(NKikimrClient::TKeyValueRequest::EXTRA);
+    SendRequestEvent(std::move(compositeRequest), tc);
+    tc.Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(mainBlobChannel), 1);
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(extraBlobChannel), 0);
+
+    SendRequestEvent(MakeReadRequest(3, {"extra-free"}), tc);
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 3, {"value-extra-free"});
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(extraBlobChannel), 1);
+
+    gets.UnblockOne();
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 1, {"value-main-hold"});
+
+    tc.Runtime->WaitFor("composite read starts after main queue is released", [&] {
+        return gets.BlockedCount(mainBlobChannel) == 1 && gets.Seen(mainBlobChannel) == 2;
+    }, TDuration::Seconds(1));
+
+    gets.UnblockOne();
+    const NKikimrClient::TResponse compositeResponse = ReceiveKeyValueResponse(tc);
+    CheckReadResponse(compositeResponse, 2, {"value-main-wait"});
+    UNIT_ASSERT_VALUES_EQUAL(compositeResponse.GetStatusResultSize(), 1);
+    UNIT_ASSERT(compositeResponse.GetGetStatusResult(0).HasStatus());
+    UNIT_ASSERT_EQUAL(compositeResponse.GetGetStatusResult(0).GetStatus(), NKikimrProto::OK);
 }
 
 Y_UNIT_TEST(TestPerChannelReadLimitDoesNotBlockWritesAndInlineReads)

@@ -667,11 +667,10 @@ public:
     bool PrepareAcquireLockRequest(const TActorContext &ctx, TEvKeyValue::TEvAcquireLock::TPtr &ev,
         THolder<TIntermediate> &intermediate);
 
-    TVector<ui32> GetAcquiredChannels(const TIntermediate &intermediate, const TTabletStorageInfo *info) const;
-    bool TryStartOrPostponeIntermediate(THolder<TIntermediate> &intermediate, const TActorContext &ctx,
-        const TTabletStorageInfo *info);
+    TVector<ui32> GetAcquiredChannels(const TIntermediate &intermediate) const;
+    bool TryStartOrPostponeIntermediate(THolder<TIntermediate> &intermediate, const TActorContext &ctx);
     void StartChannelLimitedIntermediate(const TIntermediate &intermediate);
-    TVector<ui32> ReleaseChannelLimitedIntermediate(const TVector<ui32> &acquiredChannels);
+    void ReleaseChannelLimitedIntermediate(const TVector<ui32> &acquiredChannels);
     void ProcessPostponedChannel(ui32 channel, const TActorContext &ctx, const TTabletStorageInfo *info);
     void ProcessPostponedChannels(const TVector<ui32> &channels, const TActorContext &ctx,
         const TTabletStorageInfo *info);

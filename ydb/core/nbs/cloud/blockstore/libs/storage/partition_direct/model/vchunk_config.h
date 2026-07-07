@@ -32,6 +32,8 @@ public:
     // host.
     void DisableHost(THostIndex hostIndex);
 
+    void AppendHost();
+
     // Disables the host. Demote ddisk and pbuffer. If possible, adds ddisk on
     // the new host. Returns the text of the error or message to be logged.
     TString EvacuateHost(THostIndex hostIndex);

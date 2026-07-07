@@ -132,6 +132,12 @@ public:
     using TDBGDumpHandler =
         std::function<NThreading::TFuture<TDBGDumpResponse>()>;
 
+    using TOnAddHostResultHandler = std::function<void(
+        const NProto::TError& error,
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId)>;
+
     TExecutorPtr Executor;
     TOracleMock Oracle;
     TScheduleHandler ScheduleHandler;
@@ -145,6 +151,7 @@ public:
     TDBGRestoreHandler RestoreDBGPBuffersHandler;
     TListPBuffersHandler ListPBuffersHandler;
     TDBGDumpHandler DumpHandler;
+    TOnAddHostResultHandler OnAddHostResultHandler;
 
     TVector<TVChunkWeakPtr> VChunks;
 
@@ -228,6 +235,12 @@ public:
         THostIndex hostIndex) override;
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
+
+    void OnAddHostResult(
+        const NProto::TError& error,
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
 };
 
 using TDirectBlockGroupMockPtr = std::shared_ptr<TDirectBlockGroupMock>;

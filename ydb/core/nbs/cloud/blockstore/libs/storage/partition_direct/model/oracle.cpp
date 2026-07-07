@@ -203,6 +203,19 @@ void TOracle::Think(TInstant now)
     }
 }
 
+void TOracle::OnHostAdded()
+{
+    HostStatistics.emplace_back();
+    HostStates.emplace_back();
+    HostsHealths.push_back(EHostHealth::Online);
+    HostsReconnectDelays.emplace_back(MinReconnectDelay, MaxReconnectDelay);
+}
+
+size_t TOracle::GetHostCount() const
+{
+    return HostStates.size();
+}
+
 void TOracle::OnRequestStarted(
     THostIndex hostIndex,
     EOperation operation,

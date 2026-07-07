@@ -1056,7 +1056,7 @@ protected:
             {"selfId", SelfId()},
             {"socket", GetRawSocket()},
             {"address", Address->ToString()},
-            {"state", "connected"});
+            {"state", "accepting"});
         LogEvent(*ev.Get());
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPollerReady, HandleConnected);

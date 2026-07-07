@@ -8,6 +8,8 @@ using namespace NYdb::NQuery;
 
 namespace {
 
+constexpr std::string_view MultiPartQuery = "SELECT * FROM AS_TABLE(ListReplicate(AsStruct(1 AS v), 1000));";
+
 struct TRunArgs {
     TDriver Driver;
 };
@@ -44,9 +46,36 @@ uint64_t CountRows(const TExecuteQueryResult& result) {
     return count;
 }
 
+size_t CountResultSetStreamParts(TQueryClient& client, const TExecuteQuerySettings& settings) {
+    size_t parts = 0;
+    auto iterator = client.StreamExecuteQuery(
+        std::string(MultiPartQuery),
+        TTxControl::NoTx(),
+        settings).GetValueSync();
+
+    EXPECT_TRUE(iterator.IsSuccess()) << iterator.GetIssues().ToString();
+
+    while (true) {
+        auto part = iterator.ReadNext().GetValueSync();
+        if (part.EOS()) {
+            break;
+        }
+
+        EXPECT_TRUE(part.IsSuccess()) << part.GetIssues().ToString();
+        if (part.HasResultSet()) {
+            ++parts;
+        }
+    }
+
+    return parts;
+}
+
 } // namespace
 
 TEST(ExecuteQueryBuffer, SinglePartBufferedExecuteQuery) {
+    ASSERT_NE(std::getenv("YDB_ENDPOINT"), nullptr);
+    ASSERT_NE(std::getenv("YDB_DATABASE"), nullptr);
+
     auto [driver] = GetRunArgs();
 
     TQueryClient client(driver);
@@ -63,13 +92,18 @@ TEST(ExecuteQueryBuffer, SinglePartBufferedExecuteQuery) {
 }
 
 TEST(ExecuteQueryBuffer, MultiPartBufferedExecuteQuery) {
+    ASSERT_NE(std::getenv("YDB_ENDPOINT"), nullptr);
+    ASSERT_NE(std::getenv("YDB_DATABASE"), nullptr);
+
     auto [driver] = GetRunArgs();
 
     TQueryClient client(driver);
 
     const auto settings = TExecuteQuerySettings().OutputChunkMaxSize(100);
+    ASSERT_GT(CountResultSetStreamParts(client, settings), 1u);
+
     const auto result = client.ExecuteQuery(
-        "SELECT * FROM AS_TABLE(ListReplicate(AsStruct(1 AS v), 1000));",
+        std::string(MultiPartQuery),
         TTxControl::NoTx(),
         settings).GetValueSync();
 
@@ -81,7 +115,10 @@ TEST(ExecuteQueryBuffer, MultiPartBufferedExecuteQuery) {
     driver.Stop(true);
 }
 
-TEST(ExecuteQueryBuffer, StatsOnlyBufferedExecuteQuery) {
+TEST(ExecuteQueryBuffer, SinglePartBufferedExecuteQueryWithStats) {
+    ASSERT_NE(std::getenv("YDB_ENDPOINT"), nullptr);
+    ASSERT_NE(std::getenv("YDB_DATABASE"), nullptr);
+
     auto [driver] = GetRunArgs();
 
     TQueryClient client(driver);

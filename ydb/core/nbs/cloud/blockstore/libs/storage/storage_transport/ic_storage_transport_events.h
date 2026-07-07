@@ -112,7 +112,6 @@ struct TEvTransportPrivate
 
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
-        const TVector<NKikimr::NDDisk::TBlockSelector> Selectors;
         const TVector<ui64> Lsns;
         NWilson::TTraceId TraceId;
         NThreading::TPromise<TResult> Promise =
@@ -121,12 +120,10 @@ struct TEvTransportPrivate
         TBatchEraseFromPBuffer(
             const NActors::TActorId serviceId,
             const NKikimr::NDDisk::TQueryCredentials& credentials,
-            TVector<NKikimr::NDDisk::TBlockSelector> selectors,
             TVector<ui64> lsns,
             NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
-            , Selectors(std::move(selectors))
             , Lsns(std::move(lsns))
             , TraceId(std::move(traceId))
         {}

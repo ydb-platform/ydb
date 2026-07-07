@@ -36,7 +36,7 @@ public:
         yqlCtx.TablesByCluster = CollectTablesByCluster(*root);
 
         for (TString cluster : CollectClusters(*root)) {
-            Y_UNUSED(yqlCtx.TablesByCluster[std::move(cluster)]);
+            Y_UNUSED(yqlCtx.TablesByCluster[cluster]);
         }
 
         return yqlCtx;

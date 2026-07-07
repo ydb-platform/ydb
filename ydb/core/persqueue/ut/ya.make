@@ -27,7 +27,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
 
     ydb/core/tx/schemeshard/ut_helpers
-    ydb/library/kafka
+    ydb/public/sdk/cpp/src/library/kafka
 )
 
 YQL_LAST_ABI_VERSION()

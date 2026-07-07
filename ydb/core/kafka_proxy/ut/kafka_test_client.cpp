@@ -4,7 +4,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/kafka_proxy/kafka_constants.h>
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/library/login/sasl/scram.h>
 
 #include <util/random/random.h>
@@ -298,7 +298,7 @@ TMessagePtr<TListOffsetsResponseData> TKafkaTestClient::ListOffsets(std::vector<
     return WriteAndRead<TListOffsetsResponseData>(header, request);
 }
 
-TMessagePtr<TJoinGroupResponseData> TKafkaTestClient::JoinGroup(std::vector<TString>& topics, TString& groupId, TString protocolName, i32 heartbeatTimeout) {
+TMessagePtr<TJoinGroupResponseData> TKafkaTestClient::JoinGroup(std::vector<TString>& topics, TString& groupId, TString protocolName, i32 heartbeatTimeout, bool emptyMetadata) {
     Cerr << ">>>>> TJoinGroupRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::JOIN_GROUP, 9);
@@ -319,12 +319,17 @@ TMessagePtr<TJoinGroupResponseData> TKafkaTestClient::JoinGroup(std::vector<TStr
 
     TKafkaVersion version = 3;
 
-    TKafkaWriteBuffer buf( subscribtion.Size(version) + sizeof(version));
+    TKafkaWriteBuffer buf(subscribtion.Size(version) + sizeof(version));
     TKafkaWritable writable(buf);
-    writable << version;
-    subscribtion.Write(writable, version);
 
-    protocol.Metadata = TKafkaRawBytes(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
+    if (emptyMetadata) {
+        protocol.Metadata = TKafkaRawBytes();
+    } else {
+        writable << version;
+        subscribtion.Write(writable, version);
+
+        protocol.Metadata = TKafkaRawBytes(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
+    }
 
     request.Protocols.push_back(protocol);
     return WriteAndRead<TJoinGroupResponseData>(header, request);

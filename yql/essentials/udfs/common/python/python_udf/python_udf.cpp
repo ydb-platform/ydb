@@ -172,7 +172,7 @@ void NKikimr::NUdf::RegisterYqlPythonUdf(
     } else {
         registrator.AddModule(
             moduleName,
-            NKikimr::NUdf::GetYqlPythonUdfModule(resourceName, pythonFlavor, true));
+            NKikimr::NUdf::GetYqlPythonUdfModule(resourceName, pythonFlavor, /*standalone=*/true));
     }
 }
 

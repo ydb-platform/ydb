@@ -48,6 +48,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads,
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableStatistics(true);
     featureFlags.SetEnableColumnStatistics(true);
+    featureFlags.SetEnableAnalyzeLongRunningOperation(true);
     Settings->SetFeatureFlags(featureFlags);
 
     modifySettings(*Settings);

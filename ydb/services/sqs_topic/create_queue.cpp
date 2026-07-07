@@ -82,7 +82,11 @@ namespace NKikimr::NSqsTopic::V1 {
             if (!Request_->GetDatabaseName()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Request without database is forbidden"));
             }
-            if (auto check = ValidateQueueName(QueueName, false); !check.has_value()) {
+            if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                return ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION,
+                    "CreateQueue is not supported"));
+            }
+            if (auto check = ValidateQueueName(QueueName, true); !check.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("Invalid queue name: {}", check.error())));
             }
             if (auto cc = ParseQueueAttributes(request.attributes(), QueueName, ConsumerName, this->Database, EConsumerAttributeUsageTarget::Create); !cc.has_value()) {
@@ -212,6 +216,8 @@ namespace NKikimr::NSqsTopic::V1 {
             if (QueueAttributes.DeadLetterQueue.Defined()) {
                 consumerType->mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue(*QueueAttributes.DeadLetterQueue);
             }
+
+            (*consumer->mutable_attributes())["_sqs_read_request_attempt_id_period_ms"] = ToString(Cfg().GetGroupsReadAttemptIdsPeriodMs());
         }
 
         void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {

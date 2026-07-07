@@ -14,21 +14,6 @@ void THostStat::OnRequest(EOperation operation)
     ++AccessInflightCount(operation);
 }
 
-void THostStat::OnError(TInstant now, EOperation operation)
-{
-    auto& inflight = AccessInflightCount(operation);
-    // Clamp to 0 to be defensive against unbalanced OnRequest/OnError pairs.
-    if (inflight > 0) {
-        --inflight;
-    }
-
-    if (!FirstErrorAt) {
-        FirstErrorAt = now;
-    }
-    LastErrorAt = now;
-    ++ErrorCount;
-}
-
 void THostStat::OnSuccess(
     TInstant now,
     TDuration executionTime,
@@ -44,7 +29,34 @@ void THostStat::OnSuccess(
     LastSuccessAt = now;
     FirstErrorAt = TInstant();
     LastErrorAt = TInstant();
-    ErrorCount = 0;
+    ConsecutiveErrorCount = 0;
+    ++ConsecutiveSuccessCount;
+}
+
+void THostStat::OnError(TInstant now, EOperation operation)
+{
+    auto& inflight = AccessInflightCount(operation);
+    // Clamp to 0 to be defensive against unbalanced OnRequest/OnError pairs.
+    if (inflight > 0) {
+        --inflight;
+    }
+
+    if (!FirstErrorAt) {
+        FirstErrorAt = now;
+    }
+    LastErrorAt = now;
+    ++ConsecutiveErrorCount;
+    ConsecutiveSuccessCount = 0;
+}
+
+void THostStat::OnCancelled(TInstant now, EOperation operation)
+{
+    Y_UNUSED(now);
+
+    auto& inflight = AccessInflightCount(operation);
+    if (inflight > 0) {
+        --inflight;
+    }
 }
 
 THostStat::TErrorsInfo THostStat::GetErrorsInfo(TInstant now) const
@@ -56,8 +68,14 @@ THostStat::TErrorsInfo THostStat::GetErrorsInfo(TInstant now) const
     if (LastErrorAt) {
         result.FromLastError = now - LastErrorAt;
     }
-    result.ErrorCount = ErrorCount;
+    result.ConsecutiveErrorCount = ConsecutiveErrorCount;
+    result.ConsecutiveSuccessCount = ConsecutiveSuccessCount;
     return result;
+}
+
+size_t THostStat::GetConsecutiveSuccessCount() const
+{
+    return ConsecutiveSuccessCount;
 }
 
 size_t THostStat::InflightCount(EOperation operation) const
@@ -83,17 +101,18 @@ TString THostStat::DebugPrint() const
     TStringBuilder sb;
     const TInstant now = TInstant::Now();
     if (LastSuccessAt) {
-        sb << "LastSuccess: " << FormatDuration(now - LastSuccessAt);
+        sb << "LastSuccess: " << FormatDuration(now - LastSuccessAt) << ", ";
     }
     if (FirstErrorAt) {
-        sb << "FirstError: " << FormatDuration(now - FirstErrorAt);
+        sb << "FirstError: " << FormatDuration(now - FirstErrorAt) << ", ";
     }
     if (LastErrorAt) {
-        sb << "LastError: " << FormatDuration(now - LastErrorAt);
+        sb << "LastError: " << FormatDuration(now - LastErrorAt) << ", ";
     }
 
-    sb << ", ErrorCount: " << ErrorCount << ", InflightByOperation: ["
-       << inflight << "]";
+    sb << "ErrorCount: " << ConsecutiveErrorCount
+       << ", SuccessCount: " << ConsecutiveSuccessCount
+       << ", InflightByOperation: [" << inflight << "]";
 
     return sb;
 }

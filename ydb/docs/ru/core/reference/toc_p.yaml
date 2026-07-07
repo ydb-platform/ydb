@@ -32,6 +32,10 @@ items:
   include:
     mode: link
     path: languages-and-apis/toc_p.yaml
+- name: AI-инструменты
+  include:
+    mode: link
+    path: ai/toc_p.yaml
 - name: Kafka API
   href: kafka-api/index.md
   include:

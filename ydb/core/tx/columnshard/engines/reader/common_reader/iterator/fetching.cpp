@@ -73,6 +73,7 @@ TStepAction::TStepAction(
     }
 }
 
+NO_SANITIZE_THREAD
 void TProgramStep::ReportTracing(
     const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs, const TString& currentExecutionResult) const {
     if (!source->GetExecutionContext().HasProgramIterator()) {

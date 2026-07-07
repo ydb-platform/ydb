@@ -1,0 +1,14 @@
+PRAGMA config.flags('OptimizerFlags', 'PushdownFiltersOverWindow');
+USE plato;
+
+$windowed = (
+    SELECT key, value,
+        MAX(value) OVER (PARTITION BY key) AS max_value
+    FROM Input
+);
+
+INSERT INTO Output
+SELECT key,
+    SESSION_START() OVER w AS sess
+FROM $windowed
+WINDOW w AS (PARTITION BY key, SessionWindow(CAST(key AS Datetime), Interval('P1D')));

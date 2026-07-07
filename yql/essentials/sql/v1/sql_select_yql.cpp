@@ -92,7 +92,7 @@ private:
         }
 
         for (auto& binding : *bindings) {
-            auto result = Build(std::move(binding));
+            auto result = Build(binding);
             if (!result) {
                 return std::unexpected(result.error());
             }
@@ -194,7 +194,7 @@ private:
         }
 
         TReadyCTE cte = {
-            .Alias = std::move(binding.Alias),
+            .Alias = binding.Alias,
             .Node = std::move(*result),
         };
 
@@ -1446,7 +1446,7 @@ private:
             YQL_ENSURE(false, "Unexpected ORDER BY direction " << direction);
         }
 
-        return new TSortSpecification(std::move(*expr), isAscending);
+        return new TSortSpecification(*expr, isAscending);
     }
 
     template <class TRule>

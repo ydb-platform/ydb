@@ -25,6 +25,7 @@ SRCS(
     ydb_secret_v1.proto
     ydb_scripting_v1.proto
     ydb_table_v1.proto
+    ydb_topic_deferred_publish_v1.proto
     ydb_topic_v1.proto
 )
 

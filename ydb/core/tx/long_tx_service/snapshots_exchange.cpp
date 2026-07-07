@@ -232,8 +232,9 @@ namespace {
 
     class TSnapshotCollectorActor : public TTreeNodeActor<TEvLongTxService::TEvCollectSnapshots, TEvLongTxService::TEvCollectSnapshotsResult> {
     public:
-        TSnapshotCollectorActor(const TLocalSnapshotsStorage::TView& localSnapshotsView, TActorId parentActorId, TEvLongTxService::TEvCollectSnapshots* event, const TSubtreeSplitter& subtreeSplitter)
-            : TTreeNodeActor(parentActorId, event, subtreeSplitter) {
+        TSnapshotCollectorActor(const TLocalSnapshotsStorage::TView& localSnapshotsView, TInstant now, TActorId parentActorId, TEvLongTxService::TEvCollectSnapshots* event, const TSubtreeSplitter& subtreeSplitter)
+            : TTreeNodeActor(parentActorId, event, subtreeSplitter)
+            , LocalCollectionTime(now) {
             for (const auto& localSnapshot : localSnapshotsView) {
                 TRemoteSnapshotInfo remoteSnapshot(
                     localSnapshot.Snapshot,
@@ -242,7 +243,6 @@ namespace {
 
                 AddToCollectedSnapshots(remoteSnapshot);
             }
-            LocalCollectionTime = AppData()->TimeProvider->Now();
             TXLOG_DEBUG("Finished creating TSnapshotCollectorActor, local collection time: " << LocalCollectionTime.MilliSeconds());
         }
 
@@ -368,10 +368,11 @@ namespace {
 
 IActor* CreateSnapshotCollectorActor(
         const TLocalSnapshotsStorage::TView& localSnapshotsView,
+        TInstant now,
         TActorId parentActorId,
         TEvLongTxService::TEvCollectSnapshots* event,
         const TSubtreeSplitter& subtreeSplitter) {
-    return new TSnapshotCollectorActor(localSnapshotsView, parentActorId, event, subtreeSplitter);
+    return new TSnapshotCollectorActor(localSnapshotsView, now, parentActorId, event, subtreeSplitter);
 }
 
 IActor* CreateSnapshotPropagatorActor(
@@ -603,8 +604,10 @@ private:
     void Handle(TEvLongTxService::TEvCollectSnapshots::TPtr& ev) {
         TXLOG_DEBUG("Handling TEvCollectSnapshots event from " << ev->Sender
             << " with " << ev->Get()->Record.GetTree().GetChildrenActorIds().size() << " children");
+        const auto now = AppData()->TimeProvider->Now();
         auto* collectorActor = CreateSnapshotCollectorActor(
-            LocalSnapshotsStorage->View(),
+            LocalSnapshotsStorage->View(now),
+            now,
             ev->Sender,
             ev->Get(),
             TSubtreeSplitter(
@@ -728,7 +731,8 @@ private:
             addToCollectedSnapshots(remoteSnapshot);
         }
 
-        for (const auto& localSnapshot : LocalSnapshotsStorage->View()) {
+        const auto now = AppData()->TimeProvider->Now();
+        for (const auto& localSnapshot : LocalSnapshotsStorage->View(now)) {
             TRemoteSnapshotInfo remoteSnapshot(
                 localSnapshot.Snapshot,
                 localSnapshot.SessionActorId,
@@ -763,7 +767,7 @@ private:
         // This node's own snapshots are known as of now.
         auto* localNodeInfoProto = resultEvent->Record.MutableSnapshots()->AddNodesCollectionInfo();
         localNodeInfoProto->SetNodeId(SelfId().NodeId());
-        localNodeInfoProto->SetUpdateTime(AppData()->TimeProvider->Now().Seconds());
+        localNodeInfoProto->SetUpdateTime(now.Seconds());
 
         TXLOG_DEBUG("Sending TEvRemoteSnapshotsPrefillResult to " << ev->Sender
             << " with " << resultEvent->Record.GetSnapshots().GetSnapshots().size() << " snapshots");

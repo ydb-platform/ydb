@@ -1,5 +1,7 @@
 #include "distconf_quorum.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
+
 namespace NKikimr::NStorage {
 
     std::optional<bool> HasStorageQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
@@ -164,7 +166,9 @@ namespace NKikimr::NStorage {
             const THashMap<TString, TBridgePileId>& /*bridgePileNameMap*/, TBridgePileId singleBridgePileId,
             const TNodeWardenConfig& nwConfig, bool allowUnformatted, IOutputStream *out, const char *name) {
         auto makeError = [&](TString error) -> bool {
-            STLOG(PRI_CRIT, BS_NODE, NWDC41, "configuration incorrect", (Error, error));
+            YDB_LOG_CRIT("Configuration incorrect",
+                {"marker", "NWDC41"},
+                {"error", error});
             //Y_DEBUG_ABORT("%s", error.c_str());
             if (out) {
                 *out << ' ' << name << ':' << error;

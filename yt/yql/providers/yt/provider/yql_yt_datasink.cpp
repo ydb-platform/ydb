@@ -256,6 +256,17 @@ public:
     }
 
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
+        if (auto leftMaterialize = TMaybeNode<TCoLeft>(node).Input().Maybe<TCoMaterialize>()) {
+            return Build<TCoLeft>(ctx, node->Pos())
+                .Input(ctx.RenameNode(leftMaterialize.Ref(), TYtMaterialize::CallableName()))
+                .Done().Ptr();
+        }
+        if (auto rightMaterialize = TMaybeNode<TCoRight>(node).Input().Maybe<TCoMaterialize>()) {
+            return Build<TCoRight>(ctx, node->Pos())
+                .Input(ctx.RenameNode(rightMaterialize.Ref(), TYtMaterialize::CallableName()))
+                .Done().Ptr();
+        }
+
         YQL_ENSURE(TMaybeNode<TYtWrite>(node).DataSink());
         std::optional<EYtWriteMode> mode;
         if (const auto m = NYql::GetSetting(*node->Child(4), EYtSettingType::Mode)) {

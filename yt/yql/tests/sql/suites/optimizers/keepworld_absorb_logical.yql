@@ -1,0 +1,12 @@
+PRAGMA config.flags('OptimizerFlags', 'KeepWorld', 'CheckMissingWorld');
+PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+USE plato;
+
+SELECT key FROM Input
+WHERE (key NOT IN (SELECT key FROM Dict) AND key != "0") OR key != "0"
+ORDER BY key;
+
+SELECT key FROM Input
+WHERE (key != "0" OR key NOT IN (SELECT key FROM Dict)) AND key != "0"
+ORDER BY key;

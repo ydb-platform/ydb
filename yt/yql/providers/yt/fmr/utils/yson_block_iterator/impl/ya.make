@@ -14,6 +14,7 @@ PEERDIR(
     yt/yql/providers/yt/fmr/request_options
     yt/yql/providers/yt/fmr/table_data_service/interface
     yt/yql/providers/yt/fmr/utils
+    yt/yql/providers/yt/fmr/utils/hasher
     yt/yql/providers/yt/fmr/utils/yson_block_iterator/interface
 )
 

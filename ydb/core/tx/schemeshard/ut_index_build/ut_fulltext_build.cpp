@@ -636,6 +636,49 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         });
     }
 
+    Y_UNIT_TEST(RowIdDisabled_RejectsCustomPkBuild) {
+        // With EnableFulltextIndexRowId off, building a fulltext index over a custom (non single integer)
+        // PK cannot use or auto-provision __ydb_row_id, so the build is rejected (mirrors the CREATE TABLE
+        // path in TFulltextIndexTests::CreateTableRowIdDisabled).
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        auto& appData = runtime.GetAppData();
+        appData.FeatureFlags.SetEnableUniqConstraint(true);
+        // The gate reads this flag live at classify time, so setting it here disables rowid doc_id mode.
+        appData.FeatureFlags.SetEnableFulltextIndexRowId(false);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "texts"
+            Columns { Name: "pk" Type: "Utf8" NotNull: true }
+            Columns { Name: "text" Type: "String" }
+            Columns { Name: "data" Type: "String" }
+            KeyColumnNames: ["pk"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::Table::TableIndex index = FulltextIndexConfig(false);
+        AsyncBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+        {
+            TAutoPtr<IEventHandle> handle;
+            auto* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
+            UNIT_ASSERT(event);
+            UNIT_ASSERT_VALUES_EQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST,
+                event->Record.GetIssues());
+            UNIT_ASSERT_STRING_CONTAINS(event->Record.DebugString(),
+                "requires the __ydb_row_id doc_id feature, which is disabled (feature flag EnableFulltextIndexRowId)");
+        }
+
+        // No __ydb_row_id unique index (nor the fulltext index) was provisioned.
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathNotExist,
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx"), {
+            NLs::PathNotExist,
+        });
+    }
+
     // Helpers for the auto-provisioning tests below: a table with a custom (Utf8) PK and NO __ydb_row_id
     // column / unique index - the schemeshard provisions both when the fulltext index is built.
 
@@ -1011,5 +1054,137 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         DoCheckRelevanceIndexTables(runtime, "/MyRoot/texts_imported/fulltext_rel_idx");
 
         NKikimr::ShutdownAwsAPI();
+    }
+
+    // TTestEnv already enables EnableFulltextIndex / EnableAddUniqueIndex by default; we only need the
+    // compact-index flag so a fulltext_plain build proto is materialized as a compact (rowid-mode) index.
+    // The schemeshard caches EnableCompactFulltextIndex at activation (it read appData before this runs),
+    // so reboot it to pick up the updated value.
+    void EnableCompactAutoProvisionFlags(TTestActorRuntime& runtime) {
+        auto& appData = runtime.GetAppData();
+        appData.FeatureFlags.SetEnableFulltextIndex(true);
+        appData.FeatureFlags.SetEnableCompactFulltextIndex(true);
+        appData.FeatureFlags.SetEnableAddUniqueIndex(true);
+        appData.FeatureFlags.SetEnableUniqConstraint(true);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+    }
+
+    TString RowIdSrcTablePath(const TString& indexPath) {
+        return TStringBuilder() << indexPath << "/"
+            << NTableIndex::ImplTable << NTableIndex::NFulltext::RowIdSrcBuildSuffix;
+    }
+
+    Y_UNIT_TEST(RowIdOptIn_CompactBuildsOverCustomPkAndDropsRowIdSrc) {
+        // Compact rowid-mode build over a custom (Utf8) PK: it runs the row-id source prepass, builds the
+        // compact posting/dict tables and, on completion, the transient "rowidsrc" build table is dropped.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableCompactAutoProvisionFlags(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        DoCreateCustomPkTextTable(runtime, env, txId);
+        DoWriteRowsCustomPk(runtime);
+
+        Ydb::Table::TableIndex index = FulltextIndexConfig(/*relevance*/ false);
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        {
+            auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                op.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+                op.DebugString());
+        }
+
+        // The auto-provisioned unique index over __ydb_row_id exists and is Ready.
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+
+        // The compact posting impl-table is keyed by [__ydb_token, __ydb_max_id, __ydb_generation] and
+        // stores the delta-encoded __ydb_segment (this is what distinguishes a compact index from a plain
+        // one, whose impl-table is keyed by [__ydb_token, __ydb_row_id] and has no segment column).
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx/indexImplTable"), {
+            NLs::PathExist,
+            NLs::CheckColumns("indexImplTable",
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::MaxIdColumn,
+                  NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::AddedColumn,
+                  NTableIndex::NFulltext::SegmentColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::MaxIdColumn,
+                  NTableIndex::NFulltext::GenColumn },
+                /*strictCount=*/ true),
+        });
+
+        // The transient row-id source build table was dropped on completion.
+        TestDescribeResult(DescribePrivatePath(runtime, RowIdSrcTablePath("/MyRoot/texts/fulltext_idx")), {
+            NLs::PathNotExist,
+        });
+    }
+
+    Y_UNIT_TEST(RowIdOptIn_CompactBuildSurvivesSchemeShardRestart) {
+        // The compact build adds a new prepass step (FulltextRowIdSrc substate). Reboot the schemeshard
+        // while it is running the prepass and verify the persisted state lets the build resume and finish.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableCompactAutoProvisionFlags(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        DoCreateCustomPkTextTable(runtime, env, txId);
+        DoWriteRowsCustomPk(runtime);
+
+        // Pause the build in the prepass: the row-id source fill is a generic secondary-index build whose
+        // target is the transient row-id source table.
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> prepassBlocker(runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetTargetName().EndsWith(NTableIndex::NFulltext::RowIdSrcBuildSuffix);
+        });
+
+        Ydb::Table::TableIndex index = FulltextIndexConfig(/*relevance*/ false);
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+
+        runtime.WaitFor("row-id source prepass scan request", [&]{ return prepassBlocker.size() > 0; });
+
+        // Crash + restart the schemeshard while parked in the FulltextRowIdSrc substate.
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        // Let the (re-issued) prepass scan and the rest of the pipeline proceed.
+        prepassBlocker.Stop().Unblock();
+
+        // The reboot drops the build's in-memory completion subscribers, so poll the persisted build
+        // state to completion instead of relying on a (now racy) notification subscription.
+        Ydb::Table::IndexBuildState::State state = Ydb::Table::IndexBuildState::STATE_UNSPECIFIED;
+        for (int i = 0; i < 100; ++i) {
+            auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            state = op.GetIndexBuild().GetState();
+            if (state == Ydb::Table::IndexBuildState::STATE_DONE ||
+                state == Ydb::Table::IndexBuildState::STATE_REJECTED ||
+                state == Ydb::Table::IndexBuildState::STATE_CANCELLED) {
+                break;
+            }
+            env.SimulateSleep(runtime, TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C((ui64)state, (ui64)Ydb::Table::IndexBuildState::STATE_DONE,
+            "compact fulltext build did not finish after schemeshard restart, last state: " << (ui64)state);
+
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+
+        // The transient row-id source build table was dropped on completion.
+        TestDescribeResult(DescribePrivatePath(runtime, RowIdSrcTablePath("/MyRoot/texts/fulltext_idx")), {
+            NLs::PathNotExist,
+        });
     }
 }

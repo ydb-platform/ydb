@@ -40,6 +40,7 @@ namespace {
 void DumpToFile(
     const TString& diskId,
     size_t index,
+    const TString& config,
     TMap<size_t, TDBGDumpResponse> debugDumps)
 {
     TVector<TDBGDumpResponse::TVChunkDump> dumps;
@@ -63,6 +64,9 @@ void DumpToFile(
 
     auto path = TStringBuilder() << dirPath << diskId << "." << index;
     TFile file(path, EOpenModeFlag::CreateAlways);
+
+    file.Write(config.data(), config.size());
+    file.Write("\n", 1);
 
     for (const auto& [dbgIndex, dump]: debugDumps) {
         file.Write(dump.Dump.data(), dump.Dump.size());
@@ -378,6 +382,17 @@ ui64 TFastPathService::GenerateLsn()
     return lsn;
 }
 
+TFastPathServiceInfo TFastPathService::GetMonInfo() const
+{
+    const ui64 vchunkSize = StorageConfig->GetVChunkSize();
+    Y_ABORT_UNLESS(vchunkSize != 0);
+    return {
+        .LsnCounter = SequenceGenerator.load(),
+        .TotalVChunks = Regions.size() * (RegionSize / vchunkSize),
+        .DbgCount = DirectBlockGroups.size(),
+    };
+}
+
 void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
 {
     const ui64 step = StorageConfig->GetPBufferCleanupLsnStep();
@@ -490,7 +505,11 @@ void TFastPathService::OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump)
     }
 
     try {
-        DumpToFile(DiskId, DumpCount, std::move(DebugDumps));
+        DumpToFile(
+            DiskId,
+            DumpCount,
+            StorageConfig->Dump(),
+            std::move(DebugDumps));
     } catch (const std::exception& e) {
         LOG_ERROR(
             *ActorSystem,

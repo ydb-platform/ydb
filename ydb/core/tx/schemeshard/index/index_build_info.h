@@ -1015,6 +1015,8 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     constexpr static ui32 MaxInProgressValidationShards = 10;
 
     bool ValidationFailed = false;  // true if any shard found NULL values
+    bool IsCancelled = false;
+    TString CancellationReason;
 
     bool IsDone() const override {
         return OperationState == EOperationState::Done;
@@ -1022,6 +1024,13 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
 
     bool IsSetColumnConstraint() const override {
         return true;
+    }
+
+    void MarkAsCancelled(TString&& reason) {
+        if (!IsCancelled) {
+            IsCancelled = true;
+            CancellationReason = std::move(reason);
+        }
     }
 };
 

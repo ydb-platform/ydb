@@ -2635,6 +2635,9 @@ struct Schema : NIceDb::Schema {
         struct StartTime :              Column<12, NScheme::NTypeIds::Uint64> {};
         struct EndTime :                Column<13, NScheme::NTypeIds::Uint64> {};
 
+        struct IsCancelled :            Column<14, NScheme::NTypeIds::Bool>   { static constexpr bool Default = false; };
+        struct CancellationReason :     Column<15, NScheme::NTypeIds::Utf8>   {};
+
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
             OperationId,
@@ -2649,7 +2652,9 @@ struct Schema : NIceDb::Schema {
             LockTxId,
             UserSID,
             StartTime,
-            EndTime
+            EndTime,
+            IsCancelled,
+            CancellationReason
         >;
     };
 

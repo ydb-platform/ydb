@@ -52,7 +52,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableUnlockNullWrit
         col->SetName(TString(columnName));
         col->SetSetNotNullInProgress(false);
 
-        if (!operationInfo.ValidationFailed) {
+        if (!operationInfo.ValidationFailed && !operationInfo.IsCancelled) {
             col->SetNotNull(true);
         }
     }
@@ -352,6 +352,11 @@ public:
 
         auto& operationInfo = *operationInfoPtr->get();
 
+        if (operationInfo.IsCancelled) {
+            LOG_I("TTxReplyValidateRowCondition: operation is cancelled, ignoring message, id# " << BuildId);
+            return true;
+        }
+
         TShardIdx shardIdx;
         bool found = false;
         for (const auto& [idx, shardStatus] : operationInfo.ValidationShards) {
@@ -379,6 +384,7 @@ public:
         }
 
         auto oldValidationFailedValue = operationInfo.ValidationFailed;
+        TString cancellationReason;
 
         auto& shardStatus = operationInfo.ValidationShards.at(shardIdx);
         shardStatus.ValidateStatus = record.GetStatus();
@@ -398,6 +404,7 @@ public:
             if (!record.GetIsValid()) {
                 LOG_N("TTxReplyValidateRowCondition: validation failed on shard# " << shardIdx);
                 operationInfo.ValidationFailed = true;
+                cancellationReason = "Validation failed: found NULL values in column(s) being set to NOT NULL";
             }
 
             operationInfo.InProgressValidationShards.erase(shardIdx);
@@ -410,6 +417,7 @@ public:
                 << ", status# " << record.GetStatus());
 
             operationInfo.ValidationFailed = true;
+            cancellationReason = "Validation failed: internal error";
 
             operationInfo.InProgressValidationShards.erase(shardIdx);
             operationInfo.DoneValidationShards.insert(shardIdx);
@@ -423,8 +431,12 @@ public:
 
         {
             NIceDb::TNiceDb db(txc.DB);
+
             if (oldValidationFailedValue != operationInfo.ValidationFailed) {
                 Self->PersistSetColumnConstraintValidationFailedValue(db, operationInfo);
+
+                operationInfo.MarkAsCancelled(std::move(cancellationReason));
+                Self->PersistSetColumnConstraintCancellation(db, operationInfo);
             }
 
             Self->PersistSetColumnConstraintShardDone(db, BuildId, shardIdx, operationInfo);

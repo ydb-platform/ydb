@@ -797,6 +797,7 @@ enum ETxTypes {
 
     TXTYPE_CREATE_SET_COLUMN_CONSTRAINT = 124             [(TxTypeOpts) = {Name: "TxCreateSetColumnConstraint"}];
     TXTYPE_GET_SET_COLUMN_CONSTRAINT = 125             [(TxTypeOpts) = {Name: "TxGetSetColumnConstraint"}];
+    TXTYPE_CANCEL_SET_COLUMN_CONSTRAINT = 126             [(TxTypeOpts) = {Name: "TxCancelSetColumnConstraint"}];
 
     TXTYPE_TEST_SHARD_CONTROL = 126 [(TxTypeOpts) = {Name: "TxTestShardControl"}];
 

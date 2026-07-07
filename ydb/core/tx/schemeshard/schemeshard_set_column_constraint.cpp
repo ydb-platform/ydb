@@ -213,6 +213,16 @@ void TSchemeShard::PersistSetColumnConstraintValidationFailedValue(
     );
 }
 
+void TSchemeShard::PersistSetColumnConstraintCancellation(
+    NIceDb::TNiceDb& db,
+    const TSetColumnConstraintOperationInfo& operationInfo)
+{
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::IsCancelled>(operationInfo.IsCancelled),
+        NIceDb::TUpdate<Schema::SetColumnConstraint::CancellationReason>(operationInfo.CancellationReason)
+    );
+}
+
 void TSchemeShard::PersistSetColumnConstraintShardDone(
     NIceDb::TNiceDb& db,
     TIndexBuildId operationId,
@@ -267,6 +277,10 @@ void TSchemeShard::Handle(TEvSetColumnConstraint::TEvGetRequest::TPtr& ev, const
 
 void TSchemeShard::Handle(TEvSetColumnConstraint::TEvListRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxListSetColumnConstraint(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvSetColumnConstraint::TEvCancelRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxSetColumnConstraintCancel(ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev, const TActorContext& ctx) {

@@ -1104,14 +1104,14 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
     if (TablesManager.IsStoreTablet()) {
         LOG_S_WARN("Forced compaction is not supported for column store: tablet# " << TabletID() << ", pathId# " << pathId
                                                                                    << ", requested from# " << ev->Sender);
-        reply(NKikimrTxDataShard::TEvCompactTableResult::FAILED);
+        reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
         return;
     }
 
     if (!TablesManager.HasPrimaryIndex()) {
         LOG_S_WARN("Forced compaction failed, no primary index: tablet# " << TabletID() << ", pathId# " << pathId << ", requested from# "
                                                                           << ev->Sender);
-        reply(NKikimrTxDataShard::TEvCompactTableResult::FAILED);
+        reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
         return;
     }
 
@@ -1120,7 +1120,7 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
     auto granule = internalPathId ? engine.GetGranuleOptional(*internalPathId) : nullptr;
     if (!granule) {
         LOG_S_WARN("Forced compaction of unknown path: tablet# " << TabletID() << ", pathId# " << pathId << ", requested from# " << ev->Sender);
-        reply(NKikimrTxDataShard::TEvCompactTableResult::FAILED);
+        reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
         return;
     }
 
@@ -1129,7 +1129,7 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         // The optimizer does not support forced compaction (i.e. it is not tiling++).
         LOG_S_WARN("Forced compaction is not supported: tablet# " << TabletID() << ", pathId# " << pathId << ", reason# "
                                                                   << noIntersections.GetErrorMessage() << ", requested from# " << ev->Sender);
-        reply(NKikimrTxDataShard::TEvCompactTableResult::FAILED);
+        reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
         return;
     }
 
@@ -1164,7 +1164,7 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
         } else {
             const auto noIntersections = granule->GetOptimizerPlanner().CheckNoIntersections();
             if (noIntersections.IsFail()) {
-                status = NKikimrTxDataShard::TEvCompactTableResult::FAILED;
+                status = NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED;
             } else if (*noIntersections) {
                 status = NKikimrTxDataShard::TEvCompactTableResult::OK;
             }

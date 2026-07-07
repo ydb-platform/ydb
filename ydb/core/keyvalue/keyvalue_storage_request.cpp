@@ -572,7 +572,8 @@ public:
         ctx.Send(keyValueActorId, new TEvKeyValue::TEvNotify(
             IntermediateResults->RequestUid,
             IntermediateResults->CreatedAtGeneration, IntermediateResults->CreatedAtStep,
-            IntermediateResults->Stat, status, std::move(IntermediateResults->RefCountsIncr)), 0, 0, Span.GetTraceId());
+            IntermediateResults->Stat, status, IntermediateResults->AcquiredChannels,
+            std::move(IntermediateResults->RefCountsIncr)), 0, 0, Span.GetTraceId());
 
         Span.EndError(TStringBuilder() << status << ": " << errorDescription);
         Die(ctx);

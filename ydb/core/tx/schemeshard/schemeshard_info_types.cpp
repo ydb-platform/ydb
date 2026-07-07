@@ -992,6 +992,13 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         }
 
         ui32 colId = colName2Id[keyName];
+        if (!alterData->Columns.contains(colId) && source && source->Columns.contains(colId)) {
+            // This key column isn't otherwise touched by this alter (e.g. an existing key
+            // column simply re-listed alongside a newly added one) -- seed it from the
+            // source column so FinishAlter's Name/DefaultKind/etc. copy-back doesn't clobber
+            // it with a default-constructed (empty-named) TColumn.
+            alterData->Columns[colId] = source->Columns.at(colId);
+        }
         TTableInfo::TColumn& column = alterData->Columns[colId];
         if (column.KeyOrder != (ui32)-1) {
             errStr = Sprintf("Column '%s' specified more than once in key column list", keyName.data());

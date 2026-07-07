@@ -244,7 +244,7 @@ public:
             NKikimrConfig::TTableServiceConfig::TResourceManager{},
             NKikimrConfig::TTableServiceConfig::TAggregationConfig{},
             MakeIntrusive<TKqpRequestCounters>(),
-            NActors::TActorId{}, nullptr, false);
+            NActors::TActorId{}, nullptr, true);
 
         Graph->GetMeta().IsScan             = Config.IsScan;
         Graph->GetMeta().AllowOlapDataQuery = true;
@@ -495,8 +495,6 @@ public:
             .SetUseRealThreads(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableColumnStatistics(true);
 
-        settings.AppConfig.MutableTableServiceConfig()->SetUseKqpTasksGraphV2(true);
-
         if constexpr (N > 0) {
             using TExecutor = NKikimrConfig::TActorSystemConfig::TExecutor;
             auto& asCfg = *settings.AppConfig.MutableActorSystemConfig();
@@ -744,19 +742,18 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 3u);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 0), 3840);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 1), 2880);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 0), 780);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 1), 585);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 2), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-            /* stage 0 */ { {32, 120} },
-            /* stage 1 */ { {24, 120} },
+        AssertNodeDistribution(dist, 0, {
+            /* stage 0 */ { {6, 60}, {7, 60} },
+            /* stage 1 */ { {4, 15}, {5, 105} },
             /* stage 2 */ { {1, 1} },
-        };
-        AssertNodeDistribution(dist, 0, expected);
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery02, TKqpTasksGraphTpchFixture) {
@@ -889,37 +886,36 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 12u);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 0), 960);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 0), 390);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 1), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 2), 8);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 2), 3);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 3), 1);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 4), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 5), 960);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 5), 390);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 6), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 7), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 8), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 9), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 10), 960);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 10), 390);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 11), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-            /* stage  0 */ { {8, 120} },
+        AssertNodeDistribution(dist, 0, {
+            /* stage  0 */ { {3, 90}, {4, 30} },
             /* stage  1 */ { {2, 104}, {3, 16} },
-            /* stage  2 */ { {8, 1} },
+            /* stage  2 */ { {3, 1} },
             /* stage  3 */ { {1, 1} },
             /* stage  4 */ { {1, 1} },
-            /* stage  5 */ { {7, 41}, {8, 38}, {9, 41} }, // was: { {8, 120} },
+            /* stage  5 */ { {3, 90}, {4, 30} },
             /* stage  6 */ { {2, 104}, {3, 16} },
             /* stage  7 */ { {2, 104}, {3, 16} },
             /* stage  8 */ { {2, 104}, {3, 16} },
             /* stage  9 */ { {1, 1} },
-            /* stage 10 */ { {1, 1}, {6, 1}, {7, 32}, {8, 45}, {9, 41} }, // was: { {7, 23}, {8, 74}, {9, 23} },
+            /* stage 10 */ { {2, 1}, {3, 84}, {4, 34} },
             /* stage 11 */ { {1, 1} },
-        };
-        AssertNodeDistribution(dist, 0, expected);
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery03, TKqpTasksGraphTpchFixture) {
@@ -1049,25 +1045,24 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 6u);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 0), 1920);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 1), 1920);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 2), 1920);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 3), 1920);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 4), 1920);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 0), 360);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 1), 360);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 2), 360);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 3), 360);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 4), 360);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 5), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-            /* stage 0 */ { {16, 120} },
-            /* stage 1 */ { {16, 120} },
-            /* stage 2 */ { {16, 120} },
-            /* stage 3 */ { {16, 120} },
-            /* stage 4 */ { {16, 120} },
+        AssertNodeDistribution(dist, 0, {
+            /* stage 0 */ { {3, 120} },
+            /* stage 1 */ { {3, 120} },
+            /* stage 2 */ { {3, 120} },
+            /* stage 3 */ { {3, 120} },
+            /* stage 4 */ { {3, 120} },
             /* stage 5 */ { {1, 1} },
-        };
-        AssertNodeDistribution(dist, 0, expected);
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery05, TKqpTasksGraphTpchFixture) {
@@ -1156,34 +1151,33 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 11u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 960);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 285);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 8);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 10);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 960);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 1200);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 1200);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 2);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 2);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 285);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 356);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 356);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 10), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
+        AssertNodeDistribution(dist, 0, {
             /* stage 0 */ { {2, 104}, {3, 16} },
-            /* stage 1 */ { {8, 120} },
+            /* stage 1 */ { {2, 75}, {3, 45} },
             /* stage 2 */ { {2, 104}, {3, 16} },
             /* stage 3 */ { {2, 104}, {3, 16} },
             /* stage 4 */ { {2, 104}, {3, 16} },
-            /* stage 5 */ { {8, 1} },
-            /* stage 6 */ { {10, 1} },
-            /* stage 7 */ { {8, 120} },
-            /* stage 8 */ { {2, 1}, {8, 32}, {10, 4}, {11, 82} }, // was: { {9, 23}, {10, 74}, {11, 23} },
-            /* stage 9 */ { {10, 120} }, // was: { {8, 1}, {9, 22}, {10, 73}, {11, 24} },
+            /* stage 5 */ { {2, 1} },
+            /* stage 6 */ { {2, 1} },
+            /* stage 7 */ { {2, 75}, {3, 45} },
+            /* stage 8 */ { {1, 1}, {3, 117}, {4, 1} },
+            /* stage 9 */ { {2, 4}, {3, 116} },
             /* stage 10 */ { {1, 1} },
-        };
-        AssertNodeDistribution(dist, 0, expected);
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery06, TKqpTasksGraphTpchFixture) {
@@ -1213,12 +1207,11 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
+        AssertNodeDistribution(dist, 0, {
             /* stage 0 */ { {32, 120} },
             /* stage 1 */ { {1, 1} },
             /* stage 2 */ { {1, 1} },
-        };
-        AssertNodeDistribution(dist, 0, expected);
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery07, TKqpTasksGraphTpchFixture) {
@@ -1304,32 +1297,31 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 10u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1200);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 10);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 825);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 6);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 240);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 165);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
+        AssertNodeDistribution(dist, 0, {
             /* stage 0 */ { {2, 104}, {3, 16} },
-            /* stage 1 */ { {10, 120} },
-            /* stage 2 */ { {10, 1} },
+            /* stage 1 */ { {6, 15}, {7, 105} },
+            /* stage 2 */ { {6, 1} },
             /* stage 3 */ { {2, 104}, {3, 16} },
-            /* stage 4 */ { {2, 104}, {3, 16} }, // was: { {2, 105}, {3, 14}, {4, 1} },
+            /* stage 4 */ { {2, 104}, {3, 16} },
             /* stage 5 */ { {2, 104}, {3, 16} },
             /* stage 6 */ { {2, 104}, {3, 16} },
             /* stage 7 */ { {2, 104}, {3, 16} },
-            /* stage 8 */ { {1, 27}, {3, 71} }, // was: { {1, 8}, {2, 104}, {3, 8} },
+            /* stage 8 */ { {1, 23}, {2, 71} },
             /* stage 9 */ { {1, 1} },
-        };
-        AssertNodeDistribution(dist, 0, expected);
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery08, TKqpTasksGraphTpchFixture) {
@@ -1464,24 +1456,22 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        // Per-stage node histogram (fill the table from logs of a run on the reference revision):
-        // const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-        //     /* stage 0 */ {},
-        //     /* stage 1 */ {},
-        //     /* stage 2 */ {},
-        //     /* stage 3 */ {},
-        //     /* stage 4 */ {},
-        //     /* stage 5 */ {},
-        //     /* stage 6 */ {},
-        //     /* stage 7 */ {},
-        //     /* stage 8 */ {},
-        //     /* stage 9 */ {},
-        //     /* stage 10 */ {},
-        //     /* stage 11 */ {},
-        //     /* stage 12 */ {},
-        //     /* stage 13 */ {},
-        // };
-        // AssertNodeDistribution(dist, 0, expected);
+        AssertNodeDistribution(dist, 0, {
+            /* stage 0 */ { {2, 104}, {3, 16} },
+            /* stage 1 */ { {6, 120} },
+            /* stage 2 */ { {1, 1} },
+            /* stage 3 */ { {6, 1} },
+            /* stage 4 */ { {1, 1} },
+            /* stage 5 */ { {2, 104}, {3, 16} },
+            /* stage 6 */ { {2, 104}, {3, 16} },
+            /* stage 7 */ { {2, 104}, {3, 16} },
+            /* stage 8 */ { {2, 104}, {3, 16} },
+            /* stage 9 */ { {2, 104}, {3, 16} },
+            /* stage 10 */ { {2, 104}, {3, 16} },
+            /* stage 11 */ { {2, 104}, {3, 16} },
+            /* stage 12 */ { {1, 52}, {2, 13}, {3, 54} },
+            /* stage 13 */ { {1, 1} },
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery09, TKqpTasksGraphTpchFixture) {
@@ -1539,40 +1529,38 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 13u);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 600);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 600);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 318);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 318);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 600);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 318);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 240);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 840);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 127);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 446);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 10), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 11), 240);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 11), 127);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 12), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        // Per-stage node histogram (fill the table from logs of a run on the reference revision):
-        // const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-        //     /* stage 0 */ {},
-        //     /* stage 1 */ {},
-        //     /* stage 2 */ {},
-        //     /* stage 3 */ {},
-        //     /* stage 4 */ {},
-        //     /* stage 5 */ {},
-        //     /* stage 6 */ {},
-        //     /* stage 7 */ {},
-        //     /* stage 8 */ {},
-        //     /* stage 9 */ {},
-        //     /* stage 10 */ {},
-        //     /* stage 11 */ {},
-        //     /* stage 12 */ {},
-        // };
-        // AssertNodeDistribution(dist, 0, expected);
+        AssertNodeDistribution(dist, 0, {
+            /* stage 0 */ { {2, 42}, {3, 78} },
+            /* stage 1 */ { {2, 42}, {3, 78} },
+            /* stage 2 */ { {2, 104}, {3, 16} },
+            /* stage 3 */ { {2, 104}, {3, 16} },
+            /* stage 4 */ { {1, 1} },
+            /* stage 5 */ { {2, 42}, {3, 78} },
+            /* stage 6 */ { {1, 1} },
+            /* stage 7 */ { {1, 61}, {2, 33} },
+            /* stage 8 */ { {3, 34}, {4, 86} },
+            /* stage 9 */ { {2, 104}, {3, 16} },
+            /* stage 10 */ { {2, 104}, {3, 16} },
+            /* stage 11 */ { {1, 113}, {2, 7} },
+            /* stage 12 */ { {1, 1} },
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery10, TKqpTasksGraphTpchFixture) {
@@ -1667,29 +1655,27 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 8u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1200);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 10);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1162);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 9);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 240);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 232);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        // Per-stage node histogram (fill the table from logs of a run on the reference revision):
-        // const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-        //     /* stage 0 */ {},
-        //     /* stage 1 */ {},
-        //     /* stage 2 */ {},
-        //     /* stage 3 */ {},
-        //     /* stage 4 */ {},
-        //     /* stage 5 */ {},
-        //     /* stage 6 */ {},
-        //     /* stage 7 */ {},
-        // };
-        // AssertNodeDistribution(dist, 0, expected);
+        AssertNodeDistribution(dist, 0, {
+            /* stage 0 */ { {2, 104}, {3, 16} },
+            /* stage 1 */ { {9, 38}, {10, 82} },
+            /* stage 2 */ { {9, 1} },
+            /* stage 3 */ { {2, 104}, {3, 16} },
+            /* stage 4 */ { {2, 104}, {3, 16} },
+            /* stage 5 */ { {2, 104}, {3, 16} },
+            /* stage 6 */ { {2, 29}, {3, 58} },
+            /* stage 7 */ { {1, 1} },
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery11, TKqpTasksGraphTpchFixture) {
@@ -1751,36 +1737,36 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 11u);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 1920);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 16);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 705);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 5);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  0), 1920);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  1), 16);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  0), 705);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  1), 5);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  2), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  3), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  4), 240);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  4), 88);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  5), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        // Per-stage node histogram (fill the table from logs of a run on the reference revision):
-        // const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-        //     /* stage 0 */ {},
-        //     /* stage 1 */ {},
-        //     /* stage 2 */ {},
-        //     /* stage 3 */ {},
-        //     /* stage 4 */ {},
-        //     /* stage 5 */ {},
-        //     /* stage 6 */ {},
-        //     /* stage 7 */ {},
-        //     /* stage 8 */ {},
-        //     /* stage 9 */ {},
-        //     /* stage 10 */ {},
-        // };
-        // AssertNodeDistribution(dist, 0, expected);
+        AssertNodeDistribution(dist, 0, {
+            /* stage 0 */ { {5, 15}, {6, 105} },
+            /* stage 1 */ { {5, 1} },
+            /* stage 2 */ { {2, 104}, {3, 16} },
+            /* stage 3 */ { {2, 104}, {3, 16} },
+            /* stage 4 */ { {1, 1} },
+        });
+        AssertNodeDistribution(dist, 1, {
+            /* stage 5 */ { {5, 15}, {6, 105} },
+            /* stage 6 */ { {5, 1} },
+            /* stage 7 */ { {2, 104}, {3, 16} },
+            /* stage 8 */ { {2, 104}, {3, 16} },
+            /* stage 9 */ { {1, 88} },
+            /* stage 10 */ { {1, 1} },
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery12, TKqpTasksGraphTpchFixture) {
@@ -1829,24 +1815,22 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 5u);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 1920);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 1560);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 240);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 195);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        // Per-stage node histogram (fill the table from logs of a run on the reference revision):
-        // const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-        //     /* stage 0 */ {},
-        //     /* stage 1 */ {},
-        //     /* stage 2 */ {},
-        //     /* stage 3 */ {},
-        //     /* stage 4 */ {},
-        // };
-        // AssertNodeDistribution(dist, 0, expected);
+        AssertNodeDistribution(dist, 0, {
+            /* stage 0 */ { {13, 120} },
+            /* stage 1 */ { {2, 104}, {3, 16} },
+            /* stage 2 */ { {2, 104}, {3, 16} },
+            /* stage 3 */ { {1, 45}, {2, 75} },
+            /* stage 4 */ { {1, 1} },
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery13, TKqpTasksGraphTpchFixture) {
@@ -1886,25 +1870,23 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 6u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1920);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1440);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 240);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 240);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 180);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 180);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        // Per-stage node histogram (fill the table from logs of a run on the reference revision):
-        // const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-        //     /* stage 0 */ {},
-        //     /* stage 1 */ {},
-        //     /* stage 2 */ {},
-        //     /* stage 3 */ {},
-        //     /* stage 4 */ {},
-        //     /* stage 5 */ {},
-        // };
-        // AssertNodeDistribution(dist, 0, expected);
+        AssertNodeDistribution(dist, 0, {
+            /* stage 0 */ { {2, 104}, {3, 16} },
+            /* stage 1 */ { {12, 120} },
+            /* stage 2 */ { {2, 104}, {3, 16} },
+            /* stage 3 */ { {1, 60}, {2, 60} },
+            /* stage 4 */ { {1, 60}, {2, 60} },
+            /* stage 5 */ { {1, 1} },
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery14, TKqpTasksGraphTpchFixture) {
@@ -1935,7 +1917,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 5u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1920);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1680);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 1);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  0), 1);
@@ -1943,15 +1925,15 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        // Per-stage node histogram (fill the table from logs of a run on the reference revision):
-        // const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-        //     /* stage 0 */ {},
-        //     /* stage 1 */ {},
-        //     /* stage 2 */ {},
-        //     /* stage 3 */ {},
-        //     /* stage 4 */ {},
-        // };
-        // AssertNodeDistribution(dist, 0, expected);
+        AssertNodeDistribution(dist, 0, {
+            /* stage 0 */ { {2, 104}, {3, 16} },
+            /* stage 1 */ { {14, 120} },
+            /* stage 2 */ { {2, 104}, {3, 16} },
+            /* stage 3 */ { {1, 1} },
+        });
+        AssertNodeDistribution(dist, 1, {
+            /* stage 4 */ { {1, 1} },
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery15, TKqpTasksGraphTpchFixture) {
@@ -2011,30 +1993,28 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 8u);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 1920);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1920);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 1920);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 540);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 540);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 67);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        // Per-stage node histogram (fill the table from logs of a run on the reference revision):
-        // const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-        //     /* stage 0 */ {},
-        //     /* stage 1 */ {},
-        //     /* stage 2 */ {},
-        //     /* stage 3 */ {},
-        //     /* stage 4 */ {},
-        //     /* stage 5 */ {},
-        //     /* stage 6 */ {},
-        //     /* stage 7 */ {},
-        // };
-        // AssertNodeDistribution(dist, 0, expected);
+        AssertNodeDistribution(dist, 0, {
+            /* stage 0 */ { {4, 60}, {5, 60} },
+            /* stage 1 */ { {4, 60}, {5, 60} },
+            /* stage 2 */ { {2, 104}, {3, 16} },
+            /* stage 3 */ { {2, 104}, {3, 16} },
+            /* stage 4 */ { {1, 1} },
+            /* stage 5 */ { {1, 1} },
+            /* stage 6 */ { {1, 67} },
+            /* stage 7 */ { {1, 1} },
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery16, TKqpTasksGraphTpchFixture) {
@@ -2112,18 +2092,16 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        // Per-stage node histogram (fill the table from logs of a run on the reference revision):
-        // const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-        //     /* stage 0 */ {},
-        //     /* stage 1 */ {},
-        //     /* stage 2 */ {},
-        //     /* stage 3 */ {},
-        //     /* stage 4 */ {},
-        //     /* stage 5 */ {},
-        //     /* stage 6 */ {},
-        //     /* stage 7 */ {},
-        // };
-        // AssertNodeDistribution(dist, 0, expected);
+        AssertNodeDistribution(dist, 0, {
+            /* stage 0 */ { {10, 120} },
+            /* stage 1 */ { {2, 104}, {3, 16} },
+            /* stage 2 */ { {2, 104}, {3, 16} },
+            /* stage 3 */ { {2, 104}, {3, 16} },
+            /* stage 4 */ { {2, 104}, {3, 16} },
+            /* stage 5 */ { {1, 32}, {2, 56}, {3, 32} },
+            /* stage 6 */ { {2, 120} },
+            /* stage 7 */ { {1, 1} },
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery17, TKqpTasksGraphTpchFixture) {
@@ -2183,18 +2161,18 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        // Per-stage node histogram (fill the table from logs of a run on the reference revision):
-        // const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-        //     /* stage 0 */ {},
-        //     /* stage 1 */ {},
-        //     /* stage 2 */ {},
-        //     /* stage 3 */ {},
-        //     /* stage 4 */ {},
-        //     /* stage 5 */ {},
-        //     /* stage 6 */ {},
-        //     /* stage 7 */ {},
-        // };
-        // AssertNodeDistribution(dist, 0, expected);
+        AssertNodeDistribution(dist, 0, {
+            /* stage 0 */ { {2, 104}, {3, 16} },
+            /* stage 1 */ { {2, 104}, {3, 16} },
+            /* stage 2 */ { {2, 104}, {3, 16} },
+            /* stage 3 */ { {1, 1}, {2, 22}, {3, 65} },
+            /* stage 4 */ { {2, 104}, {3, 16} },
+            /* stage 5 */ { {2, 104}, {3, 16} },
+            /* stage 6 */ { {1, 1} },
+        });
+        AssertNodeDistribution(dist, 1, {
+            /* stage 7 */ { {1, 1} },
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery18, TKqpTasksGraphTpchFixture) {
@@ -2254,29 +2232,27 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 8u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1200);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 1200);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 487);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 487);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 240);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 97);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        // Per-stage node histogram (fill the table from logs of a run on the reference revision):
-        // const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-        //     /* stage 0 */ {},
-        //     /* stage 1 */ {},
-        //     /* stage 2 */ {},
-        //     /* stage 3 */ {},
-        //     /* stage 4 */ {},
-        //     /* stage 5 */ {},
-        //     /* stage 6 */ {},
-        //     /* stage 7 */ {},
-        // };
-        // AssertNodeDistribution(dist, 0, expected);
+        AssertNodeDistribution(dist, 0, {
+            /* stage 0 */ { {2, 104}, {3, 16} },
+            /* stage 1 */ { {4, 113}, {5, 7} },
+            /* stage 2 */ { {3, 32}, {4, 49}, {5, 39} },
+            /* stage 3 */ { {2, 104}, {3, 16} },
+            /* stage 4 */ { {2, 104}, {3, 16} },
+            /* stage 5 */ { {2, 104}, {3, 16} },
+            /* stage 6 */ { {1, 97} },
+            /* stage 7 */ { {1, 1} },
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery19, TKqpTasksGraphTpchFixture) {
@@ -2324,7 +2300,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 5u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1920);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1680);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 1);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 1);
@@ -2332,15 +2308,13 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        // Per-stage node histogram (fill the table from logs of a run on the reference revision):
-        // const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-        //     /* stage 0 */ {},
-        //     /* stage 1 */ {},
-        //     /* stage 2 */ {},
-        //     /* stage 3 */ {},
-        //     /* stage 4 */ {},
-        // };
-        // AssertNodeDistribution(dist, 0, expected);
+        AssertNodeDistribution(dist, 0, {
+            /* stage 0 */ { {2, 104}, {3, 16} },
+            /* stage 1 */ { {14, 120} },
+            /* stage 2 */ { {2, 104}, {3, 16} },
+            /* stage 3 */ { {1, 1} },
+            /* stage 4 */ { {1, 1} },
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery20, TKqpTasksGraphTpchFixture) {
@@ -2424,36 +2398,34 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 11u);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 720);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 720);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 315);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 315);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 720);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 315);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 720);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 720);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 315);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 315);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 6);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 2);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 10), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        // Per-stage node histogram (fill the table from logs of a run on the reference revision):
-        // const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-        //     /* stage 0 */ {},
-        //     /* stage 1 */ {},
-        //     /* stage 2 */ {},
-        //     /* stage 3 */ {},
-        //     /* stage 4 */ {},
-        //     /* stage 5 */ {},
-        //     /* stage 6 */ {},
-        //     /* stage 7 */ {},
-        //     /* stage 8 */ {},
-        //     /* stage 9 */ {},
-        //     /* stage 10 */ {},
-        // };
-        // AssertNodeDistribution(dist, 0, expected);
+        AssertNodeDistribution(dist, 0, {
+            /* stage 0 */ { {2, 45}, {3, 75} },
+            /* stage 1 */ { {1, 1}, {2, 43}, {3, 76} },
+            /* stage 2 */ { {2, 104}, {3, 16} },
+            /* stage 3 */ { {2, 45}, {3, 75} },
+            /* stage 4 */ { {2, 104}, {3, 16} },
+            /* stage 5 */ { {1, 1}, {2, 43}, {3, 76} },
+            /* stage 6 */ { {2, 45}, {3, 75} },
+            /* stage 7 */ { {2, 104}, {3, 16} },
+            /* stage 8 */ { {2, 1} },
+            /* stage 9 */ { {2, 104}, {3, 16} },
+            /* stage 10 */ { {1, 1} },
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery21, TKqpTasksGraphTpchFixture) {
@@ -2498,35 +2470,33 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 11u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1200);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 10);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 225);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 1);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 1440);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 270);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 1440);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 1440);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 270);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 270);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 10), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        // Per-stage node histogram (fill the table from logs of a run on the reference revision):
-        // const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-        //     /* stage 0 */ {},
-        //     /* stage 1 */ {},
-        //     /* stage 2 */ {},
-        //     /* stage 3 */ {},
-        //     /* stage 4 */ {},
-        //     /* stage 5 */ {},
-        //     /* stage 6 */ {},
-        //     /* stage 7 */ {},
-        //     /* stage 8 */ {},
-        //     /* stage 9 */ {},
-        //     /* stage 10 */ {},
-        // };
-        // AssertNodeDistribution(dist, 0, expected);
+        AssertNodeDistribution(dist, 0, {
+            /* stage 0 */ { {2, 104}, {3, 16} },
+            /* stage 1 */ { {1, 15}, {2, 105} },
+            /* stage 2 */ { {1, 1} },
+            /* stage 3 */ { {2, 104}, {3, 16} },
+            /* stage 4 */ { {2, 104}, {3, 16} },
+            /* stage 5 */ { {2, 104}, {3, 16} },
+            /* stage 6 */ { {2, 90}, {3, 30} },
+            /* stage 7 */ { {2, 104}, {3, 16} },
+            /* stage 8 */ { {2, 90}, {3, 30} },
+            /* stage 9 */ { {2, 90}, {3, 30} },
+            /* stage 10 */ { {1, 1} },
+        });
     }
 
     Y_UNIT_TEST_F(TpchQuery22, TKqpTasksGraphTpchFixture) {
@@ -2602,26 +2572,24 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 1);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 1920);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 2160);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 2160);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 390);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 438);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 438);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        // Per-stage node histogram (fill the table from logs of a run on the reference revision):
-        // const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-        //     /* stage 0 */ {},
-        //     /* stage 1 */ {},
-        //     /* stage 2 */ {},
-        //     /* stage 3 */ {},
-        //     /* stage 4 */ {},
-        //     /* stage 5 */ {},
-        //     /* stage 6 */ {},
-        //     /* stage 7 */ {},
-        // };
-        // AssertNodeDistribution(dist, 0, expected);
+        AssertNodeDistribution(dist, 0, {
+            /* stage 0 */ { {2, 104}, {3, 16} },
+            /* stage 1 */ { {1, 1} },
+            /* stage 2 */ { {1, 1} },
+            /* stage 3 */ { {2, 104}, {3, 16} },
+            /* stage 4 */ { {3, 90}, {4, 30} },
+            /* stage 5 */ { {3, 42}, {4, 78} },
+            /* stage 6 */ { {3, 42}, {4, 78} },
+            /* stage 7 */ { {1, 1} },
+        });
     }
 
     Y_UNIT_TEST_F(CustomQuery01, TKqpTasksGraphTpchFixture) {
@@ -2730,62 +2698,60 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 25u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 600);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 600);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 234);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 234);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 240);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 93);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 240);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 240);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 93);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 100);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 93);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 10), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 11), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 12), 240);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 13), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 14), 240);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 12), 93);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 13), 100);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 14), 93);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 15), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 16), 5);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 16), 1);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 17), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 18), 240);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 18), 93);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 19), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 20), 240);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 21), 480);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 22), 240);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 23), 720);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 20), 93);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 21), 187);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 22), 93);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 23), 281);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 24), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
-        // Per-stage node histogram (fill the table from logs of a run on the reference revision):
-        // const TVector<THashMap<ui32, ui32>> expected = { // index = stageId, value = {tasksOnNode -> nodeCount}
-        //     /* stage 0 */ {},
-        //     /* stage 1 */ {},
-        //     /* stage 2 */ {},
-        //     /* stage 3 */ {},
-        //     /* stage 4 */ {},
-        //     /* stage 5 */ {},
-        //     /* stage 6 */ {},
-        //     /* stage 7 */ {},
-        //     /* stage 8 */ {},
-        //     /* stage 9 */ {},
-        //     /* stage 10 */ {},
-        //     /* stage 11 */ {},
-        //     /* stage 12 */ {},
-        //     /* stage 13 */ {},
-        //     /* stage 14 */ {},
-        //     /* stage 15 */ {},
-        //     /* stage 16 */ {},
-        //     /* stage 17 */ {},
-        //     /* stage 18 */ {},
-        //     /* stage 19 */ {},
-        //     /* stage 20 */ {},
-        //     /* stage 21 */ {},
-        //     /* stage 22 */ {},
-        //     /* stage 23 */ {},
-        //     /* stage 24 */ {},
-        // };
-        // AssertNodeDistribution(dist, 0, expected);
+        AssertNodeDistribution(dist, 0, {
+            /* stage 0 */ { {2, 104}, {3, 16} },
+            /* stage 1 */ { {2, 104}, {3, 16} },
+            /* stage 2 */ { {1, 6}, {2, 114} },
+            /* stage 3 */ { {1, 6}, {2, 114} },
+            /* stage 4 */ { {2, 104}, {3, 16} },
+            /* stage 5 */ { {1, 93} },
+            /* stage 6 */ { {2, 104}, {3, 16} },
+            /* stage 7 */ { {1, 93} },
+            /* stage 8 */ { {1, 100} },
+            /* stage 9 */ { {1, 93} },
+            /* stage 10 */ { {2, 104}, {3, 16} },
+            /* stage 11 */ { {2, 104}, {3, 16} },
+            /* stage 12 */ { {1, 93} },
+            /* stage 13 */ { {1, 100} },
+            /* stage 14 */ { {1, 93} },
+            /* stage 15 */ { {1, 1} },
+            /* stage 16 */ { {1, 1} },
+            /* stage 17 */ { {1, 1} },
+            /* stage 18 */ { {1, 93} },
+            /* stage 19 */ { {1, 1} },
+            /* stage 20 */ { {1, 93} },
+            /* stage 21 */ { {1, 53}, {2, 67} },
+            /* stage 22 */ { {1, 93} },
+            /* stage 23 */ { {2, 79}, {3, 41} },
+            /* stage 24 */ { {1, 1} },
+        });
     }
 
 } // Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild)

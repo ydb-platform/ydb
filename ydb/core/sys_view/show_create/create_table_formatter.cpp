@@ -1991,6 +1991,23 @@ void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const N
         EscapeValue(options.GetSchemeNeedActualization(), paramsStr);
         del = ", ";
     }
+    if (options.HasInsertOptions()) {
+        const auto& insertOptions = options.GetInsertOptions();
+        if (insertOptions.HasBuildIndexesEnabled()) {
+            paramsStr << del;
+            EscapeName("INSERT_OPTIONS.BUILD_INDEXES_ENABLED", paramsStr);
+            paramsStr << "=";
+            EscapeValue(insertOptions.GetBuildIndexesEnabled(), paramsStr);
+            del = ", ";
+        }
+        if (insertOptions.HasBuildIndexesMinBlobBytes()) {
+            paramsStr << del;
+            EscapeName("INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES", paramsStr);
+            paramsStr << "=";
+            EscapeValue(insertOptions.GetBuildIndexesMinBlobBytes(), paramsStr);
+            del = ", ";
+        }
+    }
     if (options.HasScanReaderPolicyName() && !options.GetScanReaderPolicyName().empty()) {
         paramsStr << del;
         EscapeName("SCAN_READER_POLICY_NAME", paramsStr);
@@ -2041,6 +2058,12 @@ void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const N
                                 }
                                 if (zeroLevel.HasPortionsCountLimit()) {
                                     jsonLevel["portions_count_limit"] = zeroLevel.GetPortionsCountLimit();
+                                }
+                                if (zeroLevel.HasCompactAtLevel()) {
+                                    jsonLevel["compact_at_level"] = zeroLevel.GetCompactAtLevel();
+                                }
+                                if (zeroLevel.HasSkipLevelMinBlobSize()) {
+                                    jsonLevel["skip_level_min_blob_size"] = zeroLevel.GetSkipLevelMinBlobSize();
                                 }
                                 break;
                             }

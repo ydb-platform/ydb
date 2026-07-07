@@ -18,20 +18,20 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         auto &rec = Request->Get()->Record;
-        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateLastProvidedConfig",
-            {"execute", rec});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateLastProvidedConfig execute",
+            {"ev", rec.ShortDebugString()});
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
         auto subscription = Self->SubscriptionIndex.GetSubscription(rec.GetSubscriptionId());
         if (!subscription) {
             YDB_LOG_DEBUG_CTX(ctx, "Config notification response for missing subscription",
-                {"id", rec.GetSubscriptionId()});
+                {"subscriptionId", rec.GetSubscriptionId()});
             return true;
         }
         if (Request->Cookie != subscription->Cookie) {
             YDB_LOG_DEBUG_CTX(ctx, "Config notification response cookie mismatch for subscription",
-                {"id", rec.GetSubscriptionId()});
+                {"subscriptionId", rec.GetSubscriptionId()});
             Y_ABORT_UNLESS(subscription->Subscriber.ServiceId,
                      "%s  ==>  %s",
                      rec.ShortDebugString().c_str(),

@@ -46,7 +46,7 @@ public:
             Y_PROTOBUF_SUPPRESS_NODISCARD config.ParseFromArray(configString.data(), configString.size());
             Self->LoadConfigFromProto(config);
 
-            YDB_LOG_DEBUG_CTX(ctx, "Loaded",
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded config",
                 {"config", config.DebugString()});
         } else {
             YDB_LOG_DEBUG_CTX(ctx, "Using default config");

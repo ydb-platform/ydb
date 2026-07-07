@@ -25,7 +25,7 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdatePoolState for pool of",
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdatePoolState execute",
             {"poolName", Pool->Config.GetName()},
             {"tenantPath", Tenant->Path},
             {"state", State});
@@ -72,8 +72,8 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdatePoolState complete for tenant state",
-            {"name", Pool->Config.GetName()},
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdatePoolState complete",
+            {"poolName", Pool->Config.GetName()},
             {"state", Tenant->State});
 
         if (Update) {

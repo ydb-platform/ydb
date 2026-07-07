@@ -20,7 +20,7 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_DEBUG_CTX(ctx, "TTxRevertPoolState for pool of tenant",
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRevertPoolState execute",
             {"poolName", Pool->Config.GetName()},
             {"tenantPath", Tenant->Path});
 

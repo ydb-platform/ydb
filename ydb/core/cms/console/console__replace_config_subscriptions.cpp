@@ -19,8 +19,8 @@ public:
                const TString &error,
                const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG_CTX(ctx, "Cannot replace",
-            {"subscriptions", error});
+        YDB_LOG_DEBUG_CTX(ctx, "Cannot replace subscriptions",
+            {"error", error});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);
@@ -35,8 +35,8 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         auto &rec = Request->Get()->Record;
-        YDB_LOG_DEBUG_CTX(ctx, "TTxReplaceConfigSubscriptions",
-            {"execute", rec});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxReplaceConfigSubscriptions execute",
+            {"ev", rec.ShortDebugString()});
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
@@ -94,7 +94,7 @@ public:
             Self->ApplyPendingSubscriptionModifications(ctx, ev);
         } else {
             YDB_LOG_TRACE_CTX(ctx, "Send",
-                {"TEvReplaceConfigSubscriptionsResponse", Response->Record});
+                {"ev", Response->Record});
             ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
         }
 

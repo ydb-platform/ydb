@@ -465,7 +465,7 @@ void TExternalIdpProvider::RegisterFields(const TActorContext& ctx) {
     }
 
     if (Config.HasIssuer() && !Config.GetIssuer().empty() && !IsHttpsUrl(Config.GetIssuer())) {
-        YDB_LOG_ERROR("Issuer must use https scheme",
+        YDB_LOG_ERROR("Issuer must use https:// scheme, refusing to fetch keys over plaintext; disabling External IdP provider",
             {"issuer", Config.GetIssuer()});
         Config.ClearIssuer();
     }

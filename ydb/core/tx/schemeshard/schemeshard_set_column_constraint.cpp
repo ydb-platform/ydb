@@ -230,7 +230,7 @@ void TSchemeShard::PersistSetColumnConstraintShardDone(
 
 void TSchemeShard::PersistSetColumnConstraintForget(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& info) {
     db.Table<Schema::SetColumnConstraint>().Key(ui64(info.Id)).Delete();
-    
+
     for (const auto& [shardIdx, _] : info.ValidationShards) {
         db.Table<Schema::SetColumnConstraintShardStatus>()
             .Key(info.Id, shardIdx.GetOwnerId(), shardIdx.GetLocalId())
@@ -243,11 +243,18 @@ void TSchemeShard::ForgetSetColumnConstraint(NIceDb::TNiceDb& db, const TSetColu
     const auto byTimeKey = std::make_pair(info.StartTime, id);
 
     PersistSetColumnConstraintForget(db, info);
+
     SetColumnConstraintOperationsByTime.erase(byTimeKey);
-    SetColumnConstraintOperations.erase(id);
     if (info.Uid) {
         SetColumnConstraintOperationsByUid.erase(info.Uid);
     }
+
+    TxIdToSetColumnConstraintOperations.erase(info.LockTxId);
+    TxIdToSetColumnConstraintOperations.erase(info.LockNullWritesTxId);
+    TxIdToSetColumnConstraintOperations.erase(info.UnlockNullWritesTxId);
+    TxIdToSetColumnConstraintOperations.erase(info.UnlockTxId);
+
+    SetColumnConstraintOperations.erase(id);
 }
 
 void TSchemeShard::Handle(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev, const TActorContext& ctx) {

@@ -706,11 +706,11 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             pbuffers[1].DDiskSlotId,
             sentIds[1].GetDDiskSlotId());
 
-        UNIT_ASSERT_VALUES_EQUAL(pbuffers[2].NodeId, sentIds[4].GetNodeId());
-        UNIT_ASSERT_VALUES_EQUAL(pbuffers[2].PDiskId, sentIds[4].GetPDiskId());
+        UNIT_ASSERT_VALUES_EQUAL(pbuffers[4].NodeId, sentIds[2].GetNodeId());
+        UNIT_ASSERT_VALUES_EQUAL(pbuffers[4].PDiskId, sentIds[2].GetPDiskId());
         UNIT_ASSERT_VALUES_EQUAL(
-            pbuffers[2].DDiskSlotId,
-            sentIds[4].GetDDiskSlotId());
+            pbuffers[4].DDiskSlotId,
+            sentIds[2].GetDDiskSlotId());
     }
 
     Y_UNIT_TEST_F(
@@ -787,6 +787,15 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                 0,
                 hostStat.InflightCount(EOperation::WriteToManyPBuffers));
             UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ConsecutiveErrorCount);
+        }
+        // Non-coordinator hosts should not have errors or inflight changes.
+        for (auto host: {THostIndex(1), THostIndex(3)}) {
+            const auto& hostStat = dbg->GetOracle()->GetHostStatistics(host);
+            const auto& errorsInfo = hostStat.GetErrorsInfo(TInstant::Now());
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                hostStat.InflightCount(EOperation::WriteToManyPBuffers));
+            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveErrorCount);
         }
     }
 }

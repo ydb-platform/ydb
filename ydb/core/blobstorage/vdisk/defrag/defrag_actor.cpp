@@ -179,10 +179,21 @@ namespace NKikimr {
             }
 
             void Handle(TEvTakeHullSnapshotResult::TPtr ev) {
-                TDefragCalcStat calcStat(std::move(ev->Get()->Snap), DCtx->HugeBlobCtx);
+                const TInstant now = TAppData::TimeProvider->Now();
+                // When enabled, this single scan also computes per-SST storage ratio and publishes it, so the
+                // compaction selector finds ratios fresh and skips its own whole-DB walk (one pass for both).
+                // Rate-limit to at most once per HullCompStorageRatioCalcPeriod: frequent active-defrag scans
+                // must not re-walk the whole tree for ratio each time (they would only refresh still-fresh
+                // ratios). Between refreshes the selector picks up newly written SSTs on its own.
+                const TDuration calcPeriod = DCtx->VCfg->HullCompStorageRatioCalcPeriod;
+                const TInstant lastRatioPublish = TInstant::FromValue(DCtx->LastRatioPublishUs.load());
+                const bool produceRatios = DCtx->VCfg->HullCompStorageRatioSinglePass
+                    && lastRatioPublish + calcPeriod <= now;
+                TDefragCalcStatWithRatio calcStat(std::move(ev->Get()->Snap), DCtx->HugeBlobCtx, produceRatios);
                 std::unique_ptr<TEvDefragStartQuantum> res;
                 if (calcStat.Scan(NDefrag::MaxSnapshotHoldDuration)) {
                     STLOG(PRI_ERROR, BS_VDISK_DEFRAG, BSVDD05, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan timed out"));
+                    // partial scan -> do not publish incomplete ratios; the selector keeps its own path
                 } else {
                     const ui32 totalChunks = calcStat.GetTotalChunks();
                     const ui32 usefulChunks = calcStat.GetUsefulChunks();
@@ -221,6 +232,13 @@ namespace NKikimr {
                         (SpaceCouldBeFreedViaCompaction, spaceCouldBeFreedViaCompaction),
                         (GarbageThresholdToRunCompaction, garbageThresholdToRunCompaction)
                     );
+
+                    // The scan completed, so per-SST ratios are complete: publish them for the selector and
+                    // remember when, to rate-limit the next refresh to once per calcPeriod.
+                    if (produceRatios) {
+                        calcStat.ApplyStorageRatios(now);
+                        DCtx->LastRatioPublishUs.store(now.GetValue());
+                    }
                 }
                 if (!res) {
                     res = std::make_unique<TEvDefragStartQuantum>(TChunksToDefrag());

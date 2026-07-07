@@ -132,6 +132,12 @@ namespace NKikimr {
         TControlWrapper HullCompMaxInFlightReads;
         TControlWrapper HullCompFullCompPeriodSec;
         TControlWrapper HullCompThrottlerBytesRate;
+        // Single umbrella switch for the shared storage-ratio pass optimization (0 == legacy behaviour):
+        //  - the compaction selector recomputes per-SST ratio in ONE whole-DB pass (TSinglePassRatioCollector)
+        //    instead of the legacy per-SST MergeIteratorWithWholeDb loop that re-walks the whole DB per L0 SST;
+        //  - the defrag planner's existing whole-DB scan ALSO computes and publishes per-SST ratio, so that one
+        //    walk serves both defrag and the selector (the selector then finds LogoBlobs ratios fresh and skips).
+        TControlWrapper HullCompStorageRatioSinglePass = 0;
         TControlWrapper DefragThrottlerBytesRate;
         TControlWrapper MaxActiveCompactionsPerPDisk;
         double HullCompReadBatchEfficiencyThreshold;

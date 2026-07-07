@@ -1495,6 +1495,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 300,
             DefaultValue: 0 }];
+        optional uint64 HullCompStorageRatioSinglePass = 52 [(ControlOptions) = {
+            Description: "Compute per-SST storage ratio in a single shared whole-DB pass: the selector uses one pass instead of a per-SST rewalk, and the defrag planner's scan also publishes ratios (one walk for both). 0 == legacy",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
 
         reserved 14;
         optional uint64 ThrottlingDryRun = 26 [(ControlOptions) = {

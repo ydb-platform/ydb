@@ -106,17 +106,14 @@ private:
     void PassAway() final {
         //Counters->VectorResolveActorsCount->Dec();
 
-        if (ReadActorId) {
-            Send(ReadActorId, new TEvents::TEvPoison);
-            ReadActorId = {};
-        }
-
         {
             auto guard = BindAllocator();
             Input.Clear();
             NKikimr::NMiniKQL::TUnboxedValueDeque emptyList;
             emptyList.swap(PendingRows);
         }
+
+        DestroyReadActor();
 
         MySpan.End();
 
@@ -374,15 +371,24 @@ private:
                     Locks.push_back(resultInfo.GetLocks(i));
                 }
             }
-            Send(ReadActorId, new TEvents::TEvPoison);
-            ReadActorId = {};
-            ReadActorInput = nullptr;
+            DestroyReadActor();
             ReadingChildClusters = false;
             // Convert to NKikimr::NKMeans::TClusters
             if (!Failed) {
                 auto guard = BindAllocator();
                 ParseFetchedClusters();
             }
+        }
+    }
+
+    void DestroyReadActor() {
+        if (ReadActorInput) {
+            // Destroy ReadActor directly, just like library/yql/dq compute actor destroys us
+            // Otherwise it may reference an already destroyed TypeEnv and crash in BindAllocator
+            // when handling TEvPoison
+            ReadActorInput->PassAway();
+            ReadActorId = {};
+            ReadActorInput = nullptr;
         }
     }
 

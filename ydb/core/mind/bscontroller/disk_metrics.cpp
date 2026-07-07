@@ -1,5 +1,7 @@
 #include "impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
+
 namespace NKikimr::NBsController {
 
 class TBlobStorageController::TTxUpdateDiskMetrics : public TTransactionBase<TBlobStorageController> {
@@ -63,7 +65,9 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
     std::vector<TPDiskId> pdiskIds;
     std::vector<TVSlotId> vslotIds;
 
-    STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXUDM01, "Updating disk status", (Record, record));
+    YDB_LOG_DEBUG("Updating disk status",
+        {"marker", "BSCTXUDM01"},
+        {"record", record});
 
     // apply VDisk metrics update
     std::set<const TGroupInfo*> dirtyGroups;
@@ -82,12 +86,16 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
 
             // update in-memory metrics
             i64 allocatedSizeIncrement;
-            if (slot->UpdateVDiskMetrics(m, &allocatedSizeIncrement) && slot->Group) {
+            bool statusFlagsChanged;
+            slot->UpdateVDiskMetrics(m, &allocatedSizeIncrement, &statusFlagsChanged);
+            if (statusFlagsChanged && slot->Group) {
                 dirtyGroups.insert(slot->Group);
+            }
+            if (slot->Group) {
                 groupsToCheck.insert(slot->Group->ID);
             }
             if (allocatedSizeIncrement && !slot->IsBeingDeleted()) {
-                const TGroupInfo *group = FindGroup(slot->GroupId);
+                const TGroupInfo *group = FindGroup(slot->GroupId); // we don't refer to slot->Group because we account donors too
                 Y_ABORT_UNLESS(group);
                 StoragePoolStat->UpdateAllocatedSize(TStoragePoolStat::ConvertId(group->StoragePoolId), allocatedSizeIncrement);
             }
@@ -120,7 +128,9 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
             SysViewChangedVSlots.insert(it->second);
             SysViewChangedGroups.insert(vdiskId.GroupID);
         } else {
-            STLOG(PRI_NOTICE, BS_CONTROLLER, BSCTXUDM02, "VDisk not found", (VDiskId, vdiskId));
+            YDB_LOG_NOTICE("VDisk not found",
+                {"marker", "BSCTXUDM02"},
+                {"VDiskId", vdiskId});
         }
     }
     for (const TGroupInfo *group : dirtyGroups) {
@@ -140,6 +150,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
             }
 
             if (pdisk->UpdatePDiskMetrics(m, now)) {
+                // this PDisk just did obtain full metrics set, we can unblock any pending SelectGroups operations
                 for (auto& [id, slot] : pdisk->VSlotsOnPDisk) {
                     if (slot->Group) {
                         groupsToCheck.insert(slot->Group->ID);
@@ -153,7 +164,9 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
             it->second.PDiskMetrics = m;
             it->second.PDiskMetricsUpdateTimestamp = now;
         } else {
-            STLOG(PRI_NOTICE, BS_CONTROLLER, BSCTXUDM03, "PDisk not found", (PDiskId, pdiskId));
+            YDB_LOG_NOTICE("PDisk not found",
+                {"marker", "BSCTXUDM03"},
+                {"PDiskId", pdiskId});
         }
     }
 

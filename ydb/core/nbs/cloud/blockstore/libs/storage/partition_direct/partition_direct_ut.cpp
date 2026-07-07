@@ -11,6 +11,8 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 
+#include <ydb/library/actors/core/mon.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr;
@@ -769,7 +771,11 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NKikimrServices::NBS_PARTITION,
             NActors::NLog::PRI_DEBUG);
 
-        auto scopedService = SetupStorage(env, EWriteMode::IndirectWrite);
+        // set big writeHedgingDelay for test pure fallback to direct writes
+        auto scopedService = SetupStorage(
+            env,
+            EWriteMode::IndirectWrite,
+            TDuration::Seconds(10));
 
         auto partition = CreatePartitionTablet(env);
 
@@ -1037,7 +1043,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             env.Sim(TDuration::Seconds(1));
 
             scopedService = std::make_unique<TScopedNbsService>(
-                CreateNbsConfig(EWriteMode::PBufferReplication));
+                CreateNbsConfig(EWriteMode::IndirectWrite));
         }
 
         WaitForTabletBoot(env);
@@ -1257,6 +1263,41 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         }
 
         StopFastPathService(env, partition, edge);
+    }
+
+    Y_UNIT_TEST(MonitoringPageRenders)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        const ui64 tabletId = CreatePartitionTablet(env);
+
+        const TActorId edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        runtime->SendToPipe(
+            tabletId,
+            edge,
+            new NActors::NMon::TEvRemoteHttpInfo(
+                "/app?TabletID=" + ToString(tabletId)),
+            0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+
+        auto response =
+            env.WaitForEdgeActorEvent<NActors::NMon::TEvRemoteHttpInfoRes>(
+                edge);
+        UNIT_ASSERT(response);
+
+        const TString& html = response->Get()->Html;
+        UNIT_ASSERT(!html.empty());
+        UNIT_ASSERT_STRING_CONTAINS(html, "partition_direct tablet");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Overview");
     }
 }
 

@@ -108,6 +108,14 @@ public:
         ReduceOperationSpec_ = reduceOperationSpec;
     }
 
+    void SetIsMapReduceReducer(bool value) {
+        IsMapReduceReducer_ = value;
+    }
+
+    void SetIsMapReduceMap(bool value) {
+        IsMapReduceMap_ = value;
+    }
+
     void Save(IOutputStream& s) const override;
     void Load(IInputStream& s) override;
 
@@ -120,6 +128,8 @@ protected:
 
     void ChangeMkqlIOSpecIfNeeded() override;
 
+    void PostInitMkqlIOSpec() override;
+
     bool NeedWriteStats() override {
         return false;
     }
@@ -130,7 +140,7 @@ private:
     void FillQueueFromInputTablesOrdered();
     void FillQueueFromReduceInput();
 
-    void InitializeFmrUserJob();
+    void InitializeFmrUserJob(TVector<TString>* mapperBlobs = nullptr);
 
     TStatistics GetStatistics(const TFmrUserJobOptions& options);
 
@@ -145,6 +155,8 @@ private:
     TMaybe<TFmrTvmJobSettings> TvmSettings_ = Nothing();
     TMaybe<TVanillaInfo> VanillaInfo_ = Nothing();
     TMaybe<TReduceOperationSpec> ReduceOperationSpec_;
+    bool IsMapReduceReducer_ = false;
+    bool IsMapReduceMap_ = false;
     // End of serializable part
 
     // Non-serialized: set only for in-process execution via SetTableDataServiceDiscovery.

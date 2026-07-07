@@ -165,6 +165,7 @@ message TDqConfig {
         optional bool LimitTasksPerWindow = 5 [default = false];
         optional uint32 LimiterNumerator = 6 [default = 1];
         optional uint32 LimiterDenumerator = 7 [default = 2];
+        optional uint32 MaxRequestsPerTick = 8 [default = 200];
     }
 
     optional TScheduler Scheduler = 10;

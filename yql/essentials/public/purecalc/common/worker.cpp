@@ -79,7 +79,7 @@ TWorkerGraph::TWorkerGraph(
 
     // Setup struct types
 
-    NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(Env, FuncRegistry, false, langver);
+    NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(Env, FuncRegistry, /*voidWithEffects=*/false, langver);
     for (ui32 i = 0; i < inputsCount; ++i) {
         const auto* type = static_cast<NKikimr::NMiniKQL::TStructType*>(NCommon::BuildType(TPositionHandle(), *inputTypes[i], pgmBuilder, typeMemoization));
         const auto* originalType = type;
@@ -158,10 +158,10 @@ TWorkerGraph::TWorkerGraph(
         NKikimr::NUdf::EValidatePolicy::Exception,
         LLVMSettings,
         NKikimr::NMiniKQL::EGraphPerProcess::Multi,
-        nullptr,
+        /*stats=*/nullptr,
         countersProvider,
-        nullptr,
-        nullptr,
+        /*secureParamsProvider=*/nullptr,
+        /*logProvider=*/nullptr,
         langver,
         RuntimeSettings);
 
@@ -226,7 +226,7 @@ TWorker<TBase>::TWorker(
     : WorkerFactory_(std::move(factory))
     , Graph_(exprRoot, exprCtx, serializedProgram, funcRegistry, userData,
              inputTypes, originalInputTypes, rawInputTypes, outputType, rawOutputType,
-             LLVMSettings, countersProvider, nativeYtTypeFlags, deterministicTimeProviderSeed, langver, false,
+             LLVMSettings, countersProvider, nativeYtTypeFlags, deterministicTimeProviderSeed, langver, /*insideEvaluation=*/false,
              std::move(runtimeSettings))
 {
 }

@@ -5,13 +5,15 @@
     "endpointPrefix":"pi",
     "jsonVersion":"1.1",
     "protocol":"json",
+    "protocols":["json"],
     "serviceAbbreviation":"AWS PI",
     "serviceFullName":"AWS Performance Insights",
     "serviceId":"PI",
     "signatureVersion":"v4",
     "signingName":"pi",
     "targetPrefix":"PerformanceInsightsv20180227",
-    "uid":"pi-2018-02-27"
+    "uid":"pi-2018-02-27",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "CreatePerformanceAnalysisReport":{
@@ -117,7 +119,7 @@
         {"shape":"InternalServiceError"},
         {"shape":"NotAuthorizedException"}
       ],
-      "documentation":"<p>Retrieve Performance Insights metrics for a set of data sources over a time period. You can provide specific dimension groups and dimensions, and provide aggregation and filtering criteria for each group.</p> <note> <p>Each response element returns a maximum of 500 bytes. For larger elements, such as SQL statements, only the first 500 bytes are returned.</p> </note>"
+      "documentation":"<p>Retrieve Performance Insights metrics for a set of data sources over a time period. You can provide specific dimension groups and dimensions, and provide filtering criteria for each group. You must specify an aggregate function for each metric.</p> <note> <p>Each response element returns a maximum of 500 bytes. For larger elements, such as SQL statements, only the first 500 bytes are returned.</p> </note>"
     },
     "ListAvailableResourceDimensions":{
       "name":"ListAvailableResourceDimensions",
@@ -217,7 +219,7 @@
     },
     "AdditionalMetricsList":{
       "type":"list",
-      "member":{"shape":"RequestString"},
+      "member":{"shape":"SanitizedString"},
       "max":30,
       "min":1
     },
@@ -318,6 +320,12 @@
         "SUCCEEDED",
         "FAILED"
       ]
+    },
+    "AuthorizedActionsList":{
+      "type":"list",
+      "member":{"shape":"FineGrainedAction"},
+      "max":3,
+      "min":0
     },
     "Boolean":{"type":"boolean"},
     "ContextType":{
@@ -479,7 +487,7 @@
         },
         "Filter":{
           "shape":"MetricQueryFilterMap",
-          "documentation":"<p>One or more filters to apply in the request. Restrictions:</p> <ul> <li> <p>Any number of filters by the same dimension, as specified in the <code>GroupBy</code> or <code>Partition</code> parameters.</p> </li> <li> <p>A single filter for any other dimension in this dimension group.</p> </li> </ul>"
+          "documentation":"<p>One or more filters to apply in the request. Restrictions:</p> <ul> <li> <p>Any number of filters by the same dimension, as specified in the <code>GroupBy</code> or <code>Partition</code> parameters.</p> </li> <li> <p>A single filter for any other dimension in this dimension group.</p> </li> </ul> <note> <p>The <code>db.sql.db_id</code> filter isn't available for RDS for SQL Server DB instances.</p> </note>"
         },
         "MaxResults":{
           "shape":"MaxResults",
@@ -559,12 +567,12 @@
       "required":["Group"],
       "members":{
         "Group":{
-          "shape":"RequestString",
+          "shape":"SanitizedString",
           "documentation":"<p>The name of the dimension group. Valid values are as follows:</p> <ul> <li> <p> <code>db</code> - The name of the database to which the client is connected. The following values are permitted:</p> <ul> <li> <p>Aurora PostgreSQL</p> </li> <li> <p>Amazon RDS PostgreSQL</p> </li> <li> <p>Aurora MySQL</p> </li> <li> <p>Amazon RDS MySQL</p> </li> <li> <p>Amazon RDS MariaDB</p> </li> <li> <p>Amazon DocumentDB</p> </li> </ul> </li> <li> <p> <code>db.application</code> - The name of the application that is connected to the database. The following values are permitted:</p> <ul> <li> <p>Aurora PostgreSQL</p> </li> <li> <p>Amazon RDS PostgreSQL</p> </li> <li> <p>Amazon DocumentDB</p> </li> </ul> </li> <li> <p> <code>db.host</code> - The host name of the connected client (all engines).</p> </li> <li> <p> <code>db.query</code> - The query that is currently running (only Amazon DocumentDB).</p> </li> <li> <p> <code>db.query_tokenized</code> - The digest query (only Amazon DocumentDB).</p> </li> <li> <p> <code>db.session_type</code> - The type of the current session (only Aurora PostgreSQL and RDS PostgreSQL).</p> </li> <li> <p> <code>db.sql</code> - The text of the SQL statement that is currently running (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.sql_tokenized</code> - The SQL digest (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.user</code> - The user logged in to the database (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.wait_event</code> - The event for which the database backend is waiting (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.wait_event_type</code> - The type of event for which the database backend is waiting (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.wait_state</code> - The event for which the database backend is waiting (only Amazon DocumentDB).</p> </li> </ul>"
         },
         "Dimensions":{
-          "shape":"RequestStringList",
-          "documentation":"<p>A list of specific dimensions from a dimension group. If this parameter is not present, then it signifies that all of the dimensions in the group were requested, or are present in the response.</p> <p>Valid values for elements in the <code>Dimensions</code> array are:</p> <ul> <li> <p> <code>db.application.name</code> - The name of the application that is connected to the database. Valid values are as follows: </p> <ul> <li> <p>Aurora PostgreSQL</p> </li> <li> <p>Amazon RDS PostgreSQL</p> </li> <li> <p>Amazon DocumentDB</p> </li> </ul> </li> <li> <p> <code>db.host.id</code> - The host ID of the connected client (all engines).</p> </li> <li> <p> <code>db.host.name</code> - The host name of the connected client (all engines).</p> </li> <li> <p> <code>db.name</code> - The name of the database to which the client is connected. Valid values are as follows:</p> <ul> <li> <p>Aurora PostgreSQL</p> </li> <li> <p>Amazon RDS PostgreSQL</p> </li> <li> <p>Aurora MySQL</p> </li> <li> <p>Amazon RDS MySQL</p> </li> <li> <p>Amazon RDS MariaDB</p> </li> <li> <p>Amazon DocumentDB</p> </li> </ul> </li> <li> <p> <code>db.query.id</code> - The query ID generated by Performance Insights (only Amazon DocumentDB).</p> </li> <li> <p> <code>db.query.db_id</code> - The query ID generated by the database (only Amazon DocumentDB).</p> </li> <li> <p> <code>db.query.statement</code> - The text of the query that is being run (only Amazon DocumentDB).</p> </li> <li> <p> <code>db.query.tokenized_id</code> </p> </li> <li> <p> <code>db.query.tokenized.id</code> - The query digest ID generated by Performance Insights (only Amazon DocumentDB).</p> </li> <li> <p> <code>db.query.tokenized.db_id</code> - The query digest ID generated by Performance Insights (only Amazon DocumentDB).</p> </li> <li> <p> <code>db.query.tokenized.statement</code> - The text of the query digest (only Amazon DocumentDB).</p> </li> <li> <p> <code>db.session_type.name</code> - The type of the current session (only Amazon DocumentDB).</p> </li> <li> <p> <code>db.sql.id</code> - The hash of the full, non-tokenized SQL statement generated by Performance Insights (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.sql.db_id</code> - Either the SQL ID generated by the database engine, or a value generated by Performance Insights that begins with <code>pi-</code> (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.sql.statement</code> - The full text of the SQL statement that is running, as in <code>SELECT * FROM employees</code> (all engines except Amazon DocumentDB)</p> </li> <li> <p> <code>db.sql.tokenized_id</code> </p> </li> <li> <p> <code>db.sql_tokenized.id</code> - The hash of the SQL digest generated by Performance Insights (all engines except Amazon DocumentDB). In the console, <code>db.sql_tokenized.id</code> is called the Support ID because Amazon Web Services Support can look at this data to help you troubleshoot database issues.</p> </li> <li> <p> <code>db.sql_tokenized.db_id</code> - Either the native database ID used to refer to the SQL statement, or a synthetic ID such as <code>pi-2372568224</code> that Performance Insights generates if the native database ID isn't available (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.sql_tokenized.statement</code> - The text of the SQL digest, as in <code>SELECT * FROM employees WHERE employee_id = ?</code> (all engines except Amazon DocumentDB)</p> </li> <li> <p> <code>db.user.id</code> - The ID of the user logged in to the database (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.user.name</code> - The name of the user logged in to the database (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.wait_event.name</code> - The event for which the backend is waiting (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.wait_event.type</code> - The type of event for which the backend is waiting (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.wait_event_type.name</code> - The name of the event type for which the backend is waiting (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.wait_state.name</code> - The event for which the backend is waiting (only Amazon DocumentDB).</p> </li> </ul>"
+          "shape":"SanitizedStringList",
+          "documentation":"<p>A list of specific dimensions from a dimension group. If this parameter is not present, then it signifies that all of the dimensions in the group were requested, or are present in the response.</p> <p>Valid values for elements in the <code>Dimensions</code> array are:</p> <ul> <li> <p> <code>db.application.name</code> - The name of the application that is connected to the database. Valid values are as follows: </p> <ul> <li> <p>Aurora PostgreSQL</p> </li> <li> <p>Amazon RDS PostgreSQL</p> </li> <li> <p>Amazon DocumentDB</p> </li> </ul> </li> <li> <p> <code>db.host.id</code> - The host ID of the connected client (all engines).</p> </li> <li> <p> <code>db.host.name</code> - The host name of the connected client (all engines).</p> </li> <li> <p> <code>db.name</code> - The name of the database to which the client is connected. Valid values are as follows:</p> <ul> <li> <p>Aurora PostgreSQL</p> </li> <li> <p>Amazon RDS PostgreSQL</p> </li> <li> <p>Aurora MySQL</p> </li> <li> <p>Amazon RDS MySQL</p> </li> <li> <p>Amazon RDS MariaDB</p> </li> <li> <p>Amazon DocumentDB</p> </li> </ul> </li> <li> <p> <code>db.query.id</code> - The query ID generated by Performance Insights (only Amazon DocumentDB).</p> </li> <li> <p> <code>db.query.db_id</code> - The query ID generated by the database (only Amazon DocumentDB).</p> </li> <li> <p> <code>db.query.statement</code> - The text of the query that is being run (only Amazon DocumentDB).</p> </li> <li> <p> <code>db.query.tokenized_id</code> </p> </li> <li> <p> <code>db.query.tokenized.id</code> - The query digest ID generated by Performance Insights (only Amazon DocumentDB).</p> </li> <li> <p> <code>db.query.tokenized.db_id</code> - The query digest ID generated by Performance Insights (only Amazon DocumentDB).</p> </li> <li> <p> <code>db.query.tokenized.statement</code> - The text of the query digest (only Amazon DocumentDB).</p> </li> <li> <p> <code>db.session_type.name</code> - The type of the current session (only Amazon DocumentDB).</p> </li> <li> <p> <code>db.sql.id</code> - The hash of the full, non-tokenized SQL statement generated by Performance Insights (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.sql.db_id</code> - Either the SQL ID generated by the database engine, or a value generated by Performance Insights that begins with <code>pi-</code> (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.sql.statement</code> - The full text of the SQL statement that is running, as in <code>SELECT * FROM employees</code> (all engines except Amazon DocumentDB)</p> </li> <li> <p> <code>db.sql.tokenized_id</code> - The hash of the SQL digest generated by Performance Insights (all engines except Amazon DocumentDB). The <code>db.sql.tokenized_id</code> dimension fetches the value of the <code>db.sql_tokenized.id</code> dimension. Amazon RDS returns <code>db.sql.tokenized_id</code> from the <code>db.sql</code> dimension group. </p> </li> <li> <p> <code>db.sql_tokenized.id</code> - The hash of the SQL digest generated by Performance Insights (all engines except Amazon DocumentDB). In the console, <code>db.sql_tokenized.id</code> is called the Support ID because Amazon Web Services Support can look at this data to help you troubleshoot database issues.</p> </li> <li> <p> <code>db.sql_tokenized.db_id</code> - Either the native database ID used to refer to the SQL statement, or a synthetic ID such as <code>pi-2372568224</code> that Performance Insights generates if the native database ID isn't available (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.sql_tokenized.statement</code> - The text of the SQL digest, as in <code>SELECT * FROM employees WHERE employee_id = ?</code> (all engines except Amazon DocumentDB)</p> </li> <li> <p> <code>db.user.id</code> - The ID of the user logged in to the database (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.user.name</code> - The name of the user logged in to the database (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.wait_event.name</code> - The event for which the backend is waiting (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.wait_event.type</code> - The type of event for which the backend is waiting (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.wait_event_type.name</code> - The name of the event type for which the backend is waiting (all engines except Amazon DocumentDB).</p> </li> <li> <p> <code>db.wait_state.name</code> - The event for which the backend is waiting (only Amazon DocumentDB).</p> </li> </ul>"
         },
         "Limit":{
           "shape":"Limit",
@@ -646,7 +654,7 @@
     },
     "DimensionsMetricList":{
       "type":"list",
-      "member":{"shape":"RequestString"},
+      "member":{"shape":"SanitizedString"},
       "max":5,
       "min":1
     },
@@ -676,6 +684,14 @@
         "ENABLED_PENDING_REBOOT",
         "DISABLED_PENDING_REBOOT",
         "UNKNOWN"
+      ]
+    },
+    "FineGrainedAction":{
+      "type":"string",
+      "enum":[
+        "DescribeDimensionKeys",
+        "GetDimensionKeyDetails",
+        "GetResourceMetrics"
       ]
     },
     "GetDimensionKeyDetailsRequest":{
@@ -807,7 +823,7 @@
         },
         "MetricQueries":{
           "shape":"MetricQueryList",
-          "documentation":"<p>An array of one or more queries to perform. Each query must specify a Performance Insights metric, and can optionally specify aggregation and filtering criteria.</p>"
+          "documentation":"<p>An array of one or more queries to perform. Each query must specify a Performance Insights metric and specify an aggregate function, and you can provide filtering criteria. You must append the aggregate function to the metric. For example, to find the average for the metric <code>db.load</code> you must use <code>db.load.avg</code>. Valid values for aggregate functions include <code>.avg</code>, <code>.min</code>, <code>.max</code>, and <code>.sum</code>.</p>"
         },
         "StartTime":{
           "shape":"ISOTimestamp",
@@ -972,6 +988,10 @@
         "NextToken":{
           "shape":"NextToken",
           "documentation":"<p>An optional pagination token provided by a previous request. If this parameter is specified, the response includes only records beyond the token, up to the value specified by <code>MaxRecords</code>. </p>"
+        },
+        "AuthorizedActions":{
+          "shape":"AuthorizedActionsList",
+          "documentation":"<p>The actions to discover the dimensions you are authorized to access. If you specify multiple actions, then the response will contain the dimensions common for all the actions.</p> <p>When you don't specify this request parameter or provide an empty list, the response contains all the available dimensions for the target database engine whether or not you are authorized to access them.</p>"
         }
       }
     },
@@ -1152,8 +1172,8 @@
       "required":["Metric"],
       "members":{
         "Metric":{
-          "shape":"RequestString",
-          "documentation":"<p>The name of a Performance Insights metric to be measured.</p> <p>Valid values for <code>Metric</code> are:</p> <ul> <li> <p> <code>db.load.avg</code> - A scaled representation of the number of active sessions for the database engine.</p> </li> <li> <p> <code>db.sampledload.avg</code> - The raw number of active sessions for the database engine.</p> </li> <li> <p>The counter metrics listed in <a href=\"https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/USER_PerfInsights_Counters.html#USER_PerfInsights_Counters.OS\">Performance Insights operating system counters</a> in the <i>Amazon Aurora User Guide</i>.</p> </li> </ul> <p>If the number of active sessions is less than an internal Performance Insights threshold, <code>db.load.avg</code> and <code>db.sampledload.avg</code> are the same value. If the number of active sessions is greater than the internal threshold, Performance Insights samples the active sessions, with <code>db.load.avg</code> showing the scaled values, <code>db.sampledload.avg</code> showing the raw values, and <code>db.sampledload.avg</code> less than <code>db.load.avg</code>. For most use cases, you can query <code>db.load.avg</code> only.</p>"
+          "shape":"SanitizedString",
+          "documentation":"<p>The name of a Performance Insights metric to be measured.</p> <p>Valid values for <code>Metric</code> are:</p> <ul> <li> <p> <code>db.load.avg</code> - A scaled representation of the number of active sessions for the database engine.</p> </li> <li> <p> <code>db.sampledload.avg</code> - The raw number of active sessions for the database engine.</p> </li> <li> <p>The counter metrics listed in <a href=\"https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/USER_PerfInsights_Counters.html#USER_PerfInsights_Counters.OS\">Performance Insights operating system counters</a> in the <i>Amazon Aurora User Guide</i>.</p> </li> <li> <p>The counter metrics listed in <a href=\"https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_PerfInsights_Counters.html#USER_PerfInsights_Counters.OS\">Performance Insights operating system counters</a> in the <i>Amazon RDS User Guide</i>.</p> </li> </ul> <p>If the number of active sessions is less than an internal Performance Insights threshold, <code>db.load.avg</code> and <code>db.sampledload.avg</code> are the same value. If the number of active sessions is greater than the internal threshold, Performance Insights samples the active sessions, with <code>db.load.avg</code> showing the scaled values, <code>db.sampledload.avg</code> showing the raw values, and <code>db.sampledload.avg</code> less than <code>db.load.avg</code>. For most use cases, you can query <code>db.load.avg</code> only.</p>"
         },
         "GroupBy":{
           "shape":"DimensionGroup",
@@ -1161,14 +1181,14 @@
         },
         "Filter":{
           "shape":"MetricQueryFilterMap",
-          "documentation":"<p>One or more filters to apply in the request. Restrictions:</p> <ul> <li> <p>Any number of filters by the same dimension, as specified in the <code>GroupBy</code> parameter.</p> </li> <li> <p>A single filter for any other dimension in this dimension group.</p> </li> </ul>"
+          "documentation":"<p>One or more filters to apply in the request. Restrictions:</p> <ul> <li> <p>Any number of filters by the same dimension, as specified in the <code>GroupBy</code> parameter.</p> </li> <li> <p>A single filter for any other dimension in this dimension group.</p> </li> </ul> <note> <p>The <code>db.sql.db_id</code> filter isn't available for RDS for SQL Server DB instances.</p> </note>"
         }
       },
-      "documentation":"<p>A single query to be processed. You must provide the metric to query. If no other parameters are specified, Performance Insights returns all data points for the specified metric. Optionally, you can request that the data points be aggregated by dimension group (<code>GroupBy</code>), and return only those data points that match your criteria (<code>Filter</code>).</p>"
+      "documentation":"<p>A single query to be processed. You must provide the metric to query and append an aggregate function to the metric. For example, to find the average for the metric <code>db.load</code> you must use <code>db.load.avg</code>. Valid values for aggregate functions include <code>.avg</code>, <code>.min</code>, <code>.max</code>, and <code>.sum</code>. If no other parameters are specified, Performance Insights returns all data points for the specified metric. Optionally, you can request that the data points be aggregated by dimension group (<code>GroupBy</code>), and return only those data points that match your criteria (<code>Filter</code>).</p>"
     },
     "MetricQueryFilterMap":{
       "type":"map",
-      "key":{"shape":"RequestString"},
+      "key":{"shape":"SanitizedString"},
       "value":{"shape":"RequestString"}
     },
     "MetricQueryList":{
@@ -1179,7 +1199,7 @@
     },
     "MetricTypeList":{
       "type":"list",
-      "member":{"shape":"RequestString"}
+      "member":{"shape":"SanitizedString"}
     },
     "MetricValuesList":{
       "type":"list",
@@ -1252,15 +1272,9 @@
       "min":0,
       "pattern":".*\\S.*"
     },
-    "RequestStringList":{
-      "type":"list",
-      "member":{"shape":"RequestString"},
-      "max":10,
-      "min":1
-    },
     "RequestedDimensionList":{
       "type":"list",
-      "member":{"shape":"RequestString"},
+      "member":{"shape":"SanitizedString"},
       "max":10,
       "min":1
     },
@@ -1303,7 +1317,7 @@
       "members":{
         "Metric":{
           "shape":"String",
-          "documentation":"<p>The name of a Performance Insights metric to be measured.</p> <p>Valid values for <code>Metric</code> are:</p> <ul> <li> <p> <code>db.load.avg</code> - A scaled representation of the number of active sessions for the database engine.</p> </li> <li> <p> <code>db.sampledload.avg</code> - The raw number of active sessions for the database engine.</p> </li> <li> <p>The counter metrics listed in <a href=\"https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/USER_PerfInsights_Counters.html#USER_PerfInsights_Counters.OS\">Performance Insights operating system counters</a> in the <i>Amazon Aurora User Guide</i>.</p> </li> </ul> <p>If the number of active sessions is less than an internal Performance Insights threshold, <code>db.load.avg</code> and <code>db.sampledload.avg</code> are the same value. If the number of active sessions is greater than the internal threshold, Performance Insights samples the active sessions, with <code>db.load.avg</code> showing the scaled values, <code>db.sampledload.avg</code> showing the raw values, and <code>db.sampledload.avg</code> less than <code>db.load.avg</code>. For most use cases, you can query <code>db.load.avg</code> only. </p>"
+          "documentation":"<p>The name of a Performance Insights metric to be measured.</p> <p>Valid values for <code>Metric</code> are:</p> <ul> <li> <p> <code>db.load.avg</code> - A scaled representation of the number of active sessions for the database engine.</p> </li> <li> <p> <code>db.sampledload.avg</code> - The raw number of active sessions for the database engine.</p> </li> <li> <p>The counter metrics listed in <a href=\"https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/USER_PerfInsights_Counters.html#USER_PerfInsights_Counters.OS\">Performance Insights operating system counters</a> in the <i>Amazon Aurora User Guide</i>.</p> </li> <li> <p>The counter metrics listed in <a href=\"https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_PerfInsights_Counters.html#USER_PerfInsights_Counters.OS\">Performance Insights operating system counters</a> in the <i>Amazon RDS User Guide</i>.</p> </li> </ul> <p>If the number of active sessions is less than an internal Performance Insights threshold, <code>db.load.avg</code> and <code>db.sampledload.avg</code> are the same value. If the number of active sessions is greater than the internal threshold, Performance Insights samples the active sessions, with <code>db.load.avg</code> showing the scaled values, <code>db.sampledload.avg</code> showing the raw values, and <code>db.sampledload.avg</code> less than <code>db.load.avg</code>. For most use cases, you can query <code>db.load.avg</code> only. </p>"
         },
         "Dimensions":{
           "shape":"DimensionMap",
@@ -1315,6 +1329,19 @@
     "ResponseResourceMetricList":{
       "type":"list",
       "member":{"shape":"ResponseResourceMetric"}
+    },
+    "SanitizedString":{
+      "type":"string",
+      "documentation":"A generic string type that forbids characters that could expose our service (or services downstream) to security risks around injections.",
+      "max":256,
+      "min":0,
+      "pattern":"^[a-zA-Z0-9-_\\.:/*)( ]+$"
+    },
+    "SanitizedStringList":{
+      "type":"list",
+      "member":{"shape":"SanitizedString"},
+      "max":10,
+      "min":1
     },
     "ServiceType":{
       "type":"string",

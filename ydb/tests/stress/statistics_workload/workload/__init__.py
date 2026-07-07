@@ -129,6 +129,43 @@ class Workload(object):
             session.execute_scheme(f"ANALYZE `{table_path}`")
         self.run_query_ignore_errors(callee)
 
+        # Check for background operations after ANALYZE
+        max_retries = 5
+        retry_delay = 2  # seconds
+        for attempt in range(max_retries):
+            try:
+                self.check_background_operations(table_path)
+                break
+            except AssertionError:
+                if attempt == max_retries - 1:
+                    # Last attempt failed, re-raise the error
+                    raise
+                logger.warning(f"[{table_path}] Background operations check failed (attempt {attempt + 1}/{max_retries}), retrying...")
+                time.sleep(retry_delay)
+
+    def check_background_operations(self, table_path):
+        """Check for background ANALYZE operations using operation client."""
+        # Try to list operations - this tests the background operation functionality
+        request = ydb._apis.ydb_operation.ListOperationsRequest(kind="analyze")
+        list_result = self.driver(request, ydb._apis.OperationService.Stub, "ListOperations")
+        operations = getattr(list_result, "operations", [])
+        logger.info(f"[{table_path}] Found {len(operations)} background operations")
+
+        # Check if any analyze operations are present - they should be in the list
+        analyze_operations_found = False
+        for op in operations:
+            if hasattr(op, 'metadata') and hasattr(op.metadata, 'state'):
+                logger.info(f"[{table_path}] Operation {op.id}: state={op.metadata.state}, progress={op.metadata.progress}")
+                # Check if this is an analyze operation by looking at metadata structure
+                if hasattr(op.metadata, 'paths') or hasattr(op.metadata, 'done_paths'):
+                    analyze_operations_found = True
+                    logger.info(f"[{table_path}] Found ANALYZE operation {op.id} with state={op.metadata.state}")
+
+        # Assert that ANALYZE operations are present in the background operations list
+        assert analyze_operations_found, \
+            f"[{table_path}] ANALYZE operation must be present in background operations list after ANALYZE command"
+        logger.info(f"[{table_path}] ✓ ANALYZE operation successfully found in background operations list")
+
     def get_planner_row_count_estimate(self, table_name):
         with InstrumentedQuerySessionPool(self.driver) as session_pool:
             res = session_pool.explain_with_retries(f"SELECT count(*) FROM {table_name}")

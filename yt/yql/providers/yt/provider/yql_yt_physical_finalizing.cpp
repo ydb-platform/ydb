@@ -1038,6 +1038,13 @@ private:
                                 .Second(newOpSecond ? std::move(newOpSecond) : mayTry.Cast().Second().Ptr())
                                 .Done().Ptr();
                         }
+                    } else if (const auto maybePersist = TExprBase(writer).Maybe<TYtPersist>()) {
+                        if (!NYql::HasSetting(maybePersist.Cast().Settings().Ref(), EYtSettingType::Unordered)) {
+                            newOp = Build<TYtPersist>(ctx, writer->Pos())
+                                .InitFrom(maybePersist.Cast())
+                                .Settings(NYql::AddSetting(maybePersist.Cast().Settings().Ref(), EYtSettingType::Unordered, {}, ctx))
+                                .Done().Ptr();
+                        }
                     } else {
                         newOp = MakeUnorderedOp(*writer, unorderedOuts, ctx);
                     }
@@ -1928,7 +1935,7 @@ private:
             bool hasPublish = false;
             for (auto& item : x.second) {
                 auto reader = std::get<0>(item);
-                if (TYtPublish::Match(reader) || TYtCopy::Match(reader) || TYtMerge::Match(reader) || TYtSort::Match(reader)) {
+                if (TYtPublish::Match(reader) || TYtCopy::Match(reader) || TYtMerge::Match(reader) || TYtSort::Match(reader) || TYtPersist::Match(reader)) {
                     const auto opIndex = FromString<size_t>(std::get<2>(item)->Child(TYtOutput::idx_OutIndex)->Content());
                     ++outUsage[opIndex];
                     hasPublish = hasPublish || TYtPublish::Match(reader);
@@ -1939,7 +1946,7 @@ private:
             }
 
             const TYtOutputOpBase operation = GetRealOperation(TExprBase(x.first));
-            const bool canUpdateOp = !IsBeingExecuted(*x.first) && !operation.Maybe<TYtCopy>();
+            const bool canUpdateOp = !IsBeingExecuted(*x.first) && !operation.Maybe<TYtCopy>() && !operation.Maybe<TYtPersist>();
             const bool canChangeNativeTypeForOp = !operation.Maybe<TYtMerge>() && !operation.Maybe<TYtSort>();
 
             auto origOutput = operation.Output().Ptr();
@@ -2977,6 +2984,8 @@ private:
                     usage.UsedByMerges[outIndex].push_back(std::get<0>(item));
                 }
 
+            } else if (TYtPersist::Match(std::get<0>(item))) {
+                usage.PublishUsage[outIndex].emplace();
             } else if (EColumnGroupMode::Single == mode) {
                 usage.FullUsage[outIndex] = true;
             } else {
@@ -3013,12 +3022,12 @@ private:
         std::vector<const TExprNode*> withMergeDeps;
 
         for (auto writer: opDepsOrder) {
-            if (TYtEquiJoin::Match(writer) || IsBeingExecuted(*writer)) {
+            if (TYtEquiJoin::Match(writer) || TYtPersist::Match(writer) || IsBeingExecuted(*writer)) {
                 continue;
             }
             const auto& readers = opDeps.at(writer);
 
-            // Check all counsumers are known
+            // Check all consumers are known
             auto& processed = ProcessedCalculateColumnGroups[writer];
             if (processed.size() == readers.size() &&
                 AllOf(readers, [&processed](const auto& item) {
@@ -3231,6 +3240,7 @@ THashSet<TStringBuf> TYtPhysicalFinalizingTransformer::OPS_WITH_SORTED_OUTPUT = 
     TYtReduce::CallableName(),
     TYtFill::CallableName(),
     TYtDqProcessWrite::CallableName(),
+    TYtPersist::CallableName(),
     TYtTryFirst::CallableName(),
 };
 

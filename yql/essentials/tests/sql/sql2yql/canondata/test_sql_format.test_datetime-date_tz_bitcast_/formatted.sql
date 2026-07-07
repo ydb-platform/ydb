@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     BITCAST(Yql::TzDate(AsAtom('1,UTC')) AS Uint8)
 ;

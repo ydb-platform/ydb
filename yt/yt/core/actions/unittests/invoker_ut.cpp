@@ -146,6 +146,79 @@ TEST(TSyncInvokerTest, SleepyFiber)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEST(TMakeGuardedCallbackTest, RunsOnSuccessWhenInvoked)
+{
+    bool success = false;
+    bool cancel = false;
+    {
+        auto callback = MakeGuardedCallback(
+            BIND([&] { success = true; }),
+            BIND([&] { cancel = true; }));
+        callback.Run();
+        // Releasing the last reference to the guard must not fire onCancel.
+        callback.Reset();
+        EXPECT_TRUE(success);
+        EXPECT_FALSE(cancel);
+    }
+    EXPECT_TRUE(success);
+    EXPECT_FALSE(cancel);
+}
+
+TEST(TMakeGuardedCallbackTest, RunsOnCancelWhenDiscarded)
+{
+    bool success = false;
+    bool cancel = false;
+    {
+        auto callback = MakeGuardedCallback(
+            BIND([&] { success = true; }),
+            BIND([&] { cancel = true; }));
+        // Callback is discarded without being run.
+    }
+    EXPECT_FALSE(success);
+    EXPECT_TRUE(cancel);
+}
+
+TEST(TMakeGuardedCallbackTest, OnCancelFiresOnlyAfterLastReferenceDropped)
+{
+    bool success = false;
+    bool cancel = false;
+    auto callback = MakeGuardedCallback(
+        BIND([&] { success = true; }),
+        BIND([&] { cancel = true; }));
+    auto copy = callback;
+    callback.Reset();
+    // The guard is still alive via #copy.
+    EXPECT_FALSE(success);
+    EXPECT_FALSE(cancel);
+    copy.Reset();
+    EXPECT_FALSE(success);
+    EXPECT_TRUE(cancel);
+}
+
+TEST(TMakeGuardedCallbackTest, DiscardedByNullInvoker)
+{
+    bool success = false;
+    bool cancel = false;
+    GetNullInvoker()->Invoke(MakeGuardedCallback(
+        BIND([&] { success = true; }),
+        BIND([&] { cancel = true; })));
+    EXPECT_FALSE(success);
+    EXPECT_TRUE(cancel);
+}
+
+TEST(TMakeGuardedCallbackTest, ExecutedBySyncInvoker)
+{
+    bool success = false;
+    bool cancel = false;
+    GetSyncInvoker()->Invoke(MakeGuardedCallback(
+        BIND([&] { success = true; }),
+        BIND([&] { cancel = true; })));
+    EXPECT_TRUE(success);
+    EXPECT_FALSE(cancel);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Returns the aggregated summary of all duration-like time series with sensor name #sensorName within #sensorDump.
 const NProfiling::NProto::TSummaryDuration& GetSummaryDuration(
     const NProfiling::NProto::TSensorDump& sensorDump,

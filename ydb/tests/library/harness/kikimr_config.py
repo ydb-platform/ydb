@@ -209,6 +209,7 @@ class KikimrConfigGenerator(object):
             nbs_database_name="/Root/NBS",
             enable_topic_cloud_events=False,
             shutdown_config=None,
+            replication_config=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -350,6 +351,7 @@ class KikimrConfigGenerator(object):
 
         if os.getenv('PGWIRE_LISTENING_PORT', ''):
             self.yaml_config["local_pg_wire_config"] = {}
+            self.yaml_config["local_pg_wire_config"]["enable_local_pg_wire"] = True
             self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
 
         # dirty hack for internal ydbd flavour
@@ -473,6 +475,9 @@ class KikimrConfigGenerator(object):
         if query_service_config:
             self.yaml_config["query_service_config"] = query_service_config
 
+        if replication_config:
+            self.yaml_config["replication_config"] = replication_config
+
         if scan_grouped_memory_limiter_config:
             self.yaml_config["scan_grouped_memory_limiter_config"] = scan_grouped_memory_limiter_config
         if comp_grouped_memory_limiter_config:
@@ -571,7 +576,8 @@ class KikimrConfigGenerator(object):
             if "local_pg_wire_config" not in self.yaml_config:
                 self.yaml_config["local_pg_wire_config"] = {}
 
-            ydb_pgwire_port = self.port_allocator.get_node_port_allocator(node_id).pgwire_port
+            self.yaml_config['local_pg_wire_config']['enable_local_pg_wire'] = True
+            ydb_pgwire_port = self.port_allocator.get_node_port_allocator(self.__node_ids[0]).pgwire_port
             self.yaml_config['local_pg_wire_config']['listening_port'] = ydb_pgwire_port
 
             # https://github.com/ydb-platform/ydb/issues/5152

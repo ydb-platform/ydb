@@ -77,6 +77,7 @@ public:
         bool EnableTopicPartitionSplitBasedOnMessages : 1 = false;
         bool EnableTopicMessagesBatching : 1 = false;
         bool EnableAccessServiceV2Interface : 1 = false;
+        bool TopicsAreFirstClassCitizen : 1 = true;
     };
 
     void InitAll(const TInitParameters initParameters);

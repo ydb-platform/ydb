@@ -423,12 +423,17 @@ void TTransaction::ModifyRows(
     std::vector<TUnversionedRow> rows;
     rows.reserve(modifications.Size());
 
+    const auto& config = Connection_->GetConfig();
+
+    bool usedAnyLocks = false;
     bool usedStrongLocks = false;
     bool usedWideLocks = false;
     for (const auto& modification : modifications) {
         if (!std::holds_alternative<NRowModifications::TWriteAndLockRow>(modification)) {
             continue;
         }
+
+        usedAnyLocks = true;
 
         auto mask = std::get<NRowModifications::TWriteAndLockRow>(modification).Locks;
         usedWideLocks |= mask.GetSize() > TLegacyLockMask::MaxCount;
@@ -439,15 +444,15 @@ void TTransaction::ModifyRows(
         for (int index = 0; index < TLegacyLockMask::MaxCount; ++index) {
             usedWideLocks |= mask.Get(index) > MaxOldLockType;
             usedStrongLocks |= mask.Get(index) == ELockType::SharedStrong;
+
+            // Pure locks do not set usedStrongLocks by themselves. That causes row_legacy_read_locks to be used.
+            // And with row_legacy_read_locks used rpc proxy reconstructs exclusive locks using row values from attachments.
+            // With DoNotDropPureExclusiveLocks at least row_legacy_locks will be used.
+            if (config->DoNotDropPureExclusiveLocks) {
+                usedStrongLocks |= mask.Get(index) == ELockType::Exclusive;
+            }
         }
     }
-
-    const auto& config = Connection_->GetConfig();
-
-    // Pure locks do not set usedStrongLocks by themselves. That causes row_legacy_read_locks to be used.
-    // And with row_legacy_read_locks used rpc proxy reconstructs exclusive locks using row values from attachments.
-    // With DoNotDropPureExclusiveLocks at least row_legacy_locks will be used.
-    usedStrongLocks |= config->DoNotDropPureExclusiveLocks;
 
     if (usedStrongLocks) {
         req->Header().set_protocol_version_minor(YTRpcModifyRowsStrongLocksVersion);
@@ -458,13 +463,13 @@ void TTransaction::ModifyRows(
     }
 
     // NB: Should be called for every modification to keep index correspondence.
-    auto fillCorrespondingLock = [&req, usedWideLocks, usedStrongLocks] (const TLockMask& locks) {
+    auto fillCorrespondingLock = [&req, usedWideLocks, usedStrongLocks, usedAnyLocks] (const TLockMask& locks) {
         if (usedWideLocks) {
             ToProto(req->add_row_locks(), locks);
         } else if (usedStrongLocks) {
             YT_VERIFY(!locks.HasNewLocks());
             req->add_row_legacy_locks(locks.ToLegacyMask().GetBitmap());
-        } else {
+        } else if (usedAnyLocks) {
             TLegacyLockBitmap bitmap = 0;
             for (int index = 0; index < TLegacyLockMask::MaxCount; ++index) {
                 if (locks.Get(index) == ELockType::SharedWeak) {
@@ -500,7 +505,8 @@ void TTransaction::ModifyRows(
 
     YT_VERIFY(modifications.size() == static_cast<size_t>(req->row_legacy_read_locks_size()) ||
         modifications.size() == static_cast<size_t>(req->row_legacy_locks_size()) ||
-        modifications.size() == static_cast<size_t>(req->row_locks_size()));
+        modifications.size() == static_cast<size_t>(req->row_locks_size()) ||
+        (req->row_legacy_read_locks_size() == 0 && req->row_legacy_locks_size() == 0 && req->row_locks_size() == 0));
 
     req->Attachments() = SerializeRowset(
         nameTable,

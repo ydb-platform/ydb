@@ -15,7 +15,7 @@ public:
         , Env_(Alloc_)
         , TypeInfoHelper_(new TTypeInfoHelper())
         , RuntimeSettings_(NYql::MakeRuntimeSettings())
-        , FunctionTypeInfoBuilder_(NYql::UnknownLangVersion, *RuntimeSettings_, Env_, TypeInfoHelper_, "", nullptr, NYql::NUdf::TSourcePosition())
+        , FunctionTypeInfoBuilder_(NYql::UnknownLangVersion, *RuntimeSettings_, Env_, TypeInfoHelper_, "", /*countersProvider=*/nullptr, NYql::NUdf::TSourcePosition())
     {
     }
 
@@ -382,7 +382,7 @@ struct TLogProviderSetup {
                   Messages.push_back({TString(component), level, TString(message)});
               }))
         , RuntimeSettings(NYql::MakeRuntimeSettings())
-        , FunctionTypeInfoBuilder(NYql::UnknownLangVersion, *RuntimeSettings, Env, TypeInfoHelper, "module", nullptr, NYql::NUdf::TSourcePosition(), nullptr, withoutLog ? nullptr : LogProvider.Get())
+        , FunctionTypeInfoBuilder(NYql::UnknownLangVersion, *RuntimeSettings, Env, TypeInfoHelper, "module", /*countersProvider=*/nullptr, NYql::NUdf::TSourcePosition(), /*secureParamsProvider=*/nullptr, withoutLog ? nullptr : LogProvider.Get())
     {
     }
 

@@ -160,7 +160,7 @@ Y_UNIT_TEST_SUITE(TAccessServiceTestV2) {
         TTestSetup setup(true);
 
         TAutoPtr<IEventHandle> handle;
-        setup.AccessServiceMockV2.BulkAuthorizeData["user1-something.read-test_folder_1-something.write-test_folder_2"].Response.mutable_subject()->mutable_user_account()->set_id("user1");
+        setup.AccessServiceMockV2.AuthorizeData["user1-something.read-test_folder_1"].Response.mutable_subject()->mutable_user_account()->set_id("user1");
 
         auto request = MakeHolder<NCloud::TEvAccessService::TEvBulkAuthorizeRequestV2>();
         request->Request.set_iam_token("user1");
@@ -176,6 +176,10 @@ Y_UNIT_TEST_SUITE(TAccessServiceTestV2) {
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
         UNIT_ASSERT_VALUES_EQUAL(result->Response.subject().user_account().id(), "user1");
+        UNIT_ASSERT_VALUES_EQUAL(result->Response.results().items_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Response.results().items(0).permission(), "something.write");
+        UNIT_ASSERT_VALUES_EQUAL(result->Response.results().items(0).resource_path_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Response.results().items(0).resource_path(0).id(), "test_folder_2");
     }
 
     Y_UNIT_TEST(PassRequestId) {

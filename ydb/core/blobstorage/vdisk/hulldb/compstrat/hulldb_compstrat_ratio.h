@@ -41,11 +41,7 @@ namespace NKikimr {
                 UpdateStorageRatioForDb(startTime, stat);
                 TInstant finishTime(TAppData::TimeProvider->Now());
                 if (HullCtx->VCtx->ActorSystem) {
-                    LOG_DEBUG(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                            VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                                "%s: StorageRatio: timeSpent# %s stat# %s",
-                                PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                (finishTime - startTime).ToString().data(), stat.ToString().data()));
+                    YDB_LOG_DEBUG_CTX_COMP(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "%s: StorageRatio: timeSpent# %s stat# %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), (finishTime - startTime).ToString().data(), stat.ToString().data()));
                 }
 
                 BarriersEssence.Reset();

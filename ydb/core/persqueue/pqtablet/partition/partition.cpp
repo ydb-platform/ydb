@@ -2227,6 +2227,13 @@ void TPartition::Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const
     userInfo->ConsumerBatchProcessorCPUUsage += event->CPUUsage;
 }
 
+void TPartition::Handle(NBatching::TEvProcessBatchKeysResult::TPtr& ev, const TActorContext& ctx) {
+    Y_UNUSED(ctx);
+    if (Compacter) {
+        Compacter->ProcessResponse(ev);
+    }
+}
+
 void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->IsInternal) {
         CompacterPartitionRequestInflight = false;

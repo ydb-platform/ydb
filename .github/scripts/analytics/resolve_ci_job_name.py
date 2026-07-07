@@ -17,9 +17,7 @@ def _postcommit_preset_suffix(build_preset: str) -> str:
 def resolve_ci_job_name(
     workflow_name: str, build_preset: str, event_name: str = ""
 ) -> str:
-    is_postcommit = workflow_name == "Postcommit" or (
-        workflow_name == "PR-check" and event_name == "push"
-    )
+    is_postcommit = workflow_name == "PR-check" and event_name == "push"
     if is_postcommit:
         if build_preset in POSTCOMMIT_LEGACY_NAMES:
             return POSTCOMMIT_LEGACY_NAMES[build_preset]

@@ -26,6 +26,7 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/yql_user_data.h>
 #include <yql/essentials/providers/common/mkql_simple_file/mkql_simple_file.h>
@@ -834,6 +835,8 @@ public:
             future = DoReduce(op.Cast(), execCtx, ctx);
         } else if (auto op = opBase.Maybe<TYtFill>()) {
             future = DoFill(op.Cast(), execCtx, ctx);
+        } else if (auto op = opBase.Maybe<TYtMapReduce>()) {
+            future = DoMapReduce(op.Cast(), execCtx, ctx);
         } else {
             // We don't support this operation
             return UploadFmrInputsAndForwardToUnderlyingGateway(execCtx, node, ctx, std::move(options), nodePos);
@@ -2094,9 +2097,20 @@ private:
         startOperationResponseFuture.Subscribe([this, promise = std::move(promise), sessionId, distributedWriteSession, publicId, isPull] (const auto& startOperationFuture) mutable {
             TStartOperationResponse startOperationResponse = startOperationFuture.GetValueSync();
             if (startOperationResponse.Status == EOperationStatus::Failed) {
-                YQL_CLOG(ERROR, FastMapReduce) << "Failed to start operation";
                 TFmrOperationResult result;
                 result.Errors = startOperationResponse.ErrorMessages;
+                bool isFallback = AnyOf(result.Errors, [](const TFmrError& e) {
+                    return e.Reason == EFmrErrorReason::FallbackOperation;
+                });
+                if (isFallback) {
+                    for (const auto& e : result.Errors) {
+                        if (e.Reason == EFmrErrorReason::FallbackOperation) {
+                            YQL_CLOG(WARN, FastMapReduce) << "FMR operation will fall back to native gateway: " << e.ErrorMessage;
+                        }
+                    }
+                } else {
+                    YQL_CLOG(ERROR, FastMapReduce) << "Failed to start operation";
+                }
                 promise.SetValue(std::move(result));
                 return;
             }
@@ -2152,9 +2166,20 @@ private:
         startOperationResponseFuture.Subscribe([this, promise = std::move(promise), sessionId, startOperationRequest] (const auto& startOperationFuture) mutable {
             TStartOperationResponse startOperationResponse = startOperationFuture.GetValueSync();
             if (startOperationResponse.Status == EOperationStatus::Failed) {
-                YQL_CLOG(ERROR, FastMapReduce) << "Failed to start operation";
                 TFmrOperationResult result;
                 result.Errors = startOperationResponse.ErrorMessages;
+                bool isFallback = AnyOf(result.Errors, [](const TFmrError& e) {
+                    return e.Reason == EFmrErrorReason::FallbackOperation;
+                });
+                if (isFallback) {
+                    for (const auto& e : result.Errors) {
+                        if (e.Reason == EFmrErrorReason::FallbackOperation) {
+                            YQL_CLOG(WARN, FastMapReduce) << "FMR operation will fall back to native gateway: " << e.ErrorMessage;
+                        }
+                    }
+                } else {
+                    YQL_CLOG(ERROR, FastMapReduce) << "Failed to start operation";
+                }
                 promise.SetValue(std::move(result));
                 return;
             }
@@ -3435,6 +3460,217 @@ private:
             YQL_CLOG(INFO, FastMapReduce) << "Starting reduce from yt tables: " << JoinRange(' ', inputPaths.begin(), inputPaths.end()) << " to yt tables: " << JoinRange(' ', outputPaths.begin(), outputPaths.end());
             return GetRunningOperationFuture(reduceOperationRequest, sessionId, Nothing(), execCtx->Options_.PublicId()).Apply(
                 [localTableContentDir](const auto& f) { return f.GetValue(); });
+        });
+    }
+
+    TFuture<TFmrOperationResult> DoMapReduce(
+        TYtMapReduce mapReduce,
+        const TExecContextSimple<TRunOptions>::TPtr& execCtx,
+        TExprContext& ctx
+    ) {
+        TString sessionId = execCtx->GetSessionId();
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
+        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
+
+        auto reduceBy = NYql::GetSettingAsColumnPairList(mapReduce.Settings().Ref(), EYtSettingType::ReduceBy);
+        auto sortBy = NYql::GetSettingAsColumnPairList(mapReduce.Settings().Ref(), EYtSettingType::SortBy);
+
+        if (sortBy.empty()) {
+            sortBy = reduceBy;
+        }
+
+        auto [mapReduceInputTables, clusterConnections] = GetInputTablesAndConnections(execCtx->InputTables_, sessionId, execCtx->Options_.Config());
+        auto fmrOutputTables = GetOutputTables(execCtx);
+
+        // When mapper is TCoVoid (identity mapper), we skip serializing a user job and pass
+        // an empty SerializedMapJobState. The FMR worker then sorts inputs by the reduce-by
+        // columns directly, without running any user lambda.
+        const bool hasMapper = !mapReduce.Mapper().Maybe<TCoVoid>().IsValid();
+
+        // Multi-input MapReduce (JOIN) with an explicit mapper requires Variant-tagged input
+        // rows, which FMR does not yet support. Fall back to the native gateway.
+        if (hasMapper && mapReduce.Input().Size() > 1U) {
+            YQL_CLOG(WARN, FastMapReduce) << "DoMapReduce: explicit mapper with multiple input tables"
+                << " (JOIN) is not yet supported by FMR — falling back to native gateway";
+            TFmrOperationResult fallback;
+            fallback.Errors.emplace_back(TFmrError{
+                .Component = EFmrComponent::Gateway,
+                .Reason = EFmrErrorReason::FallbackOperation,
+                .ErrorMessage = "MapReduce with explicit mapper and multiple input tables is not yet supported"
+            });
+            return MakeFuture(fallback);
+        }
+
+        // -- Mapper setup --
+        auto mapJob = std::make_shared<TFmrUserJob>();
+        TMapJobBuilder mapJobBuilder;
+        TString mapLambda;
+
+        if (hasMapper) {
+            TString mapInputType = NCommon::WriteTypeToYson(
+                GetSequenceItemType(
+                    mapReduce.Input().Size() == 1U
+                        ? TExprBase(mapReduce.Input().Item(0))
+                        : TExprBase(mapReduce.Mapper().Cast<TCoLambda>().Args().Arg(0)),
+                    true));
+            mapJob->SetInputType(mapInputType);
+
+            TRemapperMap remapperMap;
+            TSet<TString> remapperAllFiles;
+            bool useSkiff = false;
+            bool forceYsonInputFormat = true;
+            mapJobBuilder.SetMapJobParams(mapJob.get(), execCtx, remapperMap, remapperAllFiles, useSkiff, forceYsonInputFormat, false);
+
+            // Override OutSpec: SetMapJobParams uses the final output tables, but the mapper
+            // writes to the intermediate table whose schema matches the mapper's own output type.
+            {
+                const auto mapTypeSet = NYql::GetSetting(mapReduce.Settings().Ref(), EYtSettingType::MapOutputType);
+                const TTypeAnnotationNode* mapResultItem = mapTypeSet
+                    ? mapTypeSet->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()
+                    : GetSequenceItemType(mapReduce.Mapper(), true);
+                NYT::TNode tableSpec = NYT::TNode::CreateMap();
+                tableSpec[YqlRowSpecAttribute][TString{RowSpecAttrType}] = NCommon::TypeToYsonNode(mapResultItem);
+                NYT::TNode intermediateOutSpec = NYT::TNode::CreateMap();
+                intermediateOutSpec[TString{YqlIOSpecTables}] = NYT::TNode::CreateList().Add(tableSpec);
+                mapJob->SetOutSpec(NYT::NodeToYsonString(intermediateOutSpec));
+            }
+
+            {
+                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
+                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
+                TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc);
+                mapLambda = builder.BuildLambdaWithIO(*execCtx->MkqlCompiler_, mapReduce.Mapper().Cast<TCoLambda>(), ctx, false);
+            }
+            mapJob->SetLambdaCode(mapLambda);
+            mapJob->SetFmrJobType(EFmrJobType::Map);
+            mapJob->SetSettings(TFmrUserJobSettings());
+        }
+
+        // -- Reducer setup --
+        auto reduceJob = std::make_shared<TFmrUserJob>();
+        TReduceJobBuilder reduceJobBuilder;
+
+        const auto inputTypeSet = NYql::GetSetting(mapReduce.Settings().Ref(), EYtSettingType::ReduceInputType);
+        TString reduceInputType = NCommon::WriteTypeToYson(inputTypeSet
+            ? inputTypeSet->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()
+            : GetSequenceItemType(mapReduce.Reducer().Args().Arg(0), true));
+        reduceJob->SetInputType(reduceInputType);
+
+        TVector<ui32> groups;
+        TVector<TString> tables;
+        TVector<ui64> rowOffsets;
+        ui64 currentRowOffset = 0;
+        YQL_ENSURE(!execCtx->InputTables_.empty());
+        for (const auto& table : execCtx->InputTables_) {
+            if (!groups.empty() && groups.back() != table.Group) {
+                currentRowOffset = 0;
+            }
+            groups.push_back(table.Group);
+            tables.push_back(table.Temp ? TString() : table.Name);
+            rowOffsets.push_back(currentRowOffset);
+            currentRowOffset += table.Records;
+        }
+
+        THashSet<TString> auxColumns;
+        std::for_each(reduceBy.begin(), reduceBy.end(), [&auxColumns](const auto& it) { auxColumns.insert(it.first); });
+        std::for_each(sortBy.begin(), sortBy.end(), [&auxColumns](const auto& it) { auxColumns.insert(it.first); });
+
+        reduceJobBuilder.SetReduceJobParams(reduceJob.get(), execCtx, groups, tables, rowOffsets, auxColumns);
+
+        // Override InputSpec: the reducer reads from the intermediate FMR table, not the original
+        // input, so its InputSpec must match the mapper's output type.
+        if (hasMapper) {
+            const auto mapTypeSet = NYql::GetSetting(mapReduce.Settings().Ref(), EYtSettingType::MapOutputType);
+            const TTypeAnnotationNode* mapResultItem = mapTypeSet
+                ? mapTypeSet->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()
+                : GetSequenceItemType(mapReduce.Mapper(), true);
+            NYT::TNode tableSpec = NYT::TNode::CreateMap();
+            tableSpec[YqlRowSpecAttribute][TString{RowSpecAttrType}] = NCommon::TypeToYsonNode(mapResultItem);
+            NYT::TNode intermediateInputSpec = NYT::TNode::CreateMap();
+            intermediateInputSpec[TString{YqlIOSpecTables}] = NYT::TNode::CreateList().Add(tableSpec);
+            reduceJob->SetInputSpec(NYT::NodeToYsonString(intermediateInputSpec));
+        }
+
+        TString reduceLambda;
+        {
+            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
+                execCtx->FunctionRegistry_->SupportsSizedAllocators());
+            alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
+            TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc);
+            reduceLambda = builder.BuildLambdaWithIO(*execCtx->MkqlCompiler_, mapReduce.Reducer(), ctx);
+        }
+        reduceJob->SetLambdaCode(reduceLambda);
+        reduceJob->SetFmrJobType(EFmrJobType::Reduce);
+        reduceJob->SetSettings(TFmrUserJobSettings());
+
+        // -- Upload resources --
+        std::vector<TFileInfo> filesToUpload;
+        std::vector<TYtResourceInfo> ytResources;
+        std::vector<TFmrResourceOperationInfo> fmrResources;
+
+        std::shared_ptr<TTempDir> localMapTableContentDir;
+        if (hasMapper) {
+            localMapTableContentDir = PrepareUserFilesForUpload(execCtx, mapJob, mapLambda, filesToUpload, ytResources, fmrResources);
+        }
+        auto localReduceTableContentDir = PrepareUserFilesForUpload(execCtx, reduceJob, reduceLambda, filesToUpload, ytResources, fmrResources);
+
+        auto uploadResourcesFuture = GetUploadResourcesFuture(sessionId, execCtx->Options_.Config(), std::move(filesToUpload), std::move(ytResources), execCtx->Options_.PublicId());
+
+        // SortBy must reflect the actual sort order of the intermediate tables written by the
+        // MapReduceMap stage: [_yql_key_hash, ...original_sort_by]. The n-way sorted merge reader
+        // in the Reduce job uses SortBy to merge input partitions in the correct order.
+        TReduceOperationSpec reduceOperationSpec{
+            .ReduceBy = GetSortingColumnsFromColumnPairList(reduceBy),
+            .SortBy = MakeMapReduceIntermediateSortColumns(GetSortingColumnsFromColumnPairList(sortBy)),
+            .ReduceType = EReduceType::SortedReduce
+        };
+
+        return uploadResourcesFuture.Apply([=, this](const auto& uploadF) mutable {
+            auto uploadResult = uploadF.GetValue();
+
+            TStringStream mapJobStateStream;
+            if (hasMapper) {
+                mapJob->Save(mapJobStateStream);
+            }
+            // else: empty stream → empty SerializedMapJobState signals TCoVoid (identity sort)
+
+            TStringStream reduceJobStateStream;
+            reduceJob->Save(reduceJobStateStream);
+
+            TMapReduceOperationParams mapReduceOperationParams{
+                .Input = mapReduceInputTables,
+                .Output = fmrOutputTables,
+                .SerializedMapJobState = mapJobStateStream.Str(),
+                .SerializedReduceJobState = reduceJobStateStream.Str(),
+                .ReduceOperationSpec = reduceOperationSpec
+            };
+            TStartOperationRequest mapReduceOperationRequest{
+                .OperationType = EOperationType::MapReduce,
+                .OperationParams = mapReduceOperationParams,
+                .SessionId = sessionId,
+                .IdempotencyKey = GenerateId(),
+                .NumRetries = 1,
+                .ClusterConnections = clusterConnections,
+                .FmrOperationSpec = execCtx->Options_.Config()->FmrOperationSpec.Get(execCtx->Cluster_),
+                .Files = std::move(uploadResult.Files),
+                .YtResources = std::move(uploadResult.YtResources),
+                .FmrResources = fmrResources,
+                .FmrJob = uploadResult.FmrJob
+            };
+
+            std::vector<TString> inputPaths, outputPaths;
+            std::transform(execCtx->InputTables_.begin(), execCtx->InputTables_.end(), std::back_inserter(inputPaths),
+                [](const auto& table) { return table.Cluster + "." + table.Name; });
+            std::transform(execCtx->OutTables_.begin(), execCtx->OutTables_.end(), std::back_inserter(outputPaths),
+                [execCtx](const auto& table) { return execCtx->Cluster_ + "." + table.Path; });
+
+            YQL_CLOG(INFO, FastMapReduce) << "Starting MapReduce"
+                << " from: " << JoinRange(' ', inputPaths.begin(), inputPaths.end())
+                << " to: " << JoinRange(' ', outputPaths.begin(), outputPaths.end());
+
+            return GetRunningOperationFuture(mapReduceOperationRequest, sessionId, Nothing(), execCtx->Options_.PublicId()).Apply(
+                [localMapTableContentDir, localReduceTableContentDir](const auto& f) { return f.GetValue(); });
         });
     }
 

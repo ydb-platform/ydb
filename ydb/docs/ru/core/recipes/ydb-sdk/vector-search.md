@@ -158,7 +158,7 @@
 
     let client = ClientBuilder::new_from_connection_string(connection_string)?.client()?;
     client.wait().await?;
-    let mut qc = client.query_client().clone_with_idempotent_operations(true);
+    let mut qc = client.query_client();
     ```
 
 - PHP

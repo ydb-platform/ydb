@@ -12,6 +12,7 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx);
 
     void Handle(TEvProcessBatch::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(TEvProcessBatchKeys::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(NActors::TEvents::TEvPoisonPill::TPtr& ev, const NActors::TActorContext& ctx);
 

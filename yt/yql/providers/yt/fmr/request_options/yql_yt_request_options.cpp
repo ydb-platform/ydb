@@ -307,6 +307,19 @@ void TReduceOperationSpec::Load(IInputStream* buffer) {
     );
 }
 
+TSortingColumns MakeMapReduceIntermediateSortColumns(const TSortingColumns& reduceBy) {
+    Y_ENSURE(reduceBy.Columns.size() == reduceBy.SortOrders.size(),
+        "reduceBy columns and sort orders must have equal length");
+    TSortingColumns result;
+    result.Columns.push_back(TString(YqlKeyHashColumn));
+    result.SortOrders.push_back(ESortOrder::Ascending);
+    for (size_t i = 0; i < reduceBy.Columns.size(); ++i) {
+        result.Columns.push_back(reduceBy.Columns[i]);
+        result.SortOrders.push_back(reduceBy.SortOrders[i]);
+    }
+    return result;
+}
+
 } // namespace NYql::NFmr
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////

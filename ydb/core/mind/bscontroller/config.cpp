@@ -5,6 +5,8 @@
 
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER_AUDIT
+
 namespace NKikimr::NBsController {
 
         class TBlobStorageController::TNodeWardenUpdateNotifier {
@@ -160,7 +162,9 @@ namespace NKikimr::NBsController {
                 VDiskIDFromVDiskID(vslotInfo.GetVDiskId(), item.MutableVDiskID());
 
                 // fill in VDiskLocation
-                Serialize(item.MutableVDiskLocation(), vslotInfo);
+                const auto it = State.PDiskGuidsForDeletedVSlots.find(vslotId);
+                const ui64 pdiskGuid = it != State.PDiskGuidsForDeletedVSlots.end() ? it->second : vslotInfo.PDisk->Guid;
+                Serialize(item.MutableVDiskLocation(), vslotId, pdiskGuid);
 
                 // set up kind
                 item.SetVDiskKind(vslotInfo.Kind);
@@ -311,11 +315,12 @@ namespace NKikimr::NBsController {
                     const TVSlotInfo& prevSlot = *prev.VDisksInGroup[i];
                     const TVSlotInfo& curSlot = *cur.VDisksInGroup[i];
                     if (prevSlot.VSlotId != curSlot.VSlotId) {
-                        STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA05, "VDisk moved",
-                            (UniqueId, State.UniqueId),
-                            (PrevSlot, prevSlot.VSlotId),
-                            (CurSlot, curSlot.VSlotId),
-                            (VDiskId, curSlot.GetVDiskId()));
+                        YDB_LOG_INFO("VDisk moved",
+                            {"marker", "BSCA05"},
+                            {"uniqueId", State.UniqueId},
+                            {"prevSlot", prevSlot.VSlotId},
+                            {"curSlot", curSlot.VSlotId},
+                            {"VDiskId", curSlot.GetVDiskId()});
                     }
                 }
             }
@@ -921,6 +926,7 @@ namespace NKikimr::NBsController {
                 const size_t num = group->VSlotsBeingDeleted.erase(vslot->VSlotId);
                 Y_ABORT_UNLESS(num);
             }
+            PDiskGuidsForDeletedVSlots.emplace(vslot->VSlotId, vslot->PDisk->Guid);
             VSlots.DeleteExistingEntry(vslot->VSlotId);
         }
 
@@ -1167,16 +1173,17 @@ namespace NKikimr::NBsController {
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotInfo& vslot) {
-            pb->SetNodeID(vslot.VSlotId.NodeId);
-            pb->SetPDiskID(vslot.VSlotId.PDiskId);
-            pb->SetVDiskSlotID(vslot.VSlotId.VSlotId);
-            pb->SetPDiskGuid(vslot.PDisk->Guid);
+            Serialize(pb, vslot.VSlotId, vslot.PDisk->Guid);
         }
 
-        void TBlobStorageController::Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotId& vslotId) {
+        void TBlobStorageController::Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotId& vslotId,
+                std::optional<ui64> pdiskGuid) {
             pb->SetNodeID(vslotId.NodeId);
             pb->SetPDiskID(vslotId.PDiskId);
             pb->SetVDiskSlotID(vslotId.VSlotId);
+            if (pdiskGuid) {
+                pb->SetPDiskGuid(*pdiskGuid);
+            }
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TBaseConfig::TVSlot *pb, const TVSlotInfo &vslot,

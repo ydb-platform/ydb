@@ -153,7 +153,16 @@ class _GoToolCover(_GoTool):
 
     def execute(self) -> int:
         if not self.args.cover_srcs:
-            sys.stderr.write("Not found source files, skip covering\n")
+            sys.stderr.write("Not found source files for covering\n")
+            # But covervars.go and cover_outcfg declared as output, we must create empty they
+            cover_outcfg_path = self.bindir / self.args.cover_outcfg
+            os.makedirs(cover_outcfg_path.parent, exist_ok=True)
+            with open(cover_outcfg_path, 'w'):
+                pass
+            cover_covervars_path = self.bindir / self.args.cover_covervars
+            os.makedirs(cover_covervars_path.parent, exist_ok=True)
+            with open(cover_covervars_path, 'wt', encoding="utf-8") as f:
+                f.write(f'package {self.cover_package}\n')
             return 0
         # Extract go packages from all go files
         go_package2files = {}

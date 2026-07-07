@@ -22,12 +22,10 @@ IReadRequestExecutorPtr CreateReadRequestExecutor(
     if (readHint.RangeHints.size() == 1) {
         return std::make_shared<TReadSingleLocationRequestExecutor>(
             actorSystem,
-            logTitle.GetChildWithTags(
-                GetCycleCount(),
-                {{"t", "read"}, {"r", request->Headers.Range.Print()}}),
+            logTitle,
             vChunkConfig,
             std::move(directBlockGroup),
-            std::move(readHint),
+            std::move(readHint.RangeHints[0]),
             std::move(callContext),
             std::move(request),
             std::move(traceId));
@@ -35,9 +33,7 @@ IReadRequestExecutorPtr CreateReadRequestExecutor(
 
     return std::make_shared<TReadMultipleLocationRequestExecutor>(
         actorSystem,
-        logTitle.GetChildWithTags(
-            GetCycleCount(),
-            {{"t", "mread"}, {"r", request->Headers.Range.Print()}}),
+        logTitle,
         vChunkConfig,
         std::move(directBlockGroup),
         std::move(readHint),

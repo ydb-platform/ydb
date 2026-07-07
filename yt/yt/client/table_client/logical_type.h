@@ -109,7 +109,7 @@ private:
 DEFINE_REFCOUNTED_TYPE(TLogicalType)
 
 TLogicalTypePtr ParseType(TStringBuf typeString);
-TString ToString(const TLogicalType& logicalType);
+std::string ToString(const TLogicalType& logicalType);
 void FormatValue(TStringBuilderBase* builder, const TLogicalType& logicalType, TStringBuf spec);
 
 //! Debug printers for Gtest unittests.
@@ -441,9 +441,9 @@ class TTaggedLogicalType
     : public TLogicalType
 {
 public:
-    TTaggedLogicalType(TString tag, TLogicalTypePtr element);
+    TTaggedLogicalType(std::string tag, TLogicalTypePtr element);
 
-    Y_FORCE_INLINE const TString& GetTag() const;
+    Y_FORCE_INLINE const std::string& GetTag() const;
     Y_FORCE_INLINE const TLogicalTypePtr& GetElement() const;
 
     i64 GetMemoryUsage() const override;
@@ -454,7 +454,7 @@ public:
     bool IsNullable() const override;
 
 private:
-    const TString Tag_;
+    const std::string Tag_;
     const TLogicalTypePtr Element_;
 };
 
@@ -475,7 +475,7 @@ TLogicalTypePtr TupleLogicalType(std::vector<TLogicalTypePtr> elements);
 TLogicalTypePtr VariantTupleLogicalType(std::vector<TLogicalTypePtr> elements);
 
 TLogicalTypePtr DictLogicalType(TLogicalTypePtr key, TLogicalTypePtr value);
-TLogicalTypePtr TaggedLogicalType(TString tag, TLogicalTypePtr element);
+TLogicalTypePtr TaggedLogicalType(std::string tag, TLogicalTypePtr element);
 TLogicalTypePtr NullLogicalType();
 
 TLogicalTypePtr MakeOptionalIfNot(TLogicalTypePtr element);

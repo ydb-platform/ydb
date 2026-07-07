@@ -22,6 +22,7 @@ SRCS(
     ydb_register_node_ut.cpp
     ydb_scripting_ut.cpp
     ydb_table_ut.cpp
+    ydb_unary_retry_ut.cpp
     ydb_stats_ut.cpp
     ydb_logstore_ut.cpp
     ydb_olapstore_ut.cpp

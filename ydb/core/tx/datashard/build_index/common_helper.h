@@ -22,6 +22,24 @@ class TBatchRowsUploader
         TBufferData Buffer;
         TString Table;
         std::shared_ptr<NTxProxy::TUploadTypes> Types;
+        // Last source-table key whose entries for this destination have been
+        // durably uploaded. Updated when an upload of this destination acks
+        // successfully. Used by GetMinFlushedKey() to compute a cross-
+        // destination safe checkpoint for the scan-level LastKeyAck.
+        //
+        // The accompanying FlushedSeqNo is a monotonic counter sampled at
+        // the same moment FlushedKey is sampled. Since the scan reads
+        // source rows in ascending key order, capture order == key order;
+        // we therefore use SeqNo to compare keys cheaply and type-
+        // independently across destinations.
+        TSerializedCellVec FlushedKey;
+        ui64 FlushedSeqNo = 0;
+        // Snapshot of the scan's current source key captured at the moment
+        // this destination's buffer was claimed for the in-flight upload.
+        // Promoted to FlushedKey when that upload acks.
+        TSerializedCellVec PendingFlushKey;
+        ui64 PendingFlushSeqNo = 0;
+        bool HasFlushedOnce = false;
 
         operator bool() const {
             return !Buffer.IsEmpty();
@@ -59,6 +77,12 @@ public:
         UploadBytes += Uploading.Buffer.GetRowCellBytes();
         Uploading.Buffer.Clear();
         RetryCount = 0;
+
+        if (auto it = Destinations.find(Uploading.Table); it != Destinations.end()) {
+            it->second.FlushedKey = it->second.PendingFlushKey;
+            it->second.FlushedSeqNo = it->second.PendingFlushSeqNo;
+            it->second.HasFlushedOnce = true;
+        }
 
         for (auto& [_, dst] : Destinations) {
             if (TryUpload(dst, true /* by limit */)) {
@@ -191,6 +215,42 @@ public:
         Owner = owner;
     }
 
+    // The scan must call this whenever it processes a new source row, before
+    // (or right at) AddRow on any destination buffer. The uploader uses the
+    // most recent value to snapshot a per-destination "PendingFlushKey" at
+    // each TryUpload, which becomes the destination's FlushedKey on a
+    // successful upload ack. See GetMinFlushedKey.
+    void SetCurrentSourceKey(TSerializedCellVec key) {
+        CurrentSourceKey = std::move(key);
+    }
+
+    // Returns the latest source-table key K such that, for every destination
+    // buffer, all entries this destination would produce for source rows
+    // <= K are durably persisted via the upload pipeline. Returns nullopt
+    // while any destination has not yet completed a successful upload — in
+    // that case there is no cross-destination safe checkpoint and the caller
+    // must NOT advance LastKeyAck on the scan-level response.
+    //
+    // The min across destinations is the safe checkpoint because each
+    // destination's FlushedKey reflects only the rows whose entries it has
+    // already uploaded; rows past that key may still have entries buffered
+    // and would be lost if the scan is resumed past that key.
+    std::optional<TSerializedCellVec> GetMinFlushedKey() const {
+        if (Destinations.empty()) {
+            return std::nullopt;
+        }
+        const TDestination* minDst = nullptr;
+        for (const auto& [_, dst] : Destinations) {
+            if (!dst.HasFlushedOnce) {
+                return std::nullopt;
+            }
+            if (!minDst || dst.FlushedSeqNo < minDst->FlushedSeqNo) {
+                minDst = &dst;
+            }
+        }
+        return minDst->FlushedKey;
+    }
+
     TString Debug() const {
         TStringBuilder result;
 
@@ -212,6 +272,12 @@ private:
             Uploading.Table = destination.Table;
             Uploading.Types = destination.Types;
             destination.Buffer.FlushTo(Uploading.Buffer);
+            // Capture the scan's current source key as the boundary that the
+            // upload of this destination's batch covers — i.e. all entries
+            // for source rows <= CurrentSourceKey produced by this scan and
+            // belonging to this destination are now committed to the upload.
+            destination.PendingFlushKey = CurrentSourceKey;
+            destination.PendingFlushSeqNo = ++CurrentSourceSeqNo;
             StartUploadRowsInternal();
             return true;
         }
@@ -247,6 +313,12 @@ private:
     ui64 UploadRows = 0;
     ui64 UploadBytes = 0;
     ui32 RetryCount = 0;
+
+    // Updated by the scan via SetCurrentSourceKey before AddRow on any
+    // destination. Snapshotted into per-destination PendingFlushKey at
+    // each TryUpload.
+    TSerializedCellVec CurrentSourceKey;
+    ui64 CurrentSourceSeqNo = 0;
 };
 
 inline void StartScan(TDataShard* dataShard, TAutoPtr<NTable::IScan>&& scan, ui64 id,

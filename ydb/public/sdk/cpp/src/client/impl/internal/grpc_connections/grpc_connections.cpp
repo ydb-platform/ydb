@@ -26,7 +26,9 @@ std::string GetAuthInfo(TDbDriverStatePtr p) {
         }
         return token;
     } catch (const TAuthenticationError& e) {
-        throw e;
+        throw;
+    } catch (const TYdbException& e) {
+        throw;
     } catch (const std::exception& e) {
         throw TAuthenticationError(TStringBuilder() << "Can't get Authentication info from CredentialsProvider. " << e.what());
     }

@@ -1,21 +1,21 @@
 # Экспорт логов в OpenTelemetry
 
-Каждый {{ ydb-short-name }} SDK пишет свои внутренние логи (инициализация драйвера, пул сессий, выполнение запросов, повторные попытки и т.д.) через стандартное средство логирования своего языка. Вместо вывода логов только в консоль (см. [Включить логирование](debug-logs.md)) их можно перенаправить в [OpenTelemetry](https://opentelemetry.io/) Logs SDK и экспортировать по стандартному протоколу OTLP в коллектор. Коллектор затем пересылает записи в выбранный бэкенд для хранения и просмотра логов.
+Каждый {{ ydb-short-name }} SDK записывает свои внутренние логи (инициализация драйвера, пул сессий, выполнение запросов, повторные попытки и т.д.) через стандартный механизм логирования своего языка. Вместо вывода логов только в консоль (см. [Включение логирования](debug-logs.md)), их можно перенаправить в [OpenTelemetry](https://opentelemetry.io/) Logs SDK и экспортировать по стандартному протоколу OTLP в коллектор. Затем коллектор пересылает записи в выбранный бэкенд для хранения и просмотра логов.
 
-Принцип одинаков во всех SDK:
+Принцип одинаков для всех SDK:
 
-1. Создать OpenTelemetry `LoggerProvider` с OTLP-экспортёром логов и атрибутом ресурса `service.name`.
-2. Перенаправить логгер SDK в этот провайдер через адаптер (log appender / bridge), превращающий каждую запись лога SDK в OTel log record. Состав адаптеров и статус поддержки логов в разных языках см. в [документации OpenTelemetry по логам](https://opentelemetry.io/docs/concepts/signals/logs/).
-3. Запустить рабочую нагрузку — все внутренние логи SDK теперь отправляются в коллектор как OTLP log records.
+1. Создайте OpenTelemetry `LoggerProvider` с экспортером логов OTLP и атрибутом ресурса `service.name`.
+2. Перенаправьте логгер SDK в этот провайдер через адаптер (log appender / bridge), который преобразует каждую запись лога SDK в запись лога OTel. Список адаптеров и статус поддержки логов в разных языках см. в [документации по логам OpenTelemetry](https://opentelemetry.io/docs/concepts/signals/logs/).
+3. Запустите рабочую нагрузку — теперь все внутренние логи SDK отправляются в коллектор как записи логов OTLP.
 
 {% note info %}
 
 ## Принципы {#principles}
 
-Способ сбора логов зависит от языка и инфраструктуры — единого формата нет:
+Метод сбора логов зависит от языка и инфраструктуры — единого формата нет:
 
-* **Программные мосты (log appender / bridge).** Приложение само отправляет логи в коллектор по OTLP прямо из процесса (workflow «direct-to-Collector»). Именно этот подход показан в примерах ниже.
-* **Агенты-коллекторы.** Приложение пишет логи в файл или `stdout`, а отдельный агент (например, [filelog receiver](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/filelogreceiver) в [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/)) читает, парсит и пересылает их в бэкенд — без изменения кода приложения.
+* **Программные мосты (log appender / bridge).** Приложение само отправляет логи в коллектор по OTLP непосредственно из процесса (рабочий процесс "direct-to-Collector"). Именно этот подход показан в примерах ниже.
+* **Агенты коллектора.** Приложение записывает логи в файл или `stdout`, а отдельный агент (например, [filelog receiver](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/filelogreceiver) в [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/)) читает, разбирает и пересылает их в бэкенд — без изменения кода приложения.
 
 {% endnote %}
 
@@ -25,13 +25,15 @@
 
 - Go
 
-  Для {{ ydb-short-name }} Go SDK есть готовый адаптер [ydb-go-sdk-otel](https://github.com/ydb-platform/ydb-go-sdk-otel), который превращает события SDK в сигналы OpenTelemetry: трассы (`WithTracer`), метрики (`WithMetrics`) и логи (`WithLogger`). Адаптер не настраивает экспортёры сам — вы создаёте `LoggerProvider` с OTLP-экспортёром логов, получаете из него логгер и передаёте его в опцию `ydbOtel.WithLogger` при вызове `ydb.Open`. Каждая внутренняя запись лога SDK (инициализация драйвера, пул сессий, выполнение запросов, ретраи и т.д.) при этом отправляется в коллектор как OTLP log record.
+  Для {{ ydb-short-name }} Go SDK существует готовый адаптер [ydb-go-sdk-otel](https://github.com/ydb-platform/ydb-go-sdk-otel), который преобразует события SDK в сигналы OpenTelemetry: трассы (`WithTracer`), метрики (`WithMetrics`) и логи (`WithLogger`). Адаптер сам не настраивает экспортеры — вы создаете `LoggerProvider` с OTLP-экспортером логов, получаете из него логгер и передаете его в опцию `ydbOtel.WithLogger` при вызове `ydb.Open`. Каждая внутренняя запись лога SDK (инициализация драйвера, пул сессий, выполнение запросов, повторные попытки и т.д.) затем отправляется в коллектор как запись лога OTLP.
+
 
   ```bash
   go get github.com/ydb-platform/ydb-go-sdk-otel
   go get go.opentelemetry.io/otel/sdk/log
   go get go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc
   ```
+
 
   ```go
   package main
@@ -54,7 +56,7 @@
   func main() {
       ctx := context.Background()
 
-      // 1. Настраиваем провайдер логов OTel с OTLP-экспортёром.
+      // 1. Configuring the OTel log provider with an OTLP exporter.
       exporter, err := otlploggrpc.New(ctx,
           otlploggrpc.WithEndpoint("localhost:4317"),
           otlploggrpc.WithInsecure(),
@@ -71,8 +73,8 @@
       )
       defer lp.Shutdown(ctx)
 
-      // 2. Открываем драйвер YDB с адаптером ydb-go-sdk-otel.
-      // WithLogger пересылает события логов SDK в OTel log records.
+      // 2. Opening the YDB driver with the ydb-go-sdk-otel adapter.
+      // WithLogger forwards SDK log events to OTel log records.
       logger := lp.Logger("ydb-go-sdk")
       db, err := ydb.Open(ctx,
           os.Getenv("YDB_CONNECTION_STRING"),
@@ -82,17 +84,19 @@
           panic(err)
       }
       defer db.Close(ctx)
-      // ... используйте db ...
+      // ... use db ...
   }
   ```
 
 - Python
 
-  {{ ydb-short-name }} Python SDK пишет логи через стандартный модуль `logging` (логгеры с именами `ydb.*`). Используйте встроенный в OpenTelemetry `LoggingHandler`, чтобы перенаправить эти записи в `LoggerProvider` и экспортировать по OTLP:
+  {{ ydb-short-name }} Python SDK записывает логи через стандартный модуль `logging` (логгеры с именем `ydb.*`). Используйте встроенный `LoggingHandler` OpenTelemetry для перенаправления этих записей в `LoggerProvider` и экспорта через OTLP:
+
 
   ```bash
   pip install opentelemetry-sdk opentelemetry-exporter-otlp-proto-grpc
   ```
+
 
   ```python
   import logging
@@ -111,8 +115,8 @@
   )
   set_logger_provider(logger_provider)
 
-  # Мост stdlib logging -> OpenTelemetry. Привязка обработчика к корневому логгеру
-  # перехватывает всё, что SDK пишет через logging.getLogger("ydb...").
+  # Bridge stdlib logging -> OpenTelemetry. Binding a handler to the root logger
+  # intercepts everything the SDK writes via logging.getLogger("ydb...").
   otel_handler = LoggingHandler(level=logging.NOTSET, logger_provider=logger_provider)
   logging.basicConfig(level=logging.INFO, handlers=[otel_handler])
   logging.getLogger("ydb").setLevel(logging.INFO)
@@ -127,12 +131,14 @@
 
 - C#
 
-  {{ ydb-short-name }} C# SDK пишет логи через переданный ему `ILoggerFactory`. Создайте фабрику на основе провайдера логирования OpenTelemetry с OTLP-экспортёром и передайте её в источник данных:
+  {{ ydb-short-name }} C# SDK записывает логи через переданный ему `ILoggerFactory`. Создайте фабрику на основе провайдера логирования OpenTelemetry с экспортером OTLP и передайте ее источнику данных:
+
 
   ```bash
   dotnet add package OpenTelemetry
   dotnet add package OpenTelemetry.Exporter.OpenTelemetryProtocol
   ```
+
 
   ```csharp
   using Microsoft.Extensions.Logging;
@@ -152,8 +158,8 @@
       });
   });
 
-  // Передаём фабрику в SDK: каждый внутренний лог (инициализация драйвера, пул сессий,
-  // выполнение запросов, ретраи, ...) экспортируется в коллектор как OTLP log record.
+  // Pass the factory to the SDK: each internal log (driver initialization, session pool,
+  // query execution, retries, ...) is exported to the collector as an OTLP log record.
   await using var dataSource = new YdbDataSource(
       new YdbConnectionStringBuilder("Host=localhost;Port=2136;Database=/local")
       {
@@ -166,7 +172,8 @@
 
 - Java
 
-  {{ ydb-short-name }} Java SDK пишет логи через `slf4j`. Если в качестве реализации `slf4j` используется logback, подключите готовый аппендер `opentelemetry-logback-appender-1.0`, который пересылает каждое событие в OpenTelemetry Logs SDK:
+  {{ ydb-short-name }} Java SDK записывает логи через `slf4j`. Если logback используется в качестве реализации `slf4j`, подключите готовый аппендер `opentelemetry-logback-appender-1.0`, который пересылает каждое событие в OpenTelemetry Logs SDK:
+
 
   ```xml
   <dependency>
@@ -191,7 +198,9 @@
   </dependency>
   ```
 
+
   Подключите аппендер в `logback.xml`:
+
 
   ```xml
   <configuration>
@@ -204,7 +213,9 @@
   </configuration>
   ```
 
-  Соберите экземпляр OpenTelemetry SDK с OTLP-экспортёром логов и установите его в аппендер вызовом `OpenTelemetryAppender.install(...)` перед запуском рабочей нагрузки:
+
+  Создайте экземпляр OpenTelemetry SDK с экспортером логов OTLP и установите его в аппендере, вызвав `OpenTelemetryAppender.install(...)` перед началом рабочей нагрузки:
+
 
   ```java
   import java.util.concurrent.TimeUnit;
@@ -235,12 +246,12 @@
           .setLoggerProvider(loggerProvider)
           .build();
 
-  // Передаём OpenTelemetry SDK в аппендер, объявленный в logback.xml.
+  // Pass the OpenTelemetry SDK to the appender declared in logback.xml.
   OpenTelemetryAppender.install(openTelemetry);
 
   try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local").build();
        QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      // ... используйте queryClient ...
+      // ... use queryClient ...
   } finally {
       loggerProvider.forceFlush().join(10, TimeUnit.SECONDS);
       loggerProvider.shutdown().join(10, TimeUnit.SECONDS);
@@ -249,7 +260,8 @@
 
 - C++
 
-  {{ ydb-short-name }} C++ SDK пишет логи через `TLogBackend` из `util`. Реализуйте бэкенд, который превращает каждую запись в OTel log record, и передайте его в драйвер через `TDriverConfig::SetLog`. Сборку OpenTelemetry C++ SDK см. в [Getting Started](https://opentelemetry.io/docs/languages/cpp/getting-started/).
+  {{ ydb-short-name }}C++ SDK записывает логи через `TLogBackend` из `util`. Реализуйте бэкенд, который преобразует каждую запись в лог-запись OTel, и передайте его драйверу через `TDriverConfig::SetLog`. См. [Начало работы](https://opentelemetry.io/docs/languages/cpp/getting-started/) для сборки OpenTelemetry C++ SDK.
+
 
   ```cpp
   #include <ydb-cpp-sdk/client/driver/driver.h>
@@ -262,14 +274,14 @@
   #include <library/cpp/logger/backend.h>
   #include <library/cpp/logger/record.h>
   #include <memory>
-  
+
   namespace otlp     = opentelemetry::exporter::otlp;
   namespace logs_sdk = opentelemetry::sdk::logs;
   namespace logs_api = opentelemetry::logs;
   namespace resource = opentelemetry::sdk::resource;
-  
+
   namespace {
-  
+
   class TOtelLogBackend final : public TLogBackend {
   public:
     explicit TOtelLogBackend(opentelemetry::nostd::shared_ptr<logs_api::Logger> logger)
@@ -300,9 +312,9 @@
     opentelemetry::nostd::shared_ptr<logs_api::Logger> Logger_;
   };
   } // namespace
-  
+
   int main() {
-    // 1. Настраиваем провайдер логов OTel с OTLP-экспортёром
+    // 1. Configuring the OTel log provider with an OTLP exporter
     otlp::OtlpGrpcLogRecordExporterOptions exporterOpts;
     exporterOpts.endpoint = "localhost:4317";
     auto exporter  = otlp::OtlpGrpcLogRecordExporterFactory::Create(exporterOpts);
@@ -315,14 +327,14 @@
 
     auto logger = provider->GetLogger("ydb-cpp-sdk");
 
-    // 2. Передаём мост в драйвер YDB
+    // 2. Pass the bridge to the YDB driver
     auto config = NYdb::TDriverConfig()
         .SetEndpoint("localhost:2136")
         .SetDatabase("/local")
         .SetLog(std::make_unique<TOtelLogBackend>(logger));
 
     NYdb::TDriver driver(config);
-    // ... используйте driver ...
+    // ... use driver ...
     driver.Stop(true);
   }
   ```
@@ -330,5 +342,11 @@
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Отслеживайте прогресс или голосуйте за поддержку Rust SDK: [ydb-rs-sdk#268](https://github.com/ydb-platform/ydb-rs-sdk/issues/268)
 
 {% endlist %}

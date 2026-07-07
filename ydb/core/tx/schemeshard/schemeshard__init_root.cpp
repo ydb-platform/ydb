@@ -377,7 +377,8 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         Self->ParentDomainEffectiveACLVersion = effectiveACLVersion;
         Self->ParentDomainCachedEffectiveACL.Init(Self->ParentDomainEffectiveACL);
 
-        newPath->CachedEffectiveACL.Update(Self->ParentDomainCachedEffectiveACL, newPath->ACL, newPath->IsContainer());
+        newPath->CachedEffectiveACL.Update(Self->ParentDomainCachedEffectiveACL, newPath->ACL,
+            newPath->IsContainer(), /*isTenantRoot*/ true);
 
         TPathId resourcesDomainId = Self->ParentDomainId;
         if (record.HasResourcesDomainOwnerId() && record.HasResourcesDomainPathId()) {
@@ -725,7 +726,8 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
                     NIceDb::TUpdate<Schema::MigratedColumns::DefaultKind>(ETableColumnDefaultKind(colDescr.GetDefaultKind())),
                     NIceDb::TUpdate<Schema::MigratedColumns::DefaultValue>(colDescr.GetDefaultValue()),
                     NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(colDescr.GetNotNull()),
-                    NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(colDescr.GetIsBuildInProgress()));
+                    NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(colDescr.GetIsBuildInProgress()),
+                    NIceDb::TUpdate<Schema::MigratedColumns::SetNotNullInProgress>(colDescr.GetSetNotNullInProgress()));
             }
 
             for (const NKikimrScheme::TMigratePartition& partDescr: tableDescr.GetPartitions()) {

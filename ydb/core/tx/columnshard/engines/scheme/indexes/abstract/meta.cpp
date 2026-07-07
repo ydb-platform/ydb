@@ -34,13 +34,9 @@ void IIndexMeta::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto)
     return DoSerializeToProto(proto);
 }
 
-NJson::TJsonValue IIndexMeta::SerializeDataToJson(const TIndexChunk& iChunk, const TIndexInfo& indexInfo) const {
+NJson::TJsonValue IIndexMeta::SerializeDataToJson(const TString& iChunk, const TIndexInfo& indexInfo) const {
     NJson::TJsonValue result = NJson::JSON_MAP;
-    result.InsertValue("entity_id", iChunk.GetEntityId());
-    result.InsertValue("chunk_idx", iChunk.GetChunkIdx());
-    if (iChunk.HasBlobData()) {
-        result.InsertValue("data", DoSerializeDataToJson(iChunk.GetBlobDataVerified(), indexInfo));
-    }
+    result.InsertValue("data", DoSerializeDataToJson(iChunk, indexInfo));
     return result;
 }
 

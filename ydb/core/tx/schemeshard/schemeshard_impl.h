@@ -72,7 +72,7 @@
 
 #include <util/generic/ptr.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
 namespace NKikimr::NSchemeShard::NBackground {
 struct TEvListRequest;
@@ -83,6 +83,10 @@ namespace NKikimr::TEvKeyValue {
     using TEvVacuumResponse__HandlePtr = TAutoPtr<NActors::TEventHandle<TEvVacuumResponse>>;
 }
 
+namespace NKikimr::NTestShard {
+    struct TEvControlResponse;
+    using TEvControlResponse__HandlePtr = TAutoPtr<NActors::TEventHandle<TEvControlResponse>>;
+}
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -219,8 +223,6 @@ private:
 public:
     static constexpr ui32 DefaultPQTabletPartitionsCount = 1;
     static constexpr ui32 MaxPQTabletPartitionsCount = 1000;
-    static constexpr ui32 MaxPQGroupTabletsCount = 10*1000;
-    static constexpr ui32 MaxPQGroupPartitionsCount = 20*1000;
     static constexpr ui32 MaxPQWriteSpeedPerPartition = 50*1024*1024;
     static constexpr ui32 MaxPQLifetimeSeconds = 31 * 86400;
     static constexpr ui32 PublishChunkSize = 1000;
@@ -320,6 +322,7 @@ public:
     THashMap<TPathId, TSecretInfo::TPtr> Secrets;
     THashMap<TPathId, TStreamingQueryInfo::TPtr> StreamingQueries;
     THashSet<TPathId> TableInBackupCollections;
+    THashMap<TPathId, TTestShardSetInfo::TPtr> TestShardSets;
 
     TTempDirsState TempDirsState;
 
@@ -344,7 +347,7 @@ public:
 
     ui64 NextLocalShardIdx = 0;
     THashMap<TShardIdx, TShardInfo> ShardInfos;
-    THashMap<TShardIdx, THashSet<TPathId>> SharedShards; // Maps shard to all paths that share it
+    THashMap<TShardIdx, THashMap<TPathId, TTxId>> SharedShards; // Maps shard to all paths that share it, with per-entry LastTxId
     THashMap<TShardIdx, TAdoptedShard> AdoptedShards;
     THashMap<TTabletId, TShardIdx> TabletIdToShardIdx;
     THashMap<TShardIdx, TVector<TActorId>> ShardDeletionSubscribers; // for tests
@@ -881,6 +884,7 @@ public:
     void PersistDeleteAdopted(NIceDb::TNiceDb& db, TShardIdx shardIdx);
     void PersistAddSharedShard(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId);
     void PersistRemoveSharedShard(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId);
+    void PersistSharedShardTx(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId, TTxId txId);
 
     void PersistSnapshotTable(NIceDb::TNiceDb& db, const TTxId snapshotId, const TPathId tableId);
     void PersistSnapshotStepId(NIceDb::TNiceDb& db, const TTxId snapshotId, const TStepId stepId);
@@ -1024,6 +1028,10 @@ public:
     // StreamingQuery
     void PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
     void PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
+
+    // TestShardSet
+    void PersistTestShardSet(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistRemoveTestShardSet(NIceDb::TNiceDb& db, TPathId pathId);
 
     void PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op);
 
@@ -1576,6 +1584,8 @@ public:
 
     void Handle(TEvPrivate::TEvProgressTablePartitionsFormatSweep::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(NKikimr::NTestShard::TEvControlResponse__HandlePtr& ev, const TActorContext& ctx);
+
     void RestartPipeTx(TTabletId tabletId, const TActorContext& ctx);
 
     TOperationId RouteIncoming(TTabletId tabletId, const TActorContext& ctx);
@@ -1846,6 +1856,13 @@ public:
     void PersistBuildIndexAlterMainTableTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexAlterMainTableTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
+    void PersistBuildIndexCreateBuildSequenceTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexCreateBuildSequenceTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexCreateBuildSequenceTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+
+    // Persists the fulltext rowid auto-provisioning intent + child-build linkage fields together.
+    void PersistBuildIndexFulltextProvisioning(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+
     void PersistBuildIndexInitiateTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexInitiateTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexInitiateTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
@@ -1920,6 +1937,7 @@ public:
 
         class TTxCreateSetColumnConstraint;
         struct TTxProgressSetColumnConstraint;
+        struct TTxGetSetColumnConstraint;
     };
 
     NTabletFlatExecutor::ITransaction* CreateTxCreate(TEvIndexBuilder::TEvCreateRequest::TPtr& ev);
@@ -1971,8 +1989,10 @@ public:
 
     // Begin SetColumnConstraint
     void Handle(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSetColumnConstraint::TEvGetRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxCreateSetColumnConstraint(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxGetSetColumnConstraint(TEvSetColumnConstraint::TEvGetRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxSetColumnConstraintProgress(TIndexBuildId id);
     NTabletFlatExecutor::ITransaction* CreateTxReplyAllocateSetColumnConstraint(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxReplyModifySetColumnConstraint(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
@@ -1987,6 +2007,7 @@ public:
 
     void PersistCreateSetColumnConstraint(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& indexInfo);
     void PersistSetColumnConstraintState(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& indexInfo);
+    void PersistSetColumnConstraintResetSubState(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
     void PersistSetColumnConstraintLockTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
     void PersistSetColumnConstraintLockTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
     void PersistSetColumnConstraintLockTxDone(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
@@ -1999,9 +2020,8 @@ public:
     void PersistSetColumnConstraintUnlockTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
     void PersistSetColumnConstraintUnlockTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
     void PersistSetColumnConstraintUnlockTxDone(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
-    void PersistSetColumnConstraintValidationSnapshot(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
-    void PersistSetColumnConstraintValidationShardStatus(NIceDb::TNiceDb& db, TShardIdx shardIdx, const TIndexBuildShardStatus& status);
-    void PersistSetColumnConstraintValidationIssue(NIceDb::TNiceDb& db, const TString& issue);
+    void PersistSetColumnConstraintValidationFailedValue(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
+    void PersistSetColumnConstraintShardDone(NIceDb::TNiceDb& db, TIndexBuildId operationId, TShardIdx shardIdx, const TSetColumnConstraintOperationInfo& operationInfo);
 
     void AddSetColumnConstraintOperation(const std::shared_ptr<TSetColumnConstraintOperationInfo>& indexInfo);
 
@@ -2025,6 +2045,8 @@ public:
     TInstant ForcedCompactionProgressStartTime;
     TDuration ForcedCompactionPersistBatchMaxTime = TDuration::MilliSeconds(100);
     bool ForcedCompactionNeedsImmediatePersist = false;
+    ui32 ForcedCompactionStoredOperationsLimit = 1000; // total operations, 0 means unlimited
+    bool ForcedCompactionAutoForgetOperations = true;
 
     struct TCancellingForcedCompaction {
         struct TWaiter {
@@ -2063,6 +2085,11 @@ public:
 
     void PersistForcedCompactionState(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo);
     void PersistForcedCompactionForget(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo);
+    void ForgetForcedCompaction(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo);
+    // Ensures there is room to store one more operation within ForcedCompactionStoredOperationsLimit,
+    // auto-forgetting the oldest finished operations when ForcedCompactionAutoForgetOperations is enabled.
+    // Returns false if the limit is reached and no room could be made.
+    bool TryFreeForcedCompactionSlot(NIceDb::TNiceDb& db, const TActorContext& ctx);
     void PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo, const TVector<std::pair<TShardIdx, TPathId>>& shardsToCompact);
     void PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo, const TVector<TShardIdx>& shardsToCompact);
     void PersistForcedCompactionDoneShard(NIceDb::TNiceDb& db, const TShardIdx& shardId);
@@ -2171,10 +2198,16 @@ public:
     void ChangeDiskSpaceTablesTotalBytes(i64 delta) override;
     void AddDiskSpaceTables(EUserFacingStorageType storageType, ui64 data, ui64 index) override;
     void ChangeDiskSpaceTopicsTotalBytes(ui64 value) override;
-    void ChangeDiskSpaceQuotaExceeded(i64 delta) override;
     void ChangeDiskSpaceHardQuotaBytes(i64 delta) override;
     void ChangeDiskSpaceSoftQuotaBytes(i64 delta) override;
     void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) override;
+    void ChangeSmallBlobsVolumeBytes(i64 delta) override;
+    void ChangeSmallBlobsCount(i64 delta) override;
+    void ChangeSmallBlobsVolumeHardQuotaBytes(i64 delta) override;
+    void ChangeSmallBlobsVolumeSoftQuotaBytes(i64 delta) override;
+    void ChangeSmallBlobsCountHardQuota(i64 delta) override;
+    void ChangeSmallBlobsCountSoftQuota(i64 delta) override;
+    void ChangeSimpleCounter(ESimpleCounters counter, i64 delta) override;
     void ChangePathCount(i64 delta) override;
     void SetPathCount(ui64 value) override;
     void SetPathsQuota(ui64 value) override;

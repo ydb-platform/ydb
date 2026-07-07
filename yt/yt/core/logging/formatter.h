@@ -56,21 +56,23 @@ class TStructuredLogFormatter
 public:
     TStructuredLogFormatter(
         ELogFormat format,
-        THashMap<TString, NYTree::INodePtr> commonFields,
+        THashMap<std::string, NYTree::INodePtr> commonFields,
         bool enableSourceLocation = false,
         bool enableSystemFields = true,
         bool enableHostField = false,
-        NJson::TJsonFormatConfigPtr jsonFormat = nullptr);
+        NJson::TJsonFormatConfigPtr jsonFormat = nullptr,
+        NYson::EYsonFormat ysonFormat = NYson::EYsonFormat::Text);
 
     i64 WriteFormatted(IOutputStream* outputStream, const TLogEvent& event) override;
     void WriteLogReopenSeparator(IOutputStream* outputStream) override;
 
 private:
     const ELogFormat Format_;
-    const THashMap<TString, NYTree::INodePtr> CommonFields_;
+    const THashMap<std::string, NYTree::INodePtr> CommonFields_;
     const bool EnableSystemFields_;
     const bool EnableHostField_;
     const NJson::TJsonFormatConfigPtr JsonFormat_;
+    const NYson::EYsonFormat YsonFormat_;
 
     TCachingDateFormatter CachingDateFormatter_;
 };

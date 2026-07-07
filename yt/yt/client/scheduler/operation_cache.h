@@ -19,12 +19,12 @@ class TOperationCache
 public:
     TOperationCache(
         TAsyncExpiringCacheConfigPtr config,
-        THashSet<TString> attributes,
+        THashSet<std::string> attributes,
         NApi::IClientPtr client,
         NProfiling::TProfiler profiler = {});
 
 private:
-    const THashSet<TString> Attributes_;
+    const THashSet<std::string> Attributes_;
     const NApi::IClientPtr Client_;
 
     TFuture<NYson::TYsonString> DoGet(

@@ -1,5 +1,57 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 26.1 {#26-1}
+
+### Version 26.1.1.20 {#26-1-1-20}
+
+Release date: TBD.
+
+#### Functionality
+
+* YQL statements [`SHOW CREATE TABLE`](./yql/reference/syntax/show_create.md?version=v26.1) and [`SHOW CREATE VIEW`](./yql/reference/syntax/show_create.md?version=v26.1) return the DDL required to recreate a table or view.
+* `ALTER TABLE` supports default values in [`ADD COLUMN`](./yql/reference/syntax/alter_table/columns.md?version=v26.1) (`DEFAULT`).
+* [Shuffle Elimination](./concepts/query_execution/optimizer.md?version=v26.1) is enabled in production: the optimizer can remove unnecessary data shuffles in joins.
+* [Backup and restore](./reference/ydb-cli/export-import/file-structure.md?version=v26.1) now cover [asynchronous replications](./concepts/async-replication.md?version=v26.1), [external data sources](./concepts/datamodel/external_data_source.md?version=v26.1), [external tables](./concepts/datamodel/external_table.md?version=v26.1), and [transfers](./concepts/transfer.md?version=v26.1).
+* The cluster keeps running when [CMS](./concepts/glossary.md?version=v26.1#cms) is unavailable.
+* [Dynamic nodes](./devops/configuration-management/configuration-v1/node-authorization.md?version=v26.1) can be registered using client TLS certificates.
+* [LDAP service account authentication](./security/authentication.md?version=v26.1) supports the SASL EXTERNAL mechanism — see [`enable_sasl_external_bind`](./reference/configuration/auth_config.md?version=v26.1#ldap-auth-config).
+* [Asynchronous replication](./concepts/async-replication.md?version=v26.1) mirroring supports [auto-partitioned topics](./concepts/datamodel/topic.md?version=v26.1#autopartitioning); see also [topic partitions in CDC](./concepts/cdc.md?version=v26.1#topic-partitions).
+* [TLI](./reference/configuration/tli_config.md?version=v26.1) (Transaction Lock Invalidation) diagnostics were extended: `tli_config`, [logging](./troubleshooting/performance/queries/tli-logging.md?version=v26.1), and [system views](./dev/system-views.md?version=v26.1#top-tli-partitions).
+* [Load-based auto-partitioning](./concepts/datamodel/table.md?version=v26.1#auto_partitioning_by_load) considers CPU load on the partition leader and all its replicas.
+* [Streaming queries](./dev/streaming-query/index.md?version=v26.1) support [writing results to local tables](./dev/streaming-query/table-writing.md?version=v26.1).
+* [Changefeeds (CDC)](./concepts/cdc.md?version=v26.1) can export user security identifiers (`USER_SIDS`) — see [`ALTER TABLE` `CHANGEFEED`](./yql/reference/syntax/alter_table/changefeed.md?version=v26.1).
+* [External data sources](./concepts/datamodel/external_data_source.md?version=v26.1) support `AUTH_METHOD=IAM`.
+* CLI supports token file authentication (`--token-file`).
+* Transaction handling between topics and tables has been optimized.
+
+#### Bug Fixes
+
+* [Fixed](https://github.com/ydb-platform/ydb/pull/34906) `RETURNING` in streaming `UPDATE` and interactive queries.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/34915) `SET DEFAULT` and `DROP DEFAULT` in `ALTER TABLE`.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/34958) auth token expiry handling in the ticket parser.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/35003) query execution in Workload Manager after tenant recreation.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/35187) a use-after-free in the gRPC service layer.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/35663) incremental restore surviving SchemeShard restarts and shard failures.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/35787) streaming query metadata missing immediately after creation.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/35793) async checkpointing stalling when input is full and the checkpoint is empty.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/36217) cross-database quota interference in the Kesus quoter proxy.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/36220) hangs in PQ read sessions.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/36292) scan executor hangs on `SELECT … LIMIT` over empty tables.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/36692) TLI deferred `LOCKS_BROKEN` flush accounting.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/37130) streaming query timeout overflow.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/37145) thread safety and token expiry parsing in the IAM credentials provider.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/37285) errors in the HTTP gateway.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/37668) integer overflow when handling null passwords.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/38033) CDC collection disabled for `IsBuildInProgress` columns.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/38490) segfault during updates.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/38544) Shuffle Elimination with the `HashJoinMode` pragma.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/39337) duplicated rows in scan queries after delivery issues.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/39687) viewer HTTP endpoints restricted to viewer/admin SIDs; database scope enforced for database-only tokens.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/39798) OOM when loading trash on blob depot.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/41681) `TQueryBase` crash after cancelling a streaming query.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/43068) local CDC reads from YQL.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/44340) quick remote cancellation in the query service.
+
 ## Version 25.4 {#25-4}
 
 ### Version 25.4.1.15 {#25-4-1-15}
@@ -39,29 +91,29 @@ Release date: May 20, 2026.
 
 * Added support for two–data center configuration with synchronous data writes (Bridge mode). Available in {{ ydb-short-name }} Enterprise.
 * Topic improvements:
-  * In Kafka API [compacted ](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) topics can now be created, and YDB automatically creates and removes the internal service consumer used for topic compaction;
-  * Topic APIs were extended with new `DescribeConsumer`  and [per-partition topic metrics can now be exported into user quotas](./reference/observability/metrics/index.md#topics).
+  * In Kafka API [compacted](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) topics can now be created, and YDB automatically creates and removes the internal service consumer used for topic compaction;
+  * Topic APIs were extended with new `DescribeConsumer` and [per-partition topic metrics can now be exported into user quotas](./reference/observability/metrics/index.md#topics).
 * Implemented [backup and restore](./reference/ydb-cli/export-import/file-structure.md?version=v25.3#topics) of topic configuration to and from S3;
-* Implemented [backup and restore](./reference/ydb-cli/export-import/file-structure.md#views) (`VIEW`) в S3 и из S3.
+* Implemented [backup and restore](./reference/ydb-cli/export-import/file-structure.md#views) (`VIEW`) to S3 and from S3.
 
 #### Bug Fixes
 
 * [Fixed](https://github.com/ydb-platform/ydb/pull/38425) an [LDAP authentication](./security/authentication.md) vulnerability: knowing the login and password of any LDAP user (including one who is not a member of a group allowed to access {{ ydb-short-name }}), an attacker could bypass group membership checks and gain access to the cluster (LDAP search filter injection; special characters are now escaped per RFC 2254).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/33758) an issue that caused a server-side session leak.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/36926) an issue where, in rare cases, reads from a table could block its deletion.
-* [Fixed ](https://github.com/ydb-platform/ydb/pull/20238) a race condition when updating the CPU soft limit.
-* [Fixed behavior ](https://github.com/ydb-platform/ydb/pull/18121), where `ALTER TABLE` could fail for tables with a vector index.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/20238) a race condition when updating the CPU soft limit.
+* [Fixed behavior](https://github.com/ydb-platform/ydb/pull/18121), where `ALTER TABLE` could fail for tables with a vector index.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/18088) nconsistent results in some read-write transactions — conflicting writes no longer overwrite uncommitted changes.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/18234) serializability violations in read-write transactions after shard restarts.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/20560) a memory management issue when committing offsets in topics with automatic partitioning enabled.
-* [Added ](https://github.com/ydb-platform/ydb/pull/18698) checks for enabled encryption in zero-copy transfers.
-* [Fixed ](https://github.com/ydb-platform/ydb/pull/20519) an issue that could cause a VDisk to hang in local recovery after a ChunkRead error.
-* [Eliminated](https://github.com/ydb-platform/ydb/pull/18924) появление фантомных VDisk из-за гонок между операциями создания и удаления группы.
-* [Улучшено](https://github.com/ydb-platform/ydb/pull/17687) phantom VDisks caused by races between group creation and deletion operations.
+* [Added](https://github.com/ydb-platform/ydb/pull/18698) checks for enabled encryption in zero-copy transfers.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/20519) an issue that could cause a VDisk to hang in local recovery after a ChunkRead error.
+* [Eliminated](https://github.com/ydb-platform/ydb/pull/18924) phantom VDisk appearances caused by race conditions between group creation and deletion operations.
+* [Improved](https://github.com/ydb-platform/ydb/pull/17687) phantom VDisks caused by races between group creation and deletion operations.
 * When a session ends via attach stream, a notification is now [sent](https://github.com/ydb-platform/ydb/pull/22298).
 * The coordination service now correctly [returns](https://github.com/ydb-platform/ydb/pull/16901) `SCHEME_ERROR` for non-existent resources instead of the incorrect `INTERNAL_ERROR` code.
-* [Fixed ](https://github.com/ydb-platform/ydb/pull/20157) memory handling issues and internal data consistency violations in Workload Manager and related scheduler code.
-* [Fixed ](https://github.com/ydb-platform/ydb/pull/20432) an issue where PDisk info requests could time out when the target node was disabled or unavailable.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/20157) memory handling issues and internal data consistency violations in Workload Manager and related scheduler code.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/20432) an issue where PDisk info requests could time out when the target node was disabled or unavailable.
 
 ## Version 25.2 {#25-2}
 

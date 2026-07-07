@@ -101,11 +101,6 @@ private:
     IPollerPtr OwnPoller_;
 };
 
-static void ApplySslConfig(const TSslContextPtr& sslContext, const TServerCredentialsConfigPtr& sslConfig)
-{
-    sslContext->ApplyConfig(sslConfig);
-}
-
 IServerPtr CreateServer(
     const TServerConfigPtr& config,
     const IPollerPtr& poller,
@@ -113,13 +108,14 @@ IServerPtr CreateServer(
     const IInvokerPtr& controlInvoker,
     std::optional<NCrypto::TCertProfiler> certProfiler)
 {
-    auto sslContext = New<TSslContext>();
-    ApplySslConfig(sslContext, config->Credentials);
+    auto sslConfig = config->Credentials;
+    auto sslContext =  New<TSslContext>();
+    sslContext->ApplyConfig(sslConfig);
     sslContext->Commit();
 
-    auto sslConfig = config->Credentials;
     TPeriodicExecutorPtr certificateUpdater;
-    if (sslConfig->UpdatePeriod &&
+    if (sslConfig &&
+        sslConfig->UpdatePeriod &&
         sslConfig->CertificateChain->FileName &&
         sslConfig->PrivateKey->FileName)
     {
@@ -140,7 +136,7 @@ IServerPtr CreateServer(
                             config->ServerName,
                             modificationTime);
                         sslContext->Reset();
-                        ApplySslConfig(sslContext, sslConfig);
+                        sslContext->ApplyConfig(sslConfig);
                         sslContext->Commit(modificationTime);
                         YT_LOG_INFO("TLS certificates updated (ServerName: %v)",
                             config->ServerName);
@@ -166,7 +162,7 @@ IServerPtr CreateServer(
         acceptor);
 
     TPeriodicExecutorPtr certificateSensorsUpdater;
-    if (certProfiler && sslConfig->CertificateChain) {
+    if (certProfiler && sslConfig && sslConfig->CertificateChain) {
         auto certChainToExpiry = certProfiler->Profiler.Gauge("/cert_chain_to_expiry");
         // Update expiry time ASAP after creation.
         certChainToExpiry.Update(GetCertTimeToExpiry(sslConfig->CertificateChain));

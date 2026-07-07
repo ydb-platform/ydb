@@ -56,6 +56,15 @@ namespace NActors {
         EvSubscribeForConnection,
         EvReportConnection,
 
+        // io_uring transport events
+        EvUringRegister,
+        EvUringRegisterResult,
+        EvUringWriteComplete,
+        EvUringRecvComplete,
+        EvUringSendZcNotif,
+        EvUringUnregister,
+        EvUringRegisterFailed,
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // nonlocal messages; their indices must be preserved in order to work properly while doing rolling update
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

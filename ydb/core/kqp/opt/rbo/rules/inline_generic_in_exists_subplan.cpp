@@ -1,57 +1,11 @@
 #include "kqp_rules_include.h"
 
+#include <ydb/core/kqp/opt/rbo/map_renames.h>
+
 namespace {
 
 using namespace NKikimr::NKqp;
-
-// Create a mapping from a list of IUs to new synthetic variables
-THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> MakeRenameMap(const TVector<TInfoUnit>& IUs, int& varIdx) {
-    THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> result;
-    for (const auto& iu: IUs) {
-        result[iu] = TInfoUnit("_rbo_arg_" + std::to_string(varIdx++));
-    }
-    return result;
-}
-
-// Rename join keys of the right side of the join using a specified rename map
-TVector<std::pair<TInfoUnit, TInfoUnit>> RemapJoinKeysRightSide(const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys, 
-    const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap) {
-
-        TVector<std::pair<TInfoUnit, TInfoUnit>> newJoinKeys;
-
-        for (const auto& [leftKey, rightKey] : joinKeys) {
-            if (renameMap.contains(rightKey)) {
-                newJoinKeys.push_back(std::make_pair(leftKey, renameMap.at(rightKey)));
-            } else {
-                newJoinKeys.push_back(std::make_pair(leftKey, rightKey));
-            }
-    }
-    return newJoinKeys;
-
-}
-
-// Build a projecting map operator that renames output columns wrt the rename map, or copies them in
-// the ouput if they're not in the map
-TIntrusivePtr<TOpMap> MakeMapFromRenames(TIntrusivePtr<IOperator> input,
-    const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, 
-    TPositionHandle pos, 
-    TExprContext *ctx, 
-    TPlanProps *props) {
-
-    TVector<TMapElement> mapElements;
-    for (const auto& iu : input->GetOutputIUs()) {
-        auto fromIU = iu;
-        auto toIU = iu;
-
-        if (renameMap.contains(iu)) {
-            toIU = renameMap.at(iu);
-        }
-
-        mapElements.push_back(TMapElement(toIU, iu, pos, ctx, props));
-    }
-
-    return MakeIntrusive<TOpMap>(input, pos, mapElements, true);
-}
+using namespace NKikimr::NKqp::NMapRenames;
 
 bool CheckNonNullKeys(const TIntrusivePtr<IOperator> &input, const TVector<TInfoUnit>& columns) {
     auto itemType = input->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
@@ -68,7 +22,11 @@ bool CheckNonNullKeys(const TIntrusivePtr<IOperator> &input, const TVector<TInfo
 
 namespace NKikimr {
 namespace NKqp {
-    
+
+bool TInlineGenericInExistsSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Filter;
+}
+
 TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     if (input->Kind != EOperator::Filter) {
         return input;
@@ -142,21 +100,34 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
     auto zero = MakeConstant("Uint64", "0", filter->Pos, &ctx.ExprCtx);
 
     if (subplanEntry.Type == ESubplanType::IN_SUBPLAN || !extraJoinKeys.empty()) {
+        auto leftInput = filter->GetInput();
+        auto rightInput = uncorrSubplan;
+
+        const auto commonIUs = IUSetIntersect(leftInput->GetOutputIUs(), rightInput->GetOutputIUs());
+        const auto rightRenamings = MakeRenameMap(commonIUs, props.InternalVarIdx);
+        if (!rightRenamings.empty()) {
+            rightInput = MakeMapFromRenames(rightInput, rightRenamings, filter->Pos, ctx.ExprCtx, props);
+            extraJoinKeys = RemapRightJoinKeys(extraJoinKeys, rightRenamings);
+            for (auto& joinFilter : joinFilters) {
+                joinFilter = joinFilter.ApplyRenames(rightRenamings);
+            }
+        }
+
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
-        auto planIUs = uncorrSubplan->GetOutputIUs();
+        auto planIUs = rightInput->GetOutputIUs();
 
         for (size_t i = 0; i < subplanEntry.Tuple.size(); i++) {
             joinKeys.push_back(std::make_pair(subplanEntry.Tuple[i], planIUs[i]));
         }
 
         // Fetch keys
-        auto keyColumns = filter->GetInput()->Props.Metadata->KeyColumns;
+        auto keyColumns = leftInput->Props.Metadata->KeyColumns;
         Y_ENSURE(!keyColumns.empty(), "Cannot inline a join filter because key columns are missing");
-        Y_ENSURE(CheckNonNullKeys(filter->GetInput(), keyColumns), "Key columns cannot be optional when decorrelating generic IN/EXISTS");
+        Y_ENSURE(CheckNonNullKeys(leftInput, keyColumns), "Key columns cannot be optional when decorrelating generic IN/EXISTS");
 
         // Build the join
         joinKeys.insert(joinKeys.begin(), extraJoinKeys.begin(), extraJoinKeys.end());
-        join = MakeIntrusive<TOpJoin>(filter->GetInput(), uncorrSubplan, input->Pos, "Inner", joinKeys, joinFilters);
+        join = MakeIntrusive<TOpJoin>(leftInput, rightInput, input->Pos, "Inner", joinKeys, joinFilters);
 
         // Build the counting aggregate and use a map operator to compute count > 0
         auto countResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
@@ -176,15 +147,13 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
         auto topCommonIUs = IUSetIntersect(filter->GetInput()->GetOutputIUs(), compareResMap->GetOutputIUs());
 
         auto renamings = MakeRenameMap(topCommonIUs, props.InternalVarIdx);
-        auto renameMap = MakeMapFromRenames(compareResMap, renamings, filter->Pos, &ctx.ExprCtx, &props);
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> newJoinKeys;
         for (const auto & column : keyColumns) {
             newJoinKeys.push_back(std::make_pair(column, column));
         }
 
-        newJoinKeys = RemapJoinKeysRightSide(newJoinKeys, renamings);
-        join = MakeIntrusive<TOpJoin>(filter->GetInput(), renameMap, filter->Pos, "Left", newJoinKeys);
+        join = MakeJoinWithRightRenames(filter->GetInput(), compareResMap, filter->Pos, "Left", newJoinKeys, {}, renamings, ctx.ExprCtx, props);
 
     }
     // uncorrelated EXISTS

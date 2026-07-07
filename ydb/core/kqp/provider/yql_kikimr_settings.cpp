@@ -81,6 +81,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
 
     REGISTER_SETTING(*this, OptDisableTopSort);
     REGISTER_SETTING(*this, OptDisableAutoIndexSelection);
+    REGISTER_SETTING(*this, EnableAutoIndexSelectionForIndexLookupJoin);
     REGISTER_SETTING(*this, OptDisableSqlInToJoin);
     REGISTER_SETTING(*this, OptEnableInplaceUpdate);
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
@@ -95,7 +96,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptShuffleElimination);
     REGISTER_SETTING(*this, OptShuffleEliminationWithMap);
     REGISTER_SETTING(*this, OptShuffleEliminationForAggregation);
-    REGISTER_SETTING(*this, OptUseSortForPartitionsByKeys);
+    REGISTER_SETTING(*this, WindowFunctionsV2);
     REGISTER_SETTING(*this, OptDisallowFuseJoins);
     REGISTER_SETTING(*this, OptCreateStageForAggregation);
     REGISTER_SETTING(*this, OptValidateStreamingConstraints);
@@ -293,7 +294,11 @@ TKikimrSettings::TConstPtr TKikimrConfiguration::Snapshot() const {
 }
 
 ui64 TKikimrConfiguration::GetEnabledSpillingNodes() const {
-    return EnableSpillingNodes.Get().GetOrElse(ParseEnableSpillingNodes(TTableServiceConfig::GetEnableSpillingNodes()));
+    ui64 mask = EnableSpillingNodes.Get().GetOrElse(ParseEnableSpillingNodes(TTableServiceConfig::GetEnableSpillingNodes()));
+    if (!WindowFunctionsV2.Get().GetOrElse(false)) {
+        mask &= ~ui64(NYql::NDq::EEnabledSpillingNodes::WideSort);
+    }
+    return mask;
 }
 
 bool TKikimrConfiguration::GetEnableOlapPushdownProjections() const {
@@ -317,6 +322,11 @@ bool TKikimrConfiguration::GetUseDqHashCombine() const {
 
 bool TKikimrConfiguration::IsAutoIndexSelectionDisabled() const {
     return OptDisableAutoIndexSelection.Get().GetOrElse(false);
+}
+
+bool TKikimrConfiguration::IsAutoIndexSelectionForIndexLookupJoinEnabled() const {
+    return EnableAutoIndexSelectionForIndexLookupJoin.Get()
+        .GetOrElse(TTableServiceConfig::GetEnableAutoIndexSelectionForIndexLookupJoin());
 }
 
 NSQLTranslation::EBindingsMode TKikimrConfiguration::GetYqlBindingsMode() const {

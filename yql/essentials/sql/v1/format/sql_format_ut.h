@@ -56,6 +56,25 @@ Y_UNIT_TEST(TruncateTable) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(Materialize) {
+    TCases cases{
+        {"use plato;materialize Input into $result;",
+         "USE plato;\n\nMATERIALIZE Input INTO $result;\n"},
+
+        {"materialize plato.Input on plato into $result;",
+         "MATERIALIZE plato.Input ON plato INTO $result;\n"},
+
+        {"use plato;materialize Input into $result;select * from $result;",
+         "USE plato;\n\nMATERIALIZE Input INTO $result;\n\nSELECT\n\t*\nFROM\n\t$result\n;\n"},
+
+        {"materialize (select * from plato.Input) on plato into $result;",
+         "MATERIALIZE (\n\tSELECT\n\t\t*\n\tFROM\n\t\tplato.Input\n) ON plato INTO $result;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(GrantPermissions) {
     TCases cases{
         {"use plato;grant connect, modify tables, list on `/Root` to user;", "USE plato;\n\nGRANT CONNECT, MODIFY TABLES, LIST ON `/Root` TO user;\n"},
@@ -201,6 +220,15 @@ Y_UNIT_TEST(SecretOperations) {
 Y_UNIT_TEST(ShowCreateView) {
     TCases cases = {
         {"use plato;show create view user;", "USE plato;\n\nSHOW CREATE VIEW user;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(ShowCreateExternalDataSource) {
+    TCases cases = {
+        {"use plato;show create external data source source;", "USE plato;\n\nSHOW CREATE EXTERNAL DATA SOURCE source;\n"},
     };
 
     TSetup setup;
@@ -2430,6 +2458,153 @@ Y_UNIT_TEST(PgSyntax) {
                     plato.x
                 WHERE
                     convert_from(b, 'UTF8') !~ '^[0-9]+$';
+            )sql"),
+        },
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(WithCTE) {
+    TCases cases = {
+        {
+            TrimIndent(R"sql(
+                WITH x AS (SELECT 1) SELECT 1;
+            )sql"),
+            TrimIndent(R"sql(
+                WITH x AS (
+                    SELECT
+                        1
+                )
+                SELECT
+                    1
+                ;
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                WITH x (a) AS (VALUES (1)) SELECT 1;
+            )sql"),
+            TrimIndent(R"sql(
+                WITH x (a) AS (
+                    VALUES
+                        (1)
+                )
+                SELECT
+                    1
+                ;
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                WITH x AS (SELECT 1), y AS (SELECT 1) SELECT 1;
+            )sql"),
+            TrimIndent(R"sql(
+                WITH
+                    x AS (
+                        SELECT
+                            1
+                    ),
+                    y AS (
+                        SELECT
+                            1
+                    )
+                SELECT
+                    1
+                ;
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                WITH x(a, b) AS (SELECT 1), SELECT 1;
+            )sql"),
+            TrimIndent(R"sql(
+                WITH x (a, b) AS (
+                    SELECT
+                        1
+                ),
+                SELECT
+                    1
+                ;
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                WITH RECURSIVE x(a, b) AS (SELECT 1), y(a, b) AS (SELECT 1), SELECT 1;
+            )sql"),
+            TrimIndent(R"sql(
+                WITH
+                    RECURSIVE x (a, b) AS (
+                        SELECT
+                            1
+                    ),
+                    y (a, b) AS (
+                        SELECT
+                            1
+                    ),
+                SELECT
+                    1
+                ;
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                $x = (WITH x AS (SELECT 1) SELECT 1);
+            )sql"),
+            TrimIndent(R"sql(
+                $x = (
+                    WITH x AS (
+                        SELECT
+                            1
+                    )
+                    SELECT
+                        1
+                );
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                SELECT (WITH x AS (SELECT 1) SELECT 1);
+            )sql"),
+            TrimIndent(R"sql(
+                SELECT
+                    (
+                        WITH x AS (
+                            SELECT
+                                1
+                        )
+                        SELECT
+                            1
+                    )
+                ;
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                INSERT INTO x
+                WITH a AS (SELECT 1 AS b)
+                SELECT * FROM a;
+            )sql"),
+            TrimIndent(R"sql(
+                INSERT INTO x
+                WITH a AS (
+                    SELECT
+                        1 AS b
+                )
+                SELECT
+                    *
+                FROM
+                    a
+                ;
+
             )sql"),
         },
     };

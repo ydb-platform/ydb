@@ -260,10 +260,10 @@ public:
 
                 try {
                     meta = MakeCallMeta(requestSettings, dbState);
-                } catch (const TAuthenticationError& e) {
+                } catch (const TYdbException& e) {
                     userResponseCb(
                         nullptr,
-                        TPlainStatus(EStatus::CLIENT_UNAUTHENTICATED, e.what())
+                        TPlainStatus(dynamic_cast<const TAuthenticationError*>(&e) ? EStatus::CLIENT_UNAUTHENTICATED : EStatus::UNAVAILABLE, e.what())
                     );
                     return;
                 }
@@ -475,9 +475,9 @@ public:
                 TCallMeta meta;
                 try {
                     meta = MakeCallMeta(requestSettings, dbState);
-                } catch (const TAuthenticationError& e) {
+                } catch (const TYdbException& e) {
                     responseCb(
-                        TPlainStatus(EStatus::CLIENT_UNAUTHENTICATED, e.what()),
+                        TPlainStatus(dynamic_cast<const TAuthenticationError*>(&e) ? EStatus::CLIENT_UNAUTHENTICATED : EStatus::UNAVAILABLE, e.what()),
                         nullptr
                     );
                     return;
@@ -556,9 +556,9 @@ public:
                 TCallMeta meta;
                 try {
                     meta = MakeCallMeta(requestSettings, dbState);
-                } catch (const TAuthenticationError& e) {
+                } catch (const TYdbException& e) {
                     connectedCallback(
-                        TPlainStatus(EStatus::CLIENT_UNAUTHENTICATED, e.what()),
+                        TPlainStatus(dynamic_cast<const TAuthenticationError*>(&e) ? EStatus::CLIENT_UNAUTHENTICATED : EStatus::UNAVAILABLE, e.what()),
                         nullptr
                     );
                     return;

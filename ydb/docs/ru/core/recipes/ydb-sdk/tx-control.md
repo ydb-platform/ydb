@@ -262,7 +262,12 @@
 
 - Rust
 
-  Режим ImplicitTx не поддерживается
+  ```rust
+  let mut qc = client.query_client();
+  // ImplicitTx — режим по умолчанию для вспомогательных методов QueryClient, выполняющих один транзакционный SQL-запрос:
+  // сервер выбирает изоляцию по типу SQL (SELECT → snapshot RO, DML → serializable RW).
+  let mut row = qc.query_row("SELECT 1 AS one").await?;
+  ```
 
 - PHP
 
@@ -627,16 +632,17 @@
 - Rust
 
   ```rust
-  use ydb::{TransactionOptions};
+  use ydb::TxMode;
 
-  let tx_options = TransactionOptions::default().with_mode(
-    ydb::Mode::SerializableReadWrite
-  );
-  let table_client = db.table_client().clone_with_transaction_options(tx_options);
-  let result = table_client.retry_transaction(|mut tx| async move {
-    let res = tx.query("SELECT 1".into()).await?;
-    return Ok(res)
-  }).await?;
+  client
+      .query_client()
+      .retry_tx(async |tx| {
+          tx.query_row("SELECT 1 AS one").await?;
+          Ok(())
+      })
+      .isolation(TxMode::SerializableReadWrite)
+      .idempotent(true)
+      .await?;
   ```
 
 - PHP
@@ -955,14 +961,21 @@
 - Rust
 
   ```rust
-  let tx_options = TransactionOptions::default().with_mode(
-    ydb::Mode::OnlineReadonly,
-  ).with_autocommit(true);
-  let table_client = db.table_client().clone_with_transaction_options(tx_options);
-  let result = table_client.retry_transaction(|mut tx| async move {
-    let res = tx.query("SELECT 1".into()).await?;
-    return Ok(res)
-  }).await?;
+  use ydb::TxMode;
+
+  let mut qc = client.query_client();
+
+  // Online RO — согласованное чтение (allow_inconsistent_reads = false)
+  let mut row = qc
+      .query_row("SELECT 1 AS one")
+      .with_tx_mode(TxMode::OnlineReadOnly)
+      .await?;
+
+  // Online inconsistent RO — максимальная производительность (allow_inconsistent_reads = true)
+  let mut row = qc
+      .query_row("SELECT 1 AS one")
+      .with_tx_mode(TxMode::OnlineReadOnlyInconsistent)
+      .await?;
   ```
 
 - PHP
@@ -1266,7 +1279,16 @@
 
 - Rust
 
-  Режим Stale Read-Only не поддерживается в rust sdk.
+  ```rust
+  use ydb::TxMode;
+
+  let mut qc = client.query_client();
+  // Режим Stale Read-Only поддерживается только для one-shot вызовов на query-клиенте (не для retry_tx).
+  let mut row = qc
+      .query_row("SELECT 1 AS one")
+      .with_tx_mode(TxMode::StaleReadOnly)
+      .await?;
+  ```
 
 - PHP
 
@@ -1453,7 +1475,7 @@
         String connectionUrl = args[0];
 
         try (Connection connection = DriverManager.getConnection(connectionUrl)) {
-            connection.setAutoCommit(false); 
+            connection.setAutoCommit(false);
             connection.setReadOnly(true); // Будет использован  Snapshot Read-Only
             connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
 
@@ -1561,7 +1583,22 @@
 
 - Rust
 
-  Режим Snapshot Read-Only не поддерживается в rust sdk.
+  ```rust
+  use ydb::TxMode;
+
+  let mut qc = client.query_client();
+  qc.query_row("SELECT 1 AS one")
+      .with_tx_mode(TxMode::SnapshotReadOnly)
+      .await?;
+
+  qc.retry_tx(async |tx| {
+      tx.query_row("SELECT 1 AS one").await?;
+      Ok(())
+  })
+  .isolation(TxMode::SnapshotReadOnly)
+  .idempotent(true)
+  .await?;
+  ```
 
 - PHP
 
@@ -1760,7 +1797,7 @@
         props.setProperty("repeatableReadEnabled", "true"); // Режим REPEATABLE_READ не доступен по умолчанию
 
         try (Connection connection = DriverManager.getConnection(connectionUrl, props)) {
-            connection.setAutoCommit(false); 
+            connection.setAutoCommit(false);
             connection.setReadOnly(false);
             connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
 
@@ -1915,7 +1952,22 @@
 
 - Rust
 
-  Режим Snapshot Read-Write не поддерживается в rust sdk.
+  ```rust
+  use ydb::TxMode;
+
+  let mut qc = client.query_client();
+  qc.query_row("SELECT 1 AS one")
+      .with_tx_mode(TxMode::SnapshotReadWrite)
+      .await?;
+
+  qc.retry_tx(async |tx| {
+      tx.query_row("SELECT 1 AS one").await?;
+      Ok(())
+  })
+  .isolation(TxMode::SnapshotReadWrite)
+  .idempotent(true)
+  .await?;
+  ```
 
 - PHP
 

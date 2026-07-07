@@ -1,4 +1,3 @@
-/* postgres can not */
 $vt = ParseType("Variant<Int32,Uint32>");
 $v1 = Variant(1,"0",$vt);
 $v2 = Variant(2u,"1",$vt);

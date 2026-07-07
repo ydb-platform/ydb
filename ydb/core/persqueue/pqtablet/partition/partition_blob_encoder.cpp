@@ -159,14 +159,14 @@ TVector<TClientBlob> TPartitionBlobEncoder::GetBlobsFromHead(const ui64 startOff
             ui64 curOffset = offset;
 
             AFL_ENSURE(pno == blobs[i].GetPartNo());
-            bool skip = (offset + blobs[i].MessageCount <= startOffset)
+            bool skip = (offset + blobs[i].LogicalMessageCount <= startOffset)
                 || (offset == startOffset && blobs[i].GetPartNo() < partNo);
 
             if (0 < lastOffset && lastOffset <= offset) {
                 break;
             }
             if (blobs[i].IsLastPart()) {
-                offset += blobs[i].MessageCount;
+                offset += blobs[i].LogicalMessageCount;
                 pno = 0;
             } else {
                 ++pno;
@@ -658,6 +658,43 @@ void TPartitionBlobEncoder::pop_front() {
     ScheduleDelete(key);
     BodySize -= key.Size;
     DataKeysBody.pop_front();
+}
+
+void TPartitionBlobEncoder::PopFrontHeadKey() {
+    AFL_ENSURE(!HeadKeys.empty());
+
+    const TDataKey deletedKey = HeadKeys.front();
+    ScheduleDelete(HeadKeys.front());
+    HeadKeys.pop_front();
+
+    for (auto& level : DataKeysHead) {
+        if (level.KeysCount() > 0) {
+            AFL_ENSURE(level.GetKey(0) == deletedKey.Key);
+            level.PopFront();
+            break;
+        }
+    }
+
+    AFL_ENSURE(Head.PackedSize >= deletedKey.Size);
+    Head.PackedSize -= deletedKey.Size;
+
+    if (HeadKeys.empty()) {
+        Head.Clear();
+        return;
+    }
+
+    const auto& frontKey = HeadKeys.front().Key;
+    Head.Offset = frontKey.GetOffset();
+    Head.PartNo = frontKey.GetPartNo();
+
+    while (!Head.GetBatches().empty()) {
+        const auto& batch = Head.GetBatch(0);
+        if (batch.GetOffset() > frontKey.GetOffset() ||
+            (batch.GetOffset() == frontKey.GetOffset() && batch.GetPartNo() >= frontKey.GetPartNo())) {
+            break;
+        }
+        Head.ExtractFirstBatch();
+    }
 }
 
 void TPartitionBlobEncoder::ScheduleDelete(TDataKey& key) {

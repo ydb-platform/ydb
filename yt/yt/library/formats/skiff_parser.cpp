@@ -436,7 +436,7 @@ public:
         , YsonToUnversionedValueConverter_(TYsonConverterConfig(), ValueConsumer_)
         , OtherColumnsConsumer_(TYsonConverterConfig(), ValueConsumer_)
     {
-        THashMap<TString, const TColumnSchema*> columnSchemas;
+        THashMap<std::string, const TColumnSchema*> columnSchemas;
         for (const auto& column : tableSchema->Columns()) {
             columnSchemas[column.Name()] = &column;
         }

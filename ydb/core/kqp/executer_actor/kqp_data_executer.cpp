@@ -88,6 +88,7 @@ public:
 
         if (Request.AcquireLocksTxId || Request.LocksOp == ELocksOp::Commit || Request.LocksOp == ELocksOp::Rollback) {
             YQL_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_SERIALIZABLE
+                || Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE
                 || Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW
                 || Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
         }
@@ -513,10 +514,7 @@ private:
 
     void DoExecute() {
         const auto& requestContext = GetUserRequestContext();
-        auto scriptExternalEffect = std::make_unique<TEvSaveScriptExternalEffectRequest>(
-            requestContext->CurrentExecutionId, requestContext->Database,
-            requestContext->CustomerSuppliedId
-        );
+        auto scriptExternalEffect = std::make_unique<TEvSaveScriptExternalEffectRequest>(requestContext->CustomerSuppliedId);
         for (const auto& transaction : Request.Transactions) {
             for (const auto& secretName : transaction.Body->GetSecretNames()) {
                 SecretSnapshotRequired = true;

@@ -1,6 +1,7 @@
 #include "ic_storage_transport_actor.h"
 
 #include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
 
 #include <ydb/library/actors/util/rope.h>
 
@@ -10,13 +11,6 @@ using namespace NActors;
 using namespace NKikimr;
 
 namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-constexpr TStringBuf DestroyErrorMessage =
-    "TICStorageTransportActor is destroyed";
-constexpr TStringBuf CantAcquireDataErrorMessage = "can't acquire data";
-constexpr TStringBuf UndeliveryErrorMessage = "Undelivered";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -46,15 +40,6 @@ MakeWritePersistentBuffersResult(
     return errorResponse;
 }
 
-template <typename T>
-void SetCantAcquireStatus(T& record)
-{
-    SetErrorStatus(
-        NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
-        CantAcquireDataErrorMessage,
-        record);
-}
-
 template <typename TEvent, typename TMap>
 void RejectAllPending(TMap& map)
 {
@@ -81,6 +66,19 @@ void SetUndeliveryError(T& record)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TActorId CreateTransportActor()
+{
+    auto actor = std::make_unique<TICStorageTransportActor>();
+
+    return TActivationContext::Register(
+        actor.release(),
+        TActorId(),
+        TMailboxType::ReadAsFilled,
+        NKikimr::AppData()->SystemPoolId);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TICStorageTransportActor::~TICStorageTransportActor()
 {
     RejectAllPending<NDDisk::TEvConnectResult>(ConnectRequests);
@@ -90,8 +88,7 @@ TICStorageTransportActor::~TICStorageTransportActor()
     RejectAllPending<NDDisk::TEvWritePersistentBufferResult>(
         WriteToPBufferRequests);
     RejectAllPending<NDDisk::TEvWriteResult>(WriteToDDiskRequests);
-    RejectAllPending<NDDisk::TEvSyncWithPersistentBufferResult>(
-        FlushFromPBufferRequests);
+    RejectAllPending<NDDisk::TEvSyncResult>(FlushFromPBufferRequests);
     RejectAllPending<NDDisk::TEvErasePersistentBufferResult>(
         BatchEraseFromPBufferRequests);
     RejectAllPending<NDDisk::TEvErasePersistentBufferResult>(
@@ -373,7 +370,7 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
         requestId);
 
     auto errorResponse = MakeWritePersistentBuffersResult(
-        NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
+        NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN,
         CantAcquireDataErrorMessage,
         msg->PersistentBufferIds);
     ctx.Send(MakeHolder<IEventHandle>(
@@ -906,6 +903,10 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
 {
     auto* msg = ev->Get();
 
+    // SyncWithPBuffer must only be issued for an established pbuffer
+    // connection.
+    Y_ABORT_UNLESS(msg->PBufferCredentials.DDiskInstanceGuid.has_value());
+
     const ui64 requestId = ++RequestIdGenerator;
 
     auto [it, inserted] =
@@ -918,17 +919,17 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
         "Sent TEvSyncWithPBuffer with requestId# %lu",
         requestId);
 
-    auto request = std::make_unique<NDDisk::TEvSyncWithPersistentBuffer>(
-        msg->Credentials,
-        std::make_tuple(
-            msg->PBufferId.NodeId,
-            msg->PBufferId.PDiskId,
-            msg->PBufferId.DDiskSlotId),
-        msg->PBufferCredentials.DDiskInstanceGuid);
+    auto request = std::make_unique<NDDisk::TEvSync>(msg->Credentials);
+    const auto pBufferId = std::make_tuple(
+        msg->PBufferId.NodeId,
+        msg->PBufferId.PDiskId,
+        msg->PBufferId.DDiskSlotId);
 
     Y_ABORT_UNLESS(msg->Selectors.size() == msg->Lsns.size());
     for (size_t i = 0; i < msg->Selectors.size(); ++i) {
-        request->AddSegment(
+        request->AddSegmentFromPB(
+            pBufferId,
+            *msg->PBufferCredentials.DDiskInstanceGuid,
             msg->Selectors[i],
             msg->Lsns[i],
             msg->Credentials.Generation);
@@ -943,7 +944,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
 }
 
 void TICStorageTransportActor::HandleSyncWithPersistentBufferUndelivery(
-    const NKikimr::NDDisk::TEvSyncWithPersistentBuffer::TPtr& ev,
+    const NKikimr::NDDisk::TEvSync::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
     const ui64 requestId = ev->Cookie;
@@ -951,14 +952,12 @@ void TICStorageTransportActor::HandleSyncWithPersistentBufferUndelivery(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received NDDisk::TEvSyncWithPersistentBuffer undelivery with "
-        "requestId# %lu",
+        "Received NDDisk::TEvSync undelivery with requestId# %lu",
         requestId);
 
     if (auto* r = FlushFromPBufferRequests.FindPtr(requestId)) {
         auto& request = **r;
-        auto result =
-            NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult();
+        auto result = NKikimrBlobStorage::NDDisk::TEvSyncResult();
         SetUndeliveryError(result);
         request.Promise.SetValue(std::move(result));
         FlushFromPBufferRequests.erase(requestId);
@@ -973,7 +972,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBufferUndelivery(
 }
 
 void TICStorageTransportActor::HandleSyncWithPersistentBufferResult(
-    const NDDisk::TEvSyncWithPersistentBufferResult::TPtr& ev,
+    const NDDisk::TEvSyncResult::TPtr& ev,
     const TActorContext& ctx)
 {
     const ui64 requestId = ev->Cookie;
@@ -981,7 +980,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBufferResult(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received TEvSyncWithPersistentBufferResult with requestId# %lu",
+        "Received TEvSyncResult with requestId# %lu",
         requestId);
 
     if (auto* r = FlushFromPBufferRequests.FindPtr(requestId)) {
@@ -1148,10 +1147,10 @@ STFUNC(TICStorageTransportActor::StateWork)
             TEvTransportPrivate::TEvSyncWithPBuffer,
             HandleSyncWithPersistentBuffer);
         HFunc(
-            NKikimr::NDDisk::TEvSyncWithPersistentBuffer,
+            NKikimr::NDDisk::TEvSync,
             HandleSyncWithPersistentBufferUndelivery);
         HFunc(
-            NKikimr::NDDisk::TEvSyncWithPersistentBufferResult,
+            NKikimr::NDDisk::TEvSyncResult,
             HandleSyncWithPersistentBufferResult);
 
         HFunc(
@@ -1172,19 +1171,6 @@ STFUNC(TICStorageTransportActor::StateWork)
                                          << " event: " << ev->ToString());
             break;
     }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TActorId CreateTransportActor()
-{
-    auto actor = std::make_unique<TICStorageTransportActor>();
-
-    return TActivationContext::Register(
-        actor.release(),
-        TActorId(),
-        TMailboxType::ReadAsFilled,
-        NKikimr::AppData()->SystemPoolId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

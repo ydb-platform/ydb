@@ -5,12 +5,14 @@
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_CONVEYOR
+
 namespace NKikimr::NConveyor {
 
 LWTRACE_USING(YDB_CONVEYOR_PROVIDER);
 
 TWorkersPool::TWorkersPool(const TString& conveyorName, const NActors::TActorId& distributorId, const TConfig& config, const TCounters& counters)
-    : WorkersCount(config.GetWorkersCountForConveyor(NKqp::TStagePredictor::GetUsableThreads()))
+    : WorkersCount(config.GetWorkersCountForConveyor(NKqp::TStagePredictor::GetPossibleMaxLimitThreads()))
     , Counters(counters) {
     Workers.reserve(WorkersCount);
     for (ui32 i = 0; i < WorkersCount; ++i) {
@@ -100,7 +102,12 @@ void TDistributor::Bootstrap() {
     if (!EnableProcesses) {
         AddProcess(0, TCPULimitsConfig(WorkersPool->GetMaxWorkerThreads(), ""));
     }
-    AFL_NOTICE(NKikimrServices::TX_CONVEYOR)("name", ConveyorName)("action", "conveyor_registered")("config", Config.DebugString())("actor_id", SelfId())("count", WorkersPool->GetWorkersCount());
+    YDB_LOG_NOTICE("",
+        {"name", ConveyorName},
+        {"action", "conveyor_registered"},
+        {"config", Config.DebugString()},
+        {"actorId", SelfId()},
+        {"count", WorkersPool->GetWorkersCount()});
     Counters.WaitingQueueSizeLimit->Set(Config.GetQueueSizeLimit());
     Become(&TDistributor::StateMain);
 }
@@ -108,8 +115,12 @@ void TDistributor::Bootstrap() {
 void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) {
     auto& event = *evExt->Get();
     WorkersPool->ReleaseWorker(event.GetWorketIdx());
-    AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "result")("sender", evExt->Sender)
-        ("queue", ProcessesOrdered.size())("count", event.GetProcessIds().size())("d", event.GetInstants().back() - event.GetInstants().front());
+    YDB_LOG_DEBUG("",
+        {"action", "result"},
+        {"sender", evExt->Sender},
+        {"queue", ProcessesOrdered.size()},
+        {"count", event.GetProcessIds().size()},
+        {"d", event.GetInstants().back() - event.GetInstants().front()});
     for (ui32 idx = 0; idx < event.GetProcessIds().size(); ++idx) {
         LWPROBE(TaskProcessedResult, ConveyorName, event.GetProcessIds()[idx], TDuration::MilliSeconds((event.GetInstants().back() - event.GetInstants().front()).MilliSeconds()), WaitingTasksCount.Val(), event.GetProcessIds().size());
         AddCPUTime(event.GetProcessIds()[idx], event.GetInstants()[idx + 1] - std::max(LastAddProcessInstant, event.GetInstants()[idx]));
@@ -127,9 +138,15 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
     const double alpha = 0.1;
     const ui32 countTheory = (dBackSend + dForwardSend).GetValue() / (alpha * predictedDurationPerTask.GetValue());
     const ui32 countPredicted = std::max<ui32>(1, std::min<ui32>(WaitingTasksCount.Val() / WorkersPool->GetWorkersCount(), countTheory));
-    AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "prediction")("alpha", alpha)
-        ("send_forward", dForwardSend)("send_back", dBackSend)("count", event.GetProcessIds().size())("exec", dExecution)("theory_count", countTheory)
-        ("real_count", countPredicted);
+    YDB_LOG_DEBUG("",
+        {"action", "prediction"},
+        {"alpha", alpha},
+        {"sendForward", dForwardSend},
+        {"sendBack", dBackSend},
+        {"count", event.GetProcessIds().size()},
+        {"exec", dExecution},
+        {"theoryCount", countTheory},
+        {"realCount", countPredicted});
 
     Counters.SendBackHistogram->Collect(dBackSend.MicroSeconds());
     Counters.SendBackDuration->Add(dBackSend.MicroSeconds());
@@ -145,11 +162,17 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
             tasks.emplace_back(std::move(task));
         }
         Counters.PackHistogram->Collect(tasks.size());
-        AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "to_execute")("id", evExt->Sender)("queue", WaitingTasksCount.Val())("count", tasks.size());
+        YDB_LOG_DEBUG("",
+            {"action", "to_execute"},
+            {"id", evExt->Sender},
+            {"queue", WaitingTasksCount.Val()},
+            {"count", tasks.size()});
         WorkersPool->RunTask(std::move(tasks));
     } else {
         AFL_VERIFY(!WaitingTasksCount.Val() || !hasFreeWorker);
-        AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "return_worker")("id", evExt->Sender);
+        YDB_LOG_DEBUG("",
+            {"action", "return_worker"},
+            {"id", evExt->Sender});
     }
     Counters.WaitingQueueSize->Set(WaitingTasksCount.Val());
 }
@@ -191,7 +214,10 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     Counters.IncomingRate->Inc();
     const ui64 processId = ev->Get()->GetProcessId();
     const TString taskClass = ev->Get()->GetTask()->GetTaskClassIdentifier();
-    AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "add_task")("sender", ev->Sender)("task", taskClass);
+    YDB_LOG_DEBUG("",
+        {"action", "add_task"},
+        {"sender", ev->Sender},
+        {"task", taskClass});
     auto itSignal = Signals.find(taskClass);
     if (itSignal == Signals.end()) {
         itSignal = Signals.emplace(taskClass, std::make_shared<TTaskSignals>("Conveyor/" + ConveyorName, taskClass)).first;
@@ -199,7 +225,10 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     Counters.ReceiveTaskHistogram->Collect((TMonotonic::Now() - ev->Get()->GetConstructInstant()).MicroSeconds());
 
     TWorkerTask wTask(ev->Get()->GetTask(), itSignal->second, processId);
-    AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "add_task")("proc", processId)("queue", WaitingTasksCount.Val());
+    YDB_LOG_DEBUG("",
+        {"action", "add_task"},
+        {"proc", processId},
+        {"queue", WaitingTasksCount.Val()});
     LWPROBE(NewTask, ConveyorName, processId, taskClass, WaitingTasksCount.Val());
 
     if (WorkersPool->HasFreeWorker()) {
@@ -213,7 +242,10 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
         Counters.WaitWorkerRate->Inc();
     } else {
         Counters.OverlimitRate->Inc();
-        AFL_ERROR(NKikimrServices::TX_CONVEYOR)("action", "queue_overlimit")("sender", ev->Sender)("limit", Config.GetQueueSizeLimit());
+        YDB_LOG_ERROR("",
+            {"action", "queue_overlimit"},
+            {"sender", ev->Sender},
+            {"limit", Config.GetQueueSizeLimit()});
         ev->Get()->GetTask()->OnCannotExecute("scan conveyor overloaded (" + ::ToString(WaitingTasksCount.Val()) + " >= " + ::ToString(Config.GetQueueSizeLimit()) + ")");
     }
     Counters.WaitingQueueSize->Set(WaitingTasksCount.Val());

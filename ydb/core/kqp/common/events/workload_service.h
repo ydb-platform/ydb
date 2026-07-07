@@ -14,11 +14,9 @@
 
 #include <memory>
 
-namespace NKikimr::NKqp {
-    struct IWmSessionUpdater;
-}
-
 namespace NKikimr::NKqp::NWorkload {
+
+class ISessionUpdater;
 
 struct TEvSubscribeOnPoolChanges : public NActors::TEventLocal<TEvSubscribeOnPoolChanges, TKqpWorkloadServiceEvents::EvSubscribeOnPoolChanges> {
     TEvSubscribeOnPoolChanges(const TString& databaseId, const TString& poolId)
@@ -31,7 +29,7 @@ struct TEvSubscribeOnPoolChanges : public NActors::TEventLocal<TEvSubscribeOnPoo
 };
 
 struct TEvPlaceRequestIntoPool : public NActors::TEventLocal<TEvPlaceRequestIntoPool, TKqpWorkloadServiceEvents::EvPlaceRequestIntoPool> {
-    TEvPlaceRequestIntoPool(const TString& databaseId, const TString& sessionId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& requestText = "", std::shared_ptr<IWmSessionUpdater> wmSessionUpdater = nullptr)
+    TEvPlaceRequestIntoPool(const TString& databaseId, const TString& sessionId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& requestText = "", std::shared_ptr<ISessionUpdater> wmSessionUpdater = nullptr)
         : DatabaseId(databaseId)
         , SessionId(sessionId)
         , PoolId(poolId)
@@ -45,7 +43,7 @@ struct TEvPlaceRequestIntoPool : public NActors::TEventLocal<TEvPlaceRequestInto
     TString PoolId;  // Can be changed to default pool id
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TString RequestText;
-    std::shared_ptr<IWmSessionUpdater> WmSessionUpdater;
+    std::shared_ptr<ISessionUpdater> WmSessionUpdater;
 };
 
 struct TEvContinueRequest : public NActors::TEventLocal<TEvContinueRequest, TKqpWorkloadServiceEvents::EvContinueRequest> {

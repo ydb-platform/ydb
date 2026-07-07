@@ -198,7 +198,7 @@ std::vector<TThreadIntrospectionInfo> IntrospectThreads()
         infos.push_back(TThreadIntrospectionInfo{
             .ThreadId = threadId,
             .FiberId = signalHandlerContext.FiberId,
-            .ThreadName = TString(signalHandlerContext.ThreadName.Buffer.data(), static_cast<size_t>(signalHandlerContext.ThreadName.Length)),
+            .ThreadName = std::string(signalHandlerContext.ThreadName.Buffer.data(), static_cast<size_t>(signalHandlerContext.ThreadName.Length)),
             .TraceId = signalHandlerContext.TraceId,
             .TraceLoggingTag = signalHandlerContext.TraceLoggingTag,
             .Backtrace = signalHandlerContext.Backtrace,

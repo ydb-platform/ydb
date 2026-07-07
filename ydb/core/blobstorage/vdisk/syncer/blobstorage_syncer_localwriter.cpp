@@ -2,6 +2,8 @@
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgwriter.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_SYNCER
+
 namespace NKikimr {
 
     TEvLocalSyncData::TEvLocalSyncData(const TVDiskID &vdisk, const TSyncState &syncState, const TString &data)
@@ -124,22 +126,45 @@ namespace NKikimr {
             Squeeze(logoBlobs);
             Extracted.LogoBlobs =
                 std::make_shared<TFreshAppendixLogoBlobs>(std::move(logoBlobs), vctx->FreshIndex, true);
+            LogoBlobsSize = Extracted.LogoBlobs->SizeApproximation();
         }
         if (blocks) {
             Squeeze(blocks);
             // blocks are already sorted
             Extracted.Blocks =
                 std::make_shared<TFreshAppendixBlocks>(std::move(blocks), vctx->FreshIndex, true);
+            BlocksSize = Extracted.Blocks->SizeApproximation();
         }
         if (barriers) {
             Squeeze(barriers);
             Extracted.Barriers =
                 std::make_shared<TFreshAppendixBarriers>(std::move(barriers), vctx->FreshIndex, true);
+            BarriersSize = Extracted.Barriers->SizeApproximation();
         }
         Y_ABORT_UNLESS(Extracted.IsReady());
     }
 
+    void TEvLocalSyncData::CalculateSizesFromData() {
+        LogoBlobsSize = 0;
+        BlocksSize = 0;
+        BarriersSize = 0;
 
+        auto blobHandler = [&] (const NSyncLog::TLogoBlobRec*) {
+            LogoBlobsSize += sizeof(TKeyLogoBlob) + sizeof(TMemRecLogoBlob);
+        };
+        auto blockHandler = [&] (const NSyncLog::TBlockRec*) {
+            BlocksSize += sizeof(TKeyBlock) + sizeof(TMemRecBlock);
+        };
+        auto barrierHandler = [&] (const NSyncLog::TBarrierRec*) {
+            BarriersSize += sizeof(TKeyBarrier) + sizeof(TMemRecBarrier);
+        };
+        auto blockHandlerV2 = [&] (const NSyncLog::TBlockRecV2*) {
+            BlocksSize += sizeof(TKeyBlock) + sizeof(TMemRecBlock);
+        };
+
+        NSyncLog::TFragmentReader fragment(Data);
+        fragment.ForEach(blobHandler, blockHandler, barrierHandler, blockHandlerV2);
+    }
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // TLocalSyncDataExtractorActor -- actor extracts data from TEvLocalSyncData
     ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -156,10 +181,11 @@ namespace NKikimr {
             auto startTime = TAppData::TimeProvider->Now();
             Ev->UnpackData(VCtx);
             auto finishTime = TAppData::TimeProvider->Now();
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_SYNCER, VCtx->VDiskLogPrefix
-                    << "TLocalSyncDataExtractorActor: VDiskId# " << Ev->VDiskID.ToString()
-                    << " dataSize# " << Ev->Data.size()
-                    << " duration# %s" << (finishTime - startTime));
+            YDB_LOG_DEBUG_CTX(ctx, "TLocalSyncDataExtractorActor: %s",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"VDiskId", Ev->VDiskID},
+                {"dataSize", Ev->Data.size()},
+                {"duration", (finishTime - startTime)});
 
             ctx.Send(new IEventHandle(TargetId, ParentId, Ev.release()));
             PassAway();
@@ -235,10 +261,11 @@ namespace NKikimr {
             }
             addChunk();
 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER, VCtx->VDiskLogPrefix
-                    << "TLocalSyncDataCutterActor: VDiskId# " << Ev->VDiskID.ToString()
-                    << " dataSize# " << Ev->Data.size()
-                    << " duration# " << TDuration::Seconds(timer.Passed()));
+            YDB_LOG_DEBUG("TLocalSyncDataCutterActor",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"VDiskId", Ev->VDiskID},
+                {"dataSize", Ev->Data.size()},
+                {"duration", TDuration::Seconds(timer.Passed())});
 
             Become(&TThis::StateFunc);
             SendChunks();

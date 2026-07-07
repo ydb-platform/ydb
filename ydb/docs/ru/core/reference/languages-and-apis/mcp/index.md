@@ -13,7 +13,7 @@
 
 #### Анонимная аутентификация
 
-{% list tabs tab group=install %}
+{% list tabs group=install %}
 
 - uvx
 

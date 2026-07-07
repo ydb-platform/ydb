@@ -142,6 +142,16 @@ runs:
 
         python3 -m pip install ydb ydb[yc] codeowners humanize plotly
 
+    - name: Resolve analytics job name
+      shell: bash
+      env:
+        WORKFLOW_NAME: ${{ github.workflow }}
+        BUILD_PRESET: ${{ inputs.build_preset }}
+        EVENT_NAME: ${{ github.event_name }}
+      run: |
+        ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
+        echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
+
     - name: Setup cache
       shell: bash
       run: |
@@ -192,6 +202,7 @@ runs:
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
           --add-peerdirs-tests all
+          --cleanup-child-processes
         )
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
@@ -204,9 +215,6 @@ runs:
           relwithdebinfo)
             params+=(--build "relwithdebinfo")
             ;;
-          profile)
-            params+=(--build "profile")
-            ;;
           release)
             params+=(--build "release")
             ;;
@@ -214,7 +222,6 @@ runs:
             params+=(
               --build "release" --sanitize="address"
             )
-            IS_TEST_RESULT_IGNORED=1
             ;;
           release-tsan)
             params+=(
@@ -577,7 +584,7 @@ runs:
               ;;
           esac
           run_name="${run_name}_attempt_${RETRY}"
-          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
+          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${ANALYTICS_JOB_NAME}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break

@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "summary.h"
 #endif
-#undef SUMMARY_INL_H_
 
 #include <util/generic/utility.h>
 

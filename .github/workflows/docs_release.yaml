@@ -20,12 +20,38 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      # Branches listed below keep the old logic (use-ya-opensource: false).
+      # All other branches use the new logic (use-ya-opensource: true).
+      # This workflow runs on push / workflow_dispatch, so the relevant branch
+      # is the one being built (context.ref), not a pull request base ref.
+      - name: Determine ya-opensource flag
+        id: ya
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const legacyBranches = [
+              'stable-25-1',
+              'stable-25-2',
+              'stable-25-2-1',
+              'stable-25-3',
+              'stable-25-3-1',
+              'stable-25-4',
+              'stable-25-4-1',
+              'stable-26-1',
+              'stable-26-1-1',
+              'stable-26-2',
+              'stable-26-2-1',
+            ];
+            const branch = context.ref.replace('refs/heads/', '');
+            core.setOutput('use', legacyBranches.includes(branch) ? 'false' : 'true');
+
       - name: Build
         uses: diplodoc-platform/docs-build-action@v3
         with:
           revision: "${{ github.sha }}"
           src-root: ${{ vars.SRC_ROOT }}
-          cli-version: stable
+          cli-version: "4.59.12"
+          use-ya-opensource: ${{ steps.ya.outputs.use }}
 
   upload:
     needs: build

@@ -47,7 +47,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         return nullptr;
     }
 
-    if (partitionCount == 0 || partitionCount > TSchemeShard::MaxPQGroupPartitionsCount) {
+    if (partitionCount == 0) {
         status = NKikimrScheme::StatusInvalidParameter;
         errStr = Sprintf("Invalid total partition count specified: %u", partitionCount);
         return nullptr;
@@ -144,7 +144,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
             }
         }
 
-        pqGroupInfo->PartitionsToAdd.emplace(i, i + 1, keyRange);
+        pqGroupInfo->PartitionsToAdd.emplace_back(i, i + 1, keyRange);
     }
 
     if (partsPerTablet == 0 || partsPerTablet > TSchemeShard::MaxPQTabletPartitionsCount) {
@@ -159,13 +159,6 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     pqGroupInfo->TotalGroupCount = partitionCount;
     pqGroupInfo->TotalPartitionCount = partitionCount;
     pqGroupInfo->ActivePartitionCount = partitionCount;
-
-    ui32 tabletCount = pqGroupInfo->ExpectedShardCount();
-    if (tabletCount > TSchemeShard::MaxPQGroupTabletsCount) {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = Sprintf("Invalid tablet count specified: %u", tabletCount);
-        return nullptr;
-    }
 
     NKikimrPQ::TPQTabletConfig tabletConfig = op.GetPQTabletConfig();
     tabletConfig.ClearPartitionIds();
@@ -240,7 +233,9 @@ void ApplySharding(TTxId txId,
         partition->PqId = it->PartitionId;
         partition->GroupId = it->GroupId;
         partition->KeyRange = it->KeyRange;
-        partition->AlterVersion = 1;
+        // Must match pqGroup->AlterVersion: init counts partitions with
+        // partition->AlterVersion <= alterData->AlterVersion when rebuilding PQPartitionsInside.
+        partition->AlterVersion = pqGroup->AlterVersion;
         partition->CreateVersion = 1;
         partition->Status = NKikimrPQ::ETopicPartitionStatus::Active;
         partition->CreationTimestamp = TInstant::Seconds(TAppData::TimeProvider->Now().Seconds());

@@ -19,7 +19,6 @@
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/providers/pq/common/pq_events_processor.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
-#include <ydb/library/yql/providers/pq/common/pq_partition_key.h>
 #include <ydb/library/yql/providers/pq/gateway/clients/composite/yql_pq_composite_read_session.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
@@ -246,7 +245,6 @@ class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInterna
     };
 
 public:
-    using TPartitionKey = ::NPq::TPartitionKey;
     using TDebugOffsets = TMaybe<std::pair<ui64, ui64>>;
 
     TDqPqReadActor(
@@ -999,7 +997,7 @@ private:
             Schedule(checkTime, new TEvPrivate::TEvCheckPartitionCount(clusterState.Index));
         }
     }
-        
+
     void Handle(TEvPrivate::TEvCheckPartitionCount::TPtr& ev) {
         auto& clusterState = Clusters[ev->Get()->ClusterIndex];
         SRC_LOG_T("Checking partition count for topic \"" << SourceParams.GetTopicPath() << "\", cluster \"" << clusterState.Info.Name << "\"");
@@ -1045,7 +1043,7 @@ private:
             if (!Clusters[clusterIndex].Info.Name.empty()) {
                 message << " (on cluster \"" << Clusters[clusterIndex].Info.Name << "\")";
             }
-            message << " is changed from " << Clusters[clusterIndex].PartitionsCount << " to " << partitionsCount 
+            message << " is changed from " << Clusters[clusterIndex].PartitionsCount << " to " << partitionsCount
                 << ". You need to restart (alter with text or drop / create) query to read all partitions.";
             SRC_LOG_E(message);
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, TIssues({TIssue(message)}), NYql::NDqProto::StatusIds::SCHEME_ERROR));
@@ -1076,7 +1074,7 @@ private:
                     SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Skip data. Message writetime: " << partitionTime << ", end write time: " << *partitionInfo.EndWriteTime << ")");
                     needSkip = true;
                 }
-                
+
                 if (ClusterState.ReadSessionControl) {
                     ClusterState.ReadSessionControl->AdvancePartitionTime(message.GetPartitionSession()->GetPartitionId(), message.GetWriteTime());
                 }
@@ -1084,13 +1082,13 @@ private:
                 if (message.GetWriteTime() < Self.StartingMessageTimestamp) {
                     SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Skip data. StartingMessageTimestamp: " << Self.StartingMessageTimestamp << ". Write time: " << message.GetWriteTime());
                     needSkip = true;
-                }         
+                }
 
                 if (Self.ReadyBuffer.empty() || Self.ReadyBuffer.back().Watermark.Defined()) {
                     Self.ReadyBuffer.emplace(Nothing(), BatchCapacity);
                 }
                 TReadyBatch& activeBatch = Self.ReadyBuffer.back();
-                
+
                 if (!needSkip) {
                     auto [item, size] = CreateItem(message);
                     activeBatch.Data.emplace_back(std::move(item));
@@ -1214,7 +1212,7 @@ private:
         TClusterState& ClusterState;
         ui32 BatchCapacity;
         const TString& LogPrefix;
-        const TString& Cluster;
+        const TString Cluster;
         const ui32 Index;
     };
 

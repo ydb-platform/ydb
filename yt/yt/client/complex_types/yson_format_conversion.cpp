@@ -18,6 +18,8 @@
 
 #include <yt/yt/library/decimal/decimal.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/generic/buffer.h>
 
 #include <util/stream/buffer.h>
@@ -314,8 +316,8 @@ private:
     }
 
 private:
-    TString Converted_;
-    TStringOutput ConvertedWriter_;
+    std::string Converted_;
+    TStdStringOutput ConvertedWriter_;
     const ESimpleLogicalValueType ValueType_;
 };
 
@@ -1100,7 +1102,7 @@ std::variant<TYsonServerToClientConverter, TYsonClientToServerConverter> CreateY
         return [
             converter=std::move(converter)
         ] (TUnversionedValue value, IYsonConsumer* consumer) {
-            TMemoryInput in(value.Data.String, value.Length);
+            TMemoryInput in(value.AsStringBuf());
             TYsonPullParser parser(&in, EYsonType::Node);
             TYsonPullParserCursor cursor(&parser);
             converter(&cursor, consumer);

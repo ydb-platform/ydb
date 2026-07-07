@@ -140,6 +140,7 @@ public:
 
     bool ReturnSession(TKqpSessionCommon* sessionImpl) override;
     void DeleteSession(TKqpSessionCommon* sessionImpl) override;
+    void PessimizeNode(std::uint64_t nodeId) override;
     ui32 GetSessionRetryLimit() const;
 
     void SetStatCollector(const NSdkStats::TStatCollector::TClientStatCollector& collector);
@@ -163,7 +164,6 @@ public:
         , const std::shared_ptr<NObservability::TRequestSpan>& parent = nullptr
     );
 
-public:
     TClientSettings Settings_;
 
 private:

@@ -92,4 +92,4 @@ TCoLambda TYtPhysicalOptProposalTransformer::MakeJobLambda<true>(TCoLambda lambd
     }
 }
 
-}  // namespace NYql
+} // namespace NYql

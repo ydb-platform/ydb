@@ -2,11 +2,13 @@
 
 namespace NYT::NSecurityClient {
 
+using namespace NYPath;
+
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr TStringBuf AccessControlObjectNamespacePath = "//sys/access_control_object_namespaces/%lv";
-static constexpr TStringBuf AccessControlObjectPath = "//sys/access_control_object_namespaces/%lv/%lv";
-static constexpr TStringBuf AccessControlObjectPrincipalPath = "//sys/access_control_object_namespaces/%lv/%lv/principal";
+static constexpr TStringBuf AccessControlObjectNamespacePathPattern = "//sys/access_control_object_namespaces/%lv";
+static constexpr TStringBuf AccessControlObjectPathPattern = "//sys/access_control_object_namespaces/%lv/%lv";
+static constexpr TStringBuf AccessControlObjectPrincipalPathPattern = "//sys/access_control_object_namespaces/%lv/%lv/principal";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -17,18 +19,18 @@ TAccessControlObjectDescriptor::TAccessControlObjectDescriptor(
     , Name_(accessControlObject)
 { }
 
-TString TAccessControlObjectDescriptor::GetPath() const
+TYPath TAccessControlObjectDescriptor::GetPath() const
 {
     return Format(
-        AccessControlObjectPath,
+        AccessControlObjectPathPattern,
         Namespace_,
         Name_);
 }
 
-TString TAccessControlObjectDescriptor::GetPrincipalPath() const
+TYPath TAccessControlObjectDescriptor::GetPrincipalPath() const
 {
     return Format(
-        AccessControlObjectPrincipalPath,
+        AccessControlObjectPrincipalPathPattern,
         Namespace_,
         Name_);
 }
@@ -44,19 +46,19 @@ TAccessControlObjectDescriptor GetAccessControlObjectDescriptor(
     return iter->second;
 }
 
-TString GetAccessControlObjectNamespacePath(EAccessControlObjectNamespace accessControlObjectNamespace)
+TYPath GetAccessControlObjectNamespacePath(EAccessControlObjectNamespace accessControlObjectNamespace)
 {
-    return Format(AccessControlObjectNamespacePath, accessControlObjectNamespace);
+    return Format(AccessControlObjectNamespacePathPattern, accessControlObjectNamespace);
 }
 
-TString GetAccessControlObjectNamespaceName(EAccessControlObjectNamespace accessControlObjectNamespace)
+std::string GetAccessControlObjectNamespaceName(EAccessControlObjectNamespace accessControlObjectNamespace)
 {
-    return Format("%lv", accessControlObjectNamespace);
+    return FormatEnum(accessControlObjectNamespace);
 }
 
-TString GetAccessControlObjectName(EAccessControlObject accessControlObject)
+std::string GetAccessControlObjectName(EAccessControlObject accessControlObject)
 {
-    return Format("%lv", accessControlObject);
+    return FormatEnum(accessControlObject);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

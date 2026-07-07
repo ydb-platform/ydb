@@ -2150,12 +2150,13 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     SummaryBuilder
         << ", Avg " << Sprintf("%lu.%.2lu", usagePS / 100, usagePS % 100) << " CPU/s";
     }
+    auto cpuGroups = GetCriticalCpuGroups();
     SummaryBuilder
         << "</title>" << Endl
-        << "  <rect x='" << Config.SummaryLeft + INTERNAL_GAP_X + summary3 << "' y='" << titleHeight + INTERNAL_GAP_Y
+        << "  <rect class='cpupath' data-groups='" << cpuGroups << "' x='" << Config.SummaryLeft + INTERNAL_GAP_X + summary3 << "' y='" << titleHeight + INTERNAL_GAP_Y
         << "' width='" << Config.SummaryWidth - (summary3 + INTERNAL_GAP_X) * 2 << "' height='" << TIME_HEIGHT
         << "' stroke-width='0' fill='" << Config.Palette.CpuMedium << "'/>" << Endl
-        << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
+        << "  <text class='cpupath' data-groups='" << cpuGroups << "' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
         << "' x='" << Config.SummaryLeft + INTERNAL_GAP_X + summary3 + 2
         << "' y='" << titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatUsage(p->CpuTime->Value) << "</text>" << Endl
         << "</g>" << Endl;
@@ -2170,13 +2171,14 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         << "' y='" << titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatBytes(p->MaxMemoryUsage->Value) << "</text>" << Endl
         << "</g>" << Endl;
 
+    auto timeGroups = GetCriticalTimeGroups();
     auto x = Config.TimelineLeft + (Config.TimelineWidth - timelineDelta) * (p->TimeOffset + p->MaxTime) / maxTime;
     SummaryBuilder
         << "<g><title>" << "Duration: " << FormatTimeMs(p->MaxTime) << ", Total " << FormatTimeMs(p->MaxTime + p->TimeOffset) << "</title>" << Endl
-        << "  <rect x='" << x - summary3 << "' y='" << INTERNAL_GAP_Y + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
+        << "  <rect class='timepath' data-groups='" << timeGroups << "' x='" << x - summary3 << "' y='" << INTERNAL_GAP_Y + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
         << "' width='" << summary3 << "' height='" << TIME_HEIGHT
         << "' stroke-width='0' fill='" << Config.Palette.StageGrid << "'/>" << Endl
-        << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextInverted << "' x='" << x - 2
+        << "  <text class='timepath' data-groups='" << timeGroups << "' text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextInverted << "' x='" << x - 2
         << "' y='" << titleHeight << "'>" << FormatTimeMs(p->MaxTime + p->TimeOffset) << "</text>" << Endl
         << "</g>" << Endl;
 
@@ -3109,9 +3111,74 @@ struct TVS {
     ui32 StageId;
 };
 
+TString TPlan::GetCriticalCpuGroups() {
+    TStringBuilder builder;
+    if (!Stages.empty()) {
+        auto* stage = Stages[0].get();
+        builder << 'g' << stage->GroupId;
+        while (stage) {
+            if (stage->CriticalCpuConnection) {
+                builder << ",g" << stage->CriticalCpuConnection->GroupId;
+                stage = stage->CriticalCpuConnection->FromStage.get();
+                builder << ",g" << stage->GroupId;
+            } else {
+                stage = nullptr;
+            }
+        }
+    }
+    return builder;
+}
+
+TString TPlan::GetCriticalTimeGroups() {
+    TStringBuilder builder;
+    if (!Stages.empty()) {
+        auto* stage = Stages[0].get();
+        builder << 'g' << stage->GroupId;
+        while (stage) {
+            if (stage->CriticalTimeConnection) {
+                builder << ",g" << stage->CriticalTimeConnection->GroupId;
+                stage = stage->CriticalTimeConnection->FromStage.get();
+                builder << ",g" << stage->GroupId;
+            } else {
+                stage = nullptr;
+            }
+        }
+    }
+    return builder;
+}
+
+void TPlan::CalcCriticals(TStage& stage) {
+    if (stage.CriticalCpuTotal == 0 && stage.CriticalTimeTotal == 0) {
+        for (auto& connection : stage.Connections) {
+            if (connection->FromStage) {
+                CalcCriticals(*connection->FromStage);
+                if (!stage.CriticalCpuConnection || stage.CriticalCpuTotal < connection->FromStage->CriticalCpuTotal) {
+                    stage.CriticalCpuConnection = connection;
+                    stage.CriticalCpuTotal = connection->FromStage->CriticalCpuTotal;
+                }
+                if (!stage.CriticalTimeConnection || stage.CriticalTimeTotal < connection->FromStage->CriticalTimeTotal) {
+                    stage.CriticalTimeConnection = connection;
+                    stage.CriticalTimeTotal = connection->FromStage->CriticalTimeTotal;
+                }
+            }
+        }
+        if (stage.CpuTime) {
+            auto cpu = stage.CpuTime->Details.Sum;
+            if (stage.Tasks) {
+                cpu /= stage.Tasks;
+            }
+            stage.CriticalCpuTotal += cpu;
+        }
+        stage.CriticalTimeTotal += stage.MaxTime - stage.MinTime;
+    }
+}
+
 void TPlan::CalcHotPath() {
     std::vector<TVS> cpuTimes;
     std::unordered_map<ui32, TStage*> StageIdToStage;
+    if (!Stages.empty()) {
+        CalcCriticals(*Stages[0]);
+    }
     for (auto s : Stages) {
         if (!s->External && s->CpuTime && s->Tasks && !s->CpuTime->History.Values.empty()) {
             auto stageId = s->PhysicalStageId;
@@ -3447,7 +3514,7 @@ TString TPlanVisualizer::PrintSvg() {
     svg << R"(
 <script type="text/ecmascript">
 <![CDATA[
-    var selectedGroup;
+    var selectedGroups = [];
 
     function shift_nodes(node, delta) {
         while(node && node.tagName == "svg") {
@@ -3545,32 +3612,59 @@ TString TPlanVisualizer::PrintSvg() {
         }
     }
 
-    function toggle_selection(node) {
-        var g = node.getAttribute("data-group");
-        if (g) {
-            if (selectedGroup) {
-                var e = document.querySelectorAll("[data-group='" + selectedGroup + "']");
-                for (var i = 0; i < e.length; i++) {
-                    e[i].classList.remove("selected");
-                }
+    function deselect_selected() {
+        for (const group of selectedGroups) {
+            var nodes = document.querySelectorAll("[data-group='" + group + "']");
+            for (const node of nodes) {
+                node.classList.remove("selected");
             }
-            if (g == selectedGroup) {
-                selectedGroup = null;
+        }
+    }
+
+    function select_selected() {
+        for (const group of selectedGroups) {
+            var nodes = document.querySelectorAll("[data-group='" + group + "']");
+            for (const node of nodes) {
+                node.classList.add("selected");
+                toggle_slim_off(find_parent_svg(node));
+            }
+        }
+    }
+
+    function select_cpu_path(groups) {
+        deselect_selected();
+        selectedGroups = groups.split(',');
+        select_selected();
+    }
+
+    function select_time_path(groups) {
+        deselect_selected();
+        selectedGroups = groups.split(',');
+        select_selected();
+    }
+
+    function toggle_selection(node) {
+        var group = node.getAttribute("data-group");
+        if (group) {
+            deselect_selected();
+            if (selectedGroups.length == 1 && selectedGroups[0] == group) {
+                selectedGroups = [];
             } else {
-                selectedGroup = g;
-                var e = document.querySelectorAll("[data-group='" + selectedGroup + "']");
-                for (var i = 0; i < e.length; i++) {
-                    e[i].classList.add("selected");
-                    toggle_slim_off(find_parent_svg(e[i]));
-                }
+                selectedGroups = [group];
+                select_selected();
             }
         }
     }
 
     window.onload = function() {
-        var node = document.querySelector(".selected");
-        if (node) {
-            selectedGroup = node.getAttribute("data-group");
+        var nodes = document.querySelectorAll(".selected");
+        if (nodes.length > 0) {
+            selectedGroups = [];
+            for (const node of nodes) {
+                selectedGroups.push(node.getAttribute("data-group"));
+            }
+        } else {
+            select_selected();
         }
     }
 
@@ -3596,6 +3690,14 @@ TString TPlanVisualizer::PrintSvg() {
             if (node.classList.contains("selectable")) {
                 toggle_slim_off(find_parent_svg(node));
                 toggle_selection(node);
+                return;
+            }
+            if (node.classList.contains("cpupath")) {
+                select_cpu_path(node.getAttribute("data-groups"));
+                return;
+            }
+            if (node.classList.contains("timepath")) {
+                select_time_path(node.getAttribute("data-groups"));
                 return;
             }
             node = node.parentElement;

@@ -22,7 +22,13 @@ struct TRetryOperationSettings {
     FLUENT_SETTING_DEFAULT(TDuration, MaxTimeout, TDuration::Max());
     FLUENT_SETTING_DEFAULT(TBackoffSettings, FastBackoffSettings, DefaultFastBackoffSettings());
     FLUENT_SETTING_DEFAULT(TBackoffSettings, SlowBackoffSettings, DefaultSlowBackoffSettings());
-    FLUENT_SETTING_FLAG(Idempotent);
+    bool Idempotent_ = false;
+    bool IdempotentWasSet_ = false;
+    TSelf& Idempotent(bool value = true) {
+        Idempotent_ = value;
+        IdempotentWasSet_ = true;
+        return static_cast<TSelf&>(*this);
+    }
     FLUENT_SETTING_FLAG(Verbose);
     FLUENT_SETTING_FLAG(RetryUndefined);
 

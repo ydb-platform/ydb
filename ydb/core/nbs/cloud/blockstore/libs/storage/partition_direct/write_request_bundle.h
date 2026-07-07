@@ -52,6 +52,7 @@ public:
 
     NThreading::TFuture<TWriteBlocksLocalResponse> GetFuture();
     NWilson::TSpan& GetSpan();
+    TBlockRange64 GetRange() const;
     TBlockRange64 GetVChunkRange() const;
     void SetLsn(ui64 lsn);
     ui64 GetLsn() const;

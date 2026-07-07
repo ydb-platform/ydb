@@ -346,16 +346,18 @@ bool TKafkaReadSessionActor::TryFillTopicsToRead(const TMessagePtr<TJoinGroupReq
     }
 
     auto result = GetSubscriptions(*request);
-    for (auto topic: result->Topics) {
-        if (topic.has_value()) {
-            YDB_LOG_DEBUG("JOIN_GROUP requested topic",
-                {"logPrefix", LogPrefix()},
-                {"toRead", topic});
+    if (result.has_value()) {
+        for (auto topic: result->Topics) {
+            if (topic.has_value()) {
+                YDB_LOG_DEBUG("JOIN_GROUP requested topic",
+                    {"logPrefix", LogPrefix()},
+                    {"toRead", topic});
 
-            auto normalizedTopicName = NormalizePath(Context->DatabasePath, topic.value());
-            OriginalTopicNames[normalizedTopicName] = topic.value();
-            OriginalTopicNames[normalizedTopicName + "/streamImpl"] = topic.value();
-            topics.emplace(normalizedTopicName);
+                auto normalizedTopicName = NormalizePath(Context->DatabasePath, topic.value());
+                OriginalTopicNames[normalizedTopicName] = topic.value();
+                OriginalTopicNames[normalizedTopicName + "/streamImpl"] = topic.value();
+                topics.emplace(normalizedTopicName);
+            }
         }
     }
 

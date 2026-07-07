@@ -30,12 +30,12 @@ static const TSensitivePairedWords SensitivePairedWords[] = {
     {"alter", "secret"},
 };
 
-bool ContainsCaseInsensitive(const TString& text, TStringBuf pattern) {
+bool ContainsCaseInsensitive(TStringBuf text, TStringBuf pattern) {
     return std::search(text.begin(), text.end(), pattern.begin(), pattern.end(),
         [](char a, char b) { return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b)); }) != text.end();
 }
 
-bool MatchPrefixIgnoreCase(const TString& text, size_t pos, TStringBuf word) {
+bool MatchPrefixIgnoreCase(TStringBuf text, size_t pos, TStringBuf word) {
     if (pos + word.size() > text.size()) {
         return false;
     }
@@ -49,7 +49,7 @@ bool MatchPrefixIgnoreCase(const TString& text, size_t pos, TStringBuf word) {
 }
 
 // Two consecutive keywords; only ASCII whitespace between them; case-insensitive.
-bool ContainsAdjacentWordsIgnoreSpaces(const TString& text, TStringBuf w1, TStringBuf w2) {
+bool ContainsAdjacentWordsIgnoreSpaces(TStringBuf text, TStringBuf w1, TStringBuf w2) {
     for (size_t i = 0; i + w1.size() <= text.size(); ++i) {
         if (!MatchPrefixIgnoreCase(text, i, w1)) {
             continue;
@@ -65,7 +65,7 @@ bool ContainsAdjacentWordsIgnoreSpaces(const TString& text, TStringBuf w1, TStri
     return false;
 }
 
-TMaybe<TString> FindSensitiveQueryMarker(const TString& text) {
+TMaybe<TString> FindSensitiveQueryMarker(TStringBuf text) {
     for (const TString& word : SensitiveWords) {
         if (ContainsCaseInsensitive(text, word)) {
             return word;
@@ -81,15 +81,25 @@ TMaybe<TString> FindSensitiveQueryMarker(const TString& text) {
 
 } // namespace
 
-bool IsQueryWithSensitiveInfo(const TString& text) {
+bool IsQueryWithSensitiveInfo(TStringBuf text) {
     return FindSensitiveQueryMarker(text).Defined();
 }
 
 TString ProtectQueryForLoggingIfSensitive(const TString& text) {
-    if (const auto marker = FindSensitiveQueryMarker(text)) {
-        return TStringBuilder() << "Query text is hidden due to a sensitive marker: " << *marker;
+    TString protectedText;
+    if (ProtectQueryForLoggingIfSensitive(TStringBuf(text), protectedText)) {
+        return protectedText;
     }
     return text;
+}
+
+bool ProtectQueryForLoggingIfSensitive(TStringBuf text, TString& protectedText) {
+    if (const auto marker = FindSensitiveQueryMarker(text)) {
+        protectedText = TStringBuilder() << "Query text is hidden due to a sensitive marker: " << *marker;
+        return true;
+    }
+    protectedText.clear();
+    return false;
 }
 
 TString MaskTicket(TStringBuf token) {

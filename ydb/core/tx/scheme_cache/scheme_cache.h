@@ -207,6 +207,7 @@ struct TSchemeCacheNavigate {
         KindSysView = 25,
         KindSecret = 26,
         KindStreamingQuery = 27,
+        KindTestShardSet = 28,
     };
 
     struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {
@@ -343,6 +344,11 @@ struct TSchemeCacheNavigate {
         NKikimrSchemeOp::TStreamingQueryDescription Description;
     };
 
+    struct TTestShardSetInfo : public TAtomicRefCount<TTestShardSetInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TTestShardSetDescription Description;
+    };
+
     struct TEntry {
         enum class ERequestType : ui8 {
             ByPath,
@@ -374,6 +380,7 @@ struct TSchemeCacheNavigate {
         THashMap<TString, TString> Attributes;
         THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
         THashSet<TString> NotNullColumns;
+        THashSet<TString> SetNotNullInProgressColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
         TVector<NKikimrSchemeOp::TSequenceDescription> Sequences;
@@ -401,6 +408,7 @@ struct TSchemeCacheNavigate {
         TIntrusiveConstPtr<TSysViewInfo> SysViewInfo;
         TIntrusiveConstPtr<TSecretInfo> SecretInfo;
         TIntrusiveConstPtr<TStreamingQueryInfo> StreamingQueryInfo;
+        TIntrusiveConstPtr<TTestShardSetInfo> TestShardSetInfo;
 
         TString ToString() const;
         TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;

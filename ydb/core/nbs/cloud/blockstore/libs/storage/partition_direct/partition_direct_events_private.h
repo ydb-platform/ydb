@@ -6,7 +6,13 @@
 
 #include <ydb/library/actors/core/event_local.h>
 
+#include <memory>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TFastPathService;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -23,6 +29,10 @@ struct TEvPartitionDirectPrivate
                   LocalEventsOffset,
 
         EvUpdateVChunkConfig,
+        EvFastPathServiceReady,
+
+        EvFastPathServiceShutdown,
+        EvFastPathServiceStopped,
 
         EvEnd,
     };
@@ -36,6 +46,27 @@ struct TEvPartitionDirectPrivate
         explicit TEvUpdateVChunkConfig(TVChunkConfig cfg)
             : VChunkConfig(std::move(cfg))
         {}
+    };
+
+    // Signals that FastPathServiceReady (and its DBGs) are ready.
+    struct TEvFastPathServiceReady
+        : public NActors::
+              TEventLocal<TEvFastPathServiceReady, EvFastPathServiceReady>
+    {
+    };
+
+    // Triggers the shutdown of the fast path service
+    struct TEvFastPathServiceShutdown
+        : public NActors::
+              TEventLocal<TEvFastPathServiceShutdown, EvFastPathServiceShutdown>
+    {
+    };
+
+    // Signals that FastPathService stopped.
+    struct TEvFastPathServiceStopped
+        : public NActors::
+              TEventLocal<TEvFastPathServiceStopped, EvFastPathServiceStopped>
+    {
     };
 };
 

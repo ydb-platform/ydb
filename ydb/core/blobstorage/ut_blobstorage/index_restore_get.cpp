@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(IndexRestoreGet) {
             env.Runtime->WrapInActorContext(edge, [&] {
                 SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), id.Generation(),
                     1, id.Channel(), true, id.Generation(), id.Step(), new TVector<TLogoBlobID>{id}, nullptr,
-                    TInstant::Max(), true, false));
+                    TInstant::Max(), true, TWriteSource::Unknown, false));
             });
             auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge);
             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);

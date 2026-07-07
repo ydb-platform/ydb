@@ -73,6 +73,12 @@ public:
     const NRpc::TStreamingParameters& ServerAttachmentsStreamingParameters() const override;
     NRpc::TStreamingParameters& ServerAttachmentsStreamingParameters() override;
 
+    const NRpc::TDirectPlacementTransferParameters& RequestAttachmentsDptParameters() const override;
+    NRpc::TDirectPlacementTransferParameters& RequestAttachmentsDptParameters() override;
+
+    const NRpc::TDirectPlacementTransferParameters& ResponseAttachmentsDptParameters() const override;
+    NRpc::TDirectPlacementTransferParameters& ResponseAttachmentsDptParameters() override;
+
     NConcurrency::IAsyncZeroCopyOutputStreamPtr GetRequestAttachmentsStream() const override;
     NConcurrency::IAsyncZeroCopyInputStreamPtr GetResponseAttachmentsStream() const override;
 

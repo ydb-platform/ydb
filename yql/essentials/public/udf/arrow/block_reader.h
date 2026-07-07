@@ -624,7 +624,7 @@ private:
         return size;
     }
     const TVector<std::unique_ptr<IBlockReader>> Children_;
-    mutable TBlockItem InnerItem_;
+    TBlockItem InnerItem_;
 };
 
 class TExternalOptionalBlockReader final: public TBlockReaderBase {
@@ -745,7 +745,7 @@ struct TReaderTraits {
 };
 
 inline std::unique_ptr<IBlockReader> MakeBlockReader(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
-    return DispatchByArrowTraits<TReaderTraits>(typeInfoHelper, type, nullptr);
+    return DispatchByArrowTraits<TReaderTraits>(typeInfoHelper, type, /*pgBuilder=*/nullptr);
 }
 
 inline void UpdateBlockItemSerializeProps(const ITypeInfoHelper& typeInfoHelper, const TType* type, TBlockItemSerializeProps& props) {

@@ -355,7 +355,7 @@ message TKqpVectorResolveSettings {
 
     // Database name and pool id (see below) for KqpReadActor
     optional string Database = 17;
-    
+
     // Parameters for finding overlapping clusters (multiple clusters per row)
     optional uint32 OverlapClusters = 18;
     optional double OverlapRatio = 19;
@@ -2015,6 +2015,14 @@ message TEvBuildFulltextIndexRequest {
     optional EFulltextIndexType IndexType = 14;
 
     optional NKikimrTx.TKeyRange KeyRange = 15;
+
+    // When true, the scan uses the __ydb_row_id Uint64 column of the source table as the doc_id key
+    // (and as the key of the posting/docs impl tables) instead of the source table PK columns.
+    optional bool UseRowIdAsDocId = 16;
+
+    // Prefix (leading) key columns of the posting impl table, in order. The posting key is
+    // [PrefixColumns..., __ydb_token, doc_id...]. Empty for a non-prefixed fulltext index.
+    repeated string PrefixColumns = 17;
 }
 
 message TEvBuildFulltextIndexResponse {
@@ -2065,6 +2073,11 @@ message TEvBuildFulltextDictRequest {
     optional EFulltextIndexType IndexType = 15;
     optional string PostingTableName = 16;
     optional uint64 MaxSegmentDocuments = 17;
+
+    // Leading prefix key columns of the posting table, in key order. The posting key is
+    // [prefix..., __ydb_token, __ydb_max_id, __ydb_generation]; the dict scan must skip these
+    // to locate the token and to group/compact segments per (prefix, token).
+    repeated string PrefixColumns = 18;
 }
 
 message TEvBuildFulltextDictResponse {

@@ -996,15 +996,20 @@ public:
         Configure(std::move(config));
     }
 
-    TFuture<TNetworkAddress> Resolve(const std::string& hostName)
+    TFuture<TNetworkAddress> Resolve(TStringBuf hostName)
     {
         // Check if |address| parses into a valid IPv4 or IPv6 address.
         if (auto result = TNetworkAddress::TryParse(hostName); result.IsOK()) {
             return MakeFuture(result);
         }
 
-        // Run async resolution.
-        return Get(hostName);
+        // Fast path: probe the cache without materializing a std::string key.
+        if (auto address = Find(hostName)) {
+            return MakeFuture(*address);
+        }
+
+        // Slow path: materialize the key and run async resolution.
+        return Get(std::string(hostName));
     }
 
     IDnsResolverPtr GetDnsResolver()
@@ -1124,7 +1129,7 @@ TAddressResolver* TAddressResolver::Get()
     return LeakySingleton<TAddressResolver>();
 }
 
-TFuture<TNetworkAddress> TAddressResolver::Resolve(const std::string& address)
+TFuture<TNetworkAddress> TAddressResolver::Resolve(TStringBuf address)
 {
     return Impl_->Resolve(address);
 }

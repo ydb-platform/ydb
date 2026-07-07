@@ -167,7 +167,61 @@ public:
 
             NKikimrSchemeOp::TIndexBuildConfig tmpConfig;
             buildInfo->SerializeToProto(Self, &tmpConfig);
-            const auto indexDesc = tmpConfig.GetIndex();
+            auto& indexDesc = *tmpConfig.MutableIndex();
+
+            // Decide how a fulltext index on this table obtains its doc_id. For a custom (non single
+            // integer) PK without the rowid infrastructure we auto-provision it: the build first spawns
+            // child builds for the __ydb_row_id column and/or the unique index on it (under this build's
+            // shared lock), then builds the fulltext index in rowid mode. See the provisioning prefix
+            // in build_index__progress.cpp.
+            const auto classification = NTableIndex::ClassifyFulltextRowId(
+                tableInfo, tablePath.Base()->GetChildren(), Self->Indexes, indexDesc, explain);
+            auto enableRowIdMode = [&]() {
+                indexDesc.MutableFulltextIndexDescription()->SetUseRowIdAsDocId(true);
+                // Fulltext index builds always carry a TFulltextIndexDescription. JSON index builds
+                // historically carry std::monostate (no settings); attach a fulltext description here
+                // so the UseRowIdAsDocId flag is persisted and propagated like for fulltext.
+                if (auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&buildInfo->SpecializedIndexDescription)) {
+                    ft->SetUseRowIdAsDocId(true);
+                } else {
+                    NKikimrSchemeOp::TFulltextIndexDescription ftd;
+                    ftd.SetUseRowIdAsDocId(true);
+                    buildInfo->SpecializedIndexDescription = std::move(ftd);
+                }
+            };
+            switch (classification.Plan) {
+                case NTableIndex::EFulltextRowIdPlan::Error:
+                    return Reply(Ydb::StatusIds::BAD_REQUEST, explain);
+                case NTableIndex::EFulltextRowIdPlan::NotApplicable:
+                case NTableIndex::EFulltextRowIdPlan::LegacyIntegerPk:
+                    break;
+                case NTableIndex::EFulltextRowIdPlan::Reuse:
+                    enableRowIdMode();
+                    break;
+                case NTableIndex::EFulltextRowIdPlan::Provision: {
+                    if (!Self->EnableAddUniqueIndex) {
+                        return Reply(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder()
+                            << "Auto-provisioning '" << NTableIndex::NFulltext::RowIdColumn
+                            << "' for a fulltext/JSON index on a non-integer-PK table requires the unique-index feature");
+                    }
+                    buildInfo->FulltextNeedsRowIdColumn = classification.NeedColumn;
+                    buildInfo->FulltextNeedsUniqueIndex = classification.NeedUniqueIndex;
+                    buildInfo->AutoUniqueIndexName = NTableIndex::NFulltext::RowIdUniqueIndexName;
+                    if (classification.NeedUniqueIndex) {
+                        // The auto unique-index path must be free (a reusable Ready index would have been
+                        // classified as Reuse, not Provision).
+                        const auto autoUniquePath = tablePath.Child(buildInfo->AutoUniqueIndexName);
+                        if (autoUniquePath.IsResolved() && !autoUniquePath.IsDeleted()) {
+                            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                                << "Cannot auto-provision the fulltext rowid unique index: path '"
+                                << autoUniquePath.PathString() << "' already exists");
+                        }
+                    }
+                    // The fulltext index runs in rowid mode once provisioning completes.
+                    enableRowIdMode();
+                    break;
+                }
+            }
             if (!NTableIndex::CommonCheck(tableInfo, indexDesc,
                                           domainInfo->GetSchemeLimits(),
                                           explain)) {
@@ -195,7 +249,14 @@ public:
                 }
             }
         } else if (settings.has_column_build_operation()) {
-            if (!Self->EnableAddColumsWithDefaults) {
+            bool allFromSequence = settings.column_build_operation().column_size() > 0;
+            for (int i = 0; i < settings.column_build_operation().column_size(); i++) {
+                if (settings.column_build_operation().column(i).default_from_sequence().empty()) {
+                    allFromSequence = false;
+                    break;
+                }
+            }
+            if (!Self->EnableAddColumsWithDefaults && !allFromSequence) {
                 return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Adding columns with defaults is disabled");
             }
 
@@ -207,9 +268,21 @@ public:
                 const auto& colInfo = settings.column_build_operation().column(i);
                 bool notNull = colInfo.HasNotNull() && colInfo.GetNotNull();
                 TString familyName = colInfo.HasFamily() ? colInfo.GetFamily() : "";
-                buildInfo->BuildColumns.push_back(
-                    TIndexBuildInfo::TColumnBuildInfo(
-                        colInfo.GetColumnName(), colInfo.default_from_literal(), notNull, familyName));
+                if (!colInfo.default_from_sequence().empty()) {
+                    buildInfo->BuildColumns.push_back(
+                        TIndexBuildInfo::TColumnBuildInfo(
+                            TIndexBuildInfo::TColumnBuildInfo::FromSequenceTag{},
+                            colInfo.GetColumnName(),
+                            colInfo.default_from_literal().type(),
+                            colInfo.default_from_sequence(),
+                            colInfo.bit_reverse_sequence_value(),
+                            notNull,
+                            familyName));
+                } else {
+                    buildInfo->BuildColumns.push_back(
+                        TIndexBuildInfo::TColumnBuildInfo(
+                            colInfo.GetColumnName(), colInfo.default_from_literal(), notNull, familyName));
+                }
             }
         } else {
             return makeReply("missing index or column to build");
@@ -243,7 +316,16 @@ public:
 
         Self->PersistCreateBuildIndex(db, *buildInfo);
 
-        buildInfo->State = TIndexBuildInfo::EState::Locking;
+        if (buildInfo->IsFulltextProvisioning()) {
+            Self->PersistBuildIndexFulltextProvisioning(db, *buildInfo);
+            // Provision the rowid infrastructure (sequentially, via child builds) before this build
+            // takes its own lock and builds the fulltext index.
+            buildInfo->State = buildInfo->FulltextNeedsRowIdColumn
+                ? TIndexBuildInfo::EState::ProvisioningRowIdColumn
+                : TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex;
+        } else {
+            buildInfo->State = TIndexBuildInfo::EState::Locking;
+        }
 
         Self->PersistBuildIndexState(db, *buildInfo);
         Self->AddIndexBuild(buildInfo);

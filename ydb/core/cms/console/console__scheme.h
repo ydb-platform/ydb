@@ -117,6 +117,14 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Id, Timestamp, UserSID, Data>;
     };
 
+    struct DecommittedGroups : Table<8> {
+        struct GroupId : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct DecommitTime : Column<2, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<GroupId>;
+        using TColumns = TableColumns<GroupId, DecommitTime>;
+    };
+
     struct ConfigItems : Table<100> {
         struct Id : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Generation : Column<2, NScheme::NTypeIds::Uint64> {};
@@ -178,7 +186,7 @@ struct Schema : NIceDb::Schema {
 
     using TTables = SchemaTables<Config, Tenants, TenantPools, TenantUnits, RemovedTenants,
                                  RegisteredUnits, LogRecords, ConfigItems, ConfigSubscriptions, DisabledValidators,
-                                 YamlConfig, DatabaseYamlConfigs>;
+                                 YamlConfig, DatabaseYamlConfigs, DecommittedGroups>;
     using TSettings = SchemaSettings<ExecutorLogBatching<true>,
                                      ExecutorLogFlushPeriod<TDuration::MicroSeconds(512).GetValue()>>;
 };

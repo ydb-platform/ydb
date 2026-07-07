@@ -113,10 +113,18 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-            case NKikimrSchemeOp::EIndexTypeGlobalJson:
-            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
                 // no specialized index description
                 Y_ASSERT(std::holds_alternative<std::monostate>(info.SpecializedIndexDescription));
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                // JSON indexes carry a fulltext description only when rowid mode (__ydb_row_id as doc_id)
+                // has been enabled; otherwise there is no specialized index description.
+                if (const auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&info.SpecializedIndexDescription)) {
+                    *serializableRepresentation.MutableFulltextIndexDescription() = *ft;
+                } else {
+                    Y_ASSERT(std::holds_alternative<std::monostate>(info.SpecializedIndexDescription));
+                }
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() =
@@ -160,7 +168,9 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
             NIceDb::TUpdate<Schema::BuildColumnOperationSettings::DefaultFromLiteral>(
                 TString(info.BuildColumns[i].DefaultFromLiteral.SerializeAsString())),
             NIceDb::TUpdate<Schema::BuildColumnOperationSettings::NotNull>(info.BuildColumns[i].NotNull),
-            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::FamilyName>(info.BuildColumns[i].FamilyName)
+            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::FamilyName>(info.BuildColumns[i].FamilyName),
+            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::DefaultFromSequence>(info.BuildColumns[i].DefaultFromSequence),
+            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::BitReverseSequenceValue>(info.BuildColumns[i].BitReverseSequenceValue)
         );
     }
 }
@@ -221,6 +231,31 @@ void TSchemeShard::PersistBuildIndexAlterMainTableTxStatus(NIceDb::TNiceDb& db, 
 void TSchemeShard::PersistBuildIndexAlterMainTableTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
         NIceDb::TUpdate<Schema::IndexBuild::AlterMainTableTxDone>(indexInfo.AlterMainTableTxDone));
+}
+
+void TSchemeShard::PersistBuildIndexCreateBuildSequenceTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
+    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
+        NIceDb::TUpdate<Schema::IndexBuild::CreateBuildSequenceTxId>(indexInfo.CreateBuildSequenceTxId));
+}
+
+void TSchemeShard::PersistBuildIndexCreateBuildSequenceTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
+    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
+        NIceDb::TUpdate<Schema::IndexBuild::CreateBuildSequenceTxStatus>(indexInfo.CreateBuildSequenceTxStatus));
+}
+
+void TSchemeShard::PersistBuildIndexCreateBuildSequenceTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
+    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
+        NIceDb::TUpdate<Schema::IndexBuild::CreateBuildSequenceTxDone>(indexInfo.CreateBuildSequenceTxDone));
+}
+
+void TSchemeShard::PersistBuildIndexFulltextProvisioning(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
+    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
+        NIceDb::TUpdate<Schema::IndexBuild::FulltextNeedsRowIdColumn>(indexInfo.FulltextNeedsRowIdColumn),
+        NIceDb::TUpdate<Schema::IndexBuild::FulltextNeedsUniqueIndex>(indexInfo.FulltextNeedsUniqueIndex),
+        NIceDb::TUpdate<Schema::IndexBuild::AutoUniqueIndexName>(indexInfo.AutoUniqueIndexName),
+        NIceDb::TUpdate<Schema::IndexBuild::RowIdColumnBuildId>(indexInfo.RowIdColumnBuildId),
+        NIceDb::TUpdate<Schema::IndexBuild::RowIdUniqueBuildId>(indexInfo.RowIdUniqueBuildId),
+        NIceDb::TUpdate<Schema::IndexBuild::ParentBuildId>(indexInfo.ParentBuildId));
 }
 
 void TSchemeShard::PersistBuildIndexInitiateTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
@@ -565,6 +600,7 @@ void TSchemeShard::SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TAc
 
         // TODO(mbkkt) order here is unexpected, is it intentional or accidental?
         handle(buildInfo.LockTxId);
+        handle(buildInfo.CreateBuildSequenceTxId);
         handle(buildInfo.AlterMainTableTxId);
         handle(buildInfo.InitiateTxId);
         handle(buildInfo.ApplyTxId);

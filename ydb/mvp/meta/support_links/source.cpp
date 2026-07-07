@@ -5,7 +5,7 @@
 
 #include <util/generic/yexception.h>
 
-namespace NMVP {
+namespace NMVP::NSupportLinks {
 
 void ValidateSupportLinksConfig(const TSupportLinksConfig& supportLinks, const TMetaSettings& metaSettings) {
     for (int i = 0; i < supportLinks.GetCluster().size(); ++i) {
@@ -13,6 +13,12 @@ void ValidateSupportLinksConfig(const TSupportLinksConfig& supportLinks, const T
     }
     for (int i = 0; i < supportLinks.GetDatabase().size(); ++i) {
         ValidateLinkSourceConfig(supportLinks.GetDatabase(i), metaSettings);
+    }
+    for (int i = 0; i < supportLinks.GetNode().size(); ++i) {
+        ValidateLinkSourceConfig(supportLinks.GetNode(i), metaSettings);
+    }
+    for (int i = 0; i < supportLinks.GetHost().size(); ++i) {
+        ValidateLinkSourceConfig(supportLinks.GetHost(i), metaSettings);
     }
 }
 
@@ -53,4 +59,4 @@ std::shared_ptr<ILinkSource> MakeLinkSource(TSupportLinkEntryConfig config, cons
     ythrow yexception() << "unsupported support_links source: " << config.GetSource();
 }
 
-} // namespace NMVP
+} // namespace NMVP::NSupportLinks

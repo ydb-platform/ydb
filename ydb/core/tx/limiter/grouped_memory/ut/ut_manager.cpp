@@ -234,4 +234,46 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         UNIT_ASSERT(manager->IsEmpty());
         UNIT_ASSERT_VALUES_EQUAL(TObjectCounter<TAllocation>::ObjectCount(), 0);
     }
+
+    Y_UNIT_TEST(UnregisterScopeKeepsWaitingWhenScopeHasLinks) {
+        auto groupedMemoryLimiterCounters = std::make_shared<NOlap::NGroupedMemoryManager::TCounters>(
+            MakeIntrusive<NMonitoring::TDynamicCounters>(), "Scan");
+        auto stage = std::make_shared<NOlap::NGroupedMemoryManager::TStageFeatures>("GLOBAL", 100, std::nullopt, nullptr,
+            groupedMemoryLimiterCounters->BuildStageCounters("general"));
+        NOlap::NGroupedMemoryManager::TProcessMemory process(0, 1, NActors::TActorId(), true, {}, stage);
+
+        process.RegisterScope(0);
+        process.RegisterScope(0);
+
+        process.RegisterGroup(0, 1);
+        auto alloc1 = std::make_shared<TAllocation>(100);
+        process.RegisterAllocation(0, 1, alloc1, {});
+        UNIT_ASSERT(alloc1->IsAllocated());
+
+        process.RegisterGroup(0, 2);
+        auto alloc2 = std::make_shared<TAllocation>(50);
+        process.RegisterAllocation(0, 2, alloc2, {});
+        UNIT_ASSERT(!alloc2->IsAllocated());
+        UNIT_ASSERT(process.HasWaitingAllocations());
+
+        process.UnregisterScope(0);
+        UNIT_ASSERT(process.HasWaitingAllocations());
+
+        alloc1->Guard.reset();
+        UNIT_ASSERT(process.TryAllocateWaiting(1));
+        UNIT_ASSERT(alloc2->IsAllocated());
+        
+        alloc2->Guard.reset();
+        process.UnregisterAllocation(0, alloc1->GetIdentifier());
+        process.UnregisterAllocation(0, alloc2->GetIdentifier());
+        process.UnregisterGroup(0, 1);
+        process.UnregisterGroup(0, 2);
+        process.UnregisterScope(0);
+
+        alloc1.reset();
+        alloc2.reset();
+
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetUsage().Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(TObjectCounter<TAllocation>::ObjectCount(), 0);
+    }
 };

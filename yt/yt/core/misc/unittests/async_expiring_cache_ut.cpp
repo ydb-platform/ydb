@@ -7,6 +7,8 @@
 
 #include <yt/yt/core/rpc/dispatcher.h>
 
+#include <util/generic/strbuf.h>
+
 #include <random>
 
 namespace NYT {
@@ -538,6 +540,44 @@ TEST(TAsyncExpiringCacheTest, ForceUpdate)
     rev1 = cache->Get(0);
     ASSERT_EQ(WaitForFast(rev1).Value(), 1);
     ASSERT_EQ(cache->ForcedUpdateCount.load(), 1);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TStringExpiringCache
+    : public TAsyncExpiringCache<std::string, int>
+{
+public:
+    explicit TStringExpiringCache(TAsyncExpiringCacheConfigPtr config)
+        : TAsyncExpiringCache(
+            std::move(config),
+            NRpc::TDispatcher::Get()->GetHeavyInvoker(),
+            TestLogger())
+    { }
+
+protected:
+    TFuture<int> DoGet(const std::string& /*key*/, bool /*isPeriodicUpdate*/) noexcept override
+    {
+        return MakeFuture<int>(0);
+    }
+};
+
+TEST(TAsyncExpiringCacheTest, HeterogeneousLookup)
+{
+    auto config = New<TAsyncExpiringCacheConfig>();
+    config->BatchUpdate = true;
+    config->ExpireAfterAccessTime = TDuration::Seconds(100);
+    config->ExpireAfterSuccessfulUpdateTime = TDuration::Seconds(100);
+    config->ExpireAfterFailedUpdateTime = TDuration::Seconds(100);
+    auto cache = New<TStringExpiringCache>(config);
+
+    cache->Set(std::string("alpha"), 42);
+
+    // Lookup via TStringBuf must not materialize a std::string key.
+    auto result = cache->Find(TStringBuf("alpha"));
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->ValueOrThrow(), 42);
+    EXPECT_FALSE(cache->Find(TStringBuf("beta")).has_value());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

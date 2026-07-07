@@ -20,6 +20,7 @@ class TTicketParser : public TTicketParserImpl<TTicketParser> {
         Login,
         ApiKey, // IAM api_key
         Certificate, // Token from SSL Certificate
+        ExternalIdp, // JWT token from external IdP (OIDC/OAuth2)
     };
 
     THashMap<TString, TTokenRecord> UserTokens;

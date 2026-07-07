@@ -22,7 +22,8 @@ enum Codec {
     CODEC_GZIP = 2;
     CODEC_LZOP = 3;
     CODEC_ZSTD = 4;
-    reserved 5 to 9999;
+    CODEC_KAFKA_BATCH = 5;
+    reserved 6 to 9999;
     // User-defined codecs from 10000 to 19999
     CODEC_CUSTOM = 10000;
     reserved 20000 to max;
@@ -138,6 +139,9 @@ message StreamWriteMessage {
         // Client can only use compression codecs from this set to write messages to topic.
         // Otherwise session will be closed with BAD_REQUEST.
         SupportedCodecs supported_codecs = 4;
+
+        // Indicates that server supports batching.
+        bool is_batching_supported = 5;
     }
 
     // Represents portion of client messages.
@@ -148,10 +152,13 @@ message StreamWriteMessage {
         // See enum Codec above for values.
         int32 codec = 2;
 
-        optional TransactionIdentity tx = 3;
+        oneof write_context {
+            TransactionIdentity tx = 3;
+            DeferredPublishIdentity deferred_publish = 9;
+        }
 
         message MessageData {
-            // Message sequence number, provided by client for deduplication.
+            // Message sequence number, provided by client for deduplication. Max sequence number for batch messages.
             // Starts at 1
             int64 seq_no = 1;
             // Creation timestamp.
@@ -343,6 +350,9 @@ message StreamReadMessage {
             // Read only messages with 'written_at' value greater or equal than this timestamp.
             google.protobuf.Timestamp read_from = 4;
         }
+
+        // Indicates that client supports batching.
+        bool is_batching_supported = 7;
     }
 
     // Handshake response.
@@ -381,7 +391,7 @@ message StreamReadMessage {
         message MessageData {
             // Partition offset in partition that assigned for message.
             int64 offset = 1; //unique value for client side deduplication - Topic:Partition:Offset
-            // Sequence number that provided with message on write from client.
+            // Sequence number that provided with message on write from client. Max sequence number for batch messages.
             int64 seq_no = 2;
             // Timestamp of creation of message provided on write from client.
             google.protobuf.Timestamp created_at = 3;
@@ -515,6 +525,10 @@ message StreamReadMessage {
         // All messages with offset less than commit_offset are processed by client.
         // Server will commit this position if this is not done yet.
         optional int64 commit_offset = 3;
+
+        // If max_ofset is set, server will return data only up to max_offset (inclusive)
+        // If set and is less than read_offset, commit_offset or actual committed offset then server will send an error message (status != SUCCESS) and close stream.
+        optional int64 max_offset = 4;
     }
 
     // Command from server to stop and destroy concrete partition session.
@@ -705,6 +719,15 @@ message TransactionIdentity {
 
     // Session identifier from TableService.
     string session = 2;
+}
+
+// Identity of a deferred topic publication for StreamWrite.
+// int_publication_id is assigned by the server in BeginPublication.
+// ext_publication_id is repeated from BeginPublication on each write batch.
+message DeferredPublishIdentity {
+    uint64 int_publication_id = 1;
+
+    string ext_publication_id = 2 [(Ydb.length).le = 2048];
 }
 
 // Add offsets to transaction request sent from client to server.

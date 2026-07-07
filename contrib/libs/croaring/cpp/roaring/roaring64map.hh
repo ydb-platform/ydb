@@ -494,7 +494,82 @@ class Roaring64Map {
         return iter->second.contains(lowBytes(x));
     }
 
-    // TODO: implement `containsRange`
+    /**
+     * Returns true if all values in the half-open interval [min, max) are
+     * present.
+     */
+    bool containsRange(uint64_t min, uint64_t max) const {
+        if (min >= max) {
+            return true;
+        }
+        return containsRangeClosed(min, max - 1);
+    }
+
+    /**
+     * Returns true if all values in the closed interval [min, max] are present.
+     */
+    bool containsRangeClosed(uint32_t min, uint32_t max) const {
+        auto iter = roarings.find(0);
+        if (iter == roarings.end()) {
+            return min > max;
+        }
+        return iter->second.containsRangeClosed(min, max);
+    }
+
+    /**
+     * Returns true if all values in the closed interval [min, max] are present.
+     */
+    bool containsRangeClosed(uint64_t min, uint64_t max) const {
+        if (min > max) {
+            return true;
+        }
+        uint32_t start_high = highBytes(min);
+        uint32_t start_low = lowBytes(min);
+        uint32_t end_high = highBytes(max);
+        uint32_t end_low = lowBytes(max);
+
+        // We put std::numeric_limits<>::max in parentheses to avoid a
+        // clash with the Windows.h header under Windows.
+        const uint32_t uint32_max = (std::numeric_limits<uint32_t>::max)();
+
+        // If start == end, check it in one call.
+        if (start_high == end_high) {
+            auto iter = roarings.find(start_high);
+            if (iter == roarings.end()) {
+                return false;
+            }
+            return iter->second.containsRangeClosed(start_low, end_low);
+        }
+
+        // Otherwise the range spans multiple bitmaps.
+        auto iter = roarings.find(start_high);
+        if (iter == roarings.end()) {
+            return false;
+        }
+
+        // 1. The first bitmap must contain [start_low, uint32_max].
+        if (!iter->second.containsRangeClosed(start_low, uint32_max)) {
+            return false;
+        }
+
+        // 2. Every intermediate bitmap must contain [0, uint32_max] (full).
+        for (uint32_t high = start_high + 1; high != end_high; ++high) {
+            ++iter;
+            if (iter == roarings.end() || iter->first != high) {
+                return false;
+            }
+            if (!iter->second.containsRangeClosed(0, uint32_max)) {
+                return false;
+            }
+        }
+
+        // 3. The last bitmap must contain [0, end_low].
+        ++iter;
+        if (iter == roarings.end() || iter->first != end_high) {
+            return false;
+        }
+        return iter->second.containsRangeClosed(0, end_low);
+    }
 
     /**
      * Compute the intersection of the current bitmap and the provided bitmap,
@@ -832,10 +907,9 @@ class Roaring64Map {
     }
 
     /**
-     * Convert the bitmap to an array. Write the output to "ans",
-     * caller is responsible to ensure that there is enough memory
-     * allocated
-     * (e.g., ans = new uint32[mybitmap.cardinality()];)
+     * Convert the bitmap to a sorted array. Write the output to "ans", the
+     * caller is responsible to ensure that there is enough memory allocated
+     * (e.g., ans = new uint64_t[mybitmap.cardinality()];)
      */
     void toUint64Array(uint64_t *ans) const {
         // Annoyingly, VS 2017 marks std::accumulate() as [[nodiscard]]
@@ -1141,13 +1215,15 @@ class Roaring64Map {
         const char *orig = buf;
         // push map size
         uint64_t map_size = roarings.size();
-        std::memcpy(buf, &map_size, sizeof(uint64_t));
+        uint64_t map_size_le = croaring_htole64(map_size);
+        std::memcpy(buf, &map_size_le, sizeof(uint64_t));
         buf += sizeof(uint64_t);
         std::for_each(roarings.cbegin(), roarings.cend(),
                       [&buf, portable](
                           const std::pair<const uint32_t, Roaring> &map_entry) {
                           // push map key
-                          std::memcpy(buf, &map_entry.first, sizeof(uint32_t));
+                          uint32_t key_le = croaring_htole32(map_entry.first);
+                          std::memcpy(buf, &key_le, sizeof(uint32_t));
                           // ^-- Note: `*((uint32_t*)buf) = map_entry.first;` is
                           // undefined
 
@@ -1175,11 +1251,13 @@ class Roaring64Map {
         // get map size
         uint64_t map_size;
         std::memcpy(&map_size, buf, sizeof(uint64_t));
+        map_size = croaring_letoh64(map_size);
         buf += sizeof(uint64_t);
         for (uint64_t lcv = 0; lcv < map_size; lcv++) {
             // get map key
             uint32_t key;
             std::memcpy(&key, buf, sizeof(uint32_t));
+            key = croaring_letoh32(key);
             // ^-- Note: `uint32_t key = *((uint32_t*)buf);` is undefined
 
             buf += sizeof(uint32_t);
@@ -1209,6 +1287,7 @@ class Roaring64Map {
         }
         uint64_t map_size;
         std::memcpy(&map_size, buf, sizeof(uint64_t));
+        map_size = croaring_letoh64(map_size);
         buf += sizeof(uint64_t);
         maxbytes -= sizeof(uint64_t);
         for (uint64_t lcv = 0; lcv < map_size; lcv++) {
@@ -1217,6 +1296,7 @@ class Roaring64Map {
             }
             uint32_t key;
             std::memcpy(&key, buf, sizeof(uint32_t));
+            key = croaring_letoh32(key);
             // ^-- Note: `uint32_t key = *((uint32_t*)buf);` is undefined
 
             buf += sizeof(uint32_t);

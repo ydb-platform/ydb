@@ -79,11 +79,12 @@ namespace NYql::NDq {
 
 class TOutputSerializer {
 public:
-    TOutputSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, TMaybe<size_t> bufferPageAllocSize)
+    TOutputSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, TMaybe<size_t> bufferPageAllocSize)
         : Buffer(buffer)
         , RowType(rowType)
         , TransportVersion(transportVersion)
         , PackerVersion(packerVersion)
+        , DatumValidationMode(datumValidationMode)
         , BufferPageAllocSize(bufferPageAllocSize)
     {}
 
@@ -98,15 +99,17 @@ public:
     NKikimr::NMiniKQL::TType* RowType;
     NDqProto::EDataTransportVersion TransportVersion;
     NKikimr::NMiniKQL::EValuePackerVersion PackerVersion;
+    NYql::EDatumValidationMode DatumValidationMode;
     TMaybe<size_t> BufferPageAllocSize;
 };
 
 class TInputDeserializer {
 public:
-    TInputDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, const NKikimr::NMiniKQL::THolderFactory& holderFactory)
+    TInputDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, const NKikimr::NMiniKQL::THolderFactory& holderFactory)
         : RowType(rowType)
         , TransportVersion(transportVersion)
         , PackerVersion(packerVersion)
+        , DatumValidationMode(datumValidationMode)
         , HolderFactory(holderFactory) {
     }
 
@@ -116,12 +119,13 @@ public:
     NKikimr::NMiniKQL::TType* RowType;
     NDqProto::EDataTransportVersion TransportVersion;
     NKikimr::NMiniKQL::EValuePackerVersion PackerVersion;
+    NYql::EDatumValidationMode DatumValidationMode;
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
 };
 
 std::unique_ptr<TOutputSerializer> CreateSerializer(const TDqChannelSettings& settings, std::shared_ptr<IChannelBuffer> buffer, bool local);
 std::unique_ptr<TOutputSerializer> ConvertToLocalSerializer(std::unique_ptr<TOutputSerializer>&& serializer);
-std::unique_ptr<TInputDeserializer> CreateDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, TMaybe<size_t> bufferPageAllocSize, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
+std::unique_ptr<TInputDeserializer> CreateDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, TMaybe<size_t> bufferPageAllocSize, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
 
 class TChannelStub : public IChannelBuffer {
 public:
@@ -243,8 +247,8 @@ public:
     const ui64 MaxInflightBytes; // NoLimit => HardLimit
     const ui64 MinInflightBytes; // HardLimit => NoLimit
     bool FinishPushed = false;
-    TInstant LastOutputNotificationTime;
-    TInstant LastInputNotificationTime;
+    std::atomic<TInstant> LastOutputNotificationTime;
+    std::atomic<TInstant> LastInputNotificationTime;
     TInstant FinishTime;
 
     std::atomic<bool> NeedToNotifyOutput = false;
@@ -321,6 +325,7 @@ public:
     std::atomic<ui64> PushBytes = 0;
     std::atomic<ui64> RemotePopBytes = 0;
     std::atomic<ui64> SpilledBytes = 0;
+    std::atomic<ui64> SeqNo = 0;
 
     std::atomic<bool> NeedToNotifyOutput = false;
     std::atomic<bool> EarlyFinished = false;
@@ -363,8 +368,9 @@ public:
     TDataChunk Data;
     std::shared_ptr<TOutputDescriptor> Descriptor;
     std::atomic<EState> State;
-    ui64 SeqNo;
-    bool Leading;
+    ui64 SeqNo = 0;
+    bool Leading = false;
+    ui64 ChannelSeqNo = 0;
 };
 
 class TOutputBuffer : public IChannelBuffer {
@@ -444,6 +450,7 @@ public:
     std::atomic<ui64> QueueBytes = 0;
     mutable std::queue<TInputItem> Queue;
     std::atomic<ui64> InflightBytes = 0;
+    std::atomic<ui64> SeqNo = 0;
 
     std::atomic<bool> NeedToNotifyInput = false;
     std::atomic<bool> FinishPushed = false;
@@ -557,7 +564,9 @@ public:
         InputBufferBytes = counters->GetCounter("InputBuffer/Bytes", true);
         InputBufferChunks = counters->GetCounter("InputBuffer/Chunks", true);
         InputBufferInflightBytes = counters->GetCounter("InputBuffer/InflightBytes", false);
-        LastActivity.store(TInstant::Now());
+        auto now = TInstant::Now();
+        LastPeerActivity.store(now);
+        LastCleanup = now;
     }
 
     virtual ~TNodeState();
@@ -645,7 +654,8 @@ public:
     std::atomic<ui64> FailureLossSend = 0;
     std::atomic<ui64> FailureDoubleSend = 0;
     std::atomic<ui64> FailureReconciliation = 0;
-    std::atomic<TInstant> LastActivity;
+    std::atomic<TInstant> LastPeerActivity;
+    TInstant LastCleanup;
     std::atomic<bool> Terminating = false;
     std::atomic<bool> ResendAsked = false;
     std::deque<char> ReconciliationLog;
@@ -913,7 +923,7 @@ public:
         PushStats.SrcStageId = settings.SrcStageId;
         PushStats.Level = settings.Level;
         PopStats.Level = settings.Level;
-        Deserializer = CreateDeserializer(settings.RowType, settings.TransportVersion, settings.PackerVersion, settings.BufferPageAllocSize, *settings.HolderFactory);
+        Deserializer = CreateDeserializer(settings.RowType, settings.TransportVersion, settings.PackerVersion, settings.DatumValidationMode, settings.BufferPageAllocSize, *settings.HolderFactory);
     }
 
     mutable TDqInputStats PopStats;
@@ -965,22 +975,6 @@ public:
 
     bool IsPausedByCheckpoint() const override {
         return PausedByCheckpoint;
-    }
-
-    void AddWatermark(TInstant) override {
-        Y_ENSURE(false);
-    }
-
-    void PauseByWatermark(TInstant) override {
-        Y_ENSURE(false);
-    }
-
-    void ResumeByWatermark(TInstant) override {
-        Y_ENSURE(false);
-    }
-
-    bool IsPausedByWatermark() const override {
-        Y_ENSURE(false);
     }
 
 // IDqInputChannel
@@ -1276,4 +1270,3 @@ public:
 };
 
 }
-

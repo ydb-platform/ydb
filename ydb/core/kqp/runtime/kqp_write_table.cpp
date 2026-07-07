@@ -2,6 +2,9 @@
 
 #include <util/generic/size_literals.h>
 #include <util/generic/yexception.h>
+#include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/table_index.h>
+#include <ydb/library/json_index/json_index.h>
 #include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/runtime/kqp_arrow_memory_pool.h>
@@ -1041,7 +1044,7 @@ public:
     TDataBatchProjection(
         TConstArrayRef<ui32> indexes,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
-            : Indexes(indexes)
+            : Indexes(indexes.begin(), indexes.end())
             , Alloc(std::move(alloc))
             , RowBatcher(Indexes.size(), std::nullopt, Alloc) {
     }
@@ -1062,9 +1065,181 @@ public:
     }
 
 private:
-    TConstArrayRef<ui32> Indexes;
+    TVector<ui32> Indexes;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     TRowsBatcher RowBatcher;
+};
+
+template<class TDocId>
+class TFulltextTokenizeProjection : public IFulltextTokenizeProjection {
+public:
+    TFulltextTokenizeProjection(
+        TConstArrayRef<NScheme::TTypeInfo> columnTypes,
+        bool withFreq,
+        bool added,
+        const Ydb::Table::FulltextIndexSettings& settings,
+        TConstArrayRef<ui32> indexes,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
+        : TextTypeId(columnTypes.at(0).GetTypeId())
+        , DocsColumns(columnTypes.size())
+        , WithFreq(withFreq)
+        , Added(added)
+        , Indexes(indexes.begin(), indexes.end())
+        , Alloc(std::move(alloc))
+        , RowBatcher(5, std::nullopt, Alloc)
+        , DocsBatcher(Added ? columnTypes.size() : 1, std::nullopt, Alloc)
+        , DictBatcher(2, std::nullopt, Alloc)
+        , StatsBatcher(3, std::nullopt, Alloc) {
+        // Always at least 2 columns: text and id + optional data columns
+        AFL_ENSURE(Indexes.size() == columnTypes.size() && Indexes.size() >= 2);
+        // Settings/Analyzers are required for fulltext indexes, but not for json
+        AFL_ENSURE(settings.columns_size() == 1 ||
+            TextTypeId == NScheme::NTypeIds::Json ||
+            TextTypeId == NScheme::NTypeIds::JsonDocument);
+        if (settings.columns_size() == 1) {
+            Analyzers = settings.columns().at(0).analyzers();
+        }
+    }
+
+    void AddRow(TConstArrayRef<TCell> row) override {
+        ui64 docId = (ui64)row[Indexes[1]].AsValue<TDocId>();
+        auto text = row[Indexes[0]].AsBuf();
+        TVector<TString> tokens;
+        switch (TextTypeId) {
+            case NScheme::NTypeIds::String:
+            case NScheme::NTypeIds::Utf8:
+                tokens = NKikimr::NFulltext::Analyze(text, Analyzers);
+                break;
+            case NScheme::NTypeIds::Json: {
+                TString error;
+                tokens = NJsonIndex::TokenizeJson(text, error);
+                YQL_ENSURE(error.empty(), "TokenizeJson error: " << error);
+                break;
+            }
+            case NScheme::NTypeIds::JsonDocument:
+                tokens = NJsonIndex::TokenizeBinaryJson(text);
+                break;
+            default:
+                YQL_ENSURE(false, "Invalid FulltextAnalyzeActor input column type: " << TextTypeId);
+        }
+        ui32 docLength = 0;
+        for (auto& token: tokens) {
+            TokenLists[token][docId]++;
+            docLength++;
+        }
+        DocCount++;
+        TotalDocLength += docLength;
+        if (WithFreq) {
+            // indexImplDocsTable columns: document ID, __ydb_length, data columns
+            TVector<TCell> docsCells(Added ? DocsColumns : 1);
+            docsCells[0] = TCell::Make(docId);
+            if (Added) {
+                docsCells[1] = TCell::Make(docLength);
+                for (size_t i = 2; i < DocsColumns; i++) {
+                    docsCells[i] = row[Indexes[i]];
+                }
+            }
+            DocsBatcher.AddRow(docsCells);
+        }
+    }
+
+    IDataBatchPtr Flush() override {
+        TVector<TStringBuf> sortedTokens;
+        for (const auto& [token, docFreqs]: TokenLists) {
+            sortedTokens.push_back(token);
+        }
+        std::sort(sortedTokens.begin(), sortedTokens.end());
+        // Fixed column order: __ydb_token, __ydb_generation, __ydb_max_id, __ydb_added, __ydb_segment
+        TVector<TCell> cells(5);
+        // cells[1] = gen — set per token below
+        cells[3] = TCell::Make(Added);
+        // indexImplDictTable columns: __ydb_token, __ydb_freq
+        TVector<TCell> dictCells(2);
+        NFulltext::TDeltaWriter wr;
+        for (const auto& token: sortedTokens) {
+            auto docFreqs = std::move(TokenLists.at(token));
+            TVector<ui64> docIds;
+            ui64 totalFreq = 0;
+            for (const auto& [docId, freq]: docFreqs) {
+                docIds.push_back(docId);
+                totalFreq += freq;
+            }
+            std::sort(docIds.begin(), docIds.end(), [](ui64 a, ui64 b) {
+                return (TDocId)a < TDocId(b);
+            });
+            wr.Reset(WithFreq, std::is_signed<TDocId>::value);
+            if (WithFreq) {
+                for (const auto& docId: docIds) {
+                    wr.Add(docId, docFreqs[docId]);
+                }
+            } else {
+                for (const auto& docId: docIds) {
+                    wr.Add(docId, 1);
+                }
+            }
+            cells[0] = TCell(token);
+            cells[1] = TCell::Make(Gen);
+            cells[2] = TCell::Make((TDocId)wr.GetMaxId());
+            cells[4] = TCell(TConstArrayRef<const char>((const char*)wr.GetBuf().data(), wr.GetBuf().size()));
+            RowBatcher.AddRow(cells);
+            if (WithFreq) {
+                dictCells[0] = TCell(token);
+                dictCells[1] = TCell::Make(Added ? totalFreq : -totalFreq);
+                DictBatcher.AddRow(dictCells);
+            }
+        }
+        TokenLists.clear();
+        if (WithFreq) {
+            // indexImplStatsTable columns: __ydb_id (always ui32 0), __ydb_doc_count, __ydb_total_doc_length
+            TVector<TCell> statsCells(3);
+            statsCells[0] = TCell::Make((ui32)0);
+            statsCells[1] = TCell::Make(Added ? DocCount : -DocCount);
+            statsCells[2] = TCell::Make(Added ? TotalDocLength : -TotalDocLength);
+            StatsBatcher.AddRow(statsCells);
+        }
+        auto result = RowBatcher.Flush(true);
+        YQL_ENSURE(RowBatcher.IsEmpty());
+        return result;
+    }
+
+    IDataBatchPtr FlushDocs() override {
+        auto result = DocsBatcher.Flush(true);
+        YQL_ENSURE(DocsBatcher.IsEmpty());
+        return result;
+    }
+
+    IDataBatchPtr FlushDict() override {
+        auto result = DictBatcher.Flush(true);
+        YQL_ENSURE(DictBatcher.IsEmpty());
+        return result;
+    }
+
+    IDataBatchPtr FlushStats() override {
+        auto result = StatsBatcher.Flush(true);
+        YQL_ENSURE(StatsBatcher.IsEmpty());
+        return result;
+    }
+
+    void SetGen(NTableIndex::NFulltext::TGen gen) override {
+        Gen = gen;
+    }
+
+private:
+    NTableIndex::NFulltext::TGen Gen = 0;
+    NScheme::TTypeId TextTypeId = 0;
+    ui64 TotalDocLength = 0;
+    ui64 DocCount = 0;
+    ui32 DocsColumns = 0;
+    bool WithFreq = false;
+    bool Added = false;
+    Ydb::Table::FulltextIndexSettings::Analyzers Analyzers;
+    THashMap<TString, THashMap<ui64, ui32>> TokenLists;
+    TVector<ui32> Indexes;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+    TRowsBatcher RowBatcher;
+    TRowsBatcher DocsBatcher;
+    TRowsBatcher DictBatcher;
+    TRowsBatcher StatsBatcher;
 };
 
 }
@@ -1150,6 +1325,26 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
     return MakeIntrusive<TDataBatchProjection>(
         indexes, std::move(alloc));
+}
+
+IDataBatchProjectionPtr CreateFulltextTokenizeProjection(
+    TConstArrayRef<NScheme::TTypeInfo> columnTypes,
+    bool withFreq,
+    bool added,
+    const Ydb::Table::FulltextIndexSettings& settings,
+    TConstArrayRef<ui32> indexes,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
+    switch (columnTypes[1].GetTypeId()) {
+    case NScheme::NTypeIds::Uint64:
+        return MakeIntrusive<TFulltextTokenizeProjection<ui64>>(columnTypes, withFreq, added, settings, indexes, std::move(alloc));
+    case NScheme::NTypeIds::Uint32:
+        return MakeIntrusive<TFulltextTokenizeProjection<ui32>>(columnTypes, withFreq, added, settings, indexes, std::move(alloc));
+    case NScheme::NTypeIds::Int64:
+        return MakeIntrusive<TFulltextTokenizeProjection<i64>>(columnTypes, withFreq, added, settings, indexes, std::move(alloc));
+    case NScheme::NTypeIds::Int32:
+        return MakeIntrusive<TFulltextTokenizeProjection<i32>>(columnTypes, withFreq, added, settings, indexes, std::move(alloc));
+    }
+    AFL_ENSURE(false)("Unsupported primary key type", columnTypes[1].GetTypeId());
 }
 
 std::vector<TConstArrayRef<TCell>> GetRows(const NKikimr::NKqp::IDataBatchPtr& batch) {

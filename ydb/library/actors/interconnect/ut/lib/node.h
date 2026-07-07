@@ -11,6 +11,7 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
+#include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 
@@ -109,6 +110,10 @@ public:
 
         setup.LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(counters),
             TMailboxType::ReadAsFilled, 0));
+        if (common->Settings.UseUring && TUringContext::IsSupported()) {
+            setup.LocalServices.emplace_back(MakeUringPollerActorId(), TActorSetupCmd(CreateUringPollerActor(common->Settings.EnableUringSQPOLL),
+                TMailboxType::ReadAsFilled, 0));
+        }
         setup.LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
             TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(-1, 1024, rdmaCqMode, nullptr),
             TMailboxType::ReadAsFilled, 0));
@@ -206,5 +211,9 @@ public:
 
     TInterconnectSettings& MutableInterconnectSettings() {
         return Common->Settings;
+    }
+
+    std::shared_ptr<NInterconnect::NRdma::IMemPool> GetRdmaMemPool() const {
+        return Common->RdmaMemPool;
     }
 };

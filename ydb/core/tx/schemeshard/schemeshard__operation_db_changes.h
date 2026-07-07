@@ -16,6 +16,8 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
     TDeque<TPathId> Paths;
 
     TDeque<TPathId> Tables;
+    TDeque<TPathId> ColumnTables;
+    TDeque<std::tuple<TShardIdx, TPathId, TTxId>> SharedShards;
     TDeque<std::pair<TPathId, TTxId>> TableSnapshots;
     TDeque<std::pair<TPathId, TTxId>> LongLocks;
     TDeque<TPathId> Unlocks;
@@ -61,6 +63,8 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
     TDeque<TPathId> ExternalTables;
     TDeque<TPathId> ResourcePools;
 
+    TDeque<TPathId> TestShardSets;
+
     //PQ part
     TDeque<std::tuple<TPathId, TShardIdx, TTopicTabletInfo::TTopicPartitionInfo>> PersQueue;
     TDeque<std::pair<TPathId, TTopicInfo::TPtr>> PersQueueGroup;
@@ -87,6 +91,14 @@ public:
 
     void PersistTable(const TPathId& pathId) {
         Tables.push_back(pathId);
+    }
+
+    void PersistColumnTable(const TPathId& pathId) {
+        ColumnTables.push_back(pathId);
+    }
+
+    void PersistSharedShard(const TShardIdx& shardIdx, const TPathId& pathId, TTxId txId = InvalidTxId) {
+        SharedShards.emplace_back(shardIdx, pathId, txId);
     }
 
     void PersistTableSnapshot(const TPathId& pathId, TTxId snapshotTxId) {
@@ -191,6 +203,10 @@ public:
 
     void PersistResourcePool(const TPathId& pathId) {
         ResourcePools.emplace_back(pathId);
+    }
+
+    void PersistTestShardSet(const TPathId& pathId) {
+        TestShardSets.emplace_back(pathId);
     }
 
     void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);

@@ -74,6 +74,7 @@ struct TEnvironmentSetup {
         const std::function<TIntrusivePtr<TStateStorageInfo>(std::function<TActorId(ui32, ui32)>, ui32)> StateStorageInfoGenerator = nullptr;
         const bool EnablePhantomFlagStorage = false;
         const ui64 PhantomFlagStorageLimitPerVDiskBytes = 10'000'000; // 10_MB
+        const ui64 VolatilePhantomFlagStorageBlobSizeLimitBytes = 1;
         const bool TinySyncLog = false;
         const TDuration MaxPutTimeoutDSProxy = TDuration::Seconds(60);
         const bool StartFakeWilsonCollectors = false;
@@ -570,6 +571,10 @@ config:
 
                 ADD_ICB_CONTROL(BlobDepotControls.MaxLoadedTrashRecords, 1'000'000, 1, 100'000'000, 1'000'000);
 
+                ADD_ICB_CONTROL(RetroTracingControls.EnableStorageGeneration, false, false, true, false);
+                ADD_ICB_CONTROL(RetroTracingControls.EnableStorageCollectionSlowRequests, false, false, true, false);
+                ADD_ICB_CONTROL(DSProxyControls.LongRequestThresholdMs, 50'000, 1, 1'000'000'000, 50'000);
+
                 ADD_ICB_CONTROL(VDiskControls.EnableDeepScrubbing, false, false, true, Settings.EnableDeepScrubbing);
                 ADD_ICB_CONTROL(VDiskControls.HullCompThrottlerBytesRate, 0, 0, 10737418240, 0);
                 ADD_ICB_CONTROL(VDiskControls.DefragThrottlerBytesRate, 0, 0, 10'000'000'000, 0);
@@ -585,6 +590,7 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.EnablePhantomFlagStorage, true, false, true, Settings.EnablePhantomFlagStorage);
                 ADD_ICB_CONTROL(VDiskControls.EnablePersistentPhantomFlagStorage, false, false, true, Settings.EnablePersistentPhantomFlagStorage);
                 ADD_ICB_CONTROL(VDiskControls.PhantomFlagStorageLimitPerVDiskBytes, 10'000'000, 0, 100'000'000'000, Settings.PhantomFlagStorageLimitPerVDiskBytes);
+                ADD_ICB_CONTROL(VDiskControls.VolatilePhantomFlagStorageBlobSizeLimitBytes, 1'000'000, 1, 10'000'000, Settings.VolatilePhantomFlagStorageBlobSizeLimitBytes);
                 ADD_ICB_CONTROL(VDiskControls.EnableChunkKeeper, true, false, true, Settings.EnableChunkKeeper);
                 ADD_ICB_CONTROL(VDiskControls.HullCompFreeSpaceThresholdPerMille, 2000, 0, 100'000, 2000);
 #undef ADD_ICB_CONTROL

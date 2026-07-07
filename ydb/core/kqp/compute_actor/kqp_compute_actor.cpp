@@ -25,6 +25,7 @@
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.h>
+#include <ydb/library/yql/providers/solomon/events/events.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -191,6 +192,9 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
             RegisterGenericProviderFactories(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->ConnectorClient);
         }
 
+        static_assert(
+            static_cast<ui32>(NYql::NDq::EEventSpaceSolomonProvider::ES_SOLOMON_PROVIDER) == static_cast<ui32>(NKikimr::TKikimrEvents::ES_SOLOMON_PROVIDER),
+            "ES_SOLOMON_PROVIDER is out of sync with ydb/core/base/events.h");
         NYql::NDq::RegisterDQSolomonReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory);
         bool enableStreamingQueriesCounters = NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters();
         NYql::NDq::RegisterDQSolomonWriteActorFactory(*factory, federatedQuerySetup->CredentialsFactory, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters);

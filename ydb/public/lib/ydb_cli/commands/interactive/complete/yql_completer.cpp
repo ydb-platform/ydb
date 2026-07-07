@@ -5,13 +5,13 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/color/schema.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_query_utils.h>
 
-#include <yql/essentials/sql/v1/complete/sql_complete.h>
-#include <yql/essentials/sql/v1/complete/name/cache/local/cache.h>
-#include <yql/essentials/sql/v1/complete/name/object/simple/cached/schema.h>
-#include <yql/essentials/sql/v1/complete/name/service/impatient/name_service.h>
-#include <yql/essentials/sql/v1/complete/name/service/schema/name_service.h>
-#include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
-#include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
+#include <yql/essentials/sql/v1/ide/completion/sql_complete.h>
+#include <yql/essentials/sql/v1/ide/completion/name/cache/local/cache.h>
+#include <yql/essentials/sql/v1/ide/completion/name/object/simple/cached/schema.h>
+#include <yql/essentials/sql/v1/ide/completion/name/service/impatient/name_service.h>
+#include <yql/essentials/sql/v1/ide/completion/name/service/schema/name_service.h>
+#include <yql/essentials/sql/v1/ide/completion/name/service/static/name_service.h>
+#include <yql/essentials/sql/v1/ide/completion/name/service/union/name_service.h>
 
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>

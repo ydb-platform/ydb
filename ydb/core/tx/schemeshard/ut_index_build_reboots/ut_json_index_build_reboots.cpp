@@ -8,6 +8,53 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
+namespace {
+
+void EnableJsonRowIdFlags(TTestActorRuntime& runtime) {
+    auto& appData = runtime.GetAppData();
+    appData.FeatureFlags.SetEnableJsonIndex(true);
+    appData.FeatureFlags.SetEnableFulltextIndex(true);
+    appData.FeatureFlags.SetEnableAddUniqueIndex(true);
+    appData.FeatureFlags.SetEnableUniqConstraint(true);
+}
+
+// Check that the index at `indexPath` has UseRowIdAsDocId=true in its persisted description
+// and that its impl-table is keyed by [__ydb_token, __ydb_row_id].
+void CheckRowIdJsonIndex(TTestActorRuntime& runtime, const TString& indexPath) {
+    {
+        const auto d = DescribePrivatePath(runtime, indexPath);
+        const auto& tableIndex = d.GetPathDescription().GetTableIndex();
+        UNIT_ASSERT_C(tableIndex.HasFulltextIndexDescription(),
+            indexPath << ": FulltextIndexDescription must be set for rowid-mode JSON index");
+        UNIT_ASSERT_C(tableIndex.GetFulltextIndexDescription().GetUseRowIdAsDocId(),
+            indexPath << ": UseRowIdAsDocId must be true after persistence through schemeshard reboots");
+    }
+
+    TestDescribeResult(DescribePrivatePath(runtime, indexPath + "/" + TString(NTableIndex::ImplTable)), {
+        NLs::PathExist,
+        NLs::CheckColumns(TString(NTableIndex::ImplTable),
+            { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+            {},
+            { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+            /*strictCount=*/ true),
+    });
+}
+
+// Common reboot event filter for JSON index build tests.
+void SetupRebootFilter(TTestWithReboots& t) {
+    t.TabletIds.clear();
+    t.TabletIds.push_back(t.SchemeShardTabletId);
+    t.NoRebootEventTypes.insert(TEvSchemeShard::EvModifySchemeTransaction);
+    t.NoRebootEventTypes.insert(TSchemeBoardEvents::EvUpdateAck);
+    t.NoRebootEventTypes.insert(TEvSchemeShard::EvNotifyTxCompletionRegistered);
+    t.NoRebootEventTypes.insert(TEvTabletPipe::EvServerDisconnected);
+    t.NoRebootEventTypes.insert(TEvTabletPipe::EvServerConnected);
+    t.NoRebootEventTypes.insert(TEvTabletPipe::EvClientConnected);
+    t.NoRebootEventTypes.insert(TEvTabletPipe::EvClientDestroyed);
+    t.NoRebootEventTypes.insert(TEvDataShard::EvBuildIndexProgressResponse);
+}
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(JsonIndexBuildTestReboots) {
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCase, /* rebootBuckets */ 4, /* pipeResetBuckets */ 4, /* killOnCommit */ true) {
@@ -103,6 +150,163 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTestReboots) {
                     auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, indexPath + "/" + TString(NTableIndex::ImplTable));
                     Cerr << "... impl table contains " << rows << " rows" << Endl;
                     UNIT_ASSERT_C(rows > 0, "indexImplTable must be non-empty after building");
+                }
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RowIdAutoProvision, /* rebootBuckets */ 4, /* pipeResetBuckets */ 4, /* killOnCommit */ true) {
+        SetupRebootFilter(t);
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            EnableJsonRowIdFlags(runtime);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "texts"
+                    Columns { Name: "pk"   Type: "Utf8" NotNull: true }
+                    Columns { Name: "data" Type: "Json" }
+                    KeyColumnNames: ["pk"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                const struct { const char* Pk; const char* Json; } rows[] = {
+                    {"aaa", R"({"k": 1})"},
+                    {"bbb", R"({"k": 2})"},
+                    {"ccc", R"({"k": 1, "m": 3})"},
+                };
+                for (const auto& row : rows) {
+                    TString pk(row.Pk), json(row.Json);
+                    UploadRow(runtime, "/MyRoot/texts", 0,
+                        /*keyTags=*/ {1}, /*valueTags=*/ {2},
+                        /*keys=*/ {TCell(pk.data(), pk.size())},
+                        /*values=*/ {TCell(json.data(), json.size())});
+                }
+            }
+
+            const ui64 buildIndexId = ++t.TxId;
+            {
+                auto sender = runtime.AllocateEdgeActor();
+                Ydb::Table::TableIndex index;
+                index.set_name("json_idx");
+                index.add_index_columns("data");
+                index.mutable_global_json_index();
+                auto request = CreateBuildIndexRequest(buildIndexId, "/MyRoot", "/MyRoot/texts", index);
+                // Disable scan batching to keep the test fast under reboots.
+                request->Record.MutableSettings()->MutableScanSettings()->Clear();
+                ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
+            }
+
+            t.TestEnv->TestWaitNotification(runtime, buildIndexId);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    op.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+                    op.DebugString());
+
+                TestDescribeResult(DescribePrivatePath(runtime,
+                    TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+                    NLs::PathExist,
+                    NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+                    NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                });
+
+                CheckRowIdJsonIndex(runtime, "/MyRoot/texts/json_idx");
+
+                {
+                    auto rows = CountRows(runtime, TTestTxConfig::SchemeShard,
+                        "/MyRoot/texts/json_idx/" + TString(NTableIndex::ImplTable));
+                    Cerr << "... json_idx impl-table contains " << rows << " rows" << Endl;
+                    UNIT_ASSERT_C(rows > 0, "json_idx impl-table must be non-empty after building");
+                }
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RowIdManualInfra, /* rebootBuckets */ 4, /* pipeResetBuckets */ 4, /* killOnCommit */ true) {
+        SetupRebootFilter(t);
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            EnableJsonRowIdFlags(runtime);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
+                    TableDescription {
+                        Name: "texts"
+                        Columns { Name: "pk"   Type: "Utf8"   NotNull: true }
+                        Columns { Name: "data" Type: "Json" }
+                        Columns { Name: "%s"   Type: "Uint64" NotNull: true }
+                        KeyColumnNames: ["pk"]
+                    }
+                    IndexDescription {
+                        Name: "uniq_rowid"
+                        KeyColumnNames: ["%s"]
+                        Type: EIndexTypeGlobalUnique
+                    }
+                )", NTableIndex::NFulltext::RowIdColumn, NTableIndex::NFulltext::RowIdColumn));
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                const struct { const char* Pk; const char* Json; ui64 RowId; } rows[] = {
+                    {"aaa", R"({"k": 1})",       100},
+                    {"bbb", R"({"k": 2})",       200},
+                    {"ccc", R"({"k": 1, "m": 3})", 300},
+                };
+                for (const auto& row : rows) {
+                    TString pk(row.Pk), json(row.Json);
+                    UploadRow(runtime, "/MyRoot/texts", 0,
+                        /*keyTags=*/ {1}, /*valueTags=*/ {2, 3},
+                        /*keys=*/ {TCell(pk.data(), pk.size())},
+                        /*values=*/ {TCell(json.data(), json.size()), TCell::Make(row.RowId)});
+                }
+            }
+
+            const ui64 buildIndexId = ++t.TxId;
+            {
+                auto sender = runtime.AllocateEdgeActor();
+                Ydb::Table::TableIndex index;
+                index.set_name("json_idx");
+                index.add_index_columns("data");
+                index.mutable_global_json_index();
+                auto request = CreateBuildIndexRequest(buildIndexId, "/MyRoot", "/MyRoot/texts", index);
+                request->Record.MutableSettings()->MutableScanSettings()->Clear();
+                ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
+            }
+
+            t.TestEnv->TestWaitNotification(runtime, buildIndexId);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    op.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+                    op.DebugString());
+
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/uniq_rowid"), {
+                    NLs::PathExist,
+                    NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+                    NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                });
+
+                TestDescribeResult(DescribePrivatePath(runtime,
+                    TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+                    NLs::PathNotExist,
+                });
+
+                CheckRowIdJsonIndex(runtime, "/MyRoot/texts/json_idx");
+
+                {
+                    auto rows = CountRows(runtime, TTestTxConfig::SchemeShard,
+                        "/MyRoot/texts/json_idx/" + TString(NTableIndex::ImplTable));
+                    Cerr << "... json_idx impl-table contains " << rows << " rows" << Endl;
+                    UNIT_ASSERT_C(rows > 0, "json_idx impl-table must be non-empty after building");
                 }
             }
         });

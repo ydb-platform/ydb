@@ -6,6 +6,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -60,14 +61,13 @@ Y_UNIT_TEST(TestIterate) {
     const std::vector<std::pair<ui32, std::vector<ui32>>> items = {{1, {1, 2}}, {2, {1}}, {3, {0}}, {6, {1, 7}}};
 
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-    TVector<TRuntimeNode> rItems;
+    TVector<std::tuple<ui32, ui32>> tupleItems;
     for (auto& [k, vv] : items) {
         for (auto& v : vv) {
-            rItems.push_back(pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<ui32>(k), pgmBuilder.NewDataLiteral<ui32>(v)}));
+            tupleItems.emplace_back(k, v);
         }
     }
-    auto ui32Type = pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id);
-    auto list = pgmBuilder.NewList(pgmBuilder.NewTupleType({ui32Type, ui32Type}), rItems);
+    auto list = NTest::ConvertValueToLiteralNode(pgmBuilder, tupleItems);
 
     auto dict = pgmBuilder.ToHashedDict(list, /*all*/ true,
                                         [&pgmBuilder](TRuntimeNode item) { return pgmBuilder.Nth(item, 0); },

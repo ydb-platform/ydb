@@ -130,9 +130,8 @@ TString TVChunkConfig::EvacuateHost(THostIndex hostIndex)
     PromoteHost(to);
     Y_ABORT_UNLESS(EnabledHosts.Get(to) == true);
 
-    return TStringBuilder()
-           << "Host " << PrintHostIndex(hostIndex) << " demoted, host "
-           << PrintHostIndex(to) << " promoted";
+    return TStringBuilder() << PrintHostIndex(hostIndex) << " demoted, "
+                            << PrintHostIndex(to) << " promoted";
 }
 
 TString TVChunkConfig::DemoteHost(THostIndex hostIndex)
@@ -170,7 +169,20 @@ EHostRole TVChunkConfig::GetDDiskRole(THostIndex hostIndex) const
 
 THostMask TVChunkConfig::GetDesiredPBuffers() const
 {
-    return Filter(PBufferHosts, EnabledHosts, EHostRole::Primary);
+    THostMask result = Filter(PBufferHosts, EnabledHosts, EHostRole::Primary);
+    if (result.Count() >= QuorumDirectBlockGroupHostCount) {
+        return result;
+    }
+
+    // Add hand-off hosts if primary is not enough for a quorum.
+    for (auto host: GetSecondaryPBuffers()) {
+        result.Set(host);
+        if (result.Count() >= QuorumDirectBlockGroupHostCount) {
+            break;
+        }
+    }
+
+    return result;
 }
 
 THostMask TVChunkConfig::GetSecondaryPBuffers() const

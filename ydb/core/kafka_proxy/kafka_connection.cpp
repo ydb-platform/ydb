@@ -11,7 +11,10 @@
 #include "actors/actors.h"
 #include "kafka_connection.h"
 #include "kafka_events.h"
-#include <ydb/library/kafka/kafka_log.h>
+
+
+#include <ydb/core/kafka_proxy/kafka_log_impl.h>
+
 #include "kafka_metrics.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY

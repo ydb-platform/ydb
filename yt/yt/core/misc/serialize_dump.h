@@ -196,7 +196,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline TString DumpRangeToHex(TRef data)
+inline std::string DumpRangeToHex(TRef data)
 {
     TStringBuilder builder;
     builder.AppendChar('<');

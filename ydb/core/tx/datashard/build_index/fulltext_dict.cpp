@@ -34,10 +34,10 @@ using namespace NKikimr::NFulltext;
  * - Source columns: __ydb_token, <PK columns>, __ydb_freq
  * For compact index formats:
  * - This scan takes the indexImplTable0build and writes output to indexImplTable and indexImplDictTable.
- * - Source columns: __ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment
- * - Destination columns: __ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment
- * - All source segments are expected to be unique, but with random __ydb_generation
- * - Output __ydb_generation is always UINT32_MAX
+ * - Source columns: __ydb_token, __ydb_generation, __ydb_max_id, __ydb_added, __ydb_segment
+ * - Destination columns: __ydb_token, __ydb_generation, __ydb_max_id, __ydb_added, __ydb_segment
+ * - All source segments are expected to be unique with __ydb_generation = MAX
+ * - Output __ydb_generation is always MAX
  * For both:
  * - indexImplDictTable destination columns: __ydb_token, __ydb_freq
  *
@@ -90,6 +90,13 @@ protected:
     ui64 FirstTokenRows = 0;
     ui64 LastTokenRows = 0;
 
+    // Number of leading prefix key columns in the posting table key [prefix..., token, max_id, gen].
+    // Zero for non-prefixed indexes. Used to locate the token and to group segments per (prefix, token).
+    ui32 NumPrefixColumns = 0;
+    // Current group's key cells [prefix..., token] and its serialized form for group boundary detection.
+    TOwnedCellVec LastGroupKey;
+    TString LastGroupKeySerialized;
+
     bool WithFreq = false;
     ui64 MaxSegmentDocuments = 0;
     TDeltaWriter Delta;
@@ -126,9 +133,7 @@ public:
     {
         LOG_I("Create " << Debug());
 
-        auto keyTypeId = table.KeyColumnTypes.at(1).GetTypeId();
-        KeyIs32 = (keyTypeId == NScheme::NTypeIds::Uint32 || keyTypeId == NScheme::NTypeIds::Int32);
-        Signed = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Int32);
+        NumPrefixColumns = request.PrefixColumnsSize();
 
         auto types = GetAllTypes(table);
         auto addType = [&](auto& uploadTypes, const auto& column) {
@@ -155,14 +160,25 @@ public:
             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact ||
             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance)
         {
+            // For compact formats the key is [prefix..., token, __ydb_generation, __ydb_max_id];
+            // __ydb_max_id (the doc-id) determines the integer key encoding. For non-prefixed indexes
+            // this is at(2) (token at 0), preserving the previous behavior.
+            auto keyTypeId = table.KeyColumnTypes.at(NumPrefixColumns + 2).GetTypeId();
+            KeyIs32 = (keyTypeId == NScheme::NTypeIds::Uint32 || keyTypeId == NScheme::NTypeIds::Int32);
+            Signed = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Int32);
+
             auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
+            // Posting key is [prefix..., token, max_id, gen]; the prefix columns lead the key.
+            for (const auto& prefixColumn : request.GetPrefixColumns()) {
+                addType(uploadTypes, prefixColumn);
+            }
             addType(uploadTypes, TokenColumn);
-            addType(uploadTypes, MaxIdColumn);
             {
                 Ydb::Type type;
                 type.set_type_id(NTableIndex::NFulltext::GenType);
                 uploadTypes->emplace_back(GenColumn, type);
             }
+            addType(uploadTypes, MaxIdColumn);
             addType(uploadTypes, AddedColumn);
             addType(uploadTypes, SegmentColumn);
             PostingBuf = Uploader.AddDestination(request.GetPostingTableName(), std::move(uploadTypes));
@@ -338,12 +354,19 @@ protected:
 
     void Feed(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        auto token = key.at(0).AsBuf();
-        if (LastToken != token) {
+        // Segments are grouped and compacted per (prefix..., token). The token sits at
+        // key[NumPrefixColumns]; the prefix cells precede it. With prefix columns as the leading
+        // sort key, the same token may appear under different prefixes (non-adjacent), so the group
+        // boundary must be detected on the whole [prefix..., token] key, not on the token alone.
+        auto groupCells = key.Slice(0, NumPrefixColumns + 1);
+        TString groupSerialized = TSerializedCellVec::Serialize(groupCells);
+        if (LastGroupKeySerialized != groupSerialized) {
             if (LastTokenRows > 0) {
                 FinishToken(false);
             }
-            LastToken = TString(token);
+            LastGroupKey = TOwnedCellVec(groupCells);
+            LastGroupKeySerialized = std::move(groupSerialized);
+            LastToken = TString(groupCells.at(NumPrefixColumns).AsBuf());
         }
         if (!PostingBuf) {
             LastTokenRows++;
@@ -370,11 +393,15 @@ protected:
         auto buf = Delta.GetBuf();
         if (buf.size()) {
             auto maxId = Delta.GetMaxId();
-            TVector<TCell> uploadKey = {
-                TCell(LastToken),
-                KeyIs32 ? TCell::Make((ui32)maxId) : TCell::Make(maxId),
-                TCell::Make(std::numeric_limits<NTableIndex::NFulltext::TGen>::max()),
-            };
+            // Key is [prefix..., token, __ydb_max_id, __ydb_generation]; LastGroupKey holds
+            // [prefix..., token] (just the token for non-prefixed indexes).
+            TVector<TCell> uploadKey;
+            uploadKey.reserve(LastGroupKey.size() + 2);
+            for (const auto& cell : LastGroupKey) {
+                uploadKey.push_back(cell);
+            }
+            uploadKey.push_back(TCell::Make(std::numeric_limits<NTableIndex::NFulltext::TGen>::max()));
+            uploadKey.push_back(KeyIs32 ? TCell::Make((ui32)maxId) : TCell::Make(maxId));
             TVector<TCell> uploadValue = {
                 TCell::Make(true),
                 TCell((const char*)buf.data(), buf.size()),
@@ -399,6 +426,8 @@ protected:
             DictBuf->AddRow(pk, freq, pk);
         }
         LastToken.clear();
+        LastGroupKey = TOwnedCellVec();
+        LastGroupKeySerialized.clear();
         LastTokenRows = 0;
     }
 };

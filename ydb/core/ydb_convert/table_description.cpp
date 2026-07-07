@@ -1015,7 +1015,7 @@ void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTab
         }
     }
 
-    for (const auto& statistics : schema.GetMultiColumnStatistics()) {
+    for (const auto& statistics : in.GetMultiColumnStatistics()) {
         auto* outMultiColumnStatistics = out.add_statistics();
         outMultiColumnStatistics->set_name(statistics.GetName());
         for (const auto& column : statistics.GetColumnNames()) {
@@ -1594,7 +1594,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
         }
 
         for (const auto& statistics : req->add_statistics()) {
-            auto* statisticsDesc = alterColumnTable->MutableAlterSchema()->AddUpsertMultiColumnStatistics();
+            auto* statisticsDesc = alterColumnTable->AddUpsertMultiColumnStatistics();
             statisticsDesc->SetName(statistics.name());
             for (const auto& column : statistics.columns()) {
                 statisticsDesc->AddColumnNames(column);
@@ -1613,7 +1613,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
         }
 
         for (const auto& drop : req->drop_statistics()) {
-            alterColumnTable->MutableAlterSchema()->AddDropMultiColumnStatistics(drop);
+            alterColumnTable->AddDropMultiColumnStatistics(drop);
         }
     } else if (OpType == EAlterOperationKind::AddIndex) {
         if (req->add_indexes_size() != 1) {
@@ -2848,7 +2848,7 @@ bool FillColumnTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     }
 
     for (const auto& stat : in.statistics()) {
-        FillMultiColumnStatistics(*tableDesc.MutableSchema()->AddMultiColumnStatistics(), stat);
+        FillMultiColumnStatistics(*tableDesc.AddMultiColumnStatistics(), stat);
     }
 
     return true;

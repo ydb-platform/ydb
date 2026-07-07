@@ -357,8 +357,8 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         const auto& description = entry.ColumnTableInfo->Description;
         if (description.HasSchema()) {
             OlapIndexProtoToMetadata(description.GetSchema().GetIndexes(), columnOrder, tableMeta);
-            MultiColumnStatisticsProtoToMetadata(description.GetSchema().GetMultiColumnStatistics(), tableMeta);
         }
+        MultiColumnStatisticsProtoToMetadata(description.GetMultiColumnStatistics(), tableMeta);
     }
 
     IndexProtoToMetadata(entry.Indexes, tableMeta);

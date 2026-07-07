@@ -1470,9 +1470,9 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
     }
 
     bool statisticsPrinted = false;
-    if (!schema.GetMultiColumnStatistics().empty()) {
+    if (!tableDesc.GetMultiColumnStatistics().empty()) {
         try {
-            for (const auto& statistics : schema.GetMultiColumnStatistics()) {
+            for (const auto& statistics : tableDesc.GetMultiColumnStatistics()) {
                 if (isFamilyPrinted || hasInlineIndex || statisticsPrinted) {
                     Stream << ",\n";
                 }

@@ -756,7 +756,7 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
     }
 
     for (const auto& statistics : metadata->MultiColumnStatistics) {
-        auto* statisticsDesc = tableDesc.MutableSchema()->AddMultiColumnStatistics();
+        auto* statisticsDesc = tableDesc.AddMultiColumnStatistics();
         statisticsDesc->SetName(statistics.Name);
         for (const auto& column : statistics.Columns) {
             statisticsDesc->AddColumnNames(column);

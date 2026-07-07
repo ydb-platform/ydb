@@ -11,6 +11,8 @@
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/backoff_delay_provider.h>
+
 #include <util/generic/vector.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -110,7 +112,8 @@ public:
 
     void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) override;
     void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
-    TDuration GetDDiskReconnectDelay(THostIndex hostIndex) override;
+    [[nodiscard]] TDuration GetDDiskReconnectDelay(
+        THostIndex hostIndex) override;
 
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,
@@ -154,7 +157,7 @@ private:
     TVector<THostStat> HostStatistics;
     TVector<THostState> HostStates;
     TVector<EHostHealth> HostsHealths;
-    TVector<TDuration> HostsReconnectDelays;
+    TVector<TBackoffDelayProvider> HostsReconnectDelays;
     TVector<TTimePredictor> TimePredictors;
 };
 

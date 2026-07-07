@@ -44,24 +44,24 @@ class TestWatermarksInYdb(StreamingTestBase):
 
             $hop = (
                 SELECT
-                    CAST(HOP_END() AS String) AS event_time,
+                    HOP_END() AS event_time,
                     AGGREGATE_LIST(ts) AS ts
                 FROM
                     $input
                 WHERE
                     pass > 0
                 GROUP BY
-                    HoppingWindow(CAST(event_time AS Timestamp), 'PT1S', 'PT1S')
+                    HoppingWindow(event_time, 'PT1S', 'PT1S')
             );
 
             $output = (
                 SELECT
-                    CAST(HOP_END() AS String) AS event_time,
+                    HOP_END() AS event_time,
                     AGGREGATE_LIST(ts) AS ts
                 FROM
                     $hop
                 GROUP BY
-                    HoppingWindow(CAST(event_time AS Timestamp), 'PT1S', 'PT1S')
+                    HoppingWindow(event_time, 'PT1S', 'PT1S')
             );
 
             INSERT INTO {cluster}{self.output_topic}

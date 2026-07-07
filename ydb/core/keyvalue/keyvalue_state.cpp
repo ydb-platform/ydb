@@ -2081,21 +2081,22 @@ void TKeyValueState::OnRequestComplete(ui64 requestUid, ui64 generation, ui64 st
 
     RequestInputTime.erase(requestUid);
 
-    const bool isChannelLimitedRequest = stat.RequestType != TRequestType::WriteOnly
-        && stat.RequestType != TRequestType::ReadOnlyInline;
+    TVector<ui32> releasedChannels;
     if (stat.RequestType != TRequestType::WriteOnly) {
         if (stat.RequestType == TRequestType::ReadOnlyInline) {
             RoInlineIntermediatesInFlight--;
         } else {
             ReleaseChannelLimitedIntermediate(acquiredChannels);
+            // Processing postponed queues may re-enter and destroy the source intermediate.
+            releasedChannels = acquiredChannels;
         }
     }
 
     CountRequestComplete(status, stat, ctx);
     ResourceMetrics->TryUpdate(ctx);
 
-    if (isChannelLimitedRequest) {
-        ProcessPostponedChannels(acquiredChannels, ctx, info);
+    if (!releasedChannels.empty()) {
+        ProcessPostponedChannels(releasedChannels, ctx, info);
     }
 
     CmdTrimLeakedBlobsUids.erase(requestUid);

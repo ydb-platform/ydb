@@ -23,9 +23,17 @@ class TestViewer(object):
         'ImmediateGroupsToCreate',
         'ImmediateSizeToCreate',
     }
-    # Pool-derived "none" rows depend on the async BSC snapshot; keep only
+    # Pool-derived rows depend on the async BSC snapshot; keep only
     # calculator-prefilled rows in canonical /viewer/cluster output.
-    BSC_STORAGE_STATS_STABLE_ERASURE_SPECIES = {'mirror-3-dc', 'block-4-2'}
+    BSC_STORAGE_STATS_STABLE_KEYS = (
+        ('mirror-3-dc', 'Type:ROT'),
+        ('mirror-3-dc', 'Type:SSD'),
+        ('block-4-2', 'Type:ROT'),
+        ('block-4-2', 'Type:SSD'),
+    )
+    BSC_STORAGE_STATS_STABLE_KEY_ORDER = {
+        key: index for index, key in enumerate(BSC_STORAGE_STATS_STABLE_KEYS)
+    }
 
     @pytest.fixture(autouse=True, scope='class')
     @classmethod
@@ -928,10 +936,18 @@ class TestViewer(object):
         result = cls.normalize_result(result)
         cls.delete_keys_recursively(result, cls.BSC_STORAGE_STATS_VALUE_FIELDS)
         if 'StorageStats' in result:
-            result['StorageStats'] = [
-                entry for entry in result['StorageStats']
-                if entry.get('ErasureSpecies') in cls.BSC_STORAGE_STATS_STABLE_ERASURE_SPECIES
-            ]
+            stable_key_order = cls.BSC_STORAGE_STATS_STABLE_KEY_ORDER
+
+            def get_storage_stats_key(entry):
+                return (entry.get('ErasureSpecies'), entry.get('PDiskFilter'))
+
+            result['StorageStats'] = sorted(
+                (
+                    entry for entry in result['StorageStats']
+                    if get_storage_stats_key(entry) in stable_key_order
+                ),
+                key=lambda entry: stable_key_order[get_storage_stats_key(entry)],
+            )
         return result
 
     @classmethod

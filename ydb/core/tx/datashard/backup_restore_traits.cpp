@@ -87,6 +87,9 @@ ECompressionCodec NextCompressionCodec(ECompressionCodec cur) {
 }
 
 std::optional<TParquetExportSettings> ParquetExportSettingsFromTask(const NKikimrSchemeOp::TBackupTask& task) {
+    if (DataFormatFromTask(task) != EDataFormat::Parquet) {
+        return std::nullopt;
+    }
     switch(task.GetSettingsCase()) {
     case NKikimrSchemeOp::TBackupTask::kS3Settings: {
         auto& taskParquetSettings = task.GetS3Settings().GetExportDataSettings().GetParquet();

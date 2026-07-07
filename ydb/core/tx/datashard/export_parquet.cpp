@@ -88,6 +88,11 @@ bool FlushRowGroup(bool last) {
             return false;
         }
     }
+    
+    if (!BatchBuilder) {
+        ErrorString = "BatchBuilder not initialized";
+        return false;
+    }
 
     if (BatchBuilder->Rows() != 0) {
         std::vector<std::shared_ptr<arrow::RecordBatch>> batches;

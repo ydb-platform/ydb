@@ -210,6 +210,13 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                             );
                         }
                     }
+                    if (!AppData()->FeatureFlags.GetEnableExportInParquet()) {
+                        return Reply(
+                            std::move(response),
+                            Ydb::StatusIds::UNSUPPORTED,
+                            "Parquet export to S3 is disabled by feature flag EnableExportInParquet"
+                        );
+                    }
                 }
             }
             exportInfo = new TExportInfo(id, uid, kind, settings, domainPath.Base()->PathId, request.GetPeerName());

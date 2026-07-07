@@ -7,6 +7,7 @@ SIZE(MEDIUM)
 PEERDIR(
     ydb/core/base
     ydb/core/blobstorage/vdisk/common
+    ydb/core/blobstorage/vdisk/defrag
     ydb/core/blobstorage/vdisk/hulldb
     ydb/core/blobstorage/vdisk/hulldb/test
 )

@@ -134,6 +134,7 @@ namespace NKikimr {
         TControlWrapper HullCompMaxInFlightReads;
         TControlWrapper HullCompFullCompPeriodSec;
         TControlWrapper HullCompThrottlerBytesRate;
+        TControlWrapper CalculateSstRatioDuringDefrag = 0;
         TControlWrapper DefragThrottlerBytesRate;
         TControlWrapper MaxActiveCompactionsPerPDisk;
         double HullCompReadBatchEfficiencyThreshold;

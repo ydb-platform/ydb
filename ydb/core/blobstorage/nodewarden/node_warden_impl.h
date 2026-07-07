@@ -233,6 +233,7 @@ namespace NKikimr::NStorage {
         TControlWrapper HullCompMaxInFlightReads;
         TControlWrapper HullCompFullCompPeriodSec;
         TControlWrapper HullCompThrottlerBytesRate;
+        TControlWrapper CalculateSstRatioDuringDefrag;
         TControlWrapper GarbageThresholdToRunFullCompactionPerMille;
         TControlWrapper DefragThrottlerBytesRate;
 

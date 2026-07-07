@@ -328,6 +328,7 @@ void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs, 
         auto* write = o->MutableWrite();
         write->SetSkipConflictCheck(skipConflictCheck);
         write->MutableDeferredPublication()->SetOp(MapDeferredPublicationOp(*DeferredPublicationOp_));
+        NPQ::DowngradeToLegacy(*o);
         t.hasWrite = true;
     } else if (HasWriteOperations_) {
         NKikimrPQ::TPartitionOperation* o = t.tx.MutableOperations()->Add();
@@ -494,7 +495,7 @@ NKafka::TProducerInstanceId TTopicOperations::GetKafkaProducerInstanceId() const
 
 ui64 TTopicOperations::GetDeferredPublicationIntId() const
 {
-    Y_ENSURE(HasDeferredPublicationOperations_);
+    Y_ENSURE(HasDeferredPublicationOperations());
     Y_ENSURE(DeferredPublicationIntId_.Defined());
 
     return *DeferredPublicationIntId_;
@@ -502,7 +503,7 @@ ui64 TTopicOperations::GetDeferredPublicationIntId() const
 
 const TString& TTopicOperations::GetDeferredPublicationExtId() const
 {
-    Y_ENSURE(HasDeferredPublicationOperations_);
+    Y_ENSURE(HasDeferredPublicationOperations());
     Y_ENSURE(DeferredPublicationExtId_.Defined());
 
     return *DeferredPublicationExtId_;

@@ -111,6 +111,14 @@ void DowngradeKafkaWriteToLegacy(
         op.MutableKafkaProducerInstanceId());
 }
 
+void DowngradeDeferredPublicationWriteToLegacy(
+    const NKikimrPQ::TPartitionOperation::TWriteOp& write,
+    NKikimrPQ::TPartitionOperation& op)
+{
+    ClearLegacyPartitionOpFields(op);
+    op.SetSkipConflictCheck(write.GetSkipConflictCheck());
+}
+
 bool HasLegacyPartitionOp(const NKikimrPQ::TPartitionOperation& op)
 {
     return op.HasConsumer() || op.HasCommitOffsetsBegin() || op.HasCommitOffsetsEnd()
@@ -233,6 +241,9 @@ void DowngradeToLegacy(NKikimrPQ::TPartitionOperation& op)
                     break;
                 case NKikimrPQ::TPartitionOperation::TWriteOp::kKafka:
                     DowngradeKafkaWriteToLegacy(op.GetWrite(), op);
+                    break;
+                case NKikimrPQ::TPartitionOperation::TWriteOp::kDeferredPublication:
+                    DowngradeDeferredPublicationWriteToLegacy(op.GetWrite(), op);
                     break;
                 case NKikimrPQ::TPartitionOperation::TWriteOp::API_NOT_SET:
                     ClearLegacyPartitionOpFields(op);

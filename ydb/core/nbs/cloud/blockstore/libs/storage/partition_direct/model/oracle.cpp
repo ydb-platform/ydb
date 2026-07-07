@@ -131,7 +131,9 @@ TOracle::TOracle(
     , DefaultWriteMode(GetWriteModeFromProto(StorageConfig->GetWriteMode()))
     , HostStatistics(DirectBlockGroupHostCount)
     , HostStates(DirectBlockGroupHostCount)
-    , HostsReconnectDelays(DirectBlockGroupHostCount, MinReconnectDelay)
+    , HostsReconnectDelays(
+          DirectBlockGroupHostCount,
+          TBackoffDelayProvider(MinReconnectDelay, MaxReconnectDelay))
     , TimePredictors(
           OperationCount,
           TTimePredictor(
@@ -235,15 +237,13 @@ void TOracle::OnDDiskDisconnected(THostIndex hostIndex, TInstant now)
 
 void TOracle::OnDDiskConnected(THostIndex hostIndex, TInstant now)
 {
-    Y_UNUSED(hostIndex, now);
-    HostsReconnectDelays[hostIndex] = MinReconnectDelay;
+    Y_UNUSED(now);
+    HostsReconnectDelays[hostIndex].Reset();
 }
 
 TDuration TOracle::GetDDiskReconnectDelay(THostIndex hostIndex)
 {
-    HostsReconnectDelays[hostIndex] =
-        Min(HostsReconnectDelays[hostIndex] * 2, MaxReconnectDelay);
-    return HostsReconnectDelays[hostIndex];
+    return HostsReconnectDelays[hostIndex].GetDelayAndIncrease();
 }
 
 void TOracle::OnRequestCancelled(

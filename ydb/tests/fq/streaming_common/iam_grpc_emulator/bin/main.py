@@ -1,5 +1,6 @@
 import argparse
 import logging
+import random
 import time
 from concurrent import futures
 
@@ -41,20 +42,27 @@ class IamTokenServicer(iam_token_service_pb2_grpc.IamTokenServiceServicer):
         self.token = token
         self.expires_in = expires_in
 
+    def _pick_token(self):
+        # if random.random() < 0.1:
+        #     logger.debug("Returning empty token (simulated failure)")
+        #     return ""
+        return self.token
+
     def Create(self, request, context):
         logger.debug("IamTokenService.Create called")
-        return make_response(self.token, self.expires_in)
+        return make_response(self._pick_token(), self.expires_in)
 
     def CreateForServiceAccount(self, request, context):
         logger.debug("IamTokenService.CreateForServiceAccount called, sa_id=%s", request.service_account_id)
-        return make_response(self.token, self.expires_in)
+        return make_response(self._pick_token(), self.expires_in)
 
     def CreateForService(self, request, context):
+        token =self._pick_token()
         logger.debug(
-            "IamTokenService.CreateForService called, service_id=%s microservice_id=%s resource_id=%s target_sa=%s",
-            request.service_id, request.microservice_id, request.resource_id, request.target_service_account_id,
+            "IamTokenService.CreateForService called, service_id=%s microservice_id=%s resource_id=%s target_sa=%s token=%s",
+            request.service_id, request.microservice_id, request.resource_id, request.target_service_account_id, token
         )
-        return make_response(self.token, self.expires_in)
+        return make_response(token, self.expires_in)
 
 
 def main():

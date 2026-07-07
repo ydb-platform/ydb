@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
 TOKEN_PATH = "/computeMetadata/v1/instance/service-accounts/default/token"
-DEFAULT_TOKEN = "test-iam-token"
+DEFAULT_TOKEN = "vm_metadata_sa_token"
 DEFAULT_EXPIRES_IN = 3600
 
 

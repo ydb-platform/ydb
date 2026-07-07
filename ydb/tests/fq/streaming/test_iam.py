@@ -47,7 +47,8 @@ class TestIamAuth(StreamingTestBase):
                 DATABASE_NAME = "{endpoint.database}",
                 AUTH_METHOD = "IAM",
                 INITIAL_TOKEN_SECRET_PATH = "{secret_path}",
-                SERVICE_ACCOUNT_ID = "{FAKE_SERVICE_ACCOUNT_ID}"
+                SERVICE_ACCOUNT_ID = "{FAKE_SERVICE_ACCOUNT_ID}",
+                SHARED_READING="TRUE"
             );
         """)
 
@@ -71,7 +72,7 @@ class TestIamAuth(StreamingTestBase):
         time.sleep(1)
 
         # 2. Create input + output topics and an IAM-auth external data source.
-        self.init_topics(source_name, create_output=True, partitions_count=1, endpoint=endpoint)
+        self.init_topics(source_name, create_output=True, partitions_count=10, endpoint=endpoint)
         self.create_iam_source(kikimr, source_name, secret_name, endpoint)
 
         inp = f"`{source_name}`.`{self.input_topic}`"
@@ -99,5 +100,13 @@ class TestIamAuth(StreamingTestBase):
         self.write_stream(['{"time": "iam lunch time"}'], endpoint=endpoint)
         result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
         assert json.loads(result) == {"time": "iam lunch time"}
+
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);")
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);")
+        self.wait_completed_checkpoints(kikimr, path)
+
+        self.write_stream(['{"time": "new iam lunch time"}'], endpoint=endpoint)
+        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
+        assert json.loads(result) == {"time": "new iam lunch time"}
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")

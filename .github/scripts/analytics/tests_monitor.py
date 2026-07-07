@@ -39,7 +39,7 @@ def _dedupe_monitor_df(df):
     keys = ['full_name', 'date_window', 'branch', 'build_type']
     return (
         df.assign(_suite_len=df['suite_folder'].astype(str).str.len())
-        .sort_values(keys + ['_suite_len'])
+        .sort_values(keys + ['_suite_len'], kind='mergesort')
         .drop_duplicates(keys, keep='last')
         .drop(columns='_suite_len')
     )

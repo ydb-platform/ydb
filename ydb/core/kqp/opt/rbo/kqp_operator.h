@@ -279,7 +279,6 @@ protected:
     virtual void ComputeOutputIUsSubtree();
 
     friend class TOpRoot;
-    friend void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString stageName);
 };
 
 template <class K>
@@ -934,7 +933,7 @@ protected:
     void ComputeOutputIUs() override;
     void ComputeOutputIUsSubtree() override;
 
-    friend void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString stageName);
+    friend void EnsureRequiredProps(TOpRoot& root, ui32 props, ui32& computedProps, TRBOContext& ctx, const TString& stageName);
 
 private:
     void ClearParentsRec(TIntrusivePtr<IOperator> op, std::unordered_set<IOperator*>& visited) const;

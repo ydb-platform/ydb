@@ -439,7 +439,7 @@ void TConfigsDispatcher::SendUpdateToSubscriber(TSubscription::TPtr subscription
 
     YDB_LOG_TRACE("Send TEvConsole::TEvConfigNotificationRequest",
         {"subscriber", subscriber},
-        {"ev", notification->Record.ShortDebugString()});
+        {"ev", notification->Record});
 
     Send(subscriber, notification.Release(), 0, subscription->UpdateInProcessCookie);
 }
@@ -581,7 +581,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
     YDB_LOG_TRACE("Send",
-        {"ev", resp->Record.ShortDebugString()});
+        {"ev", resp->Record});
 
     Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }

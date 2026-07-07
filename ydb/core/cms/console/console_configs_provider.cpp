@@ -78,7 +78,7 @@ public:
 
         YDB_LOG_TRACE_CTX(ctx, "TTabletConfigSender Send",
             {"subscriptionId", Subscription->Id},
-            {"ev", request->Record.ShortDebugString()});
+            {"ev", request->Record});
 
         NTabletPipe::SendData(ctx, Pipe, request.Release(), Subscription->Cookie);
     }
@@ -196,7 +196,7 @@ public:
 
         YDB_LOG_TRACE_CTX(ctx, "TServiceConfigSender Send",
             {"subscriptionId", Subscription->Id},
-            {"ev", request->Record.ShortDebugString()});
+            {"ev", request->Record});
 
         ctx.Send(Subscription->Subscriber.ServiceId, request.Release(),
                  IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
@@ -372,7 +372,7 @@ public:
 
         YDB_LOG_TRACE_CTX(ctx, "TSubscriptionClientSender send",
             {"subscriber", Subscription->Subscriber},
-            {"ev", notification.Get()->Record.ShortDebugString()});
+            {"ev", notification.Get()->Record});
 
         const float mbytes = notification.Get()->GetCachedByteSize() / 1'000'000.f;
         Schedule(TDuration::MilliSeconds(100) * mbytes, new TEvents::TEvWakeup());
@@ -947,7 +947,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvCheckConfigUpdatesRequest::TPtr &ev
     }
 
     YDB_LOG_TRACE_CTX(ctx, "Send",
-        {"ev", response->Record.ShortDebugString()});
+        {"ev", response->Record});
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
@@ -1040,7 +1040,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetConfigItemsRequest::TPtr &ev, co
         item->Serialize(*response->Record.AddConfigItems());
 
     YDB_LOG_TRACE_CTX(ctx, "Send",
-        {"ev", response->Record.ShortDebugString()});
+        {"ev", response->Record});
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
@@ -1086,7 +1086,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetConfigSubscriptionRequest::TPtr 
     }
 
     YDB_LOG_TRACE_CTX(ctx, "Send",
-        {"ev", resp->Record.ShortDebugString()});
+        {"ev", resp->Record});
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
@@ -1109,7 +1109,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigItemsRequest::TPtr &ev
         item->Serialize(*response->Record.AddConfigItems());
 
     YDB_LOG_TRACE_CTX(ctx, "Send",
-        {"ev", response->Record.ShortDebugString()});
+        {"ev", response->Record});
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
@@ -1146,7 +1146,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigRequest::TPtr &ev, con
     }
 
     YDB_LOG_TRACE_CTX(ctx, "Send",
-        {"ev", response->Record.ShortDebugString()});
+        {"ev", response->Record});
 
     if (rec.HasServeYaml() && rec.GetServeYaml() && rec.HasYamlApiVersion() && rec.GetYamlApiVersion() == 1) {
         response->Record.SetMainYamlConfig(MainYamlConfig);
@@ -1183,7 +1183,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvListConfigSubscriptionsRequest::TPt
     }
 
     YDB_LOG_TRACE_CTX(ctx, "Send",
-        {"ev", response->Record.ShortDebugString()});
+        {"ev", response->Record});
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }

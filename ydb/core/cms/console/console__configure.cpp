@@ -104,7 +104,7 @@ public:
             newItems.push_back(newItem);
 
             YDB_LOG_DEBUG_CTX(ctx, "Split config item",
-                {"config", copy.ShortDebugString()});
+                {"config", copy});
         }
     }
 
@@ -460,7 +460,7 @@ public:
         TString error;
         auto &rec = Request->Get()->Record;
         YDB_LOG_DEBUG_CTX(ctx, "TTxConfigure",
-            {"ev", rec.ShortDebugString()});
+            {"ev", rec});
 
         Y_ABORT_UNLESS(Self->PendingConfigModifications.IsEmpty());
 
@@ -605,7 +605,7 @@ public:
             Self->ApplyPendingConfigModifications(ctx, ev);
         } else {
             YDB_LOG_TRACE_CTX(ctx, "Send",
-                {"ev", Response->Record.ShortDebugString()});
+                {"ev", Response->Record});
             ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
         }
 

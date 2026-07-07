@@ -36,7 +36,7 @@ public:
     {
         auto &rec = Request->Get()->Record;
         YDB_LOG_DEBUG_CTX(ctx, "TConsole::TTxToggleConfigValidator",
-            {"ev", rec.ShortDebugString()});
+            {"ev", rec});
 
         Response = MakeHolder<TEvConsole::TEvToggleConfigValidatorResponse>();
 

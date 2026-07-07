@@ -859,7 +859,7 @@ void TConfigsManager::Handle(TEvConsole::TEvListConfigValidatorsRequest::TPtr &e
     }
 
     YDB_LOG_TRACE_CTX(ctx, "Send",
-        {"ev", response->Record.ShortDebugString()});
+        {"ev", response->Record});
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }

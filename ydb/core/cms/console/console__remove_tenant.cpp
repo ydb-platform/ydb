@@ -53,7 +53,7 @@ public:
         auto &peer = Request->Get()->Record.GetPeerName();
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveTenant execute",
-            {"ev", Request->Get()->Record.ShortDebugString()});
+            {"ev", Request->Get()->Record});
 
         Response = new TEvConsole::TEvRemoveTenantResponse;
 

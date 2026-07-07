@@ -65,7 +65,7 @@ void TJaegerTracingConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest
     auto& rec = ev->Get()->Record;
 
     YDB_LOG_INFO_CTX(ctx, "TJaegerTracingConfigurator: got new config",
-        {"config", rec.GetConfig().ShortDebugString()});
+        {"config", rec.GetConfig()});
 
     ApplyConfigs(rec.GetConfig().GetTracingConfig());
 

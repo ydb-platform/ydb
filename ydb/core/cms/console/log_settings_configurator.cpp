@@ -95,7 +95,7 @@ void TLogSettingsConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
     YDB_LOG_TRACE_CTX(ctx, "TLogSettingsConfigurator: Send",
-        {"ev", resp->Record.ShortDebugString()});
+        {"ev", resp->Record});
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }

@@ -42,7 +42,7 @@ public:
         auto &rec = Request->Get()->Record.GetRequest();
         auto &token = Request->Get()->Record.GetUserToken();
         YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant execute",
-            {"ev", Request->Get()->Record.ShortDebugString()});
+            {"ev", Request->Get()->Record});
 
         Response = new TEvConsole::TEvAlterTenantResponse;
 
@@ -240,7 +240,7 @@ public:
             if (!Self->FeatureFlags.GetEnableScaleRecommender()) {
                 return Error(Ydb::StatusIds::UNSUPPORTED, "Feature flag EnableScaleRecommender is off", ctx);
             }
-            
+
             const auto& policies = rec.scale_recommender_policies();
             if (policies.policies().size() > 1) {
                 return Error(Ydb::StatusIds::BAD_REQUEST, "Currently, no more than one policy is supported at a time", ctx);
@@ -276,7 +276,7 @@ public:
                 }
             }
         }
-        
+
         // Check attributes.
         THashSet<TString> attrNames;
         for (const auto& [key, value] : rec.alter_attributes()) {

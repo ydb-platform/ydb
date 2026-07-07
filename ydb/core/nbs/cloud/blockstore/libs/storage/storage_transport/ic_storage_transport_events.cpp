@@ -16,7 +16,13 @@ TEvTransportPrivate::TWriteToPBuffer::~TWriteToPBuffer()
 
 TEvTransportPrivate::TWriteToManyPBuffers::~TWriteToManyPBuffers()
 {
-    Y_ABORT_UNLESS(NumberOfCallbackCalls);
+    Y_ABORT_UNLESS(CallbackCallCount > 0);
+}
+
+void TEvTransportPrivate::TWriteToManyPBuffers::Reply(const TResult& result)
+{
+    Callback(result);
+    ++CallbackCallCount;
 }
 
 TEvTransportPrivate::TWriteToDDisk::~TWriteToDDisk()

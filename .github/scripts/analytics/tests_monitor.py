@@ -37,8 +37,10 @@ def _dedupe_monitor_df(df):
     if df is None or df.empty:
         return df
     keys = ['full_name', 'date_window', 'branch', 'build_type']
+    if not df.duplicated(keys).any():
+        return df
     return (
-        df.assign(_suite_len=df['suite_folder'].astype(str).str.len())
+        df.assign(_suite_len=df['suite_folder'].fillna('').astype(str).str.len())
         .sort_values(keys + ['_suite_len'], kind='mergesort')
         .drop_duplicates(keys, keep='last')
         .drop(columns='_suite_len')

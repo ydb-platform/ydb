@@ -48,6 +48,14 @@ static void ExecQueryExpectErrorContains(TKikimrRunner& kikimr, bool useQuerySer
     }
 }
 
+static TKikimrSettings MakeLocalIndexOnInsertTestSettings() {
+    auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
+    settings.AppConfig.MutableFeatureFlags()->SetEnableLocalMinMaxIndex(true);
+    settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+    settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+    return settings;
+}
+
 static void AssertColumnAndIndexEntityIdsDisjoint(
     const NKikimrSchemeOp::TColumnTableSchema& schema, const TString& contextLabel)
 {
@@ -113,7 +121,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);        
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -180,7 +188,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     << csController->GetIndexesSkippingOnSelect().Val());
         }
     }
-    TString scriptChunkDetailsMinMax = R"(
+    TString scriptChunkDetailsMinMaxWithLocalDBStorage = R"(
         STOP_COMPACTION
         ------
         SCHEMA:
@@ -203,13 +211,383 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"x\",\"max\":\"x\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
         EXPECTED: [[%true]]
     )";
-    Y_UNIT_TEST(ChunkDetailsMinMax, ELocalIndexAsSchemeObject) {
+
+    Y_UNIT_TEST(ChunkDetailsMinMaxWithLocalDBStorage, ELocalIndexAsSchemeObject) {
         const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
-        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMax)).Execute(settings);
+        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMaxWithLocalDBStorage)).Execute(settings);
+    }   
+    
+    TString scriptChunkDetailsMinMaxWithBSStorage = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, field) VALUES (1u, 'x');
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=field_mm, TYPE=MIN_MAX, FEATURES=`{"storage_id": "__DEFAULT", "column_name" : "field"}`);
+        ------
+        ONE_ACTUALIZATION
+        ------
+        READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"x\",\"max\":\"x\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
+        EXPECTED: [[%true]]
+    )";
+    
+    Y_UNIT_TEST(ChunkDetailsMinMaxWithBSStorage, ELocalIndexAsSchemeObject) {
+        const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
+        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMaxWithBSStorage)).Execute(settings);
     }
 
+    TString scriptMinMaxIndexOnInsertEnabled = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=field_mm, TYPE=MIN_MAX, FEATURES=`{"column_name" : "field"}`);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, field) VALUES (1u, 'x');
+        ------
+        READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"x\",\"max\":\"x\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
+        EXPECTED: [[%true]]
+    )";
+    Y_UNIT_TEST(MinMaxIndexOnInsertEnabled) {
+        Variator::ToExecutor(Variator::SingleScript(scriptMinMaxIndexOnInsertEnabled))
+            .Execute(TKikimrSettings().SetColumnShardAlterObjectEnabled(true));
+    }
+
+    TString scriptMinMaxIndexOnInsertDisabledByDefault = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=field_mm, TYPE=MIN_MAX, FEATURES=`{"column_name" : "field"}`);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, field) VALUES (1u, 'x');
+        ------
+        READ: SELECT COUNT(*) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
+        EXPECTED: [[0u;]]
+    )";
+    Y_UNIT_TEST(MinMaxIndexOnInsertDisabledByDefault) {
+        Variator::ToExecutor(Variator::SingleScript(scriptMinMaxIndexOnInsertDisabledByDefault))
+            .Execute(TKikimrSettings().SetColumnShardAlterObjectEnabled(true));
+    }
+
+    TString scriptMinMaxIndexOnInsertMinBlobBytes = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`, `INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES`=`500`);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=field_mm, TYPE=MIN_MAX, FEATURES=`{"column_name" : "field"}`);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, field) VALUES (1u, 'small');
+        ------
+        READ: SELECT COUNT(*) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
+        EXPECTED: [[0u;]]
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, field) VALUES (2u, '__BIG_VALUE__');
+        ------
+        READ: SELECT COUNT(*) > 0u FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
+        EXPECTED: [[%true]]
+    )";
+    Y_UNIT_TEST(MinMaxIndexOnInsertMinBlobBytes) {
+        TString bigValue;
+        bigValue.reserve(10000);
+        for (size_t i = 0; i < 10000; ++i) {
+            bigValue.push_back(static_cast<char>('a' + ((i * 7 + 11) % 26)));
+        }
+        TString script = scriptMinMaxIndexOnInsertMinBlobBytes;
+        size_t pos = 0;
+        while ((pos = script.find("__BIG_VALUE__", pos)) != TString::npos) {
+            script.replace(pos, 13, bigValue);
+            pos += bigValue.size();
+        }
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute(TKikimrSettings().SetColumnShardAlterObjectEnabled(true));
+    }
+
+    TString scriptMinMaxIndexOnInsertDeleteSkipped = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=field_mm, TYPE=MIN_MAX, FEATURES=`{"column_name" : "field"}`);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, field) VALUES (1u, 'x');
+        DELETE FROM `/Root/ColumnTable` WHERE pk = 1u;
+        ------
+        READ: SELECT COUNT(*) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
+        EXPECTED: [[1u;]]
+    )";
+    Y_UNIT_TEST(MinMaxIndexOnInsertDeleteSkipped) {
+        Variator::ToExecutor(Variator::SingleScript(scriptMinMaxIndexOnInsertDeleteSkipped))
+            .Execute(TKikimrSettings().SetColumnShardAlterObjectEnabled(true));
+    }
+
+    TString scriptAllScalarIndexesOnInsert = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTableAllIdx` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            val Uint64,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTableAllIdx` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTableAllIdx` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_minmax, TYPE=MIN_MAX, FEATURES=`{"column_name" : "field"}`);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTableAllIdx` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_bloom, TYPE=BLOOM_FILTER,
+            FEATURES=`{"column_name" : "field", "false_positive_probability" : 0.01}`);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTableAllIdx` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_ngram, TYPE=BLOOM_NGRAMM_FILTER,
+            FEATURES=`{"column_name" : "field", "ngramm_size" : 3, "false_positive_probability" : 0.01, "case_sensitive" : false}`);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTableAllIdx` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_cms, TYPE=COUNT_MIN_SKETCH,
+            FEATURES=`{"column_names" : ["field"]}`);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTableAllIdx` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_max, TYPE=MAX, FEATURES=`{"column_name" : "val"}`);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTableAllIdx` (pk, field, val) VALUES (1u, 'alpha_beta_gamma', 42u);
+        ------
+        READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"alpha_beta_gamma\",\"max\":\"alpha_beta_gamma\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTableAllIdx/.sys/primary_index_stats` WHERE EntityName="idx_minmax";
+        EXPECTED: [[%true]]
+        ------
+        READ: SELECT COUNT(*) FROM (SELECT EntityName FROM `/Root/ColumnTableAllIdx/.sys/primary_index_stats` WHERE EntityName IN ("idx_bloom", "idx_ngram", "idx_cms", "idx_max") GROUP BY EntityName);
+        EXPECTED: [[4u;]]
+    )";
+    Y_UNIT_TEST(AllScalarColumnShardIndexesOnInsert) {
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
+        Variator::ToExecutor(Variator::SingleScript(scriptAllScalarIndexesOnInsert))
+            .Execute(settings);
+    }
+
+    TString scriptCategoryBloomIndexOnInsert = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTableCatBloom` (
+            pk Uint64 NOT NULL,
+            payload JsonDocument,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTableCatBloom` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTableCatBloom` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=payload, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
+            `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `FORCE_SIMD_PARSING`=`true`, `SCAN_FIRST_LEVEL_ONLY`=`false`,
+            `COLUMNS_LIMIT`=`1024`, `SPARSED_DETECTOR_KFF`=`10`, `MEM_LIMIT_CHUNK`=`1000`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTableCatBloom` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_cat_bloom, TYPE=CATEGORY_BLOOM_FILTER,
+            FEATURES=`{"column_name" : "payload", "false_positive_probability" : 0.01}`);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTableCatBloom` (pk, payload) VALUES (1u, JsonDocument('{"a.b.c" : "val1"}'));
+        ------
+        READ: SELECT COUNT(*) > 0u FROM `/Root/ColumnTableCatBloom/.sys/primary_index_stats` WHERE EntityName="idx_cat_bloom";
+        EXPECTED: [[%true]]
+    )";
+    Y_UNIT_TEST(CategoryBloomIndexOnInsert) {
+        Variator::ToExecutor(Variator::SingleScript(scriptCategoryBloomIndexOnInsert))
+            .Execute(TKikimrSettings().SetColumnShardAlterObjectEnabled(true));
+    }
+
+    TString scriptLocalIndexesOnInsertInCreateTable = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTableLocalIdx` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            PRIMARY KEY (pk),
+            INDEX idx_minmax LOCAL USING min_max ON (field),
+            INDEX idx_bloom LOCAL USING bloom_filter ON (field) WITH (false_positive_probability = 0.01),
+            INDEX idx_ngram LOCAL USING bloom_ngram_filter ON (field)
+                WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = false)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTableLocalIdx` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`, `SCHEME_NEED_ACTUALIZATION`=`true`);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTableLocalIdx` (pk, field) VALUES (1u, 'alpha_beta_gamma');
+        ------
+        READ: SELECT COUNT(*) > 0u FROM `/Root/ColumnTableLocalIdx/.sys/primary_index_stats` WHERE EntityName="idx_minmax";
+        EXPECTED: [[%true]]
+        ------
+        READ: SELECT COUNT(*) FROM (SELECT EntityName FROM `/Root/ColumnTableLocalIdx/.sys/primary_index_stats` WHERE EntityName IN ("idx_bloom", "idx_ngram") GROUP BY EntityName);
+        EXPECTED: [[2u;]]
+    )";
+    Y_UNIT_TEST(LocalIndexesOnInsertInCreateTable) {
+        Variator::ToExecutor(Variator::SingleScript(scriptLocalIndexesOnInsertInCreateTable)).Execute(MakeLocalIndexOnInsertTestSettings());
+    }
+
+    TString scriptLocalIndexesOnInsertViaAddIndex = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTableLocalAdd` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTableLocalAdd` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`);
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTableLocalAdd` ADD INDEX idx_minmax LOCAL USING min_max ON (field);
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTableLocalAdd` ADD INDEX idx_bloom LOCAL USING bloom_filter ON (field) WITH (false_positive_probability = 0.01);
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTableLocalAdd` ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter ON (field)
+            WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = false);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTableLocalAdd` (pk, field) VALUES (1u, 'alpha_beta_gamma');
+        ------
+        READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"alpha_beta_gamma\",\"max\":\"alpha_beta_gamma\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTableLocalAdd/.sys/primary_index_stats` WHERE EntityName="idx_minmax";
+        EXPECTED: [[%true]]
+        ------
+        READ: SELECT COUNT(*) FROM (SELECT EntityName FROM `/Root/ColumnTableLocalAdd/.sys/primary_index_stats` WHERE EntityName IN ("idx_bloom", "idx_ngram") GROUP BY EntityName);
+        EXPECTED: [[2u;]]
+    )";
+    Y_UNIT_TEST(LocalIndexesOnInsertViaAddIndex) {
+        Variator::ToExecutor(Variator::SingleScript(scriptLocalIndexesOnInsertViaAddIndex)).Execute(MakeLocalIndexOnInsertTestSettings());
+    }
+
+    Y_UNIT_TEST(AlterIndexOnNotExistingTableResultsInError, EUseQueryService, ELocalIndexAsSchemeObject) {
+        const bool useQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool localIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableLocalMinMaxIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(localIndexAsSchemeObject);
+        TKikimrRunner kikimr(settings);
+
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapStandaloneTable();
+        helper.SetForcedCompaction();
+        auto tableClient = kikimr.GetTableClient();
+        auto queryServiceCLient = kikimr.GetQueryClient();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+
+        auto runDDLQuery = [&](TString query) {
+            if (useQueryService) {
+                auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                return *static_cast<NYdb::TStatus*>(&result);
+            } else {
+                return tableClient.CreateSession().GetValueSync().GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            }
+        };
+
+        auto assertDDLQueryOk = [&](TString query) {
+            auto result = runDDLQuery(query);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+
+
+        assertDDLQueryOk(R"(
+            CREATE TABLE `/Root/minmax_test_applied_applied` (
+                `key` Int32 NOT NULL,
+                `value` String NOT NULL,
+                PRIMARY KEY (`key`)
+            )
+            PARTITION BY HASH (`key`)
+            WITH (
+                STORE = COLUMN
+            );
+        )");
+
+        NYdb::TStatus status = runDDLQuery(R"(
+            ALTER TABLE `/Root/minmax_test_table_doesnt_exist` ADD INDEX `value_mm` LOCAL USING min_max ON(`value`);            
+        )");
+        
+        UNIT_ASSERT_C(!status.IsSuccess(), status.GetIssues().ToString());
+    }
 
     Y_UNIT_TEST(MinMaxIndexUsedInQueries, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
@@ -289,7 +667,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             ui64 skippedAndApprovedBeforeQuery = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
             auto ysonArrayWithOneInteger = runDMLQuery(text);
             ui64 skippedAndApprovedAfterQuery = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
-            
+
             return TQueryResult {
                 .CountResult = NYT::NodeFromYsonString(ysonArrayWithOneInteger).AsList()[0].AsList()[0].AsUint64(),
                 .MinMaxIndexUsed = skippedAndApprovedBeforeQuery < skippedAndApprovedAfterQuery
@@ -301,7 +679,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )");
         UNIT_ASSERT_VALUES_EQUAL_C(resLess.CountResult, 944450, "incorrect result for query with '<' filter over min_max-indexed column");
         UNIT_ASSERT_C(resLess.MinMaxIndexUsed, "query with '<' filter over min_max-indexed column doesn't use min_max index");
-        
+
         TQueryResult resGreater = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` > "Value_500000";
         )");
@@ -331,30 +709,174 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )");
         UNIT_ASSERT_VALUES_EQUAL_C(resAnd.CountResult, 2, "incorrect result for query with '`col` >= ... AND `col` <= ...' filter over min_max-indexed column");
         UNIT_ASSERT_C(resAnd.MinMaxIndexUsed, "query with '`col` >= ... AND `col` <= ...' filter over min_max-indexed column doesn't use min_max index");
-        
+
         TQueryResult resOr = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` >= "Value_500000" OR `value` <= "Value_500001";
         )");
         UNIT_ASSERT_VALUES_EQUAL_C(resOr.CountResult, 1500000, "incorrect result for query with '`col` >= ... OR `col` <= ...' filter over min_max-indexed column");
         UNIT_ASSERT_C(resOr.MinMaxIndexUsed, "query with '`col` >= ... OR `col` <= ...' filter over min_max-indexed column doesn't use min_max index");
-        
+
         TQueryResult resNeq = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` != "Value_500000";
         )");
         UNIT_ASSERT_VALUES_EQUAL_C(resNeq.CountResult, 1499999, "incorrect result for query with '!=' filter over min_max-indexed column");
         UNIT_ASSERT_C(!resNeq.MinMaxIndexUsed, "query with '!=' filter over min_max-indexed column use min_max index, but it shouldn't");
-        
+
         TQueryResult resIsNotNull = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` IS NOT NULL;
         )");
         UNIT_ASSERT_VALUES_EQUAL_C(resIsNotNull.CountResult, 1500000, "incorrect result for query with 'IS NOT NULL' filter over min_max-indexed column");
         UNIT_ASSERT_C(!resIsNotNull.MinMaxIndexUsed, "query with 'IS NOT NULL' filter over min_max-indexed column use min_max index, but it shouldn't(will use in future, see https://github.com/ydb-platform/ydb/issues/38574)");
-        
+
         TQueryResult resDistinctFromNull = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` IS DISTINCT FROM NULL;
         )");
         UNIT_ASSERT_VALUES_EQUAL_C(resDistinctFromNull.CountResult, 1500000, "incorrect result for query with 'IS DISCTINCT FROM NULL' filter over min_max-indexed column");
         UNIT_ASSERT_C(!resDistinctFromNull.MinMaxIndexUsed, "query with 'IS DISCTINCT FROM NULL' filter over min_max-indexed column use min_max index, but it shouldn't(will use in future, see https://github.com/ydb-platform/ydb/issues/38574)");
+    }
+
+    Y_UNIT_TEST(MinMaxIndexStoredInBSForStringsAndInLocalDBOtherwise, EUseQueryService, ELocalIndexAsSchemeObject) {
+        const bool useQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool localIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableLocalMinMaxIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(localIndexAsSchemeObject);
+        TKikimrRunner kikimr(settings);
+
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapStandaloneTable();
+        helper.SetForcedCompaction();
+        auto tableClient = kikimr.GetTableClient();
+        auto queryServiceClient = kikimr.GetQueryClient();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+
+
+        auto assertDDLQueryOk = [&](TString query) {
+            if (useQueryService) {
+                auto result = queryServiceClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto res = session.ExecuteSchemeQuery(query).GetValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            }
+        };
+
+
+        auto runDMLQuery = [&] (TString query) -> THashMap<TString, TVector<NYdb::TValue>> {
+            auto result = queryServiceClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            THashMap<TString, TVector<NYdb::TValue>> columns;
+            for(auto& rs: result.GetResultSets()) {
+                NYdb::TResultSetParser rsParser(rs);
+                while (rsParser.TryNextRow()) {
+                    // THashMap<TString, NYdb::TValue> row;
+                    for (size_t ci = 0; ci < rs.ColumnsCount(); ++ci) {
+                        columns[rs.GetColumnsMeta()[ci].Name].emplace_back(rsParser.GetValue(ci));
+                    }
+                }
+            }
+            return columns;
+        };
+
+        assertDDLQueryOk(R"(
+            CREATE TABLE `/Root/minmax_test_appropriate_storage_location` (
+                `key` Int32 NOT NULL,
+                `value_str` String NOT NULL,
+                `value_utf` Utf8 NOT NULL,
+                `value_int` Int32 NOT NULL,
+                `value_ts` Timestamp NOT NULL,
+                INDEX `value_str_mm` LOCAL USING min_max ON(`value_str`),
+                INDEX `value_utf_mm` LOCAL USING min_max ON(`value_utf`),
+                INDEX `value_int_mm` LOCAL USING min_max ON(`value_int`),
+                INDEX `value_ts_mm` LOCAL USING min_max ON(`value_ts`),
+                PRIMARY KEY (`key`)
+            )
+            PARTITION BY HASH (`key`)
+            WITH (
+                STORE = COLUMN
+            );
+        )");
+
+        runDMLQuery(R"(
+            $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
+            UPSERT INTO `/Root/minmax_test_appropriate_storage_location` (`key`, `value_str`, `value_utf`, `value_int`, `value_ts`) SELECT 
+            CAST(item AS Int32) AS `key`,
+            "Value_" || CAST(item+1 AS String) AS `value_str`,
+            CAST(item+1 AS Utf8) AS `value_utf`,
+            CAST(item+1 AS Int32) as `value_int`,
+            Unwrap(DateTime::FromSeconds(CAST(item+1 AS Uint32))) as `value_ts`
+            FROM AS_TABLE($data1);
+        )");
+
+        runDMLQuery(R"(
+            $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
+            UPSERT INTO `/Root/minmax_test_appropriate_storage_location` (`key`, `value_str`, `value_utf`, `value_int`, `value_ts`) SELECT 
+            CAST(item AS Int32) AS `key`,
+            "Value_" || CAST(item AS String) AS `value_str`,
+            CAST(item AS Utf8) AS `value_utf`,
+            CAST(item AS Int32) as `value_int`,
+            Unwrap(DateTime::FromSeconds(CAST(item AS Uint32))) as `value_ts`
+            FROM AS_TABLE($data1);
+        )");
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+
+        using TQueryResult = TVector<TString>; 
+
+        auto runDMLQueryTyped = [&](TString text) -> TQueryResult {
+            auto columns = runDMLQuery(text);
+            TQueryResult res;
+            for (const auto& row: columns["TierName"]) {
+                UNIT_ASSERT(row.GetProto().has_text_value());
+                res.push_back(row.GetProto().text_value());
+            }
+            return res;
+        };
+        
+        {
+            TQueryResult tierNamesStr = runDMLQueryTyped(R"(
+                SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_str_mm";
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesStr.size(), 0, "portions are not min_max indexed with String column type");
+            for (const auto& tierName: tierNamesStr) {
+                UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__DEFAULT", "min_max index must store its data is BS when building over String column");
+            }            
+        }
+        {
+            TQueryResult tierNamesUtf8 = runDMLQueryTyped(R"(
+                SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_utf_mm";
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesUtf8.size(), 0, "portions are not min_max indexed with Utf8 column type");
+            for (const auto& tierName: tierNamesUtf8) {
+                UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__DEFAULT", "min_max index must store its data is BS when building over Utf8 column");
+            }
+
+        }
+        {
+            TQueryResult tierNamesInt = runDMLQueryTyped(R"(
+                SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_int_mm";
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesInt.size(), 0, "portions are not min_max indexed with Int32 column type");
+            for(auto& tierName: tierNamesInt) {
+                UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__LOCAL_METADATA", "min_max index must store its data is local database when building over Int32 column");
+            }
+        }
+        {
+            TQueryResult tierNamesTs = runDMLQueryTyped(R"(
+                SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_ts_mm";
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesTs.size(), 0, "portions are not min_max indexed with Timestamp column type");
+            for (const auto& tierName: tierNamesTs) {
+                UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__LOCAL_METADATA", "min_max index must store its data is local database when building over Timestamp column");
+            }
+
+        }
     }
 
     Y_UNIT_TEST(MinMaxNulls, EUseQueryService, ELocalIndexAsSchemeObject) {
@@ -944,9 +1466,10 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
     Y_UNIT_TEST(LocalBloomNgramIndexDefaultCaseSensitivePersisted, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
         TKikimrRunner kikimr(settings);
 
         ExecQuery(kikimr, UseQueryService, R"(
@@ -981,7 +1504,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
 Y_UNIT_TEST(LocalBloomIndexHasNoCaseSensitiveInShowCreate, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
@@ -1017,7 +1540,7 @@ Y_UNIT_TEST(LocalBloomIndexHasNoCaseSensitiveInShowCreate, EUseQueryService) {
 
 Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
@@ -1058,7 +1581,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
 
     Y_UNIT_TEST(RenameLocalBloomNgramIndex, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
@@ -1099,7 +1622,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
 
     Y_UNIT_TEST(RenameLocalBloomAndBloomNgramIndexes, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
@@ -1262,7 +1785,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
     // DEPRECATED: old syntax
     Y_UNIT_TEST(LocalBloomNgramIndexDeprecatedSyntaxFilterSizeRecordsCount, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
@@ -1421,7 +1944,6 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             TString result = StreamResultToYson(it);
             CompareYson(result, R"([[0u;]])");
             AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0);
-            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 0);
             AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val())
             ("approve", csController->GetIndexesApprovedOnSelect().Val())("skip", csController->GetIndexesSkippingOnSelect().Val());
         }
@@ -3122,9 +3644,10 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
 
     Y_UNIT_TEST(LocalBloomIndexesCompatibleWithDictionaryEncoding, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableCsDictionaryEncoding(true);
         TKikimrRunner kikimr(settings);
         auto& client = kikimr.GetTestClient();

@@ -10,14 +10,14 @@
 
 namespace {
 
-    std::shared_ptr<NMVP::ILinkSource> MakeTestLinkSource(NMVP::TSupportLinkEntryConfig config, const NMVP::TMetaSettings& settings) {
+    std::shared_ptr<NMVP::NSupportLinks::ILinkSource> MakeTestLinkSource(NMVP::TSupportLinkEntryConfig config, const NMVP::TMetaSettings& settings) {
         if (config.GetSource() == "mock/sync") {
             return NMVP::NTest::MakeMockLinkSourceSync(std::move(config));
         }
         if (config.GetSource() == "mock/async") {
             return NMVP::NTest::MakeMockLinkSourceAsync(std::move(config));
         }
-        return NMVP::MakeLinkSource(std::move(config), settings);
+        return NMVP::NSupportLinks::MakeLinkSource(std::move(config), settings);
     }
 
 } // namespace
@@ -42,12 +42,14 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
             Send(SelfId(), new NMVP::THandlerActorYdb::TEvPrivate::TEvDataQueryResult(std::move(Result)));
         }
 
-        std::unique_ptr<NMVP::TSupportLinksResolver> CreateSupportLinksResolver() override {
-            return std::make_unique<NMVP::TSupportLinksResolver>(NMVP::TSupportLinksResolver::TParams{
-                .EntityType = EntityType,
+        std::unique_ptr<NMVP::NSupportLinks::TSupportLinksResolver> CreateSupportLinksResolver() override {
+            return std::make_unique<NMVP::NSupportLinks::TSupportLinksResolver>(NMVP::NSupportLinks::TSupportLinksResolver::TParams{
                 .Settings = &Settings,
-                .ClusterInfo = ClusterInfo,
-                .UrlParameters = Request.Parameters.UrlParameters,
+                .RequestContext = {
+                    .Identities = EntityIdentities,
+                    .ClusterInfo = ClusterInfo,
+                    .AdditionalRequestParams = AdditionalRequestParams,
+                },
                 .Owner = SelfId(),
                 .HttpProxyId = HttpProxyId,
                 .LinkSourceFactory = MakeTestLinkSource,

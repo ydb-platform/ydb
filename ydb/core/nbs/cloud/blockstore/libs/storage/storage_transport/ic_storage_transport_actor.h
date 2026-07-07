@@ -54,6 +54,9 @@ private:
 
     THashMap<ui64, TWriteToManyPBuffersReqInfo> WriteToManyPBuffersRequests;
 
+    // Subscribed nodes with disconnect promises
+    THashMap<ui64, TVector<NThreading::TPromise<ui32>>> ICSubscribedNodes;
+
 public:
     TICStorageTransportActor() = default;
 
@@ -108,11 +111,14 @@ private:
         const TEvTransportPrivate::TEvBatchEraseFromPBuffer::TPtr& ev,
         const NActors::TActorContext& ctx);
 
-    void HandleErasePersistentBuffer(
+    void HandleBarrierErasePersistentBuffer(
         const TEvTransportPrivate::TEvBarrierEraseFromPBuffer::TPtr& ev,
         const NActors::TActorContext& ctx);
-    void HandleErasePersistentBufferUndelivery(
+    void HandleBatchErasePersistentBufferUndelivery(
         const NKikimr::NDDisk::TEvBatchErasePersistentBuffer::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleBarrierErasePersistentBufferUndelivery(
+        const NKikimr::NDDisk::TEvErasePersistentBuffer::TPtr& ev,
         const NActors::TActorContext& ctx);
     void HandleErasePersistentBufferResult(
         const NKikimr::NDDisk::TEvErasePersistentBufferResult::TPtr& ev,
@@ -142,10 +148,10 @@ private:
         const TEvTransportPrivate::TEvSyncWithPBuffer::TPtr& ev,
         const NActors::TActorContext& ctx);
     void HandleSyncWithPersistentBufferUndelivery(
-        const NKikimr::NDDisk::TEvSyncWithPersistentBuffer::TPtr& ev,
+        const NKikimr::NDDisk::TEvSync::TPtr& ev,
         const NActors::TActorContext& ctx);
     void HandleSyncWithPersistentBufferResult(
-        const NKikimr::NDDisk::TEvSyncWithPersistentBufferResult::TPtr& ev,
+        const NKikimr::NDDisk::TEvSyncResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleListPersistentBuffer(
@@ -156,6 +162,15 @@ private:
         const NActors::TActorContext& ctx);
     void HandleListPersistentBufferResult(
         const NKikimr::NDDisk::TEvListPersistentBufferResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void PassAway() override;
+    void RejectAllSessionRequestsForNode(
+        ui32 nodeId,
+        const NActors::TActorContext& ctx);
+
+    void HandleICNodeDisconnected(
+        const NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev,
         const NActors::TActorContext& ctx);
 };
 

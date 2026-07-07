@@ -1,5 +1,6 @@
 #include "kqp_rbo_statistics.h"
 #include "kqp_operator.h"
+#include <ydb/core/kqp/common/kqp_yql.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -58,7 +59,7 @@ TInfoUnit TRBOMetadata::MapColumn(const TInfoUnit& key) {
     }
 }
 
-TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool withStatsAndCosts) {
+TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool withStatsAndCosts, const NYql::TTypeAnnotationContext& typeCtx) {
     TVector<TInfoUnit> mappedKeyColumns;
     TVector<TString> keyColumnNames;
 
@@ -72,13 +73,51 @@ TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool with
 
     const double cost = props.Cost.has_value() ? *props.Cost : 0.0;
 
-    return TOptimizerStatistics(props.Metadata->Type, 
-        withStatsAndCosts ? props.Statistics->EBytes : 0.0,
+    // Build column statistics for the set of IUs
+    // Use lineage table to obtain table and column names, look up table names in the
+    // type annotation context and place them in the local map. If there are multiple tables - 
+    // then its a result of join or set operation, don't create column statistics
+    TString table;
+    THashSet<TString> attributes;
+
+    for (const auto& [iu, lineageEntry]: props.Metadata->ColumnLineage.Mapping) {
+        if (table != "" && table != lineageEntry.TableName) {
+            attributes.clear();
+            break;
+        }
+        table = lineageEntry.TableName;
+        attributes.insert(lineageEntry.ColumnName);
+    }
+
+    TIntrusivePtr<TOptimizerStatistics::TColumnStatMap> ColumnStatistics;
+
+    THashMap<TString, TColumnStatistics> columnStatsMap;
+
+    if (attributes.size() && typeCtx.ColumnStatisticsByTableName.contains(table)) {
+        const auto& globalMap = typeCtx.ColumnStatisticsByTableName.at(table)->Data;
+
+        for (const auto& columnName : attributes) {
+            if (globalMap.contains(columnName)) {
+                columnStatsMap.insert({columnName, globalMap.at(columnName)});
+            }    
+        }
+
+        if (columnStatsMap.size()) {
+            ColumnStatistics = MakeIntrusive<TOptimizerStatistics::TColumnStatMap>(
+                TOptimizerStatistics::TColumnStatMap(columnStatsMap));
+        }
+    }
+
+
+    return TOptimizerStatistics(props.Metadata->Type,
+        withStatsAndCosts ? props.Statistics->ERows : 0.0,
         props.Metadata->ColumnsCount,
         withStatsAndCosts ? props.Statistics->EBytes : 0.0,
         withStatsAndCosts ? cost : 0.0,
         TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(
-            new TOptimizerStatistics::TKeyColumns(keyColumnNames)));
+            new TOptimizerStatistics::TKeyColumns(keyColumnNames)),
+        ColumnStatistics
+        );
 }
 
 TString TRBOMetadata::ToString(ui32 printOptions) {
@@ -96,6 +135,9 @@ TString TRBOMetadata::ToString(ui32 printOptions) {
                 break;
             case EStatisticsType::ManyManyJoin:
                 metadataType = "ManyManyJoin";
+                break;
+            case EStatisticsType::Constant:
+                metadataType = "Constant";
                 break;
         default:
             Y_ENSURE(false,"Unknown EStatisticsType");

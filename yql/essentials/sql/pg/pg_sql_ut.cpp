@@ -421,7 +421,7 @@ Y_UNIT_TEST(ParamRef_IntAndPoint) {
         10,
         {},
         EDebugOutput::None,
-        false,
+        /*ansiLexer=*/false,
         settings);
     TMap<TString, TString> expectedParamToType{
         {"$p1", "'int4"},
@@ -442,7 +442,7 @@ Y_UNIT_TEST(ParamRef_IntUnknownInt) {
         10,
         {},
         EDebugOutput::None,
-        false,
+        /*ansiLexer=*/false,
         settings);
     TMap<TString, TString> expectedParamToType{
         {"$p1", "'int4"},
@@ -583,7 +583,7 @@ Y_UNIT_TEST(SetConfig_SearchPath) {
         10,
         {},
         EDebugOutput::ToCerr,
-        false,
+        /*ansiLexer=*/false,
         settings);
     UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
     UNIT_ASSERT(res.Root);
@@ -599,7 +599,7 @@ from pg_type)",
         10,
         {},
         EDebugOutput::None,
-        false,
+        /*ansiLexer=*/false,
         settings);
     UNIT_ASSERT(res.IsOk());
     UNIT_ASSERT(res.Root);
@@ -615,7 +615,7 @@ from pg_catalog.pg_type)",
         10,
         {},
         EDebugOutput::None,
-        false,
+        /*ansiLexer=*/false,
         settings);
     UNIT_ASSERT(res.IsOk());
     UNIT_ASSERT(res.Root);
@@ -626,7 +626,7 @@ from pg_catalog.pg_type)",
         10,
         {},
         EDebugOutput::None,
-        false,
+        /*ansiLexer=*/false,
         settings);
     UNIT_ASSERT(res.IsOk());
     UNIT_ASSERT(res.Root);
@@ -637,7 +637,7 @@ from pg_catalog.pg_type)",
         10,
         {},
         EDebugOutput::None,
-        false,
+        /*ansiLexer=*/false,
         settings);
     UNIT_ASSERT(res.IsOk());
     UNIT_ASSERT(res.Root);
@@ -650,7 +650,7 @@ using namespace NYql;
 Y_UNIT_TEST(Empty) {
     NPg::ClearExtensions();
     UNIT_ASSERT_VALUES_EQUAL(NPg::ExportExtensions(), "");
-    NPg::ImportExtensions("", true, nullptr);
+    NPg::ImportExtensions("", /*typesOnly=*/true, /*loader=*/nullptr);
 }
 
 Y_UNIT_TEST(ProcsAndType) {
@@ -684,7 +684,7 @@ Y_UNIT_TEST(ProcsAndType) {
     desc.Name = "MyExt";
     desc.InstallName = "$libdir/MyExt";
     desc.SqlPaths.push_back(h.Name());
-    NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+    NPg::RegisterExtensions({desc}, /*typesOnly=*/true, *NSQLTranslationPG::CreateExtensionSqlParser(), /*loader=*/nullptr);
     auto validate = [&]() {
         const auto& type = NPg::LookupType("mytype");
         UNIT_ASSERT_VALUES_EQUAL(type.Category, 'U');
@@ -707,7 +707,7 @@ Y_UNIT_TEST(ProcsAndType) {
     validate();
     auto exported = NPg::ExportExtensions();
     NPg::ClearExtensions();
-    NPg::ImportExtensions(exported, true, nullptr);
+    NPg::ImportExtensions(exported, /*typesOnly=*/true, /*loader=*/nullptr);
     validate();
 }
 
@@ -730,7 +730,7 @@ Y_UNIT_TEST(InsertValues) {
     desc.Name = "MyExt";
     desc.InstallName = "$libdir/MyExt";
     desc.SqlPaths.push_back(h.Name());
-    NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+    NPg::RegisterExtensions({desc}, /*typesOnly=*/true, *NSQLTranslationPG::CreateExtensionSqlParser(), /*loader=*/nullptr);
     auto validate = [&]() {
         const auto& table = NPg::LookupStaticTable({.Schema = "pg_catalog", .Name = "mytable"});
         UNIT_ASSERT(table.Kind == NPg::ERelKind::Relation);
@@ -748,7 +748,7 @@ Y_UNIT_TEST(InsertValues) {
     validate();
     auto exported = NPg::ExportExtensions();
     NPg::ClearExtensions();
-    NPg::ImportExtensions(exported, true, nullptr);
+    NPg::ImportExtensions(exported, /*typesOnly=*/true, /*loader=*/nullptr);
     validate();
 }
 
@@ -783,7 +783,7 @@ Y_UNIT_TEST(Casts) {
     desc.Name = "MyExt";
     desc.InstallName = "$libdir/MyExt";
     desc.SqlPaths.push_back(h.Name());
-    NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+    NPg::RegisterExtensions({desc}, /*typesOnly=*/true, *NSQLTranslationPG::CreateExtensionSqlParser(), /*loader=*/nullptr);
     auto validate = [&]() {
         auto sourceId = NPg::LookupType("foo").TypeId;
         auto targetId = NPg::LookupType("bar").TypeId;
@@ -799,7 +799,7 @@ Y_UNIT_TEST(Casts) {
     validate();
     auto exported = NPg::ExportExtensions();
     NPg::ClearExtensions();
-    NPg::ImportExtensions(exported, true, nullptr);
+    NPg::ImportExtensions(exported, /*typesOnly=*/true, /*loader=*/nullptr);
     validate();
 }
 
@@ -862,7 +862,7 @@ Y_UNIT_TEST(Operators) {
     desc.Name = "MyExt";
     desc.InstallName = "$libdir/MyExt";
     desc.SqlPaths.push_back(h.Name());
-    NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+    NPg::RegisterExtensions({desc}, /*typesOnly=*/true, *NSQLTranslationPG::CreateExtensionSqlParser(), /*loader=*/nullptr);
     auto validate = [&]() {
         auto typeId = NPg::LookupType("foo").TypeId;
         TVector<ui32> args{typeId, typeId};
@@ -908,7 +908,7 @@ Y_UNIT_TEST(Operators) {
     validate();
     auto exported = NPg::ExportExtensions();
     NPg::ClearExtensions();
-    NPg::ImportExtensions(exported, true, nullptr);
+    NPg::ImportExtensions(exported, /*typesOnly=*/true, /*loader=*/nullptr);
     validate();
 }
 
@@ -965,7 +965,7 @@ Y_UNIT_TEST(Aggregates) {
     desc.Name = "MyExt";
     desc.InstallName = "$libdir/MyExt";
     desc.SqlPaths.push_back(h.Name());
-    NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+    NPg::RegisterExtensions({desc}, /*typesOnly=*/true, *NSQLTranslationPG::CreateExtensionSqlParser(), /*loader=*/nullptr);
     auto validate = [&]() {
         auto typeId = NPg::LookupType("foo").TypeId;
         auto internalTypeId = NPg::LookupType("internal").TypeId;
@@ -984,7 +984,7 @@ Y_UNIT_TEST(Aggregates) {
     validate();
     auto exported = NPg::ExportExtensions();
     NPg::ClearExtensions();
-    NPg::ImportExtensions(exported, true, nullptr);
+    NPg::ImportExtensions(exported, /*typesOnly=*/true, /*loader=*/nullptr);
     validate();
 }
 
@@ -1080,7 +1080,7 @@ Y_UNIT_TEST(OpClasses) {
     desc.Name = "MyExt";
     desc.InstallName = "$libdir/MyExt";
     desc.SqlPaths.push_back(h.Name());
-    NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+    NPg::RegisterExtensions({desc}, /*typesOnly=*/true, *NSQLTranslationPG::CreateExtensionSqlParser(), /*loader=*/nullptr);
     auto validate = [&]() {
         const auto& typeDesc = NPg::LookupType("foo");
         auto typeId = typeDesc.TypeId;
@@ -1108,7 +1108,7 @@ Y_UNIT_TEST(OpClasses) {
     validate();
     auto exported = NPg::ExportExtensions();
     NPg::ClearExtensions();
-    NPg::ImportExtensions(exported, true, nullptr);
+    NPg::ImportExtensions(exported, /*typesOnly=*/true, /*loader=*/nullptr);
     validate();
 }
 
@@ -1122,7 +1122,7 @@ Y_UNIT_TEST(WarningAsErrorLangver) {
         SELECT 1 FROM plato.Input FOR UPDATE;
     )sql";
 
-    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
 
@@ -1139,7 +1139,7 @@ Y_UNIT_TEST(WarningAsError) {
 
     TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2026, 01);
-    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
 
@@ -1156,7 +1156,7 @@ Y_UNIT_TEST(WarningDisable) {
 
     TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2026, 01);
-    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(res.Root);
     UNIT_ASSERT_EQUAL(res.Issues.Size(), 0);
 }
@@ -1169,7 +1169,7 @@ Y_UNIT_TEST(WarningDefault) {
 
     TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2026, 01);
-    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
 
@@ -1185,7 +1185,7 @@ Y_UNIT_TEST(WarningInvalidAction) {
 
     TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2026, 01);
-    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
 
@@ -1201,7 +1201,7 @@ Y_UNIT_TEST(WarningInvalidPattern) {
 
     TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2026, 01);
-    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
 
@@ -1217,7 +1217,7 @@ Y_UNIT_TEST(WarningMissingArguments) {
 
     TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2026, 01);
-    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
 
@@ -1233,7 +1233,7 @@ Y_UNIT_TEST(WarningTooManyArguments) {
 
     TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2026, 01);
-    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
 
@@ -1250,7 +1250,7 @@ Y_UNIT_TEST(WarningSpecificCode) {
 
     TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2026, 01);
-    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
 
@@ -1267,7 +1267,7 @@ Y_UNIT_TEST(WarningSpecificCodeDisable) {
 
     TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2026, 01);
-    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(res.Root);
     UNIT_ASSERT_EQUAL(res.Issues.Size(), 0);
 }
@@ -1279,7 +1279,7 @@ Y_UNIT_TEST(WarningNonStringAction) {
 
     TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2026, 01);
-    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
 
@@ -1295,7 +1295,7 @@ Y_UNIT_TEST(WarningNonStringPattern) {
 
     TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2026, 01);
-    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
 
@@ -1313,7 +1313,7 @@ Y_UNIT_TEST(WarningMultipleRules) {
 
     TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2026, 01);
-    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
 
@@ -1329,7 +1329,7 @@ Y_UNIT_TEST(WarningNoArguments) {
 
     TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2026, 01);
-    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
 

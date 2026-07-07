@@ -108,7 +108,7 @@ public:
         auto minInitialPenalty = TDuration::Max();
         std::vector<std::pair<TDuration, int>> sortedNodePenalties;
         sortedNodePenalties.reserve(nodes.size());
-        ui32 randomRemotePenalty = RandomNumber<ui32>();
+        ui32 randomRemoteShift = RandomNumber<ui32>();
         for (int nodeIndex = 0; nodeIndex < std::ssize(nodes); ++nodeIndex) {
             auto& node = nodes[nodeIndex];
             node.ExternalPenalty = PenaltyProvider_->Get(node.ClusterName);
@@ -116,12 +116,9 @@ public:
             minInitialPenalty = std::min(minInitialPenalty, currentInitialPenalty);
 
             auto additionalPenalty = node.AdaptivePenalty + node.ExternalPenalty;
-            if (node.ClientPriority != NApi::EClientPriority::Local) {
-                additionalPenalty += RemoteDataCenterPenalty_;
-                if (remoteNodesCount) {
-                    additionalPenalty += TDuration::MilliSeconds(randomRemotePenalty % remoteNodesCount);
-                    ++randomRemotePenalty;
-                }
+            if (node.ClientPriority != NApi::EClientPriority::Local && remoteNodesCount > 0) {
+                additionalPenalty += RemoteDataCenterPenalty_ * (1 + randomRemoteShift % remoteNodesCount);
+                ++randomRemoteShift;
             }
             sortedNodePenalties.emplace_back(additionalPenalty, nodeIndex);
         }

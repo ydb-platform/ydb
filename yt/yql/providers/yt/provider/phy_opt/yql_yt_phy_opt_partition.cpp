@@ -897,4 +897,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
     return WrapOp(mapReduce, ctx);
 }
 
-}  // namespace NYql
+} // namespace NYql

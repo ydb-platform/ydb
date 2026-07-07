@@ -404,7 +404,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         }
         auto& chEndpoint = *channel.MutableSrcEndpoint();
         ActorIdToProto(srcEdgeActor->second, chEndpoint.MutableActorId());
-        channel.SetWatermarksMode(NDqProto::WATERMARKS_MODE_DEFAULT);
+        channel.SetWatermarksMode(NDqProto::WATERMARKS_MODE_DISABLED);
         channel.SetCheckpointingMode(NDqProto::CHECKPOINTING_MODE_DEFAULT);
         channel.SetInMemory(true);
         channel.SetSrcStageId(InputStageId);
@@ -457,7 +457,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         channel.SetId(channelId);
         auto& chEndpoint = *channel.MutableDstEndpoint();
         ActorIdToProto(DstEdgeActor, chEndpoint.MutableActorId());
-        channel.SetWatermarksMode(NDqProto::WATERMARKS_MODE_DEFAULT);
+        channel.SetWatermarksMode(NDqProto::WATERMARKS_MODE_DISABLED);
         channel.SetCheckpointingMode(NDqProto::CHECKPOINTING_MODE_DEFAULT);
         channel.SetInMemory(true);
         channel.SetDstStageId(OutputStageId);
@@ -557,9 +557,8 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
     }
 
     // cb(TUnboxedValue& value, ui32 column) is called for each value in a row
-    // cbWatermark(TInstant watermark) is called for each received watermark
     // beforeFinalAck() is called before sending final ack (when CA is still definitely alive)
-    bool ReceiveData(auto&& cb, auto&& cbWatermark, auto&& beforeFinalAck, auto dqInputChannel) {
+    bool ReceiveData(auto&& cb, auto&& beforeFinalAck, auto dqInputChannel) {
         auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvChannelData>({DstEdgeActor}, TDuration::Seconds(20));
         if (!ev) {
             throw yexception() << "Failed";
@@ -577,7 +576,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         TMaybe<TInstant> watermark;
         const auto columns = IsWide ? static_cast<TMultiType*>(dqInputChannel->GetInputType())->GetElementsCount() : static_cast<TStructType*>(dqInputChannel->GetInputType())->GetMembersCount();
         while (dqInputChannel->Pop(batch, watermark)) {
-            UNIT_ASSERT(watermark.Empty());
+            UNIT_ASSERT_C(watermark.Empty(), "Got unexpected in-band watermark");
             if (IsWide) {
                 if (!batch.ForEachRowWide([this, cb, columns](const NUdf::TUnboxedValue row[], ui32 width) {
                     LOG_D("WideRow:");
@@ -618,10 +617,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 }
             }
         }
-        if (channelData.HasWatermark()) {
-            auto watermark = TInstant::MicroSeconds(channelData.GetWatermark().GetTimestampUs());
-            cbWatermark(watermark);
-        }
+        UNIT_ASSERT_C(!channelData.HasWatermark(), "Got unexpected watermark");
         if (dqInputChannel->IsFinished()) {
             beforeFinalAck();
         }
@@ -718,21 +714,9 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         WaitForChannelDataAck(dqOutputChannel->GetChannelId(), *seqNo);
     }
 
-#if 0 // TODO: switch when inputtransform will be fixed; just log for now
-#define WEAK_UNIT_ASSERT_GT_C UNIT_ASSERT_GT_C
-#define WEAK_UNIT_ASSERT_LE_C UNIT_ASSERT_LE_C
-#define WEAK_UNIT_ASSERT_EQUAL_C UNIT_ASSERT_EQUAL_C
-#define WEAK_UNIT_ASSERT UNIT_ASSERT
-#else
-#define WEAK_UNIT_ASSERT_GT_C(A, B, C) do { if (!((A) > (B))) LOG_E("Assert " #A " > " #B " failed " << C); } while(0)
-#define WEAK_UNIT_ASSERT_LE_C(A, B, C) do { if (!((A) <= (B))) LOG_E("Assert " #A " <= " #B " failed " << C); } while(0)
-#define WEAK_UNIT_ASSERT_EQUAL_C(A, B, C) do { if (!((A) == (B))) LOG_E("Assert " #A " == " #B " failed " << C); } while(0)
-#define WEAK_UNIT_ASSERT(A) do { if (!(A)) LOG_E("Assert " #A " failed "); } while(0)
-#endif
-    void BasicMultichannelTests(ui32 packets, ui32 watermarkPeriod, bool waitIntermediateAcks, ui32 numChannels, auto& rng, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
+    void BasicMultichannelTests(ui32 packets, bool waitIntermediateAcks, ui32 numChannels, auto& rng, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
         LogPrefix = TStringBuilder() << "Square Test for:"
            << " packets=" << packets
-           << " watermarkPeriod=" << watermarkPeriod
            << " waitIntermediateAcks=" << waitIntermediateAcks
            << " channels=" << numChannels
            << " ";
@@ -748,7 +732,6 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
 
         ui32 val = 0;
-        TMaybe<TInstant> expectedWatermark;
         TVector<ui32> seqNo(numChannels);
         TVector<ui64> activeChannels(numChannels);
         std::iota(activeChannels.begin(), activeChannels.end(), 0);
@@ -760,13 +743,6 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             PushRow(CreateRow(++val, packet), dqOutputChannel);
-            if (watermarkPeriod && packet % watermarkPeriod == 0) {
-                LOG_D("push watermark " << packet);
-                NDqProto::TWatermark watermark;
-                watermark.SetTimestampUs(TInstant::Seconds(packet).MicroSeconds());
-                dqOutputChannel->Push(std::move(watermark));
-                expectedWatermark = std::max(expectedWatermark, TMaybe<TInstant>(TInstant::Seconds(packet)));
-            }
             if (isFinal || activeChannels.size() > 1 && rng() % std::max(packets/numChannels, ui32{1}) == 0) {
                 // when we have more than one active channels left, we may randomly finish it midway
                 dqOutputChannel->Finish();
@@ -785,17 +761,12 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         }
 
         TMap<ui32, ui32> receivedData;
-        TMaybe<TInstant> watermark;
         try {
             while (ReceiveData(
-                    [this, &receivedData, &watermark](const NUdf::TUnboxedValue& val, ui32 column) {
+                    [this, &receivedData](const NUdf::TUnboxedValue& val, ui32 column) {
                         UNIT_ASSERT(!!val);
                         UNIT_ASSERT(val.IsEmbedded());
                         if (RowType->GetMemberName(column) == "ts") {
-                            auto ts = val.Get<ui64>();
-                            if (watermark) {
-                                UNIT_ASSERT_GT_C(ts, watermark->Seconds(), ts << " >= " << watermark->Seconds());
-                            }
                             return true;
                         }
                         UNIT_ASSERT_EQUAL(RowType->GetMemberName(column), "id");
@@ -803,10 +774,6 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                         LOG_D(data);
                         ++receivedData[data];
                         return true;
-                    },
-                    [this, &watermark](const auto& receivedWatermark) {
-                        watermark = receivedWatermark;
-                        LOG_D("Got watermark " << *watermark);
                     },
                     [this, &asyncCA]() {
                         DumpMonPage(asyncCA, [this](auto&& str) {
@@ -828,24 +795,11 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         for (; val > 0; --val) {
             UNIT_ASSERT_EQUAL_C(receivedData[val * val], 1, "expected count for " << (val * val));
         }
-        if (expectedWatermark) {
-            WEAK_UNIT_ASSERT(!!watermark);
-            if (watermark) {
-                UNIT_ASSERT_LE_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " <= " << expectedWatermark);
-                WEAK_UNIT_ASSERT_EQUAL_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " == " << expectedWatermark << ", Watermark Delay is " << (*expectedWatermark - *watermark));
-                LOG_D("Last watermark " << *watermark);
-            } else {
-                LOG_E("NO WATERMARK");
-            }
-        } else {
-            UNIT_ASSERT(!watermark);
-        }
     }
 
-    void InputTransformMultichannelTests(ui32 packets, ui32 watermarkPeriod, bool waitIntermediateAcks, ui32 numChannels, auto& rng) {
+    void InputTransformMultichannelTests(ui32 packets, bool waitIntermediateAcks, ui32 numChannels, auto& rng) {
         LogPrefix = TStringBuilder() << "InputTransform Test for:"
            << " packets=" << packets
-           << " watermarkPeriod=" << watermarkPeriod
            << " waitIntermediateAcks=" << waitIntermediateAcks
            << " channels=" << numChannels
            << " ";
@@ -877,7 +831,6 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
 
         ui32 val = 0;
-        TMaybe<TInstant> expectedWatermark;
         TVector<ui32> seqNo(numChannels);
         TVector<ui64> activeChannels(numChannels);
         std::iota(activeChannels.begin(), activeChannels.end(), 0);
@@ -900,12 +853,6 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             ++expectedData[val];
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             ++expectedData[val];
-            if (watermarkPeriod && packet % watermarkPeriod == 0) {
-                NDqProto::TWatermark watermark;
-                watermark.SetTimestampUs(TInstant::Seconds(packet).MicroSeconds());
-                dqOutputChannel->Push(std::move(watermark));
-                expectedWatermark = std::max(expectedWatermark, TMaybe<TInstant>(TInstant::Seconds(packet)));
-            }
             if (isFinal || activeChannels.size() > 1 && rng() % std::max(packets/numChannels, ui32{1}) == 0) {
                 // when we have more than one active channels left, we may randomly finish it midway
                 dqOutputChannel->Finish();
@@ -926,9 +873,8 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         TMap<i32, ui32> receivedData;
 
         i32 col0 = ~0;
-        TMaybe<TInstant> watermark;
         while (ReceiveData(
-                [this, &receivedData, &watermark, &col0](const NUdf::TUnboxedValue& val, ui32 column) {
+                [this, &receivedData, &col0](const NUdf::TUnboxedValue& val, ui32 column) {
                     UNIT_ASSERT_LT(column, RowTransformedType->GetMembersCount());
                     auto columnName = RowTransformedType->GetMemberName(column);
                     if (columnName == "e.id") {
@@ -942,9 +888,6 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                         UNIT_ASSERT(val.IsEmbedded());
                         auto ts = val.Get<ui64>();
                         LOG_D(column << " ts = " << ts);
-                        if (watermark) {
-                            UNIT_ASSERT_GT_C(ts, watermark->Seconds(), "Timestamp " << ts << " before watermark: " << watermark->Seconds());
-                        }
                     } else if (columnName == "u.key") {
                         if (col0 >= MinTransformedValue && col0 <= MaxTransformedValue) {
                             UNIT_ASSERT(!!val);
@@ -975,10 +918,6 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                     }
                     return true;
                 },
-                [this, &watermark](const auto& receivedWatermark) {
-                    watermark = receivedWatermark;
-                    LOG_D("Got watermark " << *watermark);
-                },
                 [this, &asyncCA]() {
                     DumpMonPage(asyncCA, [this](auto&& str) {
                         UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
@@ -992,18 +931,6 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         UNIT_ASSERT_EQUAL_C(receivedData.size(), expectedData.size(), "received " << receivedData.size() << " != expected " << expectedData.size());
         for (auto [receivedVal, receivedCnt] : receivedData) {
             UNIT_ASSERT_EQUAL_C(receivedCnt, expectedData[receivedVal], "expected count for " << receivedVal << ": " << receivedCnt << " != " << expectedData[receivedVal]);
-        }
-        if (expectedWatermark) {
-            WEAK_UNIT_ASSERT(!!watermark);
-            if (watermark) {
-                UNIT_ASSERT_LE_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " <= " << expectedWatermark);
-                WEAK_UNIT_ASSERT_EQUAL_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " == " << expectedWatermark << ", Watermark Delay is " << (*expectedWatermark - *watermark));
-                LOG_D("Last watermark " << *watermark);
-            } else {
-                LOG_E("NO WATERMARK");
-            }
-        } else {
-            UNIT_ASSERT(!watermark);
         }
     }
 
@@ -1034,12 +961,10 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
         std::mt19937 rng(seed);
         for (ui32 t = 0; t < (TESTS_LARGE ? 32 : 16) ; ++t) sizes.push_back(1 + rng() % 734);
         for (bool waitIntermediateAcks : { false, true }) {
-            for (ui32 watermarkPeriod : { 0, 1, 3 }) {
-                for (ui32 packets : sizes) {
-                    for (ui32 numChannels : { 1, 3, 7, 16 }) {
-                        std::mt19937 trng(seed);
-                        BasicMultichannelTests(packets, watermarkPeriod, waitIntermediateAcks, numChannels, trng);
-                    }
+            for (ui32 packets : sizes) {
+                for (ui32 numChannels : { 1, 3, 7, 16 }) {
+                    std::mt19937 trng(seed);
+                    BasicMultichannelTests(packets, waitIntermediateAcks, numChannels, trng);
                 }
             }
         }
@@ -1053,7 +978,7 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
                 NDqProto::DQ_STATS_MODE_PROFILE,
                 }) {
             std::mt19937 rng;
-            BasicMultichannelTests(5, 1, true, 1, rng, statsMode);
+            BasicMultichannelTests(5, true, 1, rng, statsMode);
         }
     }
 
@@ -1063,10 +988,8 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
         for (ui32 t = 0; t < (TESTS_LARGE ? 32 : 8) ; ++t) sizes.push_back(1 + rng() % 734);
         for (ui32 numChannels: { 1, 2, 11 }) {
             for (bool waitIntermediateAcks : { false, true }) {
-                for (ui32 watermarkPeriod : { 0, 1, 3 }) {
-                    for (ui32 packets : sizes) {
-                        InputTransformMultichannelTests(packets, watermarkPeriod, waitIntermediateAcks, numChannels, rng);
-                    }
+                for (ui32 packets : sizes) {
+                    InputTransformMultichannelTests(packets, waitIntermediateAcks, numChannels, rng);
                 }
             }
         }
@@ -1074,4 +997,3 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
 }
 
 } //namespace NYql::NDq
-

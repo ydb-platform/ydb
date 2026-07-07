@@ -54,6 +54,7 @@ from botocore.exceptions import (
 )
 from botocore.regions import EndpointResolverBuiltins
 from botocore.signers import (
+    add_dsql_generate_db_auth_token_methods,
     add_generate_db_auth_token,
     add_generate_presigned_post,
     add_generate_presigned_url,
@@ -132,6 +133,7 @@ def escape_xml_payload(params, **kwargs):
 
 
 def check_for_200_error(response, **kwargs):
+    """This function has been deprecated, but is kept for backwards compatibility."""
     # From: http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectCOPY.html
     # There are two opportunities for a copy request to return an error. One
     # can occur when Amazon S3 receives the copy request and the other can
@@ -152,7 +154,9 @@ def check_for_200_error(response, **kwargs):
         # trying to retrieve the response.  See Endpoint._get_response().
         return
     http_response, parsed = response
-    if _looks_like_special_case_error(http_response):
+    if _looks_like_special_case_error(
+        http_response.status_code, http_response.content
+    ):
         logger.debug(
             "Error found for response with 200 status code, "
             "errors: %s, changing status code to "
@@ -162,13 +166,13 @@ def check_for_200_error(response, **kwargs):
         http_response.status_code = 500
 
 
-def _looks_like_special_case_error(http_response):
-    if http_response.status_code == 200:
+def _looks_like_special_case_error(status_code, body):
+    if status_code == 200 and body:
         try:
             parser = ETree.XMLParser(
                 target=ETree.TreeBuilder(), encoding='utf-8'
             )
-            parser.feed(http_response.content)
+            parser.feed(body)
             root = parser.close()
         except XMLParseError:
             # In cases of network disruptions, we may end up with a partial
@@ -203,6 +207,11 @@ def set_operation_specific_signer(context, signing_name, **kwargs):
     if auth_type == 'bearer':
         return 'bearer'
 
+    # If the operation needs an unsigned body, we set additional context
+    # allowing the signer to be aware of this.
+    if context.get('unsigned_payload') or auth_type == 'v4-unsigned-body':
+        context['payload_signing_enabled'] = False
+
     if auth_type.startswith('v4'):
         if auth_type == 'v4-s3express':
             return auth_type
@@ -210,7 +219,8 @@ def set_operation_specific_signer(context, signing_name, **kwargs):
         if auth_type == 'v4a':
             # If sigv4a is chosen, we must add additional signing config for
             # global signature.
-            signing = {'region': '*', 'signing_name': signing_name}
+            region = _resolve_sigv4a_region(context)
+            signing = {'region': region, 'signing_name': signing_name}
             if 'signing' in context:
                 context['signing'].update(signing)
             else:
@@ -219,17 +229,21 @@ def set_operation_specific_signer(context, signing_name, **kwargs):
         else:
             signature_version = 'v4'
 
-        # If the operation needs an unsigned body, we set additional context
-        # allowing the signer to be aware of this.
-        if auth_type == 'v4-unsigned-body':
-            context['payload_signing_enabled'] = False
-
         # Signing names used by s3 and s3-control use customized signers "s3v4"
         # and "s3v4a".
         if signing_name in S3_SIGNING_NAMES:
             signature_version = f's3{signature_version}'
 
         return signature_version
+
+
+def _resolve_sigv4a_region(context):
+    region = None
+    if 'client_config' in context:
+        region = context['client_config'].sigv4a_signing_region_set
+    if not region and context.get('signing', {}).get('region'):
+        region = context['signing']['region']
+    return region or '*'
 
 
 def decode_console_output(parsed, **kwargs):
@@ -251,8 +265,7 @@ def generate_idempotent_uuid(params, model, **kwargs):
         if name not in params:
             params[name] = str(uuid.uuid4())
             logger.debug(
-                "injecting idempotency token (%s) into param '%s'."
-                % (params[name], name)
+                f"injecting idempotency token ({params[name]}) into param '{name}'."
             )
 
 
@@ -454,7 +467,7 @@ def _quote_source_header_from_dict(source_dict):
         )
     final = percent_encode(final, safe=SAFE_CHARS + '/')
     if version_id is not None:
-        final += '?versionId=%s' % version_id
+        final += f'?versionId={version_id}'
     return final
 
 
@@ -632,8 +645,8 @@ def validate_ascii_metadata(params, **kwargs):
         except UnicodeEncodeError:
             error_msg = (
                 'Non ascii characters found in S3 metadata '
-                'for key "%s", value: "%s".  \nS3 metadata can only '
-                'contain ASCII characters. ' % (key, value)
+                f'for key "{key}", value: "{value}".  \nS3 metadata can only '
+                'contain ASCII characters. '
             )
             raise ParamValidationError(report=error_msg)
 
@@ -761,10 +774,10 @@ def check_openssl_supports_tls_version_1_2(**kwargs):
         openssl_version_tuple = ssl.OPENSSL_VERSION_INFO
         if openssl_version_tuple < (1, 0, 1):
             warnings.warn(
-                'Currently installed openssl version: %s does not '
+                f'Currently installed openssl version: {ssl.OPENSSL_VERSION} does not '
                 'support TLS 1.2, which is required for use of iot-data. '
                 'Please use python installed with openssl version 1.0.1 or '
-                'higher.' % (ssl.OPENSSL_VERSION),
+                'higher.',
                 UnsupportedTLSVersionWarning,
             )
     # We cannot check the openssl version on python2.6, so we should just
@@ -1044,6 +1057,12 @@ def remove_lex_v2_start_conversation(class_attributes, **kwargs):
         del class_attributes['start_conversation']
 
 
+def remove_qbusiness_chat(class_attributes, **kwargs):
+    """Operation requires h2 which is currently unsupported in Python"""
+    if 'chat' in class_attributes:
+        del class_attributes['chat']
+
+
 def add_retry_headers(request, **kwargs):
     retries_context = request.context.get('retries')
     if not retries_context:
@@ -1182,6 +1201,120 @@ def remove_content_type_header_for_presigning(request, **kwargs):
         del request.headers['Content-Type']
 
 
+def handle_expires_header(
+    operation_model, response_dict, customized_response_dict, **kwargs
+):
+    if _has_expires_shape(operation_model.output_shape):
+        if expires_value := response_dict.get('headers', {}).get('Expires'):
+            customized_response_dict['ExpiresString'] = expires_value
+            try:
+                utils.parse_timestamp(expires_value)
+            except (ValueError, RuntimeError):
+                logger.warning(
+                    f'Failed to parse the "Expires" member as a timestamp: {expires_value}. '
+                    f'The unparsed value is available in the response under "ExpiresString".'
+                )
+                del response_dict['headers']['Expires']
+
+
+def _has_expires_shape(shape):
+    if not shape:
+        return False
+    return any(
+        member_shape.name == 'Expires'
+        and member_shape.serialization.get('name') == 'Expires'
+        for member_shape in shape.members.values()
+    )
+
+
+def document_expires_shape(section, event_name, **kwargs):
+    # Updates the documentation for S3 operations that include the 'Expires' member
+    # in their response structure. Documents a synthetic member 'ExpiresString' and
+    # includes a deprecation notice for 'Expires'.
+    if 'response-example' in event_name:
+        if not section.has_section('structure-value'):
+            return
+        parent = section.get_section('structure-value')
+        if not parent.has_section('Expires'):
+            return
+        param_line = parent.get_section('Expires')
+        param_line.add_new_section('ExpiresString')
+        new_param_line = param_line.get_section('ExpiresString')
+        new_param_line.write("'ExpiresString': 'string',")
+        new_param_line.style.new_line()
+    elif 'response-params' in event_name:
+        if not section.has_section('Expires'):
+            return
+        param_section = section.get_section('Expires')
+        # Add a deprecation notice for the "Expires" param
+        doc_section = param_section.get_section('param-documentation')
+        doc_section.style.start_note()
+        doc_section.write(
+            'This member has been deprecated. Please use ``ExpiresString`` instead.'
+        )
+        doc_section.style.end_note()
+        # Document the "ExpiresString" param
+        new_param_section = param_section.add_new_section('ExpiresString')
+        new_param_section.style.new_paragraph()
+        new_param_section.write('- **ExpiresString** *(string) --*')
+        new_param_section.style.indent()
+        new_param_section.style.new_paragraph()
+        new_param_section.write(
+            'The raw, unparsed value of the ``Expires`` field.'
+        )
+
+
+def _handle_200_error(operation_model, response_dict, **kwargs):
+    # S3 can return a 200 response with an error embedded in the body.
+    # Convert the 200 to a 500 for retry resolution in ``_update_status_code``.
+    if not _should_handle_200_error(operation_model, response_dict):
+        # Operations with streaming response blobs are excluded as they
+        # can't be reliably distinguished from an S3 error.
+        return
+    if _looks_like_special_case_error(
+        response_dict['status_code'], response_dict['body']
+    ):
+        response_dict['status_code'] = 500
+        logger.debug(
+            f"Error found for response with 200 status code: {response_dict['body']}."
+        )
+
+
+def _should_handle_200_error(operation_model, response_dict):
+    output_shape = operation_model.output_shape
+    if (
+        not response_dict
+        or operation_model.has_event_stream_output
+        or not output_shape
+    ):
+        return False
+    payload = output_shape.serialization.get('payload')
+    if payload is not None:
+        payload_shape = output_shape.members[payload]
+        if payload_shape.type_name in ('blob', 'string'):
+            return False
+    return True
+
+
+def _update_status_code(response, **kwargs):
+    # Update the http_response status code when the parsed response has been
+    # modified in a handler. This enables retries for cases like ``_handle_200_error``.
+    if response is None:
+        return
+    http_response, parsed = response
+    parsed_status_code = parsed.get('ResponseMetadata', {}).get(
+        'HTTPStatusCode', http_response.status_code
+    )
+    if http_response.status_code != parsed_status_code:
+        http_response.status_code = parsed_status_code
+
+
+def add_query_compatibility_header(model, params, **kwargs):
+    if not model.service_model.is_query_compatible:
+        return
+    params['headers']['x-amzn-query-mode'] = 'true'
+
+
 # This is a list of (event_name, handler).
 # When a Session is created, everything in this list will be
 # automatically registered with that Session.
@@ -1211,10 +1344,13 @@ BUILTIN_HANDLERS = [
     ('creating-client-class.s3', add_generate_presigned_post),
     ('creating-client-class.iot-data', check_openssl_supports_tls_version_1_2),
     ('creating-client-class.lex-runtime-v2', remove_lex_v2_start_conversation),
+    ('creating-client-class.qbusiness', remove_qbusiness_chat),
     ('after-call.iam', json_decode_policies),
     ('after-call.ec2.GetConsoleOutput', decode_console_output),
     ('after-call.cloudformation.GetTemplate', json_decode_template_body),
     ('after-call.s3.GetBucketLocation', parse_get_bucket_location),
+    ('before-parse.s3.*', handle_expires_header),
+    ('before-parse.s3.*', _handle_200_error, REGISTER_FIRST),
     ('before-parameter-build', generate_idempotent_uuid),
     ('before-parameter-build.s3', validate_bucket_name),
     ('before-parameter-build.s3', remove_bucket_from_url_paths_from_model),
@@ -1241,8 +1377,11 @@ BUILTIN_HANDLERS = [
     ('before-parameter-build.s3-control', remove_accid_host_prefix_from_model),
     ('docs.*.s3.CopyObject.complete-section', document_copy_source_form),
     ('docs.*.s3.UploadPartCopy.complete-section', document_copy_source_form),
+    ('docs.response-example.s3.*.complete-section', document_expires_shape),
+    ('docs.response-params.s3.*.complete-section', document_expires_shape),
     ('before-endpoint-resolution.s3', customize_endpoint_resolver_builtins),
     ('before-call', add_recursion_detection_header),
+    ('before-call', add_query_compatibility_header),
     ('before-call.s3', add_expect_header),
     ('before-call.glacier', add_glacier_version),
     ('before-call.apigateway', add_accept_header),
@@ -1257,13 +1396,7 @@ BUILTIN_HANDLERS = [
     ('before-call.ec2.CopySnapshot', inject_presigned_url_ec2),
     ('request-created', add_retry_headers),
     ('request-created.machinelearning.Predict', switch_host_machinelearning),
-    ('needs-retry.s3.UploadPartCopy', check_for_200_error, REGISTER_FIRST),
-    ('needs-retry.s3.CopyObject', check_for_200_error, REGISTER_FIRST),
-    (
-        'needs-retry.s3.CompleteMultipartUpload',
-        check_for_200_error,
-        REGISTER_FIRST,
-    ),
+    ('needs-retry.s3.*', _update_status_code, REGISTER_FIRST),
     ('choose-signer.cognito-identity.GetId', disable_signing),
     ('choose-signer.cognito-identity.GetOpenIdToken', disable_signing),
     ('choose-signer.cognito-identity.UnlinkIdentity', disable_signing),
@@ -1388,6 +1521,10 @@ BUILTIN_HANDLERS = [
             ],
         ).hide_param,
     ),
+    #############
+    # DSQL
+    #############
+    ('creating-client-class.dsql', add_dsql_generate_db_auth_token_methods),
     #############
     # RDS
     #############

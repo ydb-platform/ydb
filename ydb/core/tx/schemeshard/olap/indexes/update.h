@@ -39,7 +39,7 @@ namespace NKikimr::NSchemeShard {
             return IndexConstructor;
         }
 
-        TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& requestedProto);
+        bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& requestedProto);
         void SerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& requestedProto) const;
     };
 

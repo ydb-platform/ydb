@@ -1,58 +1,34 @@
 name: Rebuild documentation
 
+# SECURITY: this workflow runs in the privileged `pull_request_target` context
+# (triggered when a maintainer applies the `rebuild_docs` label), but it
+# never checks out or executes PR-controlled code. It only:
+#   1. Removes the trigger label.
+#   2. Verifies the PR actually has docs changes.
+#   3. Dispatches `docs_build.yaml` via the GitHub API.
+#
+# The dispatched `docs_build.yaml` runs in the `workflow_dispatch` entry
+# point with `permissions: contents: read` and no declared secrets, so the
+# checkout-and-build of PR content happens with a read-only token and no
+# secret material. `workflow_dispatch` is a documented exception to the
+# "GITHUB_TOKEN does not trigger workflow runs" rule, so the dispatched
+# build still fires the `docs_preview.yaml` workflow_run handler.
+
 on:
   pull_request_target:
     types: [labeled]
 
 jobs:
-  build-docs:
+  rebuild:
     if: |
       github.event.label.name == 'rebuild_docs' &&
       github.event.pull_request.state == 'open'
-    concurrency:
-      group: docs-build-${{ github.event.pull_request.number }}
-      cancel-in-progress: true
     runs-on: ubuntu-latest
     permissions:
-      contents: read
       pull-requests: write
-      issues: write
+      actions: write
     steps:
-      - name: Check PR has docs changes
-        id: docs-changes
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const files = await github.paginate(github.rest.pulls.listFiles, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number,
-              per_page: 100,
-            });
-            const hasDocs = files.some((f) => f.filename.startsWith('ydb/docs/'));
-            core.setOutput('has_docs', hasDocs ? 'true' : 'false');
-
-      - name: Checkout
-        if: steps.docs-changes.outputs.has_docs == 'true'
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - name: Get commit SHA
-        id: sha
-        if: steps.docs-changes.outputs.has_docs == 'true'
-        run: echo "value=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
-
-      - name: Build
-        if: steps.docs-changes.outputs.has_docs == 'true'
-        uses: diplodoc-platform/docs-build-action@v3
-        with:
-          revision: "pr-${{ github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"
-          src-root: "./ydb/docs"
-          cli-version: stable
-
       - name: Remove rebuild_docs label
-        if: always()
         uses: actions/github-script@v8
         with:
           script: |
@@ -69,3 +45,91 @@ jobs:
                 throw error;
               }
             }
+
+      - name: Check PR has docs changes
+        id: docs-changes
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            const hasDocs = files.some((f) => f.filename.startsWith('ydb/docs/'));
+            core.setOutput('has_docs', hasDocs ? 'true' : 'false');
+
+      - name: Dispatch docs build
+        if: steps.docs-changes.outputs.has_docs == 'true'
+        run: echo "value=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      # Branches listed below keep the old logic (use-ya-opensource: false).
+      # All other branches use the new logic (use-ya-opensource: true).
+      # This workflow only runs on pull_request_target, so the relevant branch
+      # is the pull request base ref.
+      - name: Determine ya-opensource flag
+        id: ya
+        if: steps.docs-changes.outputs.has_docs == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const legacyBranches = [
+              'stable-25-1',
+              'stable-25-2',
+              'stable-25-2-1',
+              'stable-25-3',
+              'stable-25-3-1',
+              'stable-25-4',
+              'stable-25-4-1',
+              'stable-26-1',
+              'stable-26-1-1',
+              'stable-26-2',
+              'stable-26-2-1',
+            ];
+            const baseRef = context.payload.pull_request.base.ref;
+            core.setOutput('use', legacyBranches.includes(baseRef) ? 'false' : 'true');
+
+
+      - name: Build
+        if: steps.docs-changes.outputs.has_docs == 'true'
+        uses: diplodoc-platform/docs-build-action@v3
+        with:
+          revision: "pr-${{ github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"
+          src-root: "./ydb/docs"
+          cli-version: "4.59.12"
+          use-ya-opensource: ${{ steps.ya.outputs.use }}
+
+      - name: Fail on documentation build issues
+        if: steps.docs-changes.outputs.has_docs == 'true'
+        run: |
+          set -euo pipefail
+          if [[ ! -f build-html.log ]]; then
+            echo "::error::Documentation build log (build-html.log) not found"
+            exit 1
+          fi
+          issue_count=$(grep -cE '^(ERR|WARN)' build-html.log || true)
+          if [[ "$issue_count" -gt 0 ]]; then
+            echo "::error::Documentation build has ${issue_count} error(s)/warning(s)"
+            grep -E '^(ERR|WARN)' build-html.log | sort -u | head -20
+            if [[ "$issue_count" -gt 20 ]]; then
+              echo "... and $((issue_count - 20)) more (see PR comment for full log)"
+            fi
+            exit 1
+          fi
+          echo "No documentation build warnings or errors"
+
+      - name: Remove rebuild_docs label
+        if: always()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'docs_build.yaml',
+              ref: context.payload.repository.default_branch,
+              inputs: {
+                pull_number: String(context.payload.pull_request.number),
+              },
+            });

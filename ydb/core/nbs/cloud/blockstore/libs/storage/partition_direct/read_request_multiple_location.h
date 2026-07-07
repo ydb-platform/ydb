@@ -26,7 +26,7 @@ class TReadMultipleLocationRequestExecutor
 public:
     TReadMultipleLocationRequestExecutor(
         NActors::TActorSystem const* actorSystem,
-        TChildLogTitle logTitle,
+        const TLogTitle& logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         TReadHint readHint,
@@ -36,8 +36,11 @@ public:
 
     ~TReadMultipleLocationRequestExecutor() override;
 
+    // Implementation of IRequestExecutor
     void Run() override;
+    TString Print() override;
 
+    // Implementation of IReadRequestExecutor
     [[nodiscard]] NThreading::TFuture<TResponse> GetFuture() const override;
 
 private:

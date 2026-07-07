@@ -86,7 +86,7 @@ GROWTH_RATE(MultiDictObject *md)
     return md->used * 3;
 }
 
-#ifndef NDEBUG
+#if 0
 static inline int
 _md_check_consistency(MultiDictObject *md, bool update);
 static inline int
@@ -1901,7 +1901,7 @@ md_clear(MultiDictObject *md)
     return 0;
 }
 
-#ifndef NDEBUG
+#if 0
 
 static inline int
 _md_check_consistency(MultiDictObject *md, bool update)

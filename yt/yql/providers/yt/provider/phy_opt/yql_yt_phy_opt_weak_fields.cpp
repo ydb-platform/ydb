@@ -300,4 +300,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::WeakFields(TExprBase no
     return TExprBase(res);
 }
 
-}  // namespace NYql
+} // namespace NYql

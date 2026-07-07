@@ -1,5 +1,7 @@
 #include "distconf_invoke.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
+
 namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
@@ -48,8 +50,11 @@ namespace NKikimr::NStorage {
             const TActorId actorId = GroupInfo->GetActorId(i);
             const ui32 flags = IEventHandle::FlagTrackDelivery |
                 (actorId.NodeId() == SelfId().NodeId() ? 0 : IEventHandle::FlagSubscribeOnSession);
-            STLOG(PRI_DEBUG, BS_NODE, NWDC73, "sending TEvVStatus", (SelfId, SelfId()), (VDiskId, vdiskId),
-                (ActorId, actorId));
+            YDB_LOG_DEBUG("Sending TEvVStatus",
+                {"marker", "NWDC73"},
+                {"selfId", SelfId()},
+                {"VDiskId", vdiskId},
+                {"actorId", actorId});
             Send(actorId, new TEvBlobStorage::TEvVStatus(vdiskId), flags);
             if (actorId.NodeId() != SelfId().NodeId()) {
                 NodeToVDisk.emplace(actorId.NodeId(), vdiskId);
@@ -63,7 +68,11 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvVStatusResult::TPtr ev) {
         const auto& record = ev->Get()->Record;
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
-        STLOG(PRI_DEBUG, BS_NODE, NWDC74, "TEvVStatusResult", (SelfId, SelfId()), (Record, record), (VDiskId, vdiskId));
+        YDB_LOG_DEBUG("TEvVStatusResult",
+            {"marker", "NWDC74"},
+            {"selfId", SelfId()},
+            {"record", record},
+            {"VDiskId", vdiskId});
         if (!PendingVDiskIds.erase(vdiskId)) {
             throw TExError() << "TEvVStatusResult VDiskID# " << vdiskId << " is unexpected";
         }
@@ -108,7 +117,9 @@ namespace NKikimr::NStorage {
         const auto& record = op->Command;
         const auto& cmd = record.GetReassignGroupDisk();
 
-        STLOG(PRI_DEBUG, BS_NODE, NWDC75, "ReassignGroupDiskExecute", (SelfId, SelfId()));
+        YDB_LOG_DEBUG("ReassignGroupDiskExecute",
+            {"marker", "NWDC75"},
+            {"selfId", SelfId()});
 
         const auto& vdiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());
 
@@ -204,10 +215,12 @@ namespace NKikimr::NStorage {
                         &BaseConfig.value(), cmd.GetConvertToDonor(), cmd.GetIgnoreVSlotQuotaCheck(),
                         cmd.GetIsSelfHealReasonDecommit(), bridgePileId, bridgeProxyGroupId);
                 } catch (const TExConfigError& ex) {
-                    STLOG(PRI_NOTICE, BS_NODE, NWDC76, "ReassignGroupDisk failed to allocate group", (SelfId, SelfId()),
-                        (Config, config),
-                        (BaseConfig, *BaseConfig),
-                        (Error, ex.what()));
+                    YDB_LOG_NOTICE("ReassignGroupDisk failed to allocate group",
+                        {"marker", "NWDC76"},
+                        {"selfId", SelfId()},
+                        {"config", config},
+                        {"baseConfig", *BaseConfig},
+                        {"error", ex.what()});
                     throw TExError() << "Failed to allocate group: " << ex.what();
                 }
 

@@ -62,7 +62,7 @@ public:
         , Underlying_(underlying)
         , Worker_(worker)
         , ScopedAlloc_(Worker_->GetScopedAlloc())
-        , Packer_(false, Worker_->GetInputType(index))
+        , Packer_(/*stable=*/false, Worker_->GetInputType(index))
     {
     }
 
@@ -118,8 +118,8 @@ struct TInputSpecTraits<TPickleInputSpec> {
             auto& holderFactory = worker->GetGraph().GetHolderFactory();
             for (ui32 i = 0; i < streams.size(); i++) {
                 auto input = holderFactory.template Create<TPickleListValue>(
-                    spec, i, std::move(streams[i]), worker);
-                worker->SetInput(std::move(input), i);
+                    spec, i, streams[i], worker);
+                worker->SetInput(input, i);
             }
         }
     }
@@ -151,7 +151,7 @@ class TPickleOutputHandle final: public TStreamOutputHandle {
 public:
     explicit TPickleOutputHandle(TWorkerHolder<IPullListWorker> worker)
         : Worker_(std::move(worker))
-        , Packer_(false, Worker_->GetOutputType())
+        , Packer_(/*stable=*/false, Worker_->GetOutputType())
     {
     }
 
@@ -370,7 +370,7 @@ TStringStream MakeGenInput(ui64 count) {
     auto ui64Type = env.GetUi64Lazy();
     std::pair<TString, NKikimr::NMiniKQL::TType*> member("index", ui64Type);
     auto ui64StructType = TStructType::Create(&member, 1, env);
-    TValuePackerGeneric<true> packer(false, ui64StructType);
+    TValuePackerGeneric<true> packer(/*stable=*/false, ui64StructType);
 
     TPlainContainerCache cache;
     for (ui64 i = 0; i < count; ++i) {
@@ -618,7 +618,7 @@ int Main(int argc, const char** argv)
         auto inputGenSpec = TPickleInputSpec(inputGenSchema);
         // XXX: Untrack the datums, produced by "gen sql", so they can be
         // preserved for later multiply usage in "test sql".
-        auto outputGenSpec = TArrowOutputSpec({NYT::TNode::CreateEntity()}, true);
+        auto outputGenSpec = TArrowOutputSpec({NYT::TNode::CreateEntity()}, /*untrackBatches=*/true);
         // XXX: <RunGenSql> cannot be used for this case, since all buffers
         // from the Datums in the obtained batches are owned by the worker's
         // allocator. Hence, the program (i.e. worker) object should be created

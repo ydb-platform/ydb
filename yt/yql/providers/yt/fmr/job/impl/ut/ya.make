@@ -18,6 +18,7 @@ PEERDIR(
     yt/yql/providers/yt/fmr/test_tools/fmr_block_iterator
     yt/yql/providers/yt/fmr/test_tools/table_data_service
     yt/yql/providers/yt/fmr/test_tools/yson
+    yt/yql/providers/yt/fmr/test_utils
     yt/yql/providers/yt/fmr/utils
     yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl
     yql/essentials/utils/log

@@ -21,6 +21,13 @@ message TStreamingParameters
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TDirectPlacementTransferParameters
+{
+    optional bool enabled = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TRequestHeader
 {
     optional NYT.NProto.TGuid request_id = 1;
@@ -57,6 +64,10 @@ message TRequestHeader
     optional int32 response_codec = 24; // ECodec
 
     optional TStreamingParameters server_attachments_streaming_parameters = 33;
+
+    // Direct placement transfer (DPT) of attachments; see TDirectPlacementTransferParameters.
+    optional TDirectPlacementTransferParameters request_attachments_dpt_parameters = 39;
+    optional TDirectPlacementTransferParameters response_attachments_dpt_parameters = 40;
 
     optional bytes request_format_options = 34; // TYsonString
     optional bytes response_format_options = 35; // TYsonString

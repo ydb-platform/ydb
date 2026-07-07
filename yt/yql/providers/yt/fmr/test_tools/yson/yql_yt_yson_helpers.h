@@ -9,4 +9,4 @@ namespace NYql::NFmr {
 
     TString GetTextYson(const TString& binaryYsonContent);
 
-}  // namespace NYql::NFmr
+} // namespace NYql::NFmr

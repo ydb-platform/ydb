@@ -10,7 +10,12 @@ namespace NYdb::NBS::NBlockStore {
 
 struct TPartitionDirectServiceMock: public IPartitionDirectService
 {
+    explicit TPartitionDirectServiceMock(bool dropScheduledCallbacks = false)
+        : DropScheduledCallbacks(dropScheduledCallbacks)
+    {}
+
     TVolumeConfigPtr VolumeConfig;
+    bool DropScheduledCallbacks = false;
 
     [[nodiscard]] TVolumeConfigPtr GetVolumeConfig() const override
     {
@@ -29,6 +34,9 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         TCallback callback) override
     {
         Y_UNUSED(delay);
+        if (DropScheduledCallbacks) {
+            return;
+        }
         executor->ExecuteSimple(std::move(callback));
     }
 

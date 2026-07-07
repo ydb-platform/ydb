@@ -42,8 +42,7 @@ public:
     using TEvWriteToManyPersistentBuffersResult =
         NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult;
     using TEvWriteResult = NKikimrBlobStorage::NDDisk::TEvWriteResult;
-    using TEvSyncWithPersistentBufferResult =
-        NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
+    using TEvSyncResult = NKikimrBlobStorage::NDDisk::TEvSyncResult;
     using TEvErasePersistentBufferResult =
         NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult;
     using TEvListPersistentBufferResult =
@@ -53,14 +52,20 @@ public:
     // May be called multiple times if the underlying transport delivers more
     // than one response for the same request.
     using TWriteToManyPBuffersCallback = std::function<void(
-        TEvWriteToManyPersistentBuffersResult,
-        std::shared_ptr<NWilson::TSpan>)>;
+        const TEvWriteToManyPersistentBuffersResult& result,
+        std::shared_ptr<NWilson::TSpan> span)>;
 
     IStorageTransport() = default;
 
     virtual ~IStorageTransport() = default;
 
-    virtual NThreading::TFuture<TEvConnectResult> Connect(
+    struct TConnectResultFutures
+    {
+        NThreading::TFuture<TEvConnectResult> ConnectFuture;
+        NThreading::TFuture<ui32> DisconnectFuture;
+    };
+
+    virtual TConnectResultFutures Connect(
         const THostConnection& connection) = 0;
 
     virtual NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(
@@ -107,8 +112,7 @@ public:
         const TGuardedSgList& data,
         NWilson::TSpan* span) = 0;
 
-    virtual NThreading::TFuture<TEvSyncWithPersistentBufferResult>
-    SyncWithPBuffer(
+    virtual NThreading::TFuture<TEvSyncResult> SyncWithPBuffer(
         const THostConnection& pbufferConnection,
         const THostConnection& ddiskConnection,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,
@@ -118,7 +122,6 @@ public:
     virtual NThreading::TFuture<TEvErasePersistentBufferResult>
     BatchEraseFromPBuffer(
         const THostConnection& connection,
-        TVector<NKikimr::NDDisk::TBlockSelector> selectors,
         TVector<ui64> lsns,
         NWilson::TSpan* span) = 0;
 

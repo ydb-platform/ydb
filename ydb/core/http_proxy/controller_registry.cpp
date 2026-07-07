@@ -14,8 +14,8 @@ namespace NKikimr::NHttpProxy {
 
         class TSqsControllerProxy: public IHttpController {
         public:
-            THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
-                return GetSqsHttpController()->MakeError(contentType, Status, message, issueCode);
+            THttpResponseData MakeError(const THttpRequestContext& httpContext, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
+                return GetSqsHttpController()->MakeError(httpContext, Status, message, issueCode);
             }
 
             bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const override {

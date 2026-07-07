@@ -1,0 +1,27 @@
+package NYT.NTabletClient.NProto;
+
+option go_package = "a.yandex-team.ru/yt/go/proto/client/tablet_client";
+
+import "yt_proto/yt/core/misc/proto/guid.proto";
+import "yt_proto/yt/client/api/common/proto/schema.proto";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TUnfoldedColumns
+{
+    required string table_column = 1;
+    required string index_column = 2;
+}
+
+message TIndexInfo
+{
+    required NYT.NProto.TGuid index_object_id = 1;
+    required int32 index_kind = 2; // NTabletClient::ESecondaryIndexKind
+    optional string predicate = 3;
+    optional string unfolded_column = 4;
+    optional int32 index_correspondence = 6; // NTabletClient::NTabletClient::ETableToIndexCorrespondence
+    optional NYT.NApi.NRpcProxy.NProto.TTableSchema evaluated_columns_schema = 7;
+    optional TUnfoldedColumns unfolded_columns = 8;
+}
+
+////////////////////////////////////////////////////////////////////////////////

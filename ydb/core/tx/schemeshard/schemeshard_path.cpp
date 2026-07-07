@@ -402,6 +402,23 @@ const TPath::TChecker& TPath::TChecker::NotBackupTable(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::NotReadOnlyColumnTable(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (!Path.Base()->IsColumnTable()) {
+        return *this;
+    }
+
+    if (!Path.IsReadOnlyColumnTable()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is a read-only copy column table; only Copy and Drop are allowed"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 const TPath::TChecker& TPath::TChecker::NotAsyncReplicaTable(EStatus status) const {
     if (Failed) {
         return *this;
@@ -1223,6 +1240,19 @@ const TPath::TChecker& TPath::TChecker::Or(TCheckerMethodPtr leftFunc, TCheckerM
     return *this;
 }
 
+const TPath::TChecker& TPath::TChecker::IsTestShardSet(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsTestShardSet()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a test shard set"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 TString TPath::TChecker::BasicPathInfo(TPathElement::TPtr element) const {
     return TStringBuilder()
         << "id: " << element->PathId << ", "
@@ -1820,6 +1850,17 @@ bool TPath::IsBackupTable() const {
     return tableInfo->IsBackup;
 }
 
+bool TPath::IsReadOnlyColumnTable() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    if (!Base()->IsColumnTable() || !SS->ColumnTables.contains(Base()->PathId)) {
+        return false;
+    }
+
+    const auto tableInfo = SS->ColumnTables.GetVerified(Base()->PathId);
+    return tableInfo->IsReadOnly;
+}
+
 bool TPath::IsAsyncReplicaTable() const {
     Y_ABORT_UNLESS(IsResolved());
 
@@ -1854,6 +1895,12 @@ bool TPath::IsTransfer() const {
     Y_ABORT_UNLESS(IsResolved());
 
     return Base()->IsTransfer();
+}
+
+bool TPath::IsTestShardSet() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    return Base()->IsTestShardSet();
 }
 
 bool TPath::IsSupportedInExports() const {
@@ -1989,14 +2036,17 @@ TString TPath::GetEffectiveACL() const {
         if (element->CachedEffectiveACLVersion != version || !element->CachedEffectiveACL) {  // path needs actualizing
             if (item == Elements.begin()) { // it is root
                 if (!SS->IsDomainSchemeShard) {
-                    element->CachedEffectiveACL.Update(SS->ParentDomainCachedEffectiveACL, element->ACL, element->IsContainer());
+                    element->CachedEffectiveACL.Update(SS->ParentDomainCachedEffectiveACL,
+                        element->ACL, element->IsContainer(), /*isTenantRoot*/ true);
                 } else {
                     element->CachedEffectiveACL.Init(element->ACL);
                 }
             } else { // path element in the middle
                 auto prevIt = std::prev(item);
                 const auto& prevElement = *prevIt;
-                element->CachedEffectiveACL.Update(prevElement->CachedEffectiveACL, element->ACL, element->IsContainer());
+                element->CachedEffectiveACL.Update(prevElement->CachedEffectiveACL,
+                    element->ACL, element->IsContainer(),
+                    /*isTenantRoot*/ element->IsPlainSubDomainRoot() || element->IsExternalSubDomainRoot());
             }
             element->CachedEffectiveACLVersion = version;
         }

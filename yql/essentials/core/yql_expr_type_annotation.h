@@ -343,6 +343,7 @@ bool EnsureComparableDataType(TPositionHandle position, EDataSlot dataSlot, TExp
 bool EnsureEquatableDataType(TPositionHandle position, EDataSlot dataSlot, TExprContext& ctx);
 bool EnsureHashableDataType(TPositionHandle position, EDataSlot dataSlot, TExprContext& ctx);
 
+bool HasAnyError(const TTypeAnnotationNode* type, TExprContext& ctx);
 bool HasError(const TTypeAnnotationNode* type, TExprContext& ctx);
 bool HasError(const TTypeAnnotationNode* type, TIssue& errIssue);
 bool IsNull(const TExprNode& node);
@@ -355,6 +356,8 @@ bool IsFlowOrStream(const TExprNode& node);
 
 bool IsBoolLike(const TTypeAnnotationNode& type);
 bool IsBoolLike(const TExprNode& node);
+
+bool IsUniversalLiteral(const TExprNode::TPtr& node);
 
 TString GetTypeDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);
 TString GetTypePrettyDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);

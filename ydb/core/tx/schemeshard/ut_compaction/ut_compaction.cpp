@@ -1862,7 +1862,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
         auto info = GetPathInfo(runtime, "/MyRoot/Simple");
-        
+
         CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
@@ -1949,7 +1949,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, txId);
         auto info = GetPathInfo(runtime, "/MyRoot/Simple");
-        
+
         CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
@@ -1986,7 +1986,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         WriteData(runtime, "Simple1", 0, 100, TTestTxConfig::FakeHiveTablets);
         WriteData(runtime, "Simple1", 0, 100, TTestTxConfig::FakeHiveTablets + 1);
         auto info1 = GetPathInfo(runtime, "/MyRoot/Simple1");
-        
+
         CreateTable(runtime, env, "/MyRoot", "Simple2", 2, ++txId);
         WriteData(runtime, "Simple2", 0, 100, TTestTxConfig::FakeHiveTablets + 2);
         WriteData(runtime, "Simple2", 0, 100, TTestTxConfig::FakeHiveTablets + 3);
@@ -2023,7 +2023,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
         auto info = GetPathInfo(runtime, "/MyRoot/Simple");
-        
+
         CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
@@ -2165,7 +2165,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
                     return true;
                 }
             });
-        
+
         CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
@@ -2197,7 +2197,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
                     ev->Get()->Record.SetStatus(::NKikimrTxDataShard::TEvCompactTableResult::FAILED);
                 }
             });
-        
+
         CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
@@ -2221,7 +2221,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        
+
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", false, 3);
@@ -2346,7 +2346,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        
+
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", false, 3);
@@ -2385,7 +2385,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateIndexedTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        
+
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", true, 5);
@@ -2704,6 +2704,201 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         UNIT_ASSERT_VALUES_EQUAL(response3.GetEntries(0).GetSettings().source_path(), "/MyRoot/Simple2");
     }
 
+    void CreateTablesForLimitTest(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, ui32 count) {
+        for (ui32 i = 0; i < count; ++i) {
+            const TString name = TStringBuilder() << "Simple" << (i + 1);
+            CreateTable(runtime, env, "/MyRoot", name.c_str(), 1, ++txId);
+            WriteData(runtime, name.c_str(), 0, 100, TTestTxConfig::FakeHiveTablets + i);
+        }
+    }
+
+    Y_UNIT_TEST(StoredOperationsLimitFailsCreate) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetStoredOperationsLimit(2);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetAutoForgetOperations(false);
+        Setup(runtime, env);
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); // apply config
+
+        ui64 txId = 1000;
+        CreateTablesForLimitTest(runtime, env, txId, 3);
+
+        // fill the limit with two finished operations
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple1");
+        ui64 firstId = txId;
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple2");
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        // the third operation must be rejected: the limit is reached and auto-forget is off
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple3", false, 1, Ydb::StatusIds::PRECONDITION_FAILED);
+
+        // free a slot manually, then the create succeeds
+        TestForgetCompaction(runtime, ++txId, "/MyRoot", firstId);
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple3");
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(TestListCompactions(runtime, "/MyRoot", 10, "").EntriesSize(), 2);
+        TestGetCompaction(runtime, firstId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(AutoForgetOperationsOnCreate) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetStoredOperationsLimit(2);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetAutoForgetOperations(true);
+        Setup(runtime, env);
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); // apply config
+
+        ui64 txId = 1000;
+        CreateTablesForLimitTest(runtime, env, txId, 3);
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple1");
+        ui64 firstId = txId;
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple2");
+        ui64 secondId = txId;
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        // third create exceeds the limit, but the oldest finished op is auto-forgotten to make room
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple3");
+        ui64 thirdId = txId;
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        TestGetCompaction(runtime, firstId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, secondId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, thirdId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
+
+        auto response = TestListCompactions(runtime, "/MyRoot", 10, "");
+        UNIT_ASSERT_VALUES_EQUAL(response.EntriesSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetEntries(0).GetSettings().source_path(), "/MyRoot/Simple3");
+        UNIT_ASSERT_VALUES_EQUAL(response.GetEntries(1).GetSettings().source_path(), "/MyRoot/Simple2");
+    }
+
+    Y_UNIT_TEST(AutoForgetOperationsFailsWhenAllInProgress) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetStoredOperationsLimit(2);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetAutoForgetOperations(true);
+        Setup(runtime, env);
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); // apply config
+
+        ui64 txId = 1000;
+        CreateTablesForLimitTest(runtime, env, txId, 3);
+
+        // keep both operations in progress (block their completion)
+        TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple1");
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple2");
+        runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 2; });
+
+        // limit reached and nothing finished to forget -> create must fail even with auto-forget
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple3", false, 1, Ydb::StatusIds::PRECONDITION_FAILED);
+
+        block.Stop().Unblock();
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(TestListCompactions(runtime, "/MyRoot", 10, "").EntriesSize(), 2);
+    }
+
+    Y_UNIT_TEST(StoredOperationsLimitFailsCreateAfterReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetStoredOperationsLimit(2);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetAutoForgetOperations(false);
+        Setup(runtime, env);
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); // apply config
+
+        ui64 txId = 1000;
+        CreateTablesForLimitTest(runtime, env, txId, 3);
+
+        // fill the limit with two finished operations
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple1");
+        ui64 firstId = txId;
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple2");
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        // restart: operations are reloaded from db and the limit is re-applied from config
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        UNIT_ASSERT_VALUES_EQUAL(TestListCompactions(runtime, "/MyRoot", 10, "").EntriesSize(), 2);
+
+        // the db-loaded operations count toward the limit, so a new create is still rejected
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple3", false, 1, Ydb::StatusIds::PRECONDITION_FAILED);
+
+        // free a slot manually, then the create succeeds
+        TestForgetCompaction(runtime, ++txId, "/MyRoot", firstId);
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple3");
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(TestListCompactions(runtime, "/MyRoot", 10, "").EntriesSize(), 2);
+        TestGetCompaction(runtime, firstId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(AutoForgetOperationsOnCreateAfterReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetStoredOperationsLimit(2);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetAutoForgetOperations(true);
+        Setup(runtime, env);
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); // apply config
+
+        ui64 txId = 1000;
+        CreateTablesForLimitTest(runtime, env, txId, 3);
+
+        // fill the limit with two finished operations
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple1");
+        ui64 firstId = txId;
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple2");
+        ui64 secondId = txId;
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        // restart: operations are reloaded from db and the auto-forget flag is re-applied from config
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // create exceeds the limit; the oldest db-loaded finished op is auto-forgotten to make room
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple3");
+        ui64 thirdId = txId;
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        TestGetCompaction(runtime, firstId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, secondId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, thirdId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
+
+        {
+            auto response = TestListCompactions(runtime, "/MyRoot", 10, "");
+            UNIT_ASSERT_VALUES_EQUAL(response.EntriesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetEntries(0).GetSettings().source_path(), "/MyRoot/Simple3");
+            UNIT_ASSERT_VALUES_EQUAL(response.GetEntries(1).GetSettings().source_path(), "/MyRoot/Simple2");
+        }
+
+        // the auto-forget persisted: the forgotten op stays gone after another restart
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        TestGetCompaction(runtime, firstId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(TestListCompactions(runtime, "/MyRoot", 10, "").EntriesSize(), 2);
+    }
+
     Y_UNIT_TEST(SchemeshardShouldCompactCascade) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -2869,7 +3064,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
         {
             // second case: compaction should progress after stale or failed EvCompactTableResult
-            
+
             CreateTable(runtime, env, "/MyRoot", "Simple2", 2, ++txId);
             WriteData(runtime, "Simple2", 0, 100, TTestTxConfig::FakeHiveTablets + 2);
             WriteData(runtime, "Simple2", 0, 100, TTestTxConfig::FakeHiveTablets + 3);
@@ -3260,6 +3455,223 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
                 CheckShardNotBackgroundCompacted(runtime, newInfo.UserTable, shard, newInfo.OwnerId);
             }
         }
+    }
+
+    Y_UNIT_TEST(ShouldCompleteCascadeWhenIndexDroppedMidCompaction) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        CreateIndexedTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
+
+        // block EvCompactTable, so compaction will be stuck in progress
+        TBlockEvents<TEvDataShard::TEvCompactTable> block(runtime);
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", true, 5);
+        ui64 compactionId = txId;
+        runtime.WaitFor("EvCompactTable", [&]{ return block.size() >= 2; });
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_IN_PROGRESS
+        );
+
+        // drop the index mid-compaction
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Simple"
+            IndexName: "ValueIndex"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // release blocked EvCompactTable events; the dropped index shards no longer exist, but
+        // the compaction must still finalize
+        block.Stop().Unblock();
+        env.SimulateSleep(runtime, TDuration::Seconds(35));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
+    }
+
+    Y_UNIT_TEST(ShouldCompleteCascadeWhenIndexAddedMidCompaction) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        CreateIndexedTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
+
+        // block EvCompactTable, so compaction will be stuck in progress
+        TBlockEvents<TEvDataShard::TEvCompactTable> block(runtime);
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", true, 5);
+        ui64 compactionId = txId;
+        runtime.WaitFor("EvCompactTable", [&]{ return block.size() >= 2; });
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_IN_PROGRESS
+        );
+        const auto shardsTotalBefore =
+            TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetShardsTotal();
+
+        // add a new index mid-compaction
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Simple", "NewIndex", {"value"});
+        env.TestWaitNotification(runtime, txId);
+
+        // release blocked EvCompactTable events, so the compaction can finalize
+        block.Stop().Unblock();
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        auto response = TestGetCompaction(runtime, compactionId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_DONE);
+        // the newly added index is not part of the in-flight compaction
+        UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsTotal(), shardsTotalBefore);
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldCompactColumnTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            Schema {
+                Columns { Name: "key" Type: "Uint64" NotNull: true }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
+
+        // Forced compaction is supported for standalone (tiling++) column tables ...
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable");
+
+        // ... and an empty table already has no intersecting portions, so the columnshard succeeds.
+        runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 1; });
+        UNIT_ASSERT_VALUES_EQUAL(block[0]->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldRejectCascadeCompactionForColumnTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            Schema {
+                Columns { Name: "key" Type: "Uint64" NotNull: true }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Cascade compaction is not supported for column tables and must be rejected up front.
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable", /*cascade=*/true, /*maxShardsInFlight=*/1,
+            Ydb::StatusIds::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldFailToCompactColumnTableInStore) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "key" Type: "Uint64" NotNull: true }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: "key"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Forced compaction is not supported for tables that belong to a column store; it is rejected
+        // up front (the store's shards are shared and are not owned by a single table).
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/OlapStore/ColumnTable", /*cascade=*/false,
+            /*maxShardsInFlight=*/1, Ydb::StatusIds::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldFailToCompactColumnTableWithoutTilingOptimizer) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        // Standalone column tables use the node-wide default compaction optimizer. Forced compaction
+        // is only supported for tiling++, so a table on a different optimizer must be rejected.
+        runtime.GetAppData().ColumnShardConfig.SetDefaultCompactionPreset("lc-buckets");
+
+        ui64 txId = 1000;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            Schema {
+                Columns { Name: "key" Type: "Uint64" NotNull: true }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable");
+
+        runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 1; });
+        UNIT_ASSERT_VALUES_EQUAL(block[0]->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
+    }
+
+    Y_UNIT_TEST(CheckForgetCancelledOperationSuccess) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
+
+        TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", false, 3);
+        ui64 compactionId = txId;
+        runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 2; });
+
+        TestCancelCompaction(runtime, ++txId, "/MyRoot", compactionId);
+
+        {
+            auto response = TestGetCompaction(runtime, compactionId, "/MyRoot");
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_CANCELLED);
+        }
+
+        block.Stop().Unblock();
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        TestForgetCompaction(runtime, ++txId, "/MyRoot", compactionId);
+
+        TestGetCompaction(runtime, compactionId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
     }
 }
 

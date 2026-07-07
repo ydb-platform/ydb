@@ -4,13 +4,13 @@ namespace NYT::NScheduler {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString OperationAliasPrefix("*");
+const std::string OperationAliasPrefix("*");
 
 TOperationIdOrAlias::TOperationIdOrAlias(TOperationId id)
     : Payload(id)
 { }
 
-TOperationIdOrAlias::TOperationIdOrAlias(TString alias)
+TOperationIdOrAlias::TOperationIdOrAlias(std::string alias)
     : Payload(std::move(alias))
 { }
 
@@ -19,7 +19,7 @@ bool TOperationIdOrAlias::operator==(const TOperationIdOrAlias& other) const
     return Payload == other.Payload;
 }
 
-TOperationIdOrAlias TOperationIdOrAlias::FromString(TString operationIdOrAlias)
+TOperationIdOrAlias TOperationIdOrAlias::FromString(std::string operationIdOrAlias)
 {
     if (!operationIdOrAlias.empty() && operationIdOrAlias[0] == '*') {
         return TOperationIdOrAlias(operationIdOrAlias);
@@ -31,7 +31,7 @@ TOperationIdOrAlias TOperationIdOrAlias::FromString(TString operationIdOrAlias)
 void FormatValue(TStringBuilderBase* builder, const TOperationIdOrAlias& operationIdOrAlias, TStringBuf /*spec*/)
 {
     Visit(operationIdOrAlias.Payload,
-        [&] (const TString& alias) {
+        [&] (const std::string& alias) {
             builder->AppendFormat("%v", alias);
         },
         [&] (const TOperationId& operationId) {
@@ -43,7 +43,7 @@ TOperationIdOrAlias::operator size_t() const
 {
     size_t result = 0;
     Visit(Payload,
-        [&] (const TString& alias) {
+        [&] (const std::string& alias) {
             HashCombine(result, alias);
         },
         [&] (const TOperationId& operationId) {

@@ -7,6 +7,7 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/histogram/hdr/histogram.h>
+#include <library/cpp/histogram/hdr/histogram_iter.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
 #include <library/cpp/json/writer/json_value.h>
 
@@ -327,11 +328,64 @@ inline const TNbsDbgLikeFinishStats* GetNbsDbgLikeFinishStats(
     return std::get_if<TNbsDbgLikeFinishStats>(&*ev.WorkerStats);
 }
 
+// Non-const overload: allows std::move of the contained stats without
+// resorting to const_cast (TNbsDbgLikeFinishStats is move-only).
+inline TNbsDbgLikeFinishStats* GetNbsDbgLikeFinishStats(
+    TEvLoad::TEvLoadTestFinished& ev)
+{
+    if (!ev.WorkerStats) {
+        return nullptr;
+    }
+    return std::get_if<TNbsDbgLikeFinishStats>(&*ev.WorkerStats);
+}
+
 inline void SetNbsDbgLikeFinishStats(
     TEvLoad::TEvLoadTestFinished& ev,
     TNbsDbgLikeFinishStats stats)
 {
     ev.WorkerStats = TLoadWorkerFinishStats{std::move(stats)};
+}
+
+// Serialize an HDR histogram into the proto carrier as (value, count) pairs for
+// the recorded buckets, plus the (lowest, highest, significantDigits) needed to
+// reconstruct a compatible histogram. The reconstruction via RecordValues is
+// exact within the histogram's resolution.
+inline void SerializeNbsDbgLikeHistogram(
+    const NHdr::THistogram& src,
+    NKikimr::TEvNodeFinishResponse::TNbsDbgLikeHistogram& dst)
+{
+    dst.SetLowest(src.GetLowestDiscernibleValue());
+    dst.SetHighest(src.GetHighestTrackableValue());
+    dst.SetSignificantDigits(src.GetNumberOfSignificantValueDigits());
+    NHdr::TRecordedValuesIterator it(src);
+    while (it.Next()) {
+        const i64 count = it.GetCount();
+        if (count <= 0) {
+            continue;
+        }
+        dst.AddValues(it.GetValue());
+        dst.AddCounts(count);
+    }
+}
+
+// Reconstruct an HDR histogram from the proto carrier produced by
+// SerializeNbsDbgLikeHistogram.
+inline NHdr::THistogram DeserializeNbsDbgLikeHistogram(
+    const NKikimr::TEvNodeFinishResponse::TNbsDbgLikeHistogram& src)
+{
+    const i64 lowest = src.HasLowest() && src.GetLowest() >= 1 ? src.GetLowest() : 1;
+    const i64 highest = src.HasHighest() && src.GetHighest() > lowest
+        ? src.GetHighest()
+        : TNbsDbgLikeFinishStats::kLatencyHistMaxUs;
+    const i32 digits = src.HasSignificantDigits()
+        ? src.GetSignificantDigits()
+        : TNbsDbgLikeFinishStats::kLatencyHistPrecision;
+    NHdr::THistogram hist(lowest, highest, digits);
+    const int n = Min(src.ValuesSize(), src.CountsSize());
+    for (int i = 0; i < n; ++i) {
+        hist.RecordValues(src.GetValues(i), src.GetCounts(i));
+    }
+    return hist;
 }
 
 }

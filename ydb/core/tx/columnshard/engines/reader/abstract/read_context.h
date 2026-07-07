@@ -62,7 +62,6 @@ private:
     const ui64 ScanId;
     const TActorId ScanActorId;
     const TActorId ResourceSubscribeActorId;
-    const TActorId ReadCoordinatorActorId;
     const TComputeShardingPolicy ComputeShardingPolicy;
     std::shared_ptr<TAtomicCounter> AbortionFlag = std::make_shared<TAtomicCounter>(0);
     std::shared_ptr<const TAtomicCounter> ConstAbortionFlag = AbortionFlag;
@@ -126,10 +125,6 @@ public:
         return ResourceSubscribeActorId;
     }
 
-    const TActorId& GetReadCoordinatorActorId() const {
-        return ReadCoordinatorActorId;
-    }
-
     const TActorId& GetScanActorId() const {
         return ScanActorId;
     }
@@ -162,8 +157,8 @@ public:
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const NColumnShard::TConcreteScanCounters& counters,
         const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& resourceSubscribeActorId,
-        const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId,
-        const NConveyorComposite::TCPULimitsConfig& cpuLimits, const std::shared_ptr<NLWTrace::TOrbit>& scanOrbit);
+        const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
+        const std::shared_ptr<NLWTrace::TOrbit>& scanOrbit);
 };
 
 class IDataReader {

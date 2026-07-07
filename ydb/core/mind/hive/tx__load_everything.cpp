@@ -500,7 +500,9 @@ public:
                 }
 
                 if (tablet.NodeId == 0) {
-                    tablet.BecomeStopped();
+                    if (!tablet.LockedToActor || !Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
+                        tablet.BecomeStopped();
+                    }
                 } else {
                     auto it = Self->Nodes.find(tablet.NodeId);
                     if (it != Self->Nodes.end() && it->second.IsUnknown()) {
@@ -907,6 +909,10 @@ public:
         ui64 tabletsTotal = 0;
         for (auto it = Self->Tablets.begin(); it != Self->Tablets.end(); ++it) {
             ++tabletsTotal;
+            if (it->second.ChannelProfileNewGroup.any()) {
+                it->second.IsMarkedForReassign = true;
+                Self->UpdateCounterTabletsReassigning(+1);
+            }
             for (const TTabletInfo& follower : it->second.Followers) {
                 ++tabletsTotal;
                 if (follower.IsLeader()) {
@@ -952,7 +958,7 @@ public:
         for (const auto& [_, domainInfo] : Self->Domains) {
             for (const auto& pool : domainInfo.ShrinkingStoragePools) {
                 auto& poolInfo = Self->GetStoragePool(pool);
-                if (domainInfo.HiveId) {
+                if (domainInfo.HiveId && Self->AreWeRootHive()) {
                     poolInfo.NeedShrinkFromTenant = true;
                 }
                 Self->StartShrinkPool(poolInfo);

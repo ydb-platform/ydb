@@ -186,7 +186,8 @@ void FormatValue(
     TStringBuf /*spec*/,
     std::optional<TReplicationProgressProjection> replicationProgressProjection)
 {
-    builder->AppendFormat("{Era: %v, Replicas: %v, CoordinatorCellIds: %v, TableId: %v, TablePath: %v, TableClusterName: %v, CurrentTimestamp: %v, CollocationId: %v}",
+    builder->AppendFormat("{Era: %v, Replicas: %v, CoordinatorCellIds: %v, TableId: %v, TablePath: %v, "
+        "TableClusterName: %v, CurrentTimestamp: %v, CollocationId: %v, SecondaryIndices: %v}",
         replicationCard.Era,
         MakeFormattableView(
             replicationCard.Replicas,
@@ -203,10 +204,11 @@ void FormatValue(
         replicationCard.TablePath,
         replicationCard.TableClusterName,
         replicationCard.CurrentTimestamp,
-        replicationCard.ReplicationCardCollocationId);
+        replicationCard.ReplicationCardCollocationId,
+        ConvertToYsonString(replicationCard.SecondaryIndices, NYson::EYsonFormat::Text));
 }
 
-TString ToString(
+std::string ToString(
     const TReplicationCard& replicationCard,
     std::optional<TReplicationProgressProjection> replicationProgressProjection)
 {

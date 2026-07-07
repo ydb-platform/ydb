@@ -72,6 +72,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     //partitions will send some times it's counters
     void Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorContext&);
+    void Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const TActorContext&);
 
     void Handle(TEvPQ::TEvMetering::TPtr& ev, const TActorContext&);
 
@@ -249,6 +250,7 @@ private:
     ui32 NextSupportivePartitionId = 100'000;
 
     TActorId CacheActor;
+    TActorId BatchProcessorActor;
     TActorId ReadBalancerActorId;
 
     TSet<TChangeNotification> ChangeConfigNotification;

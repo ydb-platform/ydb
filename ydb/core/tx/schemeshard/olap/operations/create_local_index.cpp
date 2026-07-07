@@ -265,11 +265,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateNewLocalIndex(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateNewColumnTableLocalIndex(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateLocalIndex>(id, tx);
 }
 
-ISubOperation::TPtr CreateNewLocalIndex(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateNewColumnTableLocalIndex(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TCreateLocalIndex>(id, state);
 }
 

@@ -1,4 +1,3 @@
-/* syntax version 1 */
 $subst = ($names, $indices) -> {
     RETURN ListFlatMap(
         $indices,

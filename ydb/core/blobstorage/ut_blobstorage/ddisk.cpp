@@ -27,14 +27,18 @@ Y_UNIT_TEST_SUITE(DDisk) {
         int LetterIndex = 0;
         const TString Letters = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-        TDDiskTestContext(ui32 surfaceSize = 64_KB, ui64 inMemCache = 128_MB)
+        TDDiskTestContext(ui32 surfaceSize = 64_KB, ui64 inMemCache = 128_MB,
+                std::optional<ui32> minFreeSectorsReserve = std::nullopt)
             : Env({
                 .NodeCount = 8,
                 .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-                .ConfigPreprocessor = [inMemCache](ui32, TNodeWardenConfig& cfg){
+                .ConfigPreprocessor = [inMemCache, minFreeSectorsReserve](ui32, TNodeWardenConfig& cfg){
                     NYdb::NBS::NProto::TPBufferConfig pbCfg;
                     pbCfg.SetMaxChunks(10);
                     pbCfg.SetMaxInMemoryCache(inMemCache);
+                    if (minFreeSectorsReserve.has_value()) {
+                        pbCfg.SetMinFreeSectorsReserve(*minFreeSectorsReserve);
+                    }
                     cfg.PBufferConfig = pbCfg;
                 }
             }) {
@@ -459,7 +463,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
             std::tuple<ui32, ui32, ui32> sourceDDiskId(PersId.GetNodeId(), PersId.GetPDiskId(), PersId.GetDDiskSlotId());
             ui64 sourceDDiskInstanceGuid = *PBCreds[0].DDiskInstanceGuid;
-            auto sync = std::make_unique<NDDisk::TEvSyncWithPersistentBuffer>(Creds, sourceDDiskId, sourceDDiskInstanceGuid);
+            auto sync = std::make_unique<NDDisk::TEvSync>(Creds);
 
             for (ui64 lsn : selectedLsns) {
                 const auto& record = PersistentBuffers.at(lsn);
@@ -467,11 +471,16 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 const ui32 size = std::get<1>(record);
                 Cerr << "sync persistent buffer offset# " << offsetInBytes << " size# " << size
                     << " lsn# " << lsn << "\n";
-                sync->AddSegment({VChunkIndex, offsetInBytes, size}, lsn, PBCreds[0].Generation);
+                sync->AddSegmentFromPB(
+                    sourceDDiskId,
+                    sourceDDiskInstanceGuid,
+                    {VChunkIndex, offsetInBytes, size},
+                    lsn,
+                    PBCreds[0].Generation);
             }
 
             Env.Runtime->Send(new IEventHandle(ServiceId, Edge, sync.release()), Edge.NodeId());
-            auto syncRes = Env.WaitForEdgeActorEvent<NDDisk::TEvSyncWithPersistentBufferResult>(Edge, false);
+            auto syncRes = Env.WaitForEdgeActorEvent<NDDisk::TEvSyncResult>(Edge, false);
             const auto& syncRecord = syncRes->Get()->Record;
             UNIT_ASSERT(syncRecord.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
             UNIT_ASSERT_VALUES_EQUAL(syncRecord.SegmentResultsSize(), selectedLsns.size());
@@ -889,7 +898,9 @@ Y_UNIT_TEST_SUITE(DDisk) {
     }
 
     Y_UNIT_TEST(PersistentBufferEraseBarrierManyTablets) {
-        TDDiskTestContext f(1_MB);
+        // Use MinFreeSectorsReserve=0 so that the guard never fires when the
+        // disk fills up during the large write loop in this test.
+        TDDiskTestContext f(1_MB, 128_MB, 0);
         auto groups = f.AllocateDDiskBlockGroup();
         auto& node = groups.begin()->GetNodes(0);
         f.ChangeTestingNode(node);

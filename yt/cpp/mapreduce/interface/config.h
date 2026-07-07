@@ -186,6 +186,9 @@ struct TConfig
     int ReadRetryCount;
     int StartOperationRetryCount;
 
+    // The CheckClusterLiveness operation should be retried, but fewer times than other operations.
+    int CheckLivenessRetryCount;
+
     /// @brief Period for checking status of running operation.
     TDuration OperationTrackerPollPeriod = TDuration::Seconds(5);
 

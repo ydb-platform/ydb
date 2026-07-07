@@ -1,5 +1,4 @@
-// Copyright (c) 2006, Google Inc.
-// All rights reserved.
+// Copyright 2006 Google LLC
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -11,7 +10,7 @@
 // copyright notice, this list of conditions and the following disclaimer
 // in the documentation and/or other materials provided with the
 // distribution.
-//     * Neither the name of Google Inc. nor the names of its
+//     * Neither the name of Google LLC nor the names of its
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
@@ -107,8 +106,10 @@ class MinidumpProcessor {
   // exception, if this information is available.  This will be a code
   // address when the crash was caused by problems such as illegal
   // instructions or divisions by zero, or a data address when the crash
-  // was caused by a memory access violation.
-  static string GetCrashReason(Minidump* dump, uint64_t* address);
+  // was caused by a memory access violation. If enable_objdump is set, this
+  // may use disassembly to compute the faulting address.
+  static string GetCrashReason(Minidump* dump, uint64_t* address,
+                               bool enable_objdump);
 
   // This function returns true if the passed-in error code is
   // something unrecoverable(i.e. retry should not happen).  For

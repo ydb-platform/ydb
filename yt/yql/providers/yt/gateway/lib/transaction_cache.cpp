@@ -459,6 +459,7 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
             createClientOptions = createClientOptions.ImpersonationUser(*impersonationUser);
         }
         createdEntry->Client = CreateClient(server, createClientOptions);
+        createdEntry->EffectiveUser = createdEntry->Client->WhoAmI().Login;
         createdEntry->TransactionSpec = specProvider();
         if (externalTx) {
             try {

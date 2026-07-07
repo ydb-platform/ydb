@@ -1872,6 +1872,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 b Uint32 NOT NULL,
                 c Timestamp NOT NULL,
                 d Utf8,
+                e Utf8,
                 primary key(a)
             )
             PARTITION BY HASH(a)
@@ -1918,6 +1919,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     `/Root/t1` as t1
                 WHERE
                     t1.d is not distinct from "some_str";
+            )",
+            R"(
+                SELECT
+                    d, b, e
+                FROM
+                    `/Root/t1` as t1
+                WHERE
+                    t1.e in ["some_str_0", "some_str_1", "some_str_2"] and t1.d is not distinct from "some_str";
             )",
         };
 
@@ -3813,7 +3822,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema);
         testHelper.CreateTable(testTable);
         {
-            auto result = testHelper.GetSession().ExecuteSchemeQuery("ALTER OBJECT `/Root/ColumnTableTest` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`)").GetValueSync();
+            auto result = testHelper.GetSession().ExecuteSchemeQuery("ALTER OBJECT `/Root/ColumnTableTest` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
         {
@@ -4093,7 +4102,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto alterQuery = TStringBuilder() <<
-                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`);
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();

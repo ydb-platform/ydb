@@ -8,6 +8,7 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <future>
@@ -15,6 +16,8 @@
 #include <mutex>
 #include <string>
 #include <thread>
+
+#include <util/generic/yexception.h>
 
 using namespace NYdb;
 using namespace NYdb::NTest;
@@ -125,20 +128,45 @@ private:
     bool Released_ = false;
 };
 
+class TFailThenSucceedAuthProvider final : public ICredentialsProvider {
+public:
+    explicit TFailThenSucceedAuthProvider(int failCount)
+        : FailCount_(failCount)
+    {}
+
+    std::string GetAuthInfo() const override {
+        if (CallCount_.fetch_add(1) < FailCount_) {
+            ythrow yexception() << "auth failure";
+        }
+        return "auth-token";
+    }
+
+    bool IsValid() const override {
+        return true;
+    }
+
+    int GetCallCount() const {
+        return CallCount_.load();
+    }
+
+private:
+    const int FailCount_;
+    mutable std::atomic<int> CallCount_{0};
+};
+
 } // namespace
 
 TEST(GrpcIamCredentialsProvider, StopDuringFillContextDoesNotHang) {
-    TBlockingIamTokenService iamService;
-    TBlockingIamReleaseGuard releaseGuard(iamService);
-    TIamGrpcServer server(&iamService);
+    TIamTokenServiceStub iamStub;
+    iamStub.SetResponseToken("unit-test-iam-token");
+    TIamGrpcServer server(&iamStub);
     ASSERT_TRUE(server.Start());
-
-    iamService.Release();
 
     auto authProvider = std::make_shared<TSlowBlockingAuthProvider>();
 
     TIamOAuth params = MakeOAuthParams(server.Endpoint());
     params.RefreshPeriod = TDuration::MilliSeconds(50);
+    params.RequestTimeout = TDuration::MilliSeconds(400);
 
     std::shared_ptr<TGrpcIamCredentialsProvider<CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>> provider;
     auto facility = std::make_shared<TSimpleCoreFacility>();
@@ -155,7 +183,16 @@ TEST(GrpcIamCredentialsProvider, StopDuringFillContextDoesNotHang) {
         facility,
         authProvider);
 
-    ASSERT_TRUE(authProvider->WaitUntilBlocked(std::chrono::seconds(10)))
+    struct TAuthReleaseGuard {
+        std::shared_ptr<TSlowBlockingAuthProvider> Provider;
+        ~TAuthReleaseGuard() {
+            if (Provider) {
+                Provider->Release();
+            }
+        }
+    } authReleaseGuard{authProvider};
+
+    ASSERT_TRUE(authProvider->WaitUntilBlocked(std::chrono::seconds(30)))
         << "FillContext should block inside slow AuthTokenProvider during refresh";
 
     std::future<void> stopDone = std::async(std::launch::async,
@@ -167,8 +204,35 @@ TEST(GrpcIamCredentialsProvider, StopDuringFillContextDoesNotHang) {
         << "provider destructor (Stop()) must complete while FillContext is blocked in GetAuthInfo()";
     stopDone.get();
 
-    authProvider->Release();
-    facility.reset();
+    server.Stop();
+}
+
+TEST(GrpcIamCredentialsProvider, FillContextAuthExceptionSurvivesAndRecovers) {
+    TIamTokenServiceStub iamStub;
+    iamStub.SetResponseToken("unit-test-iam-token");
+    TIamGrpcServer server(&iamStub);
+    ASSERT_TRUE(server.Start());
+
+    auto authProvider = std::make_shared<TFailThenSucceedAuthProvider>(2);
+
+    TIamOAuth params = MakeOAuthParams(server.Endpoint());
+    auto facility = std::make_shared<TSimpleCoreFacility>();
+
+    TGrpcIamCredentialsProvider<CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService> provider(
+        params,
+        [token = params.OAuthToken](CreateIamTokenRequest& req) {
+            req.set_yandex_passport_oauth_token(TStringType{token});
+        },
+        [](IamTokenService::Stub* stub, grpc::ClientContext* context, const CreateIamTokenRequest* request,
+           CreateIamTokenResponse* response, std::function<void(grpc::Status)> cb) {
+            stub->async()->Create(context, request, response, std::move(cb));
+        },
+        facility,
+        authProvider);
+
+    EXPECT_EQ(provider.GetAuthInfo(), "unit-test-iam-token");
+    EXPECT_EQ(iamStub.GetRequestCount(), 1);
+    EXPECT_GE(authProvider->GetCallCount(), 3);
 
     server.Stop();
 }

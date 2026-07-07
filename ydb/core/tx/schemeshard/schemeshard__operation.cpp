@@ -15,6 +15,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/schemeshard/generated/dispatch_op.h>
 #include <ydb/core/tx/schemeshard/schemeshard_pq_helpers.h>
+#include <ydb/core/test_tablet/events.h>
 
 #include <ydb/library/protobuf_printer/security_printer.h>
 
@@ -1088,13 +1089,13 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxDropColumnTable:
         return CreateDropColumnTable(NextPartId(), txState);
     case TTxState::ETxType::TxCreateLocalIndex:
-        return CreateNewLocalIndex(NextPartId(), txState);
+        return CreateNewColumnTableLocalIndex(NextPartId(), txState);
     case TTxState::ETxType::TxDropLocalIndex:
-        return CreateDropLocalIndex(NextPartId(), txState);
+        return CreateDropColumnTableLocalIndex(NextPartId(), txState);
     case TTxState::ETxType::TxAlterLocalIndex:
-        return CreateAlterLocalIndex(NextPartId(), txState);
+        return CreateAlterColumnTableLocalIndex(NextPartId(), txState);
     case TTxState::ETxType::TxMoveLocalIndex:
-        return CreateMoveLocalIndex(NextPartId(), txState);
+        return CreateMoveColumnTableLocalIndex(NextPartId(), txState);
 
     case TTxState::ETxType::TxCreatePQGroup:
         return CreateNewPQ(NextPartId(), txState);
@@ -1334,6 +1335,12 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
 
     case TTxState::ETxType::TxTruncateTable:
         return CreateTruncateTable(NextPartId(), txState);
+
+    // TestShardSet
+    case TTxState::ETxType::TxCreateTestShardSet:
+        return CreateNewTestShardSet(NextPartId(), txState);
+    case TTxState::ETxType::TxDropTestShardSet:
+        return CreateDropTestShardSet(NextPartId(), txState);
 
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
@@ -1697,6 +1704,12 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
         return CreateConsistentTruncateTable(op.NextPartId(), tx, context);
+
+    // TestShardSet
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet:
+        return {CreateNewTestShardSet(op.NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet:
+        return {CreateDropTestShardSet(op.NextPartId(), tx)};
     }
 
     Y_UNREACHABLE();

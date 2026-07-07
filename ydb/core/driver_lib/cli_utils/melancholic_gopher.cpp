@@ -7,6 +7,8 @@
 #include <util/system/hp_timer.h>
 #include <util/system/spinlock.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::EServiceCommon::TEST
+
 namespace NActors {
 
 class TMelancholicGopher : public TActor<TMelancholicGopher> {
@@ -62,7 +64,8 @@ class TGopherMother : public TActorBootstrapped<TGopherMother> {
     void Response(const TActorContext &ctx) {
         if (--WaitFor == 0) {
             const TDuration roundTime = ctx.Now() - RoundStart;
-            LOG_INFO_S(ctx, NActorsServices::EServiceCommon::TEST, "Gopher Mother round for " << roundTime.ToString());
+            YDB_LOG_INFO_CTX(ctx, "Gopher Mother round",
+                {"roundTime", roundTime});
             Round(ctx);
         }
     }

@@ -35,6 +35,7 @@ SRCS(
     console__configure.cpp
     console__create_tenant.cpp
     console__drop_yaml_config.cpp
+    console__decommit_groups.cpp
     console__init_scheme.cpp
     console__load_state.cpp
     console__get_log_tail.cpp

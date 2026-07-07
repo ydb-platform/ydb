@@ -301,6 +301,9 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
     for (auto partitionId : settings.Partitions) {
         readSettings.Topics_[0].AppendPartitionIds(partitionId);
     }
+    if (settings.WithoutConsumer) {
+        readSettings.WithoutConsumer();
+    }
 
     struct MsgWrapper : public IMessage {
 
@@ -419,6 +422,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::PQv1>::TSdkReadSession> TTestReadSe
     for (auto partitionId : settings.Partitions) {
         readSettings.Topics_[0].PartitionGroupIds_.push_back(partitionId + 1);
     }
+    UNIT_ASSERT_VALUES_EQUAL_C(settings.WithoutConsumer, false, "Reading WithoutConsumer is not supported in PQv1");
 
     struct MsgWrapper : public IMessage {
 

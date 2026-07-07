@@ -62,6 +62,7 @@ namespace NActors {
         bool UseKernelLiveness = {};
         bool UseRdma = {};
         bool ChecksumRdmaEvent = {};
+        bool AllowDisablingPayloadChecksums = {};
         TString AuthCN;
         NActors::TScopeId PeerScopeId;
     };

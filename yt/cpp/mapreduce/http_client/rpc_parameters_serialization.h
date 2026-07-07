@@ -225,6 +225,9 @@ TNode SerializeParamsForGetTablePartitions(
     const TVector<TRichYPath>& paths,
     const TGetTablePartitionsOptions& options);
 
+TNode SerializeParamsForCheckClusterLiveness(
+    const TCheckClusterLivenessOptions& options);
+
 TNode SerializeParamsForReadFile(
     const TTransactionId& transactionId,
     const TFileReaderOptions& options);

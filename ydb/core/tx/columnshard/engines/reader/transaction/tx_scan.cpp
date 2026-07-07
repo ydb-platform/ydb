@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
@@ -40,6 +41,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
     if (snapshot.IsZero()) {
         snapshot = Self->GetLastTxSnapshot();
     }
+    const NColumnShard::TSchemeShardLocalPathId ssPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(request);
+    snapshot = Self->TablesManager.ResolveReadSnapshot(ssPathId, snapshot);
     const bool deduplicationEnabled = AppDataVerified().ColumnShardConfig.GetDeduplicationEnabled();
     const TReadMetadataBase::ESorting sorting = [&]() {
         if (request.HasReverse()) {
@@ -57,7 +60,6 @@ void TTxScan::Complete(const TActorContext& ctx) {
     const TString table = request.GetTablePath();
     const auto dataFormat = request.GetDataFormat();
     const TDuration timeout = TDuration::MilliSeconds(request.GetTimeoutMs());
-    const NColumnShard::TSchemeShardLocalPathId ssPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(request);
     NConveyorComposite::TCPULimitsConfig cpuLimits;
     cpuLimits.DeserializeFromProto(request).Validate();
     if (scanGen > 1) {
@@ -74,6 +76,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
         TReadDescription read(Self->TabletID(), snapshot, sorting);
         read.SetFakeSort(!request.HasReverse() && deduplicationEnabled);
         read.DeduplicationPolicy = deduplicationEnabled ? EDeduplicationPolicy::PREVENT_DUPLICATES : EDeduplicationPolicy::ALLOW_DUPLICATES;
+        read.GroupedMemoryLimiterOperator =
+            request.GetCSScanPolicy() == "EXPORT" ? EScanGroupedMemoryLimiterOperator::Deduplication : EScanGroupedMemoryLimiterOperator::Scan;
         read.Orbit = orbit;
         read.TxId = txId;
         read.ScanId = scanId;
@@ -115,7 +119,11 @@ void TTxScan::Complete(const TActorContext& ctx) {
         }();
         std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
             const TString scanType = [&]() {
-                return request.GetCSScanPolicy() ? request.GetCSScanPolicy() : defaultReader;
+                const TString policy = request.GetCSScanPolicy() ? request.GetCSScanPolicy() : defaultReader;
+                if (policy == "EXPORT") {
+                    return TString("PLAIN");
+                }
+                return policy;
             }();
             auto constructor =
                 NReader::IScannerConstructor::TFactory::MakeHolder(read.TableMetadataAccessor->GetOverridenScanType(scanType), context);

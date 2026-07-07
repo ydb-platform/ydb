@@ -104,7 +104,8 @@ public:
         }
 
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "actual tx operator");
-        if (internalOp->IsAsync()) {
+        const bool waitForAsyncCompletion = internalOp->IsAsync() && (!internalOp->NeedResendReply() || !internalOp->IsProposeReplyReady(*Self));
+        if (waitForAsyncCompletion) {
             Self->GetProgressTxController().StartProposeOnComplete(*internalOp, ctx);
         } else {
             Self->GetProgressTxController().FinishProposeOnComplete(*internalOp, ctx);

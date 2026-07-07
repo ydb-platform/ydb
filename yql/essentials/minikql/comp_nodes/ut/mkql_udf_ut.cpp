@@ -3,10 +3,13 @@
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/datetime/datetime64.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
 
+using NTest::TSingularVoid;
 // XXX: Emulate type transformations similar to the one made by
 // type annotation and compilation phases. As a result, the name
 // (i.e. "UDF") of callable type is lost. Hence, the type resolved
@@ -258,10 +261,10 @@ Y_UNIT_TEST_LLVM(RunconfigToCurrying) {
     TProgramBuilder& pb = *compileSetup.PgmBuilder;
 
     // Build the graph on the setup with TRunConfig implementation.
-    const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-    const auto upvalue = pb.NewDataLiteral<NUdf::EDataSlot::String>("Canary");
-    const auto value = pb.NewDataLiteral<NUdf::EDataSlot::String>("is alive");
-    const auto userType = pb.NewTupleType({pb.NewTupleType({strType}),
+    const auto strType = NTest::ConvertToMinikqlType<TStringBuf>(pb);
+    const auto upvalue = NTest::ConvertValueToLiteralNode(pb, TStringBuf("Canary"));
+    const auto value = NTest::ConvertValueToLiteralNode(pb, TStringBuf("is alive"));
+    const auto userType = pb.NewTupleType({NTest::ConvertToMinikqlType<std::tuple<TStringBuf>>(pb),
                                            pb.NewEmptyStructType(),
                                            pb.NewEmptyTupleType()});
 
@@ -287,12 +290,7 @@ Y_UNIT_TEST_LLVM(RunconfigToCurrying) {
 
     // Run the graph on the setup with TCurrying implementation.
     const auto graph = runSetup.BuildGraph(root);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue result;
-    UNIT_ASSERT(iterator.Next(result));
-    UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(result.AsStringRef()), "Canary is alive");
-    UNIT_ASSERT(!iterator.Next(result));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{"Canary is alive"});
 }
 
 Y_UNIT_TEST_LLVM(CurryingToRunconfig) {
@@ -305,16 +303,16 @@ Y_UNIT_TEST_LLVM(CurryingToRunconfig) {
     TProgramBuilder& pb = *compileSetup.PgmBuilder;
 
     // Build the graph on the setup with TRunConfig implementation.
-    const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-    const auto upvalue = pb.NewDataLiteral<NUdf::EDataSlot::String>("Canary");
-    const auto optional = pb.NewOptional(pb.NewDataLiteral(true));
-    const auto value = pb.NewDataLiteral<NUdf::EDataSlot::String>("is alive");
-    const auto userType = pb.NewTupleType({pb.NewTupleType({strType}),
+    const auto strType = NTest::ConvertToMinikqlType<TStringBuf>(pb);
+    const auto upvalue = NTest::ConvertValueToLiteralNode(pb, TStringBuf("Canary"));
+    const auto optional = NTest::ConvertValueToLiteralNode(pb, TMaybe<bool>{true});
+    const auto value = NTest::ConvertValueToLiteralNode(pb, TStringBuf("is alive"));
+    const auto userType = pb.NewTupleType({NTest::ConvertToMinikqlType<std::tuple<TStringBuf>>(pb),
                                            pb.NewEmptyStructType(),
                                            pb.NewEmptyTupleType()});
 
     const auto udfType = TweakUdfType<TCurrying>("Test", userType, *compileSetup.Env);
-    const auto udf = pb.TypedUdf("TestModule.Test", udfType, pb.NewVoid(), userType);
+    const auto udf = pb.TypedUdf("TestModule.Test", udfType, NTest::ConvertValueToLiteralNode(pb, TSingularVoid{}), userType);
     const auto closure = pb.Apply(udf, {upvalue, optional});
 
     const auto list = pb.NewList(strType, {value});
@@ -335,12 +333,7 @@ Y_UNIT_TEST_LLVM(CurryingToRunconfig) {
 
     // Run the graph on the setup with TCurrying implementation.
     const auto graph = runSetup.BuildGraph(root);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue result;
-    UNIT_ASSERT(iterator.Next(result));
-    UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(result.AsStringRef()), "Canary is alive");
-    UNIT_ASSERT(!iterator.Next(result));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{"Canary is alive"});
 }
 
 Y_UNIT_TEST_LLVM(OldToIncremental) {
@@ -353,14 +346,11 @@ Y_UNIT_TEST_LLVM(OldToIncremental) {
     TProgramBuilder& pb = *compileSetup.PgmBuilder;
 
     // Build the graph, using the old setup.
-    const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-    const auto arg1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Canary");
-    const auto arg2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("is");
-    const auto arg3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("alive");
+    const auto argTuple = NTest::ConvertValueToLiteralNode(pb, std::tuple<TStringBuf, TStringBuf, TStringBuf>{"Canary", "is", "alive"});
 
     const auto udf = pb.Udf("TestModule.Test");
-    const auto argsType = pb.NewTupleType({strType, strType, strType});
-    const auto argList = pb.NewList(argsType, {pb.NewTuple({arg1, arg2, arg3})});
+    const auto argsType = NTest::ConvertToMinikqlType<std::tuple<TStringBuf, TStringBuf, TStringBuf>>(pb);
+    const auto argList = pb.NewList(argsType, {argTuple});
     const auto pgmReturn = pb.Map(argList, [&pb, udf](const TRuntimeNode args) {
         return pb.Apply(udf, {pb.Nth(args, 0), pb.Nth(args, 1), pb.Nth(args, 2)});
     });
@@ -378,12 +368,7 @@ Y_UNIT_TEST_LLVM(OldToIncremental) {
 
     // Run the graph, using the incremental setup.
     const auto graph = runSetup.BuildGraph(root);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue result;
-    UNIT_ASSERT(iterator.Next(result));
-    UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(result.AsStringRef()), "Canary is alive");
-    UNIT_ASSERT(!iterator.Next(result));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{"Canary is alive"});
 }
 
 Y_UNIT_TEST_LLVM(IncrementalToOld) {
@@ -396,14 +381,11 @@ Y_UNIT_TEST_LLVM(IncrementalToOld) {
     TProgramBuilder& pb = *compileSetup.PgmBuilder;
 
     // Build the graph, using the incremental setup.
-    const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-    const auto arg1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Canary");
-    const auto arg2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("is");
-    const auto arg3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("alive");
+    const auto argTuple = NTest::ConvertValueToLiteralNode(pb, std::tuple<TStringBuf, TStringBuf, TStringBuf>{"Canary", "is", "alive"});
 
     const auto udf = pb.Udf("TestModule.Test");
-    const auto argsType = pb.NewTupleType({strType, strType, strType});
-    const auto argList = pb.NewList(argsType, {pb.NewTuple({arg1, arg2, arg3})});
+    const auto argsType = NTest::ConvertToMinikqlType<std::tuple<TStringBuf, TStringBuf, TStringBuf>>(pb);
+    const auto argList = pb.NewList(argsType, {argTuple});
     const auto pgmReturn = pb.Map(argList, [&pb, udf](const TRuntimeNode args) {
         return pb.Apply(udf, {pb.Nth(args, 0), pb.Nth(args, 1), pb.Nth(args, 2)});
     });
@@ -421,12 +403,7 @@ Y_UNIT_TEST_LLVM(IncrementalToOld) {
 
     // Run the graph, using the old setup.
     const auto graph = runSetup.BuildGraph(root);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue result;
-    UNIT_ASSERT(iterator.Next(result));
-    UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(result.AsStringRef()), "Canary is alive");
-    UNIT_ASSERT(!iterator.Next(result));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{"Canary is alive"});
 }
 
 Y_UNIT_TEST_LLVM(IncrementalToNew) {
@@ -439,14 +416,11 @@ Y_UNIT_TEST_LLVM(IncrementalToNew) {
     TProgramBuilder& pb = *compileSetup.PgmBuilder;
 
     // Build the graph, using the incremental setup.
-    const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-    const auto arg1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Canary");
-    const auto arg2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("is");
-    const auto arg3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("alive");
+    const auto argTuple = NTest::ConvertValueToLiteralNode(pb, std::tuple<TStringBuf, TStringBuf, TStringBuf>{"Canary", "is", "alive"});
 
     const auto udf = pb.Udf("TestModule.Test");
-    const auto argsType = pb.NewTupleType({strType, strType, strType});
-    const auto argList = pb.NewList(argsType, {pb.NewTuple({arg1, arg2, arg3})});
+    const auto argsType = NTest::ConvertToMinikqlType<std::tuple<TStringBuf, TStringBuf, TStringBuf>>(pb);
+    const auto argList = pb.NewList(argsType, {argTuple});
     const auto pgmReturn = pb.Map(argList, [&pb, udf](const TRuntimeNode args) {
         return pb.Apply(udf, {pb.Nth(args, 0), pb.Nth(args, 1), pb.Nth(args, 2)});
     });
@@ -464,12 +438,7 @@ Y_UNIT_TEST_LLVM(IncrementalToNew) {
 
     // Run the graph, using the new setup.
     const auto graph = runSetup.BuildGraph(root);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue result;
-    UNIT_ASSERT(iterator.Next(result));
-    UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(result.AsStringRef()), "Canary is alive");
-    UNIT_ASSERT(!iterator.Next(result));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{"Canary is alive"});
 }
 
 Y_UNIT_TEST_LLVM(NewToIncremental) {
@@ -482,17 +451,11 @@ Y_UNIT_TEST_LLVM(NewToIncremental) {
     TProgramBuilder& pb = *compileSetup.PgmBuilder;
 
     // Build the graph, using the new setup.
-    const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-    const auto optType = pb.NewOptionalType(strType);
-    const auto arg1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Canary");
-    const auto arg2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("is");
-    const auto arg3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("alive");
-    const auto arg4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("still");
-    const auto opt4 = pb.NewOptional(arg4);
+    const auto argTuple = NTest::ConvertValueToLiteralNode(pb, std::tuple<TStringBuf, TStringBuf, TStringBuf, TMaybe<TStringBuf>>{"Canary", "is", "alive", TMaybe<TStringBuf>{"still"}});
 
     const auto udf = pb.Udf("TestModule.Test");
-    const auto argsType = pb.NewTupleType({strType, strType, strType, optType});
-    const auto argList = pb.NewList(argsType, {pb.NewTuple({arg1, arg2, arg3, opt4})});
+    const auto argsType = NTest::ConvertToMinikqlType<std::tuple<TStringBuf, TStringBuf, TStringBuf, TMaybe<TStringBuf>>>(pb);
+    const auto argList = pb.NewList(argsType, {argTuple});
     const auto pgmReturn = pb.Map(argList, [&pb, udf](const TRuntimeNode args) {
         return pb.Apply(udf, {pb.Nth(args, 0), pb.Nth(args, 1), pb.Nth(args, 2), pb.Nth(args, 3)});
     });
@@ -510,12 +473,7 @@ Y_UNIT_TEST_LLVM(NewToIncremental) {
 
     // Run the graph, using the incremental setup.
     const auto graph = runSetup.BuildGraph(root);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue result;
-    UNIT_ASSERT(iterator.Next(result));
-    UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(result.AsStringRef()), "Canary is still alive");
-    UNIT_ASSERT(!iterator.Next(result));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{"Canary is still alive"});
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLUdfTest)
 
@@ -793,7 +751,7 @@ static void TestDateTimeFormat() {
     // Build the graph, using the compileModule setup.
     const auto dttype = pb.NewDataType(NUdf::EDataSlot::Datetime);
     const auto dtnode = NewDateTimeNode("2009-09-01T15:37:19Z", *compileSetup.Env);
-    const auto format = pb.NewDataLiteral<NUdf::EDataSlot::String>("Canary is alive");
+    const auto format = NTest::ConvertValueToLiteralNode(pb, TStringBuf("Canary is alive"));
 
     // Build the runtime node for formatter (i.e. DateTime2.Format
     // resulting closure), considering its declared signature.
@@ -829,12 +787,7 @@ static void TestDateTimeFormat() {
 
     // Run the graph, using the runModule setup.
     const auto graph = runSetup.BuildGraph(root);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue result;
-    UNIT_ASSERT(iterator.Next(result));
-    UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(result.AsStringRef()), "Canary is alive: 1/9/2009 15:37:19.");
-    UNIT_ASSERT(!iterator.Next(result));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{"Canary is alive: 1/9/2009 15:37:19."});
 }
 
 } // namespace

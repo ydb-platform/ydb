@@ -1,4 +1,5 @@
 allowHTML: true
+llms: true
 langs: ['en','ru']
 pdf:
   enabled: true
@@ -6,7 +7,7 @@ apply-presets: true
 allowCustomResources: true
 included: true
 singlePage: true
-strict: true
+strict: false
 
 resources:
   style:

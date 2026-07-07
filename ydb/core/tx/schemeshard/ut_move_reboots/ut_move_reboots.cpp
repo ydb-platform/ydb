@@ -648,8 +648,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                         Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                         Columns { Name: "data" Type: "Utf8" }
                         KeyColumnNames: "timestamp"
-                        MultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
                     }
+                    MultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
                 pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),

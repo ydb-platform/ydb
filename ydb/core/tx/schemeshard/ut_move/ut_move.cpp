@@ -2398,8 +2398,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                 Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
-                MultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
             }
+            MultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
         )");
         env.TestWaitNotification(runtime, txId);
 

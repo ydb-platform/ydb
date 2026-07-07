@@ -2,6 +2,7 @@
 #include "constructor.h"
 
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
 
@@ -47,5 +48,11 @@ public:
     TDictionaryFetchLogic(const ui32 columnId, const std::shared_ptr<ISnapshotSchema>& sourceSchema,
         const std::shared_ptr<IStoragesManager>& storages, const ui32 recordsCount);
 };
+
+// Dictionary-only accessors are indexed by dictionary entries, not portion rows.
+// Row filters with denied rows (duplicate/deletion/sharding) use portion row indices.
+inline bool IsDictionaryOnlyFetchCompatible(const NArrow::TColumnFilter& filter) {
+    return filter.IsTotalAllowFilter();
+}
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

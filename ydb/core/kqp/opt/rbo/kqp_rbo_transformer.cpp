@@ -2,11 +2,19 @@
 #include "kqp_operator.h"
 #include "kqp_plan_conversion_utils.h"
 #include "kqp_rbo_rules.h"
+#include "traces/kqp_rbo_trace_output.h"
 
 #include <ydb/core/kqp/host/kqp_transform.h>
 
+#include <util/generic/string.h>
+#include <util/system/env.h>
+
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
+
+#include <memory>
+#include <optional>
+#include <utility>
 
 namespace NKikimr::NKqp {
 
@@ -70,11 +78,28 @@ void CollectTopLevelSelects(TExprNode::TPtr input, THashSet<TExprNode*>& topLeve
     return;
 }
 
+bool IsRboTraceLogEnabled() {
+    TMaybe<TString> htmlTracePath = TryGetEnv("NEW_RBO_LOG");
+    return htmlTracePath.Defined() && !htmlTracePath->empty();
+}
+
 } // anonymous namespace
 
 IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
+    const bool needTraceAst = IsRboTraceLogEnabled();
+    if (needTraceAst) {
+        if (!RboTraceRewriteSelectStarted) {
+            KqpCtx.RboTraceAstBeforeRewriteSelect = input;
+            KqpCtx.RboTraceAstAfterRewriteSelect = nullptr;
+            RboTraceRewriteSelectStarted = true;
+        }
+    } else {
+        KqpCtx.RboTraceAstBeforeRewriteSelect = nullptr;
+        KqpCtx.RboTraceAstAfterRewriteSelect = nullptr;
+        RboTraceRewriteSelectStarted = false;
+    }
 
     THashSet<TExprNode*> topLevelSelects;
     THashSet<TExprNode*> visited;
@@ -97,10 +122,21 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
         },
         ctx, settings);
 
+    if (needTraceAst && status == TStatus::Ok) {
+        KqpCtx.RboTraceAstAfterRewriteSelect = output;
+        RboTraceRewriteSelectStarted = false;
+    } else if (status == TStatus::Error) {
+        RboTraceRewriteSelectStarted = false;
+    }
+
     return status;
 }
 
-void TKqpRewriteSelectTransformer::Rewind() {}
+void TKqpRewriteSelectTransformer::Rewind() {
+    RboTraceRewriteSelectStarted = false;
+    KqpCtx.RboTraceAstBeforeRewriteSelect = nullptr;
+    KqpCtx.RboTraceAstAfterRewriteSelect = nullptr;
+}
 
 IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
@@ -234,33 +270,41 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
         return TStatus::Ok;
     }
 
-    ColumnStatisticsReadiness = NThreading::WaitAll(futures).Apply([this, futures = std::move(futures)](const NThreading::TFuture<void>&) mutable {
-        for (auto& fut : futures) {
-            if (fut.HasException()) {
-                fut.TryRethrow();
-            }
+    auto sharedState = std::make_shared<TColumnStatisticsSharedState>();
+    ColumnStatisticsReadiness = NThreading::WaitAll(futures).Apply(
+        [weakSharedState = std::weak_ptr{sharedState}, futures = std::move(futures)](const NThreading::TFuture<void>&) mutable {
+            for (auto& fut : futures) {
+                if (fut.HasException()) {
+                    fut.TryRethrow();
+                }
 
-            auto newStats = fut.ExtractValue();
-            if (!ColumnStatisticsResponse) {
-                ColumnStatisticsResponse = std::move(newStats);
-            } else {
-                // merge statistics
-                for (const auto& [table, column2Stat] : newStats.ColumnStatisticsByTableName) {
-                    auto& oldColumn2Stat = ColumnStatisticsResponse->ColumnStatisticsByTableName[table];
-                    for (const auto& [column, newStat] : column2Stat.Data) {
-                        auto& oldStat = oldColumn2Stat.Data[column];
-                        if (newStat.CountMinSketch) {
-                            oldStat.CountMinSketch = newStat.CountMinSketch;
-                        }
-                        if (newStat.EqWidthHistogramEstimator) {
-                            oldStat.EqWidthHistogramEstimator = newStat.EqWidthHistogramEstimator;
+                auto newStats = fut.ExtractValue();
+                auto sharedState = weakSharedState.lock();
+                if (!sharedState) {
+                    // parent already deleted, just return
+                    return;
+                }
+                if (!sharedState->Response.has_value()) {
+                    sharedState->Response = std::move(newStats);
+                } else {
+                    // merge statistics
+                    for (const auto& [table, column2Stat] : newStats.ColumnStatisticsByTableName) {
+                        auto& oldColumn2Stat = sharedState->Response->ColumnStatisticsByTableName[table];
+                        for (const auto& [column, newStat] : column2Stat.Data) {
+                            auto& oldStat = oldColumn2Stat.Data[column];
+                            if (newStat.CountMinSketch) {
+                                oldStat.CountMinSketch = newStat.CountMinSketch;
+                            }
+                            if (newStat.EqWidthHistogramEstimator) {
+                                oldStat.EqWidthHistogramEstimator = newStat.EqWidthHistogramEstimator;
+                            }
                         }
                     }
                 }
             }
-        }
-    });
+        });
 
+    SharedState = sharedState;
     return TStatus::Async;
 }
 
@@ -280,7 +324,9 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             if (TKqpOpRoot::Match(node.Get())) {
                 TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
+                TRBOTraceOutput traceOutput(rboCtx);
                 auto output = RBO.Optimize(*OpRoot, rboCtx);
+                traceOutput.Flush();
                 AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
                 return output;
             } else {
@@ -294,12 +340,12 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
 
 void TKqpNewRBOTransformer::ApplyColumnStatistics() {
     Y_ENSURE(ColumnStatisticsReadiness.IsReady());
-    if (!ColumnStatisticsResponse->Issues().Empty()) {
+    if (!SharedState->Response->Issues().Empty()) {
         TStringStream ss;
-        ColumnStatisticsResponse->Issues().PrintTo(ss);
+        SharedState->Response->Issues().PrintTo(ss);
         YQL_CLOG(TRACE, ProviderKikimr) << "Can't load columns statistics for request: " << ss.Str();
     } else {
-        for (auto&& [tableName, columnStatistics] : ColumnStatisticsResponse->ColumnStatisticsByTableName) {
+        for (auto&& [tableName, columnStatistics] : SharedState->Response->ColumnStatisticsByTableName) {
             TypeCtx.ColumnStatisticsByTableName.insert({std::move(tableName), new NYql::TOptimizerStatistics::TColumnStatMap(std::move(columnStatistics))});
         }
     }
@@ -364,23 +410,18 @@ TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>&
 }
 
 void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
-    auto addMapAliasRules = [](TVector<std::unique_ptr<IRule>>& rules, bool pushAppendsUnderFilter) {
+    auto addMapAliasRules = [](TVector<std::unique_ptr<IRule>>& rules) {
         rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
-        rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
+        rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>(false));
         rules.emplace_back(std::make_unique<TRenameToAppendRule>());
-        rules.emplace_back(std::make_unique<TPushAppendIntoMapRule>());
-        rules.emplace_back(std::make_unique<TPushAppendThroughUnaryRule>(pushAppendsUnderFilter));
-        rules.emplace_back(std::make_unique<TPushAppendThroughAggregateRule>());
-        rules.emplace_back(std::make_unique<TPushAppendThroughJoinRule>());
+        rules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>(/*pushExpressions*/ false));
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughAggregateRule>());
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughUnionAllRule>());
         rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
-        rules.emplace_back(std::make_unique<TPushRenameIntoReadRule>());
-        rules.emplace_back(std::make_unique<TPushRenameIntoMapProducerRule>());
-        rules.emplace_back(std::make_unique<TPushRenameIntoAggregateResultRule>());
-        rules.emplace_back(std::make_unique<TPushRenameThroughTransparentUnaryRule>(pushAppendsUnderFilter));
-        rules.emplace_back(std::make_unique<TPushRenameThroughPassThroughMapRule>());
-        rules.emplace_back(std::make_unique<TPushRenameThroughAggregateKeyRule>());
-        rules.emplace_back(std::make_unique<TPushRenameThroughJoinSideRule>());
-        rules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>());
+        rules.emplace_back(std::make_unique<TPushRenameIntoProducerRule>());
+        rules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>(false));
+        rules.emplace_back(std::make_unique<TPruneDeadUnionAllColumnsRule>());
         rules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
     };
 
@@ -390,20 +431,12 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     expandAggregationRules.emplace_back(std::make_unique<TExpandDistinctAggregationRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Expand aggregation", std::move(expandAggregationRules)));
 
-    // Inline join filters. FIXME: Move after inlining when adding support for more advanced decorelation
-    TVector<std::unique_ptr<IRule>> joinFiltersInlineRules;
-    joinFiltersInlineRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
-    joinFiltersInlineRules.emplace_back(std::make_unique<TFuseFiltersRule>());
-    RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline join filters", std::move(joinFiltersInlineRules)));
-
     // Predicate pull-up and subplan inlining and decorelation stages.
     TVector<std::unique_ptr<IRule>> filterPullUpRules;
     filterPullUpRules.emplace_back(std::make_unique<TPullUpCorrelatedFilterRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Correlated predicate pullup", std::move(filterPullUpRules)));
 
     TVector<std::unique_ptr<IRule>> inlineScalarSubPlanStageRules;
-    inlineScalarSubPlanStageRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
-    inlineScalarSubPlanStageRules.emplace_back(std::make_unique<TFuseFiltersRule>());
     inlineScalarSubPlanStageRules.emplace_back(std::make_unique<TInlineScalarSubplanRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline scalar subplans", std::move(inlineScalarSubPlanStageRules)));
     RBO.AddStage(std::make_unique<TConstantFoldingStage>());
@@ -420,20 +453,35 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     // Normalize aliases and simple maps before the broader logical rewrites start.
     TVector<std::unique_ptr<IRule>> mapAliasRules;
-    addMapAliasRules(mapAliasRules, /*pushAppendsUnderFilter*/ true);
+    addMapAliasRules(mapAliasRules);
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Normalize maps and aliases", std::move(mapAliasRules)));
 
-    // Logical stage.
-    TVector<std::unique_ptr<IRule>> logicalStageRules;
-    addMapAliasRules(logicalStageRules, /*pushAppendsUnderFilter*/ false);
-    logicalStageRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
-    logicalStageRules.emplace_back(std::make_unique<TFuseFiltersRule>());
-    logicalStageRules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
-    logicalStageRules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
-    logicalStageRules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
-    logicalStageRules.emplace_back(std::make_unique<TEliminateLeftJoinRule>());
-    logicalStageRules.emplace_back(std::make_unique<TPushLimitIntoSortRule>());
-    RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites I", std::move(logicalStageRules)));
+    // Logical state I
+    TVector<std::unique_ptr<IRule>> logicalStage_I_Rules;
+    logicalStage_I_Rules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
+    logicalStage_I_Rules.emplace_back(std::make_unique<TExtractCommonConjunctsRule>());
+    logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
+    logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites I", std::move(logicalStage_I_Rules)));
+
+    TVector<std::unique_ptr<IRule>> logicalStage_II_Rules;
+    logicalStage_II_Rules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
+    logicalStage_II_Rules.emplace_back(std::make_unique<TFuseFiltersRule>());
+    logicalStage_II_Rules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
+    logicalStage_II_Rules.emplace_back(std::make_unique<TExtractCommonConjunctsRule>());
+    logicalStage_II_Rules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
+    logicalStage_II_Rules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
+    logicalStage_II_Rules.emplace_back(std::make_unique<TEliminateLeftJoinRule>());
+    logicalStage_II_Rules.emplace_back(std::make_unique<TPushLimitIntoSortRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites II", std::move(logicalStage_II_Rules)));
+
+    // Prune all columns, including key columns
+    TVector<std::unique_ptr<IRule>> finalPruningStageRules;
+    finalPruningStageRules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
+    finalPruningStageRules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
+    finalPruningStageRules.emplace_back(std::make_unique<TPruneDeadUnionAllColumnsRule>());
+    finalPruningStageRules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Final pruning", std::move(finalPruningStageRules)));
 
     // Physical stage.
     TVector<std::unique_ptr<IRule>> physicalStageRules;
@@ -470,8 +518,6 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateTopSortThroughStageRule>());
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateLimitThroughStageRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Optimize physical stages", std::move(optimizePhysicalStagesRules)));
-
-    RBO.AddStage(std::make_unique<TLogicalOutputPruningStage>());
 
     RBO.AddStage(std::make_unique<TPropagateHashFuncStage>());
 }

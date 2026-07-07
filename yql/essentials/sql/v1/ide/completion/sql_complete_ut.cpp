@@ -206,6 +206,7 @@ Y_UNIT_TEST(Beginning) {
         {.Kind = Keyword, .Content = "IF"},
         {.Kind = Keyword, .Content = "IMPORT"},
         {.Kind = Keyword, .Content = "INSERT"},
+        {.Kind = Keyword, .Content = "MATERIALIZE"},
         {.Kind = Keyword, .Content = "PARALLEL"},
         {.Kind = Keyword, .Content = "PRAGMA"},
         {.Kind = Keyword, .Content = "PROCESS"},
@@ -221,6 +222,7 @@ Y_UNIT_TEST(Beginning) {
         {.Kind = Keyword, .Content = "UPSERT"},
         {.Kind = Keyword, .Content = "USE"},
         {.Kind = Keyword, .Content = "VALUES"},
+        {.Kind = Keyword, .Content = "WITH"},
     };
 
     auto engine = MakeSqlCompletionEngineUT();
@@ -429,6 +431,7 @@ Y_UNIT_TEST(Explain) {
         {.Kind = Keyword, .Content = "IF"},
         {.Kind = Keyword, .Content = "IMPORT"},
         {.Kind = Keyword, .Content = "INSERT"},
+        {.Kind = Keyword, .Content = "MATERIALIZE"},
         {.Kind = Keyword, .Content = "PARALLEL"},
         {.Kind = Keyword, .Content = "PRAGMA"},
         {.Kind = Keyword, .Content = "PROCESS"},
@@ -445,6 +448,7 @@ Y_UNIT_TEST(Explain) {
         {.Kind = Keyword, .Content = "UPSERT"},
         {.Kind = Keyword, .Content = "USE"},
         {.Kind = Keyword, .Content = "VALUES"},
+        {.Kind = Keyword, .Content = "WITH"},
     };
 
     auto engine = MakeSqlCompletionEngineUT();
@@ -1060,6 +1064,7 @@ Y_UNIT_TEST(InsertTableHintName) {
     TVector<TCandidate> expected = {
         {.Kind = Keyword, .Content = "COLUMNS"},
         {.Kind = HintName, .Content = "EXPIRATION"},
+        {.Kind = Keyword, .Content = "RECURSIVE"},
         {.Kind = Keyword, .Content = "SCHEMA"},
         {.Kind = Keyword, .Content = "WATERMARK"},
     };

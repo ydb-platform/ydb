@@ -40,7 +40,7 @@ config:
                 LoadYamlAsJsonOrThrow("bad: [yaml: {broken", "my_config.yaml");
                 UNIT_FAIL("Expected exception");
             } catch (const TInitializationException& e) {
-                AssertErrorCode(e, "YDB-CFG01");
+                AssertErrorCode(e, "YDBE-10001");
                 TString msg = e.what();
                 UNIT_ASSERT_C(msg.Contains("my_config.yaml"), "source missing: " << msg);
                 UNIT_ASSERT_C(msg.Contains("Failed to parse"), "prefix missing: " << msg);
@@ -51,7 +51,7 @@ config:
                 LoadYamlAsJsonOrThrow("bad: [yaml: {broken", {});
                 UNIT_FAIL("Expected exception");
             } catch (const TInitializationException& e) {
-                AssertErrorCode(e, "YDB-CFG01");
+                AssertErrorCode(e, "YDBE-10001");
                 TString msg = e.what();
                 UNIT_ASSERT_C(msg.Contains("YAML config"), "default source missing: " << msg);
             }
@@ -61,7 +61,7 @@ config:
                 LoadYamlAsJsonOrThrow("config:\n  key: 1\n  key: 2\n", "dup.yaml");
                 UNIT_FAIL("Expected exception on duplicate key");
             } catch (const TInitializationException& e) {
-                AssertErrorCode(e, "YDB-CFG05");
+                AssertErrorCode(e, "YDBE-10005");
                 TString msg = e.what();
                 UNIT_ASSERT_C(msg.Contains("duplicate key"), "duplicate key message missing: " << msg);
                 UNIT_ASSERT_C(msg.Contains("dup.yaml"), "source missing: " << msg);
@@ -77,7 +77,7 @@ config:
             ParseJsonConfigOrThrow(json, "test.yaml", config);
             UNIT_FAIL("Expected exception");
         } catch (const TInitializationException& e) {
-            AssertErrorCode(e, "YDB-CFG02");
+            AssertErrorCode(e, "YDBE-10002");
             TString msg = e.what();
             UNIT_ASSERT_C(msg.Contains("fake_field"), "field name missing: " << msg);
             UNIT_ASSERT_C(msg.Contains("test.yaml"), "source missing: " << msg);

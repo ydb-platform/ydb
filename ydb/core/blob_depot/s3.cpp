@@ -4,6 +4,8 @@
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
+
 namespace NKikimr::NBlobDepot {
 
     using TS3Manager = TBlobDepot::TS3Manager;
@@ -15,7 +17,9 @@ namespace NKikimr::NBlobDepot {
     TS3Manager::~TS3Manager() = default;
 
     void TS3Manager::Init(const NKikimrBlobDepot::TS3BackendSettings *settings) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS05, "Init", (Settings, settings));
+        YDB_LOG_DEBUG("Init",
+            {"marker", "BDTS05"},
+            {"settings", settings});
         if (settings) {
             // All S3 traffic goes through the per-node router managed by NodeWarden.
             // Acquire is fire-and-forget: NodeWarden registers the router under its

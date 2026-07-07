@@ -61,9 +61,10 @@ namespace {
 template <typename TResponse>
 NThreading::TFuture<TResponse> MakeFailedResponse(TResponse response, const TFmrError& error, TStringBuf logPrefix) {
     if (error.Reason == EFmrErrorReason::FallbackOperation) {
-        YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: " << error.ErrorMessage;
+        YQL_CLOG(WARN, FastMapReduce) << logPrefix << "FMR fallback to YT: " << error.ErrorMessage;
+    } else {
+        YQL_CLOG(ERROR, FastMapReduce) << logPrefix << error.ErrorMessage;
     }
-    YQL_CLOG(ERROR, FastMapReduce) << logPrefix << error.ErrorMessage;
     response.ErrorMessages.emplace_back(error);
     return NThreading::MakeFuture(std::move(response));
 }
@@ -672,8 +673,6 @@ private:
                             ++it;
                         }
                     }
-                }
-                with_lock(Mutex_) {
                     MaintenanceCondVar_.WaitD(Mutex_, TInstant::Now() + TimeToSleepBetweenClearKeyRequests_);
                 }
             }
@@ -756,6 +755,9 @@ private:
                 TGcTask gcTask;
                 bool hasTask = false;
                 with_lock(GcQueueMutex_) {
+                    GcQueueCondVar_.WaitT(GcQueueMutex_, TDuration::MilliSeconds(100), [&] {
+                        return !GcQueue_.empty() || StopCoordinator_.load();
+                    });
                     if (!GcQueue_.empty()) {
                         gcTask = std::move(GcQueue_.front());
                         GcQueue_.pop();
@@ -840,8 +842,12 @@ private:
         YQL_ENSURE(Operations_.contains(taskInfo.OperationId));
         auto& currentTaskIdsForOperation = Operations_[taskInfo.OperationId];
         currentTaskIdsForOperation.TaskIds.erase(taskId);
-        if (currentTaskIdsForOperation.TaskIds.empty()) {
-            // All task for operation are cleared, can clear it
+        currentTaskIdsForOperation.AllTaskIds.erase(taskId);
+        if (currentTaskIdsForOperation.AllTaskIds.empty()) {
+            // All tasks across all stages for this operation are cleared, can clear it.
+            // Using AllTaskIds (not TaskIds) because TaskIds only tracks the current stage:
+            // after a stage transition TaskIds is cleared and refilled, so it can be empty
+            // while tasks from prior stages are still present in Tasks_.
             Operations_.erase(taskInfo.OperationId);
         }
         Tasks_.erase(taskId);
@@ -1039,6 +1045,7 @@ private:
                 .GroupsToClear = std::move(groupsToClear),
                 .PartIdsToKeep = std::move(partIdsToKeep),
             });
+            GcQueueCondVar_.Signal();
         }
     }
 

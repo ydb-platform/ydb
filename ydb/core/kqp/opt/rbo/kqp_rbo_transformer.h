@@ -49,8 +49,9 @@ public:
 
 private:
     NYql::TTypeAnnotationContext& TypeCtx;
-    const NOpt::TKqpOptimizeContext& KqpCtx;
+    NOpt::TKqpOptimizeContext& KqpCtx;
     ui64 UniqueSourceIdCounter = 0;
+    bool RboTraceRewriteSelectStarted = false;
 };
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePtr<NOpt::TKqpOptimizeContext>& kqpCtx,
@@ -95,7 +96,7 @@ private:
     TString Cluster;
     TString Database;
     NActors::TActorSystem* ActorSystem;
-    std::optional<TColumnStatisticsResponse> ColumnStatisticsResponse;
+    std::shared_ptr<TColumnStatisticsSharedState> SharedState;
     NThreading::TFuture<void> ColumnStatisticsReadiness;
     THashMap<TString, THashSet<TString>> CMColumnsByTableName;
     THashMap<TString, THashSet<TString>> HistColumnsByTableName;

@@ -53,6 +53,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/protos
     ydb/core/grpc_services/local_rpc
+    ydb/core/http_proxy/sqs_xml
     ydb/core/security
     yql/essentials/public/issue
     ydb/library/http_proxy/authorization
@@ -79,6 +80,10 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE(
+    sqs_xml
+)
 
 RECURSE_FOR_TESTS(
     ut

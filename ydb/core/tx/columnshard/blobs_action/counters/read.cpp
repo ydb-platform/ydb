@@ -18,6 +18,11 @@ TReadCounters::TReadCounters(const TConsumerCounters& owner)
     FailBytes = TBase::GetDeriviative("Fails/Bytes");
     FailDurationBySize = TBase::GetHistogram("Fails/Duration/Bytes", NMonitoring::ExponentialHistogram(15, 2, 2));
     FailDurationByCount = TBase::GetHistogram("Fails/Duration/Count", NMonitoring::ExponentialHistogram(15, 2, 2));
+
+    RetryEnqueueCount = TBase::GetDeriviative("Retries/Enqueue/Count");
+    RetryEnqueueBytes = TBase::GetDeriviative("Retries/Enqueue/Bytes");
+    RetryExecuteCount = TBase::GetDeriviative("Retries/Execute/Count");
+    RetryExhaustedCount = TBase::GetDeriviative("Retries/Exhausted/Count");
 }
 
 }   // namespace NKikimr::NOlap::NBlobOperations

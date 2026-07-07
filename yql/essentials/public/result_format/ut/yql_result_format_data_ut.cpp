@@ -39,13 +39,13 @@ Y_UNIT_TEST(EmptyVisitor) {
     v.OnUint64(1);
     v.OnFloat(1.2F);
     v.OnDouble(1.2F);
-    v.OnString("foo", true);
+    v.OnString("foo", /*isUtf8=*/true);
     v.OnUtf8("foo");
-    v.OnYson("foo", true);
+    v.OnYson("foo", /*isUtf8=*/true);
     v.OnJson("foo");
     v.OnJsonDocument("foo");
-    v.OnUuid("foo", true);
-    v.OnDyNumber("foo", true);
+    v.OnUuid("foo", /*isUtf8=*/true);
+    v.OnDyNumber("foo", /*isUtf8=*/true);
     v.OnDate(1);
     v.OnDatetime(1);
     v.OnTimestamp(1);
@@ -88,7 +88,7 @@ Y_UNIT_TEST(EmptyVisitor) {
     v.OnEndDict();
     v.OnBeginVariant(0);
     v.OnEndVariant();
-    v.OnPg("foo", true);
+    v.OnPg("foo", /*isUtf8=*/true);
 }
 
 Y_UNIT_TEST(ThrowingVisitor) {

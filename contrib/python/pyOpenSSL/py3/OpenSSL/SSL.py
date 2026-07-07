@@ -1,12 +1,10 @@
 import os
 import socket
-from sys import platform
-from functools import wraps, partial
-from itertools import count, chain
-from weakref import WeakValueDictionary
 from errno import errorcode
-
-from six import integer_types, int2byte, indexbytes
+from functools import partial, wraps
+from itertools import chain, count
+from sys import platform
+from weakref import WeakValueDictionary
 
 from OpenSSL._util import (
     UNSPECIFIED as _UNSPECIFIED,
@@ -14,19 +12,17 @@ from OpenSSL._util import (
     ffi as _ffi,
     lib as _lib,
     make_assert as _make_assert,
-    native as _native,
-    path_string as _path_string,
-    text_to_bytes_and_warn as _text_to_bytes_and_warn,
     no_zero_allocator as _no_zero_allocator,
+    path_bytes as _path_bytes,
+    text_to_bytes_and_warn as _text_to_bytes_and_warn,
 )
-
 from OpenSSL.crypto import (
     FILETYPE_PEM,
-    _PassphraseHelper,
     PKey,
-    X509Name,
     X509,
+    X509Name,
     X509Store,
+    _PassphraseHelper,
 )
 
 __all__ = [
@@ -36,10 +32,13 @@ __all__ = [
     "SSLEAY_PLATFORM",
     "SSLEAY_DIR",
     "SSLEAY_BUILT_ON",
+    "OPENSSL_VERSION",
+    "OPENSSL_CFLAGS",
+    "OPENSSL_PLATFORM",
+    "OPENSSL_DIR",
+    "OPENSSL_BUILT_ON",
     "SENT_SHUTDOWN",
     "RECEIVED_SHUTDOWN",
-    "SSLv2_METHOD",
-    "SSLv3_METHOD",
     "SSLv23_METHOD",
     "TLSv1_METHOD",
     "TLSv1_1_METHOD",
@@ -47,6 +46,9 @@ __all__ = [
     "TLS_METHOD",
     "TLS_SERVER_METHOD",
     "TLS_CLIENT_METHOD",
+    "DTLS_METHOD",
+    "DTLS_SERVER_METHOD",
+    "DTLS_CLIENT_METHOD",
     "SSL3_VERSION",
     "TLS1_VERSION",
     "TLS1_1_VERSION",
@@ -57,7 +59,6 @@ __all__ = [
     "OP_NO_TLSv1",
     "OP_NO_TLSv1_1",
     "OP_NO_TLSv1_2",
-    "OP_NO_TLSv1_3",
     "MODE_RELEASE_BUFFERS",
     "OP_SINGLE_DH_USE",
     "OP_SINGLE_ECDH_USE",
@@ -124,26 +125,17 @@ __all__ = [
     "Connection",
 ]
 
-try:
-    _buffer = buffer
-except NameError:
-
-    class _buffer(object):
-        pass
-
 
 OPENSSL_VERSION_NUMBER = _lib.OPENSSL_VERSION_NUMBER
-SSLEAY_VERSION = _lib.SSLEAY_VERSION
-SSLEAY_CFLAGS = _lib.SSLEAY_CFLAGS
-SSLEAY_PLATFORM = _lib.SSLEAY_PLATFORM
-SSLEAY_DIR = _lib.SSLEAY_DIR
-SSLEAY_BUILT_ON = _lib.SSLEAY_BUILT_ON
+OPENSSL_VERSION = SSLEAY_VERSION = _lib.OPENSSL_VERSION
+OPENSSL_CFLAGS = SSLEAY_CFLAGS = _lib.OPENSSL_CFLAGS
+OPENSSL_PLATFORM = SSLEAY_PLATFORM = _lib.OPENSSL_PLATFORM
+OPENSSL_DIR = SSLEAY_DIR = _lib.OPENSSL_DIR
+OPENSSL_BUILT_ON = SSLEAY_BUILT_ON = _lib.OPENSSL_BUILT_ON
 
 SENT_SHUTDOWN = _lib.SSL_SENT_SHUTDOWN
 RECEIVED_SHUTDOWN = _lib.SSL_RECEIVED_SHUTDOWN
 
-SSLv2_METHOD = 1
-SSLv3_METHOD = 2
 SSLv23_METHOD = 3
 TLSv1_METHOD = 4
 TLSv1_1_METHOD = 5
@@ -151,6 +143,9 @@ TLSv1_2_METHOD = 6
 TLS_METHOD = 7
 TLS_SERVER_METHOD = 8
 TLS_CLIENT_METHOD = 9
+DTLS_METHOD = 10
+DTLS_SERVER_METHOD = 11
+DTLS_CLIENT_METHOD = 12
 
 try:
     SSL3_VERSION = _lib.SSL3_VERSION
@@ -174,6 +169,7 @@ OP_NO_TLSv1_1 = _lib.SSL_OP_NO_TLSv1_1
 OP_NO_TLSv1_2 = _lib.SSL_OP_NO_TLSv1_2
 try:
     OP_NO_TLSv1_3 = _lib.SSL_OP_NO_TLSv1_3
+    __all__.append("OP_NO_TLSv1_3")
 except AttributeError:
     pass
 
@@ -207,6 +203,18 @@ OP_NO_COMPRESSION = _lib.SSL_OP_NO_COMPRESSION
 OP_NO_QUERY_MTU = _lib.SSL_OP_NO_QUERY_MTU
 OP_COOKIE_EXCHANGE = _lib.SSL_OP_COOKIE_EXCHANGE
 OP_NO_TICKET = _lib.SSL_OP_NO_TICKET
+
+try:
+    OP_NO_RENEGOTIATION = _lib.SSL_OP_NO_RENEGOTIATION
+    __all__.append("OP_NO_RENEGOTIATION")
+except AttributeError:
+    pass
+
+try:
+    OP_IGNORE_UNEXPECTED_EOF = _lib.SSL_OP_IGNORE_UNEXPECTED_EOF
+    __all__.append("OP_IGNORE_UNEXPECTED_EOF")
+except AttributeError:
+    pass
 
 OP_ALL = _lib.SSL_OP_ALL
 
@@ -257,8 +265,8 @@ _CERTIFICATE_PATH_LOCATIONS = [
 
 # These values are compared to output from cffi's ffi.string so they must be
 # byte strings.
-_CRYPTOGRAPHY_MANYLINUX1_CA_DIR = b"/opt/pyca/cryptography/openssl/certs"
-_CRYPTOGRAPHY_MANYLINUX1_CA_FILE = b"/opt/pyca/cryptography/openssl/cert.pem"
+_CRYPTOGRAPHY_MANYLINUX_CA_DIR = b"/opt/pyca/cryptography/openssl/certs"
+_CRYPTOGRAPHY_MANYLINUX_CA_FILE = b"/opt/pyca/cryptography/openssl/cert.pem"
 
 
 class Error(Exception):
@@ -291,7 +299,7 @@ class SysCallError(Error):
     pass
 
 
-class _CallbackExceptionHelper(object):
+class _CallbackExceptionHelper:
     """
     A base class for wrapper classes that allow for intelligent exception
     handling in OpenSSL callbacks.
@@ -381,7 +389,7 @@ class _ALPNSelectHelper(_CallbackExceptionHelper):
                 instr = _ffi.buffer(in_, inlen)[:]
                 protolist = []
                 while instr:
-                    encoded_len = indexbytes(instr, 0)
+                    encoded_len = instr[0]
                     proto = instr[1 : encoded_len + 1]
                     protolist.append(proto)
                     instr = instr[encoded_len + 1 :]
@@ -549,17 +557,59 @@ class _OCSPClientCallbackHelper(_CallbackExceptionHelper):
         self.callback = _ffi.callback("int (*)(SSL *, void *)", wrapper)
 
 
+class _CookieGenerateCallbackHelper(_CallbackExceptionHelper):
+    def __init__(self, callback):
+        _CallbackExceptionHelper.__init__(self)
+
+        @wraps(callback)
+        def wrapper(ssl, out, outlen):
+            try:
+                conn = Connection._reverse_mapping[ssl]
+                cookie = callback(conn)
+                out[0 : len(cookie)] = cookie
+                outlen[0] = len(cookie)
+                return 1
+            except Exception as e:
+                self._problems.append(e)
+                # "a zero return value can be used to abort the handshake"
+                return 0
+
+        self.callback = _ffi.callback(
+            "int (*)(SSL *, unsigned char *, unsigned int *)",
+            wrapper,
+        )
+
+
+class _CookieVerifyCallbackHelper(_CallbackExceptionHelper):
+    def __init__(self, callback):
+        _CallbackExceptionHelper.__init__(self)
+
+        @wraps(callback)
+        def wrapper(ssl, c_cookie, cookie_len):
+            try:
+                conn = Connection._reverse_mapping[ssl]
+                return callback(conn, bytes(c_cookie[0:cookie_len]))
+            except Exception as e:
+                self._problems.append(e)
+                return 0
+
+        self.callback = _ffi.callback(
+            "int (*)(SSL *, unsigned char *, unsigned int)",
+            wrapper,
+        )
+
+
 def _asFileDescriptor(obj):
     fd = None
-    if not isinstance(obj, integer_types):
+    if not isinstance(obj, int):
         meth = getattr(obj, "fileno", None)
         if meth is not None:
             obj = meth()
 
-    if isinstance(obj, integer_types):
+    if isinstance(obj, int):
         fd = obj
 
-    if not isinstance(fd, integer_types):
+    if not isinstance(fd, int):
         raise TypeError("argument must be an int, or have a fileno() method.")
     elif fd < 0:
         raise ValueError(
@@ -569,13 +619,16 @@ def _asFileDescriptor(obj):
     return fd
 
 
-def SSLeay_version(type):
+def OpenSSL_version(type):
     """
     Return a string describing the version of OpenSSL in use.
 
-    :param type: One of the :const:`SSLEAY_` constants defined in this module.
+    :param type: One of the :const:`OPENSSL_` constants defined in this module.
     """
-    return _ffi.string(_lib.SSLeay_version(type))
+    return _ffi.string(_lib.OpenSSL_version(type))
+
+
+SSLeay_version = OpenSSL_version
 
 
 def _make_requires(flag, error):
@@ -613,7 +666,7 @@ _requires_keylog = _make_requires(
 )
 
 
-class Session(object):
+class Session:
     """
     A class representing an SSL session.  A session defines certain connection
     parameters which may be re-used to speed up the setup of subsequent
@@ -625,39 +678,36 @@ class Session(object):
     pass
 
 
-class Context(object):
+class Context:
     """
     :class:`OpenSSL.SSL.Context` instances define the parameters for setting
     up new SSL connections.
 
-    :param method: One of TLS_METHOD, TLS_CLIENT_METHOD, or TLS_SERVER_METHOD.
+    :param method: One of TLS_METHOD, TLS_CLIENT_METHOD, TLS_SERVER_METHOD,
+                   DTLS_METHOD, DTLS_CLIENT_METHOD, or DTLS_SERVER_METHOD.
                    SSLv23_METHOD, TLSv1_METHOD, etc. are deprecated and should
                    not be used.
     """
 
     _methods = {
-        SSLv2_METHOD: "SSLv2_method",
-        SSLv3_METHOD: "SSLv3_method",
-        SSLv23_METHOD: "SSLv23_method",
-        TLSv1_METHOD: "TLSv1_method",
-        TLSv1_1_METHOD: "TLSv1_1_method",
-        TLSv1_2_METHOD: "TLSv1_2_method",
-        TLS_METHOD: "TLS_method",
-        TLS_SERVER_METHOD: "TLS_server_method",
-        TLS_CLIENT_METHOD: "TLS_client_method",
+        SSLv23_METHOD: (_lib.TLS_method, None),
+        TLSv1_METHOD: (_lib.TLS_method, TLS1_VERSION),
+        TLSv1_1_METHOD: (_lib.TLS_method, TLS1_1_VERSION),
+        TLSv1_2_METHOD: (_lib.TLS_method, TLS1_2_VERSION),
+        TLS_METHOD: (_lib.TLS_method, None),
+        TLS_SERVER_METHOD: (_lib.TLS_server_method, None),
+        TLS_CLIENT_METHOD: (_lib.TLS_client_method, None),
+        DTLS_METHOD: (_lib.DTLS_method, None),
+        DTLS_SERVER_METHOD: (_lib.DTLS_server_method, None),
+        DTLS_CLIENT_METHOD: (_lib.DTLS_client_method, None),
     }
-    _methods = dict(
-        (identifier, getattr(_lib, name))
-        for (identifier, name) in _methods.items()
-        if getattr(_lib, name, None) is not None
-    )
 
     def __init__(self, method):
-        if not isinstance(method, integer_types):
+        if not isinstance(method, int):
             raise TypeError("method must be an integer")
 
         try:
-            method_func = self._methods[method]
+            method_func, version = self._methods[method]
         except KeyError:
             raise ValueError("No such protocol")
 
@@ -667,12 +717,6 @@ class Context(object):
         context = _lib.SSL_CTX_new(method_obj)
         _openssl_assert(context != _ffi.NULL)
         context = _ffi.gc(context, _lib.SSL_CTX_free)
-
-        # Set SSL_CTX_set_ecdh_auto so that the ECDH curve will be
-        # auto-selected. This function was added in 1.0.2 and made a noop in
-        # 1.1.0+ (where it is set automatically).
-        res = _lib.SSL_CTX_set_ecdh_auto(context, 1)
-        _openssl_assert(res == 1)
 
         self._context = context
         self._passphrase_helper = None
@@ -689,8 +733,13 @@ class Context(object):
         self._ocsp_helper = None
         self._ocsp_callback = None
         self._ocsp_data = None
+        self._cookie_generate_helper = None
+        self._cookie_verify_helper = None
 
         self.set_mode(_lib.SSL_MODE_ENABLE_PARTIAL_WRITE)
+        if version is not None:
+            self.set_min_proto_version(version)
+            self.set_max_proto_version(version)
 
     def set_min_proto_version(self, version):
         """
@@ -737,12 +786,12 @@ class Context(object):
         if cafile is None:
             cafile = _ffi.NULL
         else:
-            cafile = _path_string(cafile)
+            cafile = _path_bytes(cafile)
 
         if capath is None:
             capath = _ffi.NULL
         else:
-            capath = _path_string(capath)
+            capath = _path_bytes(capath)
 
         load_result = _lib.SSL_CTX_load_verify_locations(
             self._context, cafile, capath
@@ -828,8 +877,8 @@ class Context(object):
             # to the exact values we use in our manylinux1 builds. If they are
             # then we know to load the fallbacks
             if (
-                default_dir == _CRYPTOGRAPHY_MANYLINUX1_CA_DIR
-                and default_file == _CRYPTOGRAPHY_MANYLINUX1_CA_FILE
+                default_dir == _CRYPTOGRAPHY_MANYLINUX_CA_DIR
+                and default_file == _CRYPTOGRAPHY_MANYLINUX_CA_FILE
             ):
                 # This is manylinux1, let's load our fallback paths
                 self._fallback_default_verify_paths(
@@ -876,7 +925,7 @@ class Context(object):
 
         :return: None
         """
-        certfile = _path_string(certfile)
+        certfile = _path_bytes(certfile)
 
         result = _lib.SSL_CTX_use_certificate_chain_file(
             self._context, certfile
@@ -896,8 +945,8 @@ class Context(object):
 
         :return: None
         """
-        certfile = _path_string(certfile)
-        if not isinstance(filetype, integer_types):
+        certfile = _path_bytes(certfile)
+        if not isinstance(filetype, int):
             raise TypeError("filetype must be an integer")
 
         use_result = _lib.SSL_CTX_use_certificate_file(
@@ -913,6 +962,7 @@ class Context(object):
         :param cert: The X509 object
         :return: None
         """
+        # Mirrored at Connection.use_certificate
         if not isinstance(cert, X509):
             raise TypeError("cert must be an X509 instance")
 
@@ -954,11 +1004,11 @@ class Context(object):
 
         :return: None
         """
-        keyfile = _path_string(keyfile)
+        keyfile = _path_bytes(keyfile)
 
         if filetype is _UNSPECIFIED:
             filetype = FILETYPE_PEM
-        elif not isinstance(filetype, integer_types):
+        elif not isinstance(filetype, int):
             raise TypeError("filetype must be an integer")
 
         use_result = _lib.SSL_CTX_use_PrivateKey_file(
@@ -974,6 +1024,7 @@ class Context(object):
         :param pkey: The PKey object
         :return: None
         """
+        # Mirrored at Connection.use_privatekey
         if not isinstance(pkey, PKey):
             raise TypeError("pkey must be a PKey instance")
 
@@ -1035,7 +1086,7 @@ class Context(object):
 
         .. versionadded:: 0.14
         """
-        if not isinstance(mode, integer_types):
+        if not isinstance(mode, int):
             raise TypeError("mode must be an integer")
 
         return _lib.SSL_CTX_set_session_cache_mode(self._context, mode)
@@ -1070,7 +1121,7 @@ class Context(object):
 
         See SSL_CTX_set_verify(3SSL) for further details.
         """
-        if not isinstance(mode, integer_types):
+        if not isinstance(mode, int):
             raise TypeError("mode must be an integer")
 
         if callback is None:
@@ -1093,7 +1144,7 @@ class Context(object):
         :param depth: An integer specifying the verify depth
         :return: None
         """
-        if not isinstance(depth, integer_types):
+        if not isinstance(depth, int):
             raise TypeError("depth must be an integer")
 
         _lib.SSL_CTX_set_verify_depth(self._context, depth)
@@ -1125,7 +1176,7 @@ class Context(object):
 
         :return: None
         """
-        dhfile = _path_string(dhfile)
+        dhfile = _path_bytes(dhfile)
 
         bio = _lib.BIO_new_file(dhfile, b"r")
         if bio == _ffi.NULL:
@@ -1253,7 +1304,7 @@ class Context(object):
         :param timeout: The timeout in (whole) seconds
         :return: The previous session timeout
         """
-        if not isinstance(timeout, integer_types):
+        if not isinstance(timeout, int):
             raise TypeError("timeout must be an integer")
 
         return _lib.SSL_CTX_set_timeout(self._context, timeout)
@@ -1356,7 +1407,7 @@ class Context(object):
         :param options: The options to add.
         :return: The new option bitmask.
         """
-        if not isinstance(options, integer_types):
+        if not isinstance(options, int):
             raise TypeError("options must be an integer")
 
         return _lib.SSL_CTX_set_options(self._context, options)
@@ -1369,7 +1420,7 @@ class Context(object):
         :param mode: The mode to add.
         :return: The new mode bitmask.
         """
-        if not isinstance(mode, integer_types):
+        if not isinstance(mode, int):
             raise TypeError("mode must be an integer")
 
         return _lib.SSL_CTX_set_mode(self._context, mode)
@@ -1423,10 +1474,16 @@ class Context(object):
             This list should be a Python list of bytestrings representing the
             protocols to offer, e.g. ``[b'http/1.1', b'spdy/2']``.
         """
+        # Different versions of OpenSSL are inconsistent about how they handle
+        # empty proto lists (see #1043), so we avoid the problem entirely by
+        # rejecting them ourselves.
+        if not protos:
+            raise ValueError("at least one protocol must be specified")
+
         # Take the list of protocols and join them together, prefixing them
         # with their lengths.
         protostr = b"".join(
-            chain.from_iterable((int2byte(len(p)), p) for p in protos)
+            chain.from_iterable((bytes((len(p),)), p) for p in protos)
         )
 
         # Build a C string from the list. We don't need to save this off
@@ -1523,8 +1580,22 @@ class Context(object):
         helper = _OCSPClientCallbackHelper(callback)
         self._set_ocsp_callback(helper, data)
 
+    def set_cookie_generate_callback(self, callback):
+        self._cookie_generate_helper = _CookieGenerateCallbackHelper(callback)
+        _lib.SSL_CTX_set_cookie_generate_cb(
+            self._context,
+            self._cookie_generate_helper.callback,
+        )
 
-class Connection(object):
+    def set_cookie_verify_callback(self, callback):
+        self._cookie_verify_helper = _CookieVerifyCallbackHelper(callback)
+        _lib.SSL_CTX_set_cookie_verify_cb(
+            self._context,
+            self._cookie_verify_helper.callback,
+        )
+
+
+class Connection:
     _reverse_mapping = WeakValueDictionary()
 
     def __init__(self, context, socket=None):
@@ -1559,6 +1630,10 @@ class Connection(object):
         # do not point to a dangling reference
         self._verify_helper = context._verify_helper
         self._verify_callback = context._verify_callback
+
+        # And likewise for the cookie callbacks
+        self._cookie_generate_helper = context._cookie_generate_helper
+        self._cookie_verify_helper = context._cookie_verify_helper
 
         self._reverse_mapping[self._ssl] = self
 
@@ -1626,6 +1701,24 @@ class Connection(object):
             else:
                 # TODO: This is untested.
                 _raise_current_error()
+        elif error == _lib.SSL_ERROR_SSL and _lib.ERR_peek_error() != 0:
+            # In 3.0.x an unexpected EOF no longer triggers syscall error
+            # but we want to maintain compatibility so we check here and
+            # raise syscall if it is an EOF. Since we're not actually sure
+            # what else could raise SSL_ERROR_SSL we check for the presence
+            # of the OpenSSL 3 constant SSL_R_UNEXPECTED_EOF_WHILE_READING
+            # and if it's not present we just raise an error, which matches
+            # the behavior before we added this elif section
+            peeked_error = _lib.ERR_peek_error()
+            reason = _lib.ERR_GET_REASON(peeked_error)
+            if _lib.Cryptography_HAS_UNEXPECTED_EOF_WHILE_READING:
+                _openssl_assert(
+                    reason == _lib.SSL_R_UNEXPECTED_EOF_WHILE_READING
+                )
+                _lib.ERR_clear_error()
+                raise SysCallError(-1, "Unexpected EOF")
+            else:
+                _raise_current_error()
         elif error == _lib.SSL_ERROR_NONE:
             pass
         else:
@@ -1667,6 +1760,94 @@ class Connection(object):
             return None
 
         return _ffi.string(name)
+
+    def set_verify(self, mode, callback=None):
+        """
+        Override the Context object's verification flags for this specific
+        connection. See :py:meth:`Context.set_verify` for details.
+        """
+        if not isinstance(mode, int):
+            raise TypeError("mode must be an integer")
+
+        if callback is None:
+            self._verify_helper = None
+            self._verify_callback = None
+            _lib.SSL_set_verify(self._ssl, mode, _ffi.NULL)
+        else:
+            if not callable(callback):
+                raise TypeError("callback must be callable")
+
+            self._verify_helper = _VerifyHelper(callback)
+            self._verify_callback = self._verify_helper.callback
+            _lib.SSL_set_verify(self._ssl, mode, self._verify_callback)
+
+    def get_verify_mode(self):
+        """
+        Retrieve the Connection object's verify mode, as set by
+        :meth:`set_verify`.
+
+        :return: The verify mode
+        """
+        return _lib.SSL_get_verify_mode(self._ssl)
+
+    def use_certificate(self, cert):
+        """
+        Load a certificate from a X509 object
+
+        :param cert: The X509 object
+        :return: None
+        """
+        # Mirrored from Context.use_certificate
+        if not isinstance(cert, X509):
+            raise TypeError("cert must be an X509 instance")
+
+        use_result = _lib.SSL_use_certificate(self._ssl, cert._x509)
+        if not use_result:
+            _raise_current_error()
+
+    def use_privatekey(self, pkey):
+        """
+        Load a private key from a PKey object
+
+        :param pkey: The PKey object
+        :return: None
+        """
+        # Mirrored from Context.use_privatekey
+        if not isinstance(pkey, PKey):
+            raise TypeError("pkey must be a PKey instance")
+
+        use_result = _lib.SSL_use_PrivateKey(self._ssl, pkey._pkey)
+        if not use_result:
+            self._context._raise_passphrase_exception()
+
+    def set_ciphertext_mtu(self, mtu):
+        """
+        For DTLS, set the maximum UDP payload size (*not* including IP/UDP
+        overhead).
+
+        Note that you might have to set :data:`OP_NO_QUERY_MTU` to prevent
+        OpenSSL from spontaneously clearing this.
+
+        :param mtu: An integer giving the maximum transmission unit.
+
+        .. versionadded:: 21.1
+        """
+        _lib.SSL_set_mtu(self._ssl, mtu)
+
+    def get_cleartext_mtu(self):
+        """
+        For DTLS, get the maximum size of unencrypted data you can pass to
+        :meth:`write` without exceeding the MTU (as passed to
+        :meth:`set_ciphertext_mtu`).
+
+        :return: The effective MTU as an integer.
+
+        .. versionadded:: 21.1
+        """
+
+        if not hasattr(_lib, "DTLS_get_data_mtu"):
+            raise NotImplementedError("requires OpenSSL 1.1.1 or better")
+        return _lib.DTLS_get_data_mtu(self._ssl)
 
     def set_tlsext_host_name(self, name):
         """
@@ -1839,7 +2020,7 @@ class Connection(object):
         if self._from_ssl is None:
             raise TypeError("Connection sock was not None")
 
-        if not isinstance(bufsiz, integer_types):
+        if not isinstance(bufsiz, int):
             raise TypeError("bufsiz must be an integer")
 
         buf = _no_zero_allocator("char[]", bufsiz)
@@ -1953,6 +2134,32 @@ class Connection(object):
         conn.set_accept_state()
         return (conn, addr)
 
+    def DTLSv1_listen(self):
+        """
+        Call the OpenSSL function DTLSv1_listen on this connection. See the
+        OpenSSL manual for more details.
+
+        :return: None
+        """
+        # Possible future extension: return the BIO_ADDR in some form.
+        bio_addr = _lib.BIO_ADDR_new()
+        try:
+            result = _lib.DTLSv1_listen(self._ssl, bio_addr)
+        finally:
+            _lib.BIO_ADDR_free(bio_addr)
+        # DTLSv1_listen is weird. A zero return value means 'didn't find a
+        # ClientHello with valid cookie, but keep trying'. So basically
+        # WantReadError. But it doesn't work correctly with _raise_ssl_error.
+        # So we raise it manually instead.
+        if self._cookie_generate_helper is not None:
+            self._cookie_generate_helper.raise_if_problem()
+        if self._cookie_verify_helper is not None:
+            self._cookie_verify_helper.raise_if_problem()
+        if result == 0:
+            raise WantReadError()
+        if result < 0:
+            self._raise_ssl_error(self._ssl, result)
+
     def bio_shutdown(self):
         """
         If the Connection was created with a memory BIO, this method can be
@@ -1994,7 +2201,7 @@ class Connection(object):
             result = _lib.SSL_get_cipher_list(self._ssl, i)
             if result == _ffi.NULL:
                 break
-            ciphers.append(_native(_ffi.string(result)))
+            ciphers.append(_ffi.string(result).decode("utf-8"))
         return ciphers
 
     def get_client_ca_list(self):
@@ -2070,7 +2277,7 @@ class Connection(object):
         :param state: bitvector of SENT_SHUTDOWN, RECEIVED_SHUTDOWN.
         :return: None
         """
-        if not isinstance(state, integer_types):
+        if not isinstance(state, int):
             raise TypeError("state must be an integer")
 
         _lib.SSL_set_shutdown(self._ssl, state)
@@ -2451,10 +2658,16 @@ class Connection(object):
             This list should be a Python list of bytestrings representing the
             protocols to offer, e.g. ``[b'http/1.1', b'spdy/2']``.
         """
+        # Different versions of OpenSSL are inconsistent about how they handle
+        # empty proto lists (see #1043), so we avoid the problem entirely by
+        # rejecting them ourselves.
+        if not protos:
+            raise ValueError("at least one protocol must be specified")
+
         # Take the list of protocols and join them together, prefixing them
         # with their lengths.
         protostr = b"".join(
-            chain.from_iterable((int2byte(len(p)), p) for p in protos)
+            chain.from_iterable((bytes((len(p),)), p) for p in protos)
         )
 
         # Build a C string from the list. We don't need to save this off
@@ -2475,7 +2688,7 @@ class Connection(object):
         Get the protocol that was negotiated by ALPN.
 
         :returns: A bytestring of the protocol name.  If no protocol has been
-            negotiated yet, returns an empty string.
+            negotiated yet, returns an empty bytestring.
         """
         data = _ffi.new("unsigned char **")
         data_len = _ffi.new("unsigned int *")
@@ -2498,8 +2711,3 @@ class Connection(object):
             self._ssl, _lib.TLSEXT_STATUSTYPE_ocsp
         )
         _openssl_assert(rc == 1)
-
-
-# This is similar to the initialization calls at the end of OpenSSL/crypto.py
-# but is exercised mostly by the Context initializer.
-_lib.SSL_library_init()

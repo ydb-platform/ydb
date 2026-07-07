@@ -1689,6 +1689,26 @@ struct TSkyShareTableOptions
     FLUENT_FIELD_OPTION(TString, Pool);
 };
 
+///
+/// @brief Options for @ref NYT::IClient::CheckClusterLiveness
+///
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#check_cluster_liveness
+struct TCheckClusterLivenessOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TCheckClusterLivenessOptions;
+    /// @endcond
+
+    /// Check primary master.
+    FLUENT_FIELD_DEFAULT(bool, CheckCypressRoot, true);
+
+    /// Check secondary master.
+    FLUENT_FIELD_DEFAULT(bool, CheckSecondaryMasterCells, true);
+
+    /// Check the given tablet cell bundle's health.
+    FLUENT_FIELD_OPTION(TString, CheckTabletCellBundle);
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

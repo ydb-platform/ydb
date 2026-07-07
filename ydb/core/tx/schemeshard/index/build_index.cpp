@@ -113,10 +113,18 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-            case NKikimrSchemeOp::EIndexTypeGlobalJson:
-            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
                 // no specialized index description
                 Y_ASSERT(std::holds_alternative<std::monostate>(info.SpecializedIndexDescription));
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                // JSON indexes carry a fulltext description only when rowid mode (__ydb_row_id as doc_id)
+                // has been enabled; otherwise there is no specialized index description.
+                if (const auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&info.SpecializedIndexDescription)) {
+                    *serializableRepresentation.MutableFulltextIndexDescription() = *ft;
+                } else {
+                    Y_ASSERT(std::holds_alternative<std::monostate>(info.SpecializedIndexDescription));
+                }
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() =

@@ -1,0 +1,105 @@
+# Гибридный поиск
+
+Гибридный поиск объединяет [полнотекстовый поиск](fulltext-indexes.md) и [векторный поиск](vector-indexes.md) в едином ранжированном результате: каждый документ оценивается одновременно по релевантности текста и по близости эмбеддингов, а два ранжирования объединяются в одно. Это сочетает точность лексического сопоставления и полноту семантической близости и является распространённым строительным блоком для этапа извлечения данных в подходе Retrieval-Augmented Generation (RAG).
+
+Общее описание гибридного поиска см. в разделе [Понятие гибридного поиска](../concepts/query_execution/hybrid_search.md).
+
+Гибридный поиск — это не отдельный тип индекса. Он переиспользует два существующих индекса одной и той же таблицы:
+
+* [fulltext_relevance](fulltext-indexes.md#relevance) по текстовой колонке — даёт сигнал релевантности [BM25](https://en.wikipedia.org/wiki/Okapi_BM25);
+* [vector_kmeans_tree](vector-indexes.md) по колонке с эмбеддингами — даёт сигнал близости ближайших соседей (семантический).
+
+## Подготовка индексов {#prepare}
+
+Создайте таблицу с текстовой колонкой и колонкой эмбеддингов, затем добавьте оба индекса.
+
+```yql
+CREATE TABLE documents (
+    id Uint64,
+    text Utf8,
+    embedding String,
+    PRIMARY KEY (id)
+);
+```
+
+Добавьте индекс `fulltext_relevance` по текстовой колонке (для ранжирования по релевантности требуется именно этот тип, а не `fulltext_plain`):
+
+```yql
+ALTER TABLE documents
+  ADD INDEX ft_idx
+  GLOBAL USING fulltext_relevance
+  ON (text)
+  WITH (tokenizer=standard, use_filter_lowercase=true);
+```
+
+Добавьте индекс `vector_kmeans_tree` по колонке эмбеддингов:
+
+```yql
+ALTER TABLE documents
+  ADD INDEX vec_idx
+  GLOBAL USING vector_kmeans_tree
+  ON (embedding)
+  WITH (distance=cosine);
+```
+
+Подробности о каждом типе индекса — в разделах [{#T}](fulltext-indexes.md) и [{#T}](vector-indexes.md).
+
+## Выполнение гибридного запроса {#query}
+
+Гибридный запрос — это обычный `SELECT` по основной таблице (без `VIEW`), у которого ключ `ORDER BY` представляет собой единственный вызов `HybridRank`. `HybridRank` принимает по одному оценивающему выражению на каждую ветвь: [FullTextScore](../yql/reference/builtins/fulltext.md#fulltext-score) для текстовой ветви и [Knn](../yql/reference/udf/list/knn.md)-расстояние или сходство для векторной ветви.
+
+```yql
+PRAGMA ydb.KMeansTreeSearchTopSize = "10";
+
+$queryText = "машинное обучение";
+$queryVector = Knn::ToBinaryStringFloat([0.1, 0.2, 0.3, 0.4]);
+
+SELECT id, text
+FROM documents
+ORDER BY HybridRank(
+    FullTextScore(text, $queryText),
+    Knn::CosineDistance(embedding, $queryVector))
+LIMIT 10;
+```
+
+Оба входа происходят из одного пользовательского запроса: `$queryText` — это текст поиска (сопоставляется лексически), а `$queryVector` — его эмбеддинг, вычисленный приложением (сопоставляется семантически). {{ ydb-short-name }} не вычисляет эмбеддинги самостоятельно, поэтому вектор передаётся извне — здесь он построен из литерала с помощью [Knn::ToBinaryStringFloat](../yql/reference/udf/list/knn.md#functions-convert), но в приложении это результат работы модели эмбеддингов.
+
+{{ ydb-short-name }} автоматически сопоставляет каждую ветвь с её индексом по оцениваемой колонке (`text` → полнотекстовый индекс релевантности, `embedding` → векторный индекс), извлекает пул кандидатов из каждой ветви и объединяет два ранжирования. Результат — топ `LIMIT` документов по объединённой оценке.
+
+Обратите внимание, что, в отличие от полнотекстового и векторного поиска, гибридный запрос **не** использует `VIEW IndexName`: индексы выбираются по аргументам `HybridRank`, а чтение идёт по основной таблице.
+
+`PRAGMA ydb.KMeansTreeSearchTopSize` управляет полнотой векторной ветви — см. [KMeansTreeSearchTopSize](../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize). Как и при обычном векторном поиске, его следует задавать явно.
+
+## Настройка объединения {#tuning}
+
+Способ объединения и его параметры передаются как именованные аргументы `HybridRank`. Наиболее употребительные:
+
+* `Mode` — `"rrf"` (по умолчанию, Reciprocal Rank Fusion) или `"linear"` (взвешенная сумма нормализованных оценок);
+* `Weights` — кортеж весов ветвей, по одному значению на оценивающий аргумент, для смещения ранжирования в сторону одного из сигналов;
+* `K` — константа RRF (по умолчанию `60.0`);
+* `Indexes` / `Limits` — явные имена индексов и размеры пулов кандидатов по ветвям.
+
+Например, чтобы дать векторной ветви вдвое больший вес, чем текстовой, в режиме RRF:
+
+```yql
+$queryText = "машинное обучение";
+$queryVector = Knn::ToBinaryStringFloat([0.1, 0.2, 0.3, 0.4]);
+
+SELECT id, text
+FROM documents
+ORDER BY HybridRank(
+    FullTextScore(text, $queryText),
+    Knn::CosineDistance(embedding, $queryVector),
+    (1, 2) AS Weights)
+LIMIT 10;
+```
+
+Полный список параметров и их семантика — в разделе [{#T}](../yql/reference/syntax/select/hybrid_search.md).
+
+## Ограничения {#limitations}
+
+* Для таблицы должны существовать готовый индекс `fulltext_relevance` и непрефиксный индекс `vector_kmeans_tree` по соответствующим колонкам, иначе запрос завершится с понятной ошибкой.
+* [Префиксные векторные индексы](vector-indexes.md) пока не поддерживаются.
+* Если колонке ветви соответствует более одного полнотекстового (или векторного) индекса, ветвь неоднозначна и должна быть уточнена явным аргументом `AS Indexes`.
+* `LIMIT` должен быть литералом, так как он задаёт размеры пулов кандидатов по ветвям. Чтобы использовать параметризованный `LIMIT`, передайте явный `AS Limits`.
+* `HybridRank(...)` должен быть единственным ключом `ORDER BY` — его нельзя отрицать, оборачивать в другое выражение или комбинировать с другими ключами сортировки.

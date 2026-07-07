@@ -84,7 +84,7 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
 
     if (fieldsMap.NeedField(VSessions::WmState::ColumnId)) { // 18
         if (WmState) {
-            using EWmState = IWmSessionUpdater::EWmState;
+            using EWmState = NWorkload::ISessionUpdater::EState;
             switch(WmState->GetState()) {
                 case EWmState::NONE: {
                     proto->SetWmState("NONE");
@@ -115,6 +115,12 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
     if (fieldsMap.NeedField(VSessions::WmExitTime::ColumnId)) { // 20
         if (WmState) {
             proto->SetWmExitTime(WmState->GetExitTime().MicroSeconds());
+        }
+    }
+
+    if (fieldsMap.NeedField(VSessions::TraceId::ColumnId)) { // 21
+        if (State == TKqpSessionInfo::EXECUTING && !TraceId.empty()) {
+            proto->SetTraceId(TraceId);
         }
     }
 }

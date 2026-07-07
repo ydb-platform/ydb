@@ -99,6 +99,7 @@ struct TKiExploreTxResults {
     };
 
     bool ConcurrentResults = true;
+    bool IsolateEffects = false;
 
     THashSet<const TExprNode*> Ops;
     TVector<TExprBase> Sync;
@@ -180,8 +181,10 @@ struct TKiExploreTxResults {
             uncommittedChangesRead = HasWriteOps(tableMeta->Name);
         }
 
-        if (uncommittedChangesRead) {
+        if (uncommittedChangesRead || IsolateEffects) {
             AddQueryBlock();
+        }
+        if (uncommittedChangesRead) {
             SetBlockHasUncommittedChangesRead();
         }
     }
@@ -269,7 +272,7 @@ struct TKiExploreTxResults {
             }
         }
 
-        if (QueryBlocks.empty() || uncommittedChangesRead) {
+        if (QueryBlocks.empty() || uncommittedChangesRead || IsolateEffects) {
             AddQueryBlock();
         }
 
@@ -918,20 +921,14 @@ TVector<TKiDataQueryBlock> MakeKiDataQueryBlocks(TExprBase node, const TKiExplor
     return queryBlocks;
 }
 
-TString GetShowCreateType(const TExprNode& settings) {
-    if (HasSetting(settings, "showCreateTable")) {
-        return "showCreateTable";
-    }
-    if (HasSetting(settings, "showCreateView")) {
-        return "showCreateView";
-    }
-    return "";
+TStringBuf GetShowCreateType(const TExprNode& settings) {
+    return GetShowCreateSetting(settings);
 }
 
 } // anonymous namespace
 
 TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,
-    TTypeAnnotationContext& types, bool concurrentResults) {
+    TTypeAnnotationContext& types, bool concurrentResults, bool isolateEffects) {
     if (!node.Maybe<TCoCommit>().DataSink().Maybe<TKiDataSink>()) {
         return node.Ptr();
     }
@@ -1011,8 +1008,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
         if (auto maybeReadTable = currentNode.Maybe<TKiReadTable>()) {
             auto readTable = maybeReadTable.Cast();
             for (auto setting : readTable.Settings()) {
-                auto name = setting.Name().Value();
-                if (name == "showCreateTable" || name == "showCreateView") {
+                if (IsShowCreateSettingName(setting.Name().Value())) {
                     showCreateReadReplacements[input.Get()] = nullptr;
                 }
             }
@@ -1088,7 +1084,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
                             auto name = tuple.Cast().Name().Value();
                             if (name == "sysViewRewritten") {
                                 isSysViewRewritten = true;
-                            } else if (name == "showCreateTable" || name == "showCreateView") {
+                            } else if (IsShowCreateSettingName(name)) {
                                 isShowCreate = true;
                             }
                         }
@@ -1113,11 +1109,8 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
                     if (name == "sysViewRewritten") {
                         path = tuple.Cast().Value().Cast().Cast<TCoAtom>().StringValue();
                     }
-                    if (name == "showCreateTable") {
-                        pathType = "Table";
-                    }
-                    if (name == "showCreateView") {
-                        pathType = "View";
+                    if (auto pt = ShowCreateSettingToPathType(name); !pt.empty()) {
+                        pathType = TString(pt);
                     }
                 }
             }
@@ -1200,6 +1193,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
 
     TKiExploreTxResults txExplore;
     txExplore.ConcurrentResults = concurrentResults;
+    txExplore.IsolateEffects = isolateEffects;
     if (!ExploreTx(commit.World(), ctx, kiDataSink, txExplore, tablesData, types) || txExplore.HasErrors) {
         if (txExplore.HasErrors) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "ExploreTx failed"));

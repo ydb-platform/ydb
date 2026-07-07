@@ -307,7 +307,7 @@ bool TSqlSelect::FlattenByArg(const TString& sourceLabel, TVector<TNodePtr>& fla
                 ids.push_back(BuildColumn(column->GetPos()));
                 ids.push_back(*sourcePtr);
                 ids.push_back(*columnNamePtr);
-                auto node = BuildAccess(column->GetPos(), ids, false);
+                auto node = BuildAccess(column->GetPos(), ids, /*isLookup=*/false);
                 node->SetLabel(column->GetLabel());
                 flattenByExprs.emplace_back(std::move(node));
             }
@@ -347,7 +347,7 @@ bool TSqlSelect::FlattenByArg(const TString& sourceLabel, TVector<TNodePtr>& fla
 }
 
 TSourcePtr TSqlSelect::FlattenSource(const TRule_flatten_source& node) {
-    auto source = NamedSingleSource(node.GetRule_named_single_source1(), true);
+    auto source = NamedSingleSource(node.GetRule_named_single_source1(), /*unorderedSubquery=*/true);
     if (!source) {
         return nullptr;
     }
@@ -878,7 +878,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
     const bool processStream = node.HasBlock2();
 
     if (!hasUsing) {
-        return BuildProcess(startPos, std::move(source), nullptr, false, {}, false, processStream, settings, {});
+        return BuildProcess(startPos, std::move(source), nullptr, /*withExtFunction=*/false, {}, /*listCall=*/false, processStream, settings, {});
     }
 
     const auto& block5 = node.GetBlock5();
@@ -973,14 +973,14 @@ TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSet
         selectPos = startPos;
     }
 
-    TSourcePtr source(NamedSingleSource(node.GetRule_named_single_source2(), true));
+    TSourcePtr source(NamedSingleSource(node.GetRule_named_single_source2(), /*unorderedSubquery=*/true));
     if (!source) {
         return {};
     }
     if (!node.GetBlock3().empty()) {
         TVector<TSourcePtr> sources(1, source);
         for (auto& s : node.GetBlock3()) {
-            sources.push_back(NamedSingleSource(s.GetRule_named_single_source2(), true));
+            sources.push_back(NamedSingleSource(s.GetRule_named_single_source2(), /*unorderedSubquery=*/true));
             if (!sources.back()) {
                 return nullptr;
             }
@@ -1290,7 +1290,7 @@ TSourcePtr TSqlSelect::CombineCore(const TRule_combine_core& node, const TWriteS
 
     Token(node.GetToken1());
 
-    TSourcePtr leftSource(NamedSingleSource(node.GetRule_named_single_source2(), true));
+    TSourcePtr leftSource(NamedSingleSource(node.GetRule_named_single_source2(), /*unorderedSubquery=*/true));
     if (!leftSource) {
         return {};
     }
@@ -1302,7 +1302,7 @@ TSourcePtr TSqlSelect::CombineCore(const TRule_combine_core& node, const TWriteS
 
     Token(node.GetToken4());
 
-    TSourcePtr rightSource(NamedSingleSource(node.GetRule_named_single_source5(), true));
+    TSourcePtr rightSource(NamedSingleSource(node.GetRule_named_single_source5(), /*unorderedSubquery=*/true));
     if (!rightSource) {
         return {};
     }
@@ -1515,8 +1515,25 @@ template <typename TRule>
              std::same_as<TRule, TRule_select_unparenthesized_stmt> ||
              std::same_as<TRule, TRule_select_subexpr>
 TSourcePtr TSqlSelect::BuildStmt(const TRule& node, TPosition& pos) {
+    if (node.HasBlock1()) {
+        Token(node.GetBlock1().GetRule_cte_with_clause1().GetToken1());
+        Ctx_.Error() << "WITH CTE is available only with YqlSelect";
+        return nullptr;
+    }
+
     TBuildExtra extra;
-    TSourcePtr result = BuildUnionException(node, pos, extra);
+    TSourcePtr result;
+
+    if constexpr (std::is_same_v<TRule, TRule_select_stmt>) {
+        result = BuildUnionException(node.GetRule_select_stmt_core2(), pos, extra);
+    } else if constexpr (std::is_same_v<TRule, TRule_select_unparenthesized_stmt>) {
+        result = BuildUnionException(node.GetRule_select_unparenthesized_stmt_core2(), pos, extra);
+    } else if constexpr (std::is_same_v<TRule, TRule_select_subexpr>) {
+        result = BuildUnionException(node.GetRule_select_subexpr_core2(), pos, extra);
+    } else {
+        static_assert(false, "Change implementation according to grammar changes.");
+    }
+
     return BuildStmt(std::move(result), std::move(extra));
 }
 
@@ -1597,21 +1614,21 @@ TSourcePtr TSqlSelect::BuildStmt(TSourcePtr result, TBuildExtra extra) {
 }
 
 template <typename TRule>
-    requires std::same_as<TRule, TRule_select_stmt> ||
-             std::same_as<TRule, TRule_select_unparenthesized_stmt> ||
-             std::same_as<TRule, TRule_select_subexpr>
+    requires std::same_as<TRule, TRule_select_stmt_core> ||
+             std::same_as<TRule, TRule_select_unparenthesized_stmt_core> ||
+             std::same_as<TRule, TRule_select_subexpr_core>
 TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TSqlSelect::TBuildExtra& extra) {
-    const TSelectKindPlacement firstPlacement = {
+    TSelectKindPlacement firstPlacement = {
         .IsFirstInSelectOp = true,
         .IsLastInSelectOp = node.GetBlock2().empty(),
     };
 
     TSourcePtr first;
-    if constexpr (std::is_same_v<TRule, TRule_select_stmt>) {
+    if constexpr (std::is_same_v<TRule, TRule_select_stmt_core>) {
         first = BuildIntersection(node.GetRule_select_stmt_intersect1(), pos, firstPlacement, extra);
-    } else if constexpr (std::is_same_v<TRule, TRule_select_unparenthesized_stmt>) {
+    } else if constexpr (std::is_same_v<TRule, TRule_select_unparenthesized_stmt_core>) {
         first = BuildIntersection(node.GetRule_select_unparenthesized_stmt_intersect1(), pos, firstPlacement, extra);
-    } else if constexpr (std::is_same_v<TRule, TRule_select_subexpr>) {
+    } else if constexpr (std::is_same_v<TRule, TRule_select_subexpr_core>) {
         first = BuildIntersection(node.GetRule_select_subexpr_intersect1(), pos, firstPlacement, extra);
     } else {
         static_assert(false, "Change implementation according to grammar changes.");
@@ -1657,7 +1674,7 @@ TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TS
         };
 
         TSourcePtr next;
-        if constexpr (std::is_same_v<TRule, TRule_select_subexpr>) {
+        if constexpr (std::is_same_v<TRule, TRule_select_subexpr_core>) {
             next = BuildIntersection(nextBlock.GetRule_select_subexpr_intersect2(), pos, nextPlacement, extra);
         } else {
             next = BuildIntersection(nextBlock.GetRule_select_stmt_intersect2(), pos, nextPlacement, extra);

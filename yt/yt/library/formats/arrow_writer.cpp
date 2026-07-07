@@ -24,6 +24,8 @@
 
 #include <library/cpp/yt/memory/range.h>
 
+#include <util/stream/mem.h>
+
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h>
 
 #include <contrib/libs/apache/arrow_next/cpp/src/generated/Message.fbs.h>
@@ -89,7 +91,7 @@ flatbuffers::Offset<flatbuf::Field> CreateRegularField(
 ////////////////////////////////////////////////////////////////////////////////
 
 constexpr i64 ArrowAlignment = 8;
-const TString AlignmentString(ArrowAlignment, 0);
+const std::string AlignmentString(ArrowAlignment, 0);
 
 flatbuffers::Offset<flatbuffers::String> SerializeString(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
@@ -100,8 +102,7 @@ flatbuffers::Offset<flatbuffers::String> SerializeString(
 
 TArrowSchemaType SerializeTzType(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
-    ESimpleLogicalValueType type,
-    const TArrowFormatConfigPtr& arrowConfig)
+    ESimpleLogicalValueType type)
 {
     std::vector<flatbuffers::Offset<flatbuf::Field>> childrenOffset;
 
@@ -121,34 +122,20 @@ TArrowSchemaType SerializeTzType(
 
     childrenOffset.push_back(timestampField);
 
-    if (arrowConfig->EnableTzIndex) {
-        // Make tz index field.
-        auto tzIndexOffset = flatbuf::CreateInt(
-            *flatbufBuilder,
-            /*bitWidth*/ 16,
-            /*is_signed*/ false).Union();
+    // Make tz index field.
+    auto tzIndexOffset = flatbuf::CreateInt(
+        *flatbufBuilder,
+        /*bitWidth*/ 16,
+        /*is_signed*/ false).Union();
 
-        auto tzIndexField = flatbuf::CreateField(
-            *flatbufBuilder,
-            SerializeString(flatbufBuilder, "TzIndex"),
-            /*nullable*/ false,
-            flatbuf::Type_Int,
-            tzIndexOffset);
+    auto tzIndexField = flatbuf::CreateField(
+        *flatbufBuilder,
+        SerializeString(flatbufBuilder, "TzIndex"),
+        /*nullable*/ false,
+        flatbuf::Type_Int,
+        tzIndexOffset);
 
-        childrenOffset.push_back(std::move(tzIndexField));
-    } else {
-        // Make tz name field.
-        auto tzNameOffset = flatbuf::CreateBinary(*flatbufBuilder).Union();
-
-        auto tzNameField = flatbuf::CreateField(
-            *flatbufBuilder,
-            SerializeString(flatbufBuilder, "TzName"),
-            /*nullable*/ false,
-            flatbuf::Type_Binary,
-            tzNameOffset);
-
-        childrenOffset.push_back(std::move(tzNameField));
-    }
+    childrenOffset.push_back(std::move(tzIndexField));
 
     return TArrowSchemaType{
         .Type = flatbuf::Type_Struct_,
@@ -159,8 +146,7 @@ TArrowSchemaType SerializeTzType(
 
 TArrowSchemaType SerializeLeafColumnType(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
-    ESimpleLogicalValueType simpleType,
-    const TArrowFormatConfigPtr& arrowConfig)
+    ESimpleLogicalValueType simpleType)
 {
     switch (simpleType) {
         case ESimpleLogicalValueType::Null:
@@ -265,7 +251,7 @@ TArrowSchemaType SerializeLeafColumnType(
         case ESimpleLogicalValueType::TzDate32:
         case ESimpleLogicalValueType::TzDatetime64:
         case ESimpleLogicalValueType::TzTimestamp64:
-            return SerializeTzType(flatbufBuilder, simpleType, arrowConfig);
+            return SerializeTzType(flatbufBuilder, simpleType);
 
         case ESimpleLogicalValueType::Utf8:
         case ESimpleLogicalValueType::Json:
@@ -432,7 +418,7 @@ TArrowSchemaType SerializeColumnType(
 {
     if (!arrowConfig->EnableComplexTypes) {
         auto simpleType = CastToV1Type(type).first;
-        return SerializeLeafColumnType(flatbufBuilder, simpleType, arrowConfig);
+        return SerializeLeafColumnType(flatbufBuilder, simpleType);
     }
 
     auto denullifiedType = DenullifyLogicalType(type);
@@ -440,7 +426,7 @@ TArrowSchemaType SerializeColumnType(
     switch (denullifiedType->GetMetatype()) {
         case ELogicalMetatype::Simple: {
             auto simpleType = CastToV1Type(type).first;
-            return SerializeLeafColumnType(flatbufBuilder, simpleType, arrowConfig);
+            return SerializeLeafColumnType(flatbufBuilder, simpleType);
         }
 
         case ELogicalMetatype::Struct:
@@ -1177,8 +1163,7 @@ void SerializeStringLikeColumn(
 template <ESimpleLogicalValueType type>
 void SerializeTzColumnImpl(
     const TTypedBatchColumn& typedColumn,
-    TRecordBatchSerializationContext* context,
-    const TArrowFormatConfigPtr& config)
+    TRecordBatchSerializationContext* context)
 {
     const auto* column = typedColumn.Column;
     YT_VERIFY(column->Values);
@@ -1254,75 +1239,35 @@ void SerializeTzColumnImpl(
 
     addEmptyBitmap();
 
-    if (config->EnableTzIndex) {
-        // Writing timezone indexes
-        context->AddBuffer(
-            sizeof(ui16) * column->ValueCount,
-            [=] (TMutableRef dstRef) {
-                auto currentStringData = stringData.Data();
-                auto dstValues = GetTypedValues<ui16>(dstRef);
+    // Writing timezone indexes
+    context->AddBuffer(
+        sizeof(ui16) * column->ValueCount,
+        [=] (TMutableRef dstRef) {
+            auto currentStringData = stringData.Data();
+            auto dstValues = GetTypedValues<ui16>(dstRef);
 
-                auto* currentOutput = dstValues.Begin();
-                for (int rowOffset = 0; rowOffset < column->ValueCount; ++rowOffset) {
-                    if (tzOffsets[rowOffset] != tzOffsets[rowOffset + 1]) {
-                        auto tzItem = ParseTzValue<TInt>(std::string_view(
-                            currentStringData + tzOffsets[rowOffset],
-                            currentStringData + tzOffsets[rowOffset + 1]));
-                        *currentOutput = GetTzIndex(tzItem.second);
-                    }
-                    ++currentOutput;
+            auto* currentOutput = dstValues.Begin();
+            for (int rowOffset = 0; rowOffset < column->ValueCount; ++rowOffset) {
+                if (tzOffsets[rowOffset] != tzOffsets[rowOffset + 1]) {
+                    auto tzItem = ParseTzValue<TInt>(std::string_view(
+                        currentStringData + tzOffsets[rowOffset],
+                        currentStringData + tzOffsets[rowOffset + 1]));
+                    *currentOutput = tzItem.second;
                 }
-            });
-    } else {
-        // Writing timezone names.
-        TStringBuilder builder;
-        std::vector<i32> nameOffsets;
-        nameOffsets.reserve(column->ValueCount);
-        i32 tzStringsSize = 0;
-        auto currentStringData = stringData.Data();
-        for (int rowOffset = 0; rowOffset < column->ValueCount; ++rowOffset) {
-            nameOffsets.push_back(tzStringsSize);
-            if (tzOffsets[rowOffset] != tzOffsets[rowOffset + 1]) {
-                auto tzItem = ParseTzValue<TInt>(std::string_view(
-                    currentStringData + tzOffsets[rowOffset],
-                    currentStringData + tzOffsets[rowOffset + 1]));
-                tzStringsSize += tzItem.second.size();
-                builder.AppendString(tzItem.second);
+                ++currentOutput;
             }
-        }
-        nameOffsets.push_back(tzStringsSize);
-        auto tzStringsBuffer = builder.Flush();
-
-        context->AddBuffer(
-            sizeof(i32) * (column->ValueCount + 1),
-            [=] (TMutableRef dstRef) {
-                ::memcpy(
-                    dstRef.Begin(),
-                    nameOffsets.data(),
-                    nameOffsets.size() * sizeof(i32));
-            });
-
-        context->AddBuffer(
-            tzStringsSize,
-            [=] (TMutableRef dstRef) {
-                ::memcpy(
-                    dstRef.Begin(),
-                    tzStringsBuffer.data(),
-                    tzStringsSize);
-            });
-    }
+        });
 }
 
 void SerializeTzColumn(
     const TTypedBatchColumn& typedColumn,
     ESimpleLogicalValueType simpleType,
-    TRecordBatchSerializationContext* context,
-    const TArrowFormatConfigPtr& config)
+    TRecordBatchSerializationContext* context)
 {
     switch (simpleType) {
 #define XX(ytType)                                                                                      \
     case ESimpleLogicalValueType::ytType: {                                                             \
-        return SerializeTzColumnImpl<ESimpleLogicalValueType::ytType>(typedColumn, context, config);    \
+        return SerializeTzColumnImpl<ESimpleLogicalValueType::ytType>(typedColumn, context);    \
     }
     XX(TzDate)
     XX(TzDatetime)
@@ -1414,7 +1359,6 @@ using TArrowWriterBuffer = std::variant<TTypedBlob, TBitmapOutput>;
 
 void CreateBuffersForSimpleType(
     const TLogicalTypePtr& type,
-    const TArrowFormatConfigPtr& config,
     std::vector<TArrowWriterBuffer>& buffers)
 {
     auto simpleType = CastToV1Type(type).first;
@@ -1434,17 +1378,8 @@ void CreateBuffersForSimpleType(
     if (IsTzType(type)) {
         // Buffer for timestamp data.
         buffers.emplace_back(TTypedBlob());
-        if (config->EnableTzIndex) {
-            // Buffer for timezone indices.
-            buffers.emplace_back(TTypedBlob());
-        } else {
-            // Buffer for timezone name offsets.
-            buffers.emplace_back(TTypedBlob());
-            auto& offsetsBuffer = std::get<TTypedBlob>(buffers.back());
-            offsetsBuffer.AppendValue<ui32>(0);
-            // Buffer for timezone name binary data.
-            buffers.emplace_back(TTypedBlob());
-        }
+        // Buffer for timezone indices.
+        buffers.emplace_back(TTypedBlob());
         return;
     }
 
@@ -1470,7 +1405,7 @@ void CreateBuffersForComplexType(
 {
     switch (type->GetMetatype()) {
         case ELogicalMetatype::Simple:
-            CreateBuffersForSimpleType(type, config, buffers);
+            CreateBuffersForSimpleType(type, buffers);
             break;
 
         case ELogicalMetatype::Optional:
@@ -1520,8 +1455,7 @@ void CreateBuffersForComplexType(
 }
 
 int CalculateSimpleTypeBufferIndexIncrement(
-    const TLogicalTypePtr& type,
-    const TArrowFormatConfigPtr& config)
+    const TLogicalTypePtr& type)
 {
     auto simpleType = CastToV1Type(type).first;
 
@@ -1531,13 +1465,8 @@ int CalculateSimpleTypeBufferIndexIncrement(
     }
 
     if (IsTzType(type)) {
-        if (config->EnableTzIndex) {
-            // Timestamp values and timezone indices.
-            return 2;
-        } else {
-            // Timestamp values, timezone names offsets and timezone names binary data.
-            return 3;
-        }
+        // Timestamp values and timezone indices.
+        return 2;
     }
 
     switch (simpleType) {
@@ -1552,26 +1481,24 @@ int CalculateSimpleTypeBufferIndexIncrement(
     }
 }
 
-int CalculateBufferIndexIncrement(
-    const TLogicalTypePtr& type,
-    const TArrowFormatConfigPtr& config)
+int CalculateBufferIndexIncrement(const TLogicalTypePtr& type)
 {
     switch (type->GetMetatype()) {
         case ELogicalMetatype::Simple:
-            return CalculateSimpleTypeBufferIndexIncrement(type, config);
+            return CalculateSimpleTypeBufferIndexIncrement(type);
 
         case ELogicalMetatype::Optional:
             // Validity bitmap.
-            return 1 + CalculateBufferIndexIncrement(type->GetElement(), config);
+            return 1 + CalculateBufferIndexIncrement(type->GetElement());
 
         case ELogicalMetatype::List:
             // Offsets buffer.
-            return 1 + CalculateBufferIndexIncrement(type->GetElement(), config);
+            return 1 + CalculateBufferIndexIncrement(type->GetElement());
 
         case ELogicalMetatype::Struct: {
             int total = 0;
             for (const auto& field : type->GetFields()) {
-                total += CalculateBufferIndexIncrement(field.Type, config);
+                total += CalculateBufferIndexIncrement(field.Type);
             }
             return total;
         }
@@ -1579,13 +1506,13 @@ int CalculateBufferIndexIncrement(
         case ELogicalMetatype::Dict: {
             // Offsets buffer for list of pairs.
             int total = 1;
-            total += CalculateBufferIndexIncrement(type->AsDictTypeRef().GetKey(), config);
-            total += CalculateBufferIndexIncrement(type->AsDictTypeRef().GetValue(), config);
+            total += CalculateBufferIndexIncrement(type->AsDictTypeRef().GetKey());
+            total += CalculateBufferIndexIncrement(type->AsDictTypeRef().GetValue());
             return total;
         }
 
         case ELogicalMetatype::Tagged:
-            return CalculateBufferIndexIncrement(type->GetElement(), config);
+            return CalculateBufferIndexIncrement(type->GetElement());
 
         default:
             THROW_ERROR_EXCEPTION("Complex type %Qlv is not yet supported with Arrow complex types enabled",
@@ -1595,7 +1522,6 @@ int CalculateBufferIndexIncrement(
 
 void AppendSimpleTypeToBuffer(
     const TLogicalTypePtr& logicalType,
-    const TArrowFormatConfigPtr& config,
     std::vector<TArrowWriterBuffer>& buffers,
     int& currentBufferIndex,
     TYsonPullParserCursor& cursor)
@@ -1621,23 +1547,14 @@ void AppendSimpleTypeToBuffer(
             constexpr ESimpleLogicalValueType UnderlyingDateType = GetUnderlyingDateType<TzType>();
             using TInt = TUnderlyingTimestampIntegerType<UnderlyingDateType>;
 
-            auto [timestampValue, tzName] = ParseTzValue<TInt>(stringData);
+            auto [timestampValue, tzId] = ParseTzValue<TInt>(stringData);
 
             auto& timestampValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
 
             timestampValueBuffer.AppendValue<TInt>(timestampValue);
 
-            if (config->EnableTzIndex) {
-                auto& tzIndexValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
-
-                tzIndexValueBuffer.AppendValue<ui16>(GetTzIndex(tzName));
-            } else {
-                auto& tzNameOffsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
-                auto& tzNameValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
-
-                tzNameValueBuffer.Append(tzName.data(), tzName.size());
-                tzNameOffsetsBuffer.AppendValue<ui32>(tzNameValueBuffer.Size());
-            }
+            auto& tzIndexValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+            tzIndexValueBuffer.AppendValue<ui16>(tzId);
         };
 
         switch (simpleType) {
@@ -1722,7 +1639,6 @@ void AppendSimpleTypeToBuffer(
 
 void AppendNullSimpleTypeToBuffer(
     const TLogicalTypePtr& logicalType,
-    const TArrowFormatConfigPtr& config,
     std::vector<TArrowWriterBuffer>& buffers,
     int& currentBufferIndex)
 {
@@ -1746,16 +1662,9 @@ void AppendNullSimpleTypeToBuffer(
 
             timestampValueBuffer.AppendValue<TInt>(0);
 
-            if (config->EnableTzIndex) {
-                auto& tzIndexValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+            auto& tzIndexValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
 
-                tzIndexValueBuffer.AppendValue<ui16>(0);
-            } else {
-                auto& tzNameOffsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
-                auto& tzNameValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
-
-                tzNameOffsetsBuffer.AppendValue<ui32>(tzNameValueBuffer.Size());
-            }
+            tzIndexValueBuffer.AppendValue<ui16>(0);
         };
 
         switch (simpleType) {
@@ -1823,13 +1732,12 @@ void AppendNullSimpleTypeToBuffer(
 
 void FillBuffersForComplexTypeWithNulls(
     const TLogicalTypePtr& type,
-    const TArrowFormatConfigPtr& config,
     std::vector<TArrowWriterBuffer>& buffers,
     int& currentBufferIndex)
 {
     switch (type->GetMetatype()) {
         case ELogicalMetatype::Simple:
-            AppendNullSimpleTypeToBuffer(type, config, buffers, currentBufferIndex);
+            AppendNullSimpleTypeToBuffer(type, buffers, currentBufferIndex);
             break;
 
         case ELogicalMetatype::Optional: {
@@ -1839,7 +1747,6 @@ void FillBuffersForComplexTypeWithNulls(
 
             FillBuffersForComplexTypeWithNulls(
                 type->GetElement(),
-                config,
                 buffers,
                 currentBufferIndex);
             break;
@@ -1852,7 +1759,7 @@ void FillBuffersForComplexTypeWithNulls(
             ui32 previousOffset = offsetsBuffer.GetLastValue<ui32>();
             offsetsBuffer.AppendValue<ui32>(previousOffset);
 
-            currentBufferIndex += CalculateBufferIndexIncrement(type, config) - 1;
+            currentBufferIndex += CalculateBufferIndexIncrement(type) - 1;
             break;
         }
 
@@ -1860,7 +1767,6 @@ void FillBuffersForComplexTypeWithNulls(
             for (const auto& field : type->GetFields()) {
                 FillBuffersForComplexTypeWithNulls(
                     field.Type,
-                    config,
                     buffers,
                     currentBufferIndex);
             }
@@ -1869,7 +1775,6 @@ void FillBuffersForComplexTypeWithNulls(
         case ELogicalMetatype::Tagged:
             FillBuffersForComplexTypeWithNulls(
                 type->GetElement(),
-                config,
                 buffers,
                 currentBufferIndex);
             break;
@@ -1889,7 +1794,7 @@ void FillBuffersForComplexType(
 {
     switch (type->GetMetatype()) {
         case ELogicalMetatype::Simple: {
-            AppendSimpleTypeToBuffer(type, config, buffers, currentBufferIndex, cursor);
+            AppendSimpleTypeToBuffer(type, buffers, currentBufferIndex, cursor);
             cursor.Next();
 
             break;
@@ -1909,7 +1814,6 @@ void FillBuffersForComplexType(
                 cursor.Next();
                 FillBuffersForComplexTypeWithNulls(
                     subtype,
-                    config,
                     buffers,
                     currentBufferIndex);
             } else if (subtype->IsNullable()) {
@@ -1990,7 +1894,7 @@ void FillBuffersForComplexType(
 
             if (elementCount == 0) {
                 // |currentBufferIndex| is unchanged, manually advance it.
-                currentBufferIndex += CalculateBufferIndexIncrement(type, config) - 1;
+                currentBufferIndex += CalculateBufferIndexIncrement(type) - 1;
             }
 
             ui32 previousOffset = offsetsBuffer.GetLastValue<ui32>();
@@ -2167,15 +2071,8 @@ void WriteBuffersForComplexType(
 
                 WriteEmptyValidityBitmap(context, elementCount);
 
-                if (config->EnableTzIndex) {
-                    // Write timezone indices buffer.
-                    WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
-                } else {
-                    // Write timezone name offsets buffer.
-                    WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
-                    // Write timezone name binary data buffer.
-                    WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
-                }
+                // Write timezone indices buffer.
+                WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
 
                 break;
             }
@@ -2336,11 +2233,11 @@ void SerializeComplexTypeColumn(
         int currentBufferIndex = initialBufferIndex;
 
         if (offsets[rowOffset] != offsets[rowOffset + 1]) {
-            TString ysonString(
+            std::string ysonString(
                 currentStringData + offsets[rowOffset],
                 currentStringData + offsets[rowOffset + 1]);
 
-            TStringInput input(ysonString);
+            TMemoryInput input(ysonString);
             TYsonPullParser parser(&input, EYsonType::Node);
             TYsonPullParserCursor cursor = &parser;
 
@@ -2353,7 +2250,6 @@ void SerializeComplexTypeColumn(
         } else {
             FillBuffersForComplexTypeWithNulls(
                 typedColumn.Type,
-                config,
                 buffers,
                 currentBufferIndex);
         }
@@ -2433,7 +2329,7 @@ void SerializeColumn(
     } else if (IsIntegralType(simpleType)) {
         SerializeIntegerColumn(typedColumn, simpleType, context);
     } else if (IsTzType(typedColumn.Type)) {
-        SerializeTzColumn(typedColumn, simpleType, context, config);
+        SerializeTzColumn(typedColumn, simpleType, context);
     } else if (simpleType == ESimpleLogicalValueType::Interval) {
         SerializeIntegerColumn(typedColumn, simpleType, context);
     }  else if (simpleType == ESimpleLogicalValueType::Date) {

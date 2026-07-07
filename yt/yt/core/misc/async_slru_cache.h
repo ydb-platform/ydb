@@ -209,7 +209,11 @@ public:
     std::vector<TValuePtr> GetAll();
 
     TValuePtr Find(const TKey& key);
+    template <class THeterogenousKey>
+    TValuePtr Find(const THeterogenousKey& key);
     TValueFuture Lookup(const TKey& key);
+    template <class THeterogenousKey>
+    TValueFuture Lookup(const THeterogenousKey& key);
     void Touch(const TValuePtr& value);
 
     TInsertCookie BeginInsert(const TKey& key, i64 cookieWeight = 0);
@@ -337,8 +341,10 @@ private:
     public:
         using TValuePtr = TIntrusivePtr<TValue>;
 
-        void Find(const TKey& key);
-        void Lookup(const TKey& key);
+        template <class THeterogenousKey>
+        void Find(const THeterogenousKey& key);
+        template <class THeterogenousKey>
+        void Lookup(const THeterogenousKey& key);
         void Touch(const TValuePtr& value);
 
         //! If BeginInsert() returns true, then it must be paired with either CancelInsert() or EndInsert()
@@ -372,7 +378,8 @@ private:
 
         THashMap<TKey, TGhostItem*, THash> ItemMap_;
 
-        bool DoLookup(const TKey& key, bool allowAsyncHits);
+        template <class THeterogenousKey>
+        bool DoLookup(const THeterogenousKey& key, bool allowAsyncHits);
         void Trim(NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>& guard);
     };
 
@@ -449,9 +456,11 @@ private:
 
     std::atomic<bool> GhostCachesEnabled_;
 
-    TShard* GetShardByKey(const TKey& key) const;
+    template <class THeterogenousKey>
+    TShard* GetShardByKey(const THeterogenousKey& key) const;
 
-    TValueFuture DoLookup(TShard* shard, const TKey& key);
+    template <class THeterogenousKey>
+    TValueFuture DoLookup(TShard* shard, const THeterogenousKey& key);
 
     void DoTryRemove(const TKey& key, const TValuePtr& value, bool forbidResurrection);
 

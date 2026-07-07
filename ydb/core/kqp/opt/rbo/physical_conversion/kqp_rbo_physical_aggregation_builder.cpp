@@ -890,6 +890,11 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildInitHandlerLambda(const TVecto
     TVector<TExprNode::TPtr> lambdaResults;
     for (const auto& aggTraits : aggTraitsList) {
         const auto& aggFunction = aggTraits.AggFunc;
+        // No init state for distinct.
+        if (aggFunction == "distinct") {
+            continue;
+        }
+
         const auto isOptional = aggTraits.InputItemType->IsOptionalOrNull();
         const TTypeAnnotationNode* itemType = aggTraits.InputItemType;
 
@@ -904,8 +909,6 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildInitHandlerLambda(const TVecto
             initState = isOptional ? BuildAvgAggregationInitialStateForOptionalType(initState, itemType) : BuildAvgAggregationInitialState(initState, itemType);
         } else if (aggFunction == "sum") {
             initState = BuildSumAggregationInitialState(initState, itemType);
-        } else if (aggFunction == "distinct") {
-            continue;
         } else if (aggFunction == "variance_1_1") {
             initState =
                 isOptional ? BuildVarianceAggregationInitialStateOptionalType(initState, itemType) : BuildVarianceAggregationInitialState(initState, itemType);
@@ -943,6 +946,11 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildUpdateHandlerLambda(const TVec
     TVector<TExprNode::TPtr> lambdaResults;
     for (const auto& aggTraits : aggTraitsList) {
         const auto& aggFunction = aggTraits.AggFunc;
+        // No update state for distinct.
+        if (aggFunction == "distinct") {
+            continue;
+        }
+
         const auto& fieldName = aggTraits.AggFieldName;
         const auto& stateName = aggTraits.StateFieldName;
         const bool isOptional = aggTraits.InputItemType->IsOptionalOrNull();
@@ -950,11 +958,11 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildUpdateHandlerLambda(const TVec
         TExprNode::TPtr updateState;
 
         auto it = lambdaArgsMap.find(fieldName);
-        Y_ENSURE(it != lambdaArgsMap.end());
+        Y_ENSURE(it != lambdaArgsMap.end(), TStringBuilder() << "Cannot find a field name: " << fieldName);
         TExprNode::TPtr lambdaArgField = lambdaArgs[it->second];
 
         it = lambdaArgsMap.find(stateName);
-        Y_ENSURE(it != lambdaArgsMap.end());
+        Y_ENSURE(it != lambdaArgsMap.end(), TStringBuilder() << "Cannot find state name: " << stateName);
         TExprNode::TPtr lambdaArgState = lambdaArgs[it->second];
 
         if (aggFunction == "count") {
@@ -965,8 +973,6 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildUpdateHandlerLambda(const TVec
                                      : BuildAvgAggregationUpdateState(lambdaArgState, lambdaArgField, itemType);
         } else if (aggFunction == "sum") {
             updateState = BuildSumAggregationUpdateState(lambdaArgState, lambdaArgField, aggTraits.InputItemType);
-        } else if (aggFunction == "distinct") {
-            continue;
         } else if (aggFunction == "variance_1_1") {
             updateState = isOptional ? BuildVarianceAggregationUpdateStateOptionalType(lambdaArgState, lambdaArgField, aggTraits.InputItemType)
                                      : BuildVarianceAggregationUpdateState(lambdaArgState, lambdaArgField, aggTraits.InputItemType);
@@ -992,14 +998,13 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildUpdateHandlerLambda(const TVec
 // This lambda returns aggregation result.
 // It has arguments in the following order - keys, states.
 TExprNode::TPtr TPhysicalAggregationBuilder::BuildFinishHandlerLambda(const TVector<TString>& keyFields,
-                                                                      const TVector<TPhysicalAggregationTraits>& aggTraitsList,
-                                                                      bool isDistinct) {
+                                                                      const TVector<TPhysicalAggregationTraits>& aggTraitsList, bool isDistinct) {
     ui32 lambdaArgsCounter = 0;
     TVector<TExprNode::TPtr> lambdaArgs;
     THashMap<TString, ui32> lambdaArgsMap;
     for (ui32 i = 0; i < keyFields.size(); ++i) {
         lambdaArgs.push_back(Ctx.NewArgument(Pos, "param" + ToString(lambdaArgsCounter)));
-        lambdaArgsMap.insert({keyFields[i],  lambdaArgsCounter++});
+        lambdaArgsMap.insert({keyFields[i], lambdaArgsCounter++});
     }
 
     TVector<TExprNode::TPtr> lambdaResults;
@@ -1009,19 +1014,40 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildFinishHandlerLambda(const TVec
     }
 
     if (!isDistinct) {
+        bool needOriginalDecimalType = false;
         for (ui32 i = 0; i < aggTraitsList.size(); ++i) {
             lambdaArgs.push_back(Ctx.NewArgument(Pos, "param" + ToString(lambdaArgsCounter)));
             lambdaArgsMap.insert({aggTraitsList[i].StateFieldName, lambdaArgsCounter++});
+            const auto& traits = aggTraitsList[i];
+            if (!needOriginalDecimalType && traits.AggFunc == "avg") {
+                auto typeNode = traits.InputItemType;
+                if (auto fieldType = &RemoveOptionality(*typeNode); fieldType->GetKind() == ETypeAnnotationKind::Tuple && IsDecimalType(fieldType)) {
+                    needOriginalDecimalType = true;
+                }
+            }
+        }
+
+        THashMap<TString, const TTypeAnnotationNode*> colTypeMap;
+        if (Aggregate->GetAggregationPhase() == EOpPhase::Final && needOriginalDecimalType) {
+            colTypeMap = GetIntermediateAggregationInputType();
         }
 
         for (const auto& aggTraits : aggTraitsList) {
             const auto& aggFunction = aggTraits.AggFunc;
             const auto& stateName = aggTraits.StateFieldName;
+            const auto& originalColName = aggTraits.OriginalColName;
             const bool inputIsOptional = aggTraits.InputItemType->IsOptionalOrNull();
             const bool outputIsOptional = aggTraits.OutputItemType->IsOptionalOrNull();
             const bool unwrap = aggTraits.Unwrap;
-            const TTypeAnnotationNode* typeNode = aggTraits.InputItemType;
-            auto it = lambdaArgsMap.find(stateName);
+            auto typeNode = aggTraits.InputItemType;
+
+            if (needOriginalDecimalType) {
+                const auto it = colTypeMap.find(originalColName);
+                Y_ENSURE(it != colTypeMap.end());
+                typeNode = it->second;
+            }
+
+            const auto it = lambdaArgsMap.find(stateName);
             TExprNode::TPtr finishState = lambdaArgs[it->second];
 
             if (aggFunction == "avg") {
@@ -1058,11 +1084,12 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildNarrowMapForPhysicalAggregatio
                                                                                         const TVector<TPhysicalAggregationTraits>& aggTraitsList,
                                                                                         const THashMap<TString, TString>& renameMap, bool isDistinct,
                                                                                         EOpPhase aggregationPhase) {
-    TVector<TString> outputFields = keyFields;
+    TVector<TString> outputFields;
     if (!isDistinct) {
-        for (const auto& aggTraits : aggTraitsList) {
-            outputFields.push_back(aggTraits.StateFieldName);
-        }
+        outputFields = keyFields;
+    }
+    for (const auto& aggTraits : aggTraitsList) {
+        outputFields.push_back(aggTraits.StateFieldName);
     }
 
     if (keyFields.empty() && aggregationPhase != EOpPhase::Intermediate) {
@@ -1159,7 +1186,8 @@ void TPhysicalAggregationBuilder::BuildPhysicalAggregationTraits(const TVector<T
         const TTypeAnnotationNode* inputItemType = inputStructType->FindItemType(originalColName);
         const TTypeAnnotationNode* outputItemType = outputStructType->FindItemType(resultColName);
         Y_ENSURE(inputItemType && outputItemType, "Cannot find type for item");
-        aggColumns[originalColName].push_back(std::make_tuple(aggregationTraits.AggFunction, resultColName, inputItemType, outputItemType, aggregationTraits.Unwrap));
+        aggColumns[originalColName].push_back(
+            std::make_tuple(aggregationTraits.AggFunction, resultColName, inputItemType, outputItemType, aggregationTraits.Unwrap));
     }
 
     THashMap<TString, TString> aggFieldsMap;
@@ -1176,12 +1204,7 @@ void TPhysicalAggregationBuilder::BuildPhysicalAggregationTraits(const TVector<T
                 const auto* inputType = std::get<2>(tupleTraits);
                 const auto* outputType = std::get<3>(tupleTraits);
                 const auto unwrap = std::get<4>(tupleTraits);
-
-                auto stateName = "__kqp_agg_state_" + aggFunction + "_" + originalColName + ToString(j);
-                // No renames for distinct, we want to process only keys.
-                if (aggFunction == "distinct") {
-                    stateName = originalColName;
-                }
+                const auto stateName = "__kqp_agg_state_" + aggFunction + "_" + originalColName + ToString(j);
 
                 TString inputField;
                 if (!aggFieldsMap.contains(originalColName)) {
@@ -1192,7 +1215,7 @@ void TPhysicalAggregationBuilder::BuildPhysicalAggregationTraits(const TVector<T
                     inputField = aggFieldsMap[originalColName];
                 }
 
-                TPhysicalAggregationTraits phyTraits(inputField, stateName, aggFunction, inputType, outputType, unwrap);
+                TPhysicalAggregationTraits phyTraits(inputField, stateName, originalColName, resultColName, aggFunction, inputType, outputType, unwrap);
                 if (inputColumnsToAggFunction.contains(originalColName)) {
                     phyTraits.InputAggFunc = inputColumnsToAggFunction[originalColName];
                 }
@@ -1220,13 +1243,58 @@ TVector<TString> TPhysicalAggregationBuilder::GetKeyFields() const {
     return keyFields;
 }
 
-TExprNode::TPtr TPhysicalAggregationBuilder::CreateNothingForEmptyInput(const TTypeAnnotationNode* aggType) {
-    Y_ENSURE(aggType);
-    const auto* aggStructType = aggType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+TExprNode::TPtr TPhysicalAggregationBuilder::CreateNothingForEmptyInput(const TVector<TPhysicalAggregationTraits>& phyTraitsList) {
+    auto aggType = Aggregate->Type;
+    const auto aggStructType = aggType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto newAggStructType = aggStructType;
+
+    bool processTuple = false;
+    if (Aggregate->GetAggregationPhase() == EOpPhase::Final) {
+        for (const auto& item : aggStructType->GetItems()) {
+            auto itemType = item->Cast<TItemExprType>();
+            auto originalFieldType = itemType->GetItemType();
+            if (auto fieldType = &RemoveOptionality(*originalFieldType); fieldType->GetKind() == ETypeAnnotationKind::Tuple) {
+                processTuple = true;
+                break;
+            }
+        }
+    }
+
+    if (processTuple) {
+        THashMap<TString, const TTypeAnnotationNode*> colTypeMap;
+        colTypeMap = GetIntermediateAggregationInputType();
+
+        TVector<const TItemExprType*> newItems;
+        for (const auto& traits : phyTraitsList) {
+            const auto inputType = traits.InputItemType;
+            const auto outputType = traits.OutputItemType;
+            const auto& originalColName = traits.OriginalColName;
+            const auto& resultColName = traits.ResultColName;
+            if (auto fieldType = &RemoveOptionality(*inputType); fieldType->GetKind() == ETypeAnnotationKind::Tuple) {
+                auto tupleType = fieldType->Cast<TTupleExprType>()->GetItems();
+                Y_ENSURE(tupleType.size() == 2);
+                auto newFieldType = tupleType.front();
+                if (IsDecimalType(newFieldType)) {
+                    const auto it = colTypeMap.find(originalColName);
+                    Y_ENSURE(it != colTypeMap.end(), TStringBuilder() << "Cannot find a col name: " << originalColName;);
+                    newFieldType = it->second;
+                }
+                if (inputType->IsOptionalOrNull()) {
+                    newFieldType = Ctx.MakeType<TOptionalExprType>(newFieldType);
+                }
+                newItems.emplace_back(Ctx.MakeType<TItemExprType>(resultColName, newFieldType));
+            } else {
+                newItems.emplace_back(Ctx.MakeType<TItemExprType>(resultColName, outputType));
+            }
+        }
+
+        newAggStructType = Ctx.MakeType<TStructExprType>(newItems);
+    }
+
     // clang-format off
     return Build<TCoNothing>(Ctx, Pos)
         .OptionalType<TCoOptionalType>()
-            .ItemType(ExpandType(Pos, *aggStructType, Ctx))
+            .ItemType(ExpandType(Pos, *newAggStructType, Ctx))
         .Build()
     .Done().Ptr();
     // clang-format on
@@ -1290,13 +1358,13 @@ TExprNode::TPtr TPhysicalAggregationBuilder::MapCondenseOutput(TExprNode::TPtr i
 }
 
 TExprNode::TPtr TPhysicalAggregationBuilder::BuildCondenseForAggregationOutputWithEmptyKeys(TExprNode::TPtr input,
-                                                                                            const TVector<TPhysicalAggregationTraits>& traits,
+                                                                                            const TVector<TPhysicalAggregationTraits>& traitsList,
                                                                                             const THashMap<TString, TString>& renameMap,
-                                                                                            const TTypeAnnotationNode* type, EOpPhase aggregationPhase) {
+                                                                                            EOpPhase aggregationPhase) {
     // clang-format off
     input = Build<TCoCondense>(Ctx, Pos)
         .Input(input)
-        .State(CreateNothingForEmptyInput(type))
+        .State(CreateNothingForEmptyInput(traitsList))
         .SwitchHandler()
             .Args({"item", "state"})
             .Body(MakeBool<false>(Pos, Ctx))
@@ -1310,7 +1378,41 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildCondenseForAggregationOutputWi
     .Done().Ptr();
     // clang-format on
 
-    return MapCondenseOutput(input, traits, renameMap, aggregationPhase);
+    return MapCondenseOutput(input, traitsList, renameMap, aggregationPhase);
+}
+
+void TPhysicalAggregationBuilder::PopulateAggregateColTypeMap(const TIntrusivePtr<TOpAggregate>& aggregate, const TStructExprType* structType,
+                                                              THashMap<TString, const TTypeAnnotationNode*>& colTypeMap) const {
+    for (const auto& traits : aggregate->GetAggregationTraits()) {
+        const auto resultColName = traits.ResultColName.GetFullName();
+        const auto originalColName = traits.OriginalColName.GetFullName();
+        auto fieldType = structType->FindItemType(originalColName);
+        Y_ENSURE(fieldType, TStringBuilder() << "Caanot find column in input type: " << originalColName);
+        fieldType = &RemoveOptionality(*fieldType);
+        colTypeMap.insert({resultColName, fieldType});
+    }
+}
+
+THashMap<TString, const TTypeAnnotationNode*> TPhysicalAggregationBuilder::GetIntermediateAggregationInputType() const {
+    THashMap<TString, const TTypeAnnotationNode*> colTypeMap;
+    if (Aggregate->GetInput()->GetKind() == EOperator::UnionAll) {
+        const auto unionAll = CastOperator<TOpUnionAll>(Aggregate->GetInput());
+        const auto leftInput = unionAll->GetLeftInput();
+        const auto rightInput = unionAll->GetRightInput();
+        if (leftInput->GetKind() == EOperator::Map && rightInput->GetKind() == EOperator::Map) {
+            const auto leftMap = CastOperator<TOpMap>(leftInput);
+            const auto rightMap = CastOperator<TOpMap>(rightInput);
+            if (leftMap->GetInput()->GetKind() == EOperator::Aggregate && rightMap->GetInput()->GetKind() == EOperator::Aggregate) {
+                const auto leftAggregate = CastOperator<TOpAggregate>(leftMap->GetInput());
+                const auto rightAggregate = CastOperator<TOpAggregate>(rightMap->GetInput());
+                auto leftStructType = leftAggregate->GetInput()->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                auto rightStructType = rightAggregate->GetInput()->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                PopulateAggregateColTypeMap(leftAggregate, leftStructType, colTypeMap);
+                PopulateAggregateColTypeMap(rightAggregate, rightStructType, colTypeMap);
+            }
+        }
+    }
+    return colTypeMap;
 }
 
 TExprNode::TPtr TPhysicalAggregationBuilder::BuildPhysicalOp(TExprNode::TPtr input, std::optional<i64> memLimit) {
@@ -1360,7 +1462,7 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildPhysicalOp(TExprNode::TPtr inp
     // For scalar aggregation result we need to wrap it with Condense.
     if (IsScalarAggregation() && aggregationPhase != EOpPhase::Intermediate) {
         physicalAggregation =
-            BuildCondenseForAggregationOutputWithEmptyKeys(physicalAggregation, phyAggregationTraitsList, renameMap, outputType, aggregationPhase);
+            BuildCondenseForAggregationOutputWithEmptyKeys(physicalAggregation, phyAggregationTraitsList, renameMap, aggregationPhase);
     }
 
     YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical aggregation] " << KqpExprToPrettyString(TExprBase(physicalAggregation), Ctx);
@@ -1374,7 +1476,13 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildPhysicalOp(TExprNode::TPtr inp
 }
 
 bool TPhysicalAggregationBuilder::IsDecimalType(const TTypeAnnotationNode* typeNode) const {
-    const auto features = NUdf::GetDataTypeInfo(RemoveOptionality(*typeNode).Cast<TDataExprType>()->GetSlot()).Features;
+    auto type = &RemoveOptionality(*typeNode);
+    if (type->GetKind() == ETypeAnnotationKind::Tuple) {
+        auto items = type->Cast<TTupleExprType>()->GetItems();
+        Y_ENSURE(items.size() == 2);
+        type = items.front();
+    }
+    const auto features = NUdf::GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot()).Features;
     bool isdecimal = (features & NUdf::EDataTypeFeatures::DecimalType);
     return isdecimal;
 }
@@ -1384,6 +1492,11 @@ TPhysicalAggregationBuilder::TDecimalType TPhysicalAggregationBuilder::GetDecima
     if (itemType->IsOptionalOrNull()) {
         itemType = itemType->Cast<TOptionalExprType>()->GetItemType();
     }
+
+    if (itemType->GetKind() == ETypeAnnotationKind::Tuple) {
+        itemType = itemType->Cast<TTupleExprType>()->GetItems().front();
+    }
+
     auto dataExprParams = dynamic_cast<const TDataExprParamsType*>(itemType);
     Y_ENSURE(dataExprParams);
     return TDecimalType(TString(dataExprParams->GetParamOne()), TString(dataExprParams->GetParamTwo()));

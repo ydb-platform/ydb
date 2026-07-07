@@ -33,9 +33,23 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
         SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Execute");
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->FinishTraversal(
-            db,
-            /*finishAllForceTraversalTables=*/Status != NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+        // Map TEvAnalyzeResponse status to the persisted terminal state:
+        //   SUCCESS   -> nullopt  (natural completion path: mark only the current table done;
+        //                           if all tables are done the op flips to STATE_DONE)
+        //   CANCELLED -> STATE_CANCELLED (user cancel)
+        //   ERROR     -> STATE_FAILED    (terminal failure: scan error, deadline, etc.)
+        std::optional<Ydb::Table::AnalyzeState::State> forceTerminalState;
+        switch (Status) {
+            case NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS:
+                break;
+            case NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED:
+                forceTerminalState = Ydb::Table::AnalyzeState::STATE_CANCELLED;
+                break;
+            default:
+                forceTerminalState = Ydb::Table::AnalyzeState::STATE_FAILED;
+                break;
+        }
+        Self->FinishTraversal(db, forceTerminalState, Issues);
 
         return true;
     }
@@ -49,9 +63,18 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
             return;
         }
 
-        auto forceTraversalRemained = Self->ForceTraversalOperation(OperationId);       
-        
-        if (forceTraversalRemained) {
+        // Check whether the operation still has pending (non-terminal) tables.
+        // If the operation is now terminal (or was deleted), send the response.
+        auto forceTraversal = Self->ForceTraversalOperation(OperationId);
+        const bool isTerminal = !forceTraversal || IsTerminalAnalyzeState(forceTraversal->State);
+
+        const bool hasPendingTables = !isTerminal &&
+            std::any_of(forceTraversal->Tables.begin(), forceTraversal->Tables.end(),
+                [](const TForceTraversalTable& t) {
+                    return t.Status != TForceTraversalTable::EStatus::TraversalFinished;
+                });
+
+        if (hasPendingTables) {
             SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete. Don't send TEvAnalyzeResponse. " <<
                 "There are pending operations, OperationId " << OperationId.Quote() << " , ActorId=" << ReplyToActorId);
         } else {
@@ -64,6 +87,10 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
                 NYql::IssueToMessage(issue, response->Record.AddIssues());
             }
             ctx.Send(ReplyToActorId, response.release());
+            // Clear ReplyToActorId to prevent double-reply on subsequent traversal ticks
+            if (forceTraversal) {
+                forceTraversal->ReplyToActorId = TActorId{};
+            }
         }
     }
 };

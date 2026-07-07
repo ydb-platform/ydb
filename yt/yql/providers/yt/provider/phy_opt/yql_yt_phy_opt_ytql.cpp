@@ -280,4 +280,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::OptimizeQLFilterType(TE
     return ctx.ChangeChild(qlFilter.Ref(), TYtQLFilter::idx_RowType, std::move(newRowType));
 }
 
-}  // namespace NYql
+} // namespace NYql

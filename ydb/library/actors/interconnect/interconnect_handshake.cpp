@@ -495,7 +495,11 @@ namespace NActors {
                             if (rdmaIncommingRead) {
                                 auto ack = TryRdmaRead(rdmaIncommingRead.value());
                                 SendExBlock(MainChannel, ack, "TRdmaHandshakeReadAck");
-                                Params.UseRdma = true;
+                                if (ack.HasDigest()) {
+                                    Params.UseRdma = true;
+                                } else {
+                                    Rdma.Clear();
+                                }
                             }
                             ExternalDataChannel.GetSocketRef() = std::move(ev->Get()->Socket);
                         } else {
@@ -955,6 +959,7 @@ namespace NActors {
                 request.SetRequestExternalDataChannel(Common->Settings.EnableExternalDataChannel);
                 request.SetRequestXxhash(true);
                 request.SetRequestXdcShuffle(true);
+                request.SetRequestAllowDisablingPayloadChecksums(true);
                 request.SetHandshakeId(*HandshakeId);
 
                 ui32 pending = 0;
@@ -1048,6 +1053,7 @@ namespace NActors {
                 Params.UseExternalDataChannel = success.GetUseExternalDataChannel();
                 Params.UseXxhash = success.GetUseXxhash();
                 Params.UseXdcShuffle = success.GetUseXdcShuffle();
+                Params.AllowDisablingPayloadChecksums = success.GetAllowDisablingPayloadChecksums();
                 // Kernel liveness mode is a local transport decision: it depends on whether this side
                 // configured keepalive/user-timeout on its own socket.
                 Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
@@ -1348,7 +1354,8 @@ namespace NActors {
                 Params.UseExternalDataChannel = request.GetRequestExternalDataChannel() && Common->Settings.EnableExternalDataChannel;
                 Params.UseXxhash = request.GetRequestXxhash();
                 Params.UseXdcShuffle = request.GetRequestXdcShuffle();
-                Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
+                Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady(); 
+                Params.AllowDisablingPayloadChecksums = request.GetRequestAllowDisablingPayloadChecksums();
 
                 if (Params.UseExternalDataChannel) {
                     if (request.HasHandshakeId()) {
@@ -1421,6 +1428,7 @@ namespace NActors {
                     success.SetUseExternalDataChannel(Params.UseExternalDataChannel);
                     success.SetUseXxhash(Params.UseXxhash);
                     success.SetUseXdcShuffle(Params.UseXdcShuffle);
+                    success.SetAllowDisablingPayloadChecksums(Params.AllowDisablingPayloadChecksums);
 
                     ui32 pending = 0;
                     auto& actors = Common->ConnectionCheckerActorIds;

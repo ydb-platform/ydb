@@ -125,6 +125,7 @@ bool TestIssues(const NYql::TAstParseResult& parseRes) {
 
 bool TestFormat(
     const TString& query,
+    const NYql::TAstNode* ast,
     const NSQLTranslation::TTranslationSettings& settings,
     const TString& outFileName,
     const bool checkTripleFormatting,
@@ -139,7 +140,7 @@ bool TestFormat(
     }
 
     NYql::TIssues issues;
-    TMaybe<TString> formatted = NSQLFormat::CheckedFormat(query, settings, issues, convergence);
+    TMaybe<TString> formatted = NSQLFormat::CheckedFormat(query, ast, settings, issues, convergence);
     if (!formatted) {
         Cerr << issues.ToString() << Endl;
         return false;
@@ -283,7 +284,7 @@ int BuildAST(int argc, char** argv) {
         }
         TVector<NYql::NPg::TExtensionDesc> extensions;
         NYql::PgExtensionsFromProto(*pgExtConfig, extensions);
-        NYql::NPg::RegisterExtensions(extensions, true,
+        NYql::NPg::RegisterExtensions(extensions, /*typesOnly=*/true,
                                       *NSQLTranslationPG::CreateExtensionSqlParser(),
                                       NKikimr::NMiniKQL::CreateExtensionLoader().get());
     });
@@ -460,6 +461,7 @@ int BuildAST(int argc, char** argv) {
             if (res.Has("test-format") && isSQLv1 && parseRes.IsOk()) {
                 hasError |= !TestFormat(
                     query,
+                    parseRes.Root,
                     settings,
                     outFileNameFormat,
                     /*checkTripleFormatting=*/res.Has("test-triple-format"),

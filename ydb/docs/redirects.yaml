@@ -371,14 +371,6 @@ common:
     to: recipes/ydb-sdk/balancing.md
   - from: reference/ydb-sdk/recipes/bulk-upsert.md
     to: recipes/ydb-sdk/bulk-upsert.md
-  - from: reference/ydb-sdk/recipes/debug-jaeger.md
-    to: recipes/ydb-sdk/debug-jaeger.md
-  - from: reference/ydb-sdk/recipes/debug-logs.md
-    to: recipes/ydb-sdk/debug-logs.md
-  - from: reference/ydb-sdk/recipes/debug-prometheus.md
-    to: recipes/ydb-sdk/debug-prometheus.md
-  - from: reference/ydb-sdk/recipes/debug.md
-    to: recipes/ydb-sdk/debug.md
   - from: reference/ydb-sdk/recipes/index.md
     to: recipes/ydb-sdk/index.md
   - from: reference/ydb-sdk/recipes/init.md
@@ -420,7 +412,13 @@ common:
   - from: /integrations/fluent-bit.md
     to: /integrations/ingestion/fluent-bit.md
   - from: /integrations/import-jdbc.md
-    to: /integrations/ingestion/import-jdbc.md
+    to: /integrations/data-migration/import-jdbc.md
+  - from: /integrations/ingestion/import-jdbc.md
+    to: /integrations/data-migration/import-jdbc.md
+  - from: /integrations/ingestion/import-mysql.md
+    to: /integrations/data-migration/import-mysql.md
+  - from: /integrations/ingestion/spark.md
+    to: /integrations/query-engines/spark.md
   - from: /integrations/logstash.md
     to: /integrations/ingestion/logstash.md
   - from: /integrations/spring-data-jdbc.md
@@ -486,7 +484,7 @@ common:
     to: /analyst/datasets/$1
 
   # Redirects for query_execution
-  
+
   - from: /concepts/query_execution.md
     to: /concepts/query_execution/index.md
   - from: /concepts/mvcc.md
@@ -500,11 +498,9 @@ common:
   - from: /concepts/secondary_indexes.md
     to: /concepts/query_execution/secondary_indexes.md
   - from: /concepts/scan_query.md
-    to: /reference/ydb-cli/table-query-execute.md
+    to: /concepts/query_execution/scan_query.md
   - from: /reference/ydb-cli/commands/scan-query.md
-    to: /reference/ydb-cli/table-query-execute.md
-  - from: /yql/reference/syntax/analyze.md
-    to: /concepts/query_execution/optimizer.md
+    to: /reference/ydb-cli/scan-query.md
   - from: /concepts/federated_query/(.*)$
     to: /concepts/query_execution/federated_query/$1
 
@@ -521,8 +517,42 @@ ru:
     to: /devops/configuration-management/configuration-v1/cluster-expansion.md
   - from: /concepts/topic.md
     to: /concepts/datamodel/topic.md
+  - from: /devops/backup-and-recovery/system-tablet-backup.md
+    to: /concepts/backup.md#system-tablet-backup
+  - from: /reference/ydb-sdk/recipes/debug.md
+    to: /reference/ydb-sdk/observability/index.md
+  - from: /reference/ydb-sdk/recipes/debug-logs.md
+    to: /reference/ydb-sdk/observability/logging/logging.md
+  - from: /reference/ydb-sdk/recipes/debug-prometheus.md
+    to: /reference/ydb-sdk/observability/metrics/prometheus.md
+  - from: /reference/ydb-sdk/recipes/debug-jaeger.md
+    to: /reference/ydb-sdk/observability/tracing/jaeger.md
+  - from: /recipes/ydb-sdk/debug.md
+    to: /reference/ydb-sdk/observability/index.md
+  - from: /recipes/ydb-sdk/debug-logs.md
+    to: /reference/ydb-sdk/observability/logging/logging.md
+  - from: /recipes/ydb-sdk/debug-logs-otel.md
+    to: /reference/ydb-sdk/observability/logging/opentelemetry.md
+  - from: /recipes/ydb-sdk/debug-prometheus.md
+    to: /reference/ydb-sdk/observability/metrics/prometheus.md
+  - from: /recipes/ydb-sdk/debug-otel-metrics.md
+    to: /reference/ydb-sdk/observability/metrics/opentelemetry.md
+  - from: /recipes/ydb-sdk/debug-jaeger.md
+    to: /reference/ydb-sdk/observability/tracing/jaeger.md
+  - from: /recipes/ydb-sdk/debug-otel-tracing.md
+    to: /reference/ydb-sdk/observability/tracing/opentelemetry.md
+  - from: /integrations/sql-dialect-converter.md
+    to: /integrations/sql-translation/sql-dialect-converter.md
 
 en:
+  - from: /reference/ydb-sdk/recipes/debug-jaeger.md
+    to: /recipes/ydb-sdk/debug-jaeger.md
+  - from: /reference/ydb-sdk/recipes/debug-logs.md
+    to: /recipes/ydb-sdk/debug-logs.md
+  - from: /reference/ydb-sdk/recipes/debug-prometheus.md
+    to: /recipes/ydb-sdk/debug-prometheus.md
+  - from: /reference/ydb-sdk/recipes/debug.md
+    to: /recipes/ydb-sdk/debug.md
   - from: /devops/deployment-options/manual/initial-deployment.md
     to: /devops/deployment-options/manual/initial-deployment/index.md
   - from: /devops/manual/initial-deployment.md

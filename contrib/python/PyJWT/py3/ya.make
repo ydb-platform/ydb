@@ -7,7 +7,7 @@ VERSION(2.4.0)
 LICENSE(MIT)
 
 PEERDIR(
-    contrib/python/cryptography
+    contrib/python/cryptography/py3
 )
 
 NO_LINT()

@@ -178,22 +178,30 @@ void CheckAlterTenantPools(TTenantTestRuntime &runtime,
                            const TString &token,
                            Ydb::StatusIds::StatusCode code,
                            TVector<TPoolAllocation> add,
-                           bool hasModifications = true)
+                           bool hasAllocations = true)
 {
     auto *event = new TEvConsole::TEvAlterTenantRequest;
     event->Record.MutableRequest()->set_path(path);
     if (token)
         event->Record.SetUserToken(token);
     for (auto &pool : add) {
-        auto &unit = *event->Record.MutableRequest()->add_storage_units_to_add();
-        unit.set_unit_kind(pool.PoolType);
-        unit.set_count(pool.PoolSize);
+        Ydb::Cms::StorageUnits *unit = nullptr;
+        ui64 delta = 0;
+        if (pool.PoolSize >= pool.Allocated) {
+            unit = event->Record.MutableRequest()->add_storage_units_to_add();
+            delta = pool.PoolSize - pool.Allocated;
+        } else {
+            unit = event->Record.MutableRequest()->add_storage_units_to_remove();
+            delta = pool.Allocated - pool.PoolSize;
+        }
+        unit->set_unit_kind(pool.PoolType);
+        unit->set_count(delta);
     }
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
 
-    if (hasModifications && code == Ydb::StatusIds::SUCCESS) {
+    if (hasAllocations && code == Ydb::StatusIds::SUCCESS) {
         TDispatchOptions options;
         options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvPoolAllocated);
         runtime.DispatchEvents(options);
@@ -952,6 +960,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
     }
 
     void RunTestAlterTenantModifyStorageResourcesForRunning(TTenantTestRuntime& runtime) {
+        runtime.SetLogPriority(NKikimrServices::CMS_TENANTS, NActors::NLog::PRI_TRACE);
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}, {"hdd-1", 3}});
 
@@ -982,16 +991,76 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
                           {{"hdd", 3, 3}, {"hdd-1", 6, 6}, {"hdd-2", 1, 1}}, {});
 
+        auto observer = runtime.AddObserver<TEvHive::TEvShrinkStoragePool>([&](auto&& ev) {
+            auto response = std::make_unique<TEvHive::TEvShrinkStoragePoolReply>();
+            response->Record.MutableSubDomain()->CopyFrom(ev->Get()->Record.GetSubDomain());
+            response->Record.SetStoragePool(ev->Get()->Record.GetStoragePool());
+            response->Record.SetVersion(ev->Get()->Record.GetVersion());
+            response->Record.SetStatus(NKikimrProto::OK);
+            runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release(), 0, ev->Cookie), 0);
+         });
+
+        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                              {{"hdd-1", 5, 6}}, false);
+
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::REMOVING_STORAGE_UNITS,
+                          {{"hdd", 3, 3}, {"hdd-1", 5, 6}, {"hdd-2", 1, 1}}, {});
+
+        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                              {{"hdd-2", 1}});
+
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::REMOVING_STORAGE_UNITS,
+                          {{"hdd", 3, 3}, {"hdd-1", 5, 6}, {"hdd-2", 2, 2}}, {});
+
+
+        auto observer2 = runtime.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](auto&& ev) {
+            if (ev->Get()->Record.GetRequest().GetCommand(0).HasDeleteSpecificGroups()) {
+                auto response = std::make_unique<TEvBlobStorage::TEvControllerConfigResponse>();
+                auto* proto = response->Record.MutableResponse();
+                proto->SetSuccess(true);
+                proto->AddStatus()->SetSuccess(true);
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release(), 0, ev->Cookie), 0);
+                ev.Reset();
+            }
+        });
+
+        {
+            auto ev = std::make_unique<TEvHive::TEvShrinkStoragePoolDone>();
+            ev->Record.SetStoragePool(TENANT1_1_NAME + ":hdd-1");
+            ev->Record.AddGroupsToRemove(0x30000); // mock id
+            runtime.SendToConsole(ev.release());
+        }
+
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::REMOVING_STORAGE_UNITS,
+                          {{"hdd", 3, 3}, {"hdd-1", 5, 5}, {"hdd-2", 2, 2}}, {});
+
+        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                              {{"hdd-1", 7, 5}});
+
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 3, 3}, {"hdd-1", 7, 7}, {"hdd-2", 2, 2}}, {});
+
         // Wrong unit kind.
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
                               {{"unknown", 1}});
+
+        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
+                              {{"unknown", 1, 5}});
         // Zero pool size.
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
                               {{"hdd-3", 0}});
 
-        CheckCounter(runtime, {}, TTenantsManager::COUNTER_ALTER_REQUESTS, 5);
-        CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 3);
-        CheckCounter(runtime, {{ {"status", "BAD_REQUEST"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 2);
+        // Double remove of same groups
+        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
+                              {{"hdd", 1, 3}, {"hdd", 1, 3}});
+
+        CheckCounter(runtime, {}, TTenantsManager::COUNTER_ALTER_REQUESTS, 10);
+        CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 6);
+        CheckCounter(runtime, {{ {"status", "BAD_REQUEST"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 4);
     }
 
     Y_UNIT_TEST(TestAlterTenantModifyStorageResourcesForRunning) {
@@ -1044,6 +1113,8 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
 
         // trying to extend pool
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST, {{"hdd", 1}}, {});
+        // ...or to shrink it
+        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST, {{"hdd", 1, 2}}, {});
     }
 
     Y_UNIT_TEST(TestRemoveTenantWithBorrowedStorageUnits) {
@@ -2004,32 +2075,40 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                 .WithPools({{"hdd", 1}, {"hdd-1", 3}})
                 .WithPlanResolution(500));
 
+
         RestartTenantPool(runtime);
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
                           {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {});
 
+
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                               {{"hdd-1", 1000}}, {});
+
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
                           {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {});
+
 
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                               {}, false);
 
+
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
                           {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {});
 
+
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                               {{"hdd-2", 1000}});
+
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
                           {{"hdd", 1, 1}, {"hdd-1", 3, 3}, {"hdd-2", 0, 0}}, {});
+
     }
 
     Y_UNIT_TEST(TestAlterTenantTooManyStorageResourcesForRunning) {

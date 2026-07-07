@@ -287,7 +287,7 @@ class TestYdbOverFq(TestYdsBase):
         with session.transaction() as tx:
             assert_that(
                 calling(tx.execute).with_args(""),
-                raises(ydb.issues.InternalError, "length is not in \\[1; 102400\\]"),
+                raises(ydb.issues.InternalError, "length is not in \\[1; 1024000\\]"),
             )
         with session.transaction() as tx:
             assert_that(

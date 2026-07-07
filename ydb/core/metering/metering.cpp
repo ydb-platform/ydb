@@ -8,21 +8,7 @@
 
 #include <util/string/builder.h>
 
-#if defined LOG_T || \
-    defined LOG_D || \
-    defined LOG_I || \
-    defined LOG_N || \
-    defined LOG_W || \
-    defined LOG_E
-# error log macro redefinition
-#endif
-
-#define LOG_T(stream) LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::METERING_WRITER, stream)
-#define LOG_D(stream) LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::METERING_WRITER, stream)
-#define LOG_I(stream) LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::METERING_WRITER, stream)
-#define LOG_N(stream) LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::METERING_WRITER, stream)
-#define LOG_W(stream) LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::METERING_WRITER, stream)
-#define LOG_E(stream) LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::METERING_WRITER, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METERING_WRITER
 
 namespace NKikimr {
 namespace NMetering {
@@ -95,16 +81,16 @@ void TMeteringWriteActor::HandleWriteMeteringJson(
                 msg->MeteringJson.data(),
                 msg->MeteringJson.length()));
     } catch (const TFileError& e) {
-        LOG_W("TMeteringWriteActor:"
-              << " unable to write metering data (error: " << e.what() << ")");
+        YDB_LOG_WARN("TMeteringWriteActor: unable to write metering data",
+            {"error", e.what()});
     }
 }
 
 void TMeteringWriteActor::HandleUnexpectedEvent(STFUNC_SIG)
 {
-    LOG_W("TMeteringWriteActor:"
-          << " unhandled event type: " << ev->GetTypeRewrite()
-          << " event: " << ev->ToString());
+    YDB_LOG_WARN("TMeteringWriteActor: unhandled event",
+        {"type", ev->GetTypeRewrite()},
+        {"ev", ev->ToString()});
 }
 
 }   // namespace

@@ -75,21 +75,33 @@ class StressUtilDeployer:
                 f"Preparing execution: Nodes_percentage={nodes_percentage}%, mode=parallel"
             )
 
-            # Stop nemesis before each workload run for clean start
+            # Ensure nemesis services are installed and orchestrator is healthy.
+            # This makes the warden API available for diagnostics even when
+            # nemesis chaos is not enabled.  Chaos schedules are disabled here;
+            # they will be enabled later only if nemesis_enabled=True.
             try:
-                logging.info("Stopping nemesis service before workload execution for clean start")
+                logging.info("Ensuring nemesis services are installed and stopping chaos schedules")
 
                 # Create summary log for Allure
                 prep_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 nemesis_log = [f"Workload preparation started at {prep_time}"]
 
-                # Stop nemesis using common method
-                self._manage_nemesis(False, list(workload_params.keys()), "Stopping nemesis before workload execution", nemesis_log)
+                # Install services (idempotent) and wait for orchestrator health
+                self.ensure_nemesis_installed(nemesis_log)
 
-                logging.info("Nemesis stopped successfully before workload execution")
+                # Disable chaos schedules for a clean start
+                self._disable_nemesis(nemesis_log)
+
+                logging.info("Nemesis services ready, chaos schedules disabled")
+
+                allure.attach(
+                    "\n".join(nemesis_log),
+                    "Nemesis Preparation Summary",
+                    attachment_type=allure.attachment_type.TEXT,
+                )
 
             except Exception as e:
-                error_msg = f"Error stopping nemesis before workload execution: {e}"
+                error_msg = f"Error during nemesis preparation: {e}"
                 logging.error(error_msg)
                 try:
                     allure.attach(
@@ -455,6 +467,38 @@ class StressUtilDeployer:
     # ------------------------------------------------------------------
     # Nemesis install (subprocess)
     # ------------------------------------------------------------------
+
+    def ensure_nemesis_installed(self, nemesis_log: list[str] = None) -> bool:
+        """Ensure nemesis services are installed and the orchestrator is healthy.
+
+        This method is safe to call unconditionally — it installs services
+        (if not already installed) and polls the orchestrator health endpoint.
+        It does **not** enable chaos schedules.
+
+        This makes the orchestrator warden API available for diagnostics
+        even when ``nemesis_enabled=False``.
+
+        Args:
+            nemesis_log: Optional list to append log messages to.
+
+        Returns:
+            ``True`` if the orchestrator is installed and healthy,
+            ``False`` otherwise.
+        """
+        if nemesis_log is None:
+            nemesis_log = []
+
+        if not self._install_nemesis_services(nemesis_log):
+            logging.error("Failed to install nemesis services")
+            return False
+
+        if not self._poll_health(nemesis_log):
+            logging.error("Nemesis orchestrator did not become healthy")
+            return False
+
+        nemesis_log.append("Nemesis services installed and orchestrator healthy (schedules not enabled)")
+        logging.info("Nemesis orchestrator ready for warden checks (schedules not enabled)")
+        return True
 
     def _install_nemesis_services(self, nemesis_log: list[str]) -> bool:
         """Deploy nemesis binary and start ``nemesis-agent`` on all cluster hosts.

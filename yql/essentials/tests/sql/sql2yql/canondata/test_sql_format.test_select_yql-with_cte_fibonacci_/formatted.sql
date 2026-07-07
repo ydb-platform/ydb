@@ -1,0 +1,20 @@
+PRAGMA YqlSelect = 'force';
+
+WITH RECURSIVE fibonacci AS (
+    SELECT
+        0 AS a,
+        1 AS b
+    UNION ALL
+    SELECT
+        b AS a,
+        a + b AS b
+    FROM
+        fibonacci
+    WHERE
+        b < 10
+)
+SELECT
+    a
+FROM
+    fibonacci
+;

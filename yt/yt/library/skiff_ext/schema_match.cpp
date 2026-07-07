@@ -14,10 +14,10 @@ using namespace NSkiff;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString KeySwitchColumnName = "$key_switch";
-const TString OtherColumnsName = "$other_columns";
-const TString SparseColumnsName = "$sparse_columns";
-const TString RemainingRowBytesColumnName = "$remaining_row_bytes";
+const std::string KeySwitchColumnName = "$key_switch";
+const std::string OtherColumnsName = "$other_columns";
+const std::string SparseColumnsName = "$sparse_columns";
+const std::string RemainingRowBytesColumnName = "$remaining_row_bytes";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -91,7 +91,7 @@ static TSkiffTableDescription CreateTableDescription(
     const std::string& rowIndexColumnName)
 {
     TSkiffTableDescription result;
-    THashSet<TString> topLevelNames;
+    THashSet<std::string> topLevelNames;
     std::shared_ptr<TSkiffSchema> otherColumnsField;
     std::shared_ptr<TSkiffSchema> sparseColumnsField;
 
@@ -237,7 +237,7 @@ DEFINE_REFCOUNTED_TYPE(TSkiffSchemaRepresentation)
 std::shared_ptr<TSkiffSchema> ParseSchema(
     const INodePtr& schemaNode,
     const IMapNodePtr& registry,
-    THashMap<TString, std::shared_ptr<TSkiffSchema>>* parsedRegistry,
+    THashMap<std::string, std::shared_ptr<TSkiffSchema>>* parsedRegistry,
     THashSet<std::string>* parseInProgressNames)
 {
     auto schemaNodeType = schemaNode->GetType();
@@ -315,7 +315,7 @@ std::vector<std::shared_ptr<TSkiffSchema>> ParseSkiffSchemas(
     const NYTree::IMapNodePtr& skiffSchemaRegistry,
     const NYTree::IListNodePtr& tableSkiffSchemas)
 {
-    THashMap<TString, std::shared_ptr<TSkiffSchema>> parsedRegistry;
+    THashMap<std::string, std::shared_ptr<TSkiffSchema>> parsedRegistry;
     std::vector<std::shared_ptr<TSkiffSchema>> result;
     for (const auto& node : tableSkiffSchemas->GetChildren()) {
         THashSet<std::string> parseInProgressNames;
@@ -328,7 +328,7 @@ std::vector<std::shared_ptr<TSkiffSchema>> ParseSkiffSchemas(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TFieldDescription::TFieldDescription(TString name, std::shared_ptr<TSkiffSchema> schema)
+TFieldDescription::TFieldDescription(std::string name, std::shared_ptr<TSkiffSchema> schema)
     : Name_(std::move(name))
     , Schema_(std::move(schema))
 { }

@@ -9,22 +9,21 @@ SRCS(
     expand_cbo_tree.cpp
     expand_distinct_aggregation.cpp
     extract_join_expressions.cpp
+    extract_common_conjuncts.cpp
     eliminate_left_join.cpp
     fuse_filters.cpp
     inline_cbo_tree.cpp
     inline_join_filters.cpp
     inline_scalar_subplan.cpp
     inline_simple_in_exists_subplan.cpp
-    logical_output_pruning.cpp
     inline_generic_in_exists_subplan.cpp
+    kqp_cbo_trees.cpp
     peephole_predicate.cpp
-    map/projection_pruning.cpp
-    map/projection_pruning_helpers.cpp
-    map/push_append_into_map.cpp
-    map/push_append_through_aggregate.cpp
-    map/push_append_through_join.cpp
-    map/push_append_through_unary.cpp
-    map/push_append_wrappers.cpp
+    map/prune_dead_outputs.cpp
+    map/push_map_elements_into_map.cpp
+    map/push_map_elements_through_aggregate.cpp
+    map/push_map_elements_through_input.cpp
+    map/push_map_elements_through_union_all.cpp
     push_filter_into_join.cpp
     push_filter_under_map.cpp
     push_limit_into_sort.cpp
@@ -33,22 +32,15 @@ SRCS(
     push_olap_projection.cpp
     disable_blocks_on_columns_limit.cpp
     map/rename_to_append.cpp
-    map/rename_common.cpp
     map/remove_identity_map.cpp
-    map/push_rename_into_aggregate_result.cpp
-    map/push_rename_into_map_producer.cpp
-    map/push_rename_into_read.cpp
-    map/push_rename_through_aggregate_key.cpp
-    map/push_rename_through_join_side.cpp
-    map/push_rename_through_map.cpp
-    map/push_rename_through_unary.cpp
-    map/push_rename_wrapper.cpp
+    map/push_rename_into_producer.cpp
     map/rewrite_to_preferred_alias.cpp
     propagate_aggregate_through_stage.cpp
     propagate_hash_func_stage.cpp
     propagate_topsort_through_stage.cpp
     propagate_limit_through_stage.cpp
     rewrite_right_join.cpp
+    traces/kqp_cbo_trace.cpp
 )
 
 PEERDIR(

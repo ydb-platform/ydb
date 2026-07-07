@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     kqp_expression.cpp
+    kqp_olap_expr_inspection.cpp
     kqp_operator.cpp
     kqp_plan_conversion_utils.cpp
     kqp_plan_to_json.cpp
@@ -18,6 +19,11 @@ SRCS(
     analysis/logical_liveness.cpp
     analysis/logical_name_constraints.cpp
     logical_renames.cpp
+    traces/kqp_rbo_trace_format.cpp
+    traces/kqp_rbo_trace.cpp
+    traces/kqp_rbo_trace_log.cpp
+    traces/kqp_rbo_trace_output.cpp
+    traces/kqp_rbo_rule_trace.cpp
 )
 
 PEERDIR(
@@ -27,6 +33,7 @@ PEERDIR(
     ydb/core/kqp/opt/logical
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical
+    ydb/core/kqp/opt/rbo/html_log
     ydb/core/kqp/opt/rbo/rules
     ydb/core/kqp/opt/rbo/physical_conversion
     ydb/library/yql/dq/common

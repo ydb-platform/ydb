@@ -194,7 +194,7 @@ class NbsTestBase:
         io_depth=32,
         load_type="LOAD_TYPE_RANDOM",
         range_start=0,
-        range_end=DEFAULT_DISK_BLOCKS_COUNT,
+        range_end=DEFAULT_DISK_BLOCKS_COUNT - 1,
     ):
         """
         Helper function to run NBS load test with specified parameters

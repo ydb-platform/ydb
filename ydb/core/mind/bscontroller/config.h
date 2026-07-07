@@ -149,6 +149,8 @@ namespace NKikimr {
 
             TBridgeInfo::TPtr BridgeInfo;
 
+            THashMap<TVSlotId, ui64> PDiskGuidsForDeletedVSlots;
+
         public:
             TConfigState(TBlobStorageController &controller, const THostRecordMap &hostRecords, TInstant timestamp,
                     TMonotonic mono, const NKikimrBlobStorage::TStorageConfig *storageConfig = nullptr)

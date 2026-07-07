@@ -9,9 +9,12 @@ SRCS(
 )
 
 PEERDIR(
+    yt/yt/library/tvm
+
+    yt/yt/core
+
     library/cpp/yt/memory
     library/cpp/yt/logging
-    yt/yt/core
 )
 
 IF(NOT OPENSOURCE)

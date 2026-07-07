@@ -1,5 +1,57 @@
 # Список изменений {{ ydb-short-name }} Server
 
+## Версия 26.1 {#26-1}
+
+### Версия 26.1.1.20 {#26-1-1-20}
+
+Дата выхода: уточняется.
+
+#### Функциональность
+
+* Доступны YQL-запросы [`SHOW CREATE TABLE`](./yql/reference/syntax/show_create.md?version=v26.1) и [`SHOW CREATE VIEW`](./yql/reference/syntax/show_create.md?version=v26.1) для получения DDL-выражений, необходимых для воссоздания структуры таблицы или представления.
+* В `ALTER TABLE` добавлена поддержка значений по умолчанию при [`ADD COLUMN`](./yql/reference/syntax/alter_table/columns.md?version=v26.1) (`DEFAULT`).
+* [Shuffle Elimination](./concepts/query_execution/optimizer.md?version=v26.1) включён в продакшене: оптимизатор может устранять лишние перераспределения данных при соединениях.
+* Реализовано [резервное копирование и восстановление](./reference/ydb-cli/export-import/file-structure.md?version=v26.1) схемных объектов: [асинхронных репликаций](./concepts/async-replication.md?version=v26.1), [внешних источников данных](./concepts/datamodel/external_data_source.md?version=v26.1), [внешних таблиц](./concepts/datamodel/external_table.md?version=v26.1) и [трансферов](./concepts/transfer.md?version=v26.1).
+* Кластер сохраняет работоспособность при недоступности [CMS](./concepts/glossary.md?version=v26.1#cms).
+* Добавлена возможность [регистрации динамических узлов](./devops/configuration-management/configuration-v1/node-authorization.md?version=v26.1) по клиентским TLS-сертификатам.
+* Для [LDAP-аутентификации](./security/authentication.md?version=v26.1) сервисного аккаунта поддерживается протокол SASL с механизмом EXTERNAL — см. [`enable_sasl_external_bind`](./reference/configuration/auth_config.md?version=v26.1#ldap-auth-config).
+* В [асинхронной репликации](./concepts/async-replication.md?version=v26.1) поддержано зеркалирование [автопартиционированных топиков](./concepts/datamodel/topic.md?version=v26.1#autopartitioning); см. также [партиции топиков в CDC](./concepts/cdc.md?version=v26.1#topic-partitions).
+* Расширена [диагностика TLI](./reference/configuration/tli_config.md?version=v26.1) (Transaction Lock Invalidation): конфигурация `tli_config`, [логирование](./troubleshooting/performance/queries/tli-logging.md?version=v26.1) и [системные представления](./dev/system-views.md?version=v26.1#top-tli-partitions).
+* При [автопартиционировании по нагрузке](./concepts/datamodel/table.md?version=v26.1#auto_partitioning_by_load) учитывается CPU-нагрузка на лидера партиции и на все её реплики.
+* [Потоковые запросы](./dev/streaming-query/index.md?version=v26.1) поддерживают [запись результатов в локальные таблицы](./dev/streaming-query/table-writing.md?version=v26.1).
+* В [потоках изменений (CDC)](./concepts/cdc.md?version=v26.1) доступна выгрузка идентификаторов безопасности пользователя (`USER_SIDS`) — см. [`ALTER TABLE` `CHANGEFEED`](./yql/reference/syntax/alter_table/changefeed.md?version=v26.1).
+* Для [внешних источников данных](./concepts/datamodel/external_data_source.md?version=v26.1) добавлен `AUTH_METHOD=IAM`.
+* В CLI поддерживается аутентификация по файлу токена (`--token-file`).
+* Оптимизирована работа транзакций между топиками и таблицами.
+
+#### Исправления ошибок
+
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/34906) `RETURNING` в потоковых `UPDATE` и интерактивных запросах.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/34915) `SET DEFAULT` и `DROP DEFAULT` в `ALTER TABLE`.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/34958) обработка срока действия токенов аутентификации в ticket parser.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/35003) выполнение запросов в Workload Manager после пересоздания tenant.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/35187) use-after-free в gRPC-сервисе.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/35663) инкрементальное восстановление при перезапусках SchemeShard и сбоях шардов.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/35787) отсутствие метаданных потокового запроса сразу после создания.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/35793) зависание async checkpointing при полном входе и пустом checkpoint.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/36217) взаимное влияние квот разных баз в Kesus quoter proxy.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/36220) зависания в PQ read session.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/36292) зависание scan executor на `SELECT … LIMIT` по пустым таблицам.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/36692) отложенный сброс TLI `LOCKS_BROKEN`.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/37130) переполнение таймаута потокового запроса.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/37145) потокобезопасность и разбор срока действия токена в IAM credentials provider.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/37285) ошибки в HTTP gateway.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/37668) переполнение при обработке пустого пароля.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/38033) сбор CDC для колонок `IsBuildInProgress` отключён.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/38490) segfault при обновлении.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/38544) Shuffle Elimination с прагмой `HashJoinMode`.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/39337) дублирование строк в scan query при проблемах доставки.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/39687) доступ к HTTP-эндпоинтам viewer: только viewer/admin SID; scope базы для database-only токенов.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/39798) OOM при загрузке trash на blob depot.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/41681) падение `TQueryBase` после отмены потокового запроса.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/43068) локальное чтение CDC из YQL.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/44340) быстрая удалённая отмена запросов в query service.
+
 ## Версия 25.4 {#25-4}
 
 ### Версия 25.4.1.15 {#25-4-1-15}
@@ -25,7 +77,7 @@
 * Полноценно поддержан механизм работы с секретами, хранимыми в базе данных: создание, изменение, удаление и использование — см. [Секреты](./concepts/datamodel/secrets.md?version=v25.4). Обратите внимание, что [старый синтаксис](./concepts/datamodel/secrets.md?version=v25.3) объявлен устаревшим.
 * Улучшено выполнение [`UNION ALL`](./yql/reference/syntax/select/union.md?version=main#union-all): теперь поддерживается параллельное выполнение, что повышает производительность аналитических запросов.
 
-# Исправления ошибок
+#### Исправления ошибок
 
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/38425) уязвимость [LDAP-аутентификации](./security/authentication.md): зная логин и пароль любого LDAP-пользователя (в том числе не входящего в группу с доступом к {{ ydb-short-name }}), можно было обойти проверку членства в группе и получить доступ к кластеру (инъекция в LDAP-фильтр поиска пользователя; добавлено экранирование спецсимволов по RFC 2254).
 

@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_statistics.h>
 
 namespace NKikimr::NKqp {
 
@@ -77,6 +78,15 @@ public:
         , CollectMemberEqualities(collectMemberEqualities)
         , CollectConstantMembers(collectConstantMembers)
     {}
+
+    TPredicateSelectivityComputer(
+        std::shared_ptr<TOptimizerStatistics> stats,
+        TColumnLineage* lineage
+    )
+        : Stats(std::move(stats))
+        , Lineage(lineage)
+    {}
+
 
     double Compute(const TExprBase& input);
 
@@ -178,6 +188,8 @@ private:
 
     bool CollectConstantMembers = false;
     TVector<TCoMember> ConstantMembers{};
+
+    TColumnLineage* Lineage = nullptr;
 };
 
 } // namespace NKikimr::NKqp

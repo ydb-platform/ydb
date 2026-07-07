@@ -8,7 +8,13 @@ import sys
 
 import subprocess
 
+from collections import defaultdict
+
 load_yaml = None
+
+BUILD_VOLUME_PROFILE_KEY = "build_volume"
+BUILD_VOLUME_STATISTICS_KEY = "source-manager.NumFileBytesInTranslationUnit"
+CLANG_TIDY_STATS_FILE = "clang-tidy-stats.json"
 
 
 def setup_script(args):
@@ -36,6 +42,7 @@ def parse_args():
     parser.add_argument("--export-fixes", required=True)
     parser.add_argument("--checks", required=False, default="")
     parser.add_argument("--header-filter", required=False, default=None)
+    parser.add_argument("--collect-build-volume", action="store_true")
     return parser.parse_known_args()
 
 
@@ -55,17 +62,34 @@ def generate_compilation_database(clang_cmd, source_root, filename, path):
 
 def load_profile(path):
     if os.path.exists(path):
-        files = os.listdir(path)
-        if len(files) == 1:
-            with open(os.path.join(path, files[0])) as afile:
+        profile_files = [f for f in os.listdir(path) if f != CLANG_TIDY_STATS_FILE]
+        if len(profile_files) == 1:
+            with open(os.path.join(path, profile_files[0])) as afile:
                 return json.load(afile)["profile"]
-        elif len(files) > 1:
+        elif len(profile_files) > 1:
             return {
-                "error": "found several profile files: {}".format(files),
+                "error": "found several profile files: {}".format(profile_files),
             }
     return {
         "error": "profile file is missing",
     }
+
+
+def load_build_volume(path):
+    if not os.path.exists(path):
+        return None
+
+    try:
+        with open(path) as afile:
+            statistics = json.load(afile)
+    except (IOError, ValueError):
+        return None
+
+    build_volume = statistics.get(BUILD_VOLUME_STATISTICS_KEY)
+    if type(build_volume) is not int:
+        return None
+
+    return build_volume
 
 
 def load_fixes(path):
@@ -93,9 +117,10 @@ def filter_configs(result_config, filtered_config):
     # suddenly enable more checks.
 
     input_config = load_yaml(result_config, remove_comments=False)
-    result_config = tidy_config_validation.filter_config(input_config)
+    result_config, filtered_out = tidy_config_validation.filter_config(input_config, return_filtered_out=True)
     with open(filtered_config, 'w') as afile:
         json.dump(result_config, afile)
+    return filtered_out
 
 
 def filter_cmd(cmd):
@@ -121,6 +146,25 @@ def find_header(p, h):
             return os.path.dirname(x)
 
     raise Exception('can not find inc dir')
+
+
+def compact_profile(profile):
+    PREFIX = 'time.clang-tidy.'
+    SUFFIX = '.wall'
+
+    # Metrics look like:
+    # 'time.clang-tidy.performance-implicit-conversion-in-loop.wall': 1.9073486328125e-06,
+    # 'time.clang-tidy.performance-implicit-conversion-in-loop.user': 1.0000000000001327e-06
+    # So (1), leave just wall, (2) sum by 1st word of name, and (3) round to 3 digits after '.'
+    grouped_sums = defaultdict(float)
+    for key, value in profile.items():
+        if key.startswith(PREFIX) and key.endswith(SUFFIX):
+            metric_full_name = key[len(PREFIX) : -len(SUFFIX)]
+            group_name = metric_full_name.split('-')[0]
+            group_key = f"{PREFIX}{group_name}{SUFFIX}"
+            grouped_sums[group_key] += value
+
+    return {k: round(v, 3) for k, v in grouped_sums.items()}
 
 
 def main():
@@ -150,13 +194,18 @@ def main():
 
     profile_tmpdir = ensure_clean_dir("profile_tmpdir")
     db_tmpdir = ensure_clean_dir("db_tmpdir")
+    statistics_file = None
+    if args.collect_build_volume:
+        statistics_file = os.path.join(profile_tmpdir, CLANG_TIDY_STATS_FILE)
+        clang_cmd += ["-Xclang", "-stats-file={}".format(statistics_file)]
     fixes_file = "fixes.txt"
     config_dir = ensure_clean_dir("config_dir")
     result_config_file = args.default_config_file
+    filtered_out = None
     if args.project_config_file != args.default_config_file:
         result_config = os.path.join(config_dir, "result_tidy_config.yaml")
         filtered_config = os.path.join(config_dir, "filtered_tidy_config.yaml")
-        filter_configs(args.project_config_file, filtered_config)
+        filtered_out = filter_configs(args.project_config_file, filtered_config)
         result_config_file = tidy_config_validation.merge_tidy_configs(
             base_config_path=args.default_config_file,
             additional_config_path=filtered_config,
@@ -166,6 +215,10 @@ def main():
 
     cmd = [
         clang_tidy_bin,
+    ]
+    if args.collect_build_volume:
+        cmd += ["--stats"]
+    cmd += [
         args.testing_src,
         "-p",
         compile_command_path,
@@ -188,8 +241,24 @@ def main():
     print("cmd: {}".format(' '.join(cmd)))
     res = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     out, err = res.communicate()
+    exit_code = res.returncode
+    if filtered_out and exit_code in (0, 1):
+        for check in filtered_out["Checks"]:
+            abs_check = check.lstrip('-')
+            if abs_check in tidy_config_validation.BANNED_CHECKS:
+                reason = tidy_config_validation.BANNED_CHECKS[abs_check]
+                out += (
+                    f'\n\nCheck {check} is banned by global tidy configuration '
+                    f'and must be removed from config {args.project_config_file}. '
+                    f'Ban reason: {reason}'
+                )
+                exit_code = 1
     out = out.replace(args.source_root, "$(SOURCE_ROOT)")
-    profile = load_profile(profile_tmpdir)
+    profile = compact_profile(load_profile(profile_tmpdir))
+    if statistics_file is not None:
+        build_volume = load_build_volume(statistics_file)
+        if build_volume is not None:
+            profile[BUILD_VOLUME_PROFILE_KEY] = build_volume
     testing_src = os.path.relpath(args.testing_src, args.source_root)
     tidy_fixes = load_fixes(fixes_file)
 
@@ -197,7 +266,7 @@ def main():
         json.dump(
             {
                 "file": testing_src,
-                "exit_code": res.returncode,
+                "exit_code": exit_code,
                 "profile": profile,
                 "stderr": err,
                 "stdout": out,

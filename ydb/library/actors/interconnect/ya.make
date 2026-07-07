@@ -59,6 +59,18 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/uring
+)
+
+IF (OS_LINUX)
+    SRCS(
+        uring_context.cpp
+        uring_context.h
+        uring_recv_buffer_pool.h
+    )
+ENDIF()
+
+PEERDIR(
     contrib/libs/libc_compat
     contrib/libs/openssl
     contrib/libs/xxhash

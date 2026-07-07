@@ -15,14 +15,17 @@ class TInterconnectMetricsAggregatorActor
     struct TPeerState {
         ui32 Connected = 0;
         i64 ClockSkew = 0;
+        ui32 RdmaRetryWatchdogPending = 0;
     };
 
     struct TLabelState {
         THashMap<TString, TPeerState> Peers;
         NMonitoring::TDynamicCounters::TCounterPtr ConnectedCounter;
         NMonitoring::TDynamicCounters::TCounterPtr ClockSkewCounter;
+        NMonitoring::TDynamicCounters::TCounterPtr RdmaRetryWatchdogPendingCounter;
         NMonitoring::IIntGauge* ConnectedGauge = nullptr;
         NMonitoring::IIntGauge* ClockSkewGauge = nullptr;
+        NMonitoring::IIntGauge* RdmaRetryWatchdogPendingGauge = nullptr;
     };
 
 public:
@@ -38,6 +41,7 @@ public:
         hFunc(TEvRegisterPeer, Handle);
         hFunc(TEvUpdateConnected, Handle);
         hFunc(TEvUpdateClockSkew, Handle);
+        hFunc(TEvUpdateRdmaRetryWatchdogPending, Handle);
         hFunc(TEvUnregisterPeer, Handle);
     )
 
@@ -57,22 +61,27 @@ private:
                     NMonitoring::MakeLabels(NMonitoring::TLabels{{"sensor", "interconnect.connected"}}));
                 label.ClockSkewGauge = registry->IntGauge(
                     NMonitoring::MakeLabels(NMonitoring::TLabels{{"sensor", "interconnect.clock_skew_microsec"}}));
+                label.RdmaRetryWatchdogPendingGauge = registry->IntGauge(NMonitoring::MakeLabels(
+                    NMonitoring::TLabels{{"sensor", "interconnect.rdma_retry_watchdog_pending_sessions"}}));
             } else {
                 const auto subgroup = Common_->MonCounters->GetSubgroup("peer", peerLabel);
                 label.ConnectedCounter = subgroup->GetCounter("Connected");
                 label.ClockSkewCounter = subgroup->GetCounter("ClockSkewMicrosec");
+                label.RdmaRetryWatchdogPendingCounter = subgroup->GetCounter("RdmaRetryWatchdogPendingSessions");
             }
         }
         return label;
     }
 
-    void Publish(TLabelState& label, ui32 connected, i64 clockSkew) {
+    void Publish(TLabelState& label, ui32 connected, i64 clockSkew, ui32 rdmaRetryWatchdogPending) {
         if (label.ConnectedGauge) {
             label.ConnectedGauge->Set(connected);
             label.ClockSkewGauge->Set(clockSkew);
+            label.RdmaRetryWatchdogPendingGauge->Set(rdmaRetryWatchdogPending);
         } else {
             *label.ConnectedCounter = connected;
             *label.ClockSkewCounter = clockSkew;
+            *label.RdmaRetryWatchdogPendingCounter = rdmaRetryWatchdogPending;
         }
     }
 
@@ -80,9 +89,11 @@ private:
         ui32 connected = 0;
         i64 clockSkew = 0;
         ui64 maxAbsClockSkew = 0;
+        ui32 rdmaRetryWatchdogPending = 0;
 
         for (const auto& [_, peer] : label.Peers) {
             connected += peer.Connected;
+            rdmaRetryWatchdogPending += peer.RdmaRetryWatchdogPending;
             const ui64 absClockSkew = Abs(peer.ClockSkew);
             if (absClockSkew > maxAbsClockSkew) {
                 maxAbsClockSkew = absClockSkew;
@@ -90,7 +101,7 @@ private:
             }
         }
 
-        Publish(label, connected, clockSkew);
+        Publish(label, connected, clockSkew, rdmaRetryWatchdogPending);
     }
 
     void Handle(TEvRegisterPeer::TPtr& ev) {
@@ -113,12 +124,19 @@ private:
         RecalculateAndPublish(label);
     }
 
+    void Handle(TEvUpdateRdmaRetryWatchdogPending::TPtr& ev) {
+        auto& label = GetLabelState(ev->Get()->PeerLabel);
+        auto& peer = label.Peers[ev->Get()->PeerName];
+        peer.RdmaRetryWatchdogPending = ev->Get()->Pending;
+        RecalculateAndPublish(label);
+    }
+
     void Handle(TEvUnregisterPeer::TPtr& ev) {
         if (auto it = Labels_.find(ev->Get()->PeerLabel); it != Labels_.end()) {
             auto& label = it->second;
             label.Peers.erase(ev->Get()->PeerName);
             if (label.Peers.empty()) {
-                Publish(label, 0, 0);
+                Publish(label, 0, 0, 0);
                 Labels_.erase(it);
             } else {
                 RecalculateAndPublish(label);

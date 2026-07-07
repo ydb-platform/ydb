@@ -517,6 +517,8 @@ namespace {
         std::optional<TString> policy;
         std::optional<ui64> maxProcessingAttempts;
         std::optional<TString> dlq;
+        std::optional<TDuration> receiveMessageWaitTime;
+        std::optional<TDuration> receiveMessageDelay;
 
 
         protoConsumer->set_name(consumer.Name().StringValue());
@@ -583,6 +585,16 @@ namespace {
                 dlq = GetStringValue(setting);
                 auto policyProto = protoConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy();
                 policyProto->mutable_move_action()->set_dead_letter_queue(dlq.value());
+            } else if (name == "receive_message_wait_time"sv) {
+                receiveMessageWaitTime = GetIntervalValue(setting);
+                auto* value = protoConsumer->mutable_shared_consumer_type()->mutable_receive_message_wait_time();
+                value->set_seconds(receiveMessageWaitTime->Seconds());
+                value->set_nanos(receiveMessageWaitTime->NanoSecondsOfSecond());
+            } else if (name == "receive_message_delay"sv) {
+                receiveMessageDelay = GetIntervalValue(setting);
+                auto* value = protoConsumer->mutable_shared_consumer_type()->mutable_receive_message_delay();
+                value->set_seconds(receiveMessageDelay->Seconds());
+                value->set_nanos(receiveMessageDelay->NanoSecondsOfSecond());
             }
         }
 
@@ -601,6 +613,12 @@ namespace {
             }
             if (dlq) {
                 return TStringBuilder() << "dead_letter_queue is not supported for streaming consumers";
+            }
+            if (receiveMessageWaitTime) {
+                return TStringBuilder() << "receive_message_wait_time is not supported for streaming consumers";
+            }
+            if (receiveMessageDelay) {
+                return TStringBuilder() << "receive_message_delay is not supported for streaming consumers";
             }
         } else {
             if (!policy || policy.value() == "none"sv) {
@@ -681,6 +699,16 @@ namespace {
                 }
             } else if (name == "dead_letter_queue"sv) {
                 alterDLQ = GetStringValue(setting);
+            } else if (name == "receive_message_wait_time"sv) {
+                auto period = GetIntervalValue(setting);
+                auto* value = protoConsumer->mutable_alter_shared_consumer_type()->mutable_set_receive_message_wait_time();
+                value->set_seconds(period.Seconds());
+                value->set_nanos(period.NanoSecondsOfSecond());
+            } else if (name == "receive_message_delay"sv) {
+                auto period = GetIntervalValue(setting);
+                auto* value = protoConsumer->mutable_alter_shared_consumer_type()->mutable_set_receive_message_delay();
+                value->set_seconds(period.Seconds());
+                value->set_nanos(period.NanoSecondsOfSecond());
             }
         }
 
@@ -1945,7 +1973,6 @@ public:
             NKikimrIndexBuilder::TIndexBuildSettings indexBuildSettings;
             indexBuildSettings.set_source_path(table.Metadata->Name);
 
-            TVector<TSetColumnConstraintSettings> constraintSetObjects;
             auto applyLocalBloomNgramFilterIndex = [](Ydb::Table::LocalBloomNgramFilterIndex* proto,
                                                            const TIndexDescription::TLocalBloomNgramFilterDescription& desc) -> decltype(auto) {
                 if (desc.NgramSize) {
@@ -2114,6 +2141,7 @@ public:
                         alterTableRequest.add_drop_columns(TString(dropColumn.Value()));
                     }
                 } else if (name == "alterColumns") {
+                    std::vector<TString> notNullColumns;
                     auto listNode = action.Value().Cast<TExprList>();
                     for (size_t i = 0; i < listNode.Size(); ++i) {
                         auto item = listNode.Item(i);
@@ -2189,12 +2217,7 @@ public:
                                     return SyncError();
                                 } else {
                                     alterTableRequest.mutable_alter_columns()->RemoveLast();
-
-                                    TSetColumnConstraintSettings value;
-                                    value.SetColumnName(TString(columnName));
-                                    value.SetConstraint(TSetColumnConstraintSettings::NOT_NULL);
-
-                                    constraintSetObjects.push_back(std::move(value));
+                                    notNullColumns.push_back(TString(columnName));
                                 }
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
@@ -2244,6 +2267,21 @@ public:
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
                                     TStringBuilder() << "Unsupported action to alter column: " << alterColumnAction));
                             return SyncError();
+                        }
+                    }
+
+                    if (notNullColumns.size() > 0) {
+                        if (alterTableRequest.alter_columns_size() != 0) {
+                            ctx.AddError(TIssue(
+                                ctx.GetPosition(listNode.Pos()),
+                                "Multiple ALTER COLUMN operations of different kinds are not allowed in a single statement."
+                            ));
+                            return SyncError();
+                        }
+
+                        for (const auto& columnName : notNullColumns) {
+                            auto* req = alterTableRequest.add_set_not_null();
+                            req->set_column_name(TString(columnName));
                         }
                     }
                 } else if (name == "addColumnFamilies" || name == "alterColumnFamilies") {
@@ -2760,6 +2798,7 @@ public:
 
                         auto add_index = alterTableRequest.add_add_indexes();
                         add_index->set_name(alterIndexName);
+                        add_index->add_index_columns(indexIter->KeyColumns[0]);
                         const auto alterIndexSettings = alterIndexIndexSettingsExpr.Cast<TCoNameValueTupleList>();
 
                         if (indexIter->Type == NYql::TIndexDescription::EType::LocalBloomFilter) {
@@ -2770,7 +2809,7 @@ public:
                                 return SyncError();
                             }
 
-                            
+
                             TIndexDescription::TLocalBloomFilterDescription localBloomFilterDesc;
                             for (auto&& is : alterIndexSettings) {
                                 YQL_ENSURE(is.Value().Maybe<TCoAtom>());
@@ -3064,9 +3103,14 @@ public:
                         }
                     }
                 } else if (name == "compact") {
-                    if (!SessionCtx->Config().FeatureFlags.GetEnableForcedCompactions()) {
+                    if (table.Metadata->StoreType == EStoreType::Row && !SessionCtx->Config().FeatureFlags.GetEnableForcedCompactions()) {
                         ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
-                            TStringBuilder() << "Compact is not allowed"));
+                            TStringBuilder() << "Compact is not allowed for row tables"));
+                        return SyncError();
+                    }
+                    if (table.Metadata->StoreType == EStoreType::Column && !SessionCtx->Config().FeatureFlags.GetEnableForcedColumnCompactions()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                            TStringBuilder() << "Compact is not allowed for column tables"));
                         return SyncError();
                     }
                     auto& compact = *alterTableRequest.mutable_compact();
@@ -3108,11 +3152,8 @@ public:
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
             bool isTableStore = (table.Metadata->TableType == ETableType::TableStore);  // Doesn't set, so always false
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
-            bool isSetConstraint = (!constraintSetObjects.empty());
 
-            if (isSetConstraint) {
-                future = Gateway->SetConstraint(table.Metadata->Name, std::move(constraintSetObjects));
-            } else if (isTableStore) {
+            if (isTableStore) {
                 AFL_VERIFY(false);
                 if (!isColumn) {
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),

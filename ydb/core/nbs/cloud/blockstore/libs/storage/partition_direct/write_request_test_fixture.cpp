@@ -59,7 +59,7 @@ void TWriteRequestTestFixture::Init()
         [this](
             ui32 vChunkIndex,
             THostIndex coordinatorHostIndex,
-            std::vector<THostIndex> hostIndexes,
+            THostMask hostIndexes,
             ui64 lsn,
             TBlockRange64 range,
             TDuration replyTimeout,
@@ -105,7 +105,6 @@ TDBGWriteBlocksToManyPBuffersResponse
 TWriteRequestTestFixture::CreateOkResponse()
 {
     TDBGWriteBlocksToManyPBuffersResponse okResponse;
-    okResponse.OverallError = MakeError(S_OK);
     okResponse.Responses.push_back(
         {.HostIndex = THostIndex{0}, .Error = MakeError(S_OK)});
     okResponse.Responses.push_back(
@@ -121,7 +120,6 @@ TDBGWriteBlocksToManyPBuffersResponse
 TWriteRequestTestFixture::CreateOneOkResponse(THostIndex hostIndex)
 {
     TDBGWriteBlocksToManyPBuffersResponse partiallyOkResponse;
-    partiallyOkResponse.OverallError = MakeError(S_OK);
     partiallyOkResponse.Responses.push_back(
         {.HostIndex = hostIndex, .Error = MakeError(S_OK)});
 
@@ -133,8 +131,6 @@ TDBGWriteBlocksToManyPBuffersResponse
 TWriteRequestTestFixture::CreateDBGErrorResponse()
 {
     TDBGWriteBlocksToManyPBuffersResponse dbgErrorResponse;
-    dbgErrorResponse.OverallError = MakeError(E_FAIL);
-
     return dbgErrorResponse;
 }
 
@@ -145,7 +141,7 @@ TWriteRequestTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
         [this](
             ui32 vChunkIndex,
             THostIndex coordinatorHostIndex,
-            std::vector<THostIndex> hostIndexes,
+            THostMask hostIndexes,
             ui64 lsn,
             TBlockRange64 range,
             TDuration replyTimeout,
@@ -159,17 +155,17 @@ TWriteRequestTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
-        UNIT_ASSERT_VALUES_EQUAL(3u, hostIndexes.size());
+        UNIT_ASSERT_VALUES_EQUAL(3u, hostIndexes.Count());
 
         UNIT_ASSERT_EQUAL(
             true,
-            VChunkConfig.GetDesiredPBuffers().Get(hostIndexes[0]));
+            VChunkConfig.GetDesiredPBuffers().Get(hostIndexes.Get(0)));
         UNIT_ASSERT_EQUAL(
             true,
-            VChunkConfig.GetDesiredPBuffers().Get(hostIndexes[1]));
+            VChunkConfig.GetDesiredPBuffers().Get(hostIndexes.Get(1)));
         UNIT_ASSERT_EQUAL(
             true,
-            VChunkConfig.GetDesiredPBuffers().Get(hostIndexes[2]));
+            VChunkConfig.GetDesiredPBuffers().Get(hostIndexes.Get(2)));
 
         callback(CreateOkResponse());
     };

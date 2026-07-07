@@ -20,7 +20,7 @@ void TBatchTrace::Join(const TTraceContextPtr& context)
     Clients_.push_back(context);
 }
 
-std::pair<TTraceContextPtr, bool> TBatchTrace::StartSpan(const TString& spanName)
+std::pair<TTraceContextPtr, bool> TBatchTrace::StartSpan(const std::string& spanName)
 {
     auto traceContext = TTraceContext::NewRoot(spanName);
 

@@ -1,3 +1,4 @@
+#include "yql_yt_helpers.h"
 #include "yql_yt_provider.h"
 #include "yql_yt_dq_integration.h"
 #include "yql_yt_ytflow_integration.h"
@@ -466,13 +467,8 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
         };
 
         info.CloseSessionAsync = [ytState, gateway](const TString& sessionId) {
-            return gateway->CloseSession(IYtGateway::TCloseSessionOptions(sessionId)).Apply([ytState](const NThreading::TFuture<void>& future) {
-                // do manual cleanup; otherwise there may be dead nodes at program termination
-                // in setup with several providers
-                ytState->TablesData->CleanupCompiledSQL();
-
-                future.TryRethrow();
-            });
+            ytState->TablesData->CleanupCompiledSQL();
+            return gateway->CloseSession(IYtGateway::TCloseSessionOptions(sessionId));
         };
 
         info.TokenResolver = [ytState, gateway](const TString& url, const TString& alias) -> TString {
@@ -549,6 +545,8 @@ struct TYtDataSinkFunctions {
         Names.insert(TYtPublish::CallableName());
         Names.insert(TYtEquiJoin::CallableName());
         Names.insert(TYtStatOut::CallableName());
+        Names.insert(TYtMaterialize::CallableName());
+        Names.insert(TYtPersist::CallableName());
     }
 };
 
@@ -568,6 +566,7 @@ bool TYtState::IsHybridEnabled() const {
 }
 
 bool TYtState::IsHybridEnabledForCluster(const std::string_view& cluster) const {
+    YQL_ENSURE(cluster != YtUnspecifiedCluster);
     return Configuration->_EnableDq.Get(TString(cluster)).GetOrElse(true);
 }
 
@@ -577,6 +576,7 @@ bool TYtState::HybridTakesTooLong() const {
 }
 
 TMaybe<TString> TYtState::ResolveClusterToken(const TString& cluster) {
+    YQL_ENSURE(cluster != YtUnspecifiedCluster);
     // todo: get token by cluster name from Auth when it will be implemented
     if (auto token = Configuration->Auth.Get()) {
         return *token;

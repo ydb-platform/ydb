@@ -28,9 +28,9 @@ Y_UNIT_TEST_LLVM(TestSkipNullMembers) {
 
     using TOutRow = std::tuple<TMaybe<i32>, i32>;
 
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
-                                                                      {TMaybe<i32>{}, 2},
-                                                                  });
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
+                                                          {TMaybe<i32>{}, 2},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestFilterNullMembers) {
@@ -51,9 +51,9 @@ Y_UNIT_TEST_LLVM(TestFilterNullMembers) {
 
     using TOutRow = std::tuple<TMaybe<i32>, i32>;
 
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
-                                                                      {TMaybe<i32>{}, 2},
-                                                                  });
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
+                                                          {TMaybe<i32>{}, 2},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestFilterNullMembersMultiOptional) {
@@ -76,10 +76,10 @@ Y_UNIT_TEST_LLVM(TestFilterNullMembersMultiOptional) {
 
     using TOutRow = std::tuple<TOpt, TMaybe<i32>>;
 
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
-                                                                      {TOpt{}, TMaybe<i32>{2}},
-                                                                      {TOpt{TMaybe<i32>{}}, TMaybe<i32>{}},
-                                                                  });
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
+                                                          {TOpt{}, i32(2)},
+                                                          {TOpt{TMaybe<i32>{}}, {}},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestSkipNullMembersOverFlow) {
@@ -101,8 +101,8 @@ Y_UNIT_TEST_LLVM(TestSkipNullMembersOverFlow) {
     using TOutRow = std::tuple<TMaybe<i32>, i32>;
 
     const TVector<TOutRow> expected{{TMaybe<i32>{}, 2}};
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
-                                               NYql::NUdf::TUnboxedValueComparatorStreamView<TOutRow>(expected));
+    AssertUnboxedValueElementEqual(graph->GetValue(),
+                                   NYql::NUdf::TUnboxedValueComparatorStreamView<TOutRow>(expected));
 }
 
 Y_UNIT_TEST_LLVM(TestFilterNullMembersOverFlow) {
@@ -124,8 +124,8 @@ Y_UNIT_TEST_LLVM(TestFilterNullMembersOverFlow) {
     using TOutRow = std::tuple<TMaybe<i32>, i32>;
 
     const TVector<TOutRow> expected{{TMaybe<i32>{}, 2}};
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
-                                               NYql::NUdf::TUnboxedValueComparatorStreamView<TOutRow>(expected));
+    AssertUnboxedValueElementEqual(graph->GetValue(),
+                                   NYql::NUdf::TUnboxedValueComparatorStreamView<TOutRow>(expected));
 }
 
 Y_UNIT_TEST_LLVM(TestFilterNullMembersMultiOptionalOverFlow) {
@@ -147,11 +147,11 @@ Y_UNIT_TEST_LLVM(TestFilterNullMembersMultiOptionalOverFlow) {
     using TOutRow = std::tuple<TOpt, TMaybe<i32>>;
 
     const TVector<TOutRow> expected{
-        {{}, TMaybe<i32>{2}},
-        {{TMaybe<i32>{}}, TMaybe<i32>{}},
+        {{}, i32(2)},
+        {{TMaybe<i32>{}}, {}},
     };
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
-                                               NYql::NUdf::TUnboxedValueComparatorStreamView<TOutRow>(expected));
+    AssertUnboxedValueElementEqual(graph->GetValue(),
+                                   NYql::NUdf::TUnboxedValueComparatorStreamView<TOutRow>(expected));
 }
 
 Y_UNIT_TEST_LLVM(TestSkipNullElements) {
@@ -751,7 +751,7 @@ Y_UNIT_TEST_LLVM(TestInt16ToFloatCompleteCheck) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto list = pb.ListFromRange(pb.NewDataLiteral<i16>(std::numeric_limits<i16>::min()), pb.NewDataLiteral<i16>(std::numeric_limits<i16>::max()), pb.NewDataLiteral<i16>(1));
+    const auto list = pb.ListFromRange(pb.NewDataLiteral<i16>(Min<i16>()), pb.NewDataLiteral<i16>(Max<i16>()), pb.NewDataLiteral<i16>(1));
     const auto type = pb.NewDataType(NUdf::EDataSlot::Float);
     const auto pgmReturn = pb.Not(pb.HasItems(pb.Filter(list,
                                                         [&](TRuntimeNode item) {
@@ -767,7 +767,7 @@ Y_UNIT_TEST_LLVM(TestUint16ToFloatCompleteCheck) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto list = pb.ListFromRange(pb.NewDataLiteral<ui16>(std::numeric_limits<ui16>::min()), pb.NewDataLiteral<ui16>(std::numeric_limits<ui16>::max()), pb.NewDataLiteral<ui16>(1U));
+    const auto list = pb.ListFromRange(pb.NewDataLiteral<ui16>(Min<ui16>()), pb.NewDataLiteral<ui16>(Max<ui16>()), pb.NewDataLiteral<ui16>(1U));
     const auto type = pb.NewDataType(NUdf::EDataSlot::Float);
     const auto pgmReturn = pb.Not(pb.HasItems(pb.Filter(list,
                                                         [&](TRuntimeNode item) {

@@ -617,6 +617,18 @@ public:
                 if (settings.has_encryption_settings()) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
                 }
+                if constexpr (IsFsExport) {
+                    if (settings.items().empty()) {
+                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
+                            "Exporting without explicitly specified items is not supported in current configuration");
+                    }
+                    for (const auto& item : settings.items()) {
+                        if (TTraits::GetDestination(item).empty()) {
+                            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
+                                TStringBuilder() << "destination_path must be specified for item \"" << item.source_path() << "\" in current configuration");
+                        }
+                    }
+                }
             }
             if (settings.items().empty() && !commonDestSpecified) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No destination prefix nor items specified. Don't know where to export");

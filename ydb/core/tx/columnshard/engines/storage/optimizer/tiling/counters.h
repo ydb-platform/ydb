@@ -13,12 +13,14 @@ private:
     using TBase = NColumnShard::TPortionCategoryCounterAgents;
 
 public:
-    const std::shared_ptr<NColumnShard::TValueAggregationAgent> Height;
+    const std::shared_ptr<NColumnShard::TValueAggregationAgent> NotBoredCount;
+    const NColumnShard::TIncrementalHistogram OverloadHistogram;
     const NColumnShard::TIncrementalHistogram WidthHistogram;
 
     TPortionCategoryCounterAgents(TCommonCountersOwner& base, const TString& categoryName)
         : TBase(base, categoryName)
-        , Height(TBase::GetValueAutoAggregations("ByGranule/Level/Height"))
+        , NotBoredCount(TBase::GetValueAutoAggregations("ByGranule/Level/NotBored"))
+        , OverloadHistogram(base.GetModuleId(), "ByLevel/Overload", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders)
         , WidthHistogram(base.GetModuleId(), "ByLevel/Width", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders)
     {
     }
@@ -27,19 +29,36 @@ public:
 class TPortionCategoryCounters: public NColumnShard::TPortionCategoryCounters {
 private:
     using TBase = NColumnShard::TPortionCategoryCounters;
-    std::shared_ptr<NColumnShard::TValueAggregationClient> Height;
+    std::shared_ptr<NColumnShard::TValueAggregationClient> NotBoredCount;
+    std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> OverloadHistogram;
     std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> WidthHistogram;
+    std::optional<ui64> LastOverload;
 
 public:
     TPortionCategoryCounters(TPortionCategoryCounterAgents& agents)
         : TBase(agents)
-        , Height(agents.Height->GetClient())
+        , NotBoredCount(agents.NotBoredCount->GetClient())
+        , OverloadHistogram(agents.WidthHistogram.BuildGuard())
         , WidthHistogram(agents.WidthHistogram.BuildGuard())
     {
     }
 
-    void SetHeight(const i32 height) {
-        Height->SetValue(height);
+    void SetOverload(const ui64 overload) {
+        if (LastOverload) {
+            OverloadHistogram->Sub(*LastOverload, 1);
+            if (*LastOverload > 0) {
+                NotBoredCount->Add(-1);
+            }
+        }
+        OverloadHistogram->Add(overload, 1);
+        if (overload > 0) {
+            NotBoredCount->Add(1);
+        }
+        LastOverload = overload;
+    }
+
+    i32 GetNotBoredCount() const {
+        return NotBoredCount->GetValueSimple();
     }
 
     void AddWidth(const ui64 width) {

@@ -103,6 +103,10 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         }
     }
 
+    void UpdatePriority() {
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+    }
+
     void ModifyPortions(const std::vector<typename TPortion::TPtr>& add, const std::vector<typename TPortion::TConstPtr>& remove) {
         for (const auto& p : remove) {
             this->RemovePortion(p);
@@ -116,6 +120,8 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
                 this->AddPortion(p);
             }
         }
+
+        UpdatePriority();
     }
 
     void DoActualize(const TInstant currentInstant) override {
@@ -137,7 +143,9 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
                 OverloadPriority = TOptimizationPriority::Critical(0);
             }
         }
+
         PromoteExpiredPortions(currentInstant);
+        UpdatePriority();
     }
 
     void DoAddPortion(typename TPortion::TPtr p) override {
@@ -317,6 +325,10 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         consider(LastLevel.DoGetNextOptimizationTask(isLocked));
         for (const auto& [_, middleLevel] : MiddleLevels) {
             consider(middleLevel.DoGetNextOptimizationTask(isLocked));
+        }
+
+        if (result && result->Priority.IsZeroLevel() && this->Counters.Portions->GetNotBoredCount() > 0) {
+            return std::nullopt;
         }
 
         return result;

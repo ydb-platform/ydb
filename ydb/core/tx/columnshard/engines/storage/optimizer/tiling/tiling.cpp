@@ -346,7 +346,7 @@ struct TLevel {
             return TOptimizationPriority::Zero();
         }
         auto height = Intersections.GetMaxCount();
-        Counters.Portions->SetHeight(height);
+        Counters.Portions->SetOverload(height);
         if (height < 2) {
             return TOptimizationPriority::Zero();
         }

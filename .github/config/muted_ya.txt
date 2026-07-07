@@ -6,6 +6,7 @@ ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_Unspec
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.OffsetsAndStateRecoveryAfterQueryTextChange
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewRanges
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-QueryService
+ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-SchemeQuery
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.CommitTest
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest

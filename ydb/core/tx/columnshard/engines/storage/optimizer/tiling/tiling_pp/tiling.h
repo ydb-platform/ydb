@@ -163,7 +163,8 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         Place(p, TInstant::Now());
     }
 
-    void Place(typename TPortion::TPtr p, TInstant now, bool accumulatorAllowed = true, std::optional<ui8> forcedLevel = std::nullopt) {
+    void Place(typename TPortion::TPtr p, TInstant now, bool accumulatorAllowed = true, std::optional<ui8> forcedLevel = std::nullopt,
+        bool forceCandidate = false) {
         const ui64 portionId = p->GetPortionId();
         PortionRegistry[portionId] = p;
         ui8 level = 0;
@@ -198,7 +199,11 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
             Accumulator.AddPortion(p);
             InternalLevel[portionId] = { .Level = 0, .Width = 0 };
         } else if (level == 1) {
-            LastLevel.AddPortion(p);
+            if (forceCandidate) {
+                LastLevel.AddCandidatePortion(p);
+            } else {
+                LastLevel.AddPortion(p);
+            }
             InternalLevel[portionId] = { .Level = 1, .Width = measure };
         } else {
             MiddleLevels.at(level).RegisterRoutingWidth(portionId, measure);
@@ -295,13 +300,18 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
             Place(p, currentInstant, /*accumulatorAllowed=*/false, nextLevel);
         }
 
-        if (AreOtherLevelsEmpty() && Accumulator.Portions.size() == 1) {
+        const auto neverLocked = [](typename TPortion::TConstPtr) {
+            return false;
+        };
+        if (!HasOtherLevelWork(neverLocked) && Accumulator.Portions.size() == 1) {
             auto it = Accumulator.Portions.begin();
             auto pit = PortionRegistry.find((*it)->GetPortionId());
             if (pit != PortionRegistry.end()) {
                 typename TPortion::TPtr p = pit->second;
                 DoRemovePortion(p);
-                Place(p, currentInstant, /*accumulatorAllowed=*/false, /*forcedLevel=*/static_cast<ui8>(1));
+                // Promote as a last-level candidate (not a stable portion) so it stays compactable
+                // and eventually merges with a neighbour instead of stranding as an INSERTED portion.
+                Place(p, currentInstant, /*accumulatorAllowed=*/false, /*forcedLevel=*/static_cast<ui8>(1), /*forceCandidate=*/true);
             }
         }
 
@@ -320,12 +330,29 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         return true;
     }
 
+    bool AreMiddleLevelsEmpty() const {
+        for (const auto& [_, middleLevel] : MiddleLevels) {
+            if (!middleLevel.PortionById.empty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Whether a below-threshold accumulator should defer to the other levels. Middle levels suppress
+    // structurally (a lone middle portion ages down on its own), while the last level suppresses only
+    // when it can actually produce a task — a promoted last-level candidate with no merge partner
+    // yields no task and must not stall the accumulator that would feed it a neighbour.
+    bool HasOtherLevelWork(TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const {
+        if (!AreMiddleLevelsEmpty()) {
+            return true;
+        }
+        return LastLevel.DoGetNextOptimizationTask(isLocked).has_value();
+    }
+
     std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
         TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
         std::optional<CompactionTask<TKey, TPortion>> result;
-        if (!Accumulator.IsBelowThreshold() || AreOtherLevelsEmpty()) {
-            result = Accumulator.DoGetNextOptimizationTask(isLocked);
-        }
         const auto consider = [&result](std::optional<CompactionTask<TKey, TPortion>>&& candidate) {
             if (candidate && (!result || result->Priority < candidate->Priority)) {
                 result = std::move(candidate);
@@ -334,6 +361,14 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         consider(LastLevel.DoGetNextOptimizationTask(isLocked));
         for (const auto& [_, middleLevel] : MiddleLevels) {
             consider(middleLevel.DoGetNextOptimizationTask(isLocked));
+        }
+
+        // An above-threshold accumulator always competes on priority; a below-threshold accumulator
+        // only compacts when no other level has work — either a pending task or a structurally
+        // occupied middle level — so small batches don't starve larger compactions yet never stall.
+        const bool yieldToOthers = result.has_value() || !AreMiddleLevelsEmpty();
+        if (!Accumulator.IsBelowThreshold() || !yieldToOthers) {
+            consider(Accumulator.DoGetNextOptimizationTask(isLocked));
         }
 
         return result;

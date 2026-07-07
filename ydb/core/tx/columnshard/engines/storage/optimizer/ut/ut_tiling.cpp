@@ -873,15 +873,15 @@ Y_UNIT_TEST_SUITE(TilingAccumulatorCompactionGating) {
         tiling.AddPortion(MakePortion(3, 4, 5, 100));
         UNIT_ASSERT(tiling.Accumulator.IsBelowThreshold());
 
-        // 4 non-overlapping baselines on last level (no candidates).
-        tiling.AddPortion(MakePortion(10, 0, 9, 1000));
-        tiling.AddPortion(MakePortion(11, 100, 109, 1000));
-        tiling.AddPortion(MakePortion(12, 200, 209, 1000));
-        tiling.AddPortion(MakePortion(13, 300, 309, 1000));
+        // 10 non-overlapping baselines on last level (no candidates). K == 10, so a portion must
+        // overlap >= K baselines to route to a middle level rather than staying at level 1.
+        for (ui64 i = 0; i < 10; ++i) {
+            tiling.AddPortion(MakePortion(10 + i, i * 100, i * 100 + 9, 1000));
+        }
         UNIT_ASSERT(tiling.LastLevel.CandidateIds.empty());
 
         // A wide portion overlapping all baselines → middle level.
-        tiling.AddPortion(MakePortion(100, 0, 309, 1000));
+        tiling.AddPortion(MakePortion(100, 0, 909, 1000));
         UNIT_ASSERT(tiling.InternalLevel.at(100).Level >= 2);   // in a middle level
         UNIT_ASSERT(!tiling.AreOtherLevelsEmpty());
 
@@ -925,10 +925,12 @@ Y_UNIT_TEST_SUITE(TilingAccumulatorCompactionGating) {
         const TInstant now = TInstant::Now();
         tiling.PromoteExpiredPortions(now);
 
-        // The portion should now be on the last level (level 1).
+        // The portion should now be on the last level (level 1) as a candidate — not a stable
+        // Optimized portion — so it stays compactable instead of stranding as INSERTED.
         UNIT_ASSERT_VALUES_EQUAL(tiling.Accumulator.Portions.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(1).Level, 1);
-        UNIT_ASSERT(tiling.LastLevel.PortionIds.contains(1) || tiling.LastLevel.CandidateIds.contains(1));
+        UNIT_ASSERT(tiling.LastLevel.CandidateIds.contains(1));
+        UNIT_ASSERT(!tiling.LastLevel.PortionIds.contains(1));
     }
 
     // 8) Single accumulator portion NOT promoted when other levels have work.
@@ -978,6 +980,56 @@ Y_UNIT_TEST_SUITE(TilingAccumulatorCompactionGating) {
         UNIT_ASSERT_VALUES_EQUAL(tiling.Accumulator.Portions.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(1).Level, 0);
         UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(2).Level, 0);
+    }
+
+    // 10) A lone accumulator portion promoted to the last level becomes a candidate and is compacted
+    //     solo (rewritten to SPLIT_COMPACTED) rather than stranding as an un-compacted portion.
+    Y_UNIT_TEST(PromotedLonePortionCompactsSolo) {
+        auto settings = MakeGatingSettings();
+        settings.AgingSettings.Enabled = true;
+
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+
+        tiling.AddPortion(MakePortion(1, 0, 10, 100));
+        tiling.PromoteExpiredPortions(TInstant::Now());
+        UNIT_ASSERT(tiling.LastLevel.CandidateIds.contains(1));
+
+        // No neighbour exists, so the candidate is compacted solo (single-portion repack).
+        const auto task = tiling.GetNextOptimizationTask(NeverLocked());
+        UNIT_ASSERT(task);
+        UNIT_ASSERT_VALUES_EQUAL(task->TargetLevel, 1);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions[0]->GetPortionId(), 1);
+    }
+
+    // 11) Two non-intersecting last-level candidates are compacted together as neighbours.
+    Y_UNIT_TEST(NonIntersectingCandidatesMergeAsNeighbours) {
+        TLastLevelSettings settings;
+        settings.Compaction.Bytes = 1'000'000;
+        settings.Compaction.Portions = 100;
+        settings.CandidatePortionsOverload = 100;
+
+        TCounters counters;
+        TTestLastLevel lastLevel(settings, counters);
+
+        // Two non-overlapping candidates (as the promotion path would create).
+        lastLevel.AddCandidatePortion(MakePortion(1, 0, 10, 100));
+        lastLevel.AddCandidatePortion(MakePortion(2, 20, 30, 100));
+        UNIT_ASSERT(lastLevel.CandidateIds.contains(1));
+        UNIT_ASSERT(lastLevel.CandidateIds.contains(2));
+
+        const auto task = lastLevel.DoGetNextOptimizationTask(NeverLocked());
+        UNIT_ASSERT(task);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 2);
+
+        TVector<ui64> ids;
+        for (const auto& p : task->Portions) {
+            ids.push_back(p->GetPortionId());
+        }
+        Sort(ids.begin(), ids.end());
+        UNIT_ASSERT_VALUES_EQUAL(ids[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(ids[1], 2);
     }
 }
 

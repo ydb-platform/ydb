@@ -8,6 +8,11 @@
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/util/backoff.h>
 
+#include <library/cpp/containers/absl/flat_hash_map.h>
+
+#include <type_traits>
+
+
 #define Service TBase::Service
 #define LogBuilder TBase::LogBuilder
 
@@ -133,8 +138,13 @@ private:
         }
 
         auto& partitionInfo = it->second;
+        const auto& record = ev->Get()->Record;
 
         partitionInfo.Success = true;
+        partitionInfo.HasOffsetResults = record.OffsetResultsSize() > 0;
+        for (const auto& [offset, status] : record.GetOffsetResults()) {
+            partitionInfo.OffsetResults.emplace(offset, static_cast<EOperationResult>(static_cast<ui8>(status)));
+        }
 
         --PendingRequests;
         ReplyIfPossible();
@@ -220,9 +230,23 @@ private:
         }
 
         auto response = std::make_unique<TEvChangeResponse>();
+        if (TopicInfo) {
+            response->BalancerTabletId = TopicInfo->Description.GetBalancerTabletID();
+        }
         for (auto& [partitionId, partitionInfo]: PendingPartitions) {
             for (auto offset : partitionInfo.Offsets) {
-                response->Messages.emplace_back(TMessageId(partitionId, offset), partitionInfo.Success);
+                EOperationResult status = EOperationResult::Failed;
+                if (partitionInfo.Error) {
+                    status = EOperationResult::Failed;
+                } else if (!partitionInfo.HasOffsetResults) {
+                    // Backward compatibility: old tablets don't populate offset results.
+                    // Can be removed in 27-1.
+                    status = partitionInfo.Success ? EOperationResult::Success : EOperationResult::Failed;
+                } else if (const auto statusIt = partitionInfo.OffsetResults.find(offset);
+                           statusIt != partitionInfo.OffsetResults.end()) {
+                    status = statusIt->second;
+                }
+                response->Messages.emplace_back(TMessageId(partitionId, offset), status);
             }
         }
 
@@ -250,19 +274,21 @@ private:
     struct TRequestInfo {
         bool Error = false;
         bool Success = false;
+        bool HasOffsetResults = false;
         ui64 TabletId = 0;
         std::vector<ui64> Offsets;
+        absl::flat_hash_map<ui64, EOperationResult> OffsetResults;
     };
 
     // partitionId -> request info
-    std::unordered_map<ui32, TRequestInfo> PendingPartitions;
+    absl::flat_hash_map<ui32, TRequestInfo> PendingPartitions;
 
     struct TPipeInfo {
         ui64 Cookie = 0;
         bool Subscribed = false;
     };
     // tabletId -> cookie
-    std::unordered_map<ui64, TPipeInfo> Pipes;
+    absl::flat_hash_map<ui64, TPipeInfo> Pipes;
 
     size_t PendingRequests = 0;
 };

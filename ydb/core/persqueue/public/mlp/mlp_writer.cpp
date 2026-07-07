@@ -291,6 +291,9 @@ void TWriterActor::ReplyIfPossible() {
 
     auto response = std::make_unique<TEvWriteResponse>();
     response->DescribeStatus = DescribeStatus;
+    if (TopicInfo) {
+        response->BalancerTabletId = TopicInfo->Description.GetBalancerTabletID();
+    }
     for (auto& message : PendingMessages) {
         std::optional<TMessageId> messageId;
         if (message.Status == Ydb::StatusIds::SUCCESS || message.Status == Ydb::StatusIds::ALREADY_EXISTS) {

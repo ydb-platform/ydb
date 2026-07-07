@@ -1,6 +1,7 @@
 #include "resource_pool_classifier_settings.h"
 
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 
 #include <ydb/library/aclib/aclib.h>
 
@@ -32,6 +33,19 @@ void TClassifierSettings::TParser::operator()(std::optional<TRegexPredicate>* se
     }
 }
 
+void TClassifierSettings::TParser::operator()(std::optional<EClassifierAction>* setting) const {
+    if (Value.empty()) {
+        setting->reset();
+        return;
+    }
+    const auto lowered = to_lower(Value);
+    if (lowered == "reject") {
+        *setting = EClassifierAction::Reject;
+        return;
+    }
+    throw yexception() << "Invalid action '" << Value << "', supported values: 'reject'";
+}
+
 //// TClassifierSettings::TExtractor
 
 TString TClassifierSettings::TExtractor::operator()(i64* setting) const {
@@ -53,6 +67,17 @@ TString TClassifierSettings::TExtractor::operator()(std::optional<TRegexPredicat
     return TString{};
 }
 
+TString TClassifierSettings::TExtractor::operator()(std::optional<EClassifierAction>* setting) const {
+    if (!*setting) {
+        return TString{};
+    }
+    switch (**setting) {
+        case EClassifierAction::Reject:
+            return "reject";
+    }
+    return TString{};
+}
+
 //// TClassifierSettings
 
 std::unordered_map<TString, TClassifierSettings::TProperty> TClassifierSettings::GetPropertiesMap() {
@@ -60,7 +85,8 @@ std::unordered_map<TString, TClassifierSettings::TProperty> TClassifierSettings:
         {"rank", &Rank},
         {"resource_pool", &ResourcePool},
         {"member_name", &MemberName},
-        {"has_app_name", &HasAppName}
+        {"has_app_name", &HasAppName},
+        {"action", &Action}
     };
     return properties;
 }

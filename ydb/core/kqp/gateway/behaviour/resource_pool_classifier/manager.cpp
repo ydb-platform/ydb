@@ -72,7 +72,7 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
     }
 
     if (context.GetActivityType() == EActivityType::Create) {
-        if (!configJson.GetMap().contains("resource_pool")) {
+        if (!configJson.GetMap().contains("resource_pool") && !configJson.GetMap().contains("action")) {
             return TConclusionStatus::Fail("Missing required property resource_pool");
         }
 

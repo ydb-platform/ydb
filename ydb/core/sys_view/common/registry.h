@@ -795,6 +795,7 @@ struct Schema : NIceDb::Schema {
         struct MemberName   : Column<4, NScheme::NTypeIds::Utf8> {};
         struct ResourcePool : Column<5, NScheme::NTypeIds::Utf8> {};
         struct HasAppName   : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct Action       : Column<7, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Name>;
         using TColumns = TableColumns<
@@ -802,7 +803,8 @@ struct Schema : NIceDb::Schema {
             Rank,
             MemberName,
             ResourcePool,
-            HasAppName>;
+            HasAppName,
+            Action>;
     };
 
     struct ShowCreate : Table<21> {

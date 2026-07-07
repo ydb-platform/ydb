@@ -1,6 +1,8 @@
 #include "kqp_query_classifier.h"
 #include "kqp_workload_service.h"
 
+#include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/object.h>
+
 namespace NKikimr::NKqp {
 
 inline constexpr char RESOLVER_IS_USER[] = "User request";
@@ -48,6 +50,10 @@ public:
                 return *PreClassifyResult = TPendingCompilation{.ResumeRank = rank};
             }
 
+            if (settings.Action == NResourcePool::EClassifierAction::Reject) {
+                return *PreClassifyResult = MakeRejectFromClassifier(value);
+            }
+
             if (TryResolve(settings, PreClassifyResult)) {
                 return *PreClassifyResult;
             }
@@ -75,6 +81,10 @@ public:
 
             if (!MatchesDynamic(settings, preparedQuery)) {
                 continue;
+            }
+
+            if (settings.Action == NResourcePool::EClassifierAction::Reject) {
+                return *PostClassifyResult = MakeRejectFromClassifier(it->second);
             }
 
             if (TryResolve(settings, PostClassifyResult)) {
@@ -203,6 +213,16 @@ private:
     template<typename TStore>
     bool TryResolve(const NResourcePool::TClassifierSettings& classifier, TStore& store) {
         return TryResolve(classifier.ResourcePool, store, TStringBuilder() << "Classifier with rank: " << classifier.Rank);
+    }
+
+    static TReject MakeRejectFromClassifier(const TResourcePoolClassifierConfig& config) {
+        const auto& name = config.GetName();
+        const auto rank = config.GetRank();
+        return TReject{
+            .Code = Ydb::StatusIds::PRECONDITION_FAILED,
+            .Message = TStringBuilder() << "Request is rejected by classifier '" << name << "' (rank=" << rank << ")",
+            .Resolver = TStringBuilder() << "Classifier with rank: " << rank,
+        };
     }
 
     ///

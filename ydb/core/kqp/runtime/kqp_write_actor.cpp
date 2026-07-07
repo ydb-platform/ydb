@@ -1824,6 +1824,14 @@ public:
         return ReturningInfo.has_value();
     }
 
+    bool NeedLock() const {
+        return PathLockInfo.contains(PathId);
+    }
+
+    bool NeedLookup() const {
+        return PathLookupInfo.contains(PathId);
+    }
+
     i64 GetPriority() const {
         return Priority;
     }
@@ -1907,7 +1915,13 @@ private:
 
         std::swap(BufferedBatches, ProcessBatches);
 
-        return StartProcessing(false);
+        if (NeedLock()) {
+            return StartMainTableLock();
+        }
+        if (NeedLookup()) {
+            return StartMainTableLookup();
+        }
+        return StartPrepareWrite();
     }
 
     bool ProcessLockingMainTable() {
@@ -1921,62 +1935,78 @@ private:
             return false;
         }
 
-        return StartProcessing(true);
+        if (NeedLookup()) {
+            return StartMainTableLookup();
+        }
+        return StartPrepareWrite();
     }
 
-    bool StartProcessing(bool locked) {
-        const bool needLock = !locked && PathLockInfo.contains(PathId);
-        const bool needLookup = PathLookupInfo.contains(PathId);
+    using TPrimaryKeysSet = THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals>;
 
-        if (needLookup) {
-            AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
-            AFL_ENSURE(PathLookupInfo.at(PathId).KeyIndexes.empty());
+    TPrimaryKeysSet PrepareProcessCellsAndKeys() {
+        TPrimaryKeysSet primaryKeysSet;
+        size_t index = 0;
+        ProcessCells.clear();
+        KeyToIndexes.clear();
+        for (const auto& batch : ProcessBatches) {
+            for (const auto& row : GetRows(batch)) {
+                const auto& key = row.first(KeyColumnTypes.size());
+                ProcessCells.push_back(row);
+                primaryKeysSet.insert(key);
+                KeyToIndexes[key].push_back(index++);
+            }
         }
+        return primaryKeysSet;
+    }
 
-        if (needLock || needLookup) {
-            THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> primaryKeysSet;
-            size_t index = 0;
-            ProcessCells.clear();
-            KeyToIndexes.clear();
-            for (const auto& batch : ProcessBatches) {
-                for (const auto& row : GetRows(batch)) {
-                    const auto& key = row.first(KeyColumnTypes.size());
-                    ProcessCells.push_back(row);
-                    primaryKeysSet.insert(key);
-                    KeyToIndexes[key].push_back(index++);
+    bool StartMainTableLock() {
+        AFL_ENSURE(NeedLock());
+        TPrimaryKeysSet primaryKeysSet = PrepareProcessCellsAndKeys();
+        AFL_ENSURE(!ProcessCells.empty());
+
+        auto& lockInfo = PathLockInfo.at(PathId);
+        lockInfo.LockActor->AddLockTask(
+            Cookie,
+            std::vector<TConstArrayRef<TCell>>(primaryKeysSet.begin(), primaryKeysSet.end()));
+        State = EState::LOCK_MAIN_TABLE;
+        return true;
+    }
+
+    bool StartMainTableLookup() {
+        AFL_ENSURE(NeedLookup());
+        AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
+        AFL_ENSURE(PathLookupInfo.at(PathId).KeyIndexes.empty());
+
+        TPrimaryKeysSet primaryKeysSet = PrepareProcessCellsAndKeys();
+        AFL_ENSURE(!ProcessCells.empty());
+
+        auto& lookupInfo = PathLookupInfo.at(PathId);
+        lookupInfo.Lookup->AddLookupTask(
+            Cookie, std::vector<TConstArrayRef<TCell>>(primaryKeysSet.begin(), primaryKeysSet.end()));
+        State = EState::LOOKUP_MAIN_TABLE;
+        return true;
+    }
+
+    bool CheckInsertDuplicateKeys() {
+        AFL_ENSURE(OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && PathWriteInfo.size() > 1);
+        TPrimaryKeysSet primaryKeysSet;
+        for (const auto& batch : ProcessBatches) {
+            for (const auto& row : GetRows(batch)) {
+                const auto& key = row.first(KeyColumnTypes.size());
+                if (!primaryKeysSet.insert(key).second) {
+                    Error = DuplicateKeyErrorText;
+                    return false;
                 }
             }
-
-            AFL_ENSURE(!ProcessCells.empty());
-
-            if (needLock) {
-                auto& lockInfo = PathLockInfo.at(PathId);
-                lockInfo.LockActor->AddLockTask(
-                    Cookie,
-                    std::vector<TConstArrayRef<TCell>>(primaryKeysSet.begin(), primaryKeysSet.end()));
-                State = EState::LOCK_MAIN_TABLE;
-                return true;
-            } else {
-                AFL_ENSURE(needLookup);
-                auto& lookupInfo = PathLookupInfo.at(PathId);
-                lookupInfo.Lookup->AddLookupTask(
-                    Cookie, std::vector<TConstArrayRef<TCell>>(primaryKeysSet.begin(), primaryKeysSet.end()));
-                State = EState::LOOKUP_MAIN_TABLE;
-                return true;
-            }
         }
+        return true;
+    }
 
+    bool StartPrepareWrite() {
         // TODO: remove !PathLookupInfo.empty() after full error support
         if (OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && PathWriteInfo.size() > 1) {
-            THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> primaryKeysSet;
-            for (const auto& batch : ProcessBatches) {
-                for (const auto& row : GetRows(batch)) {
-                    const auto& key = row.first(KeyColumnTypes.size());
-                    if (!primaryKeysSet.insert(key).second) {
-                        Error = DuplicateKeyErrorText;
-                        return false;
-                    }
-                }
+            if (!CheckInsertDuplicateKeys()) {
+                return false;
             }
         }
 
@@ -1999,10 +2029,67 @@ private:
                 return StartUniqueIndexLock();
             }
             return StartUniqueIndexLookup();
-        } else {
-            State = EState::WRITING;
-            return true;
         }
+
+        State = EState::WRITING;
+        return true;
+    }
+
+    using TKeyToReadCellsIndex = THashMap<TConstArrayRef<TCell>, size_t, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals>;
+
+    TKeyToReadCellsIndex ExtractLookupResults(TPathLookupInfo& lookupInfo,
+            std::vector<TOwnedCellVec>& readCells) {
+        TKeyToReadCellsIndex keyToReadCellsIndex;
+        lookupInfo.Lookup->ExtractResult(Cookie, [&](TConstArrayRef<TCell> cells) {
+            AFL_ENSURE(cells.size() >= KeyColumnTypes.size());
+            readCells.emplace_back(cells);
+            const auto key = readCells.back().first(KeyColumnTypes.size());
+            AFL_ENSURE(keyToReadCellsIndex.emplace(key, readCells.size() - 1).second);
+        });
+        return keyToReadCellsIndex;
+    }
+
+    void BuildLookupRowFound(const TConstArrayRef<TCell>& processCells,
+            const TConstArrayRef<TCell>& newCells,
+            IRowsBatcher& rowsBatcher) {
+        if (DefaultMap.empty()) {
+            for (const auto& cell : processCells) {
+                rowsBatcher.AddCell(cell);
+            }
+        } else {
+            Memory -= EstimateSize(processCells);
+            AFL_ENSURE(DefaultMap.size() == processCells.size());
+            for (size_t i = 0; i < processCells.size(); ++i) {
+                AFL_ENSURE(DefaultMap[i] < processCells.size() + newCells.size());
+                AFL_ENSURE(DefaultMap[i] == 0 || DefaultMap[i] >= processCells.size());
+
+                const auto& cell = DefaultMap[i] == 0
+                    ? processCells[i]
+                    : newCells[DefaultMap[i] - processCells.size()];
+
+                Memory += EstimateSize(TConstArrayRef<TCell>(&cell, 1));
+                rowsBatcher.AddCell(cell);
+            }
+        }
+
+        Memory += EstimateSize(newCells);
+        for (const auto& cell : newCells) {
+            rowsBatcher.AddCell(cell);
+        }
+
+        rowsBatcher.AddRow();
+    }
+
+    void BuildLookupRowMissing(const TConstArrayRef<TCell>& processCells,
+            size_t lookupColumnsCount, IRowsBatcher& rowsBatcher) {
+        for (const auto& cell : processCells) {
+            rowsBatcher.AddCell(cell);
+        }
+        for (size_t i = 0; i < lookupColumnsCount; ++i) {
+            rowsBatcher.AddCell(TCell{});
+            Memory += sizeof(TCell);
+        }
+        rowsBatcher.AddRow();
     }
 
     bool ProcessLookupMainTable() {
@@ -2020,15 +2107,7 @@ private:
         auto rowsBatcher = CreateRowsBatcher(ProcessCells[0].size() + lookupColumnsCount, Alloc);
 
         std::vector<TOwnedCellVec> readCells;
-        THashMap<TConstArrayRef<TCell>, size_t, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> keyToReadCellsIndex;
-
-        lookupInfo.Lookup->ExtractResult(Cookie, [&](TConstArrayRef<TCell> cells) {
-            AFL_ENSURE(cells.size() >= KeyColumnTypes.size());
-
-            readCells.emplace_back(cells);
-            const auto key = readCells.back().first(KeyColumnTypes.size());
-            AFL_ENSURE(keyToReadCellsIndex.emplace(key, readCells.size() - 1).second);
-        });
+        TKeyToReadCellsIndex keyToReadCellsIndex = ExtractLookupResults(lookupInfo, readCells);
 
         std::vector<bool> existsMask;
         existsMask.reserve(ProcessCells.size());
@@ -2038,35 +2117,11 @@ private:
 
             const auto keyIt = keyToReadCellsIndex.find(key);
             if (keyIt != keyToReadCellsIndex.end()) {
-                const auto& newCells = TConstArrayRef<TCell>(readCells[keyIt->second]).last(readCells[keyIt->second].size() - KeyColumnTypes.size());
+                const auto& readCellsEntry = readCells[keyIt->second];
+                const auto newCells = TConstArrayRef<TCell>(readCellsEntry).last(readCellsEntry.size() - KeyColumnTypes.size());
                 AFL_ENSURE(lookupColumnsCount == newCells.size());
 
-                if (DefaultMap.empty()) {
-                    for (const auto& cell : processCells) {
-                        rowsBatcher->AddCell(cell);
-                    }
-                } else {
-                    Memory -= EstimateSize(processCells);
-                    AFL_ENSURE(DefaultMap.size() == processCells.size());
-                    for (size_t index = 0; index < processCells.size(); ++index) {
-                        AFL_ENSURE(DefaultMap[index] < processCells.size() + newCells.size());
-                        AFL_ENSURE(DefaultMap[index] == 0 || DefaultMap[index] >= processCells.size());
-
-                        const auto& cell = DefaultMap[index] == 0
-                            ? processCells[index]
-                            : newCells[DefaultMap[index] - processCells.size()];
-
-                        Memory += EstimateSize(TConstArrayRef<TCell>(&cell, 1));
-                        rowsBatcher->AddCell(cell);
-                    }
-                }
-
-                Memory += EstimateSize(newCells);
-                for (const auto& cell : newCells) {
-                    rowsBatcher->AddCell(cell);
-                }
-
-                rowsBatcher->AddRow();
+                BuildLookupRowFound(processCells, newCells, *rowsBatcher);
                 existsMask.push_back(true);
 
                 if (OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
@@ -2080,15 +2135,7 @@ private:
                 Memory -= EstimateSize(processCells);
             } else {
                 // For UPDATE WHERE all rows must exist.
-
-                for (const auto& cell : processCells) {
-                    rowsBatcher->AddCell(cell);
-                }
-                for (size_t i = 0; i < lookupColumnsCount; ++i) {
-                    rowsBatcher->AddCell(TCell{});
-                    Memory += sizeof(TCell);
-                }
-                rowsBatcher->AddRow();
+                BuildLookupRowMissing(processCells, lookupColumnsCount, *rowsBatcher);
                 existsMask.push_back(false);
             }
         }
@@ -2111,35 +2158,68 @@ private:
                 return StartUniqueIndexLock();
             }
             return StartUniqueIndexLookup();
-        } else {
-            State = EState::WRITING;
-            return true;
         }
+
+        State = EState::WRITING;
+        return true;
+    }
+
+    TUniqueSecondaryKeyCollector MakeUniqueKeyCollector(const TPathLookupInfo& lookupInfo) const {
+        return TUniqueSecondaryKeyCollector(
+            KeyColumnTypes,
+            lookupInfo.Lookup->GetKeyColumnTypes(),
+            lookupInfo.KeyIndexes,
+            lookupInfo.FullKeyIndexes,
+            lookupInfo.PrimaryInFullKeyIndexes);
+    }
+
+    std::optional<TUniqueSecondaryKeyCollector::TKeysSet> CollectUniqueIndexKeys(
+            TUniqueSecondaryKeyCollector& collector,
+            TPathLookupInfo& lookupInfo,
+            bool skipExistingKeys) {
+        AFL_ENSURE(lookupInfo.KeyIndexes.size() == lookupInfo.OldKeyIndexes.size());
+        AFL_ENSURE(lookupInfo.KeyIndexes.size() <= lookupInfo.Lookup->GetKeyColumnTypes().size());
+
+        for (const auto& write : Writes) {
+            const auto writeRows = GetRows(write.Batch);
+            const auto& existsMask = write.ExistsMask;
+            AFL_ENSURE(writeRows.size() == existsMask.size());
+            for (size_t index = 0; index < writeRows.size(); ++index) {
+                const auto& row = writeRows[index];
+                // Only UPSERT/REPLACE/UPDATE here with skipExistingKeys
+                if (skipExistingKeys
+                        && existsMask[index]
+                        && IsEqual(
+                            row,
+                            lookupInfo.KeyIndexes,
+                            lookupInfo.OldKeyIndexes,
+                            TConstArrayRef<NScheme::TTypeInfo>(lookupInfo.Lookup->GetKeyColumnTypes())
+                                .first(lookupInfo.KeyIndexes.size()))) {
+                    // skip unchanged keys
+                    continue;
+                }
+                if (!collector.AddRow(row)) {
+                    Error = DuplicateKeyErrorText;
+                    return std::nullopt;
+                }
+            }
+        }
+
+        return std::move(collector).BuildUniqueSecondaryKeys();
     }
 
     bool StartUniqueIndexLock() {
         for (auto& [pathId, lockInfo] : PathLockInfo) {
             if (pathId != PathId) {
-                const auto& lookupInfo = PathLookupInfo.at(pathId);
-
-                TUniqueSecondaryKeyCollector collector(
-                    KeyColumnTypes,
-                    lookupInfo.Lookup->GetKeyColumnTypes(),
-                    lookupInfo.KeyIndexes,
-                    lookupInfo.FullKeyIndexes,
-                    lookupInfo.PrimaryInFullKeyIndexes);
-                for (const auto& write : Writes) {
-                    for (const auto& row : GetRows(write.Batch)) {
-                        if (!collector.AddRow(row)) {
-                            Error = DuplicateKeyErrorText;
-                            return false;
-                        }
-                    }
+                auto& lookupInfo = PathLookupInfo.at(pathId);
+                auto collector = MakeUniqueKeyCollector(lookupInfo);
+                auto uniqueKeys = CollectUniqueIndexKeys(collector, lookupInfo, false);
+                if (!uniqueKeys) {
+                    return false;
                 }
-                const auto uniqueSecondaryKeys = std::move(collector).BuildUniqueSecondaryKeys();
                 lockInfo.LockActor->AddLockTask(
                     Cookie,
-                    std::vector<TConstArrayRef<TCell>>{uniqueSecondaryKeys.begin(), uniqueSecondaryKeys.end()});
+                    std::vector<TConstArrayRef<TCell>>{uniqueKeys->begin(), uniqueKeys->end()});
             }
         }
 
@@ -2162,7 +2242,7 @@ private:
     }
 
     bool StartUniqueIndexLookup() {
-        const bool skipExistingKeys = PathLookupInfo.contains(PathId); // has main table lookup
+        const bool skipExistingKeys = NeedLookup(); // has main table lookup
         // skipExistingKeys=false means that unique indexes keys are subsets of main table key or operation is INSERT.
 
         AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
@@ -2175,46 +2255,14 @@ private:
                 continue;
             }
 
-            TUniqueSecondaryKeyCollector collector(
-                    KeyColumnTypes,
-                    lookupInfo.Lookup->GetKeyColumnTypes(),
-                    lookupInfo.KeyIndexes,
-                    lookupInfo.FullKeyIndexes,
-                    lookupInfo.PrimaryInFullKeyIndexes);
-
-            AFL_ENSURE(lookupInfo.KeyIndexes.size() == lookupInfo.OldKeyIndexes.size());
-            AFL_ENSURE(lookupInfo.KeyIndexes.size() <= lookupInfo.Lookup->GetKeyColumnTypes().size());
-
-            for (const auto& write : Writes) {
-                const auto writeRows = GetRows(write.Batch);
-                const auto& existsMask = write.ExistsMask;
-                AFL_ENSURE(writeRows.size() == existsMask.size());
-                for (size_t index = 0; index < writeRows.size(); ++index) {
-                    const auto& row = writeRows[index];
-                    // Only UPSERT/REPLACE/UPDATE here with skipExistingKeys
-                    if (skipExistingKeys
-                            && existsMask[index]
-                            && IsEqual(
-                                row,
-                                lookupInfo.KeyIndexes,
-                                lookupInfo.OldKeyIndexes,
-                                TConstArrayRef<NScheme::TTypeInfo>(lookupInfo.Lookup->GetKeyColumnTypes())
-                                    .first(lookupInfo.KeyIndexes.size()))) {
-                        // skip unchanged keys
-                        continue;
-                    }
-                    if (!collector.AddRow(row)) {
-                        Error = DuplicateKeyErrorText;
-                        return false;
-                    }
-                }
+            auto collector = MakeUniqueKeyCollector(lookupInfo);
+            auto uniqueKeys = CollectUniqueIndexKeys(collector, lookupInfo, skipExistingKeys);
+            if (!uniqueKeys) {
+                return false;
             }
-
-            const auto uniqueSecondaryKeys = std::move(collector).BuildUniqueSecondaryKeys();
-
             lookupInfo.Lookup->AddUniqueCheckTask(
                 Cookie,
-                std::vector<TConstArrayRef<TCell>>{uniqueSecondaryKeys.begin(), uniqueSecondaryKeys.end()},
+                std::vector<TConstArrayRef<TCell>>{uniqueKeys->begin(), uniqueKeys->end()},
                 /* fail on existing row*/
                 OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
         }
@@ -2238,12 +2286,7 @@ private:
 
         for (auto& [pathId, lookupInfo] : PathLookupInfo) {
             if (pathId != PathId) {
-                TUniqueSecondaryKeyCollector collector(
-                        KeyColumnTypes,
-                        lookupInfo.Lookup->GetKeyColumnTypes(),
-                        lookupInfo.KeyIndexes,
-                        lookupInfo.FullKeyIndexes,
-                        lookupInfo.PrimaryInFullKeyIndexes);
+                auto collector = MakeUniqueKeyCollector(lookupInfo);
                 std::vector<TOwnedCellVec> extractedRows;
                 lookupInfo.Lookup->ExtractResult(Cookie, [&](TConstArrayRef<TCell> cells) {
                     extractedRows.emplace_back(cells);
@@ -2265,13 +2308,17 @@ private:
         return true;
     }
 
+    bool AllWriteActorsReady() const {
+        return AllOf(PathWriteInfo, [](const auto& writeInfo) {
+            return writeInfo.second.WriteActor->IsReady();
+        });
+    }
+
     bool ProcessWriting() {
         AFL_ENSURE(State == EState::WRITING);
         AFL_ENSURE(!IsError());
 
-        if (!AllOf(PathWriteInfo, [](const auto& writeInfo) {
-                return writeInfo.second.WriteActor->IsReady();
-            })) {
+        if (!AllWriteActorsReady()) {
             return false;
         }
 
@@ -2287,9 +2334,7 @@ private:
     bool ProcessClosing() {
         AFL_ENSURE(State == EState::CLOSING);
         AFL_ENSURE(!IsError());
-        if (!AllOf(PathWriteInfo, [](const auto& writeInfo) {
-                return writeInfo.second.WriteActor->IsReady();
-            })) {
+        if (!AllWriteActorsReady()) {
             return false;
         }
         CloseWrite();
@@ -2297,147 +2342,173 @@ private:
         return true;
     }
 
-    void FlushWritesToActors() {
-        AFL_ENSURE(!IsError());
+    using TKeyToRow = THashMap<
+        TConstArrayRef<TCell>,
+        std::pair<TConstArrayRef<TCell>, bool>,
+        NKikimr::TCellVectorsHash,
+        NKikimr::TCellVectorsEquals>;
 
-        if (PathWriteInfo.contains(PathId) ? PathWriteInfo.size() > 1 : PathWriteInfo.size() > 0) {
-            // Secondary index exists
-            THashMap<
-                TConstArrayRef<TCell>,
-                std::pair<TConstArrayRef<TCell>, bool>,
-                NKikimr::TCellVectorsHash,
-                NKikimr::TCellVectorsEquals> keyToRow;
-
-            for (int batchIndex = static_cast<int>(Writes.size()) - 1; batchIndex >= 0; --batchIndex) {
-                const auto& write = Writes[batchIndex];
-                const auto rows = GetRows(write.Batch);
-                AFL_ENSURE(rows.size() == write.ExistsMask.size());
-                for (int index = static_cast<int>(rows.size()) - 1; index >= 0; --index) {
-                    keyToRow.emplace(
-                        rows[index].first(KeyColumnTypes.size()),
-                        std::make_pair(rows[index], write.ExistsMask[index]));
-                }
-            }
-
-            const bool hasMainTableLookup = PathLookupInfo.contains(PathId);
-
-            for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
-                if (actorInfo.PathType == EPathWriteType::FulltextDocs ||
-                    actorInfo.PathType == EPathWriteType::FulltextDict ||
-                    actorInfo.PathType == EPathWriteType::FulltextStats) {
-                    // Skip, additional fulltext tables are updated from the posting PathWriteInfo
-                    continue;
-                }
-
-                auto rowPossiblyChanged = [&actorInfo, &hasMainTableLookup, this](const TConstArrayRef<TCell> row) {
-                    return OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
-                        || OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT
-                        || !hasMainTableLookup
-                        || !IsEqual(
-                            row,
-                            actorInfo.NewColumnsIndexes,
-                            actorInfo.OldColumnsIndexes,
-                            actorInfo.ColumnTypes);
-                };
-
-                // At first, write to indexes
-                if (PathId != actorPathId) {
-                    const bool hasAdditionalDelete = !actorInfo.DeleteKeysIndexes.empty();
-                    if (hasAdditionalDelete) {
-                        AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
-                            && OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
-                        bool isCompact = actorInfo.PathType == JsonCompact ||
-                            actorInfo.PathType == FulltextCompact ||
-                            actorInfo.PathType == FulltextCompactRelevance;
-                        IDataBatchProjectionPtr deleteProjection;
-                        if (isCompact) {
-                            deleteProjection = CreateFulltextTokenizeProjection(actorInfo.ColumnTypes,
-                                actorInfo.PathType == FulltextCompactRelevance, false,
-                                actorInfo.FulltextSettings, actorInfo.DeleteKeysIndexes, Alloc);
-                            auto ft = (IFulltextTokenizeProjection*)deleteProjection.Get();
-                            AFL_ENSURE(actorInfo.AllocatedGenValues.size());
-                            ft->SetGen((NTableIndex::NFulltext::TGen)actorInfo.AllocatedGenValues.back());
-                            actorInfo.AllocatedGenValues.pop_back();
-                        } else {
-                            deleteProjection = CreateDataBatchProjection(actorInfo.DeleteKeysIndexes, Alloc);
-                        }
-                        for (const auto& [key, rowAndExists] : keyToRow) {
-                            const auto& [row, exists] = rowAndExists;
-                            if (exists && rowPossiblyChanged(row)) {
-                                deleteProjection->AddRow(row);
-                            }
-                        }
-                        auto preparedKeyBatch = deleteProjection->Flush();
-                        actorInfo.WriteActor->Write(
-                            isCompact ? Cookie : DeleteCookie,
-                            std::move(preparedKeyBatch));
-                        actorInfo.WriteActor->FlushBuffer(isCompact ? Cookie : DeleteCookie);
-                        if (actorInfo.PathType == FulltextCompactRelevance) {
-                            auto ft = (IFulltextTokenizeProjection*)deleteProjection.Get();
-                            PathWriteInfo.at(actorInfo.FulltextDocsTableId).WriteActor->Write(DeleteCookie, ft->FlushDocs());
-                            PathWriteInfo.at(actorInfo.FulltextDocsTableId).WriteActor->FlushBuffer(DeleteCookie);
-                            PathWriteInfo.at(actorInfo.FulltextDictTableId).WriteActor->Write(Cookie, ft->FlushDict());
-                            PathWriteInfo.at(actorInfo.FulltextDictTableId).WriteActor->FlushBuffer(Cookie);
-                            PathWriteInfo.at(actorInfo.FulltextStatsTableId).WriteActor->Write(Cookie, ft->FlushStats());
-                            PathWriteInfo.at(actorInfo.FulltextStatsTableId).WriteActor->FlushBuffer(Cookie);
-                        }
-                    }
-
-                    AFL_ENSURE(!actorInfo.NewColumnsIndexes.empty());
-                    IDataBatchProjectionPtr projection;
-                    if (actorInfo.PathType == JsonCompact ||
-                        actorInfo.PathType == FulltextCompact ||
-                        actorInfo.PathType == FulltextCompactRelevance) {
-                        projection = CreateFulltextTokenizeProjection(actorInfo.ColumnTypes,
-                            actorInfo.PathType == FulltextCompactRelevance,
-                            OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE,
-                            actorInfo.FulltextSettings, actorInfo.NewColumnsIndexes, Alloc);
-                        auto ft = (IFulltextTokenizeProjection*)projection.Get();
-                        AFL_ENSURE(actorInfo.AllocatedGenValues.size());
-                        ft->SetGen((NTableIndex::NFulltext::TGen)actorInfo.AllocatedGenValues.back());
-                        actorInfo.AllocatedGenValues.pop_back();
-                    } else {
-                        projection = CreateDataBatchProjection(actorInfo.NewColumnsIndexes, Alloc);
-                    }
-
-                    for (const auto& [key, rowAndExists] : keyToRow) {
-                        const auto& [row, exists] = rowAndExists;
-                        if (!exists || rowPossiblyChanged(row)) {
-                            projection->AddRow(row);
-                        }
-                    }
-                    auto preparedBatch = projection->Flush();
-                    actorInfo.WriteActor->Write(Cookie, preparedBatch);
-                    actorInfo.WriteActor->FlushBuffer(Cookie);
-                    if (actorInfo.PathType == FulltextCompactRelevance) {
-                        auto ft = (IFulltextTokenizeProjection*)projection.Get();
-                        PathWriteInfo.at(actorInfo.FulltextDocsTableId).WriteActor->Write(Cookie, ft->FlushDocs());
-                        PathWriteInfo.at(actorInfo.FulltextDocsTableId).WriteActor->FlushBuffer(Cookie);
-                        PathWriteInfo.at(actorInfo.FulltextDictTableId).WriteActor->Write(Cookie, ft->FlushDict());
-                        PathWriteInfo.at(actorInfo.FulltextDictTableId).WriteActor->FlushBuffer(Cookie);
-                        PathWriteInfo.at(actorInfo.FulltextStatsTableId).WriteActor->Write(Cookie, ft->FlushStats());
-                        PathWriteInfo.at(actorInfo.FulltextStatsTableId).WriteActor->FlushBuffer(Cookie);
-                    }
-                }
+    TKeyToRow BuildKeyToRow() {
+        TKeyToRow keyToRow;
+        for (int batchIndex = static_cast<int>(Writes.size()) - 1; batchIndex >= 0; --batchIndex) {
+            const auto& write = Writes[batchIndex];
+            const auto rows = GetRows(write.Batch);
+            AFL_ENSURE(rows.size() == write.ExistsMask.size());
+            for (int index = static_cast<int>(rows.size()) - 1; index >= 0; --index) {
+                keyToRow.emplace(
+                    rows[index].first(KeyColumnTypes.size()),
+                    std::make_pair(rows[index], write.ExistsMask[index]));
             }
         }
+        return keyToRow;
+    }
 
-        if (ReturningInfo) {
-            for (auto& write : Writes) {
-                const auto& batch = write.Batch;
+    static bool IsCompactPathType(EPathWriteType type) {
+        return type == EPathWriteType::JsonCompact
+            || type == EPathWriteType::FulltextCompact
+            || type == EPathWriteType::FulltextCompactRelevance;
+    }
 
-                auto projection = CreateDataBatchProjection(
-                    ReturningInfo->ColumnsIndexes,
-                    Alloc);
-                for (const auto& row : GetRows(batch)) {
-                    projection->AddRow(row);
-                }
-                auto returningBatch = projection->Flush();
+    void FlushFulltextRelevanceAuxTables(TPathWriteInfo& actorInfo,
+            IFulltextTokenizeProjection* ft, bool isDelete) {
+        auto& docs = PathWriteInfo.at(actorInfo.FulltextDocsTableId);
+        auto& dict = PathWriteInfo.at(actorInfo.FulltextDictTableId);
+        auto& stats = PathWriteInfo.at(actorInfo.FulltextStatsTableId);
+        if (isDelete) {
+            docs.WriteActor->Write(DeleteCookie, ft->FlushDocs());
+            docs.WriteActor->FlushBuffer(DeleteCookie);
+        } else {
+            docs.WriteActor->Write(Cookie, ft->FlushDocs());
+            docs.WriteActor->FlushBuffer(Cookie);
+        }
+        dict.WriteActor->Write(Cookie, ft->FlushDict());
+        dict.WriteActor->FlushBuffer(Cookie);
+        stats.WriteActor->Write(Cookie, ft->FlushStats());
+        stats.WriteActor->FlushBuffer(Cookie);
+    }
 
-                ReturningInfo->Consumer->Consume(std::move(returningBatch));
+    IDataBatchProjectionPtr CreateWriteProjection(TPathWriteInfo& info, bool added,
+            TConstArrayRef<ui32> indexes) {
+        if (IsCompactPathType(info.PathType)) {
+            auto projection = CreateFulltextTokenizeProjection(
+                info.ColumnTypes,
+                info.PathType == EPathWriteType::FulltextCompactRelevance,
+                added,
+                info.FulltextSettings,
+                indexes,
+                Alloc);
+            auto ft = static_cast<IFulltextTokenizeProjection*>(projection.Get());
+            AFL_ENSURE(info.AllocatedGenValues.size());
+            ft->SetGen(static_cast<NTableIndex::NFulltext::TGen>(info.AllocatedGenValues.back()));
+            info.AllocatedGenValues.pop_back();
+            return projection;
+        }
+        return CreateDataBatchProjection(indexes, Alloc);
+    }
+
+    void FlushProjectionToActor(TPathWriteInfo& info, ui64 cookie,
+            IDataBatchProjectionPtr projection, bool isDelete) {
+        auto batch = projection->Flush();
+        info.WriteActor->Write(cookie, std::move(batch));
+        info.WriteActor->FlushBuffer(cookie);
+        if (info.PathType == EPathWriteType::FulltextCompactRelevance) {
+            auto ft = static_cast<IFulltextTokenizeProjection*>(projection.Get());
+            FlushFulltextRelevanceAuxTables(info, ft, isDelete);
+        }
+    }
+
+    static bool IsFulltextAuxTable(EPathWriteType type) {
+        return type == EPathWriteType::FulltextDocs
+            || type == EPathWriteType::FulltextDict
+            || type == EPathWriteType::FulltextStats;
+    }
+
+    bool RowPossiblyChanged(const TPathWriteInfo& info, bool hasMainTableLookup,
+            const TConstArrayRef<TCell> row) const {
+        return OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
+            || OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT
+            || !hasMainTableLookup
+            || !IsEqual(
+                row,
+                info.NewColumnsIndexes,
+                info.OldColumnsIndexes,
+                info.ColumnTypes);
+    }
+
+    void FlushIndexDeleteOld(TPathWriteInfo& actorInfo, const TKeyToRow& keyToRow,
+            bool hasMainTableLookup) {
+        AFL_ENSURE(!actorInfo.DeleteKeysIndexes.empty());
+        AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
+            && OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
+        const bool isCompact = IsCompactPathType(actorInfo.PathType);
+        auto deleteProjection = CreateWriteProjection(
+            actorInfo, false, actorInfo.DeleteKeysIndexes);
+        for (const auto& [key, rowAndExists] : keyToRow) {
+            const auto& [row, exists] = rowAndExists;
+            if (exists && RowPossiblyChanged(actorInfo, hasMainTableLookup, row)) {
+                deleteProjection->AddRow(row);
             }
         }
+        FlushProjectionToActor(
+            actorInfo, isCompact ? Cookie : DeleteCookie, deleteProjection, true);
+    }
 
+    void FlushIndexWriteNew(TPathWriteInfo& actorInfo, const TKeyToRow& keyToRow,
+            bool hasMainTableLookup) {
+        AFL_ENSURE(!actorInfo.NewColumnsIndexes.empty());
+        auto projection = CreateWriteProjection(
+            actorInfo,
+            OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE,
+            actorInfo.NewColumnsIndexes);
+
+        for (const auto& [key, rowAndExists] : keyToRow) {
+            const auto& [row, exists] = rowAndExists;
+            if (!exists || RowPossiblyChanged(actorInfo, hasMainTableLookup, row)) {
+                projection->AddRow(row);
+            }
+        }
+        FlushProjectionToActor(actorInfo, Cookie, projection, false);
+    }
+
+    void FlushIndexWrites(const TKeyToRow& keyToRow) {
+        const bool hasMainTableLookup = PathLookupInfo.contains(PathId);
+
+        for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
+            if (IsFulltextAuxTable(actorInfo.PathType)) {
+                // Skip, additional fulltext tables are updated from the posting PathWriteInfo
+                continue;
+            }
+
+            // At first, write to indexes
+            if (PathId != actorPathId) {
+                if (!actorInfo.DeleteKeysIndexes.empty()) {
+                    FlushIndexDeleteOld(actorInfo, keyToRow, hasMainTableLookup);
+                }
+                FlushIndexWriteNew(actorInfo, keyToRow, hasMainTableLookup);
+            }
+        }
+    }
+
+    void FlushReturningWrites() {
+        if (!ReturningInfo) {
+            return;
+        }
+        for (auto& write : Writes) {
+            const auto& batch = write.Batch;
+
+            auto projection = CreateDataBatchProjection(
+                ReturningInfo->ColumnsIndexes,
+                Alloc);
+            for (const auto& row : GetRows(batch)) {
+                projection->AddRow(row);
+            }
+            auto returningBatch = projection->Flush();
+
+            ReturningInfo->Consumer->Consume(std::move(returningBatch));
+        }
+    }
+
+    void FlushMainTableWrites() {
         for (auto& write : Writes) {
             auto& batch = write.Batch;
             Memory -= batch->GetMemory();
@@ -2459,6 +2530,19 @@ private:
                 Cookie,
                 std::move(batch));
         }
+    }
+
+    void FlushWritesToActors() {
+        AFL_ENSURE(!IsError());
+
+        if (PathWriteInfo.contains(PathId) ? PathWriteInfo.size() > 1 : PathWriteInfo.size() > 0) {
+            // Secondary index exists
+            const auto keyToRow = BuildKeyToRow();
+            FlushIndexWrites(keyToRow);
+        }
+
+        FlushReturningWrites();
+        FlushMainTableWrites();
 
         Writes.clear();
     }
@@ -2468,8 +2552,8 @@ private:
         for (auto& [pathId, actorInfo] : PathWriteInfo) {
             actorInfo.WriteActor->Close(Cookie);
             if (!actorInfo.DeleteKeysIndexes.empty() && (
-                actorInfo.PathType == EPathWriteType::SecondaryIndex ||
-                actorInfo.PathType == EPathWriteType::FulltextDocs)) {
+                    actorInfo.PathType == EPathWriteType::SecondaryIndex ||
+                    actorInfo.PathType == EPathWriteType::FulltextDocs)) {
                 AFL_ENSURE(pathId != PathId);
                 actorInfo.WriteActor->Close(DeleteCookie);
             }
@@ -3291,6 +3375,679 @@ public:
             {});
     }
 
+    struct TWriteInfo {
+        struct TActorInfo {
+            TKqpTableWriteActor* WriteActor = nullptr;
+            TActorId Id;
+        };
+
+        THashMap<TPathId, TActorInfo> Actors;
+    };
+
+    struct TLookupInfo {
+        struct TActorInfo {
+            IKqpBufferTableLookup* LookupActor = nullptr;
+            TActorId Id;
+        };
+
+        THashMap<TPathId, TActorInfo> Actors;
+    };
+
+    struct TLockInfo {
+        struct TActorInfo {
+            IKqpBufferTableLock* LockActor = nullptr;
+            TActorId Id;
+        };
+
+        THashMap<TPathId, TActorInfo> Actors;
+    };
+
+    static std::vector<NScheme::TTypeInfo> BuildColumnTypes(
+            const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> columns) {
+        std::vector<NScheme::TTypeInfo> result(columns.size());
+        for (ui32 index = 0; index < columns.size(); ++index) {
+            const auto& column = columns[index];
+            result[index] = NScheme::TypeInfoFromProto(
+                column.GetTypeId(), column.GetTypeInfo());
+        }
+        return result;
+    }
+
+    static TVector<NScheme::TTypeInfo> BuildKeyColumnTypes(
+            const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns) {
+        TVector<NScheme::TTypeInfo> keyColumnTypes;
+        keyColumnTypes.reserve(keyColumns.size());
+        for (const auto& column : keyColumns) {
+            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
+                column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
+            keyColumnTypes.push_back(typeInfoMod.TypeInfo);
+        }
+        return keyColumnTypes;
+    }
+
+    TKqpTableWriteActor* EnsureWriteActor(const TWriteSettings& settings, TWriteInfo& writeInfo,
+            const TTableId& tableId, const TString& tablePath,
+            const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns) {
+        auto& actors = writeInfo.Actors;
+        if (actors.contains(tableId.PathId)) {
+            auto* actor = actors.at(tableId.PathId).WriteActor;
+            if (!CheckSchemaVersion(actor, tableId, tablePath)) {
+                return nullptr;
+            }
+            return actor;
+        }
+
+        auto keyColumnTypes = BuildKeyColumnTypes(keyColumns);
+        TKqpTableWriteActor* ptr = new TKqpTableWriteActor(
+            this,
+            settings.Database,
+            tableId,
+            tablePath,
+            LockTxId,
+            LockNodeId,
+            InconsistentTx,
+            settings.IsOlap,
+            std::move(keyColumnTypes),
+            Alloc,
+            settings.TransactionSettings.MvccSnapshot,
+            settings.TransactionSettings.LockMode,
+            TxManager,
+            SessionActorId,
+            Counters,
+            UserCtx);
+        ptr->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
+        TActorId id = RegisterWithSameMailbox(ptr);
+        CA_LOG_D("Create new TableWriteActor for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id);
+
+        actors.emplace(tableId.PathId, TWriteInfo::TActorInfo{
+            .WriteActor = ptr,
+            .Id = id,
+        });
+        return ptr;
+    }
+
+    IKqpBufferTableLookup* EnsureLookupActor(const TWriteSettings& settings, TLookupInfo& lookupInfo,
+            const TTableId& tableId, const TString& tablePath) {
+        auto& actors = lookupInfo.Actors;
+        if (actors.contains(tableId.PathId)) {
+            auto* actor = actors.at(tableId.PathId).LookupActor;
+            if (!CheckSchemaVersion(actor, tableId, tablePath)) {
+                return nullptr;
+            }
+            return actor;
+        }
+
+        auto [ptr, actor] = CreateKqpBufferTableLookup(TKqpBufferTableLookupSettings{
+            .Callbacks = this,
+
+            .TableId = tableId,
+            .TablePath = tablePath,
+
+            .LockTxId = LockTxId,
+            .LockNodeId = LockNodeId,
+            .LockMode = settings.TransactionSettings.LockMode,
+            .QuerySpanId = QuerySpanId,
+            .MvccSnapshot = settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
+                ? std::nullopt // Locked (pessimistic) rows must be read using last version, not snapshot.
+                : settings.TransactionSettings.MvccSnapshot,
+
+            .TxManager = TxManager,
+            .Alloc = Alloc,
+            .TypeEnv = *TypeEnv,
+            .HolderFactory = *HolderFactory,
+            .SessionActorId = SessionActorId,
+            .Counters = Counters,
+
+            .ParentTraceId = BufferWriteActorStateSpan.GetTraceId(),
+        });
+
+        TActorId id = RegisterWithSameMailbox(actor);
+        CA_LOG_D("Create new KqpBufferTableLookup for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id);
+
+        AFL_ENSURE(actors.emplace(tableId.PathId, TLookupInfo::TActorInfo{
+            .LookupActor = ptr,
+            .Id = id,
+        }).second);
+        return ptr;
+    }
+
+    IKqpBufferTableLock* EnsureLockActor(const TWriteSettings& settings, TLockInfo& lockInfo,
+            const TTableId& tableId, const TString& tablePath) {
+        auto& actors = lockInfo.Actors;
+        if (actors.contains(tableId.PathId)) {
+            auto* actor = actors.at(tableId.PathId).LockActor;
+            if (!CheckSchemaVersion(actor, tableId, tablePath)) {
+                return nullptr;
+            }
+            return actor;
+        }
+
+        auto [ptr, actor] = CreateKqpBufferTableLock(TKqpBufferLockSettings{
+            .Callbacks = this,
+
+            .TableId = tableId,
+            .TablePath = tablePath,
+
+            .LockTxId = LockTxId,
+            .LockNodeId = LockNodeId,
+            .LockMode = NKikimrDataEvents::ELockMode::PESSIMISTIC_EXCLUSIVE, // Writes always need EXCLUSIVE lock
+            .QuerySpanId = QuerySpanId,
+            .MvccSnapshot = settings.TransactionSettings.MvccSnapshot,
+
+            .TxManager = TxManager,
+            .Alloc = Alloc,
+            .TypeEnv = *TypeEnv,
+            .HolderFactory = *HolderFactory,
+            .SessionActorId = SessionActorId,
+            .Counters = Counters,
+
+            .ParentTraceId = BufferWriteActorStateSpan.GetTraceId(),
+        });
+
+        TActorId id = RegisterWithSameMailbox(actor);
+        CA_LOG_D("Create new KqpBufferTableLock for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id);
+
+        AFL_ENSURE(actors.emplace(tableId.PathId, TLockInfo::TActorInfo{
+            .LockActor = ptr,
+            .Id = id,
+        }).second);
+        return ptr;
+    }
+
+    bool CheckSchemaVersion(auto* actor, const TTableId& tableId, const TString& tablePath) {
+        if (actor->GetTableId().SchemaVersion != tableId.SchemaVersion) {
+            CA_LOG_E("Scheme changed for table `"
+                << tablePath << "`.");
+            ReplyError(
+                NYql::NDqProto::StatusIds::SCHEME_ERROR,
+                NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
+                TStringBuilder() << "Scheme changed. Table: `"
+                    << tablePath << "`.",
+                {});
+            return false;
+        }
+        AFL_ENSURE(actor->GetTableId() == tableId);
+        return true;
+    }
+
+    bool BuildIndexWriteTasks(const TWriteSettings& settings, const TWriteToken& token,
+            TWriteInfo& writeInfo,
+            std::vector<TKqpWriteTask::TPathWriteInfo>& writes,
+            std::vector<TKqpWriteTask::TPathLookupInfo>& lookups,
+            std::vector<TKqpWriteTask::TPathLockInfo>& locks) {
+        const auto writeCookie = token.Cookie;
+        const auto deleteCookie = token.Cookie + 1;
+
+        for (const auto& indexSettings : settings.Indexes) {
+            AFL_ENSURE(!settings.IsOlap);
+
+            const bool isCompact = (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact ||
+                indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance ||
+                indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact);
+            const bool isRelevance = (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance);
+
+            // Ensure write actor exists for this index table
+            if (!writeInfo.Actors.contains(indexSettings.TableId.PathId)) {
+                if (!EnsureWriteActor(settings, writeInfo, indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns)) {
+                    return false;
+                }
+            } else {
+                if (!CheckSchemaVersion(
+                        writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
+                        indexSettings.TableId,
+                        indexSettings.TablePath)) {
+                    return false;
+                }
+            }
+
+            // Fulltext relevance: ensure docs/dict/stats tables
+            if (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance) {
+                if (!writeInfo.Actors.contains(indexSettings.DocsTableId.PathId)) {
+                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.DocsTableId,
+                            indexSettings.DocsTablePath, {indexSettings.DocsColumns.at(0)})) {
+                        return false;
+                    }
+                } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.DocsTableId.PathId).WriteActor,
+                    indexSettings.DocsTableId, indexSettings.DocsTablePath)) {
+                    return false;
+                }
+                if (!writeInfo.Actors.contains(indexSettings.DictTableId.PathId)) {
+                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.DictTableId,
+                            indexSettings.DictTablePath, {indexSettings.DictColumns.at(0)})) {
+                        return false;
+                    }
+                } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor,
+                    indexSettings.DictTableId, indexSettings.DictTablePath)) {
+                    return false;
+                }
+                if (!writeInfo.Actors.contains(indexSettings.StatsTableId.PathId)) {
+                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.StatsTableId,
+                            indexSettings.StatsTablePath, {indexSettings.StatsColumns.at(0)})) {
+                        return false;
+                    }
+                } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.StatsTableId.PathId).WriteActor,
+                    indexSettings.StatsTableId, indexSettings.StatsTablePath)) {
+                    return false;
+                }
+            }
+
+            // Ensure lookup actor for unique indexes
+            if (indexSettings.IsUniq) {
+                auto& lookupInfo = LookupInfos[indexSettings.TableId.PathId];
+                if (!lookupInfo.Actors.contains(indexSettings.TableId.PathId)) {
+                    if (!EnsureLookupActor(settings, lookupInfo, indexSettings.TableId, indexSettings.TablePath)) {
+                        return false;
+                    }
+                } else {
+                    if (!CheckSchemaVersion(
+                            lookupInfo.Actors.at(indexSettings.TableId.PathId).LookupActor,
+                            indexSettings.TableId,
+                            indexSettings.TablePath)) {
+                        return false;
+                    }
+                }
+            }
+
+            // Ensure lock actor for unique indexes with pessimistic_none
+            if (indexSettings.IsUniq &&
+                    (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE)) {
+                auto& lockInfo = LockInfos[indexSettings.TableId.PathId];
+                if (!lockInfo.Actors.contains(indexSettings.TableId.PathId)) {
+                    if (!EnsureLockActor(settings, lockInfo, indexSettings.TableId, indexSettings.TablePath)) {
+                        return false;
+                    }
+                } else {
+                    if (!CheckSchemaVersion(
+                            lockInfo.Actors.at(indexSettings.TableId.PathId).LockActor,
+                            indexSettings.TableId,
+                            indexSettings.TablePath)) {
+                        return false;
+                    }
+                }
+            }
+
+            // Open write sessions for compact index types
+            if (isCompact) {
+                // Columns are totally different
+                writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
+                    writeCookie,
+                    NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                    indexSettings.KeyColumns,
+                    indexSettings.ImplColumns,
+                    0,
+                    settings.Priority);
+                if (isRelevance) {
+                    // Fulltext index with relevance requires writing to 3 additional tables
+                    auto docsActor = writeInfo.Actors.at(indexSettings.DocsTableId.PathId).WriteActor;
+                    writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
+                        // DeleteKeysIndexes is used to pass NeedDeleteOldRows. FIXME: Pass it explicitly.
+                        .DeleteKeysIndexes = (indexSettings.NeedDeleteOldRows ? std::vector<ui32>{1} : std::vector<ui32>()),
+                        .WriteActor = docsActor,
+                        .PathType = TKqpWriteTask::EPathWriteType::FulltextDocs,
+                    });
+                    docsActor->Open(
+                        writeCookie,
+                        GetOperation(indexSettings.OperationType),
+                        {indexSettings.DocsColumns.at(0)},
+                        (settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
+                            ? TVector<NKikimrKqp::TKqpColumnMetadataProto>{indexSettings.DocsColumns.at(0)}
+                            : indexSettings.DocsColumns),
+                        0,
+                        settings.Priority);
+                    if (indexSettings.NeedDeleteOldRows) {
+                        docsActor->Open(
+                            deleteCookie,
+                            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
+                            {indexSettings.DocsColumns.at(0)},
+                            {indexSettings.DocsColumns.at(0)},
+                            0,
+                            settings.Priority);
+                    }
+
+                    writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
+                        .WriteActor = writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor,
+                        .PathType = TKqpWriteTask::EPathWriteType::FulltextDict,
+                    });
+                    writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor->Open(
+                        writeCookie,
+                        NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT,
+                        {indexSettings.DictColumns.at(0)},
+                        indexSettings.DictColumns,
+                        0,
+                        settings.Priority);
+
+                    writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
+                        .WriteActor = writeInfo.Actors.at(indexSettings.StatsTableId.PathId).WriteActor,
+                        .PathType = TKqpWriteTask::EPathWriteType::FulltextStats,
+                    });
+                    writeInfo.Actors.at(indexSettings.StatsTableId.PathId).WriteActor->Open(
+                        writeCookie,
+                        NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT,
+                        {indexSettings.StatsColumns.at(0)},
+                        indexSettings.StatsColumns,
+                        0,
+                        settings.Priority);
+                }
+            } else {
+                writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
+                    writeCookie,
+                    GetOperation(indexSettings.OperationType),
+                    indexSettings.KeyColumns,
+                    indexSettings.Columns,
+                    CountLocalDefaults(
+                        settings.DefaultColumns,
+                        indexSettings.Columns,
+                        settings.LookupColumns),
+                    settings.Priority);
+            }
+
+            if (indexSettings.NeedDeleteOldRows && !isCompact) {
+                writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
+                    deleteCookie,
+                    NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
+                    indexSettings.KeyColumns,
+                    indexSettings.KeyColumns,
+                    0, // DELETE doesn't need DEFAULT values
+                    settings.Priority);
+            }
+
+            writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
+                .DeleteKeysIndexes = indexSettings.NeedDeleteOldRows
+                            ? GetIndexes(
+                                settings.Columns,
+                                settings.LookupColumns,
+                                isCompact ? indexSettings.Columns : indexSettings.KeyColumns,
+                                /* preferAdditionalInputColumns */ true)
+                            : std::vector<ui32>{},
+                .NewColumnsIndexes = GetIndexes(
+                            settings.Columns,
+                            settings.LookupColumns,
+                            indexSettings.Columns,
+                            /* preferAdditionalInputColumns */ false),
+                .OldColumnsIndexes = GetIndexes(
+                            settings.Columns,
+                            settings.LookupColumns,
+                            indexSettings.Columns,
+                            /* preferAdditionalInputColumns */ true),
+                .WriteActor = writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
+                .ColumnTypes = BuildColumnTypes(indexSettings.Columns),
+                .NeedWriteProjection = true,
+                .PathType = TKqpWriteTask::EPathWriteType::SecondaryIndex,
+                .FulltextSettings = indexSettings.FulltextSettings,
+            });
+            if (isRelevance) {
+                writes.back().PathType = TKqpWriteTask::EPathWriteType::FulltextCompactRelevance;
+                writes.back().FulltextDocsTableId = indexSettings.DocsTableId.PathId;
+                writes.back().FulltextDictTableId = indexSettings.DictTableId.PathId;
+                writes.back().FulltextStatsTableId = indexSettings.StatsTableId.PathId;
+                writes.back().GenSequencePath = indexSettings.TablePath + "/" + NTableIndex::NFulltext::GenSequence;
+            } else if (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact) {
+                writes.back().PathType = TKqpWriteTask::EPathWriteType::FulltextCompact;
+                writes.back().GenSequencePath = indexSettings.TablePath + "/" + NTableIndex::NFulltext::GenSequence;
+            } else if (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact) {
+                writes.back().PathType = TKqpWriteTask::EPathWriteType::JsonCompact;
+                writes.back().GenSequencePath = indexSettings.TablePath + "/" + NTableIndex::NFulltext::GenSequence;
+            }
+
+            if (indexSettings.IsUniq) {
+                if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
+                    // Lock Unique Index
+                    auto& indexLockInfo = LockInfos.at(indexSettings.TableId.PathId);
+                    auto& lockActor = indexLockInfo.Actors.at(indexSettings.TableId.PathId).LockActor;
+
+                    locks.emplace_back(TKqpWriteTask::TPathLockInfo{
+                        .LockActor = lockActor,
+                    });
+
+                    lockActor->SetLockSettings(
+                        token.Cookie,
+                        indexSettings.KeyColumns);
+                }
+
+                {
+                    // Lookup Unique Index
+                    auto lookupInfo = LookupInfos.at(indexSettings.TableId.PathId);
+                    auto lookupActor = lookupInfo.Actors.at(indexSettings.TableId.PathId).LookupActor;
+                    lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
+                        .KeyIndexes = GetIndexes( // inserted secondary keys
+                            settings.Columns,
+                            settings.LookupColumns,
+                            TConstArrayRef{
+                                indexSettings.KeyColumns.data(),
+                                indexSettings.KeyPrefixSize},
+                            /* preferAdditionalInputColumns */ false),
+                        .FullKeyIndexes = GetIndexes( // full secondary table keys
+                            settings.Columns,
+                            settings.LookupColumns,
+                            indexSettings.KeyColumns,
+                            /* preferAdditionalInputColumns */ false),
+                        .PrimaryInFullKeyIndexes = [&](){ // primary key in full secondary table keys
+                            THashMap<TStringBuf, ui32> ColumnNameToIndex;
+                            for (ui32 index = 0; index < indexSettings.KeyColumns.size(); ++index) {
+                                ColumnNameToIndex[indexSettings.KeyColumns[index].GetName()] = index;
+                            }
+                            std::vector<ui32> result(settings.KeyColumns.size());
+                            for (ui32 index = 0; index < settings.KeyColumns.size(); ++index) {
+                                result[index] = ColumnNameToIndex[settings.KeyColumns[index].GetName()];
+                            }
+                            return result;
+                        }(),
+                        .OldKeyIndexes = GetIndexes( // old secondary keys
+                                settings.Columns,
+                                settings.LookupColumns,
+                                TConstArrayRef{
+                                    indexSettings.KeyColumns.data(),
+                                    indexSettings.KeyPrefixSize},
+                                /* preferAdditionalInputColumns */ true),
+                        .Lookup = lookupActor,
+                        .SkipMissingRows = false,
+                    });
+
+                    lookupActor->SetLookupSettings(
+                        token.Cookie,
+                        indexSettings.KeyPrefixSize,
+                        indexSettings.KeyColumns,
+                        {});
+                }
+            }
+        }
+        return true;
+    }
+
+    bool BuildMainTableWriteTask(const TWriteSettings& settings, const TWriteToken& token,
+            TWriteInfo& writeInfo,
+            std::vector<TKqpWriteTask::TPathWriteInfo>& writes,
+            std::vector<TKqpWriteTask::TPathLookupInfo>& lookups,
+            std::vector<TKqpWriteTask::TPathLockInfo>& locks) {
+        const auto writeCookie = token.Cookie;
+
+        AFL_ENSURE(!settings.SkipMissingRows
+            || settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
+            || settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
+
+        writeInfo.Actors.at(settings.TableId.PathId).WriteActor->Open(
+            token.Cookie,
+            GetOperation(settings.OperationType),
+            settings.KeyColumns,
+            settings.Columns,
+            CountLocalDefaults(
+                settings.DefaultColumns,
+                settings.Columns,
+                settings.LookupColumns),
+            settings.Priority);
+
+        AFL_ENSURE(settings.KeyColumns.size() <= settings.Columns.size());
+        writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
+            .DeleteKeysIndexes = {},
+            .NewColumnsIndexes = GetIndexes(
+                        settings.Columns,
+                        settings.LookupColumns,
+                        settings.Columns,
+                        /* preferAdditionalInputColumns */ false),
+            .OldColumnsIndexes = GetIndexes(
+                        settings.Columns,
+                        settings.LookupColumns,
+                        settings.Columns,
+                        /* preferAdditionalInputColumns */ true),
+            .WriteActor = writeInfo.Actors.at(settings.TableId.PathId).WriteActor,
+            .ColumnTypes = BuildColumnTypes(settings.Columns),
+            .NeedWriteProjection = !settings.LookupColumns.empty(),
+        });
+
+        // Main table lock
+        if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
+            auto& lockInfo = LockInfos.at(settings.TableId.PathId);
+            auto& lockActor = lockInfo.Actors.at(settings.TableId.PathId).LockActor;
+
+            locks.emplace_back(TKqpWriteTask::TPathLockInfo{
+                .LockActor = lockActor,
+            });
+
+            lockActor->SetLockSettings(
+                token.Cookie,
+                settings.KeyColumns);
+        }
+
+        // Main table lookup
+        if (settings.NeedLookup) {
+            AFL_ENSURE(!settings.IsOlap);
+            auto& lookupInfo = LookupInfos.at(settings.TableId.PathId);
+            auto& lookupActor = lookupInfo.Actors.at(settings.TableId.PathId).LookupActor;
+            lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
+                .KeyIndexes = {},
+                .FullKeyIndexes = {},
+                .PrimaryInFullKeyIndexes = {},
+                .OldKeyIndexes = {},
+                .Lookup = lookupActor,
+                .SkipMissingRows = settings.SkipMissingRows,
+            });
+
+            lookupActor->SetLookupSettings(
+                token.Cookie,
+                settings.KeyColumns.size(),
+                settings.KeyColumns,
+                settings.LookupColumns);
+        }
+
+        // Returning info
+        std::optional<TKqpWriteTask::TReturningInfo> returningInfo;
+        if (!settings.ReturningColumns.empty()) {
+            returningInfo.emplace();
+            returningInfo->Consumer = &ReturningConsumers[token.Cookie];
+            returningInfo->ColumnsIndexes = GetIndexes(
+                settings.Columns,
+                settings.LookupColumns,
+                settings.ReturningColumns,
+                /* preferAdditionalInputColumns */ false);
+        }
+
+        const auto deleteCookie = token.Cookie + 1;
+        auto [taskIter, _] = WriteTasks.emplace(
+            token.Cookie,
+            TKqpWriteTask{
+                writeCookie,
+                deleteCookie,
+                settings.Priority,
+                settings.TableId.PathId,
+                settings.OperationType,
+                std::move(writes),
+                std::move(lookups),
+                returningInfo,
+                settings.KeyColumns,
+                (settings.LookupColumns.empty() || settings.DefaultColumns.empty())
+                    ? std::vector<ui32>{}
+                    : BuildDefaultMap(
+                        settings.DefaultColumns,
+                        settings.Columns,
+                        settings.LookupColumns),
+                std::move(locks),
+                Alloc,
+                settings.Database
+            });
+
+        TasksPlanner.AddTask(taskIter->second);
+        return true;
+    }
+
+    std::optional<TWriteToken> InitializeWriteActors(const TWriteSettings& settings) {
+        // Can't have CTAS here
+        AFL_ENSURE(settings.OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
+
+        auto& writeInfo = WriteInfos[settings.TableId.PathId];
+
+        // Ensure write actor for main table
+        if (!writeInfo.Actors.contains(settings.TableId.PathId)) {
+            AFL_ENSURE(writeInfo.Actors.empty());
+            if (!EnsureWriteActor(settings, writeInfo, settings.TableId, settings.TablePath, settings.KeyColumns)) {
+                return std::nullopt;
+            }
+        } else {
+            if (!CheckSchemaVersion(
+                    writeInfo.Actors.at(settings.TableId.PathId).WriteActor,
+                    settings.TableId,
+                    settings.TablePath)) {
+                return std::nullopt;
+            }
+        }
+
+        // Ensure lock actor for main table (pessimistic_none only)
+        if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
+            auto& lockInfo = LockInfos[settings.TableId.PathId];
+            if (!lockInfo.Actors.contains(settings.TableId.PathId)) {
+                if (!EnsureLockActor(settings, lockInfo, settings.TableId, settings.TablePath)) {
+                    return std::nullopt;
+                }
+            }
+        }
+
+        // Ensure lookup actor for main table
+        if (settings.NeedLookup) {
+            AFL_ENSURE(settings.InputRowFormat == TWriteSettings::EInputRowFormat::Flat);
+            AFL_ENSURE(!settings.IsOlap);
+            auto& lookupInfo = LookupInfos[settings.TableId.PathId];
+            if (!lookupInfo.Actors.contains(settings.TableId.PathId)) {
+                if (!EnsureLookupActor(settings, lookupInfo, settings.TableId, settings.TablePath)) {
+                    return std::nullopt;
+                }
+            } else {
+                if (!CheckSchemaVersion(
+                        lookupInfo.Actors.at(settings.TableId.PathId).LookupActor,
+                        settings.TableId,
+                        settings.TablePath)) {
+                    return std::nullopt;
+                }
+            }
+        }
+
+        // Set the current query's SpanId on all write actors for this table.
+        // TxManager::AddAction (called from UpdateShards) will collect per-shard SpanIds.
+        for (auto& [pathId, actorInfo] : writeInfo.Actors) {
+            actorInfo.WriteActor->SetCurrentQuerySpanId(settings.QuerySpanId);
+        }
+
+        EnableStreamWrite &= settings.EnableStreamWrite;
+
+        TWriteToken token{settings.TableId.PathId, CurrentWriteToken};
+        CurrentWriteToken += 2;
+        // Cookie -- for operations with main table and writes to indexes
+        // Cookie+1 -- for deletes from indexes
+
+        // Build per-index write tasks (ensures actors, opens sessions, builds TPathWriteInfo/LookupInfo/LockInfo)
+        std::vector<TKqpWriteTask::TPathWriteInfo> writes;
+        std::vector<TKqpWriteTask::TPathLookupInfo> lookups;
+        std::vector<TKqpWriteTask::TPathLockInfo> locks;
+
+        if (!BuildIndexWriteTasks(settings, token, writeInfo, writes, lookups, locks)) {
+            return std::nullopt;
+        }
+
+        if (!BuildMainTableWriteTask(settings, token, writeInfo, writes, lookups, locks)) {
+            return std::nullopt;
+        }
+
+        return token;
+    }
+
     void Handle(TEvBufferWrite::TPtr& ev) {
         Counters->ForwardActorWritesLatencyHistogram->Collect((TInstant::Now() - ev->Get()->SendTime).MicroSeconds());
         TWriteToken token;
@@ -3307,585 +4064,11 @@ public:
                 InconsistentTx = settings.TransactionSettings.InconsistentTx;
             }
 
-            // Can't have CTAS here
-            AFL_ENSURE(settings.OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
-
-            auto createWriteActor = [&](const TTableId tableId, const TString& tablePath, const TVector<NKikimrKqp::TKqpColumnMetadataProto>& keyColumns) -> std::pair<TKqpTableWriteActor*, TActorId> {
-                TVector<NScheme::TTypeInfo> keyColumnTypes;
-                keyColumnTypes.reserve(keyColumns.size());
-                for (const auto& column : keyColumns) {
-                    auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
-                        column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
-                    keyColumnTypes.push_back(typeInfoMod.TypeInfo);
-                }
-                TKqpTableWriteActor* ptr = new TKqpTableWriteActor(
-                    this,
-                    settings.Database,
-                    tableId,
-                    tablePath,
-                    LockTxId,
-                    LockNodeId,
-                    InconsistentTx,
-                    settings.IsOlap,
-                    std::move(keyColumnTypes),
-                    Alloc,
-                    settings.TransactionSettings.MvccSnapshot,
-                    settings.TransactionSettings.LockMode,
-                    TxManager,
-                    SessionActorId,
-                    Counters,
-                    UserCtx);
-                ptr->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
-                TActorId id = RegisterWithSameMailbox(ptr);
-                CA_LOG_D("Create new TableWriteActor for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id);
-
-                return {ptr, id};
-            };
-
-            auto checkSchemaVersion = [&](auto* actor, const TTableId tableId, const TString& tablePath) -> bool {
-                if (actor->GetTableId().SchemaVersion != tableId.SchemaVersion) {
-                    CA_LOG_E("Scheme changed for table `"
-                        << tablePath << "`.");
-                    ReplyError(
-                        NYql::NDqProto::StatusIds::SCHEME_ERROR,
-                        NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
-                        TStringBuilder() << "Scheme changed. Table: `"
-                            << tablePath << "`.",
-                        {});
-                    return false;
-                }
-                AFL_ENSURE(actor->GetTableId() == tableId);
-                return true;
-            };
-
-            auto createLookupActor = [&](const TTableId tableId, const TString& tablePath) -> std::pair<IKqpBufferTableLookup*, TActorId> {
-                auto [ptr, actor] = CreateKqpBufferTableLookup(TKqpBufferTableLookupSettings{
-                    .Callbacks = this,
-
-                    .TableId = tableId,
-                    .TablePath = tablePath,
-
-                    .LockTxId = LockTxId,
-                    .LockNodeId = LockNodeId,
-                    .LockMode = settings.TransactionSettings.LockMode,
-                    .QuerySpanId = QuerySpanId,
-                    .MvccSnapshot = settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
-                        ? std::nullopt // Locked (pessimistic) rows must be read using last version, not snapshot. 
-                        : settings.TransactionSettings.MvccSnapshot,
-
-                    .TxManager = TxManager,
-                    .Alloc = Alloc,
-                    .TypeEnv = *TypeEnv,
-                    .HolderFactory = *HolderFactory,
-                    .SessionActorId = SessionActorId,
-                    .Counters = Counters,
-
-                    .ParentTraceId = BufferWriteActorStateSpan.GetTraceId(),
-                });
-
-                TActorId id = RegisterWithSameMailbox(actor);
-                CA_LOG_D("Create new KqpBufferTableLookup for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id);
-
-                return {ptr, id};
-            };
-
-            auto createLockActor = [&](const TTableId tableId, const TString& tablePath) -> std::pair<IKqpBufferTableLock*, TActorId> {
-                auto [ptr, actor] = CreateKqpBufferTableLock(TKqpBufferLockSettings{
-                    .Callbacks = this,
-
-                    .TableId = tableId,
-                    .TablePath = tablePath,
-
-                    .LockTxId = LockTxId,
-                    .LockNodeId = LockNodeId,
-                    .LockMode = NKikimrDataEvents::ELockMode::PESSIMISTIC_EXCLUSIVE, // Writes always need EXCLUSIVE lock
-                    .QuerySpanId = QuerySpanId,
-                    .MvccSnapshot = settings.TransactionSettings.MvccSnapshot,
-
-                    .TxManager = TxManager,
-                    .Alloc = Alloc,
-                    .TypeEnv = *TypeEnv,
-                    .HolderFactory = *HolderFactory,
-                    .SessionActorId = SessionActorId,
-                    .Counters = Counters,
-
-                    .ParentTraceId = BufferWriteActorStateSpan.GetTraceId(),
-                });
-
-                TActorId id = RegisterWithSameMailbox(actor);
-                CA_LOG_D("Create new KqpBufferTableLock for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id);
-
-                return {ptr, id};
-            };
-
-
-            auto& writeInfo = WriteInfos[settings.TableId.PathId];
-            if (!writeInfo.Actors.contains(settings.TableId.PathId)) {
-                AFL_ENSURE(writeInfo.Actors.empty());
-                const auto [ptr, id] = createWriteActor(settings.TableId, settings.TablePath, settings.KeyColumns);
-                writeInfo.Actors.emplace(settings.TableId.PathId, TWriteInfo::TActorInfo{
-                    .WriteActor = ptr,
-                    .Id = id,
-                });
-            } else {
-                if (!checkSchemaVersion(
-                        writeInfo.Actors.at(settings.TableId.PathId).WriteActor,
-                        settings.TableId,
-                        settings.TablePath)) {
-                    return;
-                }
+            auto initialized = InitializeWriteActors(settings);
+            if (!initialized) {
+                return;
             }
-            // Set the current query's SpanId on all write actors for this table.
-            // TxManager::AddAction (called from UpdateShards) will collect per-shard SpanIds.
-            for (auto& [pathId, actorInfo] : writeInfo.Actors) {
-                actorInfo.WriteActor->SetCurrentQuerySpanId(settings.QuerySpanId);
-            }
-
-            if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
-                auto& lockInfo = LockInfos[settings.TableId.PathId];
-                if (!lockInfo.Actors.contains(settings.TableId.PathId)) {
-                    const auto [ptr, id] = createLockActor(settings.TableId, settings.TablePath);
-                    AFL_ENSURE(lockInfo.Actors.emplace(settings.TableId.PathId, TLockInfo::TActorInfo{
-                        .LockActor = ptr,
-                        .Id = id,
-                    }).second);
-                }
-            }
-
-            if (settings.NeedLookup) {
-                AFL_ENSURE(settings.InputRowFormat == TWriteSettings::EInputRowFormat::Flat);
-                AFL_ENSURE(!settings.IsOlap);
-                auto& lookupInfo = LookupInfos[settings.TableId.PathId];
-                if (!lookupInfo.Actors.contains(settings.TableId.PathId)) {
-                    const auto [ptr, id] = createLookupActor(settings.TableId, settings.TablePath);
-                    AFL_ENSURE(lookupInfo.Actors.emplace(settings.TableId.PathId, TLookupInfo::TActorInfo{
-                        .LookupActor = ptr,
-                        .Id = id,
-                    }).second);
-                } else {
-                    if (!checkSchemaVersion(
-                            lookupInfo.Actors.at(settings.TableId.PathId).LookupActor,
-                            settings.TableId,
-                            settings.TablePath)) {
-                        return;
-                    }
-                }
-            }
-
-            for (const auto& indexSettings : settings.Indexes) {
-                AFL_ENSURE(!settings.IsOlap);
-                if (!writeInfo.Actors.contains(indexSettings.TableId.PathId)) {
-                    const auto [ptr, id] = createWriteActor(indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns);
-                    writeInfo.Actors.emplace(indexSettings.TableId.PathId, TWriteInfo::TActorInfo{
-                        .WriteActor = ptr,
-                        .Id = id,
-                    });
-                } else {
-                    if (!checkSchemaVersion(
-                            writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
-                            indexSettings.TableId,
-                            indexSettings.TablePath)) {
-                        return;
-                    }
-                }
-
-                if (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance) {
-                    // Fulltext index with relevance requires writing to 3 additional tables
-                    if (!writeInfo.Actors.contains(indexSettings.DocsTableId.PathId)) {
-                        const auto [ptr, id] = createWriteActor(indexSettings.DocsTableId,
-                            indexSettings.DocsTablePath, {indexSettings.DocsColumns.at(0)});
-                        writeInfo.Actors.emplace(indexSettings.DocsTableId.PathId, TWriteInfo::TActorInfo{
-                            .WriteActor = ptr,
-                            .Id = id,
-                        });
-                    } else if (!checkSchemaVersion(writeInfo.Actors.at(indexSettings.DocsTableId.PathId).WriteActor,
-                        indexSettings.DocsTableId, indexSettings.DocsTablePath)) {
-                        return;
-                    }
-                    if (!writeInfo.Actors.contains(indexSettings.DictTableId.PathId)) {
-                        const auto [ptr, id] = createWriteActor(indexSettings.DictTableId,
-                            indexSettings.DictTablePath, {indexSettings.DictColumns.at(0)});
-                        writeInfo.Actors.emplace(indexSettings.DictTableId.PathId, TWriteInfo::TActorInfo{
-                            .WriteActor = ptr,
-                            .Id = id,
-                        });
-                    } else if (!checkSchemaVersion(writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor,
-                        indexSettings.DictTableId, indexSettings.DictTablePath)) {
-                        return;
-                    }
-                    if (!writeInfo.Actors.contains(indexSettings.StatsTableId.PathId)) {
-                        const auto [ptr, id] = createWriteActor(indexSettings.StatsTableId,
-                            indexSettings.StatsTablePath, {indexSettings.StatsColumns.at(0)});
-                        writeInfo.Actors.emplace(indexSettings.StatsTableId.PathId, TWriteInfo::TActorInfo{
-                            .WriteActor = ptr,
-                            .Id = id,
-                        });
-                    } else if (!checkSchemaVersion(writeInfo.Actors.at(indexSettings.StatsTableId.PathId).WriteActor,
-                        indexSettings.StatsTableId, indexSettings.StatsTablePath)) {
-                        return;
-                    }
-                }
-
-                if (indexSettings.IsUniq) {
-                    auto& lookupInfo = LookupInfos[indexSettings.TableId.PathId];
-                    if (!lookupInfo.Actors.contains(indexSettings.TableId.PathId)) {
-                        const auto [ptr, id] = createLookupActor(indexSettings.TableId, indexSettings.TablePath);
-                        AFL_ENSURE(lookupInfo.Actors.emplace(indexSettings.TableId.PathId, TLookupInfo::TActorInfo{
-                            .LookupActor = ptr,
-                            .Id = id,
-                        }).second);
-                    } else {
-                        if (!checkSchemaVersion(
-                                lookupInfo.Actors.at(indexSettings.TableId.PathId).LookupActor,
-                                indexSettings.TableId,
-                                indexSettings.TablePath)) {
-                            return;
-                        }
-                    }
-                }
-
-                if (indexSettings.IsUniq &&
-                        (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE)) {
-                    auto& lockInfo = LockInfos[indexSettings.TableId.PathId];
-                    if (!lockInfo.Actors.contains(indexSettings.TableId.PathId)) {
-                        const auto [ptr, id] = createLockActor(indexSettings.TableId, indexSettings.TablePath);
-                        AFL_ENSURE(lockInfo.Actors.emplace(indexSettings.TableId.PathId, TLockInfo::TActorInfo{
-                            .LockActor = ptr,
-                            .Id = id,
-                        }).second);
-                    } else {
-                        if (!checkSchemaVersion(
-                                lockInfo.Actors.at(indexSettings.TableId.PathId).LockActor,
-                                indexSettings.TableId,
-                                indexSettings.TablePath)) {
-                            return;
-                        }
-                    }
-                }
-            }
-
-            EnableStreamWrite &= settings.EnableStreamWrite;
-
-            token = TWriteToken{settings.TableId.PathId, CurrentWriteToken};
-            CurrentWriteToken += 2;
-            // Cookie -- for operations with main table and writes to indexes
-            // Cookie+1 -- for deletes from indexes
-            const auto writeCookie = token.Cookie;
-            const auto deleteCookie = token.Cookie + 1;
-
-            std::vector<TKqpWriteTask::TPathWriteInfo> writes;
-            std::vector<TKqpWriteTask::TPathLookupInfo> lookups;
-            std::vector<TKqpWriteTask::TPathLockInfo> locks;
-
-            AFL_ENSURE(writeInfo.Actors.size() > settings.Indexes.size());
-            for (auto& indexSettings : settings.Indexes) {
-                AFL_ENSURE(!settings.IsOlap);
-
-                const bool isCompact = (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact ||
-                    indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance ||
-                    indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact);
-                const bool isRelevance = (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance);
-                if (isCompact) {
-                    // Columns are totally different
-                    writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
-                        writeCookie,
-                        NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-                        indexSettings.KeyColumns,
-                        indexSettings.ImplColumns,
-                        0,
-                        settings.Priority);
-                    if (isRelevance) {
-                        // Fulltext index with relevance requires writing to 3 additional tables
-                        auto docsActor = writeInfo.Actors.at(indexSettings.DocsTableId.PathId).WriteActor;
-                        writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
-                            // DeleteKeysIndexes is used to pass NeedDeleteOldRows. FIXME: Pass it explicitly.
-                            .DeleteKeysIndexes = (indexSettings.NeedDeleteOldRows ? std::vector<ui32>{1} : std::vector<ui32>()),
-                            .WriteActor = docsActor,
-                            .PathType = TKqpWriteTask::EPathWriteType::FulltextDocs,
-                        });
-                        docsActor->Open(
-                            writeCookie,
-                            GetOperation(indexSettings.OperationType),
-                            {indexSettings.DocsColumns.at(0)},
-                            (settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
-                                ? TVector<NKikimrKqp::TKqpColumnMetadataProto>{indexSettings.DocsColumns.at(0)}
-                                : indexSettings.DocsColumns),
-                            0,
-                            settings.Priority);
-                        if (indexSettings.NeedDeleteOldRows) {
-                            docsActor->Open(
-                                deleteCookie,
-                                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
-                                {indexSettings.DocsColumns.at(0)},
-                                {indexSettings.DocsColumns.at(0)},
-                                0,
-                                settings.Priority);
-                        }
-
-                        writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
-                            .WriteActor = writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor,
-                            .PathType = TKqpWriteTask::EPathWriteType::FulltextDict,
-                        });
-                        writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor->Open(
-                            writeCookie,
-                            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT,
-                            {indexSettings.DictColumns.at(0)},
-                            indexSettings.DictColumns,
-                            0,
-                            settings.Priority);
-
-                        writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
-                            .WriteActor = writeInfo.Actors.at(indexSettings.StatsTableId.PathId).WriteActor,
-                            .PathType = TKqpWriteTask::EPathWriteType::FulltextStats,
-                        });
-                        writeInfo.Actors.at(indexSettings.StatsTableId.PathId).WriteActor->Open(
-                            writeCookie,
-                            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT,
-                            {indexSettings.StatsColumns.at(0)},
-                            indexSettings.StatsColumns,
-                            0,
-                            settings.Priority);
-                    }
-                } else {
-                    writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
-                        writeCookie,
-                        GetOperation(indexSettings.OperationType),
-                        indexSettings.KeyColumns,
-                        indexSettings.Columns,
-                        CountLocalDefaults(
-                            settings.DefaultColumns,
-                            indexSettings.Columns,
-                            settings.LookupColumns),
-                        settings.Priority);
-                }
-
-                if (indexSettings.NeedDeleteOldRows && !isCompact) {
-                    writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
-                        deleteCookie,
-                        NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
-                        indexSettings.KeyColumns,
-                        indexSettings.KeyColumns,
-                        0, // DELETE doesn't need DEFAULT values
-                        settings.Priority);
-                }
-
-                writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
-                    .DeleteKeysIndexes = indexSettings.NeedDeleteOldRows
-                                ? GetIndexes(
-                                    settings.Columns,
-                                    settings.LookupColumns,
-                                    isCompact ? indexSettings.Columns : indexSettings.KeyColumns,
-                                    /* preferAdditionalInputColumns */ true)
-                                : std::vector<ui32>{},
-                    .NewColumnsIndexes = GetIndexes(
-                                settings.Columns,
-                                settings.LookupColumns,
-                                indexSettings.Columns,
-                                /* preferAdditionalInputColumns */ false),
-                    .OldColumnsIndexes = GetIndexes(
-                                settings.Columns,
-                                settings.LookupColumns,
-                                indexSettings.Columns,
-                                /* preferAdditionalInputColumns */ true),
-                    .WriteActor = writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
-                    .ColumnTypes = [&]() {
-                        std::vector<NScheme::TTypeInfo> result(indexSettings.Columns.size());
-                        for (ui32 index = 0; index < indexSettings.Columns.size(); ++index) {
-                            const auto& column = indexSettings.Columns[index];
-                            result[index] = NScheme::TypeInfoFromProto(
-                                column.GetTypeId(), column.GetTypeInfo());
-                        }
-                        return result;
-                    }(),
-                    .NeedWriteProjection = true,
-                    .PathType = TKqpWriteTask::EPathWriteType::SecondaryIndex,
-                    .FulltextSettings = indexSettings.FulltextSettings,
-                });
-                if (isRelevance) {
-                    writes.back().PathType = TKqpWriteTask::EPathWriteType::FulltextCompactRelevance;
-                    writes.back().FulltextDocsTableId = indexSettings.DocsTableId.PathId;
-                    writes.back().FulltextDictTableId = indexSettings.DictTableId.PathId;
-                    writes.back().FulltextStatsTableId = indexSettings.StatsTableId.PathId;
-                    writes.back().GenSequencePath = indexSettings.TablePath + "/" + NTableIndex::NFulltext::GenSequence;
-                } else if (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact) {
-                    writes.back().PathType = TKqpWriteTask::EPathWriteType::FulltextCompact;
-                    writes.back().GenSequencePath = indexSettings.TablePath + "/" + NTableIndex::NFulltext::GenSequence;
-                } else if (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact) {
-                    writes.back().PathType = TKqpWriteTask::EPathWriteType::JsonCompact;
-                    writes.back().GenSequencePath = indexSettings.TablePath + "/" + NTableIndex::NFulltext::GenSequence;
-                }
-
-                if (indexSettings.IsUniq) {
-                    if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
-                        // Lock Unique Index
-                        auto& indexLockInfo = LockInfos.at(indexSettings.TableId.PathId);
-                        auto& lockActor = indexLockInfo.Actors.at(indexSettings.TableId.PathId).LockActor;
-
-                        locks.emplace_back(TKqpWriteTask::TPathLockInfo{
-                            .LockActor = lockActor,
-                        });
-
-                        lockActor->SetLockSettings(
-                            token.Cookie,
-                            indexSettings.KeyColumns);
-                    }
-
-                    {
-                        // Lookup Unique Index
-                        auto lookupInfo = LookupInfos.at(indexSettings.TableId.PathId);
-                        auto lookupActor = lookupInfo.Actors.at(indexSettings.TableId.PathId).LookupActor;
-                        lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
-                            .KeyIndexes = GetIndexes( // inserted secondary keys
-                                settings.Columns,
-                                settings.LookupColumns,
-                                TConstArrayRef{
-                                    indexSettings.KeyColumns.data(),
-                                    indexSettings.KeyPrefixSize},
-                                /* preferAdditionalInputColumns */ false),
-                            .FullKeyIndexes = GetIndexes( // full secondary table keys
-                                settings.Columns,
-                                settings.LookupColumns,
-                                indexSettings.KeyColumns,
-                                /* preferAdditionalInputColumns */ false),
-                            .PrimaryInFullKeyIndexes = [&](){ // primary key in full secondary table keys
-                                THashMap<TStringBuf, ui32> ColumnNameToIndex;
-                                for (ui32 index = 0; index < indexSettings.KeyColumns.size(); ++index) {
-                                    ColumnNameToIndex[indexSettings.KeyColumns[index].GetName()] = index;
-                                }
-                                std::vector<ui32> result(settings.KeyColumns.size());
-                                for (ui32 index = 0; index < settings.KeyColumns.size(); ++index) {
-                                    result[index] = ColumnNameToIndex[settings.KeyColumns[index].GetName()];
-                                }
-                                return result;
-                            }(),
-                            .OldKeyIndexes = GetIndexes( // old secondary keys
-                                    settings.Columns,
-                                    settings.LookupColumns,
-                                    TConstArrayRef{
-                                        indexSettings.KeyColumns.data(),
-                                        indexSettings.KeyPrefixSize},
-                                    /* preferAdditionalInputColumns */ true),
-                            .Lookup = lookupActor,
-                            .SkipMissingRows = false,
-                        });
-
-                        lookupActor->SetLookupSettings(
-                            token.Cookie,
-                            indexSettings.KeyPrefixSize,
-                            indexSettings.KeyColumns,
-                            {});
-                    }
-                }
-            }
-            if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
-                auto& lockInfo = LockInfos.at(settings.TableId.PathId);
-                auto& lockActor = lockInfo.Actors.at(settings.TableId.PathId).LockActor;
-
-                locks.emplace_back(TKqpWriteTask::TPathLockInfo{
-                    .LockActor = lockActor,
-                });
-
-                lockActor->SetLockSettings(
-                    token.Cookie,
-                    settings.KeyColumns);
-            }
-
-            if (settings.NeedLookup) {
-                AFL_ENSURE(!settings.IsOlap);
-                auto& lookupInfo = LookupInfos.at(settings.TableId.PathId);
-                auto& lookupActor = lookupInfo.Actors.at(settings.TableId.PathId).LookupActor;
-                lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
-                    .KeyIndexes = {},
-                    .FullKeyIndexes = {},
-                    .PrimaryInFullKeyIndexes = {},
-                    .OldKeyIndexes = {},
-                    .Lookup = lookupActor,
-                    .SkipMissingRows = settings.SkipMissingRows,
-                });
-
-                lookupActor->SetLookupSettings(
-                    token.Cookie,
-                    settings.KeyColumns.size(),
-                    settings.KeyColumns,
-                    settings.LookupColumns);
-            }
-
-            AFL_ENSURE(!settings.SkipMissingRows
-                || settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
-                || settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
-
-            writeInfo.Actors.at(settings.TableId.PathId).WriteActor->Open(
-                token.Cookie,
-                GetOperation(settings.OperationType),
-                settings.KeyColumns,
-                settings.Columns,
-                CountLocalDefaults(
-                    settings.DefaultColumns,
-                    settings.Columns,
-                    settings.LookupColumns),
-                settings.Priority);
-
-            AFL_ENSURE(settings.KeyColumns.size() <= settings.Columns.size());
-            writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
-                .DeleteKeysIndexes = {},
-                .NewColumnsIndexes = GetIndexes(
-                            settings.Columns,
-                            settings.LookupColumns,
-                            settings.Columns,
-                            /* preferAdditionalInputColumns */ false),
-                .OldColumnsIndexes = GetIndexes(
-                            settings.Columns,
-                            settings.LookupColumns,
-                            settings.Columns,
-                            /* preferAdditionalInputColumns */ true),
-                .WriteActor = writeInfo.Actors.at(settings.TableId.PathId).WriteActor,
-                .ColumnTypes = [&]() {
-                    std::vector<NScheme::TTypeInfo> result(settings.Columns.size());
-                    for (ui32 index = 0; index < settings.Columns.size(); ++index) {
-                        const auto& column = settings.Columns[index];
-                        result[index] = NScheme::TypeInfoFromProto(
-                            column.GetTypeId(), column.GetTypeInfo());
-                    }
-                    return result;
-                }(),
-                .NeedWriteProjection = !settings.LookupColumns.empty(),
-            });
-
-            std::optional<TKqpWriteTask::TReturningInfo> returningInfo;
-            if (!settings.ReturningColumns.empty()) {
-                returningInfo.emplace();
-                returningInfo->Consumer = &ReturningConsumers[token.Cookie];
-                returningInfo->ColumnsIndexes = GetIndexes(
-                    settings.Columns,
-                    settings.LookupColumns,
-                    settings.ReturningColumns,
-                    /* preferAdditionalInputColumns */ false);
-            }
-
-            auto [taskIter, _] = WriteTasks.emplace(
-                token.Cookie,
-                TKqpWriteTask{
-                    writeCookie,
-                    deleteCookie,
-                    settings.Priority,
-                    settings.TableId.PathId,
-                    settings.OperationType,
-                    std::move(writes),
-                    std::move(lookups),
-                    returningInfo,
-                    settings.KeyColumns,
-                    (settings.LookupColumns.empty() || settings.DefaultColumns.empty())
-                        ? std::vector<ui32>{}
-                        : BuildDefaultMap(
-                            settings.DefaultColumns,
-                            settings.Columns,
-                            settings.LookupColumns),
-                    std::move(locks),
-                    Alloc,
-                    settings.Database
-                });
-
-            TasksPlanner.AddTask(taskIter->second);
+            token = *initialized;
         } else {
             token = *ev->Get()->Token;
         }
@@ -5741,33 +5924,6 @@ private:
     };
 
     std::queue<TAckMessage> AckQueue;
-
-    struct TWriteInfo {
-        struct TActorInfo {
-            TKqpTableWriteActor* WriteActor = nullptr;
-            TActorId Id;
-        };
-
-        THashMap<TPathId, TActorInfo> Actors;
-    };
-
-    struct TLookupInfo {
-        struct TActorInfo {
-            IKqpBufferTableLookup* LookupActor = nullptr;
-            TActorId Id;
-        };
-
-        THashMap<TPathId, TActorInfo> Actors;
-    };
-
-    struct TLockInfo {
-        struct TActorInfo {
-            IKqpBufferTableLock* LockActor = nullptr;
-            TActorId Id;
-        };
-
-        THashMap<TPathId, TActorInfo> Actors;
-    };
 
     class TReturningConsumer : public TKqpWriteTask::IKqpReturningConsumer  {
     public:

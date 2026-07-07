@@ -596,6 +596,7 @@ private:
     void SendWaitPlanStep(ui64 step);
     void RescheduleWaitingReads();
     NOlap::TSnapshot GetMaxReadVersion() const;
+    NOlap::TSnapshot GetMaxReadVersionForSchema(const ui64 schemaVersion) const;
     void PublishMinSnapshotForNewScans(const IScanSnapshotGuard& guard) const;
     NOlap::TSnapshot GetMinSnapshotForNewReads() const;
     bool MayStartScanAt(const NOlap::TSnapshot& snapshot, const NColumnShard::TSchemeShardLocalPathId& schemeShardLocalPathId) const;

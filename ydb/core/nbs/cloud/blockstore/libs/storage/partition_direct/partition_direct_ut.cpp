@@ -771,7 +771,11 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NKikimrServices::NBS_PARTITION,
             NActors::NLog::PRI_DEBUG);
 
-        auto scopedService = SetupStorage(env, EWriteMode::IndirectWrite);
+        // set big writeHedgingDelay for test pure fallback to direct writes
+        auto scopedService = SetupStorage(
+            env,
+            EWriteMode::IndirectWrite,
+            TDuration::Seconds(10));
 
         auto partition = CreatePartitionTablet(env);
 

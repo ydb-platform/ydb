@@ -909,19 +909,12 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         return nullptr;
     }
 
-    if (op.GetUniqueIndexKeySize()) {
-        if (op.GetUniqueIndexKeySize() >= keyColIds.size()) {
-            errStr = TStringBuilder()
-                << "Too many unique key prefix columns"
-                << ": " << op.GetUniqueIndexKeySize()
-                << ", max: " << (keyColIds.size()-1);
-            return nullptr;
-        }
-        alterData->TableDescriptionFull->SetUniqueIndexKeySize(op.GetUniqueIndexKeySize());
-    }
-
-    if (op.HasTableType()) {
-        alterData->TableDescriptionFull->SetTableType(op.GetTableType());
+    if (op.GetPartitionConfig().GetUniqueIndexKeySize() >= keyColIds.size()) {
+        errStr = TStringBuilder()
+            << "Too many unique key prefix columns"
+            << ": " << op.GetPartitionConfig().GetUniqueIndexKeySize()
+            << ", max: " << (keyColIds.size()-1);
+        return nullptr;
     }
 
     if (source) {
@@ -1313,6 +1306,14 @@ bool TPartitionConfigMerger::ApplyChanges(
 
     if (changes.HasKeepSnapshotTimeout()) {
         result.SetKeepSnapshotTimeout(changes.GetKeepSnapshotTimeout());
+    }
+
+    if (changes.HasUniqueIndexKeySize()) {
+        result.SetUniqueIndexKeySize(changes.GetUniqueIndexKeySize());
+    }
+
+    if (changes.HasSpecialTableType()) {
+        result.SetSpecialTableType(changes.GetSpecialTableType());
     }
 
     return true;

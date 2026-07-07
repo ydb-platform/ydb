@@ -39,7 +39,7 @@ TNodeResult TSqlCallExpr::BuildCall() {
 
     TUdfNode* udf_node = Node_ ? Node_->GetUdfNode() : nullptr;
     if (udf_node) {
-        if (!udf_node->DoInit(Ctx_, nullptr)) {
+        if (!udf_node->DoInit(Ctx_, /*src=*/nullptr)) {
             return std::unexpected(ESQLError::Basic);
         }
         TNodePtr positional_args = BuildTuple(Pos_, PositionalArgs_);

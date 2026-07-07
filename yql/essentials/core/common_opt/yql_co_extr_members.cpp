@@ -92,7 +92,7 @@ TExprNode::TPtr ApplyExtractMembersToFilterSkipNullMembers(const TExprNode::TPtr
     }
     innerExtracted.insert(filteredMembers.begin(), filteredMembers.end());
 
-    const auto inputType = GetSequenceItemType(filterInput, false);
+    const auto inputType = GetSequenceItemType(filterInput, /*allowMultiIO=*/false);
     YQL_ENSURE(inputType);
     const size_t inputWidth = inputType->Cast<TStructExprType>()->GetSize();
     YQL_ENSURE(inputWidth >= innerExtracted.size());

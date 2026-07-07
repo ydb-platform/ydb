@@ -472,6 +472,14 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(
+            {"selfId", this->SelfId()},
+            {"actorClassName", "TReplicaSubscriber"},
+            {"actorState", "StateWork"},
+            {"parentId", Parent},
+            {"replicaId", Replica},
+            {"path", Path},
+            {"domainOwnerId", DomainOwnerId});
         switch (ev->GetTypeRewrite()) {
             hFunc(NInternalEvents::TEvNotify, Handle);
             hFunc(NInternalEvents::TEvSyncVersionRequest, Handle);

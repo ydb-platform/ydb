@@ -1437,7 +1437,7 @@ void TQuoterResources::DisconnectSession(const NActors::TActorId& pipeServerId) 
         Y_ABORT_UNLESS(sessionIter != Sessions.end());
         TQuoterSession* session = sessionIter->second.Get();
         session->GetResource()->OnSessionDisconnected(sessionClientId);
-        session->CloseSession(Ydb::StatusIds::SESSION_EXPIRED, "Disconected.");
+        session->CloseSession(Ydb::StatusIds::SESSION_EXPIRED, "Disconnected.");
         Sessions.erase(sessionIter);
     }
     PipeServerIdToSession.erase(outerIt);

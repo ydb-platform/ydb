@@ -19,21 +19,6 @@ from github_issue_utils import (
 from testowners_utils import normalize_github_team_owners_string
 
 
-def dedupe_dataframe_by_full_name(df):
-    """Collapse rows that share full_name (e.g. legacy vs canonical suite_folder split).
-
-    Keeps the row with the longest suite_folder path as the canonical decomposition.
-    """
-    if df is None or df.empty or 'full_name' not in df.columns:
-        return df
-    return (
-        df.assign(_suite_len=df['suite_folder'].astype(str).str.len())
-        .sort_values(['full_name', '_suite_len'])
-        .drop_duplicates('full_name', keep='last')
-        .drop(columns='_suite_len')
-    )
-
-
 def create_tables(ydb_wrapper, table_path):
     print(f"> create table if not exists:'{table_path}'")
 
@@ -361,10 +346,19 @@ def main():
             date_str = target_date.strftime('%Y-%m-%d')
             query = f"""
                 SELECT *
-                FROM `{read_table_path}`
-                WHERE build_type = '{build_type}'
-                AND branch = '{branch}'
-                AND date_window = Date('{date_str}')
+                FROM (
+                    SELECT
+                        t.*,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY t.full_name
+                            ORDER BY Length(t.suite_folder) DESC
+                        ) AS _dedup_rn
+                    FROM `{read_table_path}` AS t
+                    WHERE t.build_type = '{build_type}'
+                    AND t.branch = '{branch}'
+                    AND t.date_window = Date('{date_str}')
+                )
+                WHERE _dedup_rn = 1
             """
             _max_retries = 5
             _retry_delay = 10  # seconds
@@ -436,7 +430,7 @@ def main():
                     )
                 rows.append(rec)
 
-            return dedupe_dataframe_by_full_name(pd.DataFrame(rows))
+            return pd.DataFrame(rows)
 
         # Get last existing day
         print("Getting date of last collected monitor data")
@@ -653,7 +647,7 @@ def main():
                 )
 
         start_time = time.time()
-        df = dedupe_dataframe_by_full_name(pd.DataFrame(data))
+        df = pd.DataFrame(data)
 
         if df.empty:
             print(f"No test data found for branch='{branch}', build_type='{build_type}' in the date range. Nothing to process.")

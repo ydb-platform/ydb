@@ -2154,6 +2154,12 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0
         }];
+        optional uint64 UsePerChannelReadQueues = 5 [(ControlOptions) = {
+            Description: "Use separate KeyValue read request queues per storage channel",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0
+        }];
     }
 
     message TKQPSessionControls {

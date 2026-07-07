@@ -98,6 +98,8 @@ TKeyValueState::TKeyValueState()
     , UsePayload(UsePayload_Base)
     , RejectNonExistentStorageChannel_Base(0, 0, 1)
     , RejectNonExistentStorageChannel(RejectNonExistentStorageChannel_Base)
+    , UsePerChannelReadQueues_Base(0, 0, 1)
+    , UsePerChannelReadQueues(UsePerChannelReadQueues_Base)
 {
     TabletCounters = nullptr;
     Clear();
@@ -619,12 +621,15 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
         UsePayload.ResetControl(UsePayload_Base);
         TControlBoard::RegisterSharedControl(RejectNonExistentStorageChannel_Base, icb->KeyValueVolumeControls.RejectNonExistentStorageChannel);
         RejectNonExistentStorageChannel.ResetControl(RejectNonExistentStorageChannel_Base);
+        TControlBoard::RegisterSharedControl(UsePerChannelReadQueues_Base, icb->KeyValueVolumeControls.UsePerChannelReadQueues);
+        UsePerChannelReadQueues.ResetControl(UsePerChannelReadQueues_Base);
 
         YDB_LOG_DEBUG("Init KeyValue with ICB",
             {"keyValue", TabletId},
             {"usePayload", UsePayload.Update(ctx.Now())},
             {"readRequestsInFlightLimit", ReadRequestsInFlightLimit.Update(ctx.Now())},
             {"rejectNonExistentStorageChannel", RejectNonExistentStorageChannel.Update(ctx.Now())},
+            {"usePerChannelReadQueues", UsePerChannelReadQueues.Update(ctx.Now())},
             {"marker", "KV92"});
     }
 
@@ -1991,13 +1996,19 @@ bool TKeyValueState::TryStartOrPostponeIntermediate(THolder<TIntermediate> &inte
         const TTabletStorageInfo *info) {
     Y_DEBUG_ABORT_UNLESS(intermediate->Stat.RequestType != TRequestType::WriteOnly);
     Y_DEBUG_ABORT_UNLESS(intermediate->Stat.RequestType != TRequestType::ReadOnlyInline);
+    const TInstant now = ctx.Now();
     intermediate->AcquiredChannels = GetAcquiredChannels(*intermediate, info);
     intermediate->PostponedQueuesLeft = 0;
     if (intermediate->AcquiredChannels.empty()) {
         return true;
     }
 
-    const ui64 limit = ReadRequestsInFlightLimit.Update(ctx.Now());
+    if (!UsePerChannelReadQueues.Update(now)) {
+        Y_DEBUG_ABORT_UNLESS(BLOB_CHANNEL < PostponedChannels.size());
+        intermediate->AcquiredChannels = {BLOB_CHANNEL};
+    }
+
+    const ui64 limit = ReadRequestsInFlightLimit.Update(now);
     TIntermediate *rawIntermediate = intermediate.Get();
     for (ui32 channel : intermediate->AcquiredChannels) {
         TPostponedChannel& channelState = PostponedChannels[channel];

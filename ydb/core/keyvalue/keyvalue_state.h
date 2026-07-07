@@ -318,6 +318,8 @@ protected:
     TMemorizableControlWrapper UsePayload;
     TControlWrapper RejectNonExistentStorageChannel_Base;
     TMemorizableControlWrapper RejectNonExistentStorageChannel;
+    TControlWrapper UsePerChannelReadQueues_Base;
+    TMemorizableControlWrapper UsePerChannelReadQueues;
 
     std::shared_ptr<TKeyValueStateLifetimeToken> LifetimeToken = std::make_shared<TKeyValueStateLifetimeToken>();
 

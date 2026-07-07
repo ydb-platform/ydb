@@ -3142,6 +3142,9 @@ Y_UNIT_TEST(TestPerChannelReadLimitKeepsOtherChannelsAvailable)
     TControlWrapper readRequestInFlightLimit(5, 1, 4096);
     TControlBoard::RegisterSharedControl(readRequestInFlightLimit, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
     readRequestInFlightLimit = 1;
+    TControlWrapper usePerChannelReadQueues(0, 0, 1);
+    TControlBoard::RegisterSharedControl(usePerChannelReadQueues, icb->KeyValueVolumeControls.UsePerChannelReadQueues);
+    usePerChannelReadQueues = 1;
 
     constexpr ui32 mainBlobChannel = NKeyValue::BLOB_CHANNEL;
     constexpr ui32 extraBlobChannel = NKeyValue::BLOB_CHANNEL + 1;
@@ -3183,6 +3186,50 @@ Y_UNIT_TEST(TestPerChannelReadLimitKeepsOtherChannelsAvailable)
     CheckReadResponse(ReceiveKeyValueResponse(tc), 2, {"value-main-wait"});
 }
 
+Y_UNIT_TEST(TestReadLimitUsesSingleQueueByDefault)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &){}, activeZone);
+
+    auto &icb = tc.Runtime->GetAppData().Icb;
+    TControlWrapper readRequestInFlightLimit(5, 1, 4096);
+    TControlBoard::RegisterSharedControl(readRequestInFlightLimit, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
+    readRequestInFlightLimit = 1;
+
+    constexpr ui32 mainBlobChannel = NKeyValue::BLOB_CHANNEL;
+    constexpr ui32 extraBlobChannel = NKeyValue::BLOB_CHANNEL + 1;
+
+    CmdWrite("main-hold", "value-main-hold",
+        NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    CmdWrite("extra-wait", "value-extra-wait",
+        NKikimrClient::TKeyValueRequest::EXTRA,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
+    TGetBlocker gets(*tc.Runtime);
+    gets.BlockChannel(mainBlobChannel);
+
+    SendRequestEvent(MakeReadRequest(1, {"main-hold"}), tc);
+    tc.Runtime->WaitFor("blocked main read", [&] {
+        return gets.BlockedCount(mainBlobChannel) == 1;
+    }, TDuration::Seconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(mainBlobChannel), 1);
+
+    SendRequestEvent(MakeReadRequest(2, {"extra-wait"}), tc);
+    tc.Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+    UNIT_ASSERT_VALUES_EQUAL(gets.Seen(extraBlobChannel), 0);
+
+    gets.UnblockOne();
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 1, {"value-main-hold"});
+
+    tc.Runtime->WaitFor("extra read starts after main queue is released", [&] {
+        return gets.Seen(extraBlobChannel) == 1;
+    }, TDuration::Seconds(1));
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 2, {"value-extra-wait"});
+}
+
 Y_UNIT_TEST(TestPerChannelReadLimitDoesNotBlockWritesAndInlineReads)
 {
     TTestContext tc;
@@ -3194,6 +3241,9 @@ Y_UNIT_TEST(TestPerChannelReadLimitDoesNotBlockWritesAndInlineReads)
     TControlWrapper readRequestInFlightLimit(5, 1, 4096);
     TControlBoard::RegisterSharedControl(readRequestInFlightLimit, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
     readRequestInFlightLimit = 1;
+    TControlWrapper usePerChannelReadQueues(0, 0, 1);
+    TControlBoard::RegisterSharedControl(usePerChannelReadQueues, icb->KeyValueVolumeControls.UsePerChannelReadQueues);
+    usePerChannelReadQueues = 1;
 
     constexpr ui32 mainBlobChannel = NKeyValue::BLOB_CHANNEL;
 
@@ -3235,6 +3285,9 @@ Y_UNIT_TEST(TestPerChannelReadLimitMultiChannelReadWaitsForBlockedChannel)
     TControlWrapper readRequestInFlightLimit(5, 1, 4096);
     TControlBoard::RegisterSharedControl(readRequestInFlightLimit, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
     readRequestInFlightLimit = 1;
+    TControlWrapper usePerChannelReadQueues(0, 0, 1);
+    TControlBoard::RegisterSharedControl(usePerChannelReadQueues, icb->KeyValueVolumeControls.UsePerChannelReadQueues);
+    usePerChannelReadQueues = 1;
 
     constexpr ui32 mainBlobChannel = NKeyValue::BLOB_CHANNEL;
     constexpr ui32 extraBlobChannel = NKeyValue::BLOB_CHANNEL + 1;
@@ -3287,6 +3340,9 @@ Y_UNIT_TEST(TestPerChannelReadLimitRandomizedNoDeadlock)
     TControlWrapper readRequestInFlightLimit(5, 1, 4096);
     TControlBoard::RegisterSharedControl(readRequestInFlightLimit, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
     readRequestInFlightLimit = 1;
+    TControlWrapper usePerChannelReadQueues(0, 0, 1);
+    TControlBoard::RegisterSharedControl(usePerChannelReadQueues, icb->KeyValueVolumeControls.UsePerChannelReadQueues);
+    usePerChannelReadQueues = 1;
 
     struct TChannelKey {
         TString Key;

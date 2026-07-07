@@ -1270,8 +1270,8 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateSubscriptions::TPtr &ev, cons
 {
     auto &event = ev->Get()->Event;
     if (event) {
-        YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider",
-            {"send", ev->ToString()});
+        YDB_LOG_TRACE_CTX(ctx, "Send",
+            {"ev", ev->ToString()});
         ctx.Send(event.Release());
     }
 

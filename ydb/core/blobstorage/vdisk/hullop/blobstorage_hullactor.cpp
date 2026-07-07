@@ -269,8 +269,9 @@ namespace NKikimr {
                     break;
                 }
                 case NHullComp::ActDeleteSsts: {
-                    Y_ABORT_UNLESS(CompactionTask->GetSstsToAdd().Empty() && !CompactionTask->GetSstsToDelete().Empty());
-                    if (CompactionTask->GetHugeBlobsToDelete().Empty()) {
+                    Y_VERIFY_S(CompactionTask->GetSstsToAdd().Empty() && !CompactionTask->GetSstsToDelete().Empty(),
+                        HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                    if (CompactionTask->GetHugeBlobsToDelete().Empty() && CompactionTask->GetHugeBlobsAllocated().Empty()) {
                         ApplyCompactionResult(ctx, {}, {}, 0);
                     } else {
                         // switch compaction state to pre-compaction to block any attempts of concurrent compaction
@@ -431,7 +432,7 @@ namespace NKikimr {
             }
             THullChange *msg = ev->Get();
 
-            if (!msg->FreedHugeBlobs.Empty() && !wId && !msg->Aborted) {
+            if ((!msg->FreedHugeBlobs.Empty() || !msg->AllocatedHugeBlobs.Empty()) && !wId && !msg->Aborted) {
                 const ui64 cookie = NextPreCompactCookie++;
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix
                     << "requesting PreCompact for THullChange");

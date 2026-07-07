@@ -59,12 +59,16 @@ public:
     // returns a TOwningFacilityCredentialsProvider). Sharing a TSimpleCoreFacility between two gRPC
     // IAM providers would abort: each one registers a periodic task and the facility allows only one.
     TCredentialsProviderPtr CreateProvider() const override final {
-        auto authProvider = Params_.SystemServiceAccountCredentials->CreateProvider();
-        auto outerFacility = CreateSimpleCoreFacility();
-        auto serviceProvider = std::make_shared<TCredentialsProvider>(
-            Params_, std::weak_ptr<ICoreFacility>(outerFacility), std::move(authProvider));
-        return std::make_shared<TOwningFacilityCredentialsProvider>(
-            std::move(outerFacility), std::move(serviceProvider));
+        std::lock_guard guard(Lock_);
+        if (!Provider_) {
+            auto authProvider = Params_.SystemServiceAccountCredentials->CreateProvider();
+            auto outerFacility = CreateSimpleCoreFacility();
+            auto serviceProvider = std::make_shared<TCredentialsProvider>(
+                Params_, std::weak_ptr<ICoreFacility>(outerFacility), std::move(authProvider));
+            Provider_ = std::make_shared<TOwningFacilityCredentialsProvider>(
+                std::move(outerFacility), std::move(serviceProvider));
+        }
+        return Provider_;
     }
 
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
@@ -84,7 +88,9 @@ public:
     }
 
 private:
-    TIamServiceParams Params_;
+    const TIamServiceParams Params_;
+    mutable std::mutex Lock_;
+    mutable TCredentialsProviderPtr Provider_;
 };
 
 }

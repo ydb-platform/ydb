@@ -4,6 +4,9 @@
 
 #include <ydb/public/api/client/yc_private/iam/iam_token_service.pb.h>
 #include <ydb/public/api/client/yc_private/iam/iam_token_service.grpc.pb.h>
+#include <mutex>
+#include <string>
+#include <util/generic/hash.h>
 
 using namespace yandex::cloud::priv::iam::v1;
 
@@ -27,12 +30,41 @@ TCredentialsProviderFactoryPtr CreateIamJwtParamsCredentialsProviderFactoryPriva
     return CreateIamJwtCredentialsProviderFactoryImplPrivate(std::move(jwtParams));
 }
 
+class TIamserviceProviderFactories{
+    std::mutex Mutex;
+    THashMap<std::string, TCredentialsProviderFactoryPtr> Factories;
+    std::string GetKey(const TIamServiceParams& params) {
+        return TStringBuilder()
+                << '\t' << params.ServiceId
+                << '\t' << params.MicroserviceId
+                << '\t' << params.ResourceId
+                << '\t' << params.ResourceType
+                << '\t' << params.TargetServiceAccountId
+                ;
+        
+    }
+public:
+    TCredentialsProviderFactoryPtr GetFactory(const TIamServiceParams& params) {
+        std::lock_guard<std::mutex> lock(Mutex);
+        auto key = GetKey(params);
+        const auto p = Factories.FindPtr(key);
+        if (p) {
+            return *p;
+        }
+        Factories[key] = std::make_shared<TIamServiceCredentialsProviderFactory<
+                CreateIamTokenForServiceRequest,
+                CreateIamTokenResponse,
+                IamTokenService
+            >>(params);
+        return Factories[key];
+    }
+};
+
+
+
 TCredentialsProviderFactoryPtr CreateIamServiceCredentialsProviderFactory(const TIamServiceParams& params) {
-    return std::make_shared<TIamServiceCredentialsProviderFactory<
-                    CreateIamTokenForServiceRequest,
-                    CreateIamTokenResponse,
-                    IamTokenService
-                >>(params);
+    static TIamserviceProviderFactories iamServiceProviderFactories;
+    return iamServiceProviderFactories.GetFactory(params);
 }
 
 }

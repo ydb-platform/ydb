@@ -5,6 +5,7 @@ import datetime
 import os
 import ydb
 from ydb_wrapper import YDBWrapper
+from test_path_dedup import dedupe_rows_by_full_name
 
 
 BASE_DATE = datetime.date(1970, 1, 1)
@@ -257,6 +258,7 @@ def process_date_range(ydb_wrapper, test_runs_table, testowners_table, flaky_tes
             query, 
             query_name=f"get_flaky_test_history_for_date_{branch}"
         )
+        results = dedupe_rows_by_full_name(results)
         print(f'📈 History data captured, {len(results)} rows')
         
         for row in results:

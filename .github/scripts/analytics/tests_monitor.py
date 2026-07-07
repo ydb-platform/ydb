@@ -17,6 +17,7 @@ from github_issue_utils import (
     min_area_by_owner_team_from_rows,
 )
 from testowners_utils import normalize_github_team_owners_string
+from test_path_dedup import dedupe_dataframe_by_full_name, dedupe_rows_by_full_name
 
 
 def create_tables(ydb_wrapper, table_path):
@@ -421,7 +422,7 @@ def main():
                     )
                 rows.append(rec)
 
-            return pd.DataFrame(rows)
+            return dedupe_dataframe_by_full_name(pd.DataFrame(rows))
 
         # Get last existing day
         print("Getting date of last collected monitor data")
@@ -592,12 +593,12 @@ def main():
                         AND run_timestamp_last >= Timestamp('{thirty_days_ago_ts}')
                 ) AS owners_t
                 ON 
-                    hist.test_name = owners_t.test_name
-                    AND hist.suite_folder = owners_t.suite_folder
+                    hist.full_name = owners_t.suite_folder || '/' || owners_t.test_name
                     AND hist.date_window = owners_t.date
                     AND hist.build_type = owners_t.build_type;
             """
             results = ydb_wrapper.execute_scan_query(query_get_history, query_name=f"get_monitor_history_for_date_{branch}")
+            results = dedupe_rows_by_full_name(results)
 
             if results:
                 for row in results:
@@ -629,7 +630,7 @@ def main():
                 )
 
         start_time = time.time()
-        df = pd.DataFrame(data)
+        df = dedupe_dataframe_by_full_name(pd.DataFrame(data))
 
         if df.empty:
             print(f"No test data found for branch='{branch}', build_type='{build_type}' in the date range. Nothing to process.")

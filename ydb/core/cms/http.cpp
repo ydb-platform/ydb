@@ -171,7 +171,7 @@ private:
         NMon::TEvHttpInfo *msg = ev->Get();
 
         YDB_LOG_DEBUG_CTX(ctx, "HTTP request",
-            {"dump", DumpRequest(msg->Request)});
+            {"request", DumpRequest(msg->Request)});
 
         // Check for API call.
         if (msg->Request.GetPathInfo().StartsWith("/api/")) {

@@ -45,8 +45,8 @@ public:
         }
 
         YDB_LOG_INFO_CTX(ctx, "Response status",
-            {"status", ToString(Response->Record.GetStatus().GetCode()).data()},
-            {"reason", Response->Record.GetStatus().GetReason().data()});
+            {"status", ToString(Response->Record.GetStatus().GetCode())},
+            {"reason", Response->Record.GetStatus().GetReason()});
 
         return true;
     }

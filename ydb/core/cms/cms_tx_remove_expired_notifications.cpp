@@ -34,8 +34,8 @@ public:
 
                 if (deadline <= now) {
                     YDB_LOG_INFO_CTX(ctx, "Removing expired action from notification",
-                        {"notificationId", info.NotificationId.data()},
-                        {"action", i->ShortDebugString().data()});
+                        {"notificationId", info.NotificationId},
+                        {"action", i->ShortDebugString()});
 
                     i = actions->erase(i);
                     modified = true;

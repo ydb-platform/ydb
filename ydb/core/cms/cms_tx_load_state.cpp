@@ -70,8 +70,8 @@ public:
             state->FirstBootTimestamp = TInstant::MicroSeconds(paramRow.GetValueOrDefault<Schema::Param::FirstBootTimestamp>(0));
             config = paramRow.GetValueOrDefault<Schema::Param::Config>(NKikimrCms::TCmsConfig());
 
-            YDB_LOG_DEBUG_CTX(ctx, "Loaded",
-                {"config", config});
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded config",
+                {"config", config.ShortDebugString()});
         } else {
             FirstBoot = true;
 
@@ -111,10 +111,10 @@ public:
             request.Priority = priority;
             ParseFromStringSafe(requestStr, &request.Request);
 
-            YDB_LOG_DEBUG_CTX(ctx, "Loaded request owned by",
-                {"id", id.data()},
-                {"owner", owner.data()},
-                {"request", requestStr.data()});
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded request",
+                {"requestId", id},
+                {"owner", owner},
+                {"request", requestStr});
 
             state->ScheduledRequests.emplace(id, request);
 
@@ -132,9 +132,9 @@ public:
             state->WalleRequests.emplace(requestId, taskId);
             state->WalleTasks.emplace(taskId, task);
 
-            YDB_LOG_DEBUG_CTX(ctx, "Loaded Wall-E task mapped to request",
-                {"taskId", taskId.data()},
-                {"requestId", requestId.data()});
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded Wall-E task",
+                {"taskId", taskId},
+                {"requestId", requestId});
 
             if (!walleTaskRowset.Next())
                 return false;
@@ -161,9 +161,9 @@ public:
                 .MaxInflightActions = maxInflightActions
             });
 
-            YDB_LOG_DEBUG_CTX(ctx, "Loaded maintenance task mapped to request",
-                {"taskId", taskId.data()},
-                {"requestId", requestId.data()});
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded maintenance task",
+                {"taskId", taskId},
+                {"requestId", requestId});
 
             if (!maintenanceTasksRowset.Next())
                 return false;
@@ -186,10 +186,10 @@ public:
             permission.Priority = priority;
 
             YDB_LOG_DEBUG_CTX(ctx, "Loaded permission",
-                {"id", id.data()},
-                {"owner", owner.data()},
-                {"until", TInstant::MicroSeconds(deadline).ToStringLocalUpToSeconds().data()},
-                {"action", actionStr.data()});
+                {"permissionId", id},
+                {"owner", owner},
+                {"deadline", TInstant::MicroSeconds(deadline).ToStringLocalUpToSeconds()},
+                {"action", actionStr});
 
             state->Permissions.emplace(id, permission);
 
@@ -198,8 +198,8 @@ public:
                 state->WalleTasks[taskId].Permissions.insert(id);
 
                 YDB_LOG_DEBUG_CTX(ctx, "Added permission to Wall-E task",
-                    {"id", id.data()},
-                    {"taskId", taskId.data()});
+                    {"permissionId", id},
+                    {"taskId", taskId});
             }
 
             if (state->MaintenanceRequests.contains(requestId)) {
@@ -207,8 +207,8 @@ public:
                 state->MaintenanceTasks[taskId].Permissions.insert(id);
 
                 YDB_LOG_DEBUG_CTX(ctx, "Added permission to maintenance task",
-                    {"id", id.data()},
-                    {"taskId", taskId.data()});
+                    {"permissionId", id},
+                    {"taskId", taskId});
             }
 
             if (!permissionRowset.Next())
@@ -226,9 +226,9 @@ public:
             ParseFromStringSafe(notificationStr, &notification.Notification);
 
             YDB_LOG_DEBUG_CTX(ctx, "Loaded notification",
-                {"id", id.data()},
-                {"owner", owner.data()},
-                {"notification", notificationStr.data()});
+                {"notificationId", id},
+                {"owner", owner},
+                {"notification", notificationStr});
 
             state->Notifications.emplace(id, notification);
 
@@ -240,8 +240,8 @@ public:
             ui32 nodeId = nodeTenantRowset.GetValue<Schema::NodeTenant::NodeId>();
             TString tenant = nodeTenantRowset.GetValue<Schema::NodeTenant::Tenant>();
 
-            YDB_LOG_DEBUG_CTX(ctx, "Loaded node tenant for node",
-                {"tenant", tenant.data()},
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded tenant node",
+                {"tenant", tenant},
                 {"nodeId", nodeId});
             state->InitialNodeTenants[nodeId] = tenant;
 

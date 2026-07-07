@@ -24,9 +24,9 @@ public:
         Response = new TEvCms::TEvNotificationResponse;
 
         YDB_LOG_INFO_CTX(ctx, "Processing notification",
-            {"fromUser", rec.GetUser().data()},
-            {"time", TInstant::MicroSeconds(rec.GetTime()).ToStringLocalUpToSeconds().data()},
-            {"reason", rec.GetReason().data()});
+            {"user", rec.GetUser()},
+            {"time", TInstant::MicroSeconds(rec.GetTime()).ToStringLocalUpToSeconds()},
+            {"reason", rec.GetReason()});
 
         if (Self->CheckNotification(rec, Response->Record, ctx)) {
             TString id = Self->AcceptNotification(rec, ctx);

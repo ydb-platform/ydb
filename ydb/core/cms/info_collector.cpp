@@ -69,7 +69,7 @@ private:
         default:
             YDB_LOG_ERROR("[InfoCollector] Unexpected event",
                 {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString()});
+                {"ev", ev->ToString()});
         }
     }
 

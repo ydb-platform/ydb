@@ -32,8 +32,8 @@ bool TLogger::DbCleanupLog(TTransactionContext &txc, const TActorContext &ctx) {
     TInstant fromDate = ctx.Now() - State->Config.LogConfig.TTL;
     ui64 from = Max<ui64>() - fromDate.GetValue();
 
-    YDB_LOG_DEBUG_CTX(ctx, "Cleanup log records until",
-        {"date", fromDate});
+    YDB_LOG_DEBUG_CTX(ctx, "Cleanup log records",
+        {"untilDate", fromDate});
 
     auto rowset = db.Table<Schema::LogRecords>().GreaterOrEqual(from)
         .Select<Schema::LogRecords::Timestamp>();

@@ -112,7 +112,7 @@ bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, const TNodeLockContext&
     Y_ABORT_UNLESS(Nodes.contains(nodeId));
     auto nodeState = Nodes.at(nodeId).State;
 
-    YDB_LOG_DEBUG("[Nodes Counter] Checking",
+    YDB_LOG_DEBUG("[Nodes Counter] Checking node",
         {"node", nodeId},
         {"state", nodeState},
         {"limitNodes", DisabledNodesLimit},
@@ -204,7 +204,7 @@ bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, const TNodeLockContext&
     auto nodeState = Nodes.at(nodeId).State;
 
     YDB_LOG_DEBUG("[Nodes Counter] Checking limits for sys tablet",
-        {"tablet", NKikimrConfig::TBootstrap_ETabletType_Name(TabletType)},
+        {"tabletType", NKikimrConfig::TBootstrap_ETabletType_Name(TabletType)},
         {"node", nodeId},
         {"state", nodeState},
         {"lockedNodes", LockedNodesCount},

@@ -770,7 +770,7 @@ private:
 
         TPopulatorInfo& info = Populators[owner];
         if (generation < info.PendingGeneration) {
-            YDB_LOG_ERROR("Reject handshake from stale populator pending",
+            YDB_LOG_ERROR("Reject handshake from stale populator",
                 {"selfId", SelfId()},
                 {"sender", ev->Sender},
                 {"owner", owner},
@@ -791,7 +791,7 @@ private:
     }
 
     void Handle(NInternalEvents::TEvUpdate::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle event",
+        YDB_LOG_DEBUG("Handle",
             {"selfId", SelfId()},
             {"ev", ev->Get()->ToString()},
             {"sender", ev->Sender},
@@ -816,7 +816,7 @@ private:
                 return;
             }
             if (generation != populatorIt->second.PendingGeneration) {
-                YDB_LOG_ERROR("Reject update from stale populator pending",
+                YDB_LOG_ERROR("Reject update from stale populator",
                     {"selfId", SelfId()},
                     {"sender", ev->Sender},
                     {"owner", owner},
@@ -997,7 +997,7 @@ private:
 
         TPopulatorInfo& info = it->second;
         if (generation != info.PendingGeneration) {
-            YDB_LOG_ERROR("Reject commit from stale populator pending",
+            YDB_LOG_ERROR("Reject commit from stale populator",
                 {"selfId", SelfId()},
                 {"sender", ev->Sender},
                 {"owner", owner},

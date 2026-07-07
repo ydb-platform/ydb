@@ -48,6 +48,9 @@ void AssertPurgeOK(NActors::TTestActorRuntime& runtime, TDuration timeout = TDur
 
 void WriteMany(std::shared_ptr<TTopicSdkTestSetup> setup, const std::string& topic, ui32 partitionId, size_t messageSize, size_t messageCount);
 
+// The function writes `messageCount` messages. For each message, it assigns one of the `groupCount` groups in round-robin order
+void WriteManyGroups(const std::shared_ptr<TTopicSdkTestSetup>& setup, const std::string& topic, size_t messageSize, size_t messageCount, size_t groupCount);
+
 ui64 GetTabletId(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic, ui32 partitionId = 0);
 ui64 GetPQRBTabletId(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic);
 

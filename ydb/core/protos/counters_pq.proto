@@ -284,4 +284,6 @@ enum EMLPConsumerLabeledCounters {
 
     METRIC_COMMITTED_COUNT = 5                                    [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.committed_messages"}];
     METRIC_PURGED_COUNT = 6                                       [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.purged_messages"}];
+
+    METRIC_INFLIGHT_MESSAGE_GROUP_COUNT = 7                       [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.inflight.message_groups"}];
 }

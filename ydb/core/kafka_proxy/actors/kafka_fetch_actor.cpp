@@ -58,7 +58,6 @@ void TKafkaFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
 void TKafkaFetchActor::SendFetchRequests(const TActorContext& ctx) {
     Response->Responses.resize(FetchRequestData->Topics.size());
     YDB_LOG_DEBUG("Fetch actor: New request",
-        {"logPrefix", LogPrefix()},
         {"databasePath", Context->DatabasePath},
         {"maxWaitMs", FetchRequestData->MaxWaitMs},
         {"maxBytes", FetchRequestData->MaxBytes});
@@ -98,7 +97,6 @@ TVector<NKikimr::NPQ::TPartitionFetchRequest> TKafkaFetchActor::PrepareFetchRequ
     for (size_t partIndex = 0; partIndex < topicKafkaRequest.Partitions.size(); partIndex++) {
         auto& partKafkaRequest = topicKafkaRequest.Partitions[partIndex];
         YDB_LOG_DEBUG("Fetch actor: New request",
-            {"logPrefix", LogPrefix()},
             {"topic", topicKafkaRequest.Topic.value()},
             {"partition", partKafkaRequest.Partition},
             {"fetchOffset", partKafkaRequest.FetchOffset},
@@ -135,8 +133,7 @@ size_t TKafkaFetchActor::CheckTopicIndex(const NKikimr::TEvPQ::TEvFetchResponse:
     Y_DEBUG_ABORT_UNLESS(topicIt != TopicIndexes.end());
 
     if (topicIt == TopicIndexes.end()) {
-        YDB_LOG_ERROR("Fetch actor: Received unexpected TEvFetchResponse. Ignoring. Expect malformed/incompled fetch reply",
-            {"logPrefix", LogPrefix()});
+        YDB_LOG_ERROR("Fetch actor: Received unexpected TEvFetchResponse. Ignoring. Expect malformed/incompled fetch reply");
         return std::numeric_limits<size_t>::max();
     }
 
@@ -150,7 +147,6 @@ void TKafkaFetchActor::HandleErrorResponse(const NKikimr::TEvPQ::TEvFetchRespons
         partitionResponse.ErrorCode = code;
     }
     YDB_LOG_ERROR("Fetch actor: Failed to get responses",
-        {"logPrefix", LogPrefix()},
         {"topic", topicResponse.Topic},
         {"code", ev->Get()->Status},
         {"reason", ev->Get()->Message});
@@ -170,7 +166,6 @@ void TKafkaFetchActor::HandleSuccessResponse(const NKikimr::TEvPQ::TEvFetchRespo
 
         if (partPQResponse.GetReadResult().GetErrorCode() != NPersQueue::NErrorCode::EErrorCode::OK) {
             YDB_LOG_DEBUG("Fetch actor: Failed to get responses",
-                {"logPrefix", LogPrefix()},
                 {"topic", topicResponse.Topic},
                 {"partition", partPQResponse.GetPartition()},
                 {"code", static_cast<size_t>(partPQResponse.GetReadResult().GetErrorCode())},
@@ -223,7 +218,6 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
 
         recordsBatch.BatchLength = recordsBatch.Size(TKafkaRecordBatch::MessageMeta::PresentVersions.Max) - BatchFirstTwoFieldsSize;
         YDB_LOG_DEBUG("Fetch actor: RecordBatch info",
-            {"logPrefix", LogPrefix()},
             {"baseOffset", recordsBatch.BaseOffset},
             {"lastOffsetDelta", recordsBatch.LastOffsetDelta},
             {"baseTimestamp", recordsBatch.BaseTimestamp},
@@ -268,7 +262,6 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         const bool isKafkaBatch = dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec();
 
         YDB_LOG_DEBUG("Fetch actor: Kafka record candidate",
-            {"logPrefix", LogPrefix()},
             {"resultsCount", partPQResponse.GetReadResult().GetResult().size()},
             {"offset", result.GetOffset()},
             {"isBatch", result.GetIsBatch()},

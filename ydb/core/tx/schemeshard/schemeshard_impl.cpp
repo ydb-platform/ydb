@@ -4659,11 +4659,37 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId,
     if (!skipStatsUpdate) {
         UpdateDiskSpaceUsage(db, pathId, TPartitionStats(), tableInfo.GetStats().Aggregated, ctx);
     }
+    
+    auto clearHistory = [&](const TMap<TTxId, TTableInfo::TBackupRestoreResult>& history) {
+        for (auto& bItem: history) {
+            TTxId txId = bItem.first;
+            const auto& result = bItem.second;
+
+            for (auto& sItem: result.ShardStatuses) {
+                auto shard = sItem.first;
+                if (IsLocalId(shard)) {
+                    db.Table<Schema::ShardBackupStatus>().Key(txId, shard.GetLocalId()).Delete();
+                }
+                db.Table<Schema::MigratedShardBackupStatus>().Key(txId, shard.GetOwnerId(), shard.GetLocalId()).Delete();
+                db.Table<Schema::TxShardStatus>().Key(txId, shard.GetOwnerId(), shard.GetLocalId()).Delete();
+            }
+
+            if (IsLocalId(pathId)) {
+                db.Table<Schema::CompletedBackups>().Key(pathId.LocalPathId, txId, result.CompletionDateTime).Delete();
+            }
+            db.Table<Schema::MigratedCompletedBackups>().Key(pathId.OwnerId, pathId.LocalPathId, txId, result.CompletionDateTime).Delete();
+        }
+    };
+
+    clearHistory(tableInfo.BackupHistory);
+    clearHistory(tableInfo.RestoreHistory);
 
     if (IsLocalId(pathId)) {
         db.Table<Schema::BackupSettings>().Key(pathId.LocalPathId).Delete();
     }
     db.Table<Schema::MigratedBackupSettings>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+    
+    db.Table<Schema::RestoreTasks>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 
     db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Delete();
     ColumnTables.Drop(pathId);

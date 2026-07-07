@@ -569,7 +569,7 @@ class TBackupRestoreOperationBase: public TSubOperation {
                 if (txState->State == TTxState::Propose) {
                     return TTxState::Propose;
                 }
-                
+
                 Y_ABORT_UNLESS(txState->State == TTxState::Aborting);
                 return TTxState::Aborting;
             }

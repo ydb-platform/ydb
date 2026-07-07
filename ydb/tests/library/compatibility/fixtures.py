@@ -298,9 +298,9 @@ class RollingUpgradeAndDowngradeFixture:
         request_timeout = 10  # seconds
         settings = (
             ydb.BaseRequestSettings()
-                .with_timeout(request_timeout)
-                .with_operation_timeout(request_timeout)
-                .with_cancel_after(request_timeout)
+            .with_timeout(request_timeout)
+            .with_operation_timeout(request_timeout)
+            .with_cancel_after(request_timeout)
         )
 
         start_time = time.time()

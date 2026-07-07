@@ -472,6 +472,8 @@ void TKqpQueryState::FillDeferredPublicationOperations() {
     NTopic::ValidateDeferredPublicationRequest(request);
 
     TopicOperations = NTopic::TTopicOperations();
+    // Same default as Kafka in FillTopicOperations: conflict check stays enabled on wire.
+    TopicOperations.SetTrackProducerId(true);
 
     for (const auto& destination : request.GetDestinations()) {
         YQL_ENSURE(destination.HasPath());

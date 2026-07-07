@@ -1661,10 +1661,6 @@ void CancelWhileProcessingImpl(TBackupTestFixture& f, bool isOlap) {
 
     f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
-    if (isOlap) {
-        return;
-    }
-
     auto createSchemaResult = f.YdbQueryClient().ExecuteQuery(fmt::format(R"sql(
         CREATE TABLE `/Root/Table0` (
             key Uint32 NOT NULL,

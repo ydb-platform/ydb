@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 class TestUpgradeToInternalPathId:
     cluster = None
+    driver = None
     session = None
     partition_count = 17
     num_rows = 500
@@ -29,17 +30,26 @@ class TestUpgradeToInternalPathId:
 
         self.cluster = KiKiMR(self.config)
         self.cluster.start()
-        driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
-        self.session = ydb.QuerySessionPool(driver)
-        driver.wait(5, fail_fast=True)
+        self.driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
+        self.session = ydb.QuerySessionPool(self.driver)
+        self.driver.wait(5, fail_fast=True)
 
         yield
 
-        self.session.stop()
+        self._close_client()
         self.cluster.stop()
+
+    def _close_client(self):
+        if self.session is not None:
+            self.session.stop()
+            self.session = None
+        if self.driver is not None:
+            self.driver.stop()
+            self.driver = None
 
     def restart_cluster(self, generate_internal_path_id):
         self.config.yaml_config["column_shard_config"]["generate_internal_path_id"] = generate_internal_path_id
+        self._close_client()
         self.cluster.update_configurator_and_restart(self.config)
 
         driver_holder = {}
@@ -58,7 +68,8 @@ class TestUpgradeToInternalPathId:
         if not wait_for(driver_ready, timeout_seconds=120, step_seconds=1):
             raise AssertionError("Driver didn't become ready after cluster restart")
 
-        self.session = ydb.QuerySessionPool(driver_holder["driver"])
+        self.driver = driver_holder["driver"]
+        self.session = ydb.QuerySessionPool(self.driver)
         self._wait_for_cluster_resources()
 
     def _wait_for_cluster_resources(self, timeout_seconds=120):

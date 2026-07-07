@@ -162,6 +162,7 @@ std::shared_ptr<arrow::RecordBatch> RowsToBatch(
     const TVector<std::pair<TSerializedCellVec, TString>>& rows,
     const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema,
     const std::set<std::string>& notNullColumns,
+    bool enableValidation,
     TString& errorMessage)
 {
     NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, notNullColumns);
@@ -184,26 +185,29 @@ std::shared_ptr<arrow::RecordBatch> RowsToBatch(
 
         const auto keyCells = key.GetCells();
         const auto valueCells = value.GetCells();
-        if (keyCells.size() + valueCells.size() != ydbSchema.size()) {
-            errorMessage = TStringBuilder()
-                << "Row " << rowIdx << " has unexpected cells count " << (keyCells.size() + valueCells.size())
-                << " (expected " << ydbSchema.size() << ")";
-            return {};
-        }
 
-        for (size_t i = 0; i < keyCells.size(); ++i) {
-            const TString sizeErr = NScheme::HasUnexpectedValueSize(keyCells[i], ydbSchema[i].second);
-            if (!sizeErr.empty()) {
-                errorMessage = TStringBuilder() << "Row " << rowIdx << ", column '" << ydbSchema[i].first << "': " << sizeErr;
+        if (enableValidation) {
+            if (keyCells.size() + valueCells.size() != ydbSchema.size()) {
+                errorMessage = TStringBuilder()
+                    << "Row " << rowIdx << " has unexpected cells count " << (keyCells.size() + valueCells.size())
+                    << " (expected " << ydbSchema.size() << ")";
                 return {};
             }
-        }
-        for (size_t i = 0; i < valueCells.size(); ++i) {
-            const size_t col = keyCells.size() + i;
-            const TString sizeErr = NScheme::HasUnexpectedValueSize(valueCells[i], ydbSchema[col].second);
-            if (!sizeErr.empty()) {
-                errorMessage = TStringBuilder() << "Row " << rowIdx << ", column '" << ydbSchema[col].first << "': " << sizeErr;
-                return {};
+
+            for (size_t i = 0; i < keyCells.size(); ++i) {
+                const TString sizeErr = NScheme::HasUnexpectedValueSize(keyCells[i], ydbSchema[i].second);
+                if (!sizeErr.empty()) {
+                    errorMessage = TStringBuilder() << "Row " << rowIdx << ", column '" << ydbSchema[i].first << "': " << sizeErr;
+                    return {};
+                }
+            }
+            for (size_t i = 0; i < valueCells.size(); ++i) {
+                const size_t col = keyCells.size() + i;
+                const TString sizeErr = NScheme::HasUnexpectedValueSize(valueCells[i], ydbSchema[col].second);
+                if (!sizeErr.empty()) {
+                    errorMessage = TStringBuilder() << "Row " << rowIdx << ", column '" << ydbSchema[col].first << "': " << sizeErr;
+                    return {};
+                }
             }
         }
 
@@ -359,7 +363,7 @@ private:
     }
 
     bool ExtractBatch(TString& errorMessage) override {
-        Batch = NGRpcService::RowsToBatch(*Rows, YdbSchema, NotNullColumns, errorMessage);
+        Batch = NGRpcService::RowsToBatch(*Rows, YdbSchema, NotNullColumns, IsBulkUpsertValidationEnabled(), errorMessage);
         return Batch.get();
     }
 

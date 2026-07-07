@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(RowsToBatchTests) {
         std::set<std::string> notNullColumns;
         TString errorMessage;
 
-        auto batch = NGRpcService::RowsToBatch(rows, ydbSchema, notNullColumns, errorMessage);
+        auto batch = NGRpcService::RowsToBatch(rows, ydbSchema, notNullColumns, true, errorMessage);
 
         UNIT_ASSERT_C(batch, "RowsToBatch should succeed for valid data, error: " + errorMessage);
         UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(RowsToBatchTests) {
         std::set<std::string> notNullColumns;
         TString errorMessage;
 
-        auto batch = NGRpcService::RowsToBatch(rows, ydbSchema, notNullColumns, errorMessage);
+        auto batch = NGRpcService::RowsToBatch(rows, ydbSchema, notNullColumns, true, errorMessage);
 
         UNIT_ASSERT(!batch);
         UNIT_ASSERT_STRING_CONTAINS(errorMessage, "Cannot parse serialized cell vec");
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(RowsToBatchTests) {
         TString errorMessage;
 
         // Should not crash; result may be nullptr for zero rows
-        auto batch = NGRpcService::RowsToBatch(rows, ydbSchema, notNullColumns, errorMessage);
+        auto batch = NGRpcService::RowsToBatch(rows, ydbSchema, notNullColumns, true, errorMessage);
         Y_UNUSED(batch);
     }
 }

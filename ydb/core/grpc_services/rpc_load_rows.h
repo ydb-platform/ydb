@@ -18,6 +18,7 @@ std::shared_ptr<arrow::RecordBatch> RowsToBatch(
     const TVector<std::pair<TSerializedCellVec, TString>>& rows,
     const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema,
     const std::set<std::string>& notNullColumns,
+    bool enableValidation,
     TString& errorMessage);
 
 } // namespace NGRpcService

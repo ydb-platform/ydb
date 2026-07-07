@@ -27,6 +27,8 @@ struct TEvSetColumnConstraint {
         EvGetResponse,
         EvListRequest,
         EvListResponse,
+        EvForgetRequest,
+        EvForgetResponse,
 
         EvEnd
     };
@@ -69,6 +71,7 @@ struct TEvSetColumnConstraint {
 
     struct TEvGetResponse: public TEventPB<TEvGetResponse, NKikimrSetColumnConstraint::TEvGetResponse, EvGetResponse> {};
 
+<<<<<<< HEAD
     struct TEvListRequest: public TEventPB<TEvListRequest, NKikimrSetColumnConstraint::TEvListRequest, EvListRequest> {
         TEvListRequest() = default;
 
@@ -81,6 +84,28 @@ struct TEvSetColumnConstraint {
 
     struct TEvListResponse: public TEventPB<TEvListResponse, NKikimrSetColumnConstraint::TEvListResponse, EvListResponse> {
         TEvListResponse() = default;
+=======
+    struct TEvForgetRequest: public TEventPB<TEvForgetRequest, NKikimrSetColumnConstraint::TEvForgetRequest, EvForgetRequest> {
+        TEvForgetRequest() = default;
+
+        explicit TEvForgetRequest(
+            const ui64 txId,
+            const TString& dbName,
+            ui64 operationId)
+        {
+            Record.SetTxId(txId);
+            Record.SetDatabaseName(dbName);
+            Record.SetOperationId(operationId);
+        }
+    };
+
+    struct TEvForgetResponse: public TEventPB<TEvForgetResponse, NKikimrSetColumnConstraint::TEvForgetResponse, EvForgetResponse> {
+        TEvForgetResponse() = default;
+
+        explicit TEvForgetResponse(const ui64 txId) {
+            Record.SetTxId(txId);
+        }
+>>>>>>> 2c2e9baa213 (init)
     };
 }; // TEvSetColumnConstraint
 

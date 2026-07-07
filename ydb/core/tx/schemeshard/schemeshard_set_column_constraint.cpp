@@ -228,6 +228,28 @@ void TSchemeShard::PersistSetColumnConstraintShardDone(
         );
 }
 
+void TSchemeShard::PersistSetColumnConstraintForget(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& info) {
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(info.Id)).Delete();
+    
+    for (const auto& [shardIdx, _] : info.ValidationShards) {
+        db.Table<Schema::SetColumnConstraintShardStatus>()
+            .Key(info.Id, shardIdx.GetOwnerId(), shardIdx.GetLocalId())
+            .Delete();
+    }
+}
+
+void TSchemeShard::ForgetSetColumnConstraint(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& info) {
+    const auto id = info.Id;
+    const auto byTimeKey = std::make_pair(info.StartTime, id);
+
+    PersistSetColumnConstraintForget(db, info);
+    SetColumnConstraintOperationsByTime.erase(byTimeKey);
+    SetColumnConstraintOperations.erase(id);
+    if (info.Uid) {
+        SetColumnConstraintOperationsByUid.erase(info.Uid);
+    }
+}
+
 void TSchemeShard::Handle(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxCreateSetColumnConstraint(ev), ctx);
 }
@@ -244,6 +266,10 @@ void TSchemeShard::Handle(TEvDataShard::TEvValidateRowConditionResponse::TPtr& e
     const auto& record = ev->Get()->Record;
     TIndexBuildId operationId = TIndexBuildId(record.GetId());
     Execute(CreateTxReplyValidateRowCondition(operationId, ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvSetColumnConstraint::TEvForgetRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxForgetSetColumnConstraint(ev), ctx);
 }
 
 } // NSchemeShard

@@ -33,7 +33,7 @@ bool TTxDataAckToSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc
 
 void TTxDataAckToSource::DoComplete(const TActorContext& /*ctx*/) {
     YDB_LOG_NOTICE("",
-        {"#_TTxDataAckToSource::DoComplete", "1"});
+        {"event", "TTxDataAckToSource::DoComplete"});
 
     Session->ActualizeDestination(*Self, Self->GetDataLocksManager());
 }

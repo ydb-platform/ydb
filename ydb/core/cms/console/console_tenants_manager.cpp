@@ -4108,12 +4108,12 @@ void TTenantsManager::Handle(TEvTenantSlotBroker::TEvTenantState::TPtr &ev, cons
 void TTenantsManager::Handle(TEvHive::TEvShrinkStoragePoolDone::TPtr &ev, const TActorContext &ctx)
 {
     YDB_LOG_TRACE("Handle TEvShrinkStoragePoolDone",
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     const auto &poolName = ev->Get()->Record.GetStoragePool();
     const auto splitIdx = poolName.find(':');
     if (splitIdx == std::string::npos || splitIdx + 1 == poolName.size()) {
-        YDB_LOG_ERROR("Invalid pool name",
-            {"format", poolName});
+        YDB_LOG_ERROR("Invalid pool name format",
+            {"poolName", poolName});
         return;
     }
     const auto tenantName = poolName.substr(0, splitIdx);

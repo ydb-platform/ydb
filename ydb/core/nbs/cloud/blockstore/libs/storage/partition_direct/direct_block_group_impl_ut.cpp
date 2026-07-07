@@ -532,7 +532,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto executor = MakeExecutor();
         auto transport = std::make_unique<TStorageTransportMock>();
         auto* transportPtr = transport.get();
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -576,7 +576,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         pendingWrite.GetValue(WaitTimeout).GetValue(WaitTimeout);
 
         // The coordinator's PBuffer DDisk must be first in the request.
-        const auto pbuffers = MakeDDiskIds(100 + DirectBlockGroupHostCount);
+        const auto& pbuffers = transportPtr->GetPBufferIds();
         const auto& sentIds = transportPtr->LastWriteToManyPBuffersDiskIds;
         UNIT_ASSERT_VALUES_EQUAL(3, sentIds.size());
         UNIT_ASSERT_VALUES_EQUAL(
@@ -612,7 +612,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto transport = std::make_unique<TStorageTransportMock>();
         transport->WriteToManyPBufferCoordinatorOnlyStatus =
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);

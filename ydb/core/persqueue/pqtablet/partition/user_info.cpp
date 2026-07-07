@@ -4,7 +4,7 @@
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/public/config.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 namespace NKikimr {

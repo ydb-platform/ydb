@@ -126,7 +126,7 @@ public:
 
         YDB_LOG_DEBUG("Send pool",
             {"logPrefix", LogPrefix},
-            {"request", request->Record});
+            {"request", request->Record.ShortDebugString()});
 
         NTabletPipe::SendData(ctx, BSControllerPipe, request.Release());
     }
@@ -3140,11 +3140,11 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
                 {"count", count},
                 {"tenantPath", path});
         } else {
-            YDB_LOG_CRIT_CTX(ctx, "Loaded units < >( for unknown tenant",
+            YDB_LOG_CRIT_CTX(ctx, "Loaded units for unknown tenant",
                 {"kind", kind},
                 {"zone", zone},
                 {"count", count},
-                {"path", path});
+                {"tenantPath", path});
         }
 
         if (!slotRowset.Next())
@@ -3166,17 +3166,17 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
 
             Counters.Inc(kind, COUNTER_REGISTERED_UNITS);
 
-            YDB_LOG_DEBUG_CTX(ctx, "Loaded registered unit of kind for tenant",
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded registered unit",
                 {"host", host},
                 {"port", port},
                 {"kind", kind},
-                {"path", path});
+                {"tenantPath", path});
         } else {
-            YDB_LOG_CRIT_CTX(ctx, "Loaded registered unit of kind for unknown tenant",
+            YDB_LOG_CRIT_CTX(ctx, "Loaded registered unit for unknown tenant",
                 {"host", host},
                 {"port", port},
                 {"kind", kind},
-                {"path", path});
+                {"tenantPath", path});
         }
 
         if (!registeredRowset.Next())
@@ -3221,7 +3221,7 @@ void TTenantsManager::DbUpdateConfirmedSubdomain(TTenant::TPtr tenant,
 {
     YDB_LOG_TRACE_CTX(ctx, "Update database",
         {"tenantPath", tenant->Path},
-        {"confirmedsubdomain", version});
+        {"version", version});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Tenants>().Key(tenant->Path)
@@ -3232,9 +3232,9 @@ void TTenantsManager::DbRemoveComputationalUnits(TTenant::TPtr tenant,
                                                  TTransactionContext &txc,
                                                  const TActorContext &ctx)
 {
-    YDB_LOG_TRACE_CTX(ctx, "Remove computational units of from database",
+    YDB_LOG_TRACE_CTX(ctx, "Remove computational units from database",
         {"tenantPath", tenant->Path},
-        {"txid", tenant->TxId},
+        {"txId", tenant->TxId},
         {"issue", tenant->Issue});
 
     NIceDb::TNiceDb db(txc.DB);
@@ -3250,7 +3250,7 @@ void TTenantsManager::DbRemoveRegisteredUnit(TTenant::TPtr tenant,
                                              TTransactionContext &txc,
                                              const TActorContext &ctx)
 {
-    YDB_LOG_TRACE_CTX(ctx, "Remove registered computational unit for from database",
+    YDB_LOG_TRACE_CTX(ctx, "Remove registered computational unit from database",
         {"tenantPath", tenant->Path},
         {"host", host},
         {"port", port});
@@ -3265,7 +3265,7 @@ void TTenantsManager::DbRemoveTenantAndPools(TTenant::TPtr tenant,
 {
     YDB_LOG_TRACE_CTX(ctx, "Remove tenant from database",
         {"tenantPath", tenant->Path},
-        {"txid", tenant->TxId},
+        {"txId", tenant->TxId},
         {"issue", tenant->Issue});
 
     NIceDb::TNiceDb db(txc.DB);
@@ -3284,7 +3284,7 @@ void TTenantsManager::DbUpdateComputationalUnit(TTenant::TPtr tenant,
                                                 TTransactionContext &txc,
                                                 const TActorContext &ctx)
 {
-    YDB_LOG_TRACE_CTX(ctx, "Remove computational unit of from database",
+    YDB_LOG_TRACE_CTX(ctx, "Remove computational unit from database",
         {"tenantPath", tenant->Path},
         {"kind", kind},
         {"zone", zone},
@@ -3302,7 +3302,7 @@ void TTenantsManager::DbUpdatePool(TTenant::TPtr tenant,
 {
     YDB_LOG_TRACE_CTX(ctx, "Update database for pool",
         {"poolName", pool->Config.GetName()},
-        {"config", pool->Config},
+        {"config", pool->Config.ShortDebugString()},
         {"state", pool->State});
 
     TString config;
@@ -3321,7 +3321,7 @@ void TTenantsManager::DbUpdatePoolConfig(TTenant::TPtr tenant,
 {
     YDB_LOG_TRACE_CTX(ctx, "Update pool config in database",
         {"poolName", pool->Config.GetName()},
-        {"config", config});
+        {"config", config.ShortDebugString()});
 
     TString val;
     Y_PROTOBUF_SUPPRESS_NODISCARD config.SerializeToString(&val);
@@ -3355,7 +3355,7 @@ void TTenantsManager::DbUpdatePoolState(TTenant::TPtr tenant,
     YDB_LOG_TRACE_CTX(ctx, "Update pool state in database",
         {"poolName", pool->Config.GetName()},
         {"state", state},
-        {"allocatednumgroups", allocatedNumGroups});
+        {"allocatedNumGroups", allocatedNumGroups});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::TenantPools>().Key(tenant->Path, pool->Kind)
@@ -3370,7 +3370,7 @@ void TTenantsManager::DbUpdateRegisteredUnit(TTenant::TPtr tenant,
                                              TTransactionContext &txc,
                                              const TActorContext &ctx)
 {
-    YDB_LOG_TRACE_CTX(ctx, "Update registered computational unit for in database",
+    YDB_LOG_TRACE_CTX(ctx, "Update registered computational unit in database",
         {"tenantPath", tenant->Path},
         {"host", host},
         {"port", port},
@@ -3388,9 +3388,9 @@ void TTenantsManager::DbUpdateRemovedTenant(TTenant::TPtr tenant,
 {
     YDB_LOG_TRACE_CTX(ctx, "Add tenant removal info",
         {"tenantPath", tenant->Path},
-        {"txid", tenant->TxId},
+        {"txId", tenant->TxId},
         {"code", code},
-        {"errorcode", tenant->ErrorCode},
+        {"errorCode", tenant->ErrorCode},
         {"issue", tenant->Issue});
 
     NIceDb::TNiceDb db(txc.DB);
@@ -3452,8 +3452,8 @@ void TTenantsManager::DbUpdateTenantState(TTenant::TPtr tenant,
     YDB_LOG_TRACE_CTX(ctx, "Update tenant state in database",
         {"tenantPath", tenant->Path},
         {"state", state},
-        {"txid", tenant->TxId},
-        {"errorcode", tenant->ErrorCode},
+        {"txId", tenant->TxId},
+        {"errorCode", tenant->ErrorCode},
         {"issue", tenant->Issue});
 
     NIceDb::TNiceDb db(txc.DB);
@@ -3472,8 +3472,8 @@ void TTenantsManager::DbUpdateTenantSubdomain(TTenant::TPtr tenant,
 {
     YDB_LOG_TRACE_CTX(ctx, "Update tenant subdomain in database",
         {"tenantPath", tenant->Path},
-        {"schemeshardid", schemeShardId},
-        {"pathid", pathId});
+        {"schemeshardId", schemeShardId},
+        {"pathId", pathId});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Tenants>().Key(tenant->Path)
@@ -3514,7 +3514,7 @@ void TTenantsManager::DbUpdateSubdomainVersion(TTenant::TPtr tenant,
 {
     YDB_LOG_TRACE_CTX(ctx, "Update subdomain version in database",
         {"tenantPath", tenant->Path},
-        {"subdomainversion", version});
+        {"version", version});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Tenants>().Key(tenant->Path)
@@ -3526,7 +3526,7 @@ void TTenantsManager::DbUpdateSchemaOperationQuotas(TTenant::TPtr tenant,
                                                     TTransactionContext &txc,
                                                     const TActorContext &ctx)
 {
-    YDB_LOG_TRACE_CTX(ctx, "Update schema operation quotas for quotas",
+    YDB_LOG_TRACE_CTX(ctx, "Update schema operation quotas",
         {"tenantPath", tenant->Path},
         {"quotas", quotas.DebugString()});
 
@@ -3543,7 +3543,7 @@ void TTenantsManager::DbUpdateDatabaseQuotas(TTenant::TPtr tenant,
                                              TTransactionContext &txc,
                                              const TActorContext &ctx)
 {
-    YDB_LOG_TRACE_CTX(ctx, "Update database quotas for quotas",
+    YDB_LOG_TRACE_CTX(ctx, "Update database quotas",
         {"tenantPath", tenant->Path},
         {"quotas", quotas.DebugString()});
 
@@ -3560,7 +3560,7 @@ void TTenantsManager::DbUpdateScaleRecommenderPolicies(TTenant::TPtr tenant,
                                                        TTransactionContext &txc,
                                                        const TActorContext &ctx)
 {
-    YDB_LOG_TRACE_CTX(ctx, "Update scale recommender policies for policies",
+    YDB_LOG_TRACE_CTX(ctx, "Update scale recommender policies",
         {"tenantPath", tenant->Path},
         {"policies", policies.DebugString()});
 
@@ -3642,7 +3642,7 @@ void TTenantsManager::Handle(TEvConsole::TEvDescribeTenantOptionsRequest::TPtr &
     operation.mutable_result()->PackFrom(result);
 
     YDB_LOG_TRACE_CTX(ctx, "Send TEvConsole::TEvDescribeTenantOptionsResponse",
-        {"response", resp->Record});
+        {"ev", resp->Record.ShortDebugString()});
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
@@ -3659,7 +3659,7 @@ void TTenantsManager::Handle(TEvConsole::TEvGetOperationRequest::TPtr &ev, const
         Counters.Inc(operation.status(), COUNTER_CREATE_RESPONSES);
 
     YDB_LOG_TRACE_CTX(ctx, "Send TEvConsole::TEvGetOperationResponse",
-        {"resp", resp->Record});
+        {"ev", resp->Record.ShortDebugString()});
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
@@ -3682,7 +3682,7 @@ void TTenantsManager::Handle(TEvConsole::TEvGetTenantStatusRequest::TPtr &ev, co
         issue->set_message(Sprintf("Unknown tenant %s", path.data()));
 
         YDB_LOG_TRACE_CTX(ctx, "Send TEvConsole::TEvGetTenantStatusResponse",
-            {"resp", resp->Record});
+            {"ev", resp->Record.ShortDebugString()});
 
         Counters.Inc(Ydb::StatusIds::NOT_FOUND, COUNTER_STATUS_RESPONSES);
 
@@ -3696,7 +3696,7 @@ void TTenantsManager::Handle(TEvConsole::TEvGetTenantStatusRequest::TPtr &ev, co
         operation.mutable_result()->PackFrom(result);
 
         YDB_LOG_TRACE_CTX(ctx, "Send TEvConsole::TEvGetTenantStatusResponse",
-            {"resp", resp->Record});
+            {"ev", resp->Record.ShortDebugString()});
 
         Counters.Inc(Ydb::StatusIds::SUCCESS, COUNTER_STATUS_RESPONSES);
 
@@ -3724,7 +3724,7 @@ void TTenantsManager::Handle(TEvConsole::TEvListTenantsRequest::TPtr &ev, const 
     operation.mutable_result()->PackFrom(result);
 
     YDB_LOG_TRACE_CTX(ctx, "Send TEvConsole::TEvListTenantsResponse",
-        {"resp", resp->Record});
+        {"ev", resp->Record.ShortDebugString()});
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
@@ -3739,7 +3739,7 @@ void TTenantsManager::Handle(TEvConsole::TEvNotifyOperationCompletionRequest::TP
         auto resp = MakeHolder<TEvConsole::TEvOperationCompletionNotification>();
         resp->Record.MutableResponse()->mutable_operation()->CopyFrom(operation);
         YDB_LOG_TRACE_CTX(ctx, "Send TEvConsole::TEvOperationCompletionNotification",
-            {"resp", resp->Record});
+            {"ev", resp->Record.ShortDebugString()});
         ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
     } else {
         if (!operation.ready()) {
@@ -3753,7 +3753,7 @@ void TTenantsManager::Handle(TEvConsole::TEvNotifyOperationCompletionRequest::TP
         auto resp = MakeHolder<TEvConsole::TEvNotifyOperationCompletionResponse>();
         resp->Record.MutableResponse()->mutable_operation()->CopyFrom(operation);
         YDB_LOG_TRACE_CTX(ctx, "Send TEvConsole::TEvNotifyOperationCompletionResponse",
-            {"resp", resp->Record});
+            {"ev", resp->Record.ShortDebugString()});
         ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
     }
 }
@@ -3809,7 +3809,7 @@ void TTenantsManager::Handle(TEvPrivate::TEvPoolFailed::TPtr &ev, const TActorCo
     auto &issue = ev->Get()->Issue;
 
     if (pool->Worker != ev->Sender) {
-        YDB_LOG_ERROR_CTX(ctx, "Ignoring TEvPrivate::TEvPoolFailed from outdated worker of pool for tenant",
+        YDB_LOG_ERROR_CTX(ctx, "Ignoring TEvPrivate::TEvPoolFailed from outdated worker",
             {"poolName", pool->Config.GetName()},
             {"tenantPath", tenant->Path},
             {"issue", issue});
@@ -3817,7 +3817,7 @@ void TTenantsManager::Handle(TEvPrivate::TEvPoolFailed::TPtr &ev, const TActorCo
     }
 
     if (tenant->State == TTenant::REMOVING_POOLS) {
-        YDB_LOG_CRIT_CTX(ctx, "Couldn't delete storage pool for tenant",
+        YDB_LOG_CRIT_CTX(ctx, "Couldn't delete storage pool",
             {"poolName", pool->Config.GetName()},
             {"tenantPath", tenant->Path},
             {"issue", issue});
@@ -3834,7 +3834,7 @@ void TTenantsManager::Handle(TEvPrivate::TEvPoolFailed::TPtr &ev, const TActorCo
         tenant->Issue = issue;
         TxProcessor->ProcessTx(CreateTxUpdateTenantState(tenant->Path, TTenant::REMOVING_POOLS), ctx);
     } else {
-        YDB_LOG_CRIT_CTX(ctx, "Couldn't update storage pool for tenant",
+        YDB_LOG_CRIT_CTX(ctx, "Couldn't update storage pool",
             {"poolName", pool->Config.GetName()},
             {"tenantPath", tenant->Path},
             {"issue", issue});
@@ -3889,7 +3889,7 @@ void TTenantsManager::Handle(TEvPrivate::TEvSubdomainFailed::TPtr &ev, const TAc
     auto code = ev->Get()->Code;
 
     if (tenant->Worker != ev->Sender) {
-        YDB_LOG_ERROR_CTX(ctx, "Ignoring TEvPrivate::TEvSubdomainFailed from outdated worker of",
+        YDB_LOG_ERROR_CTX(ctx, "Ignoring TEvPrivate::TEvSubdomainFailed from outdated worker",
             {"tenantPath", tenant->Path},
             {"issue", issue});
         return;
@@ -3901,7 +3901,7 @@ void TTenantsManager::Handle(TEvPrivate::TEvSubdomainFailed::TPtr &ev, const TAc
     if (tenant->IsRemoving()) {
         Y_ABORT_UNLESS(tenant->State == TTenant::REMOVING_SUBDOMAIN);
 
-        YDB_LOG_ERROR_CTX(ctx, "Cannot remove subdomain for tenant",
+        YDB_LOG_ERROR_CTX(ctx, "Cannot remove subdomain",
             {"tenantPath", tenant->Path},
             {"code", code},
             {"issue", issue});
@@ -3921,7 +3921,7 @@ void TTenantsManager::Handle(TEvPrivate::TEvSubdomainFailed::TPtr &ev, const TAc
     Counters.Inc(COUNTER_CONFIGURE_SUBDOMAIN_FAILED);
 
     if (tenant->State == TTenant::CREATING_SUBDOMAIN) {
-        YDB_LOG_ERROR_CTX(ctx, "Cannot create subdomain for tenant",
+        YDB_LOG_ERROR_CTX(ctx, "Cannot create subdomain",
             {"tenantPath", tenant->Path},
             {"code", code},
             {"issue", issue});
@@ -3931,7 +3931,7 @@ void TTenantsManager::Handle(TEvPrivate::TEvSubdomainFailed::TPtr &ev, const TAc
                                                          tenant->Worker),
                                ctx);
     } else {
-        YDB_LOG_CRIT_CTX(ctx, "Cannot configure subdomain for tenant",
+        YDB_LOG_CRIT_CTX(ctx, "Cannot configure subdomain",
             {"tenantPath", tenant->Path},
             {"code", code},
             {"issue", issue});
@@ -3949,9 +3949,9 @@ void TTenantsManager::Handle(TEvPrivate::TEvSubdomainCreated::TPtr &ev, const TA
     Y_ABORT_UNLESS(tenant == GetTenant(tenant->Path));
 
     if (tenant->Worker != ev->Sender) {
-        YDB_LOG_DEBUG_CTX(ctx, "Ignoring created subdomain from outdated worker for tenant in state",
+        YDB_LOG_DEBUG_CTX(ctx, "Ignoring created subdomain from outdated worker",
             {"tenantPath", tenant->Path},
-            {"tenantState", tenant->State});
+            {"state", tenant->State});
         return;
     }
 
@@ -3969,9 +3969,9 @@ void TTenantsManager::Handle(TEvPrivate::TEvSubdomainKey::TPtr &ev, const TActor
     Y_ABORT_UNLESS(tenant == GetTenant(tenant->Path));
 
     if (tenant->Worker != ev->Sender) {
-        YDB_LOG_DEBUG_CTX(ctx, "Ignoring subdomain key from outdated worker for tenant in state",
+        YDB_LOG_DEBUG_CTX(ctx, "Ignoring subdomain key from outdated worker",
             {"tenantPath", tenant->Path},
-            {"tenantState", tenant->State});
+            {"state", tenant->State});
         return;
     }
 
@@ -3988,16 +3988,16 @@ void TTenantsManager::Handle(TEvPrivate::TEvSubdomainReady::TPtr &ev, const TAct
 
     // Subdomain configuration might be too late.
     if (tenant->IsRemoving()) {
-        YDB_LOG_DEBUG_CTX(ctx, "Ignoring ready subdomain for tenant in state",
+        YDB_LOG_DEBUG_CTX(ctx, "Ignoring ready subdomain",
             {"tenantPath", tenant->Path},
-            {"tenantState", tenant->State});
+            {"state", tenant->State});
         return;
     }
 
     if (tenant->Worker != ev->Sender) {
-        YDB_LOG_DEBUG_CTX(ctx, "Ignoring ready subdomain from outdated worker for tenant in state",
+        YDB_LOG_DEBUG_CTX(ctx, "Ignoring ready subdomain from outdated worker",
             {"tenantPath", tenant->Path},
-            {"tenantState", tenant->State});
+            {"state", tenant->State});
         return;
     }
 
@@ -4069,7 +4069,7 @@ void TTenantsManager::Handle(TEvTenantSlotBroker::TEvTenantState::TPtr &ev, cons
     auto tenant = GetTenant(path);
     if (!tenant) {
         YDB_LOG_WARN_CTX(ctx, "Got state for missing tenant from Tenant Slot Broker",
-            {"path", path},
+            {"tenantPath", path},
             {"tenantName", rec.GetTenantName()});
         return;
     }
@@ -4095,7 +4095,7 @@ void TTenantsManager::Handle(TEvTenantSlotBroker::TEvTenantState::TPtr &ev, cons
         Counters.Inc(Ydb::StatusIds::SUCCESS, COUNTER_STATUS_RESPONSES);
 
         YDB_LOG_TRACE_CTX(ctx, "Send TEvConsole::TEvGetTenantStatusResponse",
-            {"resp", resp->Record});
+            {"ev", resp->Record.ShortDebugString()});
 
         ctx.Send(req->Sender, resp.Release(), 0, req->Cookie);
     }

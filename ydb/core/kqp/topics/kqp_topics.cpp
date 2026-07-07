@@ -320,6 +320,8 @@ void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs, 
         NPQ::DowngradeToLegacy(*o);
     }
 
+    // One partition operation is either deferred publication or a Topic/Kafka write,
+    // not both. Mixing different APIs in one distributed transaction is not supported.
     if (DeferredPublicationOp_.Defined()) {
         NKikimrPQ::TPartitionOperation* o = t.tx.MutableOperations()->Add();
         o->SetPartitionId(*Partition_);
@@ -747,6 +749,9 @@ void TTopicOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
 
 void TTopicOperations::Merge(const TTopicOperations& rhs)
 {
+    // Merging accumulates operations from the same API within one transaction
+    // (e.g. multiple Topic offset commits). Mixing Topic, Kafka, and DeferredPublication
+    // APIs in one transaction is not supported.
     for (auto& [key, value] : rhs.Operations_) {
         Operations_[key].Merge(value);
     }

@@ -607,6 +607,7 @@ def main():
                     SELECT 
                         test_name,
                         suite_folder,
+                        full_name,
                         owners,
                         is_muted,
                         date,
@@ -620,7 +621,7 @@ def main():
                         AND run_timestamp_last >= Timestamp('{thirty_days_ago_ts}')
                 ) AS owners_t
                 ON 
-                    hist.full_name = owners_t.suite_folder || '/' || owners_t.test_name
+                    hist.full_name = owners_t.full_name
                     AND hist.date_window = owners_t.date
                     AND hist.build_type = owners_t.build_type;
             """

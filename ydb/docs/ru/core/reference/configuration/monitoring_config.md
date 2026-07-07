@@ -7,6 +7,10 @@ monitoring_config:
   # аутентификация на страницах /counters и /healthcheck
   require_counters_authentication: false
   require_healthcheck_authentication: false
+  # список путей, для которых отключена аутентификация
+  disabled_authentication_paths:
+    - /ver
+    - /trace
 ```
 
 ## Аутентификация на страницах мониторинга {#authentication}
@@ -43,5 +47,15 @@ monitoring_config:
 
 {% endnote %}
 
+||
+|| `disabled_authentication_paths` | Список путей встроенного мониторинга, для которых отключается обязательная [аутентификация](../../security/authentication.md) (даже если в [security_config](./security_config.md) включен режим обязательной аутентификации `enforce_user_token_requirement`).
+
+При сопоставлении путей действуют следующие правила:
+- Путь должен совпадать ровно (например, `/ver` или `/trace`).
+- Параметры запроса (query parameters) отсекаются перед сопоставлением (например, запрос `/ver?foo=bar` успешно сопоставится с `/ver`).
+- Подпути не сопоставляются автоматически (например, если отключена аутентификация для `/ver`, то для `/ver/subpath` аутентификация по-прежнему будет требоваться).
+- Префиксы не сопоставляются автоматически (например, `/prefix/ver` по-прежнему потребует аутентификацию).
+
+Значение по умолчанию: пустой список.
 ||
 |#

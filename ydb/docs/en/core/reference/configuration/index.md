@@ -17,7 +17,7 @@ The following top-level configuration sections are available, listed in alphabet
 || [{#T}](blob_storage_config.md) | No | Static cluster group configuration for system tablets ||
 || [{#T}](bridge_config.md) | No | Cluster piles for bridge mode ||
 || [{#T}](client_certificate_authorization.md) | No | Client certificate authentication ||
-|| [{#T}](cms_config.md) | No | Cluster Management System configuration ||
+|| || [{#T}](cms_config.md) | No | Cluster Management System configuration ||
 || [{#T}](domains_config.md) | No | Cluster domain configuration including Blob Storage and State Storage ||
 || [{#T}](feature_flags.md) | No | Feature flags to enable or disable specific {{ ydb-short-name }} features ||
 || [{#T}](healthcheck_config.md) | No | Health check service thresholds and timeout settings ||
@@ -27,6 +27,7 @@ The following top-level configuration sections are available, listed in alphabet
 || [{#T}](kafka.md) | No | [Kafka Proxy](../../reference/kafka-api/index.md) configuration ||
 || [{#T}](log_config.md) | No | Logging configuration and parameters ||
 || [{#T}](memory_controller_config.md) | No | Memory allocation and limits for database components ||
+|| [{#T}](monitoring_config.md) | No | Parameters for [YDB Monitoring](../embedded-ui/ydb-monitoring.md) ||
 || [{#T}](node_broker_config.md) | No | Stable node names configuration ||
 || [{#T}](query_service_config.md) | No | Federated query connector configuration ||
 || [{#T}](resource_broker_config.md) | No | Resource broker for controlling CPU and memory consumption ||

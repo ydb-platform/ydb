@@ -624,9 +624,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         auto checkMultiColumnStatistics = [&](const TSet<TString>& expectedNames) {
             auto descr = DescribePrivatePath(runtime, "/MyRoot/ColumnTable");
-            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            const auto& tableDesc = descr.GetPathDescription().GetColumnTableDescription();
             TSet<TString> names;
-            for (const auto& stat : schema.GetMultiColumnStatistics()) {
+            for (const auto& stat : tableDesc.GetMultiColumnStatistics()) {
                 names.insert(stat.GetName());
                 // column names must be resolved to ids on persist
                 UNIT_ASSERT_VALUES_EQUAL(stat.ColumnNamesSize(), stat.ColumnIdsSize());
@@ -643,8 +643,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         auto checkStatisticsColumns = [&](const TString& statName, const TVector<TString>& expectedColumns) {
             auto descr = DescribePrivatePath(runtime, "/MyRoot/ColumnTable");
-            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
-            for (const auto& stat : schema.GetMultiColumnStatistics()) {
+            const auto& tableDesc = descr.GetPathDescription().GetColumnTableDescription();
+            for (const auto& stat : tableDesc.GetMultiColumnStatistics()) {
                 if (stat.GetName() != statName) {
                     continue;
                 }
@@ -663,8 +663,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "key1" Type: "Uint32" }
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: [ "timestamp" ]
-                MultiColumnStatistics { Name: "s1" ColumnNames: "key1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
             }
+            MultiColumnStatistics { Name: "s1" ColumnNames: "key1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
         )");
         env.TestWaitNotification(runtime, txId);
         checkMultiColumnStatistics({"s1"});
@@ -674,41 +674,35 @@ Y_UNIT_TEST_SUITE(TOlap) {
         checkMultiColumnStatistics({"s1"});
 
         // ADD STATISTICS
+        // A stats-only alter is a SchemeShard-local state change: it completes synchronously
+        // (StatusSuccess), without a shard round-trip (StatusAccepted).
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTable"
-            AlterSchema {
-                UpsertMultiColumnStatistics { Name: "s2" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
-            }
-        )");
+            UpsertMultiColumnStatistics { Name: "s2" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
+        )", {NKikimrScheme::StatusSuccess});
         env.TestWaitNotification(runtime, txId);
         checkMultiColumnStatistics({"s1", "s2"});
 
         // DROP STATISTICS
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTable"
-            AlterSchema {
-                DropMultiColumnStatistics: "s2"
-            }
-        )");
+            DropMultiColumnStatistics: "s2"
+        )", {NKikimrScheme::StatusSuccess});
         env.TestWaitNotification(runtime, txId);
         checkMultiColumnStatistics({"s1"});
 
         // Validation: referencing an unknown column must fail.
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTable"
-            AlterSchema {
-                UpsertMultiColumnStatistics { Name: "bad" ColumnNames: "missing" Types: COUNT_MIN_SKETCH }
-            }
+            UpsertMultiColumnStatistics { Name: "bad" ColumnNames: "missing" Types: COUNT_MIN_SKETCH }
         )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
 
         // True upsert: re-adding an existing name overwrites its definition instead of failing.
         checkStatisticsColumns("s1", {"key1", "data"});
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTable"
-            AlterSchema {
-                UpsertMultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
-            }
-        )");
+            UpsertMultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
+        )", {NKikimrScheme::StatusSuccess});
         env.TestWaitNotification(runtime, txId);
         checkMultiColumnStatistics({"s1"});
         checkStatisticsColumns("s1", {"data"});
@@ -721,9 +715,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         auto checkMultiColumnStatistics = [&](const TString& expectedName) {
             auto descr = DescribePrivatePath(runtime, "/MyRoot/ColumnTableNoTypes");
-            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
-            UNIT_ASSERT_VALUES_EQUAL(schema.MultiColumnStatisticsSize(), 1);
-            const auto& stat = schema.GetMultiColumnStatistics(0);
+            const auto& tableDesc = descr.GetPathDescription().GetColumnTableDescription();
+            UNIT_ASSERT_VALUES_EQUAL(tableDesc.MultiColumnStatisticsSize(), 1);
+            const auto& stat = tableDesc.GetMultiColumnStatistics(0);
             UNIT_ASSERT_VALUES_EQUAL(stat.GetName(), expectedName);
             UNIT_ASSERT_VALUES_EQUAL(stat.TypesSize(), 0);
         };
@@ -736,8 +730,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: [ "timestamp" ]
-                MultiColumnStatistics { Name: "s1" ColumnNames: "data" }
             }
+            MultiColumnStatistics { Name: "s1" ColumnNames: "data" }
         )");
         env.TestWaitNotification(runtime, txId);
         checkMultiColumnStatistics("s1");
@@ -745,18 +739,14 @@ Y_UNIT_TEST_SUITE(TOlap) {
         // ALTER ADD STATISTICS: also with no Types.
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTableNoTypes"
-            AlterSchema {
-                DropMultiColumnStatistics: "s1"
-            }
-        )");
+            DropMultiColumnStatistics: "s1"
+        )", {NKikimrScheme::StatusSuccess});
         env.TestWaitNotification(runtime, txId);
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTableNoTypes"
-            AlterSchema {
-                UpsertMultiColumnStatistics { Name: "s2" ColumnNames: "data" }
-            }
-        )");
+            UpsertMultiColumnStatistics { Name: "s2" ColumnNames: "data" }
+        )", {NKikimrScheme::StatusSuccess});
         env.TestWaitNotification(runtime, txId);
         checkMultiColumnStatistics("s2");
     }

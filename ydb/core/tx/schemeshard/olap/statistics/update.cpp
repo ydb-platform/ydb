@@ -12,9 +12,9 @@ void TOlapMultiColumnStatisticsUpsert::DeserializeFromProto(const NKikimrSchemeO
     }
 }
 
-bool TOlapMultiColumnStatisticsUpdate::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors) {
+bool TOlapMultiColumnStatisticsUpdate::Parse(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) {
     TSet<TString> upsertNames;
-    for (const auto& proto : tableSchema.GetMultiColumnStatistics()) {
+    for (const auto& proto : description.GetMultiColumnStatistics()) {
         TOlapMultiColumnStatisticsUpsert statistics;
         statistics.DeserializeFromProto(proto);
         if (!upsertNames.emplace(statistics.GetName()).second) {
@@ -27,7 +27,7 @@ bool TOlapMultiColumnStatisticsUpdate::Parse(const NKikimrSchemeOp::TColumnTable
     return true;
 }
 
-bool TOlapMultiColumnStatisticsUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
+bool TOlapMultiColumnStatisticsUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTable& alterRequest, IErrorCollector& errors) {
     for (const auto& name : alterRequest.GetDropMultiColumnStatistics()) {
         if (!DropMultiColumnStatistics.emplace(name).second) {
             errors.AddError(NKikimrScheme::StatusInvalidParameter, "Duplicated statistics for drop");

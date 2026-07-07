@@ -38,8 +38,7 @@ public:
 
     bool ApplyUpdate(const TOlapSchema& currentSchema, const TOlapMultiColumnStatisticsUpdate& schemaUpdate, IErrorCollector& errors);
 
-    void Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);
-    void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;
-    bool ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
+    void Parse(const NKikimrSchemeOp::TColumnTableDescription& description);
+    void Serialize(NKikimrSchemeOp::TColumnTableDescription& description) const;
 };
 }

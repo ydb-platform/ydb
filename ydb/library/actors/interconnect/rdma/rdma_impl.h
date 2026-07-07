@@ -6,7 +6,7 @@
 #include "mem_pool.h"
 
 #include <contrib/libs/ibdrv/include/infiniband/verbs.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <library/cpp/monlib/metrics/metric_sub_registry.h>

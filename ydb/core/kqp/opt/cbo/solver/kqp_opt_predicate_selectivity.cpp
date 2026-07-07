@@ -253,7 +253,7 @@ namespace {
             float l = FromString<float>(left);
             float r = FromString<float>(right);
             return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
+        } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
             double l = FromString<double>(left);
             double r = FromString<double>(right);
             return (l < r) ? -1 : (l > r) ? 1 : 0;
@@ -318,7 +318,7 @@ namespace {
             } else if (columnType == "Int64") {
                 i64 val = FromString<i64>(value);
                 return EstimateInequalityPredicateByType<i64>(eqWidthHistogram, val, predicate);
-            } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
+            } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
                 double val = FromString<double>(value);
                 return EstimateInequalityPredicateByType<double>(eqWidthHistogram, val, predicate);
             } else if (columnType == "Date") {
@@ -382,7 +382,7 @@ namespace {
                 i64 leftVal = FromString<i64>(leftValue);
                 i64 rightVal = FromString<i64>(rightValue);
                 return EstimateRangePredicateByType<i64>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
-            } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
+            } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
                 double leftVal = FromString<double>(leftValue);
                 double rightVal = FromString<double>(rightValue);
                 return EstimateRangePredicateByType<double>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
@@ -437,7 +437,7 @@ namespace {
             } else if (columnType == "Float") {
                 float val = FromString<float>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
-            } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
+            } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
                 double val = FromString<double>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
             } else if (columnType == "Date") {
@@ -491,13 +491,25 @@ namespace NKikimr::NKqp {
 
 
 TMaybe<TString> TPredicateSelectivityComputer::GetAttributeType(const TString& attributeName) {
-    if (Stats && Stats->ColumnStatistics) {
-        auto it = Stats->ColumnStatistics->Data.find(attributeName);
-        if (it != Stats->ColumnStatistics->Data.end()) {
-            return it->second.Type;
-        }
+    if (!Stats || !Stats->ColumnStatistics) {
         return Nothing();
     }
+
+    TString columnName = attributeName;
+    if (Lineage) {
+        const auto& mapping = Lineage->Mapping;
+        if (mapping.contains(TInfoUnit(attributeName).GetFullName())) {
+            const auto& entry = mapping.at(TInfoUnit(attributeName).GetFullName());
+            auto infoUnit = TInfoUnit(entry.TableName, entry.ColumnName);
+            columnName = infoUnit.GetFullName();
+        }
+    }
+
+    auto it = Stats->ColumnStatistics->Data.find(columnName);
+    if (it != Stats->ColumnStatistics->Data.end()) {
+        return it->second.Type;
+    }
+
     return Nothing();
 }
 
@@ -517,7 +529,7 @@ double TPredicateSelectivityComputer::ComputeInequalitySelectivity(
         if (IsAttribute(right)) {
             return TWO_COLUMNS_DEFAULT_SELECTIVITY;
         } else if (IsConstantExprWithParams(right.Ptr())) {
-            const TString attributeName = attribute.GetRef();
+            TString attributeName = attribute.GetRef();
             if (!IsConstantExpr(right.Ptr())) {
                 return DefaultInequalitySelectivity(Stats, attributeName);
             }
@@ -529,6 +541,15 @@ double TPredicateSelectivityComputer::ComputeInequalitySelectivity(
                     }
                 }
                 return DefaultInequalitySelectivity(Stats, attributeName);
+            }
+
+            if (Lineage) {
+                const auto& mapping = Lineage->Mapping;
+                if (mapping.contains(TInfoUnit(attributeName).GetFullName())) {
+                    const auto& entry = mapping.at(TInfoUnit(attributeName).GetFullName());
+                    auto infoUnit = TInfoUnit(entry.TableName, entry.ColumnName);
+                    attributeName = infoUnit.GetFullName();
+                }
             }
 
             if (const auto eqWidthHistogram = Stats->ColumnStatistics->Data[attributeName].EqWidthHistogramEstimator) {
@@ -571,7 +592,7 @@ double TPredicateSelectivityComputer::ComputeEqualitySelectivity(
 
         // In case the right side is a constant that can be extracted, compute the selectivity using statistics
         else if (IsConstantExprWithParams(right.Ptr())) {
-            const TString attributeName = attribute.GetRef();
+            TString attributeName = attribute.GetRef();
             if (!IsConstantExpr(right.Ptr())) {
                 return DefaultEqualitySelectivity(Stats, attributeName);
             }
@@ -590,6 +611,15 @@ double TPredicateSelectivityComputer::ComputeEqualitySelectivity(
                     }
                 }
                 return DefaultEqualitySelectivity(Stats, attributeName);
+            }
+
+            if (Lineage) {
+                const auto& mapping = Lineage->Mapping;
+                if (mapping.contains(TInfoUnit(attributeName).GetFullName())) {
+                    const auto& entry = mapping.at(TInfoUnit(attributeName).GetFullName());
+                    auto infoUnit = TInfoUnit(entry.TableName, entry.ColumnName);
+                    attributeName = infoUnit.GetFullName();
+                }
             }
 
             if (const auto countMinSketch = Stats->ColumnStatistics->Data[attributeName].CountMinSketch) {
@@ -775,7 +805,6 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertInequalityToRan
         }
     }
 
-
     return node;
 }
 
@@ -896,6 +925,15 @@ double TPredicateSelectivityComputer::ReComputeEstimation(TString attributeName,
 
     if (!Stats->Nrows) {
         return DefaultEqualitySelectivity(Stats, attributeName); 
+    }
+
+    if (Lineage) {
+        const auto& mapping = Lineage->Mapping;
+        if (mapping.contains(TInfoUnit(attributeName).GetFullName())) {
+            const auto& entry = mapping.at(TInfoUnit(attributeName).GetFullName());
+            auto infoUnit = TInfoUnit(entry.TableName, entry.ColumnName);
+            attributeName = infoUnit.GetFullName();
+        }
     }
 
     // point predicate logic
@@ -1149,10 +1187,8 @@ double TPredicateSelectivityComputer::ComputeSelectivity(const std::shared_ptr<T
     }
 
     else if (node->Operator == ELogicalOperator::Leaf) {
-        TString tableAlias;
         if (node->TableAlias.Defined()) {
             tableAliases.insert(node->TableAlias.GetRef());
-            tableAlias = node->TableAlias.GetRef();
         }
         return node->Selectivity;
     }
@@ -1178,16 +1214,16 @@ double TPredicateSelectivityComputer::ComputeSelectivity(const std::shared_ptr<T
         }
 
         // intersect overlaps and re-compute selectivity
-        for (auto& entry : columnSelectivities) {
-            if (entry.second.size() == 0) {
-
-            } else if (entry.second.size() == 1) {
-                resSelectivity *= ComputeSelectivity(entry.second.front(), tableAliases);
+        for (auto& column : columnSelectivities) {
+            if (column.second.size() == 0) {
+                // do nothing
+            } else if (column.second.size() == 1) {
+                resSelectivity *= ComputeSelectivity(column.second.front(), tableAliases);
             } else {
-                TString columnType = entry.second.front()->ColumnType;
-                TMaybe<TPredicateRange> mergedRange = IntersectOverlappingConjunctions(entry.second, columnType);
+                TString columnType = column.second.front()->ColumnType;
+                TMaybe<TPredicateRange> mergedRange = IntersectOverlappingConjunctions(column.second, columnType);
                 if (mergedRange.Defined()) {
-                    resSelectivity *= ReComputeEstimation(entry.first, mergedRange.GetRef());
+                    resSelectivity *= ReComputeEstimation(column.first, mergedRange.GetRef());
                 } else {
                     // in case of no overlaps, zero selectivity
                     return 0.0;
@@ -1219,21 +1255,21 @@ double TPredicateSelectivityComputer::ComputeSelectivity(const std::shared_ptr<T
         }
 
         // union overlaps and re-compute selectivity
-        for (auto& entry : columnSelectivities) {
-            if (entry.second.size() == 0) {
-
-            } else if (entry.second.size() == 1) {
-                resSelectivity += ComputeSelectivity(entry.second.front(), tableAliases);
+        for (auto& column : columnSelectivities) {
+            if (column.second.size() == 0) {
+                // do nothing
+            } else if (column.second.size() == 1) {
+                resSelectivity += ComputeSelectivity(column.second.front(), tableAliases);
             } else {
-                TString columnType = entry.second.front()->ColumnType;
-                TMaybe<TVector<TPredicateRange>> allMergedRanges = UnionOverlappingDisjunctions(entry.second, columnType);
+                TString columnType = column.second.front()->ColumnType;
+                TMaybe<TVector<TPredicateRange>> allMergedRanges = UnionOverlappingDisjunctions(column.second, columnType);
                 if (allMergedRanges.Defined()) {
                     for (auto& mergedRange : allMergedRanges.GetRef()) {
                         // domain full coverage
                         if (!mergedRange.LeftBound.Defined() && !mergedRange.RightBound.Defined()) {
                             return 1.0;
                         }
-                        resSelectivity += ReComputeEstimation(entry.first, mergedRange);
+                        resSelectivity += ReComputeEstimation(column.first, mergedRange);
                     }
                 } else {
                     // in case of no overlaps, zero selectivity
@@ -1257,8 +1293,10 @@ double TPredicateSelectivityComputer::Compute(const NNodes::TExprBase& input) {
 
     TSet<TString> tableAliases;
     double resSelectivity = ComputeSelectivity(rootNode, tableAliases);
-    if (tableAliases.size() != 1) {
-        YQL_CLOG(TRACE, CoreDq) << "No or multiple table aliases in computing selectivity.";
+    if (tableAliases.size() == 0) {
+        YQL_CLOG(TRACE, CoreDq) << "No table aliases in computing selectivity.";
+    } else if (tableAliases.size() != 1) {
+        YQL_CLOG(TRACE, CoreDq) << "Multiple table aliases in computing selectivity.";
     }
 
     return std::min(1.0, resSelectivity);

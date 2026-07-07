@@ -115,10 +115,11 @@ struct TCgi {
     static const TParam OwnerPathId;
     static const TParam LocalPathId;
     static const TParam IsReadOnlyMode;
-    static const TParam UpdateAccessDatabaseRights;
-    static const TParam UpdateAccessDatabaseRightsDryRun;
-    static const TParam FixAccessDatabaseInheritance;
-    static const TParam FixAccessDatabaseInheritanceDryRun;
+    // Deprecated: connect (ConnectDatabase) right is now always inherited via DefaultInheritanceType.
+    // static const TParam UpdateAccessDatabaseRights;
+    // static const TParam UpdateAccessDatabaseRightsDryRun;
+    // static const TParam FixAccessDatabaseInheritance;
+    // static const TParam FixAccessDatabaseInheritanceDryRun;
     static const TParam Page;
     static const TParam BuildIndexId;
     static const TParam UpdateCoordinatorsConfig;
@@ -161,10 +162,11 @@ const TCgi::TParam TCgi::ShardID = TStringBuf("ShardID");
 const TCgi::TParam TCgi::OwnerPathId = TStringBuf("OwnerPathId");
 const TCgi::TParam TCgi::LocalPathId = TStringBuf("LocalPathId");
 const TCgi::TParam TCgi::IsReadOnlyMode = TStringBuf("IsReadOnlyMode");
-const TCgi::TParam TCgi::UpdateAccessDatabaseRights = TStringBuf("UpdateAccessDatabaseRights");
-const TCgi::TParam TCgi::UpdateAccessDatabaseRightsDryRun = TStringBuf("UpdateAccessDatabaseRightsDryRun");
-const TCgi::TParam TCgi::FixAccessDatabaseInheritance = TStringBuf("FixAccessDatabaseInheritance");
-const TCgi::TParam TCgi::FixAccessDatabaseInheritanceDryRun = TStringBuf("FixAccessDatabaseInheritanceDryRun");
+// Deprecated: connect (ConnectDatabase) right is now always inherited via DefaultInheritanceType.
+// const TCgi::TParam TCgi::UpdateAccessDatabaseRights = TStringBuf("UpdateAccessDatabaseRights");
+// const TCgi::TParam TCgi::UpdateAccessDatabaseRightsDryRun = TStringBuf("UpdateAccessDatabaseRightsDryRun");
+// const TCgi::TParam TCgi::FixAccessDatabaseInheritance = TStringBuf("FixAccessDatabaseInheritance");
+// const TCgi::TParam TCgi::FixAccessDatabaseInheritanceDryRun = TStringBuf("FixAccessDatabaseInheritanceDryRun");
 const TCgi::TParam TCgi::Page = TStringBuf("Page");
 const TCgi::TParam TCgi::BuildIndexId = TStringBuf("BuildIndexId");
 const TCgi::TParam TCgi::UpdateCoordinatorsConfig = TStringBuf("UpdateCoordinatorsConfig");
@@ -628,6 +630,9 @@ private:
             Self->IsReadOnlyMode = value;
         }
 
+        // Deprecated: connect (ConnectDatabase) right is now always inherited via DefaultInheritanceType.
+        // These admin actions (UpdateAccessDatabaseRights / FixAccessDatabaseInheritance) are no longer available.
+        /*
         if (cgi.Has(TCgi::UpdateAccessDatabaseRights)) {
             TString rowDryRunStr = cgi.Get(TCgi::UpdateAccessDatabaseRightsDryRun);
             auto valueDryRun = FromStringWithDefault<ui64>(rowDryRunStr, ui64(1));
@@ -731,6 +736,7 @@ private:
 
             return;
         }
+        */
 
         if (cgi.Has(TCgi::UpdateCoordinatorsConfig)) {
             TString rawDryRunStr = cgi.Get(TCgi::UpdateCoordinatorsConfigDryRun);
@@ -1031,6 +1037,9 @@ private:
             str << "</div>";
             str << "</form>" << Endl;
         }
+        // Deprecated: connect (ConnectDatabase) right is now always inherited via DefaultInheritanceType.
+        // These admin sections (UpdateAccessDatabaseRights / FixAccessDatabaseInheritance) are no longer shown.
+        /*
         {
             str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\" class=\"form-group\">" << Endl;
             str << "<legend> Execute upgrade DB's ACL, grant ACCESS to all existed users: </legend>";
@@ -1055,6 +1064,7 @@ private:
             str << "</div>";
             str << "</form>" << Endl;
         }
+        */
         {
             str << "<form method=\"GET\" id=\"tblMonSSFrmUpdateCoordinatorsConfig\" name=\"tblMonSSFrmUpdateCoordinatorsConfig\" class=\"form-group\">" << Endl;
             str << "<legend> Send configuration update to all coordinators: </legend>";

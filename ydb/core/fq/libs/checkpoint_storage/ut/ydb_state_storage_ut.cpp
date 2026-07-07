@@ -12,7 +12,7 @@
 #include <google/protobuf/util/message_differencer.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
-#include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NFq {
 
@@ -139,7 +139,7 @@ public:
                 UNIT_ASSERT_VALUES_EQUAL(state1.Data.size(), state2.Data.size());
                 return true;
             }));
-        
+
         UNIT_ASSERT_VALUES_EQUAL(state1.Sinks.size(), state2.Sinks.size());
         UNIT_ASSERT(std::equal(std::begin(state1.Sinks), std::end(state1.Sinks), std::begin(state2.Sinks), std::end(state2.Sinks),
             [](const NYql::NDq::TSinkState& state1, const NYql::NDq::TSinkState& state2) {
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
 
     Y_UNIT_TEST_F(ShouldSaveGetIncrementBigState, TFixture)
     {
-        ShouldSaveGetStateImpl("ShouldSaveGetIncrementState", MakeIncrementState(YdbRowSizeLimit * 5));    
+        ShouldSaveGetStateImpl("ShouldSaveGetIncrementState", MakeIncrementState(YdbRowSizeLimit * 5));
     }
 
     Y_UNIT_TEST_F(ShouldNotGetNonExistendState, TFixture)
@@ -344,7 +344,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
     Y_UNIT_TEST_F(ShouldGetMultipleStates, TFixture)
     {
         auto storage = GetStateStorage("TStateStorageTestShouldGetMultipleStates");
-    
+
         auto state1 = MakeStateFromBlob(10);
         auto state2 = MakeIncrementState(10);
         auto state3 = MakeStateFromBlob(YdbRowSizeLimit * 6);

@@ -2693,7 +2693,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(RestoreViewToDifferentDatabase) {
         TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableShowCreate(true);
 
         constexpr const char* alice = "/Root/tenants/alice";
         constexpr const char* bob = "/Root/tenants/bob";
@@ -3286,7 +3285,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestSystemViewBackupRestore() {
         NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableShowCreate(true);
         TKikimrWithGrpcAndRootSchema server(config);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TSchemeClient schemeClient(driver);
@@ -3371,6 +3369,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeInvalid:
             case EPathTypeBackupCollection:
             case EPathTypeBlobDepot:
+            case EPathTypeTestShardSet:
                 break; // not applicable
             case EPathTypeRtmrVolume:
             case EPathTypeBlockStoreVolume:
@@ -3420,7 +3419,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
 
         NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableShowCreate(true);
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
 
@@ -3530,7 +3528,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     Y_UNIT_TEST(TestReplaceRestoreOptionOnNonExistingSchemeObjects) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
-        config.MutableFeatureFlags()->SetEnableShowCreate(true);
         TKikimrWithGrpcAndRootSchema server(config);
 
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
@@ -3948,7 +3945,6 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                     appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableJsonIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableCsDictionaryEncoding(true);
-                    appConfig.MutableFeatureFlags()->SetEnableShowCreate(true);
                     appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
                     return appConfig;
                 }())
@@ -4698,6 +4694,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EPathTypeInvalid:
             case EPathTypeBackupCollection:
             case EPathTypeBlobDepot:
+            case EPathTypeTestShardSet:
+                break; // not applicable
             case EPathTypeRtmrVolume:
             case EPathTypeBlockStoreVolume:
             case EPathTypeSolomonVolume:

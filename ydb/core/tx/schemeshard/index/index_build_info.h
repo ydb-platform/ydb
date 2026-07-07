@@ -50,6 +50,7 @@ struct TIndexBuildShardStatus {
 };
 
 struct TValidateColumnConstraintShardStatus : TIndexBuildShardStatus {
+    using TIndexBuildShardStatus::TIndexBuildShardStatus;
     NKikimrSetColumnConstraint::EValidateStatus ValidateStatus = NKikimrSetColumnConstraint::EValidateStatus::INVALID;
 };
 
@@ -110,6 +111,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         FulltextIndexStats = 200,
         FulltextIndexDictionary = 201,
         FulltextIndexBorders = 202,
+        // Compact rowid-mode prepass: build the transient "row-id source" table (main re-keyed by the
+        // dense seq) that the posting scan then reads so doc ids arrive ascending and densely packed.
+        FulltextRowIdSrc = 203,
     };
 
     struct TColumnBuildInfo {
@@ -821,6 +825,16 @@ public:
             IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact);
     }
 
+    // A compact fulltext build that uses __ydb_row_id as the doc id: it runs a prepass building the
+    // transient row-id source table, then the posting scan reads that (__ydb_row_id-ordered) table.
+    bool IsBuildFulltextCompactRowId() const {
+        if (!IsBuildFulltextCompact()) {
+            return false;
+        }
+        const auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&SpecializedIndexDescription);
+        return desc && desc->GetUseRowIdAsDocId();
+    }
+
     bool IsBuildIndex() const {
         return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildVectorIndex() || IsBuildFulltextIndex();
     }
@@ -981,7 +995,7 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     };
 
     EOperationState OperationState = EOperationState::Invalid;
-    std::vector<std::string> SetNotNullColumns;
+    std::vector<TString> SetNotNullColumns;
 
     TTxId LockNullWritesTxId = TTxId();
     NKikimrScheme::EStatus LockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
@@ -991,14 +1005,12 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     NKikimrScheme::EStatus UnlockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
     bool UnlockNullWritesTxDone = false;
 
+    bool NeedToCalculateValidationShards = true;
     THashMap<TShardIdx, TValidateColumnConstraintShardStatus> ValidationShards;
 
     TDeque<TShardIdx> ToValidateShards;
     THashSet<TShardIdx> InProgressValidationShards;
-    TVector<TShardIdx> DoneValidationShards;
-
-    TTxId ValidationSnapshotTxId = TTxId();
-    TStepId ValidationSnapshotStep = TStepId();
+    THashSet<TShardIdx> DoneValidationShards;
 
     constexpr static ui32 MaxInProgressValidationShards = 10;
 

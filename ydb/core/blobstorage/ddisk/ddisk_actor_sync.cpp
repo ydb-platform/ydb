@@ -9,8 +9,10 @@
 namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(TEvSync::TPtr ev) {
-        STLOG(PRI_TRACE, BS_DDISK, BSDD22,
-            "TDDiskActor::HandleSync", (DDiskId, DDiskId), (Msg, ev->Get()->Record));
+        YDB_LOG_TRACE_COMP(BS_DDISK, "TDDiskActor::HandleSync",
+            {"marker", "BSDD22"},
+            {"DDiskId", DDiskId},
+            {"msg", ev->Get()->Record});
 
         auto& counters = Counters.Interface.Sync;
         if (!CheckQuery(*ev, &counters)) {
@@ -40,10 +42,9 @@ namespace NKikimr::NDDisk {
         };
 
         auto reject = [&](NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorReason) {
-            LOG_DEBUG_S(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK,
-                "TDDiskActor::HandleSync reject"
-                << " reason# " << errorReason
-                << " DDiskId# " << DDiskId);
+            YDB_LOG_DEBUG_CTX_COMP(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK, "TDDiskActor::HandleSync reject",
+                {"reason", errorReason},
+                {"DDiskId", DDiskId});
             cleanupSyncState();
             counters.Reply(false);
             SendReply(*ev, std::make_unique<TEvSyncResult>(status, std::move(errorReason)));
@@ -232,9 +233,11 @@ namespace NKikimr::NDDisk {
 
     template <typename TEventPtr>
     void TDDiskActor::InternalSyncReadResult(TEventPtr ev) {
-        STLOG(PRI_TRACE, BS_DDISK, BSDD26,
-            "TDDiskActor::InternalSyncReadResult", (DDiskId, DDiskId),
-            (Cookie, ev->Cookie), (Msg, ev->Get()->Record));
+        YDB_LOG_TRACE_COMP(BS_DDISK, "TDDiskActor::InternalSyncReadResult",
+            {"marker", "BSDD26"},
+            {"DDiskId", DDiskId},
+            {"cookie", ev->Cookie},
+            {"msg", ev->Get()->Record});
 
         ui64 syncId = SegmentManager.GetSync(ev->Cookie);
 
@@ -242,10 +245,10 @@ namespace NKikimr::NDDisk {
             if (SyncReadCookiesInFlight.erase(ev->Cookie)) {
                 return;
             }
-            STLOG(PRI_ERROR, BS_DDISK, BSDD24,
-                "TDDiskActor::InternalSyncReadResult unknown sync for cookie",
-                (DDiskId, DDiskId),
-                (Cookie, ev->Cookie));
+            YDB_LOG_ERROR_COMP(BS_DDISK, "TDDiskActor::InternalSyncReadResult unknown sync for cookie",
+                {"marker", "BSDD24"},
+                {"DDiskId", DDiskId},
+                {"cookie", ev->Cookie});
             return;
         }
 
@@ -258,13 +261,13 @@ namespace NKikimr::NDDisk {
 
         if (ev->Cookie < sync.FirstRequestId || ev->Cookie >= sync.FirstRequestId + sync.Requests.size()) {
             SyncReadCookiesInFlight.erase(ev->Cookie);
-            STLOG(PRI_ERROR, BS_DDISK, BSDD25,
-                "TDDiskActor::InternalSyncReadResult request cookie out of range",
-                (DDiskId, DDiskId),
-                (Cookie, ev->Cookie),
-                (SyncId, syncId),
-                (FirstRequestId, sync.FirstRequestId),
-                (RequestsCount, sync.Requests.size()));
+            YDB_LOG_ERROR_COMP(BS_DDISK, "TDDiskActor::InternalSyncReadResult request cookie out of range",
+                {"marker", "BSDD25"},
+                {"DDiskId", DDiskId},
+                {"cookie", ev->Cookie},
+                {"syncId", syncId},
+                {"firstRequestId", sync.FirstRequestId},
+                {"requestsCount", sync.Requests.size()});
             return;
         }
         auto& request = sync.Requests[ev->Cookie - sync.FirstRequestId];
@@ -282,13 +285,12 @@ namespace NKikimr::NDDisk {
                 << request.Selector.OffsetInBytes + request.Selector.Size
                 << "] failed to read; reason: " << record.GetErrorReason();
             sync.ErrorReason << "[request_idx=" << ev->Cookie - sync.FirstRequestId << "] failed to read; ";
-            LOG_DEBUG_S(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK,
-                "TDDiskActor::InternalSyncReadResult read failed"
-                << " DDiskId# " << DDiskId
-                << " Cookie# " << ev->Cookie
-                << " SyncId# " << syncId
-                << " Status# " << static_cast<int>(record.GetStatus())
-                << " ErrorReason# " << record.GetErrorReason());
+            YDB_LOG_DEBUG_CTX_COMP(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK, "TDDiskActor::InternalSyncReadResult read failed",
+                {"DDiskId", DDiskId},
+                {"cookie", ev->Cookie},
+                {"syncId", syncId},
+                {"status", static_cast<int>(record.GetStatus())},
+                {"errorReason", record.GetErrorReason()});
             if (--sync.RequestsInFlight == 0) {
                 ReplySync(it);
             }
@@ -315,14 +317,13 @@ namespace NKikimr::NDDisk {
         ui64 cuttedFromData = request.Selector.OffsetInBytes;
         request.SegmentsInFlight = segments.size();
 
-        LOG_DEBUG_S(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK,
-            "TDDiskActor::InternalSyncReadResult writing segments"
-            << " DDiskId# " << DDiskId
-            << " Cookie# " << ev->Cookie
-            << " SyncId# " << syncId
-            << " ChunkIdx# " << chunkRef.ChunkIdx
-            << " SegmentsInFlight# " << request.SegmentsInFlight
-            << " DataSize# " << data.size());
+        YDB_LOG_DEBUG_CTX_COMP(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK, "TDDiskActor::InternalSyncReadResult writing segments",
+            {"DDiskId", DDiskId},
+            {"cookie", ev->Cookie},
+            {"syncId", syncId},
+            {"chunkIdx", chunkRef.ChunkIdx},
+            {"segmentsInFlight", request.SegmentsInFlight},
+            {"dataSize", data.size()});
 
         // TODO: don't flush each time, write as a single op?
         for (auto& [begin, end] : segments) {

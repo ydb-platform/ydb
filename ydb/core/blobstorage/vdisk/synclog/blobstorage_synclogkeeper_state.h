@@ -98,13 +98,17 @@ namespace NKikimr {
 
             // Add flags from cut sync log snapshot
             void FinishPhantomFlagStorageBuilder(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds);
-            void RecoverPhantomFlagStorage(TPhantomFlagStorageSnapshot&& snapshot);
+            void RecoverPhantomFlagStorage(TPhantomFlagThresholds&& thresholdsBatch, bool eof);
             void RequestPhantomFlagStorageSnapshot(TEvPhantomFlagStorageGetSnapshot::TPtr request) const;
+            // Re-issue snapshot request to the persistent processor (used during
+            // streaming recovery to fetch the next chunk).
+            void ContinuePhantomFlagStorageSnapshot(std::unique_ptr<TEvPhantomFlagStorageGetSnapshot> request) const;
             void UpdatePhantomFlagStorageData(std::optional<TPhantomFlagStorageData>&& data);
             void RetireExtractedChunks(const std::vector<ui32>& chunkIdxs);
             void ProcessLocalSyncData(ui32 orderNumber, const TString& data);
 
             void UpdateMetrics();
+            void UpdateAtomics(TInstant now);
 
             TVector<ui32> GetChunksToForget() {
                 return std::exchange(ChunksToForget, {});
@@ -154,6 +158,7 @@ namespace NKikimr {
             TMemorizableControlWrapper EnablePhantomFlagStorage;
             bool EnablePersistentPhantomFlagStorage;
             TMemorizableControlWrapper PhantomFlagStorageLimit;
+            TMemorizableControlWrapper VolatilePhantomFlagStorageBlobSizeLimit;
 
             ui32 SelfOrderNumber;
 

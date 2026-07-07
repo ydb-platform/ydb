@@ -40,7 +40,7 @@ public:
     TString Print() override;
 
 private:
-    void SendIndirectWriteRequest();
+    void SendIndirectWriteRequest(THostMask hosts);
     void OnIndirectWriteResponse(
         const TDBGWriteBlocksToManyPBuffersResponse& response);
     void SendAdditionalDirectWrites();
@@ -58,7 +58,7 @@ private:
     void Reply(NProto::TError error);
     void NotifyBelated(THostMask completedOnCurrentResponse);
 
-    void ScheduleHedging();
+    void ScheduleHedging(TDuration hedgingDelay);
     void ScheduleRequestTimeout();
     void OnHedgingTimeout();
     void OnRequestTimeout();
@@ -76,7 +76,6 @@ private:
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const TWriteRequestBundlePtr Bundle;
-    const TDuration HedgingDelay;
     const TDuration RequestTimeout;
     const TDuration IndirectWriteReplyTimeout;
 

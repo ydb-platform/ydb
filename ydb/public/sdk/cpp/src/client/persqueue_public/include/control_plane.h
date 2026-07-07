@@ -42,6 +42,53 @@ private:
     Ydb::PersQueue::V1::Credentials Credentials_;
 };
 
+struct TSharedConsumerDeadLetterPolicySettings {
+    using TSelf = TSharedConsumerDeadLetterPolicySettings;
+
+    enum class EAction {
+        Unspecified = 0,
+        Move = 1,
+        Delete = 2,
+    };
+
+    FLUENT_SETTING_DEFAULT(bool, Enabled, false);
+    FLUENT_SETTING_DEFAULT(ui32, MaxProcessingAttempts, 0);
+    FLUENT_SETTING(std::string, DeadLetterQueue);
+    FLUENT_SETTING_DEFAULT(EAction, Action, EAction::Unspecified);
+
+    bool GetEnabled() const { return Enabled_; }
+    ui32 GetMaxProcessingAttempts() const { return MaxProcessingAttempts_; }
+    const std::string& GetDeadLetterQueue() const { return DeadLetterQueue_; }
+    EAction GetAction() const { return Action_; }
+
+    TSelf& DeleteAction() {
+        Action_ = EAction::Delete;
+        return *this;
+    }
+
+    TSelf& MoveAction(const std::string& deadLetterQueue) {
+        Action_ = EAction::Move;
+        DeadLetterQueue_ = deadLetterQueue;
+        return *this;
+    }
+};
+
+struct TSharedConsumerSettings {
+    using TSelf = TSharedConsumerSettings;
+
+    FLUENT_SETTING_DEFAULT(bool, KeepMessagesOrder, false);
+    FLUENT_SETTING_DEFAULT(TDuration, DefaultProcessingTimeout, TDuration::Zero());
+    FLUENT_SETTING_DEFAULT(TDuration, ReceiveMessageWaitTime, TDuration::Zero());
+    FLUENT_SETTING_DEFAULT(TDuration, ReceiveMessageDelay, TDuration::Zero());
+    FLUENT_SETTING(TSharedConsumerDeadLetterPolicySettings, DeadLetterPolicy);
+
+    bool GetKeepMessagesOrder() const { return KeepMessagesOrder_; }
+    TDuration GetDefaultProcessingTimeout() const { return DefaultProcessingTimeout_; }
+    TDuration GetReceiveMessageWaitTime() const { return ReceiveMessageWaitTime_; }
+    TDuration GetReceiveMessageDelay() const { return ReceiveMessageDelay_; }
+    const TSharedConsumerDeadLetterPolicySettings& GetDeadLetterPolicy() const { return DeadLetterPolicy_; }
+};
+
 
 // Result for describe resource request.
 struct TDescribeTopicResult : public TStatus {
@@ -65,6 +112,7 @@ struct TDescribeTopicResult : public TStatus {
             }
             GETTER(ui32, Version);
             GETTER(std::string, ServiceType);
+            const std::optional<TSharedConsumerSettings>& SharedConsumer() const { return SharedConsumer_; }
 
         private:
             std::string ConsumerName_;
@@ -75,6 +123,7 @@ struct TDescribeTopicResult : public TStatus {
             std::vector<ECodec> SupportedCodecs_;
             ui32 Version_;
             std::string ServiceType_;
+            std::optional<TSharedConsumerSettings> SharedConsumer_;
         };
 
         struct TRemoteMirrorRule {
@@ -190,6 +239,9 @@ struct TReadRuleSettings {
 
     FLUENT_SETTING_DEFAULT(ui32, Version, 0);
     FLUENT_SETTING(std::string, ServiceType);
+    FLUENT_SETTING_OPTIONAL(TSharedConsumerSettings, SharedConsumer);
+
+    const std::optional<TSharedConsumerSettings>& GetSharedConsumer() const { return SharedConsumer_; }
 
     TReadRuleSettings& SetSettings(const TDescribeTopicResult::TTopicSettings::TReadRule& settings) {
         ConsumerName_ = settings.ConsumerName();
@@ -203,6 +255,10 @@ struct TReadRuleSettings {
         }
         Version_ = settings.Version();
         ServiceType_ = settings.ServiceType();
+        SharedConsumer_.reset();
+        if (const auto& sharedConsumer = settings.SharedConsumer()) {
+            SharedConsumer_ = sharedConsumer;
+        }
         return *this;
     }
 

@@ -34,6 +34,9 @@ message TIndexPortionMeta {
     optional TPKBordersV1 PrimaryKeyBordersV1 = 18;
     optional uint32 NumSlices = 19;
 
+    // Index blob bytes that physically live in blob storage
+    optional uint32 BsIndexBlobBytes = 20;
+
     message TWrittenPortion {
     }
 

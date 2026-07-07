@@ -14,6 +14,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/object_factory/object_factory.h>
 
+#include <algorithm>
 #include <utility>
 
 namespace NKikimr::NOlap {
@@ -42,12 +43,15 @@ private:
     }
 
 public:
+    TOptimizationPriority() = default;
+
     void Mul(const ui32 kff) {
         InternalLevelWeight *= kff;
     }
 
     ui64 GetGeneralPriority() const {
-        return ((ui64)Level << 56) + InternalLevelWeight;
+        const ui64 packedLevel = Level < 0 ? 0 : (ui64)std::min<i64>(Level, 255);
+        return (packedLevel << 56) + InternalLevelWeight;
     }
 
     bool operator<(const TOptimizationPriority& item) const {
@@ -58,6 +62,10 @@ public:
         return !Level && !InternalLevelWeight;
     }
 
+    bool IsZeroLevel() const {
+        return !Level;
+    }
+
     bool IsCritical() const {
         return Level >= 10;
     }
@@ -66,16 +74,19 @@ public:
         return TStringBuilder() << "(" << Level << "," << InternalLevelWeight << ")";
     }
 
-    static TOptimizationPriority Normalize(ui64 min, ui64 max, ui64 weight) {
-        if (weight >= max) {
-            return TOptimizationPriority(10, weight);
-        }
+    // Scale both Level and InternalLevelWeight by (100 + percent)%. Unlike Inc(), which bumps only the
+    // Level and leaves the weight stale (so the ceiling lands below its own level band and the weight
+    // tiebreak trips almost immediately), this keeps the ceiling internally consistent and yields a
+    // headroom that is proportional to the current backlog.
+    TOptimizationPriority IncPercent(const ui32 percent) const {
+        return TOptimizationPriority(Level + Level * (i64)percent / 100, InternalLevelWeight + InternalLevelWeight * (i64)percent / 100);
+    }
 
+    static TOptimizationPriority Normalize(ui64 min, ui64 max, ui64 weight) {
         if (weight < min) {
             return TOptimizationPriority(0, weight);
         }
 
-        // Never triggers, because if min < max one of two ifs must trigger
         AFL_VERIFY(min < max);
 
         ui64 range = max - min;

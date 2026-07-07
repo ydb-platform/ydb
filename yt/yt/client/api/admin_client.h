@@ -84,7 +84,7 @@ struct TWriteCoreDumpOptions
 struct TWriteLogBarrierOptions
     : public TTimeoutOptions
 {
-    TString Category;
+    std::string Category;
 };
 
 struct TWriteOperationControllerCoreDumpOptions
@@ -94,8 +94,8 @@ struct TWriteOperationControllerCoreDumpOptions
 struct THealExecNodeOptions
     : public TTimeoutOptions
 {
-    std::vector<TString> Locations;
-    std::vector<TString> AlertTypesToReset;
+    std::vector<std::string> Locations;
+    std::vector<std::string> AlertTypesToReset;
     bool ForceReset = false;
 };
 
@@ -211,7 +211,7 @@ struct TCollectCoverageOptions
 
 struct TCollectCoverageResult
 {
-    TString CoverageMap;
+    std::string CoverageMap;
 };
 
 struct TFreezeHydraPeerOptions

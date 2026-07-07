@@ -2,10 +2,12 @@
 
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
-#include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::STREAMS_STORAGE_SERVICE
 
 namespace NFq {
 
@@ -80,7 +82,8 @@ void TActorGC::Bootstrap()
 {
     Become(&TActorGC::StateFunc);
 
-    LOG_STREAMS_STORAGE_SERVICE_INFO("Successfully bootstrapped storage GC " << SelfId());
+    YDB_LOG_INFO("Successfully bootstrapped storage GC",
+        {"actorId", SelfId()});
 }
 
 void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
@@ -89,11 +92,13 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
     const auto& graphId = event->CoordinatorId.GraphId;
     const auto& checkpointUpperBound = event->CheckpointId;
 
-    LOG_STREAMS_STORAGE_SERVICE_DEBUG("GC received upperbound checkpoint " << checkpointUpperBound
-        << " for graph '" << graphId << "'");
+    YDB_LOG_DEBUG("GC received upperbound checkpoint for graph",
+        {"checkpointUpperBound", checkpointUpperBound},
+        {"graphId", graphId});
 
     if (event->Type != NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT) {
-        LOG_STREAMS_STORAGE_SERVICE_DEBUG("GC skip increment checkpoint for graph '" << graphId << "'");
+        YDB_LOG_DEBUG("GC skip increment checkpoint for graph",
+            {"graphId", graphId});
         return;
     }
 
@@ -118,7 +123,7 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
                 ss << "GC failed to mark checkpoints of graph '" << context->GraphId
                    << "' up to " << context->UpperBound << ", issues:";
                 issues.PrintTo(ss);
-                LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, ss.Str());
+                YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
                 context->Stage = TContext::StageFailed;
                 return future;
             }
@@ -139,7 +144,7 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
                 ss << "GC failed to delete states of checkpoints of graph '" << context->GraphId
                    << "' up to " << context->UpperBound << ", issues:";
                 issues.PrintTo(ss);
-                LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, ss.Str());
+                YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
                 context->Stage = TContext::StageFailed;
                 return future;
             }
@@ -160,14 +165,14 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
                 ss << "GC failed to delete marked checkpoints of graph '" << context->GraphId
                    << "' up to " << context->UpperBound << ", issues:";
                 issues.PrintTo(ss);
-                LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, ss.Str());
+                YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
                 context->Stage = TContext::StageFailed;
                 return future;
             }
             TStringStream ss;
             ss << "GC deleted checkpoints of graph '" << context->GraphId
                << "' up to " << context->UpperBound;
-            LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, ss.Str());
+            YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
             return future;
         });
 }

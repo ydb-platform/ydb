@@ -64,6 +64,10 @@ private:
     }
 
     bool CanReplaceOnHybrid(const TYtOutputOpBase& operation) const {
+        if (operation.DataSink().Cluster().Value() == YtUnspecifiedCluster) {
+            // wait until runtime cluster is assigned
+            return false;
+        }
         const TStringBuf nodeName = operation.Raw()->Content();
         if (!State_->IsHybridEnabledForCluster(operation.DataSink().Cluster().Value())) {
             PushSkipStat("DisabledCluster", nodeName);

@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "cluster_directory.h"
 #endif
-#undef CLUSTER_DIRECTORY_INL_H_
 
 #include "private.h"
 #include "config.h"

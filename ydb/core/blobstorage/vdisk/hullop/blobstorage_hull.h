@@ -41,6 +41,10 @@ namespace NKikimr {
         struct TFields;
         std::unique_ptr<TFields> Fields;
 
+        ui64 LogoBlobSyncDataSizeInFlight = 0;
+        ui64 BlockSyncDataSizeInFlight = 0;
+        ui64 BarrierSyncDataSizeInFlight = 0;
+
         void ValidateWriteQuery(const TActorContext &ctx, const TLogoBlobID &id, bool issueKeepFlag,
             bool *writtenBeyondBarrier);
 
@@ -204,6 +208,13 @@ namespace NKikimr {
                 TFreshBatch &&freshBatch,
                 const TLsnSeg &seg,
                 const TReplySender &replySender);
+
+        void AddLocalSyncDataInFlight(ui64 logoBlobsSize, ui64 blocksSize, ui64 barriersSize);
+        void RemoveLocalSyncDataInFlight(ui64 logoBlobsSize, ui64 blocksSize, ui64 barriersSize);
+
+        ui64 GetLogoBlobSyncDataSizeInFlight() const { return LogoBlobSyncDataSizeInFlight; }
+        ui64 GetBlockSyncDataSizeInFlight() const { return BlockSyncDataSizeInFlight; }
+        ui64 GetBarrierSyncDataSizeInFlight() const { return BarrierSyncDataSizeInFlight; }
 
         ///////////////// STATUS REQUEST ////////////////////////////////////////////
         void StatusRequest(const TActorContext &ctx, TEvLocalStatusResult *result);

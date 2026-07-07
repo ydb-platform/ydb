@@ -381,19 +381,19 @@ public:
                 ResponseHandle = ev.Release();
             } else {
                 // Response has no result sets. Forward to main pipeline
-                Callback(Promise, std::move(*ev->Get()));
+                Callback(std::move(Promise), std::move(*ev->Get()));
                 this->Die(ctx);
             }
         } else {
             // Forward error to main pipeline
-            Callback(Promise, std::move(*ev->Get()));
+            Callback(std::move(Promise), std::move(*ev->Get()));
             this->Die(ctx);
         }
     }
 
     void Handle(NKqp::TEvKqp::TEvDataQueryStreamPartAck::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
-        Callback(Promise, std::move(*ResponseHandle->Get()));
+        Callback(std::move(Promise), std::move(*ResponseHandle->Get()));
         this->Die(ctx);
     }
 
@@ -913,10 +913,6 @@ public:
             });
 
         return tablePromise.GetFuture();
-    }
-
-    TFuture<TGenericResult> SetConstraint(const TString&, TVector<NYql::TSetColumnConstraintSettings>&&) override {
-        return NotImplemented<TGenericResult>();
     }
 
     TFuture<TGenericResult> AlterDatabase(const TString&, const NYql::TAlterDatabaseSettings&) override {

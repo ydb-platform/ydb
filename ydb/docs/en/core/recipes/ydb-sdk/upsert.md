@@ -1,8 +1,152 @@
-# Inserting data
+# Upsert data
 
-Below are examples of using the {{ ydb-short-name }} SDK built-in tools to perform inserts:
+Below are code examples of using the built-in upsert tools of the {{ ydb-short-name }} SDK:
 
 {% list tabs %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void UpsertSeries(NYdb::NQuery::TQueryClient& client) {
+      NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync(
+          [](NYdb::NQuery::TSession session) {
+              constexpr auto query = R"(
+                  DECLARE $seriesData AS List<Struct<
+                      series_id: Uint64,
+                      title: Utf8,
+                      series_info: Utf8,
+                      comment: Optional<Utf8>
+                  >>;
+
+                  UPSERT INTO series
+                  (
+                      series_id,
+                      title,
+                      series_info,
+                      comment
+                  )
+                  SELECT
+                      series_id,
+                      title,
+                      series_info,
+                      comment
+                  FROM AS_TABLE($seriesData);
+              )";
+
+              auto params = NYdb::TParamsBuilder()
+                  .AddParam("$seriesData")
+                      .BeginList()
+                      .AddListItem()
+                          .BeginStruct()
+                          .AddMember("series_id").Uint64(1)
+                          .AddMember("title").Utf8("IT Crowd")
+                          .AddMember("series_info").Utf8(
+                              "The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by "
+                              "Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry.")
+                          .AddMember("comment").OptionalUtf8(std::nullopt)
+                          .EndStruct()
+                      .AddListItem()
+                          .BeginStruct()
+                          .AddMember("series_id").Uint64(2)
+                          .AddMember("title").Utf8("Silicon Valley")
+                          .AddMember("series_info").Utf8(
+                              "Silicon Valley is an American comedy television series created by Mike Judge, John Altschuler and "
+                              "Dave Krinsky. The series focuses on five young men who founded a startup company in Silicon Valley.")
+                          .AddMember("comment").OptionalUtf8("lorem ipsum")
+                          .EndStruct()
+                      .EndList()
+                      .Build()
+                  .Build();
+
+              return session.ExecuteQuery(
+                  query,
+                  NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
+                  params).GetValueSync();
+          },
+          NYdb::NQuery::TRetryOperationSettings()
+              .Idempotent(true)
+      ));
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/io/supported_types.hpp>
+    #include <userver/ydb/table.hpp>
+
+    struct SeriesData final {
+        std::uint64_t series_id;
+        ydb::Utf8 title;
+        ydb::Utf8 series_info;
+        std::optional<ydb::Utf8> comment;
+    };
+
+    void UpsertSeries(ydb::TableClient& client) {
+        auto builder = client.GetBuilder();
+        builder.Add(
+            "$seriesData",
+            std::vector<SeriesData>{
+                {
+                    .series_id = 1,
+                    .title = ydb::Utf8{"IT Crowd"},
+                    .series_info = ydb::Utf8{
+                        "The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by "
+                        "Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry."
+                    },
+                    .comment = std::nullopt,
+                },
+                {
+                    .series_id = 2,
+                    .title = ydb::Utf8{"Silicon Valley"},
+                    .series_info = ydb::Utf8{
+                        "Silicon Valley is an American comedy television series created by Mike Judge, John Altschuler and "
+                        "Dave Krinsky. The series focuses on five young men who founded a startup company in Silicon Valley."
+                    },
+                    .comment = ydb::Utf8{"lorem ipsum"},
+                },
+            }
+        );
+
+        client.ExecuteQuery(
+            ydb::OperationSettings{
+                .tx_mode = ydb::TransactionMode::kSerializableRW,
+                .is_idempotent = true,
+            },
+            ydb::Query{R"(
+                DECLARE $seriesData AS List<Struct<
+                    series_id: Uint64,
+                    title: Utf8,
+                    series_info: Utf8,
+                    comment: Optional<Utf8>
+                >>;
+
+                UPSERT INTO series
+                (
+                    series_id,
+                    title,
+                    series_info,
+                    comment
+                )
+                SELECT
+                    series_id,
+                    title,
+                    series_info,
+                    comment
+                FROM AS_TABLE($seriesData);
+            )"},
+            std::move(builder)
+        );
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 
@@ -140,7 +284,8 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools to perfo
 
   - Native SDK
 
-    Use `SessionRetryContext` and `TableSession.executeDataQuery` with a `$seriesData` parameter of type `List<Struct<...>>`. Build values for `AS_TABLE($seriesData)` the same way as row structs in the [batch insert](./bulk-upsert.md) example.
+    Use `SessionRetryContext` and `TableSession.executeDataQuery` with the `$seriesData` parameter of type `List<Struct<...>>`. Values for `AS_TABLE($seriesData)` are collected in the same way as row structures in the [batch upsert](./bulk-upsert.md) example.
+
 
     ```java
     SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
@@ -173,11 +318,12 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools to perfo
                  SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
                  """
          )) {
-        // Set $seriesData according to the query type (see JDBC driver documentation)
+        // The $seriesData parameter is set according to the query type (see the JDBC driver documentation)
     }
     ```
 
-    In Spring Boot, Hibernate, JOOQ, and other JDBC stacks, the driver also tries to optimize **large** sequences of inserts and updates: when needed, **UPSERT**, `INSERT`, `UPDATE`, and `DELETE` are **batched** on the driver side (including large batches from ORMs).
+
+    In Spring Boot, Hibernate, JOOQ, and other frameworks on top of JDBC, the driver also tries to optimize **large** sequences of inserts and updates: when necessary, **UPSERT**, `INSERT`, `UPDATE`, `DELETE` are automatically **grouped into batches** on the driver side (including large batches from ORM).
 
   {% endlist %}
 
@@ -187,7 +333,8 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools to perfo
 
   - Native SDK
 
-    Use `QuerySessionPool` and `execute_with_retries` with a parameterized YQL query. The query uses the container type `List<Struct<...>>`, so you can pass several rows in one call.
+    To upsert data, use `QuerySessionPool` and the `execute_with_retries` method with a parameterized YQL query. The query operates on the container type `List<Struct<...>>`, which allows passing multiple rows in a single call.
+
 
     ```python
     import os
@@ -296,7 +443,8 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools to perfo
 
   - SQLAlchemy
 
-    When using {{ ydb-short-name }} through SQLAlchemy, use the `ydb_sqlalchemy.upsert` helper to build an `UPSERT INTO` statement from a table and values. You can insert one row or several rows in one call:
+    When using {{ ydb-short-name }} via SQLAlchemy, the `ydb_sqlalchemy.upsert` function is used to insert data, which generates an `UPSERT INTO` query based on the table and the passed values. You can insert either a single row or multiple rows in one call:
+
 
     ```python
     import os
@@ -338,6 +486,39 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools to perfo
 
   {% endlist %}
 
+- C#
+
+  ```C#
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Ado.YdbType;
+
+  await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+  await using var connection = await dataSource.OpenRetryableConnectionAsync();
+
+  var seriesData = new List<YdbStruct>
+  {
+      new()
+      {
+          { "series_id", 1UL, YdbDbType.Uint64 },
+          { "title", "IT Crowd", YdbDbType.Text },
+          { "series_info", "The IT Crowd is a British sitcom produced by Channel 4.", YdbDbType.Text },
+          { "comment", null, YdbDbType.Text },
+      },
+      new()
+      {
+          { "series_id", 2UL, YdbDbType.Uint64 },
+          { "title", "Silicon Valley", YdbDbType.Text },
+          { "series_info", "Silicon Valley is an American comedy television series.", YdbDbType.Text },
+          { "comment", "lorem ipsum", YdbDbType.Text },
+      },
+  };
+
+  var command = new YdbCommand("UPSERT INTO series SELECT * FROM AS_TABLE($series_data)", connection);
+  command.Parameters.Add(new YdbParameter("$series_data", seriesData));
+
+  await command.ExecuteNonQueryAsync();
+  ```
+
 - JavaScript
 
   ```javascript
@@ -356,5 +537,147 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools to perfo
   await sql`UPSERT INTO users SELECT * FROM AS_TABLE(${users})`
   ```
 
+- Rust
+
+  ```rust
+  use ydb::{
+      ydb_params, ydb_struct, AccessTokenCredentials, ClientBuilder, Value, YdbResult,
+  };
+
+  fn series_row(
+      series_id: u64,
+      title: &str,
+      series_info: &str,
+      comment: Option<&str>,
+  ) -> YdbResult<Value> {
+      let comment_val = match comment {
+          None => Value::optional_from(Value::Text(String::new()), None)?,
+          Some(s) => Value::optional_from(
+              Value::Text(String::new()),
+              Some(Value::Text(s.into())),
+          )?,
+      };
+      Ok(ydb_struct!(
+          "series_id" => series_id,
+          "title" => title,
+          "series_info" => series_info,
+          "comment" => comment_val,
+      ))
+  }
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string(
+          "grpc://localhost:2136?database=local",
+      )?
+      .with_credentials(AccessTokenCredentials::from("..."))
+      .client()?;
+
+      client.wait().await?;
+
+      let example = series_row(0, "", "", None)?;
+      let series_data = Value::list_from(
+          example,
+          vec![
+              series_row(
+                  1,
+                  "IT Crowd",
+                  "The IT Crowd is a British sitcom...",
+                  None,
+              )?,
+              series_row(
+                  2,
+                  "Silicon Valley",
+                  "Silicon Valley is an American comedy...",
+                  Some("lorem ipsum"),
+              )?,
+          ],
+      )?;
+
+      client
+          .query_client()
+          .exec(
+              r#"
+              PRAGMA TablePathPrefix("/local");
+              UPSERT INTO series
+              (
+                  series_id,
+                  title,
+                  series_info,
+                  comment
+              )
+              SELECT
+                  series_id,
+                  title,
+                  series_info,
+                  comment
+              FROM AS_TABLE($seriesData);
+              "#,
+          )
+          .params(ydb_params!("$seriesData" => series_data))
+          .await?;
+
+      Ok(())
+  }
+  ```
+
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Session;
+  use YdbPlatform\Ydb\Ydb;
+
+  $ydb = new Ydb($config);
+
+  $yql = <<<'EOS'
+  PRAGMA TablePathPrefix("/local");
+  DECLARE $seriesData AS List<Struct<
+      series_id: Uint64,
+      title: Utf8,
+      series_info: Utf8,
+      comment: Optional<Utf8>
+  >>;
+
+  UPSERT INTO series
+  (
+      series_id,
+      title,
+      series_info,
+      comment
+  )
+  SELECT
+      series_id,
+      title,
+      series_info,
+      comment
+  FROM AS_TABLE($seriesData);
+  EOS;
+
+  $seriesData = [
+      [
+          'series_id' => 1,
+          'title' => 'IT Crowd',
+          'series_info' => 'The IT Crowd is a British sitcom...',
+          'comment' => null,
+      ],
+      [
+          'series_id' => 2,
+          'title' => 'Silicon Valley',
+          'series_info' => 'Silicon Valley is an American comedy...',
+          'comment' => 'lorem ipsum',
+      ],
+  ];
+
+  $ydb->table()->retryTransaction(
+      function (Session $session) use ($yql, $seriesData) {
+          return $session->prepare($yql)->execute([
+              'seriesData' => $seriesData,
+          ]);
+      },
+      true
+  );
+  ```
 
 {% endlist %}

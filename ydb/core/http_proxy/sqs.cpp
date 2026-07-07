@@ -31,6 +31,8 @@
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HTTP_PROXY
+
 namespace NKikimr::NHttpProxy {
 
     namespace {
@@ -97,13 +99,15 @@ namespace NKikimr::NHttpProxy {
             }
 
             void SendGrpcRequestNoDriver(const TActorContext& ctx) {
-                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
-                              "sending grpc request to '" << HttpContext.DiscoveryEndpoint <<
-                              "' database: '" << HttpContext.DatabasePath <<
-                              "' iam token size: " << HttpContext.IamToken.size());
+                YDB_LOG_INFO_CTX(ctx, "Sending grpc request to database: iam token",
+                    {"logPrefix", LogPrefix()},
+                    {"discoveryEndpoint", HttpContext.DiscoveryEndpoint},
+                    {"databasePath", HttpContext.DatabasePath},
+                    {"size", HttpContext.IamToken.size()});
 
                 TMap<TString, TString> peerMetadata {
                     {NYmq::V1::REQUEST_ID, HttpContext.RequestId},
+                    {NYmq::V1::SOURCE_ADDRESS, HttpContext.SourceAddress},
                 };
 
                 RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(
@@ -196,8 +200,11 @@ namespace NKikimr::NHttpProxy {
 
             void ReplyWithYdbError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText, size_t issueCode = ISSUE_CODE_GENERIC) {
                 const auto [errorName, httpCode] = MapToException(status, Method, issueCode);
+                ReplyWithYdbError(ctx, errorName, errorText, httpCode);
+            }
 
-                ctx.Send(MakeMetricsServiceID(),
+            void ReplyWithYdbError(const TActorContext& ctx, const TString& errorName, const TString& errorText, ui32 httpCode) {
+                    ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvCounter{
                              1, true, true,
                              AddCommonLabels({
@@ -209,7 +216,7 @@ namespace NKikimr::NHttpProxy {
                     .HttpCode = static_cast<ui32>(httpCode),
                     .ContentType = HttpContext.ContentType,
                     .Message = errorName,
-                    .Body = NSQS::Serialize(HttpContext.ContentType, {
+                    .Body = NSQS::Serialize(HttpContext, {
                         .StatusCode = errorName,
                         .ErrorText = errorText,
                     })
@@ -240,7 +247,7 @@ namespace NKikimr::NHttpProxy {
                     .HttpCode = httpStatusCode,
                     .ContentType = HttpContext.ContentType,
                     .Message = ymqStatusCode,
-                    .Body = NSQS::Serialize(HttpContext.ContentType, {
+                    .Body = NSQS::Serialize(HttpContext, {
                         .StatusCode = ymqStatusCode,
                         .ErrorText = errorText,
                     })
@@ -318,7 +325,7 @@ namespace NKikimr::NHttpProxy {
                         .HttpCode = 200,
                         .ContentType = HttpContext.ContentType,
                         .Message = "",
-                        .Body = NSQS::Serialize(HttpContext.ContentType, *ev->Get()->Message)
+                        .Body = NSQS::Serialize(HttpContext, *ev->Get()->Message)
                     }, ev->Get()->Message->ByteSizeLong());
                 } else {
                     auto retryClass =
@@ -347,12 +354,10 @@ namespace NKikimr::NHttpProxy {
                                 NKikimr::NSQS::NErrors::INTERNAL_FAILURE.HttpStatusCode)
                             : NKikimr::NSQS::TErrorClass::GetErrorAndCode(issues.begin()->GetCode());
 
-                        LOG_SP_DEBUG_S(
-                            ctx,
-                            NKikimrServices::HTTP_PROXY,
-                            "Not retrying GRPC response."
-                                << " Code: " << errorCode
-                                << ", Error: " << error);
+                        YDB_LOG_DEBUG_CTX(ctx, "Not retrying GRPC response",
+                            {"logPrefix", LogPrefix()},
+                            {"code", errorCode},
+                            {"error", error});
                         return ReplyWithMessageQueueError(
                             ctx,
                             errorCode,
@@ -387,18 +392,22 @@ namespace NKikimr::NHttpProxy {
             void Bootstrap(const TActorContext& ctx) {
                 StartTime = ctx.Now();
                 try {
-                    NSQS::Deserialize<TProtoRequest>(HttpContext.ContentType, Request, HttpContext.Request->Body);
+                    NSQS::Deserialize<TProtoRequest>(HttpContext, Request);
                 } catch (const NKikimr::NSQS::TSQSException& e) {
                     NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;
-                    if (e.ErrorClass.ErrorCode == "MissingParameter")
+                    if (e.ErrorClass.ErrorCode == "MissingParameter") {
                         issueCode = NYds::EErrorCodes::MISSING_PARAMETER;
-                    else if (e.ErrorClass.ErrorCode == "InvalidQueryParameter" || e.ErrorClass.ErrorCode == "MalformedQueryString")
+                    } else if (e.ErrorClass.ErrorCode == "InvalidParameterValue") {
+                        return ReplyWithYdbError(ctx, "InvalidParameterValue", e.what(), static_cast<ui32>(e.ErrorClass.HttpStatusCode));
+                    } else if (e.ErrorClass.ErrorCode == "InvalidQueryParameter" || e.ErrorClass.ErrorCode == "MalformedQueryString") {
                         issueCode = NYds::EErrorCodes::INVALID_ARGUMENT;
+                    }
                     return ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(issueCode));
                 } catch (const std::exception& e) {
-                    LOG_SP_WARN_S(ctx, NKikimrServices::HTTP_PROXY,
-                                  "got new request with incorrect json from [" << HttpContext.SourceAddress << "] " <<
-                                  "database '" << HttpContext.DatabasePath << "'");
+                    YDB_LOG_WARN_CTX(ctx, "Got new request with incorrect json from database",
+                        {"logPrefix", LogPrefix()},
+                        {"sourceAddress", HttpContext.SourceAddress},
+                        {"databasePath", HttpContext.DatabasePath});
                     return ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
                 }
 
@@ -418,10 +427,11 @@ namespace NKikimr::NHttpProxy {
                     }
                 }
 
-                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
-                              "got new request from [" << HttpContext.SourceAddress << "] " <<
-                              "database '" << HttpContext.DatabasePath << "' " <<
-                              "stream '" << MaybeGetQueueUrl<TProtoRequest>(Request) << "'");
+                YDB_LOG_INFO_CTX(ctx, "Got new request from database stream",
+                    {"logPrefix", LogPrefix()},
+                    {"sourceAddress", HttpContext.SourceAddress},
+                    {"databasePath", HttpContext.DatabasePath},
+                    {"request", MaybeGetQueueUrl<TProtoRequest>(Request)});
 
                 ReportInputCounters(ctx);
                 if (!HttpContext.SecurityToken.empty()) {
@@ -512,13 +522,13 @@ namespace NKikimr::NHttpProxy {
                 #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN
             }
 
-            THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
+            THttpResponseData MakeError(const THttpRequestContext& httpContext, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
                 const auto [errorName, httpCode] = MapToException(Status, "", issueCode);
                 return {
                     .HttpCode = static_cast<ui32>(httpCode),
-                    .ContentType = contentType,
+                    .ContentType = httpContext.ContentType,
                     .Message = errorName,
-                    .Body = NSQS::Serialize(contentType, NSQS::TErrorResponse{
+                    .Body = NSQS::Serialize(httpContext, NSQS::TErrorResponse{
                         .StatusCode = errorName,
                         .ErrorText = TString(message),
                     })
@@ -543,4 +553,3 @@ namespace NKikimr::NHttpProxy {
     }
 
 } // namespace NKikimr::NHttpProxy
-

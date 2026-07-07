@@ -668,8 +668,15 @@ class ScenarioTestHelper:
                 'table': tablename,
             },
         ):
-            result_set = self.execute_scan_query(f'SELECT count(*) FROM `{self.get_full_path(tablename)}`')
-            return result_set.result_set.rows[0][0]
+            result = self.execute_query(
+                f'SELECT count(*) FROM `{self.get_full_path(tablename)}`',
+                fail_on_error=False,
+                return_error=True,
+                ignore_error={''},
+            )
+            if isinstance(result, ydb.issues.Error):
+                raise result
+            return result[0].rows[0][0]
 
     @allure.step('Describe table {path}')
     def describe_table(self, path: str, settings: ydb.DescribeTableSettings = None) -> ydb.TableSchemeEntry:
@@ -769,10 +776,11 @@ class ScenarioTestHelper:
         query = f'''SELECT * FROM `{path}/.sys/primary_index_stats` WHERE Activity == 1'''
         if (len(name_column)):
             query += f' AND EntityName = \"{name_column}\"'
-        result_set = self.execute_scan_query(query, {ydb.StatusCode.SUCCESS}).result_set
+        result_sets = self.execute_query(query)
         raw_bytes = 0
         bytes = 0
-        for row in result_set.rows:
-            raw_bytes += row["RawBytes"]
-            bytes += row["BlobRangeSize"]
+        for result_set in result_sets:
+            for row in result_set.rows:
+                raw_bytes += row["RawBytes"]
+                bytes += row["BlobRangeSize"]
         return raw_bytes, bytes

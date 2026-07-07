@@ -159,15 +159,16 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
 
     // Probe driver: only used for the connectivity check and welcome message.
     {
-        TDriver probeDriver(config.CreateDriverConfigWithBuildInfo("interactive"));
-        Y_DEFER { probeDriver.Stop(true); };
+        TScopedDriver probeDriver(TDriver(config.CreateDriverConfigWithBuildInfo("interactive")));
         if (auto code = PrintWelcomeMessage(config, probeDriver, configManager)) {
             return code;
         }
     }
 
+    // The completer driver only serves on-demand autocompletion lookups, so it
+    // is released after a short idle period instead of running discovery forever.
     auto completerLazyDriver = std::make_shared<TLazyDriver>(
-        [&config] { return TDriver(config.CreateDriverConfig()); });
+        [&config] { return TDriver(config.CreateDriverConfig()); }, TDuration::Seconds(30));
     auto sqlLazyDriver = std::make_shared<TLazyDriver>(
         [&config] { return TDriver(config.CreateDriverConfigWithBuildInfo("interactive-sql")); });
     auto sqlTxLazyDriver = std::make_shared<TLazyDriver>(

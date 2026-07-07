@@ -2,6 +2,7 @@
 
 #include <yql/essentials/providers/common/config/yql_setting.h>
 
+#include <util/generic/map.h>
 #include <util/generic/ptr.h>
 
 namespace NYql {
@@ -54,7 +55,7 @@ struct TRuntimeSettings {
     // Used for testing only.
     TRuntimeSetting<bool> TestHostSetting{false};
     // =============================== Host settings end ===========================
-    using TUdfSettings = THashMap<TString, TString>;
+    using TUdfSettings = TMap<TString, TString>;
 
     TStringBuf GetUdfSetting(TStringBuf module, TStringBuf settingName) const {
         const auto moduleIt = ModuleToSettings_.find(module);
@@ -72,12 +73,12 @@ struct TRuntimeSettings {
         ModuleToSettings_[module][settingName] = value;
     }
 
-    const THashMap<TString, TUdfSettings>& GetUdfSettings() const {
+    const TMap<TString, TUdfSettings>& GetUdfSettings() const {
         return ModuleToSettings_;
     }
 
 private:
-    THashMap<TString, TUdfSettings> ModuleToSettings_;
+    TMap<TString, TUdfSettings> ModuleToSettings_;
 };
 
 TRuntimeSettings::TConstPtr MakeRuntimeSettings(auto&&... args) {

@@ -26,7 +26,7 @@ class TReadMultipleLocationRequestExecutor
 public:
     TReadMultipleLocationRequestExecutor(
         NActors::TActorSystem const* actorSystem,
-        TChildLogTitle logTitle,
+        const TLogTitle& logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         TReadHint readHint,

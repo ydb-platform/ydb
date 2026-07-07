@@ -1,11 +1,14 @@
 #include "topic_readwrite_scenario.h"
 
+#include <ydb/public/lib/ydb_cli/common/scoped_driver.h>
+
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_defines.h>
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_describe.h>
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_reader.h>
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_keyed_writer.h>
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_writer.h>
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_configurator.h>
+#include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_params.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/log.h>
 
@@ -53,6 +56,19 @@ void TTopicOperationsScenario::EnsureRatesIsValid() const
     Y_ENSURE_EX(BytesPerSec >= 0, TMisuseException() << "--bytes-per-sec should be non negative.");
 }
 
+void TTopicOperationsScenario::EnsureCodecOptionsAreValid() const
+{
+    if (BatchInnerCodecStr.empty()) {
+        return;
+    }
+
+    if ((NTopic::ECodec)Codec != NTopic::ECodec::KAFKA_BATCH) {
+        throw TMisuseException() << "--batch-inner-codec can be set only when --codec is kafka-batch";
+    }
+
+    TCommandWorkloadTopicParams::StrToBatchInnerCodec(BatchInnerCodecStr);
+}
+
 TString TTopicOperationsScenario::GetReadOnlyTableName() const
 {
     return TableName + "-ro";
@@ -82,9 +98,9 @@ void TTopicOperationsScenario::InitLog(TConfig& config)
 
 void TTopicOperationsScenario::InitDriver(TConfig& config)
 {
-    Driver =
-        std::make_unique<NYdb::TDriver>(TYdbCommand::CreateDriver(config,
-                                                                  std::unique_ptr<TLogBackend>(MakeLogBackend(config.VerbosityLevel).Release())));
+    Driver = std::make_unique<TScopedDriver>(TYdbCommand::CreateDriver(
+        config,
+        std::unique_ptr<TLogBackend>(MakeLogBackend(config.VerbosityLevel).Release())));
 }
 
 void TTopicOperationsScenario::InitStatsCollector()
@@ -285,6 +301,11 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
     bool useAutoPartitioning = NYdb::NTopic::EAutoPartitioningStrategy::Disabled != describeTopicResult.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy();
 
     auto count = std::make_shared<std::atomic_uint>();
+    TMaybe<ui32> batchInnerCodec;
+    if (!BatchInnerCodecStr.empty()) {
+        batchInnerCodec = TCommandWorkloadTopicParams::StrToBatchInnerCodec(BatchInnerCodecStr);
+    }
+
     for (ui32 writerIdx = 0; writerIdx < ProducerThreadCount; ++writerIdx) {
         TTopicWorkloadWriterParams writerParams{
             .TotalSec = TotalSec.Seconds(),
@@ -305,6 +326,7 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .PartitionSeed = partitionSeed,
             .Direct = Direct,
             .Codec = Codec,
+            .BatchInnerCodec = batchInnerCodec,
             .UseTransactions = UseTransactions,
             .TrackProducerIdInTx = !NoTrackProducerIdInTx,
             .UseAutoPartitioning = useAutoPartitioning,
@@ -315,6 +337,9 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .KeyCount = KeyCount,
             .KeySeed = writerIdx,
             .MaxMemoryUsageBytes = ProducerMaxMemoryUsageBytes,
+            .BatchFlushInterval = BatchFlushInterval,
+            .BatchFlushSizeBytes = BatchFlushSizeBytes,
+            .BatchFlushMessageCount = BatchFlushMessageCount,
         };
 
         if (KeyedWrites) {

@@ -291,8 +291,8 @@ public:
 
         SSL_set_bio(Ssl_.get(), InputBIO_, OutputBIO_);
 
-        InputBuffer_ = TSharedMutableRef::Allocate<TTlsBufferTag>(TlsBufferSize);
-        OutputBuffer_ = TSharedMutableRef::Allocate<TTlsBufferTag>(TlsBufferSize);
+        InputBuffer_ = TSharedMutableRef::Allocate<TTlsBufferTag>(TlsBufferSize, {.InitializeStorage = false});
+        OutputBuffer_ = TSharedMutableRef::Allocate<TTlsBufferTag>(TlsBufferSize, {.InitializeStorage = false});
     }
 
     void SetHost(const std::string& host)
@@ -544,13 +544,12 @@ private:
     void HandleUnderlyingIOResult(TFuture<T> future, TCallback<void(const TErrorOr<T>&)> handler)
     {
         future.Subscribe(BIND([handler = std::move(handler), invoker = Invoker_] (const TErrorOr<T>& result) {
-            GuardedInvoke(
-                std::move(invoker),
+            invoker->Invoke(MakeGuardedCallback(
                 BIND(handler, result),
                 BIND([=] {
                     TError error("Poller terminated");
                     handler(error);
-                }));
+                })));
         }));
     }
 
@@ -800,6 +799,7 @@ TInstant TSslContext::GetCommitTime() const
 void TSslContext::ApplyConfig(const TSslContextConfigPtr& config, TCertificatePathResolver pathResolver)
 {
     if (!config) {
+        UseDefaultOpenSslX509Store();
         return;
     }
 
@@ -837,9 +837,9 @@ void TSslContext::ApplyConfig(const TSslContextConfigPtr& config, TCertificatePa
     Impl_->SetInsecureSkipVerify(config->InsecureSkipVerify);
 }
 
-void TSslContext::UseBuiltinOpenSslX509Store()
+void TSslContext::UseDefaultOpenSslX509Store()
 {
-    SSL_CTX_set_cert_store(Impl_->GetContext(), GetBuiltinOpenSslX509Store().Release());
+    SSL_CTX_set_cert_store(Impl_->GetContext(), GetDefaultOpenSslX509Store().Release());
 }
 
 void TSslContext::SetCipherList(const std::string& list)
@@ -976,6 +976,8 @@ void TSslContext::AddCertificateAuthority(const TPemBlobConfigPtr& pem, TCertifi
 {
     if (pem) {
         AddCertificateAuthority(pem->LoadBlob(resolver));
+    } else {
+        UseDefaultOpenSslX509Store();
     }
 }
 

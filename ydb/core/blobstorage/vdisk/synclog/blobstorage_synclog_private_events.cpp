@@ -14,8 +14,14 @@ namespace NKikimr {
         TEvSyncLogSnapshotResult::~TEvSyncLogSnapshotResult() = default;
 
         TEvPhantomFlagStorageGetSnapshotResult::TEvPhantomFlagStorageGetSnapshotResult(
-                TPhantomFlagStorageSnapshot&& snapshot)
-            : Snapshot(std::move(snapshot))
+                TPhantomFlags&& flags,
+                TPhantomFlagThresholds&& thresholds,
+                std::unordered_set<ui32>&& processedChunks,
+                bool eof)
+            : Flags(std::move(flags))
+            , Thresholds(std::move(thresholds))
+            , ProcessedChunks(std::move(processedChunks))
+            , Eof(eof)
         {}
 
         TEvPhantomFlagStorageWriteItems::TEvPhantomFlagStorageWriteItems(

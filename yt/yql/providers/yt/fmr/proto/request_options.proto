@@ -29,8 +29,10 @@ enum EOperationType {
     OPERATION_TYPE_DISTRIBUTED_UPLOAD = 5;
     OPERATION_TYPE_SORTED_MERGE = 6;
     OPERATION_TYPE_SORT = 7;
+    OPERATION_TYPE_REDUCE = 8;
     OPERATION_TYPE_PULL = 9;
     OPERATION_TYPE_FILL = 10;
+    OPERATION_TYPE_MAP_REDUCE = 11;
 }
 
 enum ETaskType {
@@ -42,8 +44,10 @@ enum ETaskType {
     TASK_TYPE_DISTRIBUTED_UPLOAD = 5;
     TASK_TYPE_SORTED_MERGE = 6;
     TASK_TYPE_LOCAL_SORT = 7;
+    TASK_TYPE_REDUCE = 8;
     TASK_TYPE_PULL = 9;
     TASK_TYPE_FILL = 10;
+    TASK_TYPE_MAP_REDUCE_MAP = 11;
 }
 
 enum EFmrComponent {
@@ -299,6 +303,22 @@ message TSortOperationParams {
     TFmrTableRef Output = 2;
 }
 
+message TMapReduceOperationParams {
+    repeated TOperationTableRef Input = 1;
+    repeated TFmrTableRef Output = 2;
+    bytes SerializedMapJobState = 3;
+    bytes SerializedReduceJobState = 4;
+    TReduceOperationSpec ReduceOperationSpec = 5;
+}
+
+// Task params for the map stage of MapReduce: apply mapper, compute _yql_key_hash, local-sort.
+message TMapReduceMapTaskParams {
+    TTaskTableInputRef Input = 1;
+    TFmrTableOutputRef Output = 2;
+    bytes SerializedMapJobState = 3;
+    TReduceOperationSpec ReduceOperationSpec = 4;
+}
+
 message TPullOperationParams {
     repeated TOperationTableRef Input = 1;
 }
@@ -324,6 +344,7 @@ message TOperationParams {
         TReduceOperationParams ReduceOperationParams = 8;
         TPullOperationParams PullOperationParams = 9;
         TFillOperationParams FillOperationParams = 10;
+        TMapReduceOperationParams MapReduceOperationParams = 11;
     }
 }
 
@@ -339,6 +360,7 @@ message TTaskParams {
         TReduceTaskParams ReduceTaskParams = 8;
         TPullTaskParams PullTaskParams = 9;
         TFillTaskParams FillTaskParams = 10;
+        TMapReduceMapTaskParams MapReduceMapTaskParams = 11;
     }
 }
 

@@ -212,7 +212,28 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Размер пула сессий задаётся на драйвере через [`Client::with_session_pool`](https://docs.rs/ydb/latest/ydb/struct.Client.html#method.with_session_pool) и [`SessionPoolSettings::with_limit`](https://docs.rs/ydb/latest/ydb/struct.SessionPoolSettings.html#method.with_limit). Пул общий для table- и query-клиентов:
+
+  ```rust
+  use ydb::{ClientBuilder, SessionPoolSettings, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string(
+          std::env::var("YDB_CONNECTION_STRING")?,
+      )?
+      .client()?;
+      client.wait().await?;
+
+      let client = client
+          .with_session_pool(SessionPoolSettings::new().with_limit(500))
+          .await?;
+
+      let mut qc = client.query_client();
+      let mut row = qc.query_row("SELECT 1 AS one").await?;
+      Ok(())
+  }
+  ```
 
 - PHP
 

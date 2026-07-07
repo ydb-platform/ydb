@@ -90,4 +90,12 @@ NProto::TWaitForOperationsResponse WaitForOperationsResponseToProto(const TWaitF
 
 TWaitForOperationsResponse WaitForOperationsResponseFromProto(const NProto::TWaitForOperationsResponse& protoResponse);
 
+NProto::TWaitForTasksRequest WaitForTasksRequestToProto(const TWaitForTasksRequest& request);
+
+TWaitForTasksRequest WaitForTasksRequestFromProto(const NProto::TWaitForTasksRequest& protoRequest);
+
+NProto::TWaitForTasksResponse WaitForTasksResponseToProto(const TWaitForTasksResponse& response);
+
+TWaitForTasksResponse WaitForTasksResponseFromProto(const NProto::TWaitForTasksResponse& protoResponse);
+
 } // namespace NYql::NFmr

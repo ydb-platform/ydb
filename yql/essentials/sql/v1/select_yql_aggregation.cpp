@@ -131,7 +131,7 @@ TNodeResult BuildYqlAggregation(TPosition position, TYqlAggregationArgs&& args) 
 }
 
 TNodePtr BuildYqlGrouping(TPosition position, TVector<TNodePtr> args) {
-    return new TCallNodeImpl(position, "YqlGrouping", std::move(args));
+    return new TCallNodeImpl(position, "YqlGrouping", args);
 }
 
 } // namespace NSQLTranslationV1

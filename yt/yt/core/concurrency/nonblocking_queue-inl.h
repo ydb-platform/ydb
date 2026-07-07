@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "nonblocking_queue.h"
 #endif
-#undef NONBLOCKING_QUEUE_INL_H_
 
 namespace NYT::NConcurrency {
 

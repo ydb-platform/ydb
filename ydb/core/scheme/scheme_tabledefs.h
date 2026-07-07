@@ -799,6 +799,8 @@ struct TSystemColumnInfo {
     NKikimr::NScheme::TTypeId TypeId;
 };
 
+inline constexpr char YqlPartitionColumnName[] = "_yql_partition_id";
+
 const TMap<TString, TSystemColumnInfo>& GetSystemColumns();
 
 bool IsSystemColumn(ui32 columnId);

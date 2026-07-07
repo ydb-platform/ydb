@@ -1,6 +1,5 @@
 #include <ydb/core/fq/libs/checkpoint_storage/gc.h>
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
 #include <ydb/core/fq/libs/checkpoint_storage/ydb_checkpoint_storage.h>
@@ -11,6 +10,7 @@
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
@@ -75,11 +75,11 @@ NYql::NDq::TComputeActorState MakeStateFromBlob(size_t blobSize, bool isIncremen
 template<bool UseYdbSdk>
 class TGcTestBase: public NUnitTest::TTestBase {
     using TSelf = TGcTestBase<UseYdbSdk>;
-    
+
     IYdbConnection::TPtr Connection;
 
     void SetUp() override {
-        
+
         TablePrefix = CreateGuidAsString();
         if constexpr (!UseYdbSdk) {
             InitTestServer();
@@ -220,7 +220,7 @@ class TGcTestBase: public NUnitTest::TTestBase {
     template<typename TValue>
     auto Call(std::function<TValue()> operation) {
         if (UseYdbSdk) {
-            return operation();     
+            return operation();
         }
         auto promise = NThreading::NewPromise<TValue>();
         GetRuntime()->Register(new TProxyActor<TValue>(promise, operation));
@@ -230,7 +230,7 @@ class TGcTestBase: public NUnitTest::TTestBase {
     IStateStorage::TCountStatesResult CountStates(
         const TString& graphId,
         const TCheckpointId& checkpointId) {
-        return Call<NThreading::TFuture<IStateStorage::TCountStatesResult>>([&](){ 
+        return Call<NThreading::TFuture<IStateStorage::TCountStatesResult>>([&](){
             return StateStorage->CountStates(graphId, checkpointId); }).GetValueSync();
     }
 

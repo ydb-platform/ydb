@@ -23,6 +23,11 @@ private:
     NMonitoring::THistogramPtr FailDurationByCount;
     NMonitoring::THistogramPtr FailDurationBySize;
 
+    NMonitoring::TDynamicCounters::TCounterPtr RetryEnqueueCount;
+    NMonitoring::TDynamicCounters::TCounterPtr RetryEnqueueBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr RetryExecuteCount;
+    NMonitoring::TDynamicCounters::TCounterPtr RetryExhaustedCount;
+
 public:
     TReadCounters(const TConsumerCounters& owner);
 
@@ -43,6 +48,19 @@ public:
         FailBytes->Add(bytes);
         FailDurationByCount->Collect((i64)d.MilliSeconds());
         FailDurationBySize->Collect((i64)d.MilliSeconds(), (i64)bytes);
+    }
+
+    void OnRetryEnqueue(const ui64 bytes) const {
+        RetryEnqueueCount->Add(1);
+        RetryEnqueueBytes->Add(bytes);
+    }
+
+    void OnRetryExecute() const {
+        RetryExecuteCount->Add(1);
+    }
+
+    void OnRetryExhausted() const {
+        RetryExhaustedCount->Add(1);
     }
 };
 

@@ -33,7 +33,7 @@ public:
     }
 
     virtual void HandleResponse(typename TResponse::TPtr &ev, const TActorContext &ctx) {
-        Callback(Promise, std::move(*ev->Get()));
+        Callback(std::move(Promise), std::move(*ev->Get()));
         this->Die(ctx);
     }
 
@@ -68,8 +68,18 @@ public:
         this->Die(ctx);
     }
 
+    ~TRequestHandlerBase() override {
+        if (Promise.Initialized() && !Promise.IsReady()) {
+            Promise.TrySetValue(NYql::NCommon::ResultFromIssues<TResult>(
+                NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
+                "Shutting down.", {}));
+        }
+    }
+
 protected:
     THolder<TRequest> Request;
+    // Note: Promise must be moved into Callback to avoid racing with
+    // the destructor.
     NThreading::TPromise<TResult> Promise;
     TCallbackFunc Callback;
 };

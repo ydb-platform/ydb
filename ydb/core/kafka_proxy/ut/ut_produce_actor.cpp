@@ -3,6 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 namespace {
     using namespace NKafka;
@@ -108,7 +109,6 @@ namespace {
                 records->ProducerId = producerId;
                 records->ProducerEpoch = producerEpoch;
 
-                TKafkaRecordBatch batch;
                 records->BaseOffset = 3;
                 records->BaseSequence = baseSequence;
                 records->Magic = 2; // Current supported
@@ -116,10 +116,12 @@ namespace {
                 records->Records[0].Key = TKafkaRawBytes(KeyToProduce.data(), KeyToProduce.size());
                 records->Records[0].Value = TKafkaRawBytes(ValueToProduce.data(), ValueToProduce.size());
 
-                partitionData.Records = records;
+                const TString serializedRecords = WriteKafkaRecordBatch(*records);
+                auto recordsBuffer = std::make_shared<TBuffer>(serializedRecords.data(), serializedRecords.size());
+                partitionData.Records = TKafkaRawBytes(recordsBuffer->data(), recordsBuffer->size());
                 topicData.PartitionData.push_back(partitionData);
                 message->TopicData.push_back(topicData);
-                auto event = MakeHolder<TEvKafka::TEvProduceRequest>(0, NKafka::TMessagePtr<NKafka::TProduceRequestData>({}, message));
+                auto event = MakeHolder<TEvKafka::TEvProduceRequest>(0, NKafka::TMessagePtr<NKafka::TProduceRequestData>(recordsBuffer, message));
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
 

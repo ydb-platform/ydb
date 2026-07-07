@@ -643,13 +643,7 @@ private:
         }
 
         if (!defaultColumnsLeft.empty()) {
-            if (AppData(ctx)->FeatureFlags.GetDisableMissingDefaultColumnsInBulkUpsert()) {
-                return TConclusionStatus::Fail(Sprintf("Missing default columns: %s", JoinSeq(", ", defaultColumnsLeft).c_str()));
-            }
-
-            // TODO: Unreachable, delete "MissingDefaultColumns/Count" counter
-            UploadCounters.OnMissingDefaultColumns();
-            LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Missing default columns: " << JoinSeq(", ", defaultColumnsLeft).c_str());
+            return TConclusionStatus::Fail(Sprintf("Missing default columns: %s", JoinSeq(", ", defaultColumnsLeft).c_str()));
         }
 
         TConclusionStatus res = TConclusionStatus::Success();

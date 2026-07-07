@@ -19,6 +19,7 @@
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/library/services/services.pb.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -49,6 +50,7 @@ private:
 
     NActors::TActorId LoadActorAdapter;
     bool DdiskBlockGroupAllocated = false;
+    std::shared_ptr<TFastPathService> FastPathService;
 
 public:
     TPartitionActor(
@@ -64,6 +66,10 @@ public:
 private:
     void StateInit(TAutoPtr<NActors::IEventHandle>& ev);
     STFUNC(StateWork);
+
+    void HandleHttpInfo(
+        NActors::NMon::TEvRemoteHttpInfo::TPtr& ev,
+        const NActors::TActorContext& ctx);
 
     void OnDetach(const NActors::TActorContext& ctx) override;
     void OnTabletDead(
@@ -106,6 +112,18 @@ private:
 
     void HandleUpdateVChunkConfig(
         const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleFastPathServiceReady(
+        const TEvPartitionDirectPrivate::TEvFastPathServiceReady::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleFastPathServiceShutdown(
+        const TEvPartitionDirectPrivate::TEvFastPathServiceShutdown::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleFastPathServiceStopped(
+        const TEvPartitionDirectPrivate::TEvFastPathServiceStopped::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void Start(

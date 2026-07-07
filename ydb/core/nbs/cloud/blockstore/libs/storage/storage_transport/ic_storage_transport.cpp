@@ -9,11 +9,6 @@ using namespace NThreading;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TICStorageTransport::TICStorageTransport(NActors::TActorSystem* actorSystem)
-    : ActorSystem(actorSystem)
-    , ICStorageTransportActorId(CreateTransportActor())
-{}
-
 TICStorageTransport::TICStorageTransport(
     NActors::TActorSystem* actorSystem,
     NActors::TActorId icStorageTransportActorId)

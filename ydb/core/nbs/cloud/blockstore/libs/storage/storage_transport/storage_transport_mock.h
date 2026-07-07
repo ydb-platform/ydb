@@ -10,7 +10,6 @@
 
 #include <util/generic/map.h>
 #include <util/generic/vector.h>
-#include <util/generic/yexception.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 

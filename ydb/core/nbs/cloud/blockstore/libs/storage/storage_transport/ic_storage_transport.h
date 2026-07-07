@@ -9,8 +9,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 class TICStorageTransport: public IStorageTransport
 {
 public:
-    explicit TICStorageTransport(NActors::TActorSystem* actorSystem);
-
     TICStorageTransport(
         NActors::TActorSystem* actorSystem,
         NActors::TActorId icStorageTransportActorId);

@@ -1145,8 +1145,6 @@ void TDirectBlockGroup::DoEstablishConnection(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    std::function<void(ui32)> disconnectCB = nullptr;
-
     auto& connection = connectionType == EConnectionType::DDisk
                            ? DDiskConnections[index]
                            : PBufferConnections[index];
@@ -1161,32 +1159,27 @@ void TDirectBlockGroup::DoEstablishConnection(
             LogTitle.GetWithTime().c_str(),
             index,
             actualSeqNo);
-
-        disconnectCB =
-            [index, weakSelf = weak_from_this(), executor = Executor]   //
-            (ui32 nodeId)
-        {
-            executor->ExecuteSimple(
-                [index, nodeId, weakSelf]   //
-                () mutable -> void
-                {
-                    if (auto self = weakSelf.lock()) {
-                        self->OnNodeDisconnected(index, nodeId);
-                    }
-                });
-        };
     }
 
     using TEvConnectResult = NKikimrBlobStorage::NDDisk::TEvConnectResult;
 
     auto futures = StorageTransport->Connect(connection.HostConnection);
-    futures.DisconnectFuture.Subscribe(
-        [disconnectCB = std::move(disconnectCB)](const TFuture<ui32>& f)
-        {
-            if (disconnectCB) {
-                disconnectCB(f.GetValue());
-            }
-        });
+    if (connectionType == EConnectionType::DDisk) {
+        futures.DisconnectFuture.Subscribe(
+            [index, weakSelf = weak_from_this(), executor = Executor]   //
+            (const TFuture<ui32>& f)
+            {
+                executor->ExecuteSimple(
+                    [index, nodeId = f.GetValue(), weakSelf]   //
+                    () mutable -> void
+                    {
+                        if (auto self = weakSelf.lock()) {
+                            self->OnNodeDisconnected(index, nodeId);
+                        }
+                    });
+            });
+    }
+
     futures.ConnectFuture.Subscribe(
         [weakSelf = weak_from_this(),
          executor = Executor,

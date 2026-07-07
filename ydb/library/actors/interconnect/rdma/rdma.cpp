@@ -81,22 +81,6 @@ public:
         return 0;
     }
 
-    bool RegisterQpAsync(ui32 qpNum, NActors::TActorId actorId) noexcept override {
-        if (!TSimpleCqBase::RegisterQpAsync(qpNum, actorId)) {
-            return false;
-        }
-        Awake();
-        return true;
-    }
-
-    bool DeregisterQpAsync(ui32 qpNum) noexcept override {
-        if (!TSimpleCqBase::DeregisterQpAsync(qpNum)) {
-            return false;
-        }
-        Awake();
-        return true;
-    }
-
     void NotifyErr() noexcept override {
         DoNotifyErr();
         WakeUntilFinished();

@@ -74,6 +74,17 @@ TDirectBlockGroup::TDDiskConnection::GetFuture() const
     return ConnectFuture;
 }
 
+void TDirectBlockGroup::TDDiskConnection::ResetSession()
+{
+    if (!ConnectPromise.HasValue()) {
+        ConnectPromise.SetValue(MakeError(E_CANCELLED, "DDisk session reset"));
+    }
+
+    ConnectPromise = NThreading::NewPromise<NProto::TError>();
+    ConnectFuture = ConnectPromise.GetFuture();
+    SessionState = EDDiskSessionState::NotLocked;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TDirectBlockGroup::TDirectBlockGroup(
@@ -1152,9 +1163,24 @@ void TDirectBlockGroup::DoEstablishConnection(
 
     using TEvConnectResult = NKikimrBlobStorage::NDDisk::TEvConnectResult;
 
-    auto future = StorageTransport->Connect(connection.HostConnection);
+    auto futures = StorageTransport->Connect(connection.HostConnection);
+    if (connectionType == EConnectionType::DDisk) {
+        futures.DisconnectFuture.Subscribe(
+            [index, weakSelf = weak_from_this(), executor = Executor]   //
+            (const TFuture<ui32>& f)
+            {
+                executor->ExecuteSimple(
+                    [index, nodeId = f.GetValue(), weakSelf]   //
+                    () mutable -> void
+                    {
+                        if (auto self = weakSelf.lock()) {
+                            self->OnNodeDisconnected(index, nodeId);
+                        }
+                    });
+            });
+    }
 
-    future.Subscribe(
+    futures.ConnectFuture.Subscribe(
         [weakSelf = weak_from_this(),
          executor = Executor,
          connectionType = connection.HostConnection.ConnectionType,
@@ -1212,14 +1238,13 @@ void TDirectBlockGroup::OnConnectionEstablished(
             }
             connection.SessionState = EDDiskSessionState::Locked;
             connection.ConfirmedSessionSeqNo = seqNo;
+            Oracle.OnDDiskConnected(index, TInstant::Now());
         }
         // INVARIANT: PBuffer does NOT require a session/lock
     } else {
         // TODO (future phase): handle the error code/BLOCKED, transition to
         // Broken/suicide.
-        Y_ABORT(
-            "TDirectBlockGroup::OnConnectionEstablished: connection failed - "
-            "unhandled error");
+        Y_ABORT("Unhandled branch of connect error");
     }
 
     // ConnectPromise resolves both "connection ready" and "session ready" in
@@ -1236,6 +1261,42 @@ void TDirectBlockGroup::OnConnectionEstablished(
             LogTitle.GetWithTime().c_str(),
             MinLockedDDiskSessionsToStart);
     }
+}
+
+void TDirectBlockGroup::ReEstablishDDiskConnection(
+    size_t index,
+    TDuration reconnectDelay)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(index < DDiskConnections.size());
+
+    DDiskConnections[index].ResetSession();
+    Schedule(
+        reconnectDelay,
+        [index, weakSelf = weak_from_this()]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->DoEstablishConnection(index, EConnectionType::DDisk);
+            }
+        });
+}
+
+void TDirectBlockGroup::OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s OnNodeDisconnected, %s, nodeId: %d",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostIndex(hostIndex).c_str(),
+        nodeId);
+
+    Oracle.OnDDiskDisconnected(hostIndex, TInstant::Now());
+    // OnNodeDisconnected may be called only for DDisk
+    TDuration reconnectDelay = Oracle.GetDDiskReconnectDelay(hostIndex);
+    ReEstablishDDiskConnection(hostIndex, reconnectDelay);
 }
 
 bool TDirectBlockGroup::HasPBufferQuorum() const

@@ -59,7 +59,13 @@ public:
 
     virtual ~IStorageTransport() = default;
 
-    virtual NThreading::TFuture<TEvConnectResult> Connect(
+    struct TConnectResultFutures
+    {
+        NThreading::TFuture<TEvConnectResult> ConnectFuture;
+        NThreading::TFuture<ui32> DisconnectFuture;
+    };
+
+    virtual TConnectResultFutures Connect(
         const THostConnection& connection) = 0;
 
     virtual NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(

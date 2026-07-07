@@ -57,7 +57,7 @@ void TConsole::OnDetach(const TActorContext &ctx)
 void TConsole::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &, const TActorContext &ctx)
 {
     YDB_LOG_INFO_CTX(ctx, "TConsole::OnTabletDead",
-        {"tabletID", TabletID()});
+        {"tabletId", TabletID()});
 
     if (Counters)
         Counters->ResetCounters();
@@ -67,10 +67,10 @@ void TConsole::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &, const TActorContex
 
 void TConsole::Enqueue(TAutoPtr<IEventHandle> &ev)
 {
-    YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TConsole::Enqueue event",
-        {"tabletID", TabletID()},
+    YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TConsole::Enqueue",
+        {"tabletId", TabletID()},
         {"type", ev->GetTypeRewrite()},
-        {"event", ev->ToString().data()});
+        {"ev", ev->ToString()});
     InitQueue.push_back(ev);
 }
 
@@ -144,10 +144,10 @@ void TConsole::ProcessEnqueuedEvents(const TActorContext &ctx)
 {
     while (!InitQueue.empty()) {
         TAutoPtr<IEventHandle> &ev = InitQueue.front();
-        YDB_LOG_DEBUG_CTX(ctx, "TConsole::Dequeue event",
-            {"tabletID", TabletID()},
+        YDB_LOG_DEBUG_CTX(ctx, "TConsole::Dequeue",
+            {"tabletId", TabletID()},
             {"type", ev->GetTypeRewrite()},
-            {"event", ev->ToString().data()});
+            {"ev", ev->ToString()});
         ctx.Send(ev.Release());
         InitQueue.pop_front();
     }

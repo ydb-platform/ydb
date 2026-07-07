@@ -45,8 +45,8 @@ namespace {
                 if (!NFs::Rename(cfgFilePath, PathToConfigCacheFile))
                     ythrow yexception() << "Failed to rename temporary file " << LastSystemError() << " " << LastSystemErrorText();
             } catch (const yexception &ex) {
-                YDB_LOG_WARN("An exception occurred while saving",
-                    {"config", ex.what()});
+                YDB_LOG_WARN("An exception occurred while saving config",
+                    {"error", ex.what()});
             }
         }
     };
@@ -67,8 +67,8 @@ namespace {
                 if (!google::protobuf::TextFormat::ParseFromString(configFile.ReadAll(), &config))
                     ythrow yexception() << "Failed to parse config protobuf from string";
             } catch (const yexception &ex) {
-                YDB_LOG_WARN("An exception occurred while getting config from cache",
-                    {"file", ex.what()});
+                YDB_LOG_WARN("An exception occurred while getting config from cache file",
+                    {"error", ex.what()});
             }
         };
     };
@@ -80,8 +80,8 @@ void TConfigsCache::Bootstrap(const TActorContext &ctx) {
 
     Load(CurrentConfig);
 
-    YDB_LOG_DEBUG("Restored",
-        {"configuration", CurrentConfig});
+    YDB_LOG_DEBUG("Restored configuration",
+        {"config", CurrentConfig.ShortDebugString()});
 
     const auto minKind = NKikimrConsole::TConfigItem::EKind_MIN;
     const auto maxKind = NKikimrConsole::TConfigItem::EKind_MAX;
@@ -108,8 +108,8 @@ void TConfigsCache::Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &
 
     CurrentConfig.Swap(rec.MutableConfig());
 
-    YDB_LOG_DEBUG("Saving",
-        {"configuration", CurrentConfig});
+    YDB_LOG_DEBUG("Saving configuration",
+        {"config", CurrentConfig.ShortDebugString()});
 
     Save(CurrentConfig);
 
@@ -128,7 +128,7 @@ void TConfigsCache::Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &
 void TConfigsCache::Handle(TEvConsole::TEvConfigSubscriptionError::TPtr &ev, const TActorContext &ctx) {
     auto &rec = ev->Get()->Record;
 
-    YDB_LOG_ERROR("Failed to create subscription will die",
+    YDB_LOG_ERROR("Failed to create subscription",
         {"code", rec.GetCode()},
         {"reason", rec.GetReason()});
 

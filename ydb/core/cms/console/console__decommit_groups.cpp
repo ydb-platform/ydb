@@ -25,20 +25,20 @@ public:
 
         if (Tenant != Self->GetTenant(Tenant->Path)) {
             YDB_LOG_ERROR_CTX(ctx, "TTxDecommitGroups tenant mismatch",
-                {"path", Tenant->Path});
+                {"tenantPath", Tenant->Path});
             return true;
         }
 
         if (!Tenant->StoragePools.contains(Pool->Kind)
             || Pool != Tenant->StoragePools.at(Pool->Kind)) {
             YDB_LOG_ERROR_CTX(ctx, "TTxDecommitGroups pool mismatch",
-                {"name", Pool->Config.GetName()});
+                {"poolName", Pool->Config.GetName()});
             return true;
         }
 
         if (Pool->Worker != Worker) {
             YDB_LOG_NOTICE_CTX(ctx, "TTxDecommitGroups pool worker mismatch",
-                {"name", Pool->Config.GetName()});
+                {"poolName", Pool->Config.GetName()});
             return true;
         }
 
@@ -68,7 +68,7 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         YDB_LOG_DEBUG_CTX(ctx, "TTxDecommitGroups complete",
-            {"name", Pool->Config.GetName()});
+            {"poolName", Pool->Config.GetName()});
 
         if (Update) {
             Self->Counters.Dec(Pool->Kind, COUNTER_ALLOCATED_STORAGE_UNITS,

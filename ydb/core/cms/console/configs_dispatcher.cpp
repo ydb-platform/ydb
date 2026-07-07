@@ -439,7 +439,7 @@ void TConfigsDispatcher::SendUpdateToSubscriber(TSubscription::TPtr subscription
 
     YDB_LOG_TRACE("Send TEvConsole::TEvConfigNotificationRequest",
         {"subscriber", subscriber},
-        {"notification", notification->Record});
+        {"ev", notification->Record.ShortDebugString()});
 
     Send(subscriber, notification.Release(), 0, subscription->UpdateInProcessCookie);
 }
@@ -581,7 +581,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
     YDB_LOG_TRACE("Send",
-        {"TEvConfigNotificationResponse", resp->Record});
+        {"ev", resp->Record.ShortDebugString()});
 
     Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
@@ -1208,9 +1208,10 @@ THashMap<ui32, TConfigsDispatcher::TParsedOpaqueConfig> TConfigsDispatcher::Pars
                 {"error", e.what()});
         }
         catch (...) {
-            YDB_LOG_ERROR("Error parsing opaque config unknown exception",
+            YDB_LOG_ERROR("Error parsing opaque config",
                 {"kind", kind},
-                {"name", name});
+                {"name", name},
+                {"error", "unknown exception"});
         }
         result.emplace(kind, std::move(entry));
     }
@@ -1426,9 +1427,9 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr 
     }
     resp->Config = trunc;
 
-    YDB_LOG_TRACE("Dump sender, resp",
+    YDB_LOG_TRACE("Send",
         {"sender", ev->Sender},
-        {"resp", resp->Config->ShortDebugString()});
+        {"ev", resp->Config->ShortDebugString()});
 
     Send(ev->Sender, std::move(resp), 0, ev->Cookie);
 }

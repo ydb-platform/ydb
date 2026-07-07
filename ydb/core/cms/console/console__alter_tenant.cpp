@@ -18,8 +18,8 @@ public:
     bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
                const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG_CTX(ctx, "Cannot alter",
-            {"tenant", error});
+        YDB_LOG_DEBUG_CTX(ctx, "Cannot alter tenant",
+            {"error", error});
 
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(true);
@@ -41,8 +41,8 @@ public:
 
         auto &rec = Request->Get()->Record.GetRequest();
         auto &token = Request->Get()->Record.GetUserToken();
-        YDB_LOG_DEBUG_CTX(ctx, "Dump TTxAlterTenant",
-            {"TTxAlterTenant", Request->Get()->Record});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant execute",
+            {"ev", Request->Get()->Record.ShortDebugString()});
 
         Response = new TEvConsole::TEvAlterTenantResponse;
 
@@ -403,8 +403,8 @@ public:
         Self->Counters.Inc(Response->Record.GetResponse().operation().status(),
                            COUNTER_ALTER_RESPONSES);
 
-        YDB_LOG_TRACE_CTX(ctx, "Dump send",
-            {"send", Response->ToString()});
+        YDB_LOG_TRACE_CTX(ctx, "Send",
+            {"ev", Response->ToString()});
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
 
         if (Tenant) {

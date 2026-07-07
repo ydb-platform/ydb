@@ -19,8 +19,8 @@ public:
                const TString &error,
                const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG_CTX(ctx, "Cannot add",
-            {"subscription", error});
+        YDB_LOG_DEBUG_CTX(ctx, "Cannot add subscription",
+            {"error", error});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);
@@ -35,8 +35,8 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         auto &rec = Request->Get()->Record;
-        YDB_LOG_DEBUG_CTX(ctx, "TTxAddConfigSubscription",
-            {"execute", rec});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxAddConfigSubscription execute",
+            {"ev", rec.ShortDebugString()});
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
@@ -51,8 +51,8 @@ public:
         // Check if existing subscription should be returned.
         for (auto existingSubscription : Self->SubscriptionIndex.GetSubscriptions(subscription->Subscriber)) {
             if (subscription->IsEqual(*existingSubscription)) {
-                YDB_LOG_DEBUG_CTX(ctx, "Dump id",
-                    {"id", existingSubscription->Id});
+                YDB_LOG_DEBUG_CTX(ctx, "Added subscription is similar to existing one, return existing subscription",
+                    {"subscriptionId", existingSubscription->Id});
 
                 Response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
                 Response->Record.SetSubscriptionId(existingSubscription->Id);
@@ -88,7 +88,7 @@ public:
             Self->ApplyPendingSubscriptionModifications(ctx, ev);
         } else {
             YDB_LOG_TRACE_CTX(ctx, "Send",
-                {"TEvAddConfigSubscriptionResponse", Response->Record});
+                {"ev", Response->Record.ShortDebugString()});
             ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
         }
 

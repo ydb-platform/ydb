@@ -29,8 +29,8 @@ public:
     bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
                const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG_CTX(ctx, "Cannot create",
-            {"tenant", error});
+        YDB_LOG_DEBUG_CTX(ctx, "Cannot create tenant",
+            {"error", error});
 
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(true);
@@ -70,8 +70,8 @@ public:
         auto &token = Request->Get()->Record.GetUserToken();
         auto &peer = Request->Get()->Record.GetPeerName();
 
-        YDB_LOG_DEBUG_CTX(ctx, "Dump TTxCreateTenant",
-            {"TTxCreateTenant", Request->Get()->Record});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxCreateTenant",
+            {"ev", Request->Get()->Record.ShortDebugString()});
 
         Response = new TEvConsole::TEvCreateTenantResponse;
 
@@ -365,7 +365,7 @@ public:
         Tenant->Generation = 1;
 
         YDB_LOG_DEBUG_CTX(ctx, "Add tenant",
-            {"path", path},
+            {"tenantPath", path},
             {"txId", Tenant->TxId});
 
         Self->DbAddTenant(Tenant, txc, ctx);
@@ -384,8 +384,8 @@ public:
             Self->Counters.Inc(Response->Record.GetResponse().operation().status(),
                                COUNTER_CREATE_RESPONSES);
 
-        YDB_LOG_TRACE_CTX(ctx, "Dump send",
-            {"send", Response->ToString()});
+        YDB_LOG_TRACE_CTX(ctx, "Send",
+            {"ev", Response->ToString()});
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
 
         if (Tenant) {

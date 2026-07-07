@@ -199,25 +199,36 @@ void TStorageTransportMock::WriteToManyPBuffers(
     std::shared_ptr<NWilson::TSpan> span,
     TWriteToManyPBuffersCallback callback)
 {
-    Y_UNUSED(
-        connection,
-        selector,
-        lsn,
-        instruction,
-        persistentBufferIds,
-        replyTimeout,
-        data);
+    Y_UNUSED(connection, selector, lsn, instruction, replyTimeout, data);
+
+    LastWriteToManyPBuffersDiskIds = persistentBufferIds;
 
     TEvWriteToManyPersistentBuffersResult result;
-    for (const auto& ddiskId: persistentBufferIds) {
+    auto addResult = [&](const NKikimrBlobStorage::NDDisk::TDDiskId& ddiskId,
+                         TReplyStatusE status)
+    {
         auto& r = *result.AddResult();
-        r.MutableResult()->SetStatus(WriteToManyPBufferStatus);
+        r.MutableResult()->SetStatus(status);
         r.MutablePersistentBufferId()->SetNodeId(ddiskId.GetNodeId());
         r.MutablePersistentBufferId()->SetPDiskId(ddiskId.GetPDiskId());
         r.MutablePersistentBufferId()->SetDDiskSlotId(ddiskId.GetDDiskSlotId());
+    };
+
+    if (WriteToManyPBufferCoordinatorOnlyStatus) {
+        // Emulate the node-disconnection / undelivery path: the actor replies
+        // only for the coordinator (first DDisk in the request).
+        if (!persistentBufferIds.empty()) {
+            addResult(
+                persistentBufferIds.front(),
+                *WriteToManyPBufferCoordinatorOnlyStatus);
+        }
+    } else {
+        for (const auto& ddiskId: persistentBufferIds) {
+            addResult(ddiskId, WriteToManyPBufferStatus);
+        }
     }
 
-    callback(std::move(result), std::move(span));
+    callback(result, std::move(span));
 }
 
 NThreading::TFuture<TEvWriteResult> TStorageTransportMock::WriteToDDisk(

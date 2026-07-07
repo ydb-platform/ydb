@@ -370,7 +370,7 @@ void TWriteRequestExecutor::Reply(NProto::TError error)
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s Reply error %s %s",
+            "%s [!] Reply error %s %s",
             LogTitle.GetWithTime().c_str(),
             ExtendedDebugState().c_str(),
             FormatError(error).c_str());

@@ -111,11 +111,14 @@ private:
         const TEvTransportPrivate::TEvBatchEraseFromPBuffer::TPtr& ev,
         const NActors::TActorContext& ctx);
 
-    void HandleErasePersistentBuffer(
+    void HandleBarrierErasePersistentBuffer(
         const TEvTransportPrivate::TEvBarrierEraseFromPBuffer::TPtr& ev,
         const NActors::TActorContext& ctx);
-    void HandleErasePersistentBufferUndelivery(
+    void HandleBatchErasePersistentBufferUndelivery(
         const NKikimr::NDDisk::TEvBatchErasePersistentBuffer::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleBarrierErasePersistentBufferUndelivery(
+        const NKikimr::NDDisk::TEvErasePersistentBuffer::TPtr& ev,
         const NActors::TActorContext& ctx);
     void HandleErasePersistentBufferResult(
         const NKikimr::NDDisk::TEvErasePersistentBufferResult::TPtr& ev,

@@ -28,7 +28,7 @@ std::unique_ptr<NDDisk::TEvWritePersistentBuffersResult>
 MakeWritePersistentBuffersResult(
     NKikimrBlobStorage::NDDisk::TReplyStatus_E status,
     TStringBuf reason,
-    const TVector<NKikimrBlobStorage::NDDisk::TDDiskId>& pbufferIds)
+    std::span<const NKikimrBlobStorage::NDDisk::TDDiskId> pbufferIds)
 {
     auto errorResponse =
         std::make_unique<NDDisk::TEvWritePersistentBuffersResult>();
@@ -160,9 +160,7 @@ TICStorageTransportActor::~TICStorageTransportActor()
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
             DestroyErrorMessage,
             requestInfo.Request->PersistentBufferIds);
-        if (requestInfo.Request->Callback) {
-            requestInfo.Request->Callback(std::move(response->Record));
-        }
+        requestInfo.Request->Reply(response->Record);
     }
 }
 
@@ -461,12 +459,15 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersUndelivery(
     if (auto* r = WriteToManyPBuffersRequests.FindPtr(requestId)) {
         auto& requestInfo = *r;
         auto& request = *requestInfo.Request;
+
+        // Will reply undelivered only for coordinator.
+        const NKikimrBlobStorage::NDDisk::TDDiskId coordinator[1] = {
+            request.PersistentBufferIds[0]};
         auto response = MakeWritePersistentBuffersResult(
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
             UndeliveryErrorMessage,
-            request.PersistentBufferIds);
-        Y_ABORT_UNLESS(request.Callback);
-        request.Callback(std::move(response->Record));
+            coordinator);
+        request.Reply(response->Record);
         WriteToManyPBuffersRequests.erase(requestId);
     } else {
         LOG_ERROR(
@@ -494,9 +495,7 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersResult(
         auto& request = *requestInfo.Request;
         auto& waitingReplies = requestInfo.WaitingReplies;
 
-        Y_ABORT_UNLESS(request.Callback);
-        request.Callback(ev->Get()->Record);
-        request.NumberOfCallbackCalls++;
+        request.Reply(ev->Get()->Record);
 
         for (const auto& singlePBufferResponse: ev->Get()->Record.GetResult()) {
             waitingReplies.erase(singlePBufferResponse.GetPersistentBufferId());
@@ -661,7 +660,7 @@ void TICStorageTransportActor::HandleBatchErasePersistentBuffer(
         std::move(msg->TraceId)));
 }
 
-void TICStorageTransportActor::HandleErasePersistentBuffer(
+void TICStorageTransportActor::HandleBarrierErasePersistentBuffer(
     const TEvTransportPrivate::TEvBarrierEraseFromPBuffer::TPtr& ev,
     const TActorContext& ctx)
 {
@@ -692,8 +691,8 @@ void TICStorageTransportActor::HandleErasePersistentBuffer(
         std::move(msg->TraceId));
 }
 
-void TICStorageTransportActor::HandleErasePersistentBufferUndelivery(
-    const NKikimr::NDDisk::TEvBatchErasePersistentBuffer::TPtr& ev,
+void TICStorageTransportActor::HandleBatchErasePersistentBufferUndelivery(
+    const NDDisk::TEvBatchErasePersistentBuffer::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
     const ui64 requestId = ev->Cookie;
@@ -717,7 +716,37 @@ void TICStorageTransportActor::HandleErasePersistentBufferUndelivery(
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "ErasePersistentBufferEvent with requestId# %lu not found",
+            "TEvBatchErasePersistentBuffer with requestId# %lu not found",
+            requestId);
+    }
+}
+
+void TICStorageTransportActor::HandleBarrierErasePersistentBufferUndelivery(
+    const NDDisk::TEvErasePersistentBuffer::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    const ui64 requestId = ev->Cookie;
+
+    LOG_WARN(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Received NDDisk::TEvErasePersistentBuffer undelivery with "
+        "requestId# %lu",
+        requestId);
+
+    if (auto* r = BarrierEraseFromPBufferRequests.FindPtr(requestId)) {
+        auto& request = **r;
+        auto result =
+            NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult();
+        SetUndeliveryError(result);
+        request.Promise.SetValue(std::move(result));
+        BarrierEraseFromPBufferRequests.erase(requestId);
+    } else {
+        // That means that request is already completed
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "TEvErasePersistentBuffer with requestId# %lu not found",
             requestId);
     }
 }
@@ -1245,10 +1274,13 @@ STFUNC(TICStorageTransportActor::StateWork)
             HandleBatchErasePersistentBuffer);
         HFunc(
             TEvTransportPrivate::TEvBarrierEraseFromPBuffer,
-            HandleErasePersistentBuffer);
+            HandleBarrierErasePersistentBuffer);
         HFunc(
             NDDisk::TEvBatchErasePersistentBuffer,
-            HandleErasePersistentBufferUndelivery);
+            HandleBatchErasePersistentBufferUndelivery);
+        HFunc(
+            NDDisk::TEvErasePersistentBuffer,
+            HandleBarrierErasePersistentBufferUndelivery);
         HFunc(
             NDDisk::TEvErasePersistentBufferResult,
             HandleErasePersistentBufferResult);

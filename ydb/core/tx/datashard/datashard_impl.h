@@ -2691,6 +2691,8 @@ private:
 
             TItem(const TItem&) = delete;
             TItem& operator=(const TItem&) = delete;
+            TItem(TItem&&) = delete;
+            TItem& operator=(TItem&&) = delete;
 
             TAutoPtr<IEventHandle> Event;
             TInstant ReceivedAt;
@@ -2769,8 +2771,8 @@ private:
                     TItem* next = item->NextForTxId;
                     item->Unlink();
                     --Count;
-                    onCancelled(*item);  // now Size() is accurate
-                    delete item;
+                    THolder<TItem> holder(item);
+                    onCancelled(*holder);  // now Size() is accurate
                     item = next;
                 }
                 TxIds.erase(it);

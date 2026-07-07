@@ -114,7 +114,7 @@ private:
 
         bool IsFixed() const
         {
-            return Expire == TInstant::Max();
+            return Expire == TInstant::Max() || ExpireV2 == TInstant::Max();
         }
 
         static TString ExpirationString(TInstant expire)
@@ -133,20 +133,34 @@ private:
             return ExpirationString(Expire);
         }
 
+        TString ExpirationV2String() const
+        {
+            return ExpirationString(ExpireV2);
+        }
+
+        TString AliveUntilString() const
+        {
+            return ExpirationString(AliveUntil);
+        }
+
         // Lease is incremented each time node extends its lifetime.
         ui32 Lease = 0;
         TInstant Expire;
+        TInstant ExpireV2;
         bool AuthorizedByCertificate = false;
         std::optional<ui32> SlotIndex;
         TSubDomainKey ServicedSubDomain;
         ENodeState State = ENodeState::Removed;
         ui64 Version = 0;
+        TInstant AliveUntil;
+        ENodeLiveness Liveness = ENodeLiveness::Alive;
     };
 
     // State changes to apply while moving to the next epoch.
     struct TStateDiff {
         TVector<ui32> NodesToExpire;
         TVector<ui32> NodesToRemove;
+        TVector<ui32> NodesToMakeDead;
         TEpochInfo NewEpoch;
         TApproximateEpochStartInfo NewApproxEpochStart;
     };
@@ -337,6 +351,10 @@ private:
                 const TActorContext &ctx);
 
     bool EnableStableNodeNames = false;
+    bool EnableLongLease = false;
+
+    TInstant StartTime;
+
     ui64 MaxStaticId;
     ui64 MinDynamicId;
     ui64 MaxDynamicId;
@@ -367,6 +385,7 @@ private:
         // Internal state modifiers. Don't affect DB.
         void RegisterNewNode(const TNodeInfo &info);
         void AddNode(const TNodeInfo &info);
+        bool IsLeaseExtendable(const TNodeInfo &node) const;
         void ExtendLease(TNodeInfo &node);
         void FixNodeId(TNodeInfo &node);
         void RecomputeFreeIds();
@@ -397,6 +416,7 @@ private:
         // Current config.
         NKikimrNodeBroker::TConfig Config;
         TDuration EpochDuration = TDuration::Hours(1);
+        TDuration LeaseDuration = TDuration::Hours(72);
         TVector<std::pair<ui32, ui32>> BannedIds;
         ui64 ConfigSubscriptionId = 0;
         TString StableNodeNamePrefix = "slot-";

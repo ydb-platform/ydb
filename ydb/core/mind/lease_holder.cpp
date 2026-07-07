@@ -1,13 +1,17 @@
 #include "lease_holder.h"
 #include "node_broker.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/core/mon/mon.h>
-#include <ydb/library/actors/core/mon.h>
-#include <ydb/library/actors/util/should_continue.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/mon/mon.h>
+#include <ydb/core/protos/feature_flags.pb.h>
+
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/mon.h>
+#include <ydb/library/actors/util/should_continue.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -40,7 +44,8 @@ public:
 
     TLeaseHolder(TInstant expire)
         : LastPingEpoch(0)
-        , Expire(expire)
+        , Expire_(expire)
+        , ExpireV2(expire)
     {
 
     }
@@ -53,6 +58,12 @@ public:
             mon->RegisterActorPage(actorsMonPage, "lease", "Dynamic node lease status",
                                    false, ctx.ActorSystem(), ctx.SelfID);
         }
+
+        EnableLongLease = AppData()->FeatureFlags.GetEnableNodeBrokerLongLease();
+
+        ui32 featureFlagsItem = NKikimrConsole::TConfigItem::FeatureFlagsItem;
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+            new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(featureFlagsItem));
 
         Become(&TThis::StatePing);
 
@@ -69,6 +80,7 @@ private:
             HFunc(TEvPrivate::TEvExpire, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, HandleIdle);
             HFunc(TEvTabletPipe::TEvClientConnected, HandleIdle);
+            HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
             IgnoreFunc(TEvNodeBroker::TEvExtendLeaseResponse);
 
         default:
@@ -85,6 +97,7 @@ private:
             HFunc(TEvPrivate::TEvExpire, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
 
         default:
             Y_ABORT("TLeaseHolder::StatePing unexpected event type: %" PRIx32 " event: %s",
@@ -138,6 +151,18 @@ private:
             OnPipeDestroyed(ctx);
     }
 
+    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev, const TActorContext &ctx) {
+        auto& record = ev->Get()->Record;
+        if (record.HasConfig() && record.GetConfig().HasFeatureFlags()) {
+            const auto& featureFlags = record.GetConfig().GetFeatureFlags();
+            if (EnableLongLease != featureFlags.GetEnableNodeBrokerLongLease()) {
+                EnableLongLease = featureFlags.GetEnableNodeBrokerLongLease();
+                ScheduleExpire(ctx);
+            }
+        }
+        Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
+    }
+
     void Connect(const TActorContext &ctx)
     {
         NTabletPipe::TClientConfig config;
@@ -159,29 +184,34 @@ private:
             return;
         }
 
-        Expire = TInstant::MicroSeconds(rec.GetExpire());
+        Expire_ = TInstant::MicroSeconds(rec.GetExpire());
+
+        if (rec.HasExpireV2()) {
+            ExpireV2 = TInstant::MicroSeconds(rec.GetExpireV2());
+        } else {
+            ExpireV2 = TInstant::MicroSeconds(rec.GetExpire());
+        }
+
         LastResponse = ctx.Now();
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Node has now extended lease expiring " << ToString(Expire));
+                    "Node has now extended lease expiring " << ToString(Expire()));
 
         if (rec.HasEpoch()) {
             LastPingEpoch = rec.GetEpoch().GetId();
             EpochEnd = TInstant::FromValue(rec.GetEpoch().GetEnd());
+            NextEpochEnd = TInstant::FromValue(rec.GetEpoch().GetNextEnd());
 
-            if (Expire != TInstant::Max()) {
-                Y_ABORT_UNLESS(Expire > EpochEnd);
-                Y_ABORT_UNLESS(rec.GetExpire() == rec.GetEpoch().GetNextEnd());
-
-                ui64 window = (Expire - EpochEnd).GetValue() / 2;
+            if (Expire_ != TInstant::Max()) {
+                ui64 window = (NextEpochEnd - EpochEnd).GetValue() / 2;
                 Y_ABORT_UNLESS(window);
 
                 NextPing = EpochEnd + TDuration::FromValue(RandomNumber<ui64>(window));
             }
         } else {
-            NextPing = ctx.Now() + (Expire - ctx.Now()) / 2;
+            NextPing = ctx.Now() + (Expire_ - ctx.Now()) / 2;
         }
 
-        if (Expire != TInstant::Max())
+        if (Expire() != TInstant::Max())
             ctx.Schedule(NextPing - ctx.Now(), new TEvents::TEvWakeup());
         else
             NextPing = TInstant::Max();
@@ -203,11 +233,15 @@ private:
         TStringStream str;
         HTML(str) {
             PRE() {
-                str << "Lease expires: " << ToString(Expire) << Endl
+                str << "Lease expires: " << ToString(Expire()) << Endl
                     << "Last lease extension: " << ToString(LastResponse) << Endl
                     << "Last ping epoch: " << LastPingEpoch << Endl
                     << "Epoch end: " << ToString(EpochEnd) << Endl
-                    << "Next ping at: " << ToString(NextPing) << Endl;
+                    << "Next epoch end: " << ToString(NextEpochEnd) << Endl
+                    << "Next ping at: " << ToString(NextPing) << Endl
+                    << "Enable long lease: " << EnableLongLease << Endl
+                    << "Expire: " << ToString(Expire_) << Endl
+                    << "ExpireV2: " << ToString(ExpireV2) << Endl;
             }
         }
         ctx.Send(ev->Sender, new TEvHttpInfoRes(str.Str()));
@@ -215,13 +249,13 @@ private:
 
     void ScheduleExpire(const TActorContext &ctx)
     {
-        if (Expire != TInstant::Max())
-            ctx.Schedule(Expire - ctx.Now(), new TEvPrivate::TEvExpire);
+        if (Expire() != TInstant::Max())
+            ctx.Schedule(Expire() - ctx.Now(), new TEvPrivate::TEvExpire);
     }
 
     void Handle(TEvPrivate::TEvExpire::TPtr &,const TActorContext &ctx)
     {
-        if (Expire <= ctx.Now())
+        if (Expire() <= ctx.Now())
             StopNode(ctx);
         else
             ScheduleExpire(ctx);
@@ -240,13 +274,23 @@ private:
         return t.ToRfc822StringLocal();
     }
 
+    TInstant Expire() const
+    {
+        return EnableLongLease ? ExpireV2 : Expire_;
+    }
+
 private:
     TActorId NodeBrokerPipe;
     ui64 LastPingEpoch;
     TInstant EpochEnd;
-    TInstant Expire;
+    TInstant NextEpochEnd;
+
     TInstant LastResponse;
     TInstant NextPing;
+
+    bool EnableLongLease;
+    TInstant Expire_;
+    TInstant ExpireV2;
 };
 
 IActor *CreateLeaseHolder(TInstant expire)

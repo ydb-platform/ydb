@@ -142,7 +142,8 @@ void OutputStaticNodes(const TTableNameserverSetup &setup,
 
 void OutputDynamicNodes(const TString &domain,
                         TDynamicConfigPtr config,
-                        IOutputStream &str)
+                        IOutputStream &str,
+                        bool enableLongLease)
 {
     str << "<div><table class='nodes'>" << Endl
         << "  <caption>Dynamic nodes in " << domain
@@ -168,7 +169,7 @@ void OutputDynamicNodes(const TString &domain,
         ids.insert(pr.first);
     for (auto id : ids) {
         auto &node = config->DynamicNodes.at(id);
-        OutputNodeInfo(id, node, str, node.Expire);
+        OutputNodeInfo(id, node, str, node.GetExpire(enableLongLease));
     }
 
     ids.clear();
@@ -217,7 +218,7 @@ void TDynamicNameserver::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext
         OutputStaticNodes(*StaticConfig, str);
 
         if (const auto& domain = AppData(ctx)->DomainsInfo->Domain) {
-            OutputDynamicNodes(domain->Name, DynamicConfigs[domain->DomainUid], str);
+            OutputDynamicNodes(domain->Name, DynamicConfigs[domain->DomainUid], str, EnableLongLease);
         }
     }
     ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));

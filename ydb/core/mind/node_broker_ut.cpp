@@ -76,7 +76,8 @@ THashMap<ui32, TIntrusivePtr<TNodeWardenConfig>> NodeWardenConfigs;
 
 void SetupServices(TTestActorRuntime &runtime,
                    ui32 maxDynNodes,
-                   bool enableNodeBrokerDeltaProtocol)
+                   bool enableNodeBrokerDeltaProtocol,
+                   bool enableNodeBrokerLongLease = false)
 {
     const ui32 domainsNum = 1;
     const ui32 disksInDomain = 1;
@@ -191,6 +192,7 @@ void SetupServices(TTestActorRuntime &runtime,
     app.FeatureFlags.SetEnableNodeBrokerSingleDomainMode(true);
     app.FeatureFlags.SetEnableStableNodeNames(true);
     app.FeatureFlags.SetEnableNodeBrokerDeltaProtocol(enableNodeBrokerDeltaProtocol);
+    app.FeatureFlags.SetEnableNodeBrokerLongLease(enableNodeBrokerLongLease);
 
     runtime.Initialize(app.Unwrap());
 
@@ -261,6 +263,15 @@ void SetEpochDuration(TTestActorRuntime& runtime,
     SetConfig(runtime, sender, config);
 }
 
+void SetLeaseDuration(TTestActorRuntime& runtime,
+                      TActorId sender,
+                      TDuration lease)
+{
+    NKikimrNodeBroker::TConfig config;
+    config.SetLeaseDuration(lease.GetValue());
+    SetConfig(runtime, sender, config);
+}
+
 void AsyncSetBannedIds(TTestActorRuntime& runtime,
     TActorId sender,
     const TVector<std::pair<ui32, ui32>> ids)
@@ -285,7 +296,8 @@ void SetBannedIds(TTestActorRuntime& runtime,
 void Setup(TTestActorRuntime& runtime,
            ui32 maxDynNodes = 3,
            const TVector<TString>& databases = {},
-           bool enableNodeBrokerDeltaProtocol = false)
+           bool enableNodeBrokerDeltaProtocol = false,
+           bool enableNodeBrokerLongLease = false)
 {
     using namespace NMalloc;
     TMallocInfo mallocInfo = MallocInfo();
@@ -301,7 +313,7 @@ void Setup(TTestActorRuntime& runtime,
     runtime.SetScheduledEventFilter(scheduledFilter);
 
     SetupLogging(runtime);
-    SetupServices(runtime, maxDynNodes, enableNodeBrokerDeltaProtocol);
+    SetupServices(runtime, maxDynNodes, enableNodeBrokerDeltaProtocol, enableNodeBrokerLongLease);
 
     TActorId sender = runtime.AllocateEdgeActor();
     ui32 txId = 100;
@@ -668,6 +680,27 @@ NKikimrNodeBroker::TEpoch CheckNodesList(TTestActorRuntime &runtime,
     UNIT_ASSERT_VALUES_EQUAL(rec.GetEpoch().GetId(), epoch);
 
     return rec.GetEpoch();
+}
+
+void CheckNodeLiveness(TTestActorRuntime &runtime,
+                       TActorId sender,
+                       ui32 nodeId,
+                       ENodeLiveness liveness)
+{
+    const auto &rec = ListNodes(runtime, sender);
+    // The nodes list is a concatenation of the epoch snapshot and per-node
+    // deltas, so a node may appear more than once; the last occurrence wins.
+    bool found = false;
+    ui32 actual = 0;
+    for (const auto &node : rec.GetNodes()) {
+        if (node.GetNodeId() == nodeId) {
+            found = true;
+            actual = node.GetLiveness();
+        }
+    }
+    UNIT_ASSERT_C(found, "node " << nodeId << " is not in the alive nodes list");
+    UNIT_ASSERT_VALUES_EQUAL_C(actual, static_cast<ui32>(liveness),
+                               "unexpected liveness for node " << nodeId);
 }
 
 void CheckNodeInfo(TTestActorRuntime &runtime,
@@ -1393,6 +1426,142 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.5",
                           1, 2, 3, 5, TStatus::OK, NODE2, Max<ui64>(), false);
         CheckLeaseExtension(runtime, sender, NODE2, TStatus::OK, epoch, true);
+    }
+
+    Y_UNIT_TEST(LongLeaseNodeBecomesDeadThenExpires)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ true);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // Lease duration equal to a single (default) epoch: a node without pings
+        // survives one extra epoch (AliveUntil) before becoming Dead and another
+        // epoch (ExpireV2) before it finally expires.
+        SetLeaseDuration(runtime, sender, TDuration::Minutes(5));
+
+        auto epoch = GetEpoch(runtime, sender);
+        // Register node NODE1, it is Alive.
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Alive);
+
+        // After the first epoch the long lease keeps the node Alive.
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Alive);
+
+        // After the second epoch AliveUntil has passed: the node becomes Dead,
+        // but is not expired yet (ExpireV2 is still in the future).
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Dead);
+
+        // After the third epoch ExpireV2 has passed: the node expires.
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {}, {NODE1}, epoch.GetId());
+    }
+
+    Y_UNIT_TEST(LongLeasePingKeepsNodeAlive)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ true);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        SetLeaseDuration(runtime, sender, TDuration::Minutes(5));
+
+        auto epoch = GetEpoch(runtime, sender);
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
+
+        // As long as the node keeps extending its lease each epoch, it never
+        // becomes Dead nor expires, even with the long lease feature enabled.
+        for (ui32 i = 0; i < 5; ++i) {
+            epoch = WaitForEpochUpdate(runtime, sender);
+            CheckLeaseExtension(runtime, sender, NODE1, TStatus::OK, epoch);
+            CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+            CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Alive);
+        }
+    }
+
+    Y_UNIT_TEST(LongLeaseDeadNodeRevivedByRegistration)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ true);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        SetLeaseDuration(runtime, sender, TDuration::Minutes(5));
+
+        auto epoch = GetEpoch(runtime, sender);
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
+
+        // Let the node become Dead.
+        WaitForEpochUpdate(runtime, sender);
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Dead);
+
+        // Re-registration of a Dead node revives it (extends lease, back to Alive).
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Alive);
+
+        // The revived node survives the following epoch as Alive.
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Alive);
+    }
+
+    Y_UNIT_TEST(LongLeaseDeadStatePersistedAfterRestart)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ true);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        SetLeaseDuration(runtime, sender, TDuration::Minutes(5));
+
+        auto epoch = GetEpoch(runtime, sender);
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
+
+        // Let the node become Dead.
+        WaitForEpochUpdate(runtime, sender);
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Dead);
+
+        // Dead state (AliveUntil/Liveness) must survive a tablet restart.
+        RestartNodeBroker(runtime);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Dead);
+
+        // The node still expires by ExpireV2 in the next epoch.
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {}, {NODE1}, epoch.GetId());
+    }
+
+    Y_UNIT_TEST(LongLeaseDisabledNodeExpiresByExpire)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ false);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // Even with a lease duration configured, when the feature is disabled the
+        // node expires by Expire (a single epoch after its last ping) and never
+        // transitions to the Dead state.
+        SetLeaseDuration(runtime, sender, TDuration::Minutes(5));
+
+        auto epoch = GetEpoch(runtime, sender);
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Alive);
+
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Alive);
+
+        // Expires by Expire, without ever becoming Dead.
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {}, {NODE1}, epoch.GetId());
     }
 
     Y_UNIT_TEST(TestListNodes)

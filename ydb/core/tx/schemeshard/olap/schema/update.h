@@ -2,7 +2,6 @@
 
 #include <ydb/core/tx/schemeshard/olap/columns/update.h>
 #include <ydb/core/tx/schemeshard/olap/indexes/update.h>
-#include <ydb/core/tx/schemeshard/olap/statistics/update.h>
 #include <ydb/core/tx/schemeshard/olap/options/update.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -12,7 +11,6 @@ namespace NKikimr::NSchemeShard {
 class TOlapSchemaUpdate {
     YDB_READONLY_DEF(TOlapColumnsUpdate, Columns);
     YDB_READONLY_DEF(TOlapIndexesUpdate, Indexes);
-    YDB_READONLY_DEF(TOlapMultiColumnStatisticsUpdate, MultiColumnStatistics);
     YDB_READONLY_DEF(TOlapOptionsUpdate, Options);
 
 public:

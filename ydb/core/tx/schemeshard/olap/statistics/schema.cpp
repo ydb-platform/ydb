@@ -94,31 +94,18 @@ bool TOlapMultiColumnStatisticsDescription::ApplyUpdate(const TOlapSchema& curre
     return true;
 }
 
-void TOlapMultiColumnStatisticsDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
-    for (const auto& proto : tableSchema.GetMultiColumnStatistics()) {
+void TOlapMultiColumnStatisticsDescription::Parse(const NKikimrSchemeOp::TColumnTableDescription& description) {
+    for (const auto& proto : description.GetMultiColumnStatistics()) {
         TOlapMultiColumnStatisticsSchema statistics;
         statistics.DeserializeFromProto(proto);
         MultiColumnStatisticsByName.emplace(proto.GetName(), std::move(statistics));
     }
 }
 
-void TOlapMultiColumnStatisticsDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const {
+void TOlapMultiColumnStatisticsDescription::Serialize(NKikimrSchemeOp::TColumnTableDescription& description) const {
+    description.ClearMultiColumnStatistics();
     for (const auto& [_, statistics] : MultiColumnStatisticsByName) {
-        statistics.SerializeToProto(*tableSchema.AddMultiColumnStatistics());
+        statistics.SerializeToProto(*description.AddMultiColumnStatistics());
     }
-}
-
-bool TOlapMultiColumnStatisticsDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
-    for (const auto& proto : opSchema.GetMultiColumnStatistics()) {
-        if (proto.GetName().empty()) {
-            errors.AddError("MultiColumnStatistics cannot have an empty name");
-            return false;
-        }
-        if (!GetByName(proto.GetName())) {
-            errors.AddError("MultiColumnStatistics '" + proto.GetName() + "' does not match schema preset");
-            return false;
-        }
-    }
-    return true;
 }
 }

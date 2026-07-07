@@ -1650,8 +1650,8 @@ TCheckFunc CheckMultiColumnStatistics(const TString& name, const TVector<TString
 
 TCheckFunc CheckColumnTableMultiColumnStatistics(const TString& name, const TVector<TString>& columns, const TVector<NKikimrSchemeOp::EMultiColumnStatisticsType>& types) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        const auto& schema = record.GetPathDescription().GetColumnTableDescription().GetSchema();
-        const auto& stats = schema.GetMultiColumnStatistics();
+        const auto& tableDesc = record.GetPathDescription().GetColumnTableDescription();
+        const auto& stats = tableDesc.GetMultiColumnStatistics();
         auto it = std::find_if(stats.begin(), stats.end(),
             [&](const auto& s) { return s.GetName() == name; });
         UNIT_ASSERT_C(it != stats.end(), "MultiColumnStatistics '" << name << "' not found");

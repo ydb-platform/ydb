@@ -45,10 +45,6 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
         return false;
     }
 
-    if (!MultiColumnStatistics.ApplyUpdate(*this, schemaUpdate.GetMultiColumnStatistics(), errors)) {
-        return false;
-    }
-
     if (!Options.ApplyUpdate(schemaUpdate.GetOptions(), errors)) {
         return false;
     }
@@ -75,7 +71,6 @@ void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& ta
 
     Columns.Parse(tableSchema);
     Indexes.Parse(tableSchema);
-    MultiColumnStatistics.Parse(tableSchema);
     Options.Parse(tableSchema);
     AdvanceNextColumnIdPastIndexes(NextColumnId, tableSchema);
 }
@@ -92,7 +87,6 @@ void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt)
 
     Columns.Serialize(resultLocal);
     Indexes.Serialize(resultLocal);
-    MultiColumnStatistics.Serialize(resultLocal);
     Options.Serialize(resultLocal);
     std::swap(resultLocal, tableSchemaExt);
 }
@@ -103,10 +97,6 @@ bool TOlapSchema::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& op
     }
 
     if (!Indexes.ValidateForStore(opSchema, errors)) {
-        return false;
-    }
-
-    if (!MultiColumnStatistics.ValidateForStore(opSchema, errors)) {
         return false;
     }
 

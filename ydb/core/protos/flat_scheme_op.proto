@@ -822,8 +822,6 @@ message TColumnTableSchema {
     repeated TFamilyDescription ColumnFamilies = 13;
     // Internal fields
     optional uint32 NextColumnFamilyId = 14;
-
-    repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 15;
 }
 
 message TColumnTableSchemaDiff {
@@ -858,8 +856,6 @@ message TAlterColumnTableSchema {
     repeated TFamilyDescription AddColumnFamily = 13;
     repeated TFamilyDescription AlterColumnFamily = 14;
     repeated TOlapMoveIndex MoveIndex = 15;
-    repeated TMultiColumnStatisticsDescription UpsertMultiColumnStatistics = 16;
-    repeated string DropMultiColumnStatistics = 17;
 }
 
 // Schema presets are used to manage multiple tables with the same schema
@@ -1101,6 +1097,8 @@ message TColumnTableDescription {
     optional string CopyFromTable = 16;
 
     optional bool IsBackup = 17;
+
+    repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 18;
 }
 
 message TAlterColumnTable {
@@ -1114,6 +1112,9 @@ message TAlterColumnTable {
 
     optional TAlterShards AlterShards = 6;
     optional TReshardColumnTable ReshardColumnTable = 7;
+
+    repeated TMultiColumnStatisticsDescription UpsertMultiColumnStatistics = 8;
+    repeated string DropMultiColumnStatistics = 9;
 }
 
 message TReshardColumnTable {

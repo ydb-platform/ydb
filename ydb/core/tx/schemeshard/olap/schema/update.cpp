@@ -7,10 +7,6 @@ bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSc
         return false;
     }
 
-    if (!MultiColumnStatistics.Parse(tableSchema, errors)) {
-        return false;
-    }
-
     return true;
 }
 
@@ -20,10 +16,6 @@ bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& al
     }
 
     if (!Indexes.Parse(alterRequest, errors)) {
-        return false;
-    }
-
-    if (!MultiColumnStatistics.Parse(alterRequest, errors)) {
         return false;
     }
 

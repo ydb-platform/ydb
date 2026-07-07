@@ -24,9 +24,9 @@ namespace NKikimr::NSchemeShard {
         YDB_READONLY_DEF(TVector<TOlapMultiColumnStatisticsUpsert>, UpsertMultiColumnStatistics);
         YDB_READONLY_DEF(TSet<TString>, DropMultiColumnStatistics);
     public:
-        // Build the update from a full schema (CREATE TABLE): every declared statistics is an upsert.
-        bool Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors);
+        // Build the update from a full table description (CREATE TABLE): every declared statistics is an upsert.
+        bool Parse(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors);
         // Build the update from an alter diff (ALTER TABLE ADD/DROP STATISTICS).
-        bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
+        bool Parse(const NKikimrSchemeOp::TAlterColumnTable& alterRequest, IErrorCollector& errors);
     };
 }

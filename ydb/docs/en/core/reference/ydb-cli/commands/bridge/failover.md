@@ -34,6 +34,7 @@ View command help:
 - If the current `PRIMARY` is unavailable, you must specify `--new-primary` and choose a pile in the `SYNCHRONIZED` state. If `--new-primary` is missing or the chosen pile is not in `SYNCHRONIZED` state, the command returns an error without making any changes.
 - The cluster will not enter an invalid state: if requirements are violated, the command makes no changes and reports an error.
 - If the pile has not failed but you need to disable it, use [planned disable](../../../../concepts/bridge.md#takedown) — the [`takedown`](takedown.md) command.
+- The command requires administrative privileges. On a cluster with mandatory authentication enabled, login and password authentication does not work while the cluster is in an emergency state — use client certificate authentication instead. For details, see [{#T}](../../../../devops/deployment-options/manual/bridge-management.md#emergency-auth).
 
 ## Examples {#examples}
 

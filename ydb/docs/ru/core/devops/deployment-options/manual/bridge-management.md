@@ -75,6 +75,12 @@ pile-b: SYNCHRONIZED
 
 Недоступный pile будет переведён в состояние `DISCONNECTED`, а при указании нового `PRIMARY` произойдёт переключение этой роли. Если остальные pile находятся в состояниях, отличных от `SYNCHRONIZED`, аварийное отключение также может быть выполнено. Допустимые переходы зависят от текущей пары состояний и приведены на [диаграмме состояний](../../../concepts/bridge.md#pile-states) и в [таблице переходов](../../../concepts/bridge.md#transitions-between-states).
 
+{% note warning %}
+
+Если на кластере включена обязательная аутентификация, при выполнении failover в аварийном состоянии аутентификация по логину и паролю не работает — используйте аутентификацию по клиентским сертификатам. Подробнее см. [{#T}](#emergency-auth).
+
+{% endnote %}
+
 ### Вернуть pile в кластер (rejoin) {#rejoin}
 
 После завершения плановых работ или устранения причин отказа ранее отключённые pile необходимо явным образом вводить обратно в эксплуатацию следующей командой:
@@ -83,4 +89,64 @@ pile-b: SYNCHRONIZED
 {{ ydb-cli }} admin cluster bridge rejoin --pile <pile>
 ```
 
-Сразу после запуска операции pile переходит в состояние `NOT_SYNCHRONIZED` и запускается фоновый процесс синхронизации данных; по её завершении pile автоматически становится `SYNCHRONIZED`. Дождавшись этого состояния, при необходимости можно [переключить роль `PRIMARY` на данный pile](#switchover).  
+Сразу после запуска операции pile переходит в состояние `NOT_SYNCHRONIZED` и запускается фоновый процесс синхронизации данных; по её завершении pile автоматически становится `SYNCHRONIZED`. Дождавшись этого состояния, при необходимости можно [переключить роль `PRIMARY` на данный pile](#switchover).
+
+### Особенности аутентификации в аварийном состоянии кластера {#emergency-auth}
+
+Команды управления кластером в режиме bridge требуют административных прав. На кластере с включённой обязательной аутентификацией ([`enforce_user_token_requirement: true`](../../../reference/configuration/security_config.md)) на исправном кластере работают все способы аутентификации, включая [аутентификацию по логину и паролю](../../../security/authentication.md#static-credentials).
+
+Однако при отказе pile кластер приостанавливает обслуживание запросов до выполнения [failover](#failover). В этом состоянии аутентификация по логину и паролю не работает: для проверки учётных данных нужен доступ к [SchemeShard](../../../concepts/glossary.md#scheme-shard), который недоступен на кластере в аварийном состоянии. Попытка входа завершается ошибкой:
+
+```text
+SchemeShard is unreachable
+```
+
+Единственный способ аутентификации, работающий в аварийном состоянии кластера, — [аутентификация по клиентским сертификатам](../../../reference/configuration/client_certificate_authorization.md). Клиентский сертификат проверяется локально узлом, принявшим запрос, поэтому такая проверка не зависит от доступности кластера в целом.
+
+Аутентификация по клиентским сертификатам должна быть настроена на кластере заранее:
+
+1. Секция [`client_certificate_authorization`](../../../reference/configuration/client_certificate_authorization.md) конфигурации кластера должна присваивать подключениям с доверенным клиентским сертификатом [SID](../../../concepts/glossary.md#access-sid) административной группы:
+
+    ```yaml
+    client_certificate_authorization:
+      request_client_certificate: true
+      client_certificate_definitions:
+        - member_groups: ["ADMINS"]
+          subject_terms:
+          - short_name: "O"
+            values: ["YDB"]
+    ```
+
+2. Этот SID должен входить в список `administration_allowed_sids` секции [`security_config`](../../../reference/configuration/security_config.md):
+
+    ```yaml
+    security_config:
+      enforce_user_token_requirement: true
+      administration_allowed_sids:
+      - "root"
+      - "ADMINS"
+    ```
+
+Если кластер развёрнут по [инструкции по развёртыванию](initial-deployment/deployment-configuration-v2.md), эти настройки уже включены в конфигурацию, а в качестве клиентского сертификата подойдут файлы `node.crt` и `node.key` из каталога `~/CA/certs/` на любом узле кластера.
+
+Для аутентификации по клиентскому сертификату укажите его в глобальных опциях {{ ydb-short-name }} CLI `--client-cert-file` и `--client-cert-key-file`. Подключаться необходимо к узлу работоспособного pile. Пример выполнения failover:
+
+```bash
+{{ ydb-cli }} -e grpcs://<node.ydb.tech>:2135 \
+    --ca-file ca.crt \
+    --client-cert-file node.crt \
+    --client-cert-key-file node.key \
+    admin cluster bridge failover --pile <unavailable-pile> --new-primary <synchronized-pile>
+```
+
+где:
+
+- `<node.ydb.tech>` — FQDN узла в работоспособном pile;
+- `ca.crt` — сертификат доверенного центра сертификации кластера;
+- `node.crt`, `node.key` — клиентский сертификат и приватный ключ к нему, удовлетворяющие требованиям секции `client_certificate_authorization`.
+
+{% note warning %}
+
+Проверьте работоспособность аутентификации по клиентским сертификатам заранее, до возникновения аварии: изменить конфигурацию кластера в аварийном состоянии невозможно.
+
+{% endnote %}

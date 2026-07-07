@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/opt/rbo/rules/kqp_rules_include.h>
 
-#include <ydb/core/kqp/opt/physical/kqp_olap_filter_inspection.h>
+#include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -149,6 +149,10 @@ bool PruneAggregateTraits(const TIntrusivePtr<TOpAggregate>& aggregate, const TI
 
 } // anonymous namespace
 
+bool TPruneDeadMapElementsRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Map;
+}
+
 bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
@@ -183,6 +187,10 @@ bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
     return true;
 }
 
+bool TPruneDeadReadColumnsRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Source;
+}
+
 bool TPruneDeadReadColumnsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
@@ -203,6 +211,10 @@ bool TPruneDeadReadColumnsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
     }
 
     return NarrowReadColumns(read, liveOut, keepKeyColumns);
+}
+
+bool TPruneDeadUnionAllColumnsRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::UnionAll;
 }
 
 bool TPruneDeadUnionAllColumnsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
@@ -239,6 +251,10 @@ bool TPruneDeadUnionAllColumnsRule::MatchAndApply(TIntrusivePtr<IOperator>& inpu
 
     unionAll->Columns = std::move(newColumns);
     return true;
+}
+
+bool TPruneDeadAggregateTraitsRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Aggregate;
 }
 
 bool TPruneDeadAggregateTraitsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {

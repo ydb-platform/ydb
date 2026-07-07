@@ -32,6 +32,10 @@ TInfoUnitSet GetInputIUs(const TIntrusivePtr<TOpMap>& map) {
 // Remove extra maps that arrise during translation.
 // Identity renames carry no semantic rename and should not block map rewrites.
 
+bool TRemoveIdenityMapRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Map;
+}
+
 TIntrusivePtr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);

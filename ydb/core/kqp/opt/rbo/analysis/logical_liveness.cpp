@@ -69,10 +69,9 @@ public:
 
     void AddExpressionDeps(const TExpression& expr, TInfoUnitSet& target) override {
         const auto expression = TExpression(expr.Node, expr.Ctx, &Props);
-        AddInfoUnits(target, expression.GetInputIUs(false, true));
-
-        for (const auto& iu : expression.GetInputIUs(true, false)) {
+        for (const auto& iu : expression.GetInputIUs(true, true)) {
             if (!iu.IsSubplanContext()) {
+                AddInfoUnit(target, iu);
                 continue;
             }
 
@@ -81,13 +80,14 @@ public:
                 continue;
             }
 
-            AddLiveColumns(CastOperator<IOperator>(it->second.Plan), CastOperator<IOperator>(it->second.Plan)->GetOutputIUs());
+            auto subplan = CastOperator<IOperator>(it->second.Plan);
+            AddLiveColumns(subplan, subplan->GetOutputIUs());
         }
     }
 
 private:
     void Enqueue(const TIntrusivePtr<IOperator>& op) {
-        if (Queued.insert(op.get()).second) {
+        if (op && Queued.insert(op.get()).second) {
             Queue.push_back(op);
         }
     }
@@ -113,7 +113,7 @@ void IOperator::PropagateLiveness(ILivenessContext& ctx) {
 }
 
 void IUnaryOperator::PropagateLiveness(ILivenessContext& ctx) {
-    const TInfoUnitSet liveOut = ctx.GetLiveOut(this);
+    const auto& liveOut = ctx.GetLiveOut(this);
     TInfoUnitSet inputLive;
     for (const auto& iu : GetInput()->GetOutputIUs()) {
         if (liveOut.contains(iu)) {
@@ -128,7 +128,7 @@ void TOpRead::PropagateLiveness(ILivenessContext& ctx) {
 }
 
 void TOpMap::PropagateLiveness(ILivenessContext& ctx) {
-    const TInfoUnitSet liveOut = ctx.GetLiveOut(this);
+    const auto& liveOut = ctx.GetLiveOut(this);
     auto input = GetInput();
     TInfoUnitSet inputLive;
     TInfoUnitSet renameSources;
@@ -158,7 +158,7 @@ void TOpFilter::PropagateLiveness(ILivenessContext& ctx) {
 }
 
 void TOpJoin::PropagateLiveness(ILivenessContext& ctx) {
-    const TInfoUnitSet liveOut = ctx.GetLiveOut(this);
+    const auto& liveOut = ctx.GetLiveOut(this);
     const auto leftInput = GetLeftInput();
     const auto rightInput = GetRightInput();
     const auto leftOutput = MakeInfoUnitSet(leftInput->GetOutputIUs());
@@ -209,7 +209,7 @@ void TOpJoin::PropagateLiveness(ILivenessContext& ctx) {
 }
 
 void TOpUnionAll::PropagateLiveness(ILivenessContext& ctx) {
-    const TInfoUnitSet liveOut = ctx.GetLiveOut(this);
+    const auto& liveOut = ctx.GetLiveOut(this);
     TInfoUnitSet leftLive;
     TInfoUnitSet rightLive;
     for (const auto& column : Columns) {

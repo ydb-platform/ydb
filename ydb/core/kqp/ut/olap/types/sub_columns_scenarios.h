@@ -3,9 +3,9 @@
 
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
 #include <util/string/builder.h>
-
-#include <format>
+#include <util/string/printf.h>
 
 // Sub_columns read-path scenarios generated for both the non-dictionary and dictionary paths from a
 // single place, so the two differ only by the `isDictionary` switch. Each `<Scenario>(isDictionary)`
@@ -27,50 +27,76 @@ namespace NKikimr::NKqp::NSubColumnsScenarios {
 inline TString AccessorTypeCheck(
     const NArrow::NAccessor::IChunkedArray::EType expectedType, const ui32 minChunks = 0, const bool requirePresence = true) {
     const char* presence = requirePresence ? R"(JSON_EXISTS(CAST(ChunkDetails AS JsonDocument), "$.columns.accessor[0]") AND )" : "";
-    return TString(std::format(R"SQL(READ: $All = SELECT COUNT(*) AS cnt FROM `/Root/ColumnTable/.sys/primary_index_stats`
+    return Sprintf(R"SQL(READ: $All = SELECT COUNT(*) AS cnt FROM `/Root/ColumnTable/.sys/primary_index_stats`
                   WHERE Activity == 1 AND EntityName = 'Col2';
               $Ok = SELECT SUM(CASE
-                    WHEN {}NOT JSON_EXISTS(CAST(ChunkDetails AS JsonDocument), "$.columns.accessor[*] ? (@ != {})")
+                    -- $.columns.accessor[*] ? (@ != <>)  is an SQL/JSON expression meaning "value of current accessor != <>"
+                    WHEN %sNOT JSON_EXISTS(CAST(ChunkDetails AS JsonDocument), "$.columns.accessor[*] ? (@ != %u)")
                     THEN 1 ELSE 0 END) AS ok
                   FROM `/Root/ColumnTable/.sys/primary_index_stats`
                   WHERE Activity == 1 AND EntityName = 'Col2';
-              SELECT ($All > {}u) AND ($All == $Ok);
-        EXPECTED: [[[%true]]])SQL",
-        presence, (ui32)expectedType, minChunks));
+              SELECT ($All > %uu) AND ($All == $Ok);
+        EXPECTED: [[[%%true]]])SQL",
+        presence, (ui32)expectedType, minChunks);
 }
 
+// Accumulates independent scenario steps and joins them into a single Variator script on Build(). The
+// executor splits a script on the "------" token and strips each step (see Variator::SingleScript), so
+// Build() only has to interleave the separators; a step may itself contain "------" (e.g. a `body` that
+// bundles DATA + several READs), in which case it just expands into several steps.
+class TScenarioBuilder {
+private:
+    TVector<TString> Steps;
+
+public:
+    TScenarioBuilder& Add(const TStringBuf step) {
+        Steps.emplace_back(step);
+        return *this;
+    }
+
+    TString Build() const {
+        TStringBuilder result;
+        for (size_t i = 0; i < Steps.size(); ++i) {
+            if (i) {
+                result << "\n        ------\n        ";
+            }
+            result << Steps[i];
+        }
+        return result;
+    }
+};
+
 // Assemble a full scenario: STOP_COMPACTION + create + SIMPLE reader + ALTER COLUMN (SUB_COLUMNS +
-// `alterColumnExtractor` + either the sweep or dictionary settings) + `body` + the matching accessor
-// check. See the file header for the two modes.
-inline TString BuildScenario(const TStringBuf alterColumnExtractor, const TStringBuf body, const bool isDictionary) {
+// `alterColumnExtractor` + either the sweep or dictionary settings) + the `bodyParts` (each is added as
+// its own step, so callers pass the DATA/READ steps directly instead of pre-joining them) + the matching
+// accessor check. See the file header for the two modes.
+template <typename... TBodyParts>
+inline TString BuildScenario(const TStringBuf alterColumnExtractor, const bool isDictionary, const TBodyParts&... bodyParts) {
     const TStringBuf partitions = isDictionary ? TStringBuf("1") : TStringBuf("$$1|2|10$$");
-    const TStringBuf accessorSettings = isDictionary
-        ? TStringBuf(R"(`OTHERS_ALLOWED_FRACTION`=`0`, `DICTIONARY_DETECTOR_KFF`=`1`)")
-        : TStringBuf(R"(`FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)");
-    const TString accessorCheck = isDictionary
-        ? AccessorTypeCheck(NArrow::NAccessor::IChunkedArray::EType::Dictionary, 0, /*requirePresence*/ true)
-        : AccessorTypeCheck(NArrow::NAccessor::IChunkedArray::EType::Array, 0, /*requirePresence*/ false);
-    return TStringBuilder() << R"(
-        STOP_COMPACTION
-        ------
-        SCHEMA:
+    const TString alterColumn = isDictionary
+        ? Sprintf(R"(ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, %s`DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0`, `DICTIONARY_DETECTOR_KFF`=`1`))",
+              alterColumnExtractor.data())
+        : Sprintf(R"(ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, %s`DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`))",
+              alterColumnExtractor.data());
+    TScenarioBuilder builder;
+    builder.Add("STOP_COMPACTION")
+        .Add(Sprintf(R"(SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,
             Col2 JsonDocument,
             PRIMARY KEY (Col1)
         )
         PARTITION BY HASH(Col1)
-        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = )" << partitions << R"();
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, )" << alterColumnExtractor
-        << R"(`DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, )" << accessorSettings << R"()
-        ------)" << body << R"(
-        ------
-        )" << accessorCheck;
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = %s);)", partitions.data()))
+        .Add(R"(SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`))")
+        .Add(Sprintf(R"(SCHEMA:
+        %s)", alterColumn.c_str()));
+    (builder.Add(bodyParts), ...);
+    builder.Add(isDictionary
+            ? AccessorTypeCheck(NArrow::NAccessor::IChunkedArray::EType::Dictionary, 0, /*requirePresence*/ true)
+            : AccessorTypeCheck(NArrow::NAccessor::IChunkedArray::EType::Array, 0, /*requirePresence*/ false));
+    return builder.Build();
 }
 
 // ---- scenarios ------------------------------------------------------------------------------------
@@ -84,11 +110,11 @@ inline constexpr TStringBuf RestoreScenario = R"(
         EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\",\"d\":null,\"e.v\":{\"c\":1,\"e\":{\"c.a\":2}}}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\",\"d\":\"d3\",\"e\":[\"a\",{\"v\":[\"c\",5]}]}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]])";
 
 inline TString RestoreFullJson(const bool isDictionary) {
-    return BuildScenario(R"(`DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`false`, )", RestoreScenario, isDictionary);
+    return BuildScenario(R"(`DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`false`, )", isDictionary, RestoreScenario);
 }
 
 inline TString RestoreFirstLevel(const bool isDictionary) {
-    return BuildScenario(R"(`DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`true`, )", RestoreScenario, isDictionary);
+    return BuildScenario(R"(`DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`true`, )", isDictionary, RestoreScenario);
 }
 
 // JSON_VALUE filters (single, full read, and nested/dotted-key filters) over a heterogeneous dataset.
@@ -110,7 +136,7 @@ inline constexpr TStringBuf FilterScenario = R"(
         EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\",\"d\":null,\"e.v\":{\"c\":1,\"e\":{\"c.a\":2}}}"]]])";
 
 inline TString Filter(const bool isDictionary) {
-    return BuildScenario(R"(`DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`false`, )", FilterScenario, isDictionary);
+    return BuildScenario(R"(`DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`false`, )", isDictionary, FilterScenario);
 }
 
 // Heterogeneous-schema dataset (keys present in only some rows), shared by SimpleReadAll/SimpleReadExists.
@@ -129,13 +155,11 @@ inline constexpr TStringBuf SimpleReadExists = R"(
 
 
 inline TString Simple(const bool isDictionary) {
-    return BuildScenario("", TStringBuilder() << SimpleData << R"(
-        ------)" << SimpleReadAll, isDictionary);
+    return BuildScenario("", isDictionary, SimpleData, SimpleReadAll);
 }
 
 inline TString SimpleExists(const bool isDictionary) {
-    return BuildScenario("", TStringBuilder() << SimpleData << R"(
-        ------)" << SimpleReadExists, isDictionary);
+    return BuildScenario("", isDictionary, SimpleData, SimpleReadExists);
 }
 
 }   // namespace NKikimr::NKqp::NSubColumnsScenarios

@@ -11,7 +11,6 @@ void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const TStr
         {"prefix", prefix},
         {"exceptionType", TypeName(exc)},
         {"exceptionMessage", exc.what()},
-        {"endl", Endl},
         {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
 }
 

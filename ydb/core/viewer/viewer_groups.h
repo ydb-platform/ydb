@@ -1539,7 +1539,7 @@ public:
                             }
                             group->EncryptionMode = pool->GetEncryptionMode();
                         } else {
-                            YDB_LOG_WARN_COMP(NKikimrServices::VIEWER, "Storage pool not found for group box pool",
+                            YDB_LOG_WARN_COMP(NKikimrServices::VIEWER, "Storage pool not found",
                                 {"logPrefix", GetLogPrefix()},
                                 {"groupId", group->GroupId},
                                 {"boxId", group->BoxId},

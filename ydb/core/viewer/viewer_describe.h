@@ -432,9 +432,9 @@ public:
                 json["PathDescription"]["ExternalTableDescription"]["Content"][key] = array;
             }
         } catch (...) {
-            YDB_LOG_CRIT_COMP(NKikimrServices::VIEWER, "Сan't unpack content for external",
+            YDB_LOG_CRIT_COMP(NKikimrServices::VIEWER, "Сan't unpack content for external table",
                 {"logPrefix", GetLogPrefix()},
-                {"table", sourceType},
+                {"sourceType", sourceType},
                 {"error", CurrentExceptionMessage()});
         }
     }

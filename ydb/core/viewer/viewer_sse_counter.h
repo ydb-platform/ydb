@@ -62,7 +62,7 @@ public:
                 Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk("failed"));
                 return ReplyAndPassAway();
             } else {
-                YDB_LOG_DEBUG_COMP(NKikimrServices::VIEWER, "Dump logPrefix, counter",
+                YDB_LOG_DEBUG_COMP(NKikimrServices::VIEWER, "Dump counter",
                     {"logPrefix", GetLogPrefix()},
                     {"counter", Counter});
                 TStringBuilder content;

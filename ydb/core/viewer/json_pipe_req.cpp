@@ -1160,9 +1160,9 @@ void TViewerPipeClient::RequestDone(i32 requests) {
         return;
     }
     if (requests > DataRequests) {
-        YDB_LOG_ERROR("Requests count",
+        YDB_LOG_ERROR("Request count mismatch",
             {"logPrefix", GetLogPrefix()},
-            {"mismatch", requests},
+            {"request", requests},
             {"dataRequests", DataRequests});
         if (Span) {
             Span.Event("Requests count mismatch");

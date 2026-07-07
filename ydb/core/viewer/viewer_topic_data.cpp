@@ -232,12 +232,13 @@ void TTopicData::FillProtoResponse(ui64 maxTotalSize) {
             try {
                 auto decompressed = codec->DecompressData(dataChunk.GetData());
                 if (decompressed.Messages.empty()) {
-                    YDB_LOG_ERROR("Topic data decompression failed error=No messages in decompressed data",
+                    YDB_LOG_ERROR("Topic data decompression failed",
                         {"logPrefix", GetLogPrefix()},
                         {"path", TopicPath},
                         {"partition", PartitionId},
                         {"offset", r.GetOffset()},
-                        {"codec", dataChunk.GetCodec()});
+                        {"codec", dataChunk.GetCodec()},
+                        {"error", "No messages in decompressed data"});
 
                     return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Message decompression failed"));
                 }

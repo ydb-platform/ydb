@@ -69,6 +69,35 @@ struct TAsyncIoOperationMap : IObjectInQueue, IAsyncIoOperation {
         return ReqId;
     }
 
+    TDuration GetDelay() {
+        switch (Type) {
+            case IAsyncIoOperation::EType::PRead:
+                return SectorMap.GetReadDelay(Size, Offset, PrevAsyncIoOperationIsInProgress, 0);
+            case IAsyncIoOperation::EType::PWrite:
+                return SectorMap.GetWriteDelay(Size, Offset, PrevAsyncIoOperationIsInProgress, 0);
+            default:
+                Y_FAIL_S("Unexpected op type# " << (i64)Type);
+        }
+    }
+
+    void ProcessNoThrottle() {
+        switch (Type) {
+            case IAsyncIoOperation::EType::PRead:
+                {
+                    IsFailed = !SectorMap.ReadNoThrottle((ui8*)Data, Size, Offset);
+                    break;
+                }
+            case IAsyncIoOperation::EType::PWrite:
+                {
+                    IsFailed = !SectorMap.WriteNoThrottle((ui8*)Data, Size, Offset);
+                    break;
+                }
+            default:
+                Y_FAIL_S("Unexpected op type# " << (i64)Type);
+        }
+        Complete();
+    }
+
     void Process(void*) override {
         switch (Type) {
             case IAsyncIoOperation::EType::PRead:
@@ -84,6 +113,10 @@ struct TAsyncIoOperationMap : IObjectInQueue, IAsyncIoOperation {
             default:
                 Y_FAIL_S("Unexpected op type# " << (i64)Type);
         }
+        Complete();
+    }
+
+    void Complete() {
         AsyncIoContext.OnAsyncIoOperationCompletion(this);
         CompleteQueue.Push(this);
     }
@@ -97,19 +130,20 @@ struct TAsyncIoOperationMap : IObjectInQueue, IAsyncIoOperation {
     }
 };
 
-class TRandomWaitThreadPool : public IThreadPool {
+class TDelayedThreadPool : public IThreadPool {
     TCountedQueueOneOne<TAsyncIoOperationMap*, 4 << 10> IncomingQueue;
     TMultiMap<TInstant, TAsyncIoOperationMap*> WaitQueue;
 
     TThread WorkThread;
     std::atomic<bool> StopFlag;
-    std::pair<TDuration, TDuration> WaitParams;
+    bool UseRandomWait = false;
+    std::pair<TDuration, TDuration> WaitParams = {TDuration::Zero(), TDuration::Zero()};
     TSpinLock DeadlineLock;
     TInstant LatestDeadline;
 
     ///////    Thread working part    /////
     static void *Proc(void* that) {
-        static_cast<TRandomWaitThreadPool*>(that)->Work();
+        static_cast<TDelayedThreadPool*>(that)->Work();
         return nullptr;
     }
 
@@ -121,11 +155,7 @@ class TRandomWaitThreadPool : public IThreadPool {
             for (TAtomicBase idx = 0; idx < size; ++idx) {
                 TAsyncIoOperationMap *op = IncomingQueue.Pop();
                 if (op) {
-                    if (op->Deadline <= now) {
-                        op->Process(nullptr);
-                    } else {
-                        WaitQueue.emplace(op->Deadline, op);
-                    }
+                    WaitQueue.emplace(op->Deadline, op);
                 } else {
                     receivedNullFromIncomingQueue = true;
                 }
@@ -138,7 +168,7 @@ class TRandomWaitThreadPool : public IThreadPool {
             auto it = WaitQueue.begin();
             while (it != WaitQueue.end() && it->first <= now) {
                 TAsyncIoOperationMap *op = it->second;
-                op->Process(nullptr);
+                op->ProcessNoThrottle();
                 auto curr = it;
                 ++it;
                 WaitQueue.erase(curr);
@@ -170,21 +200,26 @@ class TRandomWaitThreadPool : public IThreadPool {
         }
     }
 
-    ///////    Intefrace   /////
+    ///////    Interface   /////
     bool Add(IObjectInQueue *obj) override {
         if (StopFlag.load()) {
             return false;
         }
         auto op = static_cast<TAsyncIoOperationMap*>(obj);
-        const TDuration randomWaitAddend = WaitParams.first
-            + TDuration::MicroSeconds(RandomNumber<ui32>(WaitParams.second.MicroSeconds()));
         {
             TGuard<TSpinLock> guard(DeadlineLock);
-            const TInstant baseDeadline = Max(LatestDeadline, TInstant::Now());
-            op->Deadline = baseDeadline + randomWaitAddend;
-            LatestDeadline = op->Deadline;
+            TDuration delay = op->GetDelay();
+            if (UseRandomWait) {
+                delay += WaitParams.first + TDuration::MicroSeconds(RandomNumber<ui32>(WaitParams.second.MicroSeconds()));
+            }
+            const TInstant now = TInstant::Now();
+            const TInstant baseDeadline = UseRandomWait ? Max(LatestDeadline, now) : now;
+            op->Deadline = baseDeadline + delay;
+            if (UseRandomWait) {
+                LatestDeadline = op->Deadline;
+            }
+            IncomingQueue.Push(op);
         }
-        IncomingQueue.Push(op);
         return true;
     }
 
@@ -204,16 +239,25 @@ class TRandomWaitThreadPool : public IThreadPool {
 
 
 public:
-    TRandomWaitThreadPool(const std::pair<TDuration, TDuration>& waitParams)
+    TDelayedThreadPool()
         : WorkThread(TThread::TParams(Proc, this))
         , StopFlag(false)
+        , LatestDeadline(TInstant::Now())
+    {
+        WorkThread.Start();
+    }
+
+    TDelayedThreadPool(const std::pair<TDuration, TDuration>& waitParams)
+        : WorkThread(TThread::TParams(Proc, this))
+        , StopFlag(false)
+        , UseRandomWait(true)
         , WaitParams(waitParams)
         , LatestDeadline(TInstant::Now())
     {
         WorkThread.Start();
     }
 
-    ~TRandomWaitThreadPool(){
+    ~TDelayedThreadPool(){
     }
 };
 
@@ -359,7 +403,9 @@ public:
         }
         MaxEvents = maxEvents;
         if (SectorMap->ImitateRandomWait) {
-            Queue = new TRandomWaitThreadPool(*SectorMap->ImitateRandomWait);
+            Queue = new TDelayedThreadPool(*SectorMap->ImitateRandomWait);
+        } else if (SectorMap->GetDiskModeParams()) {
+            Queue = new TDelayedThreadPool();
         } else {
             Queue = new TThreadPool();
             Queue->Start(1, MaxEvents);

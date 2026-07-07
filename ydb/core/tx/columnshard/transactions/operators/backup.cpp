@@ -17,9 +17,11 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
     }
 
     if (const auto* completedTx = owner.LastCompletedBackupTransactionsByTxId.FindPtr(GetTxId())) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "backup_already_completed")("tx_id", GetTxId())(
-            "success", completedTx->GetOpResult().GetSuccess())("explain", completedTx->GetOpResult().GetExplain());
-        AlreadyCompleted = true;
+        if (completedTx->GetOpResult().GetSuccess()) {
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "backup_already_completed")("tx_id", GetTxId())(
+                "success", completedTx->GetOpResult().GetSuccess())("explain", completedTx->GetOpResult().GetExplain());
+            AlreadyCompleted = true;
+        }
         return true;
     }
 
@@ -77,7 +79,11 @@ bool TBackupTransactionOperator::ProgressOnExecute(
     }
     AFL_VERIFY(!TxRemove);
     const auto schemeShardLocalPathId = ExportTask->GetIdentifier().GetSchemeShardLocalPathId();
-    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(schemeShardLocalPathId.GetRawValue()));
+    const TString sessionId = ::ToString(schemeShardLocalPathId.GetRawValue());
+    if (!owner.GetBackgroundSessionsManager()->IsSessionComplete(ExportTask->GetClassName(), sessionId)) {
+        return true;
+    }
+    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), sessionId);
 
     NKikimrTxColumnShard::TCompletedBackupTransaction backupTx;
     backupTx.SetTxId(GetTxId());
@@ -85,7 +91,7 @@ bool TBackupTransactionOperator::ProgressOnExecute(
     opResult.SetSuccess(status.Success);
     opResult.SetExplain(status.ErrorMessage);
 
-    TxRemove = owner.GetBackgroundSessionsManager()->TxRemove(ExportTask->GetClassName(), ::ToString(schemeShardLocalPathId.GetRawValue()));
+    TxRemove = owner.GetBackgroundSessionsManager()->TxRemove(ExportTask->GetClassName(), sessionId);
     NIceDb::TNiceDb db(txc.DB);
 
     const auto tableId = owner.TablesManager.ResolveInternalPathIdVerified(schemeShardLocalPathId, false);
@@ -175,6 +181,14 @@ TString TBackupTransactionOperator::DoDebugString() const {
 
 bool TBackupTransactionOperator::DoIsAsync() const {
     return !AlreadyCompleted;
+}
+
+bool TBackupTransactionOperator::DoIsProposeReplyReady(TColumnShard& owner) const {
+    if (AlreadyCompleted || !ExportTask) {
+        return true;
+    }
+    const auto schemeShardLocalPathId = ExportTask->GetIdentifier().GetSchemeShardLocalPathId();
+    return owner.GetBackgroundSessionsManager()->IsSessionComplete(ExportTask->GetClassName(), ::ToString(schemeShardLocalPathId.GetRawValue()));
 }
 
 TString TBackupTransactionOperator::DoGetOpType() const {

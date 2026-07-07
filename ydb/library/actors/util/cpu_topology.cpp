@@ -67,21 +67,21 @@ std::optional<ui32> TryParseNodeName(TStringBuf name) {
     return nodeId;
 }
 
-std::optional<TString> ReadFile(const TFsPath& path) {
+std::expected<std::optional<TString>, TString> ReadFile(const TFsPath& path) {
     try {
         if (!path.IsFile()) {
             return std::nullopt;
         }
         return TFileInput(path.GetPath()).ReadAll();
     } catch (...) {
-        return std::nullopt;
+        return std::unexpected("failed to read file " + path.GetPath() + ": " + CurrentExceptionMessage());
     }
 }
 
-TVector<TString> ListDirectory(const TFsPath& path) {
+std::expected<TVector<TString>, TString> ListDirectory(const TFsPath& path) {
     try {
         if (!path.IsDirectory()) {
-            return {};
+            return TVector<TString>();
         }
 
         TVector<TString> children;
@@ -89,36 +89,45 @@ TVector<TString> ListDirectory(const TFsPath& path) {
         std::sort(children.begin(), children.end());
         return children;
     } catch (...) {
-        return {};
+        return std::unexpected("failed to list directory " + path.GetPath() + ": " + CurrentExceptionMessage());
     }
 }
 
-std::optional<TString> ReadValue(const TFsPath& path) {
+std::expected<std::optional<TString>, TString> ReadValue(const TFsPath& path) {
     auto data = ReadFile(path);
     if (!data) {
+        return std::unexpected{std::move(data).error()};
+    }
+    if (!*data) {
         return std::nullopt;
     }
-    return StripString(*data);
+    return StripString(**data);
 }
 
 std::expected<ui64, TString> ReadUi64(const TFsPath& path, ui64 defaultValue = 0) {
     auto data = ReadValue(path);
-    if (!data || data->empty()) {
+    if (!data) {
+        return std::unexpected{std::move(data).error()};
+    }
+    if (!*data || (*data)->empty()) {
         return defaultValue;
     }
     ui64 value = defaultValue;
-    if (!TryFromString(*data, value)) {
-        return std::unexpected("failed to parse unsigned integer field " + path.GetPath() + ": '" + *data + "'");
+    if (!TryFromString(**data, value)) {
+        return std::unexpected("failed to parse unsigned integer field " + path.GetPath() + ": '" + **data + "'");
     }
     return value;
 }
 
 std::expected<ui32, TString> ReadTopologyId(const TFsPath& path, ui32 defaultValue = UnknownCpuTopologyId) {
     auto data = ReadValue(path);
-    if (!data || data->empty()) {
+    if (!data) {
+        return std::unexpected{std::move(data).error()};
+    }
+    if (!*data || (*data)->empty()) {
         return defaultValue;
     }
-    if (*data == "-1") {
+    if (**data == "-1") {
         return UnknownCpuTopologyId;
     }
 
@@ -127,7 +136,7 @@ std::expected<ui32, TString> ReadTopologyId(const TFsPath& path, ui32 defaultVal
         return std::unexpected{std::move(value).error()};
     }
     if (*value > UnknownCpuTopologyId) {
-        return std::unexpected("id field is too large " + path.GetPath() + ": '" + *data + "'");
+        return std::unexpected("id field is too large " + path.GetPath() + ": '" + **data + "'");
     }
     return static_cast<ui32>(*value);
 }
@@ -135,13 +144,16 @@ std::expected<ui32, TString> ReadTopologyId(const TFsPath& path, ui32 defaultVal
 std::expected<TCpuMask, TString> ReadCpuMask(const TFsPath& path) {
     auto data = ReadValue(path);
     if (!data) {
+        return std::unexpected{std::move(data).error()};
+    }
+    if (!*data) {
         return TCpuMask();
     }
-    if (data->empty() || *data == "(null)") {
+    if ((*data)->empty() || **data == "(null)") {
         return TCpuMask();
     }
     try {
-        return TCpuMask(*data);
+        return TCpuMask(**data);
     } catch (...) {
         return std::unexpected("failed to parse CPU list field " + path.GetPath() + ": " + CurrentExceptionMessage());
     }
@@ -149,7 +161,11 @@ std::expected<TCpuMask, TString> ReadCpuMask(const TFsPath& path) {
 
 std::expected<std::optional<TCpuTopologyGroup>, TString> ParseL3CacheGroup(const TFsPath& root, TCpuId cpuId) {
     const TFsPath cacheRoot = CpuPath(root, cpuId) / "cache";
-    for (const TString& indexName : ListDirectory(cacheRoot)) {
+    auto indexNames = ListDirectory(cacheRoot);
+    if (!indexNames) {
+        return std::unexpected{std::move(indexNames).error()};
+    }
+    for (const TString& indexName : *indexNames) {
         if (!indexName.StartsWith("index")) {
             continue;
         }
@@ -179,7 +195,11 @@ std::expected<std::optional<TCpuTopologyGroup>, TString> ParseL3CacheGroup(const
 
 std::expected<TVector<TLogicalCpuInfo>, TString> ParseCpus(const TFsPath& root) {
     TVector<TLogicalCpuInfo> cpus;
-    for (const TString& name : ListDirectory(CpuRootPath(root))) {
+    auto cpuNames = ListDirectory(CpuRootPath(root));
+    if (!cpuNames) {
+        return std::unexpected{std::move(cpuNames).error()};
+    }
+    for (const TString& name : *cpuNames) {
         auto cpuId = TryParseCpuName(name);
         if (!cpuId) {
             continue;
@@ -282,7 +302,11 @@ void SortGroups(TVector<TCpuTopologyGroup>& groups) {
 std::expected<TVector<TCpuTopologyGroup>, TString> ParseNumaNodes(const TFsPath& root) {
     TVector<TCpuTopologyGroup> nodes;
     const TFsPath nodeRoot = NodeRootPath(root);
-    for (const TString& name : ListDirectory(nodeRoot)) {
+    auto nodeNames = ListDirectory(nodeRoot);
+    if (!nodeNames) {
+        return std::unexpected{std::move(nodeNames).error()};
+    }
+    for (const TString& name : *nodeNames) {
         auto nodeId = TryParseNodeName(name);
         if (!nodeId) {
             continue;

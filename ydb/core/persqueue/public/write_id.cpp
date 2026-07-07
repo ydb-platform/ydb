@@ -4,6 +4,7 @@
 
 #include <util/digest/multi.h>
 #include <util/stream/output.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr::NPQ {
 
@@ -46,6 +47,8 @@ int CompareWriteIdProto(const NKikimrPQ::TWriteId& lhs, const NKikimrPQ::TWriteI
         case NKikimrPQ::TWriteId::ID_NOT_SET:
             return 0;
     }
+    Y_UNREACHABLE();
+    return 0;
 }
 
 } // namespace
@@ -103,6 +106,8 @@ size_t TWriteId::GetHash() const
         case NKikimrPQ::TWriteId::ID_NOT_SET:
             return 0;
     }
+    Y_UNREACHABLE();
+    return 0;
 }
 
 void TWriteId::ToStream(IOutputStream& s) const

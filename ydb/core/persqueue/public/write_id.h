@@ -44,16 +44,19 @@ struct TWriteId {
         return Proto.Id_case() == NKikimrPQ::TWriteId::kKafkaApi;
     }
 
+    // Precondition: IsTopicApiTransaction(). Otherwise returns default proto values (0).
     ui64 GetNodeId() const
     {
         return Proto.GetTopicApi().GetNodeId();
     }
 
+    // Precondition: IsTopicApiTransaction(). Otherwise returns default proto values (0).
     ui64 GetKeyId() const
     {
         return Proto.GetTopicApi().GetKeyId();
     }
 
+    // Precondition: IsKafkaApiTransaction(). Otherwise returns empty/default producer id.
     const NKafka::TProducerInstanceId& GetKafkaProducerInstanceId() const
     {
         return KafkaProducerInstanceId;

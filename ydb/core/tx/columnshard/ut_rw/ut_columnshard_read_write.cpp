@@ -1913,7 +1913,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCompactTable(/*ownerId=*/1, tableId));
         auto ev = runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender);
         UNIT_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::FAILED);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
     }
 
     Y_UNIT_TEST(ForcedCompactionHeldUntilNoIntersections) {

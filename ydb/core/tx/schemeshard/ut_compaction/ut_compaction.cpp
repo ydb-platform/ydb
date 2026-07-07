@@ -1862,7 +1862,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
         auto info = GetPathInfo(runtime, "/MyRoot/Simple");
-        
+
         CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
@@ -1949,7 +1949,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, txId);
         auto info = GetPathInfo(runtime, "/MyRoot/Simple");
-        
+
         CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
@@ -1986,7 +1986,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         WriteData(runtime, "Simple1", 0, 100, TTestTxConfig::FakeHiveTablets);
         WriteData(runtime, "Simple1", 0, 100, TTestTxConfig::FakeHiveTablets + 1);
         auto info1 = GetPathInfo(runtime, "/MyRoot/Simple1");
-        
+
         CreateTable(runtime, env, "/MyRoot", "Simple2", 2, ++txId);
         WriteData(runtime, "Simple2", 0, 100, TTestTxConfig::FakeHiveTablets + 2);
         WriteData(runtime, "Simple2", 0, 100, TTestTxConfig::FakeHiveTablets + 3);
@@ -2023,7 +2023,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
         auto info = GetPathInfo(runtime, "/MyRoot/Simple");
-        
+
         CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
@@ -2165,7 +2165,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
                     return true;
                 }
             });
-        
+
         CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
@@ -2197,7 +2197,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
                     ev->Get()->Record.SetStatus(::NKikimrTxDataShard::TEvCompactTableResult::FAILED);
                 }
             });
-        
+
         CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
@@ -2221,7 +2221,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        
+
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", false, 3);
@@ -2346,7 +2346,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        
+
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", false, 3);
@@ -2385,7 +2385,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateIndexedTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        
+
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", true, 5);
@@ -3064,7 +3064,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
         {
             // second case: compaction should progress after stale or failed EvCompactTableResult
-            
+
             CreateTable(runtime, env, "/MyRoot", "Simple2", 2, ++txId);
             WriteData(runtime, "Simple2", 0, 100, TTestTxConfig::FakeHiveTablets + 2);
             WriteData(runtime, "Simple2", 0, 100, TTestTxConfig::FakeHiveTablets + 3);
@@ -3641,7 +3641,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable");
 
         runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 1; });
-        UNIT_ASSERT_VALUES_EQUAL(block[0]->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::FAILED);
+        UNIT_ASSERT_VALUES_EQUAL(block[0]->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
     }
 
     Y_UNIT_TEST(CheckForgetCancelledOperationSuccess) {

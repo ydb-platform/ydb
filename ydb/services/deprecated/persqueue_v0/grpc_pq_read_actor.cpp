@@ -1154,9 +1154,9 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
     it->second.PartitionsLocked.Inc();
     it->second.PartitionsInfly.Inc();
 
-    YDB_LOG_INFO_CTX(ctx, "",
+    YDB_LOG_INFO_CTX(ctx, "Lock partition",
         {"PQLOGPREFIX", PQ_LOG_PREFIX},
-        {"lock", record});
+        {"ev", record});
 
     ctx.Send(actorId, new TEvPQProxy::TEvLockPartition(0, 0, false, !ClientsideLocksAllowed));
 }
@@ -1400,7 +1400,7 @@ void TReadSessionActor::CloseSession(const TString& errorReason, const NPersQueu
             if (BytesInflight) (*BytesInflight) += diff;
             Handler->Reply(std::move(result));
         } else {
-            YDB_LOG_WARN_CTX(ctx, "GRps is shutting dows, skip reply",
+            YDB_LOG_WARN_CTX(ctx, "GRps is shutting down, skip reply",
                 {"PQLOGPREFIX", PQ_LOG_PREFIX});
         }
     } else {
@@ -2444,7 +2444,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         if (proto.HasCodec()) {
             const auto codec = proto.GetCodec();
             if (codec < Min<int>() || codec > Max<int>() || !NPersQueueCommon::ECodec_IsValid(codec)) {
-                YDB_LOG_ERROR_CTX(ctx, "Data chunk (topic partition offset seqNo sourceId codec (id is not valid NPersQueueCommon::ECodec, loss of data compression codec information",
+                YDB_LOG_ERROR_CTX(ctx, "Data chunk codec is not a valid NPersQueueCommon::ECodec; compression codec info may be lost",
                     {"PQLOGPREFIX", PQ_LOG_PREFIX},
                     {"topic", Topic->GetInternalName()},
                     {"partition", Partition},
@@ -2519,7 +2519,7 @@ void TPartitionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const 
 
 
 void TPartitionActor::Handle(TEvPQProxy::TEvReleasePartition::TPtr&, const TActorContext& ctx) {
-    YDB_LOG_INFO_CTX(ctx, "(partition)releasing ReadOffset ClientCommitOffset CommittedOffst",
+    YDB_LOG_INFO_CTX(ctx, "(partition)releasing",
         {"PQLOGPREFIX", PQ_LOG_PREFIX},
         {"topic", Topic->GetPrintableString()},
         {"partition", Partition},

@@ -908,8 +908,9 @@ void TWriteSessionActor::HandlePoison(TEvPQProxy::TEvDieCommand::TPtr& ev, const
 
 void TWriteSessionActor::LogSession(const TActorContext& ctx) {
 
-    YDB_LOG_INFO_CTX(ctx, "Write session: userAgent= proto=v0",
+    YDB_LOG_INFO_CTX(ctx, "Write session",
         {"cookie", Cookie},
+        {"proto", "v0"},
         {"sessionId", OwnerCookie},
         {"userAgent", UserAgent},
         {"ip", PeerName},

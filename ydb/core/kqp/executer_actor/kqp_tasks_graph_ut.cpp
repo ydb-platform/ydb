@@ -1993,26 +1993,26 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         AssertNoCrossNodeCopyChannels(dist);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 8u);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 540);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 540);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 67);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 570);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 570);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 570);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
         AssertNodeDistribution(dist, 0, {
-            /* stage 0 */ { {4, 60}, {5, 60} },
-            /* stage 1 */ { {4, 60}, {5, 60} },
-            /* stage 2 */ { {2, 104}, {3, 16} },
-            /* stage 3 */ { {2, 104}, {3, 16} },
-            /* stage 4 */ { {1, 1} },
-            /* stage 5 */ { {1, 1} },
-            /* stage 6 */ { {1, 67} },
+            /* stage 0 */ { {4, 30}, {5, 90} },
+            /* stage 1 */ { {4, 30}, {5, 90} },
+            /* stage 2 */ { {1, 1} },
+            /* stage 3 */ { {1, 1} },
+            /* stage 4 */ { {4, 30}, {5, 90} },
+            /* stage 5 */ { {2, 104}, {3, 16} },
+            /* stage 6 */ { {2, 104}, {3, 16} },
             /* stage 7 */ { {1, 1} },
         });
     }

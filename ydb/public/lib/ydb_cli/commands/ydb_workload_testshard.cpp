@@ -54,8 +54,8 @@ void TCommandTestShardInit::Parse(TConfig& config) {
 }
 
 int TCommandTestShardInit::Run(TConfig& config) {
-    auto driver = std::make_unique<TDriver>(CreateDriver(config));
-    auto client = NYdb::NTestShard::TTestShardClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NTestShard::TTestShardClient(driver);
 
     auto result = client.CreateTestShard(
         OwnerIdx, std::vector<std::string>(Channels.begin(), Channels.end()), Count,
@@ -97,8 +97,8 @@ void TCommandTestShardClean::Parse(TConfig& config) {
 }
 
 int TCommandTestShardClean::Run(TConfig& config) {
-    auto driver = std::make_unique<TDriver>(CreateDriver(config));
-    auto client = NYdb::NTestShard::TTestShardClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NTestShard::TTestShardClient(driver);
 
     auto result = client.DeleteTestShard(OwnerIdx, Count, config.Database).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);

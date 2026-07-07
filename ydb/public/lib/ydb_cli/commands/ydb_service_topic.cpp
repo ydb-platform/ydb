@@ -447,7 +447,7 @@ namespace NYdb::NConsoleClient {
     }
 
     int TCommandTopicCreate::Run(TConfig& config) {
-        TDriver driver = CreateDriver(config);
+        auto driver = CreateDriver(config);
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto settings = NYdb::NTopic::TCreateTopicSettings();
@@ -630,7 +630,7 @@ namespace NYdb::NConsoleClient {
     }
 
     int TCommandTopicAlter::Run(TConfig& config) {
-        TDriver driver = CreateDriver(config);
+        auto driver = CreateDriver(config);
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
@@ -662,7 +662,7 @@ namespace NYdb::NConsoleClient {
     }
 
     int TCommandTopicDrop::Run(TConfig& config) {
-        TDriver driver = CreateDriver(config);
+        auto driver = CreateDriver(config);
         NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
@@ -769,7 +769,7 @@ namespace NYdb::NConsoleClient {
     }
 
     int TCommandTopicConsumerAdd::Run(TConfig& config) {
-        TDriver driver = CreateDriver(config);
+        auto driver = CreateDriver(config);
         NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
@@ -859,7 +859,7 @@ namespace NYdb::NConsoleClient {
     }
 
     int TCommandTopicConsumerDrop::Run(TConfig& config) {
-        TDriver driver = CreateDriver(config);
+        auto driver = CreateDriver(config);
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
@@ -904,7 +904,7 @@ namespace NYdb::NConsoleClient {
     }
 
     int TCommandTopicConsumerDescribe::Run(TConfig& config) {
-        TDriver driver = CreateDriver(config);
+        auto driver = CreateDriver(config);
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto consumerDescription = topicClient.DescribeConsumer(TopicName, ConsumerName_, NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(ShowPartitionStats_)).GetValueSync();
@@ -946,7 +946,7 @@ namespace NYdb::NConsoleClient {
     }
 
     int TCommandTopicConsumerCommitOffset::Run(TConfig& config) {
-        TDriver driver = CreateDriver(config);
+        auto driver = CreateDriver(config);
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
@@ -1204,9 +1204,9 @@ namespace NYdb::NConsoleClient {
     int TCommandTopicRead::Run(TConfig& config) {
         ValidateConfig();
 
-        auto driver =
-            std::make_unique<TDriver>(CreateDriver(config, std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)).Release())));
-        NTopic::TTopicClient topicClient(*driver);
+        auto driver = CreateDriver(config, std::unique_ptr<TLogBackend>(
+            CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)).Release()));
+        NTopic::TTopicClient topicClient(driver);
 
         auto readSession = topicClient.CreateReadSession(PrepareReadSessionSettings());
 
@@ -1228,8 +1228,6 @@ namespace NYdb::NConsoleClient {
                 return status;
             }
         }
-
-        driver->Stop(true);
 
         return EXIT_SUCCESS;
     }
@@ -1351,12 +1349,12 @@ namespace NYdb::NConsoleClient {
     int TCommandTopicWrite::Run(TConfig& config) {
         SetInterruptHandlers();
 
-        auto driver =
-            std::make_unique<TDriver>(CreateDriver(config, std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)).Release())));
-        NTopic::TTopicClient topicClient(*driver);
+        auto driver = CreateDriver(config, std::unique_ptr<TLogBackend>(
+            CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)).Release()));
+        NTopic::TTopicClient topicClient(driver);
 
         {
-            auto writeSession = NTopic::TTopicClient(*driver).CreateWriteSession(std::move(PrepareWriteSessionSettings()));
+            auto writeSession = NTopic::TTopicClient(driver).CreateWriteSession(std::move(PrepareWriteSessionSettings()));
             auto writer =
                 TTopicWriter(writeSession, std::move(TTopicWriterParams(MessagingFormat, Delimiter_, MessageSizeLimit_, BatchDuration_,
                                                                         BatchSize_, BatchMessagesCount_, GetTransform(),
@@ -1383,7 +1381,6 @@ namespace NYdb::NConsoleClient {
             }
         }
 
-        driver->Stop(true);
         return EXIT_SUCCESS;
     }
 

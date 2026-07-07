@@ -208,7 +208,8 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
     Y_UNIT_TEST(JsonRestorer) {
         NKikimr::NArrow::NAccessor::TJsonRestorer restorer;
         restorer.SetValueByPath("a", "b");
-        restorer.SetValueByPath("b.c", "d");
+        restorer.SetValueByPath(R"("b"."c")", "d");
+        restorer.SetValueByPath("p.q", "r");
         restorer.SetValueByPath(R"("d'".e)", "f");
         restorer.SetValueByPath(R"("g.h.".i)", "j");
         restorer.SetValueByPath(R"(".".k)", "l");
@@ -218,6 +219,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         NJson::TJsonValue expected;
         expected["a"] = "b";
         expected["b"]["c"] = "d";
+        expected["p.q"] = "r";
         expected["d'"]["e"] = "f";
         expected["g.h."]["i"] = "j";
         expected["."]["k"] = "l";

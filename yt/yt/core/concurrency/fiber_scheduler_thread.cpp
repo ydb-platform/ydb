@@ -7,7 +7,9 @@
 
 #include <yt/yt/library/profiling/producer.h>
 
+#include <yt/yt/core/actions/cancelable_context.h>
 #include <yt/yt/core/actions/invoker_util.h>
+
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/core/misc/finally.h>
@@ -589,13 +591,13 @@ void ResumeFiber(TFiber* targetFiber)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TCanceler)
+DECLARE_REFCOUNTED_CLASS(TCancelerClosure)
 
-class TCanceler
+class TCancelerClosure
     : public ::NYT::NDetail::TBindStateBase
 {
 public:
-    explicit TCanceler(TFiberId id)
+    explicit TCancelerClosure(TFiberId id)
         : TBindStateBase(
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
             TSourceLocation("", 0)
@@ -662,10 +664,9 @@ public:
         Cancel(error);
     }
 
-    static void StaticInvoke(const TError& error, NYT::NDetail::TBindStateBase* stateBase)
+    static TFiberCanceler ToCanceler(TCancelerClosurePtr closure)
     {
-        auto* state = static_cast<TCanceler*>(stateBase);
-        return state->Run(error);
+        return TFiberCanceler(std::move(closure), &TCancelerClosure::RunThunk);
     }
 
     TFiberId GetFiberId() const
@@ -678,12 +679,19 @@ private:
 
     std::atomic<bool> Canceled_ = false;
     NThreading::TEvent ErrorSet_;
+
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
     TError CancelationError_;
     TFuture<void> Future_;
+
+    static void RunThunk(const TError& error, NYT::NDetail::TBindStateBase* stateBase)
+    {
+        auto* state = static_cast<TCancelerClosure*>(stateBase);
+        return state->Run(error);
+    }
 };
 
-DEFINE_REFCOUNTED_TYPE(TCanceler)
+DEFINE_REFCOUNTED_TYPE(TCancelerClosure)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -880,9 +888,12 @@ public:
     TFiberSwitchHandler(const TFiberSwitchHandler&) = delete;
     TFiberSwitchHandler(TFiberSwitchHandler&&) = delete;
 
-    TCancelerPtr& Canceler()
+    const TCancelerClosurePtr& GetCancelerClosure()
     {
-        return Canceler_;
+        if (!CachedCancelerClosure_) {
+            CachedCancelerClosure_ = New<NDetail::TCancelerClosure>(GetCurrentFiberId());
+        }
+        return CachedCancelerClosure_;
     }
 
     class TGuard
@@ -925,7 +936,7 @@ private:
 
     TCompactVector<TContextSwitchHandlers, 16> UserHandlers_;
 
-    TCancelerPtr Canceler_;
+    TCancelerClosurePtr CachedCancelerClosure_;
 
     void OnSwitch()
     {
@@ -994,14 +1005,14 @@ Y_NO_INLINE void RunInFiberContext(TFiber* fiber, TClosure callback)
 class TResumeGuard
 {
 public:
-    TResumeGuard(TFiber* fiber, TCancelerPtr canceler) noexcept
+    TResumeGuard(TFiber* fiber, TCancelerClosurePtr cancelerClosure) noexcept
         : Fiber_(fiber)
-        , Canceler_(std::move(canceler))
+        , CancelerClosure_(std::move(cancelerClosure))
     { }
 
     explicit TResumeGuard(TResumeGuard&& other) noexcept
         : Fiber_(other.Release())
-        , Canceler_(std::move(other.Canceler_))
+        , CancelerClosure_(std::move(other.CancelerClosure_))
     { }
 
     TResumeGuard(const TResumeGuard&) = delete;
@@ -1012,17 +1023,17 @@ public:
     void operator()()
     {
         YT_VERIFY(Fiber_);
-        Canceler_.Reset();
+        CancelerClosure_.Reset();
         NDetail::ResumeFiber(Release());
     }
 
     ~TResumeGuard()
     {
         if (Fiber_) {
-            YT_LOG_TRACE("Unwinding fiber (TargetFiberId: %x)", Canceler_->GetFiberId());
+            YT_LOG_TRACE("Unwinding fiber (TargetFiberId: %x)", CancelerClosure_->GetFiberId());
 
-            Canceler_->Run(TError("Fiber resumer is lost"));
-            Canceler_.Reset();
+            CancelerClosure_->Run(TError("Fiber resumer is lost"));
+            CancelerClosure_.Reset();
 
             GetFinalizerInvoker()->Invoke(
                 BIND_NO_PROPAGATE([fiber = Release()] {
@@ -1033,7 +1044,7 @@ public:
 
 private:
     TFiber* Fiber_;
-    TCancelerPtr Canceler_;
+    TCancelerClosurePtr CancelerClosure_;
 
     TFiber* Release()
     {
@@ -1127,11 +1138,8 @@ TFiberCanceler GetCurrentFiberCanceler()
         return {};
     }
 
-    if (!switchHandler->Canceler()) {
-        switchHandler->Canceler() = New<NDetail::TCanceler>(GetCurrentFiberId());
-    }
-
-    return TFiberCanceler(switchHandler->Canceler(), &NDetail::TCanceler::StaticInvoke);
+    auto cancelerClosure = switchHandler->GetCancelerClosure();
+    return NDetail::TCancelerClosure::ToCanceler(cancelerClosure);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1157,20 +1165,27 @@ void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
 
     // Ensure canceler created.
     auto* switchHandler = NDetail::CurrentFiberSwitchHandler();
-    auto& canceler = switchHandler->Canceler();
-    if (!canceler) {
-        canceler = New<NDetail::TCanceler>(GetCurrentFiberId());
+    const auto& cancelerClosure = switchHandler->GetCancelerClosure();
+    cancelerClosure->SetFuture(future);
+
+    TFiberCanceler canceler;
+    auto* currentCancelableContext = TryGetCurrentCancelableContext();
+    if (currentCancelableContext) {
+        canceler = GetCurrentFiberCanceler();
+        currentCancelableContext->SubscribeCanceled(canceler);
     }
 
-    canceler->SetFuture(future);
     auto finally = Finally([&] {
-        canceler->ResetFuture();
+        cancelerClosure->ResetFuture();
+        if (currentCancelableContext) {
+            currentCancelableContext->UnsubscribeCanceled(canceler);
+        }
     });
 
     // TODO(lukyan): transfer resumer as argument of AfterSwitch.
     // Use CallOnTop like in boost.
     auto afterSwitch = NDetail::MakeAfterSwitch([
-            canceler,
+            cancelerClosure,
             invoker = std::move(invoker),
             future = std::move(future),
             currentFiber
@@ -1179,13 +1194,13 @@ void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
             future.Subscribe(BIND_NO_PROPAGATE([
                 invoker = std::move(invoker),
                 currentFiber,
-                canceler = std::move(canceler)
+                cancelerClosure = std::move(cancelerClosure)
             ] (const TError&) mutable {
                 YT_LOG_TRACE("Waking up fiber (TargetFiberId: %x)",
-                    canceler->GetFiberId());
+                    cancelerClosure->GetFiberId());
 
                 invoker->Invoke(
-                    BIND_NO_PROPAGATE(NDetail::TResumeGuard(currentFiber, std::move(canceler))));
+                    BIND_NO_PROPAGATE(NDetail::TResumeGuard(currentFiber, std::move(cancelerClosure))));
             }));
         });
 
@@ -1194,7 +1209,7 @@ void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
         NDetail::YieldFiber(afterSwitch);
     }
 
-    if (canceler->IsCanceled()) {
+    if (cancelerClosure->IsCanceled()) {
         YT_LOG_DEBUG("Throwing fiber cancelation exception");
         throw TFiberCanceledException();
     }

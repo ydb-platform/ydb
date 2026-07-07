@@ -1,0 +1,8 @@
+use plato;
+
+DEFINE SUBQUERY $process() AS
+    MATERIALIZE Input INTO $tmp;
+    SELECT * FROM $tmp ORDER BY key;
+END DEFINE;
+
+SELECT * FROM $process();

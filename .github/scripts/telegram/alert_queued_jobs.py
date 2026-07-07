@@ -33,8 +33,9 @@ WORKFLOW_THRESHOLDS = [
     ("Postcommit", "Postcommit", 6),
 ]
 
+
 def stuck_job_display_type(run: Dict[str, Any]) -> str:
-    """Classify a queued run for threshold/display (PR-check push → Postcommit)."""
+    """Classify a queued run for threshold/display (unified PR-check push → Postcommit)."""
     workflow_name = run.get('name', '')
     event = run.get('event', '')
     if workflow_name == 'PR-check' and event == 'push':
@@ -342,7 +343,7 @@ def count_stuck_jobs_by_type(stuck_jobs: List[Dict[str, Any]]) -> Dict[str, int]
     for stuck_job in stuck_jobs:
         display_type = stuck_job_display_type(stuck_job['run'])
         counts[display_type] = counts.get(display_type, 0) + 1
-    
+
     return counts
 
 def check_for_stuck_jobs(workflow_runs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

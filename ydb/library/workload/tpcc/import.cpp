@@ -938,7 +938,7 @@ public:
         Config.SetDisplay();
         CalculateApproximateDataSize();
 
-        std::vector<TDriver> drivers;
+        std::vector<NConsoleClient::TScopedDriver> drivers;
         drivers.reserve(10);
         drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
 

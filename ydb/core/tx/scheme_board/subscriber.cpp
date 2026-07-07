@@ -535,7 +535,7 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
             return;
         }
         if (const auto& record = ev->Get()->GetRecord(); !ClusterStatesMatch(ClusterState, record)) {
-            YDB_LOG_DEBUG("Cluster state mismatch in replica notification subscriber",
+            YDB_LOG_DEBUG("Cluster state mismatch in replica notification",
                 {"logPrefix", LogPrefix()},
                 {"selfId", this->SelfId()},
                 {"path", Path},
@@ -568,7 +568,7 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
     }
 
     void Handle(NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
-        YDB_LOG_TRACE("Handle current sync",
+        YDB_LOG_TRACE("Handle",
             {"logPrefix", LogPrefix()},
             {"selfId", this->SelfId()},
             {"path", Path},
@@ -824,7 +824,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     bool MaybeRunVersionSync() {
-        YDB_LOG_TRACE("MaybeRunVersionSync delayed sync",
+        YDB_LOG_TRACE("MaybeRunVersionSync",
             {"logPrefix", LogPrefix()},
             {"selfId", this->SelfId()},
             {"path", Path},
@@ -1041,7 +1041,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         const auto& record = ev->Get()->Record;
         const bool clusterStatesMatch = ClusterStatesMatch(ClusterState, record);
         if (!clusterStatesMatch) {
-            YDB_LOG_INFO("Cluster State mismatch in sync version response subscriber",
+            YDB_LOG_INFO("Cluster State mismatch in sync version response",
                 {"logPrefix", LogPrefix()},
                 {"selfId", this->SelfId()},
                 {"path", Path},
@@ -1079,7 +1079,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             const ui32 size = ProxyGroups[groupIdx].Proxies.size();
             const ui32 half = size / 2;
             if (!IsSyncFinished(successesByGroup[groupIdx], failuresByGroup[groupIdx], size, half)) {
-                YDB_LOG_DEBUG("Sync is in progress ring",
+                YDB_LOG_DEBUG("Sync is in progress",
                     {"logPrefix", LogPrefix()},
                     {"selfId", this->SelfId()},
                     {"path", Path},

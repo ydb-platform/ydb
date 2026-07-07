@@ -17,7 +17,7 @@ constexpr ui64 DefaultVChunkSize = RegionSize / DirectBlockGroupsCount;
 TVChunkConfig MakeTestVChunkConfig()
 {
     return TVChunkConfig::MakeDefault(
-        /*vChunkIndex=*/0,
+        0,   // VChunkIndex
         DirectBlockGroupHostCount,
         DefaultPrimaryCount);
 }

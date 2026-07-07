@@ -13,6 +13,16 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+constexpr auto SlowRequestTime = TDuration::Seconds(1);
+
+////////////////////////////////////////////////////////////////////////////////
+
+}   // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TWriteRequestExecutor::TWriteRequestExecutor(
@@ -53,6 +63,7 @@ TWriteRequestExecutor::~TWriteRequestExecutor()
 
 void TWriteRequestExecutor::Run()
 {
+    StartAt = TInstant::Now();
     Bundle->GetSpan().Event("Run");
 
     const auto hosts = VChunkConfig.GetDesiredPBuffers();
@@ -366,6 +377,17 @@ void TWriteRequestExecutor::Reply(NProto::TError error)
     Y_ABORT_IF(IsReplied, "TWriteRequestExecutor::Reply called twice");
     IsReplied = true;
 
+    const auto duration = TInstant::Now() - StartAt;
+    if (duration > SlowRequestTime) {
+        LOG_INFO(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s [?] Slow request %s %s",
+            LogTitle.GetWithTime().c_str(),
+            ExtendedDebugState().c_str(),
+            FormatDuration(duration).c_str());
+    }
+
     if (HasError(error)) {
         LOG_ERROR(
             *ActorSystem,
@@ -378,8 +400,9 @@ void TWriteRequestExecutor::Reply(NProto::TError error)
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s Reply OK.",
-            LogTitle.GetWithTime().c_str());
+            "%s Reply OK. %s",
+            LogTitle.GetWithTime().c_str(),
+            ExtendedDebugState().c_str());
     }
 
     Bundle->Reply(
@@ -414,8 +437,9 @@ void TWriteRequestExecutor::ScheduleHedging(TDuration hedgingDelay)
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s Schedule OnHedgingTimeout() %s",
+        "%s Schedule OnHedgingTimeout %s%s",
         LogTitle.GetWithTime().c_str(),
+        ExtendedDebugState().c_str(),
         FormatDuration(hedgingDelay).c_str());
 
     DirectBlockGroup->Schedule(
@@ -477,8 +501,9 @@ void TWriteRequestExecutor::OnRequestTimeout()
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s Request timeout.",
-        LogTitle.GetWithTime().c_str());
+        "%s Request timeout. %s",
+        LogTitle.GetWithTime().c_str(),
+        ExtendedDebugState().c_str());
 
     ReplyOrNotifyBelated(MakeError(E_TIMEOUT, "Write request timeout"), {});
 }
@@ -514,8 +539,8 @@ THostMask TWriteRequestExecutor::GetRunningDirectWrites() const
 TString TWriteRequestExecutor::ExtendedDebugState() const
 {
     TStringBuilder result;
-    result << "dr:" << RequestedDirectWrites.Print();
-    result << " ir:" << IndirectCoordinator.Print()
+    result << "d:" << RequestedDirectWrites.Print();
+    result << " i:" << IndirectCoordinator.Print()
            << RequestedIndirectWrites.Print();
     result << " c:" << CompletedWrites.Print();
     result << " f:" << FailedWrites.Print();

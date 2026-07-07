@@ -37,14 +37,15 @@ public:
     struct TDirectBlockGroup
     {
         TString DiskId;
+        size_t DBGIndex = 0;
         ui64 TabletId = 0;
         ui32 Generation = 0;
-        size_t DirectBlockGroupIndex = 0;
     };
 
     struct TVChunk
     {
         TString DiskId;
+        ui32 DBGIndex;
         ui32 VChunkIndex;
     };
 

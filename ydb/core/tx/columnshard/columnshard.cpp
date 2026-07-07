@@ -488,8 +488,8 @@ void TColumnShard::FillColumnTableStats(
     auto tables = TablesManager.GetTables();
     TTableStatsBuilder tableStatsBuilder(Counters);
 
-    YDB_LOG_DEBUG("",
-        {"#_There are stats for tables", tables.size()});
+    YDB_LOG_DEBUG("There are stats for tables",
+        {"tables", tables.size()});
     ev->Record.ClearTables();
     for (const auto& [internalPathId, table] : tables) {
         for (const auto& unifiedPathId : table.GetPathIds()) {
@@ -521,20 +521,20 @@ void TColumnShard::FillColumnTableStats(
 void TColumnShard::SendPeriodicStats(bool withExecutor) {
     if (!CurrentSchemeShardId) {
         YDB_LOG_INFO("",
-            {"#_No CurrentSchemeShardId", TabletID()});
+            {"noCurrentSchemeShardId", TabletID()});
         return;
     }
 
     if (!StatsReportPipe) {
-        YDB_LOG_INFO("",
-            {"#_StatsReportPipe created", TabletID()});
+        YDB_LOG_INFO("StatsReportPipe created",
+            {"tabletId", TabletID()});
         StatsReportPipe = ActorContext().Register(NTabletPipe::CreateClient(ActorContext().SelfID, CurrentSchemeShardId, {}));
         return;
     }
 
     if (!TablesManager.GetTabletPathIdOptional()) {
-        YDB_LOG_ERROR("",
-            {"#_TablesManager not ready", TabletID()});
+        YDB_LOG_ERROR("TablesManager not ready",
+            {"tabletId", TabletID()});
         return;
     }
 

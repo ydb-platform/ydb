@@ -8,7 +8,7 @@ Recommendations from the {{ ydb-short-name }} data model:
 
 * [`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](../../../concepts/datamodel/table.md#auto_partitioning_max_partitions_count) caps partition growth; once the cap is reached, splits stop — monitor and raise the limit before you hit it.[*](#cluster-partition-size-limit)
 
-* With load-based autopartitioning, avoid leaving the minimum partition count at **1** if load is bursty: after a lull, merges can collapse the table to one partition and force expensive splits again. See [{#T}](../../../concepts/datamodel/table.md#auto_partitioning_min_partitions_count).
+* With load-based autopartitioning, avoid leaving the minimum partition count at **1** if load is bursty: after a lull, merges can collapse the table to one partition and force expensive splits again. See [`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](../../../concepts/datamodel/table.md#auto_partitioning_min_partitions_count).
 
 To apply the recommendations:
 

@@ -1,6 +1,6 @@
 # По объёму (size-based) {#auto-by-size}
 
-Режим **`AUTO_PARTITIONING_BY_SIZE`** включает разделение партиции, когда её размер превышает заданный порог **`AUTO_PARTITIONING_PARTITION_SIZE_MB`**, и объединение соседних партиций, когда суммарный размер достаточно мал (см. точные условия в описании параметров в [{#T}](../../../../concepts/datamodel/table.md#auto_partitioning_by_size)).
+Режим **`AUTO_PARTITIONING_BY_SIZE`** включает разделение партиции, когда её размер превышает заданный порог **`AUTO_PARTITIONING_PARTITION_SIZE_MB`**, и объединение соседних партиций, когда суммарный размер достаточно мал (см. точные условия в описании параметров в [`AUTO_PARTITIONING_BY_SIZE`](../../../../concepts/datamodel/table.md#auto_partitioning_by_size)).
 
 Практические ориентиры:
 

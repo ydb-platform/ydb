@@ -37,6 +37,6 @@ Partitioning settings apply to the **base table**; each index has its own partit
 
 {% note warning %}
 
-Column-oriented tables: automatic repartitioning like row tables **is not supported** — partition count must be planned up front. See [{#T}](../../primary-key/column-oriented.md).
+Column-oriented tables: automatic repartitioning like row tables **is not supported** — partition count must be planned up front. See [{#T}](../../../primary-key/column-oriented.md).
 
 {% endnote %}

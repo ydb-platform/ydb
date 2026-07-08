@@ -1082,7 +1082,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
     if (converterIter.IsEnd()) {
         YDB_LOG_ALERT_CTX(ctx, "Ignored ev lock for event path not recognized",
             {"PQLOGPREFIX", PQ_LOG_PREFIX},
-            {"record", record});
+            {"record", record.ShortDebugString()});
         CloseSession(
                 TStringBuilder() << "Internal server error, cannot parse lock event: " << record.ShortDebugString() << ", reason: topic not found",
                 NPersQueue::NErrorCode::ERROR, ctx
@@ -1247,7 +1247,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
     if (converterIter.IsEnd()) {
         YDB_LOG_ALERT_CTX(ctx, "Failed to parse balancer",
             {"PQLOGPREFIX", PQ_LOG_PREFIX},
-            {"response", record});
+            {"response", record.ShortDebugString()});
         CloseSession(
                 TStringBuilder() << "Internal server error, cannot parse release event: " << record.ShortDebugString() << ", path not recognized",
                 NPersQueue::NErrorCode::ERROR, ctx
@@ -1269,7 +1269,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
     auto onUnknownPartition = [&](auto& marker) {
         YDB_LOG_ALERT_CTX(ctx, "Releasing unknown",
             {"PQLOGPREFIX", PQ_LOG_PREFIX},
-            {"partition", record},
+            {"partition", record.ShortDebugString()},
             {"marker", marker});
         CloseSession(
                 TStringBuilder() << "Internal server error, releasing unknown partition: " << record.ShortDebugString() << " " << marker,

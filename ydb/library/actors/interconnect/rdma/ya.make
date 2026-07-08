@@ -15,6 +15,7 @@ IF (OS_LINUX)
         ydb/library/actors/util
         contrib/libs/ibdrv
         contrib/libs/protobuf
+        library/cpp/containers/absl_flat_hash
         library/cpp/monlib/dynamic_counters
         library/cpp/threading/queue
     )

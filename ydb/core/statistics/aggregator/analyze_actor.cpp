@@ -13,6 +13,19 @@ namespace NKikimr::NStat {
 static constexpr ui64 MAX_STATISTIC_SIZE = 8_MB;
 static constexpr ui64 MAX_STATISTICS_SIZE_IN_SINGLE_SCAN = 40_MB;
 
+namespace {
+
+std::optional<EStatType> ConvertMultiColumnStatType(NKikimrSchemeOp::EMultiColumnStatisticsType type) {
+    switch (type) {
+    case NKikimrSchemeOp::EMultiColumnStatisticsType::MULTI_COLUMN_STATISTICS_UNSPECIFIED:
+        return std::nullopt;
+    case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
+        return EStatType::COUNT_MIN_SKETCH;
+    }
+}
+
+} // anonymous namespace
+
 class TAnalyzeActor::TScanActor : public TQueryBase {
 public:
     TScanActor(TActorId parent, TString Database, TString query, size_t columnCount)
@@ -170,6 +183,37 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         if (col.second.KeyOrder >= 0) {
             KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), col.second.KeyOrder + 1));
             KeyColumnTypes[col.second.KeyOrder] = col.second.PType;
+        }
+    }
+
+    for (const auto& def : entry.MultiColumnStatistics) {
+        TMultiColumnStatDesc desc;
+        desc.Name = def.GetName();
+
+        bool columnDropped = false;
+        for (auto columnId : def.GetColumnIds()) {
+            auto colIt = tag2Column.find(columnId);
+            if (colIt == tag2Column.end()) {
+                // Column probably already dropped, skip this definition.
+                columnDropped = true;
+                break;
+            }
+            desc.ColumnNames.push_back(colIt->second.Name);
+            desc.ColumnIds.push_back(columnId);
+        }
+        if (columnDropped) {
+            continue;
+        }
+
+        for (auto type : def.GetTypes()) {
+            auto statType = ConvertMultiColumnStatType(
+                static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type));
+            if (statType) {
+                desc.Types.push_back(*statType);
+            }
+        }
+        if (!desc.Types.empty()) {
+            MultiColumnStatDescs.push_back(std::move(desc));
         }
     }
 
@@ -337,20 +381,23 @@ void TAnalyzeActor::StartColumnStatEvalTasks() {
 
     while (!PendingTasks.empty()) {
         auto& task = PendingTasks.front();
-        Y_ENSURE(!task.SimpleStatEval != !task.Stage2StatEval);
+        Y_ENSURE((task.SimpleStatEval != nullptr) + (task.Stage2StatEval != nullptr) + (task.MultiStatEval != nullptr) == 1);
         size_t resultSize = task.SimpleStatEval
             ? task.SimpleStatEval->EstimateSize()
-            : task.Stage2StatEval->EstimateSize();
+            : task.Stage2StatEval
+                ? task.Stage2StatEval->EstimateSize()
+                : task.MultiStatEval->EstimateSize();
         if (totalSize + resultSize > MAX_STATISTICS_SIZE_IN_SINGLE_SCAN) {
             break;
         }
 
-        const auto& col = Columns.at(task.ColumnIdx);
         totalSize += resultSize;
         if (task.SimpleStatEval) {
-            task.SimpleStatEval->AddAggregations(col.Name, *SelectBuilder);
+            task.SimpleStatEval->AddAggregations(Columns.at(task.ColumnIdx).Name, *SelectBuilder);
         } else if (task.Stage2StatEval) {
-            task.Stage2StatEval->AddAggregations(col.Name, *SelectBuilder);
+            task.Stage2StatEval->AddAggregations(Columns.at(task.ColumnIdx).Name, *SelectBuilder);
+        } else {
+            task.MultiStatEval->AddAggregations(*SelectBuilder);
         }
         InProgressTasks.push_back(std::move(task));
         PendingTasks.pop();
@@ -462,11 +509,13 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
         // More scan results coming for the current column tasks batch, merge the current one
         // and wait for more.
         for (const auto& task : InProgressTasks) {
-            Y_ENSURE(!task.SimpleStatEval != !task.Stage2StatEval);
+            Y_ENSURE((task.SimpleStatEval != nullptr) + (task.Stage2StatEval != nullptr) + (task.MultiStatEval != nullptr) == 1);
             if (task.SimpleStatEval) {
                 task.SimpleStatEval->Merge(result.AggColumns);
-            } else {
+            } else if (task.Stage2StatEval) {
                 task.Stage2StatEval->Merge(result.AggColumns);
+            } else {
+                task.MultiStatEval->Merge(result.AggColumns);
             }
         }
         return;
@@ -482,15 +531,36 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
         resultItems.emplace_back(
             std::nullopt, EStatType::TABLE_SUMMARY, tableSummary.SerializeAsString());
         CountSeq.reset();
+
+        auto supportedMultiColumnTypes = IMultiColumnStatisticEval::SupportedMultiColumnTypes();
+        for (const auto& def : MultiColumnStatDescs) {
+            for (auto type : def.Types) {
+                if (std::find(supportedMultiColumnTypes.begin(), supportedMultiColumnTypes.end(), type)
+                        == supportedMultiColumnTypes.end()) {
+                    continue;
+                }
+                auto statEval = IMultiColumnStatisticEval::MaybeCreate(
+                    type, def.ColumnNames, def.ColumnIds, RowCount.value());
+                if (!statEval) {
+                    continue;
+                }
+                if (statEval->EstimateSize() > MAX_STATISTIC_SIZE) {
+                    continue;
+                }
+                PendingTasks.push(TColumnStatEvalTask{
+                    .MultiStatEval = std::move(statEval),
+                });
+            }
+        }
     }
 
     auto supportedStatTypes = IStage2ColumnStatisticEval::SupportedTypes();
 
     for (const auto& task : InProgressTasks) {
-        const auto& col = Columns.at(task.ColumnIdx);
-        Y_ENSURE(!task.SimpleStatEval != !task.Stage2StatEval);
+        Y_ENSURE((task.SimpleStatEval != nullptr) + (task.Stage2StatEval != nullptr) + (task.MultiStatEval != nullptr) == 1);
 
         if (task.SimpleStatEval) {
+            const auto& col = Columns.at(task.ColumnIdx);
             auto simpleStats = task.SimpleStatEval->Extract(RowCount.value(), result.AggColumns);
             resultItems.emplace_back(
                 col.Tag,
@@ -511,10 +581,16 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
                 });
             }
         } else if (task.Stage2StatEval) {
+            const auto& col = Columns.at(task.ColumnIdx);
             resultItems.emplace_back(
                 col.Tag,
                 task.Stage2StatEval->GetType(),
                 task.Stage2StatEval->ExtractData(result.AggColumns));
+        } else {
+            resultItems.emplace_back(
+                task.MultiStatEval->GetColumnIds(),
+                task.MultiStatEval->GetType(),
+                task.MultiStatEval->ExtractData(result.AggColumns));
         }
     }
 

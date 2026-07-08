@@ -162,6 +162,18 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         ValidateCountMinSketch(runtime, tableInfo.PathId);
     }
 
+    Y_UNIT_TEST(CountMinSketchMultiColumnStatistics) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareMultiColumnColumnTable(env, "Database", "Table1");
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        CheckMultiColumnStatisticsProbes(env, runtime, tableInfo.PathId, {2, 3});
+    }
+
     Y_UNIT_TEST(SimpleColumnStatistics) {
         auto responses = PrepareAndGetStatistics(
             GetColumns(), EStatType::SIMPLE_COLUMN, { "Key", "LowCardinalityString" });

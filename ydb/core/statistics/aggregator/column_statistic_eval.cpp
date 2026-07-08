@@ -157,21 +157,82 @@ NKikimrStat::TSimpleColumnStatistics TSimpleColumnStatisticEval::Extract(
     return result;
 }
 
-class TCMSEval : public IStage2ColumnStatisticEval {
-    ui64 Width;
-    ui64 Depth = DEFAULT_DEPTH;
-
-    std::optional<ui32> Seq;
-    std::unique_ptr<TCountMinSketch> IntermediateState;
-
+// Shared count-min sketch bookkeeping for both the single-column (TCMSEval) and multi-column
+// (TMultiColumnCountMinSketchEval) evaluators: owns the sketch dimensions, the aggregation
+// column slot, and (for cross-shard OLAP scans) the intermediate merge accumulator.
+class TCountMinSketchState {
+public:
     // current upper limit is 4_MB per columnar statistics
     static constexpr ui64 MAX_WIDTH = 131072;
     static constexpr ui64 MIN_WIDTH = 4096;
     static constexpr ui64 DEFAULT_DEPTH = 8;
     static constexpr double RELATIVE_ERROR = 10;
 
+    explicit TCountMinSketchState(ui64 width) : Width(width) {}
+
+    // Sketch width for the given per-element error, clamped to [MIN_WIDTH, MAX_WIDTH - 1].
+    // (MAX_WIDTH - 1 leaves room for the other class variables' memory consumption.)
+    static ui64 WidthForEps(double eps) {
+        ui64 width = std::max((ui64)MIN_WIDTH, (ui64)ceil(std::numbers::e_v<double> / eps));
+        return std::min(width, MAX_WIDTH - 1);
+    }
+
+    ui64 GetWidth() const { return Width; }
+    ui64 GetDepth() const { return Depth; }
+
+    size_t EstimateSize() const { return TCountMinSketch::StaticSize(Width, Depth); }
+
+    // Records the aggregation column slot; for intermediate (cross-shard) aggregation also
+    // allocates the accumulator that Merge() folds partial sketches into.
+    void OnAdded(ui32 seq, bool intermediateAggregation) {
+        Seq = seq;
+        if (intermediateAggregation) {
+            IntermediateState = std::unique_ptr<TCountMinSketch>(TCountMinSketch::Create(Width, Depth));
+        }
+    }
+
+    void Merge(const TVector<NYdb::TValue>& aggColumns) {
+        Y_ENSURE(IntermediateState);
+        NYdb::TValueParser val(aggColumns.at(Seq.value()));
+        val.OpenOptional();
+        if (val.IsNull()) {
+            return;
+        }
+        auto cms = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(
+            val.GetBytes().data(), val.GetBytes().size()));
+        *IntermediateState += *cms;
+    }
+
+    TString ExtractData(const TVector<NYdb::TValue>& aggColumns) {
+        if (IntermediateState) {
+            Merge(aggColumns);
+            auto bytes = IntermediateState->AsStringBuf();
+            return TString(bytes.data(), bytes.size());
+        }
+
+        NYdb::TValueParser val(aggColumns.at(Seq.value()));
+        val.OpenOptional();
+        if (!val.IsNull()) {
+            const auto& bytes = val.GetBytes();
+            return TString(bytes.data(), bytes.size());
+        }
+        auto defaultVal = std::unique_ptr<TCountMinSketch>(TCountMinSketch::Create(Width, Depth));
+        auto bytes = defaultVal->AsStringBuf();
+        return TString(bytes.data(), bytes.size());
+    }
+
+private:
+    ui64 Width;
+    ui64 Depth = DEFAULT_DEPTH;
+    std::optional<ui32> Seq;
+    std::unique_ptr<TCountMinSketch> IntermediateState;
+};
+
+class TCMSEval : public IStage2ColumnStatisticEval {
+    TCountMinSketchState Sketch;
+
 public:
-    TCMSEval(ui64 width) : Width(width) {}
+    explicit TCMSEval(ui64 width) : Sketch(width) {}
 
     static TPtr MaybeCreate(
             const NKikimrStat::TSimpleColumnStatistics& simpleStats,
@@ -189,59 +250,66 @@ public:
             return TPtr{};
         }
 
-        const double eps = (RELATIVE_ERROR - 1) * (1 + std::log10(n / ndv)) / ndv;
-        ui64 cmsWidth = std::max((ui64)MIN_WIDTH, (ui64)ceil(std::numbers::e_v<double> / eps));
-        if (cmsWidth > MAX_WIDTH - 1) {
-            // to accommodate for the other class variables' memory consumption,
-            //  negative 1 from width at each depth.
-            cmsWidth = MAX_WIDTH - 1;
-        }
-        return std::make_unique<TCMSEval>(cmsWidth);
+        const double eps = (TCountMinSketchState::RELATIVE_ERROR - 1) * (1 + std::log10(n / ndv)) / ndv;
+        return std::make_unique<TCMSEval>(TCountMinSketchState::WidthForEps(eps));
     }
 
     EStatType GetType() const final { return EStatType::COUNT_MIN_SKETCH; }
 
-    size_t EstimateSize() const final { return TCountMinSketch::StaticSize(Width, Depth); }
+    size_t EstimateSize() const final { return Sketch.EstimateSize(); }
 
     void AddAggregations(const TString& columnName, TSelectBuilder& builder) final {
-        Seq = builder.AddUDAFAggregation(columnName, "CMS", Width, Depth);
-
-        if (builder.IsIntermediateAggregation()) {
-            IntermediateState = std::unique_ptr<TCountMinSketch>(TCountMinSketch::Create(Width, Depth));
-        }
+        Sketch.OnAdded(
+            builder.AddUDAFAggregation(columnName, "CMS", Sketch.GetWidth(), Sketch.GetDepth()),
+            builder.IsIntermediateAggregation());
     }
 
-    void Merge(const TVector<NYdb::TValue>& aggColumns) final {
-        Y_ENSURE(IntermediateState);
-        NYdb::TValueParser val(aggColumns.at(Seq.value()));
-        val.OpenOptional();
-        if (val.IsNull()) {
-            return;
+    void Merge(const TVector<NYdb::TValue>& aggColumns) final { Sketch.Merge(aggColumns); }
+
+    TString ExtractData(const TVector<NYdb::TValue>& aggColumns) final { return Sketch.ExtractData(aggColumns); }
+};
+
+class TMultiColumnCountMinSketchEval : public IMultiColumnStatisticEval {
+    std::vector<TString> ColumnNames;
+    std::vector<ui32> ColumnIds;
+    TCountMinSketchState Sketch;
+
+public:
+    TMultiColumnCountMinSketchEval(std::vector<TString> columnNames, std::vector<ui32> columnIds, ui64 width)
+        : ColumnNames(std::move(columnNames))
+        , ColumnIds(std::move(columnIds))
+        , Sketch(width)
+    {}
+
+    static TPtr MaybeCreate(std::vector<TString> columnNames, std::vector<ui32> columnIds, ui64 rowCount) {
+        if (rowCount == 0) {
+            // Empty table
+            return TPtr{};
         }
-        auto cms = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(
-            val.GetBytes().data(), val.GetBytes().size()));
-        *IntermediateState += *cms;
+
+        // There is no distinct-tuple-count estimate for a multi-column tuple,
+        // so size as if every tuple were unique (ndv == n).
+        const double n = rowCount;
+        const double eps = (TCountMinSketchState::RELATIVE_ERROR - 1) / n;
+        return std::make_unique<TMultiColumnCountMinSketchEval>(
+            std::move(columnNames), std::move(columnIds), TCountMinSketchState::WidthForEps(eps));
     }
 
-    TString ExtractData(const TVector<NYdb::TValue>& aggColumns) final {
-        if (IntermediateState) {
-            Merge(aggColumns);
-            auto bytes = IntermediateState->AsStringBuf();
-            return TString(bytes.data(), bytes.size());
-        }
+    EStatType GetType() const final { return EStatType::COUNT_MIN_SKETCH; }
 
-        NYdb::TValueParser val(aggColumns.at(Seq.value()));
-        val.OpenOptional();
-        if (!val.IsNull()) {
-            const auto& bytes = val.GetBytes();
-            return TString(bytes.data(), bytes.size());
-        } else {
-            auto defaultVal = std::unique_ptr<TCountMinSketch>(
-                TCountMinSketch::Create(Width, Depth));
-            auto bytes = defaultVal->AsStringBuf();
-            return TString(bytes.data(), bytes.size());
-        }
+    const std::vector<ui32>& GetColumnIds() const final { return ColumnIds; }
+
+    size_t EstimateSize() const final { return Sketch.EstimateSize(); }
+
+    void AddAggregations(TSelectBuilder& builder) final {
+        Sketch.OnAdded(
+            builder.AddUDAFAggregationTuple(ColumnNames, "CMS", Sketch.GetWidth(), Sketch.GetDepth()),
+            builder.IsIntermediateAggregation());
     }
+
+    void Merge(const TVector<NYdb::TValue>& aggColumns) final { Sketch.Merge(aggColumns); }
+
+    TString ExtractData(const TVector<NYdb::TValue>& aggColumns) final { return Sketch.ExtractData(aggColumns); }
 };
 
 struct TBorder {
@@ -459,6 +527,26 @@ IStage2ColumnStatisticEval::TPtr IStage2ColumnStatisticEval::MaybeCreate(
 
 bool IStage2ColumnStatisticEval::AreMinMaxNeeded(const NScheme::TTypeInfo& typeInfo) {
     return TEWHEval::GetHistogramType(typeInfo.GetTypeId()).Defined();
+}
+
+TVector<EStatType> IMultiColumnStatisticEval::SupportedMultiColumnTypes() {
+    return {
+        EStatType::COUNT_MIN_SKETCH,
+    };
+}
+
+IMultiColumnStatisticEval::TPtr IMultiColumnStatisticEval::MaybeCreate(
+        EStatType statType,
+        std::vector<TString> columnNames,
+        std::vector<ui32> columnIds,
+        ui64 rowCount) {
+    switch (statType) {
+    case EStatType::COUNT_MIN_SKETCH:
+        return TMultiColumnCountMinSketchEval::MaybeCreate(
+            std::move(columnNames), std::move(columnIds), rowCount);
+    default:
+        return TPtr{};
+    }
 }
 
 } // NKikimr::NStat

@@ -623,6 +623,39 @@ Y_UNIT_TEST_SUITE(TOracle)
             oracle.GetFlushRequestCooldown(
                 THostMask::MakeOne(0).Include(THostMask::MakeOne(4))));
     }
+
+    Y_UNIT_TEST(GetFlushRequestCooldownIsClampedToMaxReconnectDelay)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr);
+        const auto now = TInstant::Now();
+
+        // The cooldown grows by 10ms per consecutive error and is capped at
+        // MaxReconnectDelay (10s). 10s / 10ms == 1000 errors reach the cap
+        // exactly; any additional error must not exceed it.
+        const auto maxReconnectDelay = TDuration::Seconds(10);
+        for (size_t i = 0; i < 1000; ++i) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+        }
+
+        // Exactly at the cap.
+        UNIT_ASSERT_VALUES_EQUAL(
+            maxReconnectDelay,
+            oracle.GetFlushRequestCooldown(THostMask::MakeOne(0)));
+
+        // Far beyond the cap - still clamped.
+        for (size_t i = 0; i < 500; ++i) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            maxReconnectDelay,
+            oracle.GetFlushRequestCooldown(THostMask::MakeOne(0)));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

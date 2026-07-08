@@ -437,7 +437,7 @@ void TWriteRequestExecutor::ScheduleHedging(TDuration hedgingDelay)
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s Schedule OnHedgingTimeout %s%s",
+        "%s Schedule OnHedgingTimeout %s %s",
         LogTitle.GetWithTime().c_str(),
         ExtendedDebugState().c_str(),
         FormatDuration(hedgingDelay).c_str());

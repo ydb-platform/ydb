@@ -361,7 +361,7 @@ TDuration TOracle::GetFlushRequestCooldown(THostMask hosts) const
     for (auto host: hosts) {
         result = Max(result, cooldown(host));
     }
-    return result;
+    return Min(result, MaxReconnectDelay);
 }
 
 TDuration TOracle::GetFlushRequestTimeout() const

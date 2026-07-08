@@ -205,6 +205,7 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
                     issues.PrintTo(ss);
                     YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
                     context->Errors->Inc();
+                    SendGcFinished(context);
                     return;
                 }
                 YDB_LOG_DEBUG_CTX(*context->ActorSystem, 

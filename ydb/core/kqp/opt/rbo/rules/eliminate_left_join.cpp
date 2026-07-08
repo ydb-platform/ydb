@@ -3,6 +3,10 @@
 namespace NKikimr {
 namespace NKqp {
 
+bool TEliminateLeftJoinRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Join;
+}
+
 // Given this shape:
 // Left Join (L_keys = R_keys)
 //     |- L

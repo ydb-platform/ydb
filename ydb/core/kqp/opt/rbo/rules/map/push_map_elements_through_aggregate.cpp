@@ -158,6 +158,11 @@ void PruneCollidingTargets(const TVector<TInfoUnit>& aggregateOutput, TVector<TC
 
 } // anonymous namespace
 
+bool TPushMapElementsThroughAggregateRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Map &&
+        input->Children.front()->Kind == EOperator::Aggregate;
+}
+
 TIntrusivePtr<IOperator>
 TPushMapElementsThroughAggregateRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     if (input->Kind != EOperator::Map) {

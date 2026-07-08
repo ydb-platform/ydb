@@ -100,7 +100,9 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
 std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSourceInfo(
     const TFullTxInfo& tx, NTabletFlatExecutor::TTransactionContext& txc) {
     auto op = GetTxOperator(tx.GetTxId(), ETxOperatorStatus::InProgress);
-    op->ResetStatusOnUpdate();
+    const bool sourceChanged = op->GetTxInfo().Source != tx.Source;
+    op->ResetStatusOnUpdate(sourceChanged);
+
     auto& txInfo = op->MutableTxInfo();
     txInfo.Source = tx.Source;
     txInfo.MinStep = tx.MinStep;
@@ -434,10 +436,12 @@ void TTxController::FinishProposeOnComplete(ITransactionOperator& txOperator, co
     NActors::TLogContextGuard lGuard =
         NActors::TLogContextBuilder::Build()("method", "TTxController::FinishProposeOnComplete")("tx_id", txOperator.GetTxId());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "start")("tx_info", txOperator.GetTxInfo().DebugString());
-    TTxController::TProposeResult proposeResult = txOperator.GetProposeStartInfoVerified();
     AFL_VERIFY(!txOperator.IsFail());
+    const bool shouldSendReply = txOperator.ShouldSendReplyOnComplete();
     txOperator.FinishProposeOnComplete(Owner, ctx);
-    txOperator.SendReply(Owner, ctx);
+    if (shouldSendReply) {
+        txOperator.SendReply(Owner, ctx);
+    }
     Counters.OnFinishProposeOnComplete(txOperator.GetOpType());
 }
 

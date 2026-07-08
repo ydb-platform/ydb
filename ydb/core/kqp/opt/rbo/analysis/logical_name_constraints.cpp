@@ -60,24 +60,49 @@ bool PropagateForbidden(const TIntrusivePtr<IOperator>& op, const TInfoUnitConst
 
 class TLogicalNameConstraints {
 public:
-    void Run(TOpRoot& root) {
-        for (const auto& iter : root) {
-            iter.Current->Props.Analysis.NameConstraints.emplace();
+    explicit TLogicalNameConstraints(TOpRoot& root)
+        : Traversal(root.PostOrder()) {
+    }
+
+    void Run() {
+        for (const auto& iter : Traversal) {
+            const auto& op = iter.Current;
+            op->Props.Analysis.NameConstraints.emplace();
         }
 
-        bool changed = true;
-        ui32 iteration = 0;
-        while (changed) {
-            changed = false;
-            for (const auto& iter : root) {
-                changed |= iter.Current->PropagateNameConstraints();
-            }
-            for (const auto& iter : root) {
-                changed |= PropagateSideBySideInputConflicts(*iter.Current);
-            }
-            Y_ENSURE(++iteration < 1000, "Name constraint propagation did not converge");
+        for (auto it = Traversal.rbegin(); it != Traversal.rend(); ++it) {
+            PropagateSideBySideInputConflicts(*it->Current);
+        }
+
+        for (auto it = Traversal.rbegin(); it != Traversal.rend(); ++it) {
+            Enqueue(it->Current);
+        }
+        Propagate();
+    }
+
+private:
+    void Enqueue(const TIntrusivePtr<IOperator>& op) {
+        if (op && Queued.insert(op.get()).second) {
+            Queue.push_back(op);
         }
     }
+
+    void Propagate() {
+        for (size_t index = 0; index < Queue.size(); ++index) {
+            auto op = Queue[index];
+            Queued.erase(op.get());
+            if (op->PropagateNameConstraints()) {
+                for (const auto& child : op->Children) {
+                    Enqueue(child);
+                }
+            }
+        }
+        Queue.clear();
+    }
+
+    TOpTraversal Traversal;
+    THashSet<IOperator*> Queued;
+    TVector<TIntrusivePtr<IOperator>> Queue;
 };
 
 } // anonymous namespace
@@ -376,12 +401,10 @@ bool TOpUnionAll::PropagateNameConstraints() {
 }
 
 void ComputePlanNameConstraints(TOpRoot& root) {
-    TLogicalNameConstraints().Run(root);
+    TLogicalNameConstraints(root).Run();
 }
 
-const TInfoUnitConstraintSet& GetForbidden(
-    IOperator* op)
-{
+const TInfoUnitConstraintSet& GetForbidden(IOperator* op) {
     Y_ENSURE(op);
     return GetComputedNameConstraints(op).GetForbidden();
 }

@@ -429,9 +429,17 @@ class TJsonNodes : public TViewerPipeClient {
                     NKikimrBlobStorage::EVDiskStatus vDiskStatus;
                     if (NKikimrBlobStorage::EVDiskStatus_Parse(vdisk.GetStatusV2(), &vDiskStatus)) {
                         switch(vDiskStatus) {
-                            case NKikimrBlobStorage::EVDiskStatus::ERROR:
-                                vDiskState.SetVDiskState(NKikimrWhiteboard::EVDiskState::LocalRecoveryError);
+                            case NKikimrBlobStorage::EVDiskStatus::ERROR: {
+                                NKikimrWhiteboard::EVDiskState realVDiskState = NKikimrWhiteboard::EVDiskState::Initial;
+                                if (vdisk.HasState()
+                                        && NKikimrWhiteboard::EVDiskState_Parse(vdisk.GetState(), &realVDiskState)
+                                        && (realVDiskState == NKikimrWhiteboard::EVDiskState::LocalRecoveryError
+                                            || realVDiskState == NKikimrWhiteboard::EVDiskState::SyncGuidRecoveryError
+                                            || realVDiskState == NKikimrWhiteboard::EVDiskState::PDiskError)) {
+                                    vDiskState.SetVDiskState(realVDiskState);
+                                }
                                 break;
+                            }
                             case NKikimrBlobStorage::EVDiskStatus::INIT_PENDING:
                                 vDiskState.SetVDiskState(NKikimrWhiteboard::EVDiskState::Initial);
                                 break;

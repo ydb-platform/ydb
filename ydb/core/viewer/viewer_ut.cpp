@@ -273,6 +273,26 @@ Y_UNIT_TEST_SUITE(Viewer) {
         entry->MutableInfo()->SetStatusV2("ACTIVE");
     }
 
+    void AddSysViewVDisk(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr* ev, ui32 nodeId, ui32 pdiskId, ui32 vslotId,
+                         const TString& statusV2, const TString& state = {}) {
+        auto* entry = (*ev)->Get()->Record.AddEntries();
+        entry->MutableKey()->SetNodeId(nodeId);
+        entry->MutableKey()->SetPDiskId(pdiskId);
+        entry->MutableKey()->SetVSlotId(vslotId);
+        auto* info = entry->MutableInfo();
+        info->SetGroupId(0);
+        info->SetGroupGeneration(1);
+        info->SetFailRealm(0);
+        info->SetFailDomain(0);
+        info->SetVDisk(0);
+        info->SetAllocatedSize(100);
+        info->SetAvailableSize(900);
+        info->SetStatusV2(statusV2);
+        if (state) {
+            info->SetState(state);
+        }
+    }
+
     void ChangeTabletStateResponse(TEvWhiteboard::TEvTabletStateResponse::TPtr* ev, int tabletsTotal, int& tabletId, int& nodeId) {
         ui64* cookie = const_cast<ui64*>(&(ev->Get()->Cookie));
         *cookie = nodeId;
@@ -767,6 +787,84 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 5.0, 1e-6);
     }
 
+    Y_UNIT_TEST(StorageGroupUsageAboveHundredWhenVDiskOvergrowsSlot)
+    {
+        // A VDisk can overgrow its nominal per-slot share (soft-partitioned PDisk with
+        // empty neighbour slots). Usage is intentionally allowed to exceed 100% as an
+        // over-subscription signal, and the disk's real AvailableSize must be preserved
+        // (not clobbered to 0). nominal slot = 1890/10 = 189, weight = GetOwnerWeight(0,0) = 1.
+        TStorageGroups::TGroup group;
+        auto& vdisk = group.VDisks.emplace_back();
+        vdisk.VSlotId = TVSlotId(1, 1, 1);
+        vdisk.AllocatedSize = 346;   // overgrown past the 189 nominal slot
+        vdisk.AvailableSize = 100;   // real headroom the disk still reports
+
+        TStorageGroups::TPDisk pdisk;
+        pdisk.TotalSize = 1890;
+        pdisk.SlotCount = 10;
+
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+
+        // Usage stays honest and above 100% (346/189 ~= 183%).
+        UNIT_ASSERT_VALUES_EQUAL(group.Used, 346);
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 189);
+        UNIT_ASSERT_GT(group.Usage, 100.0);
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 100.0 * 346 / 189, 1e-3);
+        // Bug fix: real headroom preserved instead of forced to 0.
+        UNIT_ASSERT_VALUES_EQUAL(group.Available, 100);
+    }
+
+    Y_UNIT_TEST(StorageGroupUsageAtNominalSlotBoundary)
+    {
+        // Boundary: AllocatedSize == nominal slotSize. Fully-used slot: Usage == 100%.
+        TStorageGroups::TGroup group;
+        auto& vdisk = group.VDisks.emplace_back();
+        vdisk.VSlotId = TVSlotId(1, 1, 1);
+        vdisk.AllocatedSize = 189;
+        vdisk.AvailableSize = 0;
+
+        TStorageGroups::TPDisk pdisk;
+        pdisk.TotalSize = 1890;
+        pdisk.SlotCount = 10;   // slot = 189
+
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 189);
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 100.0, 1e-6);
+    }
+
+    Y_UNIT_TEST(StorageGroupUsageAboveHundredWithMixedVDisks)
+    {
+        // Aggregate case: one overgrown vdisk (alloc 900 > slot 100, real avail 50) and one
+        // under-filled (alloc 10, avail 90). Usage stays honest: Limit=200, Used=910 -> 455%.
+        // Group Available sums real headroom (50 + 90), with the overgrown disk's 50 kept.
+        TStorageGroups::TGroup group;
+        auto& v0 = group.VDisks.emplace_back();
+        v0.VSlotId = TVSlotId(1, 1, 1);
+        v0.AllocatedSize = 900;   // overgrown
+        v0.AvailableSize = 50;    // real headroom kept (was clobbered to 0)
+        auto& v1 = group.VDisks.emplace_back();
+        v1.VSlotId = TVSlotId(1, 2, 1);
+        v1.AllocatedSize = 10;    // under-filled
+        v1.AvailableSize = 90;
+
+        TStorageGroups::TPDisk pd0;
+        pd0.TotalSize = 1000;
+        pd0.SlotCount = 10;       // slot = 100
+        TStorageGroups::TPDisk pd1;
+        pd1.TotalSize = 1000;
+        pd1.SlotCount = 10;       // slot = 100
+
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pd0}, {TPDiskId(1, 2), pd1}});
+
+        UNIT_ASSERT_VALUES_EQUAL(group.Used, 910);
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 200);
+        UNIT_ASSERT_GT(group.Usage, 100.0);
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 100.0 * 910 / 200, 1e-6);
+        // Bug fix: overgrown disk's real 50 preserved -> Available = 50 + 90.
+        UNIT_ASSERT_VALUES_EQUAL(group.Available, 140);
+    }
+
     const TPathId SHARED_DOMAIN_KEY = {7000000000, 1};
     const TPathId SERVERLESS_DOMAIN_KEY = {7000000000, 2};
     const TPathId SERVERLESS_TABLE = {7000000001, 2};
@@ -1015,6 +1113,203 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_C(disconnectedNodeMap.at("Disconnected").GetBoolean(), NJson::WriteJson(*disconnectedNode, false));
         UNIT_ASSERT_C(disconnectedNodeMap.contains("PDisks"), NJson::WriteJson(*disconnectedNode, false));
         UNIT_ASSERT_VALUES_EQUAL_C(disconnectedNodeMap.at("PDisks").GetArray().size(), 1, NJson::WriteJson(*disconnectedNode, false));
+    }
+
+    Y_UNIT_TEST(NodesPageNoLocalRecoveryErrorForDisconnectedNode)
+    {
+        // A disconnected node (e.g. a whole datacenter taken offline during a failover
+        // drill) has BSC StatusV2=ERROR forced on every VSlot. RemapDisks must NOT
+        // fabricate a LocalRecoveryError for such a merely-unreachable disk: it must
+        // leave VDiskState unset so the disk renders as unavailable/unknown (grey).
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+        const TNodeId disconnectedNodeId = runtime.GetNodeId(1);
+        size_t vslotsSysViewResponses = 0;
+        size_t droppedSystemStateResponses = 0;
+        size_t vdiskStateResponses = 0;
+
+        std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /viewer/json/nodes?type=static&fields_required=NodeId,VDisks,SystemState&storage=true&limit=2&offset=0"
+            "&offload_merge=true&offload_merge_attempts=1&dump_original_node_batches=true&timeout=10 HTTP/1.1\r\n\r\n",
+            endpoint,
+            {});
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvInterconnect::EvNodesInfo: {
+                    auto* x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                    SetNodesLocation(x, "dc-1");
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    ++vslotsSysViewResponses;
+                    (*x)->Get()->Record.ClearEntries();
+                    // Connected node: healthy, freshly reporting.
+                    AddSysViewVDisk(x, runtime.GetNodeId(0), 1, 1000, "READY", "OK");
+                    // Disconnected node: BSC forced StatusV2=ERROR, no fresh self-reported
+                    // State (the disk was healthy before the DC dropped).
+                    AddSysViewVDisk(x, runtime.GetNodeId(1), 1, 1000, "ERROR");
+                    break;
+                }
+                case TEvWhiteboard::EvSystemStateResponse: {
+                    auto* x = reinterpret_cast<TEvWhiteboard::TEvSystemStateResponse::TPtr*>(&ev);
+                    if ((*x)->Cookie == disconnectedNodeId) {
+                        ++droppedSystemStateResponses;
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
+                case TEvWhiteboard::EvVDiskStateResponse: {
+                    auto* x = reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
+                    ++vdiskStateResponses;
+                    // Force the disconnected node's VDisks to come from sysview (RemapDisks):
+                    // clearing the whiteboard VDisk info keeps node->VDisks empty so the
+                    // RemapDisks VDisks.empty() gate holds.
+                    (*x)->Get()->Record.ClearVDiskStateInfo();
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(result->Response->Body, &json, true);
+
+        const auto& nodes = json.GetMap().at("Nodes").GetArray();
+        UNIT_ASSERT_VALUES_EQUAL_C(nodes.size(), 2, NJson::WriteJson(json, false));
+        UNIT_ASSERT_VALUES_EQUAL_C(vslotsSysViewResponses, 1, NJson::WriteJson(json, false));
+        UNIT_ASSERT_VALUES_EQUAL_C(droppedSystemStateResponses, 1, NJson::WriteJson(json, false));
+        UNIT_ASSERT_C(vdiskStateResponses >= 1, NJson::WriteJson(json, false));
+
+        const NJson::TJsonValue* disconnectedNode = nullptr;
+        for (const auto& node : nodes) {
+            if (node.GetMap().at("NodeId").GetUInteger() == disconnectedNodeId) {
+                disconnectedNode = &node;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(disconnectedNode, NJson::WriteJson(json, false));
+        const auto& disconnectedNodeMap = disconnectedNode->GetMap();
+        UNIT_ASSERT_C(disconnectedNodeMap.at("Disconnected").GetBoolean(), NJson::WriteJson(*disconnectedNode, false));
+        // RemapDisks must have populated VDisks from sysview (whiteboard was cleared).
+        UNIT_ASSERT_C(disconnectedNodeMap.contains("VDisks"), NJson::WriteJson(*disconnectedNode, false));
+        const auto& vdisks = disconnectedNodeMap.at("VDisks").GetArray();
+        UNIT_ASSERT_VALUES_EQUAL_C(vdisks.size(), 1, NJson::WriteJson(*disconnectedNode, false));
+        const auto& vdiskMap = vdisks[0].GetMap();
+        // Prove the entry came through RemapDisks (sysview-derived slot id present).
+        UNIT_ASSERT_C(vdiskMap.contains("VDiskSlotId"), NJson::WriteJson(vdisks[0], false));
+        // Core assertion: a merely-unreachable disk must carry NO VDiskState at all
+        // (and specifically not the fabricated LocalRecoveryError). Fails on current
+        // code (VDiskState=="LocalRecoveryError"); passes after the fix.
+        UNIT_ASSERT_C(!vdiskMap.contains("VDiskState"), NJson::WriteJson(vdisks[0], false));
+    }
+
+    Y_UNIT_TEST(NodesPageKeepsRealVDiskErrorForDisconnectedNode)
+    {
+        // No-regression guard: if the VDisk itself last reported a genuine hard failure
+        // (sysview State=LocalRecoveryError), RemapDisks must still surface it even though
+        // the node is disconnected and StatusV2=ERROR.
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+        const TNodeId disconnectedNodeId = runtime.GetNodeId(1);
+
+        std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /viewer/json/nodes?type=static&fields_required=NodeId,VDisks,SystemState&storage=true&limit=2&offset=0"
+            "&offload_merge=true&offload_merge_attempts=1&dump_original_node_batches=true&timeout=10 HTTP/1.1\r\n\r\n",
+            endpoint,
+            {});
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvInterconnect::EvNodesInfo: {
+                    auto* x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                    SetNodesLocation(x, "dc-1");
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    (*x)->Get()->Record.ClearEntries();
+                    AddSysViewVDisk(x, runtime.GetNodeId(0), 1, 1000, "READY", "OK");
+                    // Genuine local-recovery failure that the VDisk itself reported.
+                    AddSysViewVDisk(x, runtime.GetNodeId(1), 1, 1000, "ERROR", "LocalRecoveryError");
+                    break;
+                }
+                case TEvWhiteboard::EvSystemStateResponse: {
+                    auto* x = reinterpret_cast<TEvWhiteboard::TEvSystemStateResponse::TPtr*>(&ev);
+                    if ((*x)->Cookie == disconnectedNodeId) {
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
+                case TEvWhiteboard::EvVDiskStateResponse: {
+                    auto* x = reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
+                    (*x)->Get()->Record.ClearVDiskStateInfo();
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(result->Response->Body, &json, true);
+
+        const auto& nodes = json.GetMap().at("Nodes").GetArray();
+        const NJson::TJsonValue* disconnectedNode = nullptr;
+        for (const auto& node : nodes) {
+            if (node.GetMap().at("NodeId").GetUInteger() == disconnectedNodeId) {
+                disconnectedNode = &node;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(disconnectedNode, NJson::WriteJson(json, false));
+        const auto& disconnectedNodeMap = disconnectedNode->GetMap();
+        UNIT_ASSERT_C(disconnectedNodeMap.contains("VDisks"), NJson::WriteJson(*disconnectedNode, false));
+        const auto& vdisks = disconnectedNodeMap.at("VDisks").GetArray();
+        UNIT_ASSERT_VALUES_EQUAL_C(vdisks.size(), 1, NJson::WriteJson(*disconnectedNode, false));
+        const auto& vdiskMap = vdisks[0].GetMap();
+        UNIT_ASSERT_C(vdiskMap.contains("VDiskState"), NJson::WriteJson(vdisks[0], false));
+        UNIT_ASSERT_VALUES_EQUAL_C(vdiskMap.at("VDiskState").GetString(), "LocalRecoveryError", NJson::WriteJson(vdisks[0], false));
     }
 
     Y_UNIT_TEST(ServerlessWithExclusiveNodes)

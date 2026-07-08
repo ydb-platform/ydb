@@ -52,6 +52,23 @@ Y_UNIT_TEST_SUITE(FmrRawTableQueueTests) {
             UNIT_ASSERT_VALUES_EQUAL(gottenRows[row], inputStreamsNum * repeatsNum);
         }
     }
+
+    Y_UNIT_TEST(MaxSizedRowFitsInEmptyQueue) {
+        // A row exactly as large as MaxInflightBytes must be acceptable into an
+        // otherwise empty queue; a strict "<" wait predicate would block forever.
+        ui64 maxInflightBytes = 10;
+        TFmrRawTableQueueSettings queueSettings{.MaxInflightBytes = maxInflightBytes};
+        auto queue = MakeIntrusive<TFmrRawTableQueue>(1u, queueSettings);
+
+        TBuffer row;
+        row.Resize(maxInflightBytes);
+        queue->AddRow(std::move(row));
+        queue->NotifyInputFinished(0);
+
+        TFmrRawTableQueueReader reader{queue};
+        TString result = reader.ReadAll();
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), maxInflightBytes);
+    }
 }
 
 } // namespace NYql::NFmr

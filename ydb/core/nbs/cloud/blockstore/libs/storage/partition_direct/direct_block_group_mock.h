@@ -38,13 +38,21 @@ struct TOracleMock: public IOracle
         EOperation operation,
         TInstant now) override;
 
+    void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) override;
+    void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
+    TDuration GetDDiskReconnectDelay(THostIndex hostIndex) override;
+
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,
         EOperation operation) const override;
 
-    [[nodiscard]] TDuration GetReadHedgingDelay() const override;
+    [[nodiscard]] TDuration GetReadHedgingDelay(
+        THostIndex host,
+        EDataLocation dataLocation) const override;
     [[nodiscard]] TDuration GetReadRequestTimeout() const override;
-    [[nodiscard]] TDuration GetWriteHedgingDelay() const override;
+    [[nodiscard]] TDuration GetWriteHedgingDelay(
+        THostMask hosts,
+        bool indirect) const override;
     [[nodiscard]] TDuration GetWriteRequestTimeout() const override;
     [[nodiscard]] TDuration GetIndirectWriteReplyTimeout() const override;
     [[nodiscard]] TDuration GetFlushRequestTimeout() const override;

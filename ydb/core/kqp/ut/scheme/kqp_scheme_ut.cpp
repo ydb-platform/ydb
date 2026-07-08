@@ -14955,6 +14955,77 @@ END DO)",
         UNIT_ASSERT_VALUES_EQUAL_C(compactOp.Status().GetStatus(), EStatus::SUCCESS, compactOp.Status().GetIssues().ToString());
     }
 
+    Y_UNIT_TEST_TWIN(AlterTableCompactColumnTableSql, UseQueryService) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableForcedColumnCompactions(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            auto query = R"sql(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    STORE = COLUMN
+                );)sql";
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            // A standalone (tiling++) column table supports forced compaction; an empty table already
+            // has no intersecting portions, so it completes successfully.
+            auto query = R"sql(
+                ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = 2, CASCADE = false);
+            )sql";
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+        {
+            // Cascade compaction is not supported for column tables.
+            auto query = R"sql(
+                ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = 2, CASCADE = true);
+            )sql";
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Cascade compaction is not supported for column tables",
+                result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(AlterTableCompactColumnTableDisabled, UseQueryService) {
+        // Without the column-compaction feature flag, forced compaction is rejected for column tables.
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableForcedCompactions(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            auto query = R"sql(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    STORE = COLUMN
+                );)sql";
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = R"sql(
+                ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = 2, CASCADE = false);
+            )sql";
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Compact is not allowed for column tables",
+                result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(AlterTableCompactPublicApi) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableForcedCompactions(true);

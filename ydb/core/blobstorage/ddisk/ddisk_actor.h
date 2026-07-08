@@ -32,8 +32,8 @@
 
 #include <util/generic/hash_set.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 namespace NKikimrBlobStorage::NDDisk::NInternal {
     class TChunkMapLogRecord;

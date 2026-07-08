@@ -2584,7 +2584,7 @@ private:
             return TStatus::Error;
         }
 
-        if (!ValidateSettings(*input.Ref().Child(TYtMaterialize::idx_Settings), EYtSettingType::Unordered, ctx)) {
+        if (!ValidateSettings(*input.Ref().Child(TYtMaterialize::idx_Settings), EYtSettingType::Unordered | EYtSettingType::Transparent, ctx)) {
             return TStatus::Error;
         }
 
@@ -2611,7 +2611,7 @@ private:
             return TStatus::Error;
         }
 
-        if (!ValidateSettings(*input->Child(TYtPersist::idx_Settings), EYtSettingType::Unordered, ctx)) {
+        if (!ValidateSettings(*input->Child(TYtPersist::idx_Settings), EYtSettingType::Unordered | EYtSettingType::Transparent, ctx)) {
             return TStatus::Error;
         }
 

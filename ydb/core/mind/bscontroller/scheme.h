@@ -47,7 +47,7 @@ struct Schema : NIceDb::Schema {
         struct MaintenanceStatus : Column<20, NScheme::NTypeIds::Uint8> { using Type = NKikimrBlobStorage::TMaintenanceStatus::E; static constexpr Type Default = NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST; };
         // struct InferPDiskSlotCountFromUnitSize : Column<21, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
         // struct InferPDiskSlotCountMax : Column<22, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
-        struct DiskScope : Column<23, NScheme::NTypeIds::String> {};
+        struct DiskScope : Column<23, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<NodeID, PDiskID>; // order is important
         using TColumns = TableColumns<NodeID, PDiskID, Path, Category, Guid, SharedWithOs, ReadCentric, NextVSlotId,

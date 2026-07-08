@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
 FORK_SUBTESTS()
 
-FORK_SUBTESTS()
-
 SIZE(LARGE)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

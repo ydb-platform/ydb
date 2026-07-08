@@ -350,7 +350,7 @@
             {
                 "ColumnId": 23,
                 "ColumnName": "DiskScope",
-                "ColumnType": "String"
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],

@@ -415,6 +415,7 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::T
                 gcEnabled = Config.GetCheckpointGarbageConfig().GetEnabled(),
                 actorGC = ActorGC,
                 actorSystem = TActivationContext::ActorSystem(),
+                selfId = SelfId(),
                 context]
                (const NThreading::TFuture<NYql::TIssues>& issuesFuture) {
             auto issues = issuesFuture.GetValue();
@@ -435,14 +436,12 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::T
                 return;
             }
 
-            YDB_LOG_INFO_CTX(*actorSystem, "Status updated to 'Completed'",
+            YDB_LOG_INFO_CTX(*actorSystem, "Status updated to 'Completed', send TEvNewCheckpointSucceeded to GC",
                 {"coordinatorId", coordinatorId},
                 {"checkpointId", checkpointId});
-            YDB_LOG_DEBUG_CTX(*actorSystem, "Send TEvNewCheckpointSucceeded to GC",
-                {"coordinatorId", coordinatorId},
-                {"checkpointId", checkpointId});
-            actorSystem->Send(actorGC, new TEvCheckpointStorage::TEvNewCheckpointSucceeded(
-                sender, coordinatorId, checkpointId, type));
+            actorSystem->Send(new NActors::IEventHandle(actorGC, selfId, 
+                new TEvCheckpointStorage::TEvNewCheckpointSucceeded(
+                    sender, coordinatorId, checkpointId, type, cookie)));
         });
 }
 
@@ -756,8 +755,8 @@ void TStorageProxy::Handle(NKikimr::NConsole::TEvConsole::TEvConfigNotificationR
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvGcFinished::TPtr& ev) {
     YDB_LOG_DEBUG("Got TEvGcFinished from GC",
         {"graphId", ev->Get()->CoordinatorId.GraphId});
-    auto response = std::make_unique<TEvCheckpointStorage::TEvCompleteCheckpointResponse>(checkpointId, {});
-    actorSystem->Send(sender, response.release(), 0, cookie);
+    auto response = std::make_unique<TEvCheckpointStorage::TEvCompleteCheckpointResponse>(ev->Get()->CheckpointId, NYql::TIssues{});
+    Send(ev->Get()->CheckpointCoordinatorId, response.release(), 0, ev->Get()->Cookie);
 }
 
 } // namespace

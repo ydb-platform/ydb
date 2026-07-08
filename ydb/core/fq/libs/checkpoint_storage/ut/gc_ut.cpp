@@ -85,7 +85,7 @@ class TGcTestBase: public NUnitTest::TTestBase {
             InitTestServer();
         }
         Connection = MakeConnection();
-        ::NMonitoring::TDynamicCounterPtr Counters = new ::NMonitoring::TDynamicCounters();
+        Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         Init();
     }
 
@@ -192,9 +192,11 @@ class TGcTestBase: public NUnitTest::TTestBase {
         TCoordinatorId coordinator("graph", 11);
 
         auto request = std::make_unique<TEvCheckpointStorage::TEvNewCheckpointSucceeded>(
+            sender,
             coordinator,
             checkpointUpperBound,
-            type);
+            type,
+            0);
 
         auto handle = MakeHolder<IEventHandle>(ActorGC, sender, request.release());
         GetRuntime()->Send(handle.Release());

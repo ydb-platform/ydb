@@ -16,6 +16,8 @@
 
 #include <util/thread/pool.h>
 
+#include <unordered_set>
+
 namespace NYql::NFmr {
 
 namespace {
@@ -175,12 +177,49 @@ void TFmrUserJob::PostInitMkqlIOSpec() {
     }
 }
 
-void TFmrUserJob::FillQueueFromSingleInputTable(ui64 curTableNum) {
+std::vector<ui32> TFmrUserJob::GetSectionIndicesForInput(const TTaskTableRef& tableRef) const {
+    std::vector<ui32> sectionIndices;
+    if (auto* ytTableTaskRef = std::get_if<TYtTableTaskRef>(&tableRef)) {
+        if (ytTableTaskRef->SectionIndices.empty()) {
+            // Callers that build a TYtTableTaskRef without setting SectionIndices (e.g. tests
+            // constructing one directly) fall back to 0 for all paths; harmless since it's only
+            // ever wrong when several distinct sections are actually in play, and real production
+            // partitioning always fills SectionIndices in lockstep with RichPaths.
+            sectionIndices.assign(ytTableTaskRef->RichPaths.size(), 0);
+        } else {
+            YQL_ENSURE(ytTableTaskRef->SectionIndices.size() == ytTableTaskRef->RichPaths.size());
+            sectionIndices = ytTableTaskRef->SectionIndices;
+        }
+    } else {
+        auto& fmrTableInputRef = std::get<TFmrTableInputRef>(tableRef);
+        sectionIndices.emplace_back(fmrTableInputRef.SectionIndex);
+    }
+    return sectionIndices;
+}
+
+bool TFmrUserJob::NeedsTableIndexMarking() const {
+    std::unordered_set<ui32> sectionIndices;
+    for (auto& inputTableRef: InputTables_.Inputs) {
+        for (auto sectionIndex: GetSectionIndicesForInput(inputTableRef)) {
+            sectionIndices.insert(sectionIndex);
+            if (sectionIndices.size() > 1) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void TFmrUserJob::FillQueueFromSingleInputTable(ui64 curTableNum, bool needsTableIndexMarking) {
     auto inputTableRef = InputTables_.Inputs[curTableNum];
-    auto queueTableWriter = MakeIntrusive<TFmrRawTableQueueWriter>(UnionInputTablesQueue_);
+    auto sectionIndices = GetSectionIndicesForInput(inputTableRef);
     auto inputTableReaders = GetTableInputStreams(YtJobService_, TableDataService_, inputTableRef, ClusterConnections_);
-    for (auto tableReader: inputTableReaders) {
-        ParseRecords(tableReader, queueTableWriter, 1, 1000000, CancelFlag_);
+    YQL_ENSURE(inputTableReaders.size() == sectionIndices.size());
+    auto queueTableWriter = MakeIntrusive<TFmrRawTableQueueWriter>(
+        UnionInputTablesQueue_, sectionIndices.empty() ? 0 : sectionIndices[0], needsTableIndexMarking);
+    for (ui64 i = 0; i < inputTableReaders.size(); ++i) {
+        queueTableWriter->SetTableIndex(sectionIndices[i]);
+        ParseRecords(inputTableReaders[i], queueTableWriter, 1, 1000000, CancelFlag_);
     }
     queueTableWriter->Flush();
     UnionInputTablesQueue_->NotifyInputFinished(curTableNum);
@@ -189,27 +228,32 @@ void TFmrUserJob::FillQueueFromSingleInputTable(ui64 curTableNum) {
 
 void TFmrUserJob::FillQueueFromInputTablesOrdered() {
     ui64 inputTablesNum = InputTables_.Inputs.size();
+    bool needsTableIndexMarking = NeedsTableIndexMarking();
     auto state = std::make_shared<TOrderedWriteState>();
     state->NextToEmit = 0;
     for (ui64 curTableNum = 0; curTableNum < inputTablesNum; ++curTableNum) {
-        ThreadPool_->SafeAddFunc([this, state, curTableNum]() mutable {
+        ThreadPool_->SafeAddFunc([this, state, curTableNum, needsTableIndexMarking]() mutable {
             try {
                 auto inputTableRef = InputTables_.Inputs[curTableNum];
+                auto sectionIndices = GetSectionIndicesForInput(inputTableRef);
                 auto inputTableReaders = GetTableInputStreams(
                     YtJobService_,
                     TableDataService_,
                     inputTableRef,
                     ClusterConnections_
                 );
+                YQL_ENSURE(inputTableReaders.size() == sectionIndices.size());
                 TTableWriterSettings writerSettings;
                 auto taskWriter = MakeIntrusive<TFmrRawTableQueueWriterWithLock>(
                     UnionInputTablesQueue_,
                     curTableNum,
                     state,
+                    needsTableIndexMarking,
                     writerSettings
                 );
-                for (auto tableReader : inputTableReaders) {
-                    ParseRecords(tableReader, taskWriter, 1, 1000000, CancelFlag_);
+                for (ui64 i = 0; i < inputTableReaders.size(); ++i) {
+                    taskWriter->SetSectionIndex(sectionIndices[i]);
+                    ParseRecords(inputTableReaders[i], taskWriter, 1, 1000000, CancelFlag_);
                 }
                 taskWriter->Flush();
                 with_lock(state->Mutex) {
@@ -231,10 +275,11 @@ void TFmrUserJob::FillQueueFromInputTablesOrdered() {
 
 void TFmrUserJob::FillQueueFromInputTablesUnordered() {
     ui64 inputTablesNum = InputTables_.Inputs.size();
+    bool needsTableIndexMarking = NeedsTableIndexMarking();
     for (ui64 curTableNum = 0; curTableNum < inputTablesNum; ++curTableNum) {
-        ThreadPool_->SafeAddFunc([this, curTableNum]() mutable {
+        ThreadPool_->SafeAddFunc([this, curTableNum, needsTableIndexMarking]() mutable {
             try {
-                FillQueueFromSingleInputTable(curTableNum);
+                FillQueueFromSingleInputTable(curTableNum, needsTableIndexMarking);
             } catch (...) {
                 UnionInputTablesQueue_->SetException(CurrentExceptionMessage());
             }

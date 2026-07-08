@@ -23,14 +23,23 @@ struct TTableWriterSettings {
 
 class TFmrRawTableQueueWriterWithLock: public NYT::TRawTableWriter {
 public:
+    // enableSectionIndexMarking should be false whenever the whole job only ever reads a single
+    // section (the common case): a lone section always decodes fine against the decoder's
+    // default TableIndex_ (0), so marking would be pure overhead with no correctness benefit.
     TFmrRawTableQueueWriterWithLock(
         TFmrRawTableQueue::TPtr rawTableQueue,
         ui64 tableId,
         std::shared_ptr<TOrderedWriteState> orderedWriteState,
+        bool enableSectionIndexMarking = false,
         const TTableWriterSettings& settings = TTableWriterSettings()
     );
 
     void NotifyRowEnd() override;
+
+    // Changes which table_index gets written before subsequent rows. Independent of TableId_
+    // (which only controls write-turn ordering): call this between ParseRecords() calls when
+    // this writer relays rows from several distinct physical inputs.
+    void SetSectionIndex(ui32 sectionIndex);
 
 protected:
     void DoWrite(const void* buf, ui64 len) override;
@@ -41,7 +50,13 @@ private:
     TFmrRawTableQueue::TPtr RawTableQueue_;
     std::shared_ptr<TOrderedWriteState> OrderedWriteState_;
     ui64 TableId_;
+    ui32 SectionIndex_ = 0;
+    bool EnableSectionIndexMarking_;
     TBuffer BlockContent_;
+    // Marks each flushed chunk with SectionIndex_ so the decoder can tell which schema
+    // to use once chunks from different input tables are read back as one stream. Only
+    // relevant when EnableSectionIndexMarking_ is set.
+    bool NeedsTableIndexMarker_ = true;
     TTableWriterSettings Settings_;
 };
 

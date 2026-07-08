@@ -135,10 +135,17 @@ protected:
     }
 
 private:
-    void FillQueueFromSingleInputTable(ui64 tableIndex);
+    void FillQueueFromSingleInputTable(ui64 tableIndex, bool needsTableIndexMarking);
     void FillQueueFromInputTablesUnordered();
     void FillQueueFromInputTablesOrdered();
     void FillQueueFromReduceInput();
+
+    // Per-reader section indices for a physical task-table-ref, in the same order GetTableInputStreams
+    // returns readers for it (one TYtTableTaskRef can bundle rows from several original sections).
+    std::vector<ui32> GetSectionIndicesForInput(const TTaskTableRef& tableRef) const;
+    // True only if InputTables_ actually spans more than one original section: a lone section always
+    // decodes fine against the decoder's default TableIndex_ (0), so tagging rows would be pure overhead.
+    bool NeedsTableIndexMarking() const;
 
     void InitializeFmrUserJob(TVector<TString>* mapperBlobs = nullptr);
 

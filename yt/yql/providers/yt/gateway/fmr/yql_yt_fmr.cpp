@@ -2232,10 +2232,17 @@ private:
     {
         std::vector<TOperationTableRef> operationInputTables;
         std::unordered_map<TFmrTableId, TClusterConnection> clusterConnections;
+        // SectionIndex must match the physical path position within `inputTables` (0-based across
+        // every path in the whole operation), not TInputInfo::Group: Group is the *section* number,
+        // shared by all paths of a CONCAT()'d input, while TableNames/InputSpec/Specs.Inputs[] in
+        // the codec are indexed per physical path (see TExecContextBaseSimple::GetSpecImpl, which
+        // emits one list entry per path regardless of section, deduping only by schema content).
+        ui32 physicalTableIndex = 0;
         for (auto& ytTable: inputTables) {
             TString inputCluster = ytTable.Cluster;
             auto richPath = GetFilledRichPathFromInputTable(ytTable);
             TFmrTableId fmrTableId = GetAliasOrFmrId(TFmrTableId(richPath), sessionId);
+            const ui32 sectionIndex = physicalTableIndex++;
             auto tablePresenceStatus = GetTablePresenceStatus(fmrTableId, sessionId);
             if (tablePresenceStatus == ETablePresenceStatus::Undefined) {
                 SetTablePresenceStatus(fmrTableId, sessionId, ETablePresenceStatus::OnlyInYt);
@@ -2245,6 +2252,7 @@ private:
                 // table is in fmr, do not download
                 TFmrTableRef fmrTableRef = GetFmrTableRef(fmrTableId, sessionId);
                 fmrTableRef.SerializedColumnGroups = GetColumnGroupSpec(fmrTableRef.FmrTableId, sessionId);
+                fmrTableRef.SectionIndex = sectionIndex;
                 YQL_CLOG(INFO, FastMapReduce) << "GetInputTables: table=" << fmrTableRef.FmrTableId
                     << " columnGroups=" << (fmrTableRef.SerializedColumnGroups.empty() ? "(empty)" : fmrTableRef.SerializedColumnGroups.substr(0, 200));
                 if (!richPath.Columns_.Empty()) {
@@ -2255,6 +2263,7 @@ private:
             } else {
                 TYtTableRef ytTableRef(richPath);
                 ytTableRef.FilePath = GetTableFilePath(TGetTableFilePathOptions(sessionId).Cluster(inputCluster).Path(ytTable.Name).IsTemp(ytTable.Temp));
+                ytTableRef.SectionIndex = sectionIndex;
                 operationInputTables.emplace_back(ytTableRef);
                 auto connection = GetTableClusterConnection(ytTable.Cluster, sessionId, config);
                 clusterConnections.emplace(fmrTableId, connection);

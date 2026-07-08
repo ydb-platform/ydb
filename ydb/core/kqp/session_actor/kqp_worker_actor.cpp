@@ -586,8 +586,6 @@ private:
                 execSettings.UsePgParser = false;
                 execSettings.SyntaxVersion = 1;
                 break;
-            case Ydb::Query::Syntax::SYNTAX_PG:
-                ythrow yexception() << "PostgreSQL syntax is not supported";
             default:
                 break;
         }
@@ -607,8 +605,6 @@ private:
                         execSettings.SyntaxVersion = 1;
                         break;
 
-                    case Ydb::Query::Syntax::SYNTAX_PG:
-                        ythrow yexception() << "PostgreSQL syntax is not supported";
                     default:
                         break;
                 }

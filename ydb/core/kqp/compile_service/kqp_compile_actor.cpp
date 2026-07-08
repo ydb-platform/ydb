@@ -207,9 +207,8 @@ private:
     TVector<TQueryAst> GetAstStatements(const TActorContext &ctx) {
         TString cluster = QueryId.Cluster;
         TKqpTranslationSettingsBuilder settingsBuilder(ConvertType(QueryId.Settings.QueryType), cluster, QueryId.Text, Config->GetYqlBindingsMode(), GUCSettings);
-        settingsBuilder.SetKqpTablePathPrefix(Config->_KqpTablePathPrefix.Get().GetRef())
+            settingsBuilder.SetKqpTablePathPrefix(Config->_KqpTablePathPrefix.Get().GetRef())
             .SetIsEnableExternalDataSources(AppData(ctx)->FeatureFlags.GetEnableExternalDataSources())
-            .SetIsEnablePgConstsToParams(Config->GetEnablePgConstsToParams())
             .SetApplicationName(ApplicationName)
             .SetQueryParameters(QueryId.QueryParameterTypes)
             .SetFromConfig(*Config);
@@ -241,6 +240,10 @@ private:
 
     void StartSplitting(const TActorContext &ctx) {
         Become(&TKqpCompileActor::SplitState);
+        if (QueryId.Settings.Syntax == Ydb::Query::Syntax::SYNTAX_PG) {
+            NYql::TIssue issue(NYql::TPosition(), "PostgreSQL syntax is not supported");
+            return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
+        }
         TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
             new TEvents::TEvWakeup()));
 
@@ -308,6 +311,10 @@ private:
                 && QueryId.Settings.QueryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY
                 && QueryId.Settings.QueryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY) {
             NYql::TIssue issue(NYql::TPosition(), "Read Committed isolation level is supported only for generic query.");
+            return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
+        }
+        if (QueryId.Settings.Syntax == Ydb::Query::Syntax::SYNTAX_PG) {
+            NYql::TIssue issue(NYql::TPosition(), "PostgreSQL syntax is not supported");
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
         }
 
@@ -400,10 +407,6 @@ private:
             case Ydb::Query::Syntax::SYNTAX_YQL_V1:
                 prepareSettings.UsePgParser = false;
                 prepareSettings.SyntaxVersion = 1;
-                break;
-
-            case Ydb::Query::Syntax::SYNTAX_PG:
-                ythrow yexception() << "PostgreSQL syntax is not supported";
                 break;
 
             default:

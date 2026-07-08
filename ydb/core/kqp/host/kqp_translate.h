@@ -110,11 +110,6 @@ public:
         return *this;
     }
 
-    TKqpTranslationSettingsBuilder& SetIsEnablePgConstsToParams(bool value) {
-        IsEnablePgConstsToParams = value;
-        return *this;
-    }
-
     TKqpTranslationSettingsBuilder& SetSqlAutoCommit(bool value) {
         SqlAutoCommit = value;
         return *this;
@@ -173,7 +168,6 @@ private:
 
     TString KqpTablePathPrefix = {};
     bool IsEnableExternalDataSources = false;
-    bool IsEnablePgConstsToParams = false;
     TMaybe<bool> SqlAutoCommit = {};
     TGUCSettings::TPtr GUCSettings;
     TMaybe<TString> ApplicationName = {};

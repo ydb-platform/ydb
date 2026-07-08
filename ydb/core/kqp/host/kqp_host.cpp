@@ -1410,7 +1410,6 @@ private:
         if (!query.AstResult) {
             settingsBuilder.SetKqpTablePathPrefix(SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef())
                 .SetIsEnableExternalDataSources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
-                .SetIsEnablePgConstsToParams(SessionCtx->Config().GetEnablePgConstsToParams())
                 .SetQueryParameters(query.ParameterTypes)
                 .SetApplicationName(ApplicationName)
                 .SetFromConfig(SessionCtx->Config());

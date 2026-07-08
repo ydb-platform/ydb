@@ -105,6 +105,10 @@ namespace NActors {
         return false;
     }
 
+    bool TInterconnectSessionTCP::HasRdmaState() const {
+        return static_cast<bool>(RdmaQp);
+    }
+
     void TInterconnectSessionTCP::Handle(TEvTerminate::TPtr& ev) {
         Terminate(ev->Get()->Reason);
     }

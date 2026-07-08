@@ -33,6 +33,7 @@
 #include "event_holder_pool.h"
 #include "channel_scheduler.h"
 #include "outgoing_stream.h"
+#include "interconnect_session_iface.h"
 
 #include <unordered_set>
 #include <unordered_map>
@@ -406,6 +407,7 @@ namespace NActors {
     class TInterconnectSessionTCP
        : public TActor<TInterconnectSessionTCP>
        , public TInterconnectLoggingBase
+       , public IInterconnectSession
     {
         enum {
             EvCheckCloseOnIdle = EventSpaceBegin(TEvents::ES_PRIVATE),
@@ -451,30 +453,38 @@ namespace NActors {
         TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params);
         ~TInterconnectSessionTCP();
 
-        void Init();
-        void CloseInputSession();
-        bool IsRdmaInUse();
+        void Init() override;
+        void CloseInputSession() override;
+        bool IsRdmaInUse() override;
+        bool HasRdmaState() const override;
+        bool SupportsContinuation() const override { return true; }
 
         static TEvTerminate* NewEvTerminate(TDisconnectReason reason) {
             return new TEvTerminate(std::move(reason));
         }
 
-        TDuration GetPingRTT() const {
+        TDuration GetPingRTT() const override {
             return TDuration::MicroSeconds(ReceiveContext->PingRTT_us);
         }
 
-        i64 GetClockSkew() const {
+        i64 GetClockSkew() const override {
             return ReceiveContext->ClockSkew_us;
         }
 
-        std::optional<ui8> GetXDCFlags() const noexcept;
+        std::optional<ui8> GetXDCFlags() const noexcept override;
+
+        // IInterconnectSession bridge/accessors
+        IActor& SessionActor() noexcept override { return *this; }
+        const TSessionParams& GetParams() const override { return Params; }
+        const TIntrusivePtr<NInterconnect::TStreamSocket>& GetSocket() const override { return Socket; }
+        ui64 GetTotalOutputQueueSize() const override { return TotalOutputQueueSize; }
 
     private:
         friend class TInterconnectProxyTCP;
 
         void Handle(TEvTerminate::TPtr& ev);
         void HandlePoison();
-        void Terminate(TDisconnectReason reason);
+        void Terminate(TDisconnectReason reason) override;
         void PassAway() override;
 
         void Enqueue(STATEFN_SIG);
@@ -514,8 +524,8 @@ namespace NActors {
 
         void OnDisconnect(TEvSocketDisconnect::TPtr& ev);
 
-        THolder<TEvHandshakeAck> ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev);
-        void SetNewConnection(TEvHandshakeDone::TPtr& ev);
+        THolder<TEvHandshakeAck> ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) override;
+        void SetNewConnection(TEvHandshakeDone::TPtr& ev) override;
 
         TEvRam* RamInQueue = nullptr;
         ui64 RamStartedCycles = 0;
@@ -547,10 +557,10 @@ namespace NActors {
         void DropConfirmed(ui64 confirm);
         void ShutdownSocket(TDisconnectReason reason);
 
-        void StartHandshake();
+        void StartHandshake() override;
         void ReestablishConnection(TEvHandshakeDone::TPtr&& ev, bool startHandshakeOnSessionClose,
                 TDisconnectReason reason);
-        void ReestablishConnectionWithHandshake(TDisconnectReason reason);
+        void ReestablishConnectionWithHandshake(TDisconnectReason reason) override;
         void ReestablishConnectionExecute();
 
         TInterconnectProxyTCP* const Proxy;
@@ -669,7 +679,7 @@ namespace NActors {
         void HandleFlush();
         void ResetFlushLogic();
 
-        void GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev);
+        void GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev) override;
 
         TIntrusivePtr<TReceiveContext> ReceiveContext;
         TActorId ReceiverId;

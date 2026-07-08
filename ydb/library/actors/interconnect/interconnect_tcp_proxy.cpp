@@ -1,6 +1,7 @@
 #include "interconnect_tcp_proxy.h"
 #include "interconnect_handshake.h"
 #include "interconnect_tcp_session.h"
+#include "interconnect_tcp_session_v2.h"
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -183,7 +184,7 @@ namespace NActors {
 
         // create and register handshake actor
         OutgoingHandshakeActor = Register(CreateOutgoingHandshakeActor(Common, SessionVirtualId,
-            RemoteSessionVirtualId, PeerNodeId, inputCounter, TechnicalPeerHostName, Session->Params),
+            RemoteSessionVirtualId, PeerNodeId, inputCounter, TechnicalPeerHostName, Session->GetParams()),
             TMailboxType::ReadAsFilled);
         OutgoingHandshakeActorCreated = TActivationContext::Now();
     }
@@ -244,12 +245,22 @@ namespace NActors {
                    " SessionVirtualId: %s RemoteSessionVirtualId: %s)", ev->Sender.ToString().data(),
                   ev->Get()->Peer.ToString().data(), ev->Get()->Self.ToString().data(), SessionVirtualId.ToString().data(),
                   RemoteSessionVirtualId.ToString().data());
+        } else if (!Session->SupportsContinuation()) {
+            // v2 sessions do not support continuation; reject the resume request so the peer establishes
+            // a brand new session instead
+            LOG_NOTICE_IC("ICP14", "(actor %s) rejecting resume for session that does not support continuation"
+                " Self# %s Peer# %s", ev->Sender.ToString().data(), msg->Self.ToString().data(),
+                msg->Peer.ToString().data());
+        } else if (Session->HasRdmaState()) {
+            LOG_NOTICE_IC("ICRDMA", "(actor %s) rejecting graceful reconnect for RDMA session Self# %s Peer# %s",
+                ev->Sender.ToString().data(), msg->Self.ToString().data(), msg->Peer.ToString().data());
+            InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason::NewSession());
         } else {
             // if we already have incoming handshake, then terminate existing one
             DropIncomingHandshake();
 
             // issue reply to the sender, possibly holding it while outgoing handshake is at race
-            THolder<IEventBase> reply = IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::ProcessHandshakeRequest, ev);
+            THolder<IEventBase> reply = InvokeSession(&IInterconnectSession::ProcessHandshakeRequest, ev);
             return IssueIncomingHandshakeReply(ev->Sender, RemoteSessionVirtualId.LocalId(), std::move(reply));
         }
 
@@ -376,8 +387,13 @@ namespace NActors {
             }
 
             // Create new session actor.
-            SessionID = RegisterWithSameMailbox(Session = new TInterconnectSessionTCP(this, msg->Params));
-            IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::Init);
+            if (msg->Params.UseSessionV2) {
+                Session = new TInterconnectSessionTCPv2(this, msg->Params);
+            } else {
+                Session = new TInterconnectSessionTCP(this, msg->Params);
+            }
+            SessionID = RegisterWithSameMailbox(&Session->SessionActor());
+            InvokeSession(&IInterconnectSession::Init);
             SessionVirtualId = msg->Self;
             RemoteSessionVirtualId = msg->Peer;
             LOG_INFO_IC("ICP22", "created new session: %s", SessionID.ToString().data());
@@ -387,7 +403,7 @@ namespace NActors {
         Y_ABORT_UNLESS(Session && SessionVirtualId && RemoteSessionVirtualId);
 
         // Set up new connection for the session.
-        IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::SetNewConnection, ev);
+        InvokeSession(&IInterconnectSession::SetNewConnection, ev);
 
         // Reset retry timer
         HoldByErrorWakeupDuration = TDuration::Zero();
@@ -455,13 +471,13 @@ namespace NActors {
                         // return back to initial state as we have no session and no pending handshakes
                         SwitchToInitialState();
                     }
-                } else if (Session->Socket) {
+                } else if (Session->GetSocket()) {
                     // try to reestablish connection -- meaning restart handshake from the last known position
-                    IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::ReestablishConnectionWithHandshake,
+                    InvokeSession(&IInterconnectSession::ReestablishConnectionWithHandshake,
                         TDisconnectReason::HandshakeFailTransient());
                 } else {
                     // we have no active connection in that session, so just restart handshake from last known position
-                    IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::StartHandshake);
+                    InvokeSession(&IInterconnectSession::StartHandshake);
                 }
                 break;
 
@@ -472,7 +488,7 @@ namespace NActors {
             case TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT:
                 TString timeExplanation = " LastSessionDieTime# " + LastSessionDieTime.ToString();
                 if (Session) {
-                    InvokeOtherActor(*Session, &TInterconnectSessionTCP::Terminate,
+                    InvokeSession(&IInterconnectSession::Terminate,
                         TDisconnectReason::HandshakeFailPermanent());
                 }
                 TransitToErrorState(ev->Get()->Explanation + timeExplanation, false);
@@ -546,7 +562,7 @@ namespace NActors {
         }
     }
 
-    void TInterconnectProxyTCP::UnregisterSession(TInterconnectSessionTCP* session) {
+    void TInterconnectProxyTCP::UnregisterSession(IInterconnectSession* session) {
         ICPROXY_PROFILED;
 
         Y_ABORT_UNLESS(Session && Session == session && SessionID);
@@ -629,14 +645,14 @@ namespace NActors {
 
         Y_ABORT_UNLESS(Session && SessionID);
         ValidateEvent(ev, "ForwardSessionEventToSession");
-        InvokeOtherActor(*Session, &TInterconnectSessionTCP::Receive, ev);
+        IActor::InvokeOtherActor(Session->SessionActor(), &IActor::Receive, ev);
     }
 
     void TInterconnectProxyTCP::HandleRdmaDelayedHandshake() {
         if (CurrentStateFunc() == &TThis::StateWork) {
             // There is a chance that session was promouted to use RDMA without us.
-            if (!InvokeOtherActor(*Session, &TInterconnectSessionTCP::IsRdmaInUse)) {
-                InvokeOtherActor(*Session, &TInterconnectSessionTCP::Terminate, TDisconnectReason::NewSession());
+            if (!InvokeSession(&IInterconnectSession::IsRdmaInUse)) {
+                InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason::NewSession());
             }
             DelayedRdmaHandshakeTimeout = TDuration();
         } else {
@@ -843,7 +859,7 @@ namespace NActors {
         DropHandshakes();
 
         if (Session) {
-            IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::Terminate, TDisconnectReason::UserRequest());
+            InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason::UserRequest());
         } else {
             TransitToErrorState("forced disconnect");
         }
@@ -892,9 +908,9 @@ namespace NActors {
     void TInterconnectProxyTCP::HandleClosePeerSocket(std::span<const char> logEntry) {
         ICPROXY_PROFILED;
 
-        if (Session && Session->Socket) {
+        if (Session && Session->GetSocket()) {
             LOG_INFO_IC("ICP34", logEntry.data());
-            Session->Socket->Shutdown(SHUT_RDWR);
+            Session->GetSocket()->Shutdown(SHUT_RDWR);
         }
     }
 
@@ -902,7 +918,7 @@ namespace NActors {
         ICPROXY_PROFILED;
 
         if (Session) {
-            IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::CloseInputSession);
+            InvokeSession(&IInterconnectSession::CloseInputSession);
         }
     }
 
@@ -910,7 +926,7 @@ namespace NActors {
         ICPROXY_PROFILED;
 
         if (Session) {
-            IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::Terminate, TDisconnectReason::Debug());
+            InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason::Debug());
         }
     }
 
@@ -919,7 +935,7 @@ namespace NActors {
 
         ui64 bufSize = 0;
         if (Session) {
-            bufSize = Session->TotalOutputQueueSize;
+            bufSize = Session->GetTotalOutputQueueSize();
         }
 
         Send(ev->Sender, new TEvSessionBufferSizeResponse(SessionID, bufSize));
@@ -931,10 +947,10 @@ namespace NActors {
         TProxyStats stats;
         stats.Path = Sprintf("peer%04" PRIu32, PeerNodeId);
         stats.State = State;
-        stats.PeerScopeId = Session ? Session->Params.PeerScopeId : TScopeId();
+        stats.PeerScopeId = Session ? Session->GetParams().PeerScopeId : TScopeId();
         stats.LastSessionDieTime = LastSessionDieTime;
-        stats.TotalOutputQueueSize = Session ? Session->TotalOutputQueueSize : 0;
-        stats.Connected = Session ? (bool)Session->Socket : false;
+        stats.TotalOutputQueueSize = Session ? Session->GetTotalOutputQueueSize() : 0;
+        stats.Connected = Session ? (bool)Session->GetSocket() : false;
         if (Session) {
             if (const auto xdcFlags = Session->GetXDCFlags()) {
                 stats.ExternalDataChannel = true;
@@ -956,7 +972,7 @@ namespace NActors {
         stats.Ping = Session ? Session->GetPingRTT() : TDuration::Zero();
         stats.ClockSkew = Session ? Session->GetClockSkew() : 0;
         if (Session) {
-            if (auto *x = dynamic_cast<NInterconnect::TSecureSocket*>(Session->Socket.Get())) {
+            if (auto *x = dynamic_cast<NInterconnect::TSecureSocket*>(Session->GetSocket().Get())) {
                 stats.Encryption = Sprintf("%s/%u", x->GetCipherName().data(), x->GetCipherBits());
             } else {
                 stats.Encryption = "none";
@@ -973,7 +989,7 @@ namespace NActors {
         ICPROXY_PROFILED;
 
         if (Session) {
-            IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::Terminate, TDisconnectReason());
+            InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason());
         }
         Terminated = true;
         TransitToErrorState("terminated");
@@ -981,7 +997,7 @@ namespace NActors {
 
     void TInterconnectProxyTCP::PassAway() {
         if (Session) {
-            IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::Terminate, TDisconnectReason());
+            InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason());
         }
         if (DynamicPtr) {
             Y_ABORT_UNLESS(*DynamicPtr == this);

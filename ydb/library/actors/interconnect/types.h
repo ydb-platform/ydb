@@ -61,6 +61,7 @@ namespace NActors {
         bool UseXdcShuffle = {};
         bool UseRdma = {};
         bool ChecksumRdmaEvent = {};
+        bool UseSessionV2 = {};
         TString AuthCN;
         NActors::TScopeId PeerScopeId;
     };

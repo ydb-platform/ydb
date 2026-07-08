@@ -294,6 +294,7 @@ private:
     void FlushPendingMainKeys() {
         TVector<TString> batch;
         batch.swap(PendingMainKeys);
+        PendingMainKeys.reserve(batch.size());
         LaunchMainReadFor(std::move(batch));
     }
 

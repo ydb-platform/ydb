@@ -296,10 +296,6 @@ public:
             return NeedResendReplyFlag;
         }
 
-        bool ShouldSendReplyOnComplete() const {
-            return Status != EStatus::ReplySent || NeedResendReplyFlag;
-        }
-
         bool IsProposeReplyReady(TColumnShard& owner) const {
             return DoIsProposeReplyReady(owner);
         }
@@ -407,8 +403,6 @@ public:
         void SendReply(TColumnShard& owner, const TActorContext& ctx) {
             // It means that we had already processed this event
             if (Status == EStatus::ReplySent) {
-                AFL_VERIFY(NeedResendReplyFlag);
-                NeedResendReplyFlag = false;
                 return DoSendReply(owner, ctx);
             }
             AFL_VERIFY(!!ProposeStartInfo);
@@ -417,7 +411,6 @@ public:
             } else {
                 SwitchStateVerified(EStatus::ProposeFinishedOnComplete, EStatus::ReplySent);
             }
-            NeedResendReplyFlag = false;
             return DoSendReply(owner, ctx);
         }
 

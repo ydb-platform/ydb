@@ -430,9 +430,21 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
         acc.AddStep(std::make_shared<TBuildResultStep>(i.GetIndexStart(), i.GetRecordsCount()));
     }
     auto plan = std::move(acc).Build();
-    AFL_VERIFY(!plan->IsFinished(0));
-    source->MutableAs<IDataSource>()->InitFetchingPlan(plan);
     ReportTracing(source, step, TMonotonic::Now() - startExecution);
+    if (plan->IsFinished(0)) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_AllPagesSkippedByCursor")(
+            "source_idx", source->GetSourceIdx());
+        AFL_VERIFY(source->GetStageResult().IsFinished());
+        source->MutableStageResult().SetEmptyResultChunk();
+        context->GetCommonContext()->GetCounters().OnSourceFinished(source->GetRecordsCount(), sSource->GetUsedRawBytes(), 0);
+        const ui64 blobBytes = source->GetTotalBytesRead();
+        NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
+            new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
+                source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard(), source->GetDeprecatedPortionId(), blobBytes,
+                sSource->GetUsedRawBytes(), 0, source->GetRecordsCount(), source->GetReservedMemory()));
+        return false;
+    }
+    source->MutableAs<IDataSource>()->InitFetchingPlan(plan);
     if (StartResultBuildingInplace) {
         TFetchingScriptCursor cursor(plan, 0);
         return cursor.Execute(source);

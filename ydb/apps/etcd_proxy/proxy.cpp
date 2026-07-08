@@ -377,8 +377,6 @@ TIntrusivePtr<NActors::NLog::TSettings> TProxy::BuildLoggerSettings() {
         NKikimrServices::EServiceKikimr_MAX,
         NKikimrServices::EServiceKikimr_Name
     );
-    TString explanation;
-    loggerSettings->SetLevel(NActors::NLog::PRI_DEBUG, NKikimrServices::PGWIRE, explanation);
     return loggerSettings;
 }
 

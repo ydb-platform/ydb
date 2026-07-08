@@ -18,7 +18,7 @@
 namespace NKikimr::NSecret {
 
 inline NActors::TActorId MakeDescribeSchemaSecretServiceId(ui32 nodeId) {
-    const char name[NActors::TActorId::MaxServiceIDLength] = "desc_secret";
+    constexpr char name[NActors::TActorId::MaxServiceIDLength] = "desc_secret";
     return NActors::TActorId(nodeId, TStringBuf(name, NActors::TActorId::MaxServiceIDLength));
 }
 

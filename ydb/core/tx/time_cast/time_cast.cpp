@@ -729,7 +729,7 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvGranularUpdate::TPtr
     auto& mediator = it->second;
     const ui32 bucketId = msg->Record.GetBucket();
     if (bucketId >= mediator.BucketsSz) {
-        YDB_LOG_CRIT_CTX(ctx, "Got update expecting only buckets",
+        YDB_LOG_CRIT_CTX(ctx, "Got update with unexpected bucket",
             {"actor", ctx.SelfID},
             {"fromMediator", mediatorTabletId},
             {"bucket", bucketId},
@@ -821,11 +821,11 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvGranularUpdate::TPtr
         // mediator time jumping backwards for running instances we will ignore
         // this update. Note that the current state is already updated, it's
         // just not published yet, and will be published later.
-        YDB_LOG_CRIT_CTX(ctx, "Got update with previous",
+        YDB_LOG_CRIT_CTX(ctx, "Got update with stale latestStep",
             {"actor", ctx.SelfID},
             {"fromMediator", mediatorTabletId},
             {"latestStep", latestStep},
-            {"latestStep", bucket.LatestStep->Get()});
+            {"bucketLatestStep", bucket.LatestStep->Get()});
         return;
     }
 

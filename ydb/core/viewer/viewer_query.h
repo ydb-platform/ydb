@@ -390,13 +390,12 @@ public:
         if (Query.empty() && Action != "cancel-query" && Action != "fetch-long-query") {
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Query is empty"), "EmptyQuery");
         }
-        if (Syntax == "pg") {
-            return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "PostgreSQL syntax (syntax=pg) is not supported"), "BadRequest");
-        }
         if (Action == "fetch-long-query") {
             if (!OperationId && ExecutionId.empty()) {
                 return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "operation_id or execution_id required for fetch-long-query"), "BadRequest");
             }
+        } else if (Action != "cancel-query" && Syntax == "pg") {
+            return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "PostgreSQL syntax (syntax=pg) is not supported"), "BadRequest");
         }
         if (Streaming != EStreamingType::None) {
             NHttp::THeaders headers(HttpEvent->Get()->Request->Headers);

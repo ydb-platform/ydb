@@ -281,8 +281,7 @@ TWorkloadGeneratorBase::TWorkloadGeneratorBase(const TWorkloadBaseParams& params
     : Params(params)
 {}
 
-TString TWorkloadBaseParams::GetTablePathQuote(EQuerySyntax syntax) {
-    Y_UNUSED(syntax);
+TString TWorkloadBaseParams::GetTablePathQuote() {
     return "`";
 }
 

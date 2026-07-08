@@ -41,7 +41,7 @@ TQueryInfoList TClickbenchWorkloadGenerator::GetWorkload(int type) {
         resourceName = "queries-deterministic.sql";
     }
     queries = StringSplitter(NResource::Find(resourceName)).Split(';').ToList<TString>();
-    const auto tablePath = Params.GetTablePathQuote(Params.GetSyntax()) + Params.GetPath() + Params.GetTablePathQuote(Params.GetSyntax());
+    const auto tablePath = Params.GetTablePathQuote() + Params.GetPath() + Params.GetTablePathQuote();
     for (ui32 i = 0; i < queries.size(); ++i) {
         auto& query = queries[i];
         SubstGlobal(query, "{table}", tablePath);
@@ -62,8 +62,6 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TClickbenchWorkloadGenerator::Ge
 
 void TClickbenchWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
     TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
-    Y_UNUSED(commandType);
-    Y_UNUSED(workloadType);
 }
 
 

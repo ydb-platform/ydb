@@ -126,7 +126,7 @@ void TTpcBaseWorkloadGenerator::PatchQuery(TString& query) const {
         const auto tableFullName = (Params.GetPath() ? Params.GetPath() + "/" : "") + tableName;
         SubstGlobal(query, 
             TStringBuilder() << "{{" << tableName << "}}", 
-            TStringBuilder() << Params.GetTablePathQuote(Params.GetSyntax()) << tableFullName << Params.GetTablePathQuote(Params.GetSyntax())
+            TStringBuilder() << Params.GetTablePathQuote() << tableFullName << Params.GetTablePathQuote()
         );
     }
 }

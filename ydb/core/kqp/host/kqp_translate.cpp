@@ -182,7 +182,6 @@ TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(co
 
 NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql::TExprContext& ctx) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.PgParser = false;
     settings.LangVer = LangVer;
     settings.BackportMode = BackportMode;
 
@@ -208,7 +207,6 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
         settings.SaveWorldDependencies = true;
     }
 
-    settings.PGDisable = true;
     settings.InferSyntaxVersion = true;
     settings.V0ForceDisable = false;
     settings.WarnOnV0 = false;

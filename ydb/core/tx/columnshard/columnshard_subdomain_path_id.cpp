@@ -4,9 +4,10 @@ namespace NKikimr::NColumnShard {
 
 class TTxPersistSubDomainOutOfSpace: public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
 public:
-    TTxPersistSubDomainOutOfSpace(TColumnShard* self, bool outOfSpace)
+    TTxPersistSubDomainOutOfSpace(TColumnShard* self, bool outOfSpace, bool smallBlobsQuotaExceeded)
         : TTransactionBase(self)
         , OutOfSpace(outOfSpace)
+        , SmallBlobsQuotaExceeded(smallBlobsQuotaExceeded)
     {
     }
 
@@ -21,6 +22,10 @@ public:
             Schema::SaveSpecialValue(db, Schema::EValueIds::SubDomainOutOfSpace, ui64(OutOfSpace ? 1 : 0));
             Self->SpaceWatcher->SubDomainOutOfSpace = OutOfSpace;
         }
+        if (Self->SpaceWatcher->SubDomainSmallBlobsQuotaExceeded != SmallBlobsQuotaExceeded) {
+            Schema::SaveSpecialValue(db, Schema::EValueIds::SubDomainSmallBlobsQuotaExceeded, ui64(SmallBlobsQuotaExceeded ? 1 : 0));
+            Self->SpaceWatcher->SubDomainSmallBlobsQuotaExceeded = SmallBlobsQuotaExceeded;
+        }
 
         return true;
     }
@@ -31,6 +36,7 @@ public:
 
 private:
     const bool OutOfSpace;
+    const bool SmallBlobsQuotaExceeded;
 };
 
 class TTxPersistSubDomainPathId: public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
@@ -93,9 +99,11 @@ void TSpaceWatcher::Handle(NActors::TEvents::TEvPoison::TPtr&, const TActorConte
 void TColumnShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("notify_subdomain", msg->PathId);
-    const bool outOfSpace = msg->Result->GetPathDescription().GetDomainDescription().GetDomainState().GetDiskQuotaExceeded();
+    const auto& domainState = msg->Result->GetPathDescription().GetDomainDescription().GetDomainState();
+    const bool outOfSpace = domainState.GetDiskQuotaExceeded();
+    const bool smallBlobsQuotaExceeded = domainState.GetSmallBlobsQuotaExceeded();
 
-    Execute(new TTxPersistSubDomainOutOfSpace(this, outOfSpace), ctx);
+    Execute(new TTxPersistSubDomainOutOfSpace(this, outOfSpace, smallBlobsQuotaExceeded), ctx);
 }
 
 static constexpr TDuration MaxFindSubDomainPathIdDelay = TDuration::Minutes(10);

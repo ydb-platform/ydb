@@ -723,13 +723,6 @@ private:
             return CompareTypedCellVectors(a.GetCells().data(), b.GetCells().data(), keyTypes, keyCount) < 0;
         });
 
-        // Point lookups by primary key. sortedKeys is discarded right after, so move
-        // each serialized buffer into the proto instead of copying it.
-        auto* ranges = src->MutableRanges();
-        for (auto& key : sortedKeys) {
-            ranges->AddKeyPoints(key.ReleaseBuffer());
-        }
-
         AddMainKeyColumnTypes(src);
         for (const auto& col : Settings.GetOutputColumns()) {
             AddColumnMeta(src, col.GetId(), col);
@@ -739,7 +732,9 @@ private:
         // datashard returns only the K nearest of the gathered candidate PKs.
         SetVectorTopK(src, Settings.GetVectorColumnIndex(), TopK);
 
-        LaunchRead(src, arena, EReadKind::Main);
+        // The point lookups are handed to the read actor pre-parsed instead of going
+        // through the settings proto, which would copy and re-parse every key.
+        LaunchRead(src, arena, EReadKind::Main, std::move(sortedKeys));
     }
 
     // Launch one inner read for a phase over all its ranges. The standard read actor
@@ -750,10 +745,12 @@ private:
     // match them against partitions in lockstep (see AddParentRanges / LaunchMainReadFor).
     void LaunchRead(NKikimrTxDataShard::TKqpReadRangesSourceSettings* src,
         TIntrusivePtr<NActors::TProtoArenaHolder>& arena,
-        EReadKind kind)
+        EReadKind kind,
+        TVector<TSerializedCellVec> keyPoints = {})
     {
         auto [readActorInput, readActor] = CreateKqpReadActor(src, arena, this->SelfId(),
-            0, IngressStats.Level, TxId, TaskId, TypeEnv, HolderFactory, Alloc, TraceId, Counters);
+            0, IngressStats.Level, TxId, TaskId, TypeEnv, HolderFactory, Alloc, TraceId, Counters,
+            std::move(keyPoints));
         ActiveReads.push_back({readActorInput, kind});
         RegisterWithSameMailbox(readActor);
         // Kick off the freshly launched read: the first GetAsyncInputData poll starts

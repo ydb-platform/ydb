@@ -228,6 +228,10 @@ protected:
         return Core.DoGetUsefulMetric();
     }
 
+    TConclusion<bool> DoCheckNoIntersections() const override {
+        return Core.HasNoIntersections();
+    }
+
     bool DoIsOverloaded() const override {
         return Core.IsOverloaded();
     }

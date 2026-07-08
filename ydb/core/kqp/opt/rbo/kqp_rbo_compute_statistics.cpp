@@ -54,12 +54,12 @@ void ComputeAlisesForJoin(const TIntrusivePtr<IOperator>& left, const TIntrusive
 
 TVector<TInfoUnit> ComputeKeysAfterJoin(TOpJoin* join) {
     auto leftKeys = join->GetLeftInput()->Props.Metadata->KeyColumns;
-    if (join->JoinKind == "LeftSemi" || join->JoinKind == "LeftOnly") {
+    if (!JoinOutputsRight(join->JoinKind)) {
         return leftKeys;
     }
 
     auto rightKeys = join->GetRightInput()->Props.Metadata->KeyColumns;
-    if (join->JoinKind == "RightSemi" || join->JoinKind == "RightOnly") {
+    if (!JoinOutputsLeft(join->JoinKind)) {
         return rightKeys;
     }
     
@@ -158,7 +158,7 @@ void TOpRead::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
 
     // Record lineage: source can rename its columns, so already we need to record that
     auto outputIUs = GetOutputIUs();
-    Y_ENSURE(Columns.size() == outputIUs.size());
+    Y_ENSURE(Columns.size() == outputIUs.size(), TStringBuilder());
 
     // KeyColumns must reference the read's actual output IUs (which may have been renamed),
     // not (Alias, physicalColumn). Columns[i] is the physical name aligned with outputIUs[i],
@@ -323,7 +323,7 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Metadata->Type = inputMetadata.Type;
     Props.Metadata->StorageType = inputMetadata.StorageType;
     const auto outputIUs = GetOutputIUs();
-    Y_ENSURE(!HasOutputConflicts(outputIUs), "Map output must not contain duplicate columns");
+    Y_ENSURE(MakeInfoUnitSet(outputIUs).size() == outputIUs.size(), "Map output must not contain duplicate columns");
     Props.Metadata->ColumnsCount = outputIUs.size();
 
     auto propertyPreservingMappings = GetPropertyPreservingMappings(planProps);
@@ -526,9 +526,9 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Metadata->StorageType = CBOStats.StorageType;
     Props.Metadata->Type = CBOStats.Type;
 
-    if (JoinKind == "LeftOnly" || JoinKind == "LeftSemi") {
+    if (!JoinOutputsRight(JoinKind)) {
         Props.Metadata->ColumnLineage = GetLeftInput()->Props.Metadata->ColumnLineage;
-    } else if (JoinKind == "RightOnly" || JoinKind == "RightSemi") {
+    } else if (!JoinOutputsLeft(JoinKind)) {
         Props.Metadata->ColumnLineage = GetRightInput()->Props.Metadata->ColumnLineage;
     } else {
         Props.Metadata->ColumnLineage = GetLeftInput()->Props.Metadata->ColumnLineage;

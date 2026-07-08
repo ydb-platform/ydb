@@ -335,7 +335,7 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
 
 namespace {
 
-NYql::TAstParseResult MakeRejectedSyntaxResult(TStringBuf message) {
+NYql::TAstParseResult MakeRejectedSyntaxResult(const TString& message) {
     NYql::TExprContext ctx;
     ctx.IssueManager.RaiseIssue(NYql::YqlIssue(NYql::TPosition(0, 0), NYql::TIssuesIds::DEFAULT_ERROR, message));
     NYql::TAstParseResult result;

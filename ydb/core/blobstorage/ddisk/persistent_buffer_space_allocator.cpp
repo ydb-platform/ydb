@@ -219,9 +219,19 @@ namespace NKikimr::NDDisk {
         if (FreeSpace < sectorsCount) {
             return result;
         }
+        if (FreeSpace < SectorsInChunk + sectorsCount) {
+            auto it = FreeSpaceMap.find(LockedChunkIdx);
+            if (it != FreeSpaceMap.end() && FreeSpace - it->second.FreeSpace < sectorsCount) {
+                UnlockChunk();
+            }
+        }
         while (result.size() != sectorsCount) {
             Y_ABORT_UNLESS(!ChunksByFreeSpace.empty());
             ui32 chunkIdx = ChunksByFreeSpace.back().ChunkIdx;
+            if (chunkIdx == LockedChunkIdx) {
+                Y_ABORT_UNLESS(ChunksByFreeSpace.size() >= 2);
+                chunkIdx = ChunksByFreeSpace[ChunksByFreeSpace.size() - 2].ChunkIdx;
+            }
             auto it = FreeSpaceMap.find(chunkIdx);
             Y_ABORT_UNLESS(it != FreeSpaceMap.end());
             it->second.Occupy(sectorsCount, result);
@@ -320,5 +330,34 @@ namespace NKikimr::NDDisk {
         return fs;
     }
 
+    void TPersistentBufferSpaceAllocator::LockNextChunk() {
+        if (LockedChunkIdx != Max<ui32>()) {
+            return;
+        }
+        Y_ABORT_UNLESS(OwnedChunks.size() > 0);
+        LastLockedOwnedChunksIdx++;
+        if (LastLockedOwnedChunksIdx >= OwnedChunks.size()) {
+            LastLockedOwnedChunksIdx = 0;
+        }
+        LockedChunkIdx = OwnedChunks[LastLockedOwnedChunksIdx];
+    }
+
+    void TPersistentBufferSpaceAllocator::UnlockChunk() {
+        LockedChunkIdx = Max<ui32>();
+    }
+
+    bool TPersistentBufferSpaceAllocator::DeallocateChunk() {
+        auto it = FreeSpaceMap.find(LockedChunkIdx);
+        if (it == FreeSpaceMap.end() || it->second.FreeSpace != SectorsInChunk) {
+            return false;
+        }
+        FreeSpaceMap.erase(LockedChunkIdx);
+        std::erase_if(ChunksByFreeSpace, [this](TPersistentBufferSpaceAllocator::TChunkInfo &x) {return x.ChunkIdx == LockedChunkIdx;});
+        std::erase(OwnedChunks, LockedChunkIdx);
+        FreeSpace -= SectorsInChunk;
+        Y_DEBUG_ABORT_UNLESS(FreeSpace == VerifyFreeSpace());
+        UnlockChunk();
+        return true;
+    }
 
 } // NKikimr::NDDisk

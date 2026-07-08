@@ -1,4 +1,5 @@
 #include "schemeshard_impl.h"
+#include "schemeshard__operation_common.h"
 
 #include <ydb/core/base/mon_auth.h>
 #include <ydb/core/tx/schemeshard/schemeshard__monitoring.h_serialized.h>  // for enum ESweepAlert support methods
@@ -130,6 +131,8 @@ struct TCgi {
     static const TParam Resume;
     static const TParam Cancel;
     static const TParam SweepAlert;
+    static const TParam StoragePool;
+    static const TParam ConfirmSamePool;
 
     struct TPages {
         static constexpr TStringBuf MainPage = "Main";
@@ -148,6 +151,7 @@ struct TCgi {
         static constexpr TStringBuf ForceDropUnsafe = "ForceDropUnsafe";
         static constexpr TStringBuf TablePartitionsFormatSwitch = "TablePartitionsFormatSwitch";
         static constexpr TStringBuf TablePartitionsFormatSweep = "TablePartitionsFormatSweep";
+        static constexpr TStringBuf MoveToStoragePool = "MoveToStoragePool";
     };
 };
 
@@ -176,6 +180,8 @@ const TCgi::TParam TCgi::Resume = TStringBuf("Resume");
 const TCgi::TParam TCgi::Cancel = TStringBuf("Cancel");
 const TCgi::TParam TCgi::SweepAlert = TStringBuf("sweepalert");
 const TCgi::TParam TCgi::Action = TStringBuf("Action");
+const TCgi::TParam TCgi::StoragePool = TStringBuf("StoragePool");
+const TCgi::TParam TCgi::ConfirmSamePool = TStringBuf("ConfirmSamePool");
 
 namespace {
 
@@ -492,6 +498,78 @@ public:
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
         Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
             TStringBuilder() << "HTTP/1.1 502 Bad Gateway\r\nConnection: Close\r\n\r\nSchemeShard tablet disconnected\r\n"));
+        PassAway();
+    }
+
+    void PassAway() override {
+        if (PipeCache) {
+            Send(PipeCache, new TEvPipeCache::TEvUnlink(0));
+        }
+        TActorBootstrapped::PassAway();
+    }
+};
+
+// Moves a shard's channels to other storage pool: notify Hive first, then (only on ack) ask the
+// schemeshard to persist the new bindings via TEvMoveShardToStoragePool. Hive-first keeps a
+// failed move retryable — nothing is persisted, so the recorded bindings still name the old pool.
+class TMonitoringMoveShardToStoragePool : public TActorBootstrapped<TMonitoringMoveShardToStoragePool> {
+private:
+    NMon::TEvRemoteHttpInfo::TPtr Ev;
+    TActorId SchemeShard;
+    TTabletId Hive;
+    TShardIdx ShardIdx;
+    TChannelsBindings NewBindings;
+    THolder<TEvHive::TEvCreateTablet> CreateEv;
+
+    TActorId PipeCache;
+
+public:
+    TMonitoringMoveShardToStoragePool(NMon::TEvRemoteHttpInfo::TPtr&& ev, TActorId schemeShard, TTabletId hive,
+            TShardIdx shardIdx, TChannelsBindings newBindings, THolder<TEvHive::TEvCreateTablet> createEv)
+        : Ev(std::move(ev))
+        , SchemeShard(schemeShard)
+        , Hive(hive)
+        , ShardIdx(shardIdx)
+        , NewBindings(std::move(newBindings))
+        , CreateEv(std::move(createEv))
+    {}
+
+    void Bootstrap() {
+        PipeCache = MakePipePerNodeCacheID(EPipePerNodeCache::Leader);
+        Send(PipeCache, new TEvPipeCache::TEvForward(CreateEv.Release(), ui64(Hive), /* subscribe */ true));
+        Become(&TThis::StateWait);
+    }
+
+    STFUNC(StateWait) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvHive::TEvCreateTabletReply, Handle);
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        }
+    }
+
+    void Handle(TEvHive::TEvCreateTabletReply::TPtr& ev) {
+        TString text;
+        try {
+            NProtobufJson::Proto2Json(ev->Get()->Record, text, {
+                .EnumMode = NProtobufJson::TProto2JsonConfig::EnumName,
+                .FieldNameMode = NProtobufJson::TProto2JsonConfig::FieldNameSnakeCaseDense,
+                .MapAsObject = true,
+            });
+        } catch (const std::exception& e) {
+            Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes("HTTP/1.1 500 Internal Error\r\nConnection: Close\r\n\r\nUnexpected failure to serialize the response\r\n"));
+            PassAway();
+            return;
+        }
+
+        // Hive acked; hand the sender and serialized reply to the schemeshard to persist the
+        // bindings. That tx answers the HTTP request, so success is reported only once durable.
+        Send(SchemeShard, new TEvPrivate::TEvMoveShardToStoragePool(ShardIdx, std::move(NewBindings), Ev->Sender, std::move(text)));
+        PassAway();
+    }
+
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+        // Hive not reached: nothing persisted, so the action is retryable.
+        Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(TStringBuilder() << "HTTP/1.1 502 Bad Gateway\r\nConnection: Close\r\n\r\nHive tablet disconnected\r\n"));
         PassAway();
     }
 
@@ -1508,7 +1586,102 @@ private:
                     ++channelId;
                 }
             }
+
+            ActionMoveToStoragePool(shard, str);
         }
+    }
+
+    void ActionMoveToStoragePool(const TShardInfo& shard, TStringStream& str) const {
+        if (shard.TabletID == InvalidTabletId) {
+            return;
+        }
+        // A shard with no channel bindings can't be rebound to a new pool. On a tenant
+        // schemeshard this is expected for the tenant's system tablets: their storage pool
+        // bindings are kept only on the root schemeshard, so point the operator there. On
+        // the root schemeshard itself empty bindings are anomalous, so say so plainly
+        // rather than blaming a tenant that isn't involved.
+        if (shard.BindedChannels.empty()) {
+            if (Self->IsDomainSchemeShard) {
+                str << R"(
+                    <div class='container col-md-12'>
+                        <p>This is the <b>root schemeshard</b>, and this shard has no channel bindings
+                        recorded &mdash; that is unexpected. The tablet cannot be moved to another storage
+                        pool without bindings; investigate the shard's state before moving it.</p>
+                    </div>
+                )";
+                return;
+            }
+            const TStringBuf appPath = TabletDevUiAppPath();
+            const TString rootShardUrl = TStringBuilder() << appPath
+                << "?" << TCgi::TabletID.AsCgiParam(ui64(Self->ParentDomainId.OwnerId))
+                << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::ShardInfoByTabletId)
+                << "&" << TCgi::ShardID.AsCgiParam(ui64(shard.TabletID))
+            ;
+            str << std::format(R"(
+                <div class='container col-md-12'>
+                    <p>This is a <b>tenant schemeshard</b>, and this shard has no channel bindings here:
+                    it is a tenant system tablet whose storage pool bindings are kept only on the root
+                    schemeshard. Move it to another storage pool from the
+                    <a href='{0}'>shard-info page on the root schemeshard</a>.</p>
+                </div>
+            )",
+                /* {0} */ rootShardUrl
+            );
+            return;
+        }
+        const TPathId subdomainPathId = Self->ResolvePathIdForDomain(shard.PathId);
+        auto itSubDomain = Self->SubDomains.find(subdomainPathId);
+        if (itSubDomain == Self->SubDomains.end()) {
+            return;
+        }
+        const auto& pools = itSubDomain->second->EffectiveStoragePools();
+        if (pools.empty()) {
+            return;
+        }
+
+        TStringBuilder options;
+        for (const auto& pool : pools) {
+            options << std::format("<option value='{0}'>{0} ({1})</option>", pool.GetName(), pool.GetKind());
+        }
+
+        // Duplicate params in query string in addition to form-urlencoded body
+        // to give user clear knowledge what parameters were.
+        // Params in the body are the actually used ones, query parameters will be ignored
+        // (see ydb/core/tablet/tablet_monitoring_proxy.cpp, TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr))
+        const TStringBuf appPath = TabletDevUiAppPath();
+        const TString actionUrl = TStringBuilder() << appPath << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
+            << "&" << TCgi::Action.AsCgiParam(TCgi::TActions::MoveToStoragePool)
+            << "&" << TCgi::ShardID.AsCgiParam(shard.TabletID)
+        ;
+
+        str << std::format(R"(
+                <div class='container col-md-12'>
+                    <form method='POST' class='form-horizontal col-md-12' action='{0}'>
+                        <input type='hidden' id='TabletID' name='{1}' value='{2}' />
+                        <input type='hidden' id='Action' name='{3}' value='{4}' />
+                        <input type='hidden' id='ShardID' name='{5}' value='{6}' />
+                        <div class='form-group col-md-12'>
+                            <label for='{7}'>Target storage pool:</label>
+                            <select id='{7}' name='{7}'>{8}</select>
+                            <input class='btn btn-primary btn-lg' type='submit' value='Move tablet to storage pool' />
+                        </div>
+                        <div class='form-group col-md-12'>
+                            <label><input type='checkbox' name='{9}' value='1' /> Move even if already on this pool (re-notify Hive)</label>
+                        </div>
+                    </form>
+                </div>
+            )",
+            /* {0} */ actionUrl,
+            /* {1} */ TCgi::TabletID.Name,
+            /* {2} */ Self->TabletID(),
+            /* {3} */ TCgi::Action.Name,
+            /* {4} */ TCgi::TActions::MoveToStoragePool,
+            /* {5} */ TCgi::ShardID.Name,
+            /* {6} */ ui64(shard.TabletID),
+            /* {7} */ TCgi::StoragePool.Name,
+            /* {8} */ TString(options),
+            /* {9} */ TCgi::ConfirmSamePool.Name
+        );
     }
 
     TString LinkToPathInfo(TPathId pathId) const {
@@ -1943,12 +2116,19 @@ private:
 private:
     void SendBadRequest(const TString& details, const TActorContext& ctx) {
         ctx.Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
-            TStringBuilder() << "HTTP/1.1 400 Bad Request\r\nConnection: Close\r\n\r\n" << details << "\r\n"));
+            TStringBuilder() << "HTTP/1.1 400 Bad Request\r\nConnection: Close\r\n\r\n" << details << "\r\n"
+        ));
     }
 
     void SendRedirect(const TString& location, const TActorContext& ctx) {
         ctx.Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
             TStringBuilder() << "HTTP/1.1 303 See Other\r\nLocation: " << location << "\r\n\r\n"
+        ));
+    }
+
+    void SendOk(const TString& details, const TActorContext& ctx) {
+        ctx.Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+            TStringBuilder() << "HTTP/1.1 200 OK\r\nConnection: Close\r\n\r\n" << details << "\r\n"
         ));
     }
 
@@ -2008,6 +2188,115 @@ private:
             }
 
             ctx.Register(new TMonitoringForceDropUnsafe(std::move(Ev), Self->TabletID(), path.PathString()));
+
+        } else if (action == TCgi::TActions::MoveToStoragePool) {
+            const TTabletId tabletId = TTabletId(TryParseTabletId(params.Get(TCgi::ShardID)));
+            const TShardIdx shardIdx = Self->GetShardIdx(tabletId);
+            if (!shardIdx) {
+                SendBadRequest("Cannot find the specified shard", ctx);
+                return;
+            }
+            auto* info = Self->ShardInfos.FindPtr(shardIdx);
+            if (!info) {
+                SendBadRequest("Cannot find the specified shard info", ctx);
+                return;
+            }
+            if (info->TabletID == InvalidTabletId) {
+                SendBadRequest("Shard has no running tablet to move", ctx);
+                return;
+            }
+            // Reject if the shard is owned by an in-flight schema operation. CurrentTxId
+            // is set when an op starts but not reset on completion, so a bare
+            // CurrentTxId != InvalidTxId check would wrongly block long-idle shards;
+            // keying on the op being still active also lets idle system tablets be moved.
+            if (info->CurrentTxId != InvalidTxId && Self->Operations.contains(info->CurrentTxId)) {
+                SendBadRequest(
+                    TStringBuilder() << "Shard is busy with an in-flight operation " << info->CurrentTxId,
+                    ctx
+                );
+                return;
+            }
+            // A shard with no channel bindings can't be rebound: rebinding from empty
+            // would just persist and ship empty bindings to Hive. On a tenant schemeshard
+            // this is the expected shape of the tenant's system tablets (their bindings
+            // live only on the root schemeshard); on the root schemeshard it is anomalous.
+            if (info->BindedChannels.empty()) {
+                SendBadRequest(
+                    Self->IsDomainSchemeShard
+                        ? "Shard has no channel bindings; this is unexpected on the root schemeshard. "
+                          "Cannot move a tablet without bindings."
+                        : "Shard has no channel bindings on this tenant schemeshard; it is a tenant system "
+                          "tablet whose storage pool bindings are kept only on the root schemeshard. "
+                          "Move it from the root schemeshard instead.",
+                    ctx
+                );
+                return;
+            }
+
+            const TPathId subdomainPathId = Self->ResolvePathIdForDomain(info->PathId);
+            auto itSubDomain = Self->SubDomains.find(subdomainPathId);
+            if (itSubDomain == Self->SubDomains.end()) {
+                SendBadRequest(TStringBuilder() << "Cannot resolve subdomain for path " << info->PathId, ctx);
+                return;
+            }
+            const auto& pools = itSubDomain->second->EffectiveStoragePools();
+
+            const TString targetPoolName = params.Get(TCgi::StoragePool);
+            if (!targetPoolName) {
+                SendBadRequest("StoragePool parameter is required", ctx);
+                return;
+            }
+            const TStoragePool* targetPool = nullptr;
+            for (const auto& pool : pools) {
+                if (pool.GetName() == targetPoolName) {
+                    targetPool = &pool;
+                    break;
+                }
+            }
+            if (!targetPool) {
+                SendBadRequest(
+                    TStringBuilder() << "Storage pool '" << targetPoolName << "' is not registered for the shard's subdomain",
+                    ctx
+                );
+                return;
+            }
+
+            // Already on the target pool: normally a completed move (bindings are recorded only
+            // after a Hive ack), so no-op. The confirmation box forces a re-notify anyway (e.g. to
+            // reconcile a Hive that lost the assignment).
+            const bool alreadyOnTargetPool = AllOf(info->BindedChannels, [&](const auto& bind) {
+                return bind.GetStoragePoolName() == targetPool->GetName();
+            });
+            const bool confirmSamePool = params.Get(TCgi::ConfirmSamePool) == "1";
+            if (alreadyOnTargetPool && !confirmSamePool) {
+                SendOk(
+                    TStringBuilder() << "Shard is already on storage pool '" << targetPoolName
+                        << "', nothing to do. Tick the confirmation box to re-notify Hive anyway.",
+                    ctx
+                );
+                return;
+            }
+
+            // No persist here: compute new bindings and pre-build the Hive event. Persist runs only
+            // after Hive acks (in the actor's flow), keeping a failed move retryable.
+            TChannelsBindings newBindings = info->BindedChannels;
+            for (auto& bind : newBindings) {
+                bind.SetStoragePoolName(targetPool->GetName());
+                bind.SetStoragePoolKind(targetPool->GetKind());
+            }
+
+            TPathElement::TPtr path = Self->PathsById.at(info->PathId);
+            // CreateEvCreateTablet copies the current (old-pool) bindings; override with the new ones.
+            THolder<TEvHive::TEvCreateTablet> createEv = CreateEvCreateTablet(path, shardIdx, Self);
+            createEv->Record.ClearBindedChannels();
+            for (const auto& bind : newBindings) {
+                *createEv->Record.AddBindedChannels() = bind;
+            }
+            const TTabletId hive = Self->ResolveHive(shardIdx);
+
+            ctx.Register(new TMonitoringMoveShardToStoragePool(
+                std::move(Ev), Self->SelfId(), hive, shardIdx, std::move(newBindings), std::move(createEv)
+            ));
 
         } else if (action == TCgi::TActions::TablePartitionsFormatSwitch) {
             const bool switchEnabled = AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx();
@@ -2112,6 +2401,51 @@ private:
         }
     }
 };
+
+// Persists a shard's new channel bindings once Hive has acked the move, then answers the HTTP
+// request from Complete() — so success is reported only after the binding is durable.
+struct TSchemeShard::TTxMoveShardToStoragePool : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
+    TEvPrivate::TEvMoveShardToStoragePool::TPtr Ev;
+
+    TTxMoveShardToStoragePool(TSchemeShard* self, TEvPrivate::TEvMoveShardToStoragePool::TPtr& ev)
+        : TBase(self)
+        , Ev(ev)
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_MONITORING; }
+
+    bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
+        const TShardIdx shardIdx = Ev->Get()->ShardIdx;
+        auto* info = Self->ShardInfos.FindPtr(shardIdx);
+        if (!info) {
+            // Shard deleted between Hive ack and persist; nothing to record.
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TTxMoveShardToStoragePool: shard " << shardIdx << " no longer exists, skipping persist");
+            return true;
+        }
+
+        NIceDb::TNiceDb db(txc.DB);
+        info->BindedChannels = Ev->Get()->NewBindings;
+        Self->PersistChannelsBinding(db, shardIdx, info->BindedChannels);
+
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TTxMoveShardToStoragePool: persisted new channel bindings for shard " << shardIdx);
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        // Binding durable now: answer with the Hive reply the actor captured.
+        ctx.Send(Ev->Get()->HttpSender, new NMon::TEvRemoteJsonInfoRes(Ev->Get()->HiveReply));
+    }
+};
+
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxMoveShardToStoragePool(TEvPrivate::TEvMoveShardToStoragePool::TPtr& ev) {
+    return new TTxMoveShardToStoragePool(this, ev);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvMoveShardToStoragePool::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxMoveShardToStoragePool(ev), ctx);
+}
 
 bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) {
     if (!Executor() || !Executor()->GetStats().IsActive)

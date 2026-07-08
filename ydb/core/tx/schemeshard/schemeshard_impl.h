@@ -1053,6 +1053,10 @@ public:
     struct TTxMonitoring;
     //OnRenderAppHtmlPage
 
+    struct TTxMoveShardToStoragePool;
+    NTabletFlatExecutor::ITransaction* CreateTxMoveShardToStoragePool(TEvPrivate::TEvMoveShardToStoragePool::TPtr& ev);
+    void Handle(TEvPrivate::TEvMoveShardToStoragePool::TPtr& ev, const TActorContext& ctx);
+
     struct TTxInit;
     NTabletFlatExecutor::ITransaction* CreateTxInit();
 

@@ -2,9 +2,9 @@
 
 {% include [./_includes/alert.md](./_includes/alert_preview.md) %}
 
-Data from PostgreSQL can be migrated to {{ ydb-short-name }} using utilities such as [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), [psql](https://www.postgresql.org/docs/current/app-psql.html), and [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md). The [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) and [psql](https://www.postgresql.org/docs/current/app-psql.html) utilities are installed with PostgreSQL. [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) is {{ ydb-short-name }}'s command-line client, which is [installed separately](../reference/ydb-cli/install.md).
+Data from PostgreSQL can be migrated to {{ ydb-short-name }} using utilities such as [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) together with {{ ydb-short-name }} migration tools. The [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility is installed with PostgreSQL. [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) is {{ ydb-short-name }}'s command-line client, which is [installed separately](../reference/ydb-cli/install.md).
 
-To do this, you need to:
+Recommended migration paths:
 
 1. Create a data dump using [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) with the following parameters:
 
@@ -13,52 +13,20 @@ To do this, you need to:
     * `--rows-per-insert=1000` — to insert data in batches to speed up the process.
     * `--encoding=utf_8` — YDB only supports string data in [UTF-8](https://en.wikipedia.org/wiki/UTF-8).
 
-2. Convert the dump to a format supported by {{ ydb-short-name }} using the `ydb tools pg-convert` command from [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md).
-3. Load the result into {{ ydb-short-name }} using {{ ydb-short-name }} CLI with the `--!syntax_pg` marker.
+2. Convert the dump to [YQL](../yql/reference/index.md) using the [SQL dialect converter](../integrations/sql-dialect-converter.md) or rewrite the schema and queries manually.
+3. Load the result into {{ ydb-short-name }} using [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) or [import from files](../reference/ydb-cli/export-import/import-file.md).
 
+For JDBC-based migration, see [import via JDBC](../integrations/data-migration/import-jdbc.md).
 
 ## pg-convert command {#pg-convert}
 
-The `ydb tools pg-convert` command reads a dump file or standard input created by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility, performs transformations, and outputs to standard output an SQL script that can be executed in {{ ydb-short-name }} with the `--!syntax_pg` marker.
+The `ydb tools pg-convert` command was **removed** together with PostgreSQL SQL dialect support. It previously read a dump created by [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), performed transformations, and produced an SQL script for execution with the `--!syntax_pg` marker.
 
-`ydb tools pg-convert` performs the following transformations:
-
-* Moving the creation of the primary key into the body of the [CREATE TABLE](./statements/create_table.md) command.
-* Removing the `public` schema from table names.
-* Deleting the `WITH (...)` section in `CREATE TABLE`.
-* Commenting out unsupported constructs (optionally):
-
-    * `SELECT pg_catalog.set_config.*`
-    * `ALTER TABLE`
-
-If the CLI cannot find a table's primary key, it will automatically create a [BIGSERIAL](https://www.postgresql.org/docs/current/datatype-numeric.html#DATATYPE-SERIAL) column named `__ydb_stub_id` as the primary key.
-
-The general form of the command:
-
-```bash
-{{ ydb-cli }} [global options...] tools pg-convert [options...]
-```
-
-* `global options` — [global parameters](../reference/ydb-cli/commands/global-options.md).
-* `options` — [subcommand parameters](#options).
-
-### subcommand parameters {#options}
-
-| Name                  | Description |
-|-----------------------|-------------|
-| `-i`                  | The name of the file containing the original dump. If the option is not specified, the dump is read from standard input. |
-| `--ignore-unsupported`| When this option is specified, unsupported constructs will be commented out in the resulting dump and duplicated in standard error. By default, if unsupported constructs are detected, the command returns an error. This does not apply to `ALTER TABLE` expressions that define a table's primary key, as they are commented out in any case. |
-
-
-{% note warning %}
-
-When loading large dumps, reading from standard input is not recommended because the entire dump will be stored in RAM. It is advised to use the file option, in which case the CLI will only keep a small portion of the dump in memory.
-
-{% endnote %}
+Use the [SQL dialect converter](../integrations/sql-dialect-converter.md) or manual migration instead.
 
 ## Example of importing a dump into {{ ydb-short-name }} {#examples}
 
-As an example, data generated by [pgbench](https://www.postgresql.org/docs/current/pgbench.html) will be loaded.
+As an example, data generated by [pgbench](https://www.postgresql.org/docs/current/pgbench.html) can be loaded as follows.
 
 1. Start Docker containers with PostgreSQL and {{ ydb-short-name }}:
 
@@ -68,7 +36,6 @@ As an example, data generated by [pgbench](https://www.postgresql.org/docs/curre
         -e POSTGRES_DB=local \
         -p 5433:5433 -d postgres:14 -c 'port=5433'
     docker run --name ydb-local -d --pull always -p 2136:2136 -p 8765:8765 \
-        -e YDB_FEATURE_FLAGS=enable_temp_tables,enable_table_pg_types,enable_pg_syntax \
         -e YDB_USE_IN_MEMORY_PDISKS=true \
         ghcr.io/ydb-platform/local-ydb:latest
     ```
@@ -97,11 +64,4 @@ As an example, data generated by [pgbench](https://www.postgresql.org/docs/curre
         --column-inserts --encoding=utf_8 --rows-per-insert=1000 > dump.sql
     ```
 
-4. Load the dump into {{ ydb-short-name }}:
-
-    ```bash
-    ydb tools pg-convert --ignore-unsupported -i dump.sql > converted.sql
-    ydb -e grpc://localhost:2136 -d /local sql -s "$(printf '%s\n' '--!syntax_pg' "$(cat converted.sql)")"
-    ```
-
-    This command uses {{ ydb-short-name }} CLI to convert the `dump.sql` file to a format supported by {{ ydb-short-name }}, then executes the resulting SQL script through the gRPC API.
+4. Convert the dump to YQL and load it into {{ ydb-short-name }} using the [SQL dialect converter](../integrations/sql-dialect-converter.md), or recreate the schema in YQL and import data with [import from files](../reference/ydb-cli/export-import/import-file.md).

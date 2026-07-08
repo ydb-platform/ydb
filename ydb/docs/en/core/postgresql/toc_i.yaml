@@ -1,7 +1,7 @@
 items:
 - name: Overview
   href: intro.md
-- name: Connection with PostgreSQL syntax
+- name: Removed: PostgreSQL syntax
   href: docker-connect.md
 - name: PostgreSQL statements
   include: { mode: link, path: ./statements/toc_m.yaml }

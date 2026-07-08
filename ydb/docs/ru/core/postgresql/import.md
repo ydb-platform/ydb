@@ -23,7 +23,7 @@
 
 ## pg-dump {#pg-dump}
 
-Данные из PostgreSQL в {{ ydb-short-name }} можно перенести c помощью утилит [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), [psql](https://www.postgresql.org/docs/current/app-psql.html) и [YDB CLI](../reference/ydb-cli/index.md). Утилиты [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) и [psql](https://www.postgresql.org/docs/current/app-psql.html) устанавливаются вместе с PostgreSQL, [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) — консольный клиент {{ ydb-short-name }}, который [устанавливается отдельно](../reference/ydb-cli/install.md).
+Данные из PostgreSQL в {{ ydb-short-name }} можно перенести c помощью утилит [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) и [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md). Утилита [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) устанавливается вместе с PostgreSQL, [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) — консольный клиент {{ ydb-short-name }}, который [устанавливается отдельно](../reference/ydb-cli/install.md).
 
 Для этого нужно:
 
@@ -34,46 +34,16 @@
     * `--rows-per-insert=1000` — для вставки данных пачками и ускорения процесса.
     * `--encoding=utf_8` — {{ ydb-short-name }} поддерживает строковые данные только в [UTF-8](https://ru.wikipedia.org/wiki/UTF-8).
 
-2. Привести дамп к виду, который поддерживается {{ ydb-short-name }} командой `ydb tools pg-convert` [YDB CLI](../reference/ydb-cli/index.md).
-3. Результат загрузить в {{ ydb-short-name }} с помощью {{ ydb-short-name }} CLI и маркера `--!syntax_pg`.
+2. Преобразовать дамп в [YQL](../yql/reference/index.md) с помощью [конвертера SQL-диалектов](../integrations/sql-translation/sql-dialect-converter.md) или вручную.
+3. Загрузить результат в {{ ydb-short-name }} через [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) или [импорт из файлов](../reference/ydb-cli/export-import/import-file.md).
+
+Для миграции через JDBC см. [импорт через JDBC](../integrations/data-migration/import-jdbc.md).
 
 ## Команда pg-convert {#pg-convert}
 
-Команда `ydb tools pg-convert` считывает из файла или stdin'а дамп, полученный утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), выполняет преобразования и выводит в stdout SQL-скрипт, который можно выполнить в {{ ydb-short-name }} с маркером `--!syntax_pg`.
+Команда `ydb tools pg-convert` **удалена** вместе с поддержкой SQL-диалекта PostgreSQL. Ранее она считывала дамп, полученный утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), выполняла преобразования и выводила SQL-скрипт для выполнения с маркером `--!syntax_pg`.
 
-`ydb tools pg-convert` выполняет следующие преобразования:
-
-* Перенос создания первичного ключа в тело команды [CREATE TABLE](./statements/create_table.md).
-* Вырезание схемы `public` из имен таблиц.
-* Удаление секции `WITH (...)` в `CREATE TABLE`
-* Комментирование неподдерживаемых конструкций (опционально):
-
-  * `SELECT pg_catalog.set_config.*`
-  * `ALTER TABLE`
-
-Если CLI не сможет найти первичный ключ таблицы, он автоматически создаст [BIGSERIAL](https://www.postgresql.org/docs/current/datatype-numeric.html#DATATYPE-SERIAL) колонку `__ydb_stub_id` в качестве первичного ключа.
-
-Общий вид команды:
-
-```bash
-{{ ydb-cli }} [global options...] tools pg-convert [options...]
-```
-
-* `global options` — [глобальные параметры](../reference/ydb-cli/commands/global-options.md).
-* `options` — [параметры подкоманды](#options).
-
-### Параметры подкоманды {#options}
-
-| Имя                     | Описание                                                                                                                                                                                                                                                                                                                     |
-|-------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `-i`                    | Имя файла, в котором находится изначальный дамп. Если опция не указана, дамп считывается из stdin'a.                                                                                                                                                                                                                         |
-|  `--ignore-unsupported` | При указании этой опции, неподдерживаемые конструкции будут закомментированы в итоговом дампе и продублированы в stderr. По умолчанию, при обнаружении неподдерживаемых конструкций, команда возвращает ошибку. Не относится к выражениям `ALTER TABLE`, задающим первичный ключ таблицы, они комментируются в любом случае. |
-
-{% note warning %}
-
-При загрузке больших дампов считывание из stdin'a не рекомендуется, поскольку в таком случае весь дамп будет сохранен в оперативной памяти. Рекомендуется использовать опцию с файлом, в таком случае CLI будет держать в памяти небольшую часть дампа.
-
-{% endnote %}
+Используйте [конвертер SQL-диалектов](../integrations/sql-translation/sql-dialect-converter.md) или ручную миграцию.
 
 ## Пример импорта дампа в {{ ydb-short-name }} {#file-import}
 
@@ -87,7 +57,6 @@
         -e POSTGRES_DB=local \
         -p 5433:5433 -d postgres:14 -c 'port=5433'
     docker run --name ydb-local -d --pull always -p 2136:2136 -p 8765:8765 \
-        -e YDB_FEATURE_FLAGS=enable_temp_tables,enable_table_pg_types,enable_pg_syntax \
         -e YDB_USE_IN_MEMORY_PDISKS=true \
         ghcr.io/ydb-platform/local-ydb:latest
     ```
@@ -116,11 +85,4 @@
         --column-inserts --encoding=utf_8 --rows-per-insert=1000 > dump.sql
     ```
 
-4. Загрузить дамп базы в {{ ydb-short-name }}:
-
-    ```bash
-    ydb tools pg-convert --ignore-unsupported -i dump.sql > converted.sql
-    ydb -e grpc://localhost:2136 -d /local sql -s "$(printf '%s\n' '--!syntax_pg' "$(cat converted.sql)")"
-    ```
-
-    Эта команда использует {{ ydb-short-name }} CLI для преобразования файла `dump.sql` в формат, поддерживаемый {{ ydb-short-name }}, а затем выполняет полученный SQL-скрипт через gRPC API.
+4. Преобразовать дамп в YQL с помощью [конвертера SQL-диалектов](../integrations/sql-translation/sql-dialect-converter.md) и загрузить данные в {{ ydb-short-name }} через [импорт из файлов](../reference/ydb-cli/export-import/import-file.md) или вручную созданную схему YQL.

@@ -1,7 +1,7 @@
-{% note warning %}
+{% note alert %}
 
-Поддержка синтаксиса PostgreSQL в {{ ydb-name }} **находится в разработке**. Использовать её в production окружениях **не рекомендуется**. Запросы в PostgreSQL могут исполняться до нескольких раз медленнее по сравнению с аналогичными запросами на YQL.
+Сетевой протокол PostgreSQL (pgwire) и поддержка SQL-диалекта PostgreSQL (включая маркер `--!syntax_pg`, флаг `enable_pg_syntax` и команду `ydb tools pg-convert`) **удалены** из {{ ydb-short-name }}.
 
-Основной сценарий, который можно тестировать — выполнение аналитических запросов к хранимым в {{ ydb-name }} данным.
+Страницы в этом разделе сохранены для справки. Для миграции с PostgreSQL используйте [YQL](../yql/reference/index.md), [конвертер SQL-диалектов](../integrations/sql-translation/sql-dialect-converter.md) или [инструменты миграции данных](../integrations/data-migration/index.md).
 
 {% endnote %}

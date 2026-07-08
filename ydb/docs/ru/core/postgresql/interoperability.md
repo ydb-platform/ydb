@@ -27,19 +27,11 @@
     INSERT INTO test_table(col) VALUES(1)
     ```
 
-3. Прочитаем эти данные с помощью PostgreSQL-синтаксиса
+3. Прочитаем эти данные с помощью YQL-синтаксиса (ранее для чтения тех же данных использовался PostgreSQL-диалект с маркером `--!syntax_pg`, который удалён):
 
-    ```bash
-    ydb -e <ydb_address> -d <database_name> --user <user_name> sql -s '--!syntax_pg
+    ```sql
     SELECT * FROM test_table;
-    '
     ```
-
-    Где:
-
-    - `<ydb_address>` - адрес кластера {{ ydb-short-name }}, к которому выполняется подключение.
-    - `<database_name>` - название базы данных в кластере. Может быть сложным именем, например, `mycluster/tenant1/database`.
-    - `<user_name>` - логин пользователя.
 
 
 ## Соответствие типов данных {#supported_types}
@@ -64,12 +56,10 @@
     INSERT INTO test_table(col) VALUES(1)
     ```
 
-1. Прочитаем эти данные с помощью PostgreSQL-синтаксиса. YQL-тип данных `INT` был автоматически переведен в PostgreSQL-тип `int4`, над которым была выполнена операция инкремента.
+1. Прочитаем эти данные с помощью YQL-синтаксиса. Ранее аналогичный запрос выполнялся в PostgreSQL-диалекте с маркером `--!syntax_pg`, который удалён. YQL-тип данных `INT` по-прежнему автоматически преобразуется при использовании функций семейства [`Pg`](../yql/reference/udf/list/postgres.md):
 
-    ```bash
-    ydb sql -s '--!syntax_pg
-    SELECT col+1 AS col FROM test_table;
-    '
+    ```sql
+    SELECT col + 1 AS col FROM test_table;
     ```
 
 Так как все вычисления выполняются внутри {{ ydb-short-name }}, то для для каждого PostgreSQL типа создан "зеркальный тип" в {{ ydb-short-name }}. Например, тип `text` из PostgreSQL при обработке внутри {{ ydb-short-name }} будет иметь тип `pgtext`. Это сделано, чтобы обеспечить точную семантику работы типов PostgreSQL внутри {{ ydb-short-name }}. При преобразовании типа из PostgreSQL в {{ ydb-short-name }} применяется правило, что для каждого такого типа добавляется префикс `pg`, после чего используется оригинальное имя типа из PostgreSQL.

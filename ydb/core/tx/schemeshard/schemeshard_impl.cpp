@@ -3255,7 +3255,7 @@ void WritePartitionStatsRow(TRow& row, const TPartitionStats& stats) {
 void ClearBackupRestoreHistory(NIceDb::TNiceDb& db, TPathId pathId, ui64 tabletId, const TMap<TTxId, TTableInfo::TBackupRestoreResult>& history) {
     for (const auto& [txId, result] : history) {
         for (const auto& [shard, _] : result.ShardStatuses) {
-            if (shard.GetOwnerId() == tabletId) {
+            if (IsLocalId(shard)) {
                 db.Table<Schema::ShardBackupStatus>().Key(txId, shard.GetLocalId()).Delete();
             }
             db.Table<Schema::MigratedShardBackupStatus>().Key(txId, shard.GetOwnerId(), shard.GetLocalId()).Delete();

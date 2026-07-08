@@ -2646,7 +2646,7 @@ private:
                 TableId, KeyDesc->Range, TKeyDesc::ERowOperation::Read,
                 KeyDesc->KeyColumnTypes, KeyDesc->Columns);
 
-        YDB_LOG_DEBUG("Sending TEvResolveKeySet update for table",
+        YDB_LOG_DEBUG("Sending TEvResolveKeySet update",
             {"logPrefix", LogPrefix},
             {"tablePath", Settings.TablePath});
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
@@ -2662,7 +2662,7 @@ private:
         Y_ABORT_UNLESS(ResolveInProgress, "Received TEvResolveKeySetResult without an active request");
         ResolveInProgress = false;
 
-        YDB_LOG_DEBUG("Received TEvResolveKeySetResult update for table",
+        YDB_LOG_DEBUG("Received TEvResolveKeySetResult update",
             {"logPrefix", LogPrefix},
             {"tablePath", Settings.TablePath});
 

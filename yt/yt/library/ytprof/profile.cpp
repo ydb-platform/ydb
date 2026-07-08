@@ -2,6 +2,7 @@
 
 #include "symbolize.h"
 
+#include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <library/cpp/yt/memory/allocation_tags_hooks.h>
@@ -22,7 +23,9 @@ void ReadCompressedProfile(IInputStream* in, NProto::Profile* profile)
     TZLibDecompress decompress(in);
     profile->Clear();
     TProtobufInputStreamAdaptor adaptor(&decompress);
-    Y_UNUSED(profile->ParseFromZeroCopyStream(&adaptor));
+    THROW_ERROR_EXCEPTION_UNLESS(
+        profile->ParseFromZeroCopyStream(&adaptor),
+        "Failed to parse compressed profile");
 }
 
 void WriteCompressedProfile(IOutputStream* out, const NProto::Profile& profile)
@@ -30,7 +33,9 @@ void WriteCompressedProfile(IOutputStream* out, const NProto::Profile& profile)
     TZLibCompress compress(out, ZLib::StreamType::GZip);
     {
         TProtobufOutputStreamAdaptor adaptor(&compress);
-        Y_UNUSED(profile.SerializeToZeroCopyStream(&adaptor));
+        THROW_ERROR_EXCEPTION_UNLESS(
+            profile.SerializeToZeroCopyStream(&adaptor),
+            "Failed to serialize profile");
     }
     compress.Finish();
 }

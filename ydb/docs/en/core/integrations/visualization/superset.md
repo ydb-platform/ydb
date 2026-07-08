@@ -10,9 +10,12 @@ The installation method depends on your Superset setup. For detailed instruction
 
 ## Adding a database connection to {{ ydb-short-name }} {#add-database-connection}
 
-There is one supported way to connect to {{ ydb-short-name }}:
+There are two ways to connect to {{ ydb-short-name }}:
 
 1. Native connection using the SQLAlchemy driver (starting from version 5.0.0)
+1. Connect using the PostgreSQL wire protocol
+
+It is recommended to use a native connection whenever possible.
 
 ### Native connection using SQLAlchemy driver
 
@@ -84,6 +87,31 @@ To connect to {{ ydb-short-name }} from Apache Superset **version 5.0.0 and high
 1. To save the database connection, click **FINISH**.
 
 For more information about configuring a {{ ydb-short-name }} connection, refer to the [{{ ydb-short-name }} section in the official documentation](https://superset.apache.org/docs/configuration/databases#ydb).
+
+### Connect using the PostgreSQL wire protocol
+
+To connect to {{ ydb-short-name }} from Apache Superset using the PostgreSQL wire protocol, follow these steps:
+
+1. In the Apache Superset toolbar, hover over **Settings** and select **Database Connections**.
+1. Click the **+ DATABASE** button.
+
+     The **Connect a database** wizard will appear.
+
+1. In **Step 1** of the wizard, click the **PostgreSQL** button.
+1. In **Step 2** of the wizard, enter the {{ ydb-short-name }} credentials in the corresponding fields:
+
+    * **HOST**. The [endpoint](../../concepts/connect.md#endpoint) of the {{ ydb-short-name }} cluster to connect to.
+    * **PORT**. The port of the {{ ydb-short-name }} endpoint.
+    * **DATABASE NAME**. The path to the [database](../../concepts/glossary.md#database) in the {{ ydb-short-name }} cluster where queries will be executed.
+    * **USERNAME**. The login for connecting to the {{ ydb-short-name }} database.
+    * **PASSWORD**. The password for connecting to the {{ ydb-short-name }} database.
+    * **DISPLAY NAME**. The {{ ydb-short-name }} connection name in Apache Superset.
+
+    ![](_assets/superset-ydb-pg-connection-details.png =400x)
+
+1. Click **CONNECT**.
+
+1. To save the database connection, click **FINISH**.
 
 ## Creating a dataset {#create-dataset}
 

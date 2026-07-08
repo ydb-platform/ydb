@@ -1,12 +1,12 @@
-# Connecting with PostgreSQL syntax
+# Connecting via PostgreSQL Protocol
 
 {% include [./_includes/alert.md](./_includes/alert_preview.md) %}
 
-## Running {{ ydb-short-name }} with PostgreSQL syntax support enabled
+## Running {{ ydb-short-name }} with PostgreSQL compatibility enabled
 
-PostgreSQL syntax compatibility is available in the Docker image: `ghcr.io/ydb-platform/local-ydb:nightly`.
+Currently, the PostgreSQL compatibility feature is available for testing in the Docker image: `ghcr.io/ydb-platform/local-ydb:nightly`.
 
-Commands for starting a local Docker container with {{ ydb-short-name }} and open ports for gRPC and Embedded UI:
+Commands for starting a local Docker container with {{ ydb-short-name }} and open ports for PostgreSQL and Embedded UI:
 
 {% note tip %}
 
@@ -29,11 +29,13 @@ To preserve the container's state, you need to remove the environment variable `
         ydb:
             image: ghcr.io/ydb-platform/local-ydb:nightly
             ports:
-            - "2136:2136"
+            - "5432:5432"
             - "8765:8765"
             environment:
             - "YDB_USE_IN_MEMORY_PDISKS=true"
-            - "YDB_FEATURE_FLAGS=enable_temp_tables,enable_table_pg_types,enable_pg_syntax"
+            - "POSTGRES_USER=${YDB_PG_USER:-root}"
+            - "POSTGRES_PASSWORD=${YDB_PG_PASSWORD:-1234}"
+            - "YDB_EXPERIMENTAL_PG=1"
     ```
 
     Run:
@@ -45,65 +47,78 @@ To preserve the container's state, you need to remove the environment variable `
 - Docker command
 
     ```bash
-    docker run --name ydb-local -d --pull always -p 2136:2136 -p 8765:8765 \
-        -e YDB_FEATURE_FLAGS=enable_temp_tables,enable_table_pg_types,enable_pg_syntax \
-        -e YDB_USE_IN_MEMORY_PDISKS=true ghcr.io/ydb-platform/local-ydb:nightly
+    docker run --name ydb-postgres -d --pull always -p 5432:5432 -p 8765:8765 -e POSTGRES_USER=root -e POSTGRES_PASSWORD=1234 -e YDB_EXPERIMENTAL_PG=1 -e YDB_USE_IN_MEMORY_PDISKS=true ghcr.io/ydb-platform/local-ydb:nightly
     ```
 
 {% endlist %}
 
-After launching the container, connect with {{ ydb-short-name }} CLI on `grpc://localhost:2136` and database `/local`, or open the [web interface](http://localhost:8765) on port 8765.
+After launching the container, you can connect to it via PostgreSQL clients on port 5432, the database `local`, or open the [web interface](http://localhost:8765) on port 8765.
 
-## Connecting to the running container via {{ ydb-short-name }} CLI
+## Connecting to the Running Container via psql
 
-Use the PostgreSQL dialect marker `--!syntax_pg` at the beginning of each query:
+Upon executing this command, the interactive command-line interface of `psql`, the PostgreSQL client, will be launched. All subsequent queries should be entered within this client interface.
 
 ```bash
-ydb -e grpc://localhost:2136 -d /local sql -s '--!syntax_pg
-SELECT ''Hello, world!'';
-'
+docker run --rm -it --network=host postgres:14 psql postgresql://root:1234@localhost:5432/local
+```
+
+### Hello world example
+
+```yql
+SELECT 'Hello, world!';
 ```
 
 Output:
 
 ```text
- column0
+    column0
 ---------------
  Hello, world!
+(1 row)
 ```
 
-### Creating a table
+### Creating a Table
 
-```bash
-ydb -e grpc://localhost:2136 -d /local sql -s '--!syntax_pg
+The primary purpose of database management systems is to store data for later retrieval. As an SQL-based system, the principal abstraction for storing data is the table. To create our first table, execute the following query:
+
+```sql
 CREATE TABLE example
 (
     key int4,
     value text,
     PRIMARY KEY (key)
 );
-'
 ```
 
 ### Adding test data
 
-```bash
-ydb -e grpc://localhost:2136 -d /local sql -s '--!syntax_pg
+Now let's populate our table with some initial data. The simplest way to do this is by using literals.
+
+```sql
 INSERT INTO example (key, value)
-VALUES (123, ''hello''),
-       (321, ''world'');
-'
+VALUES (123, 'hello'),
+       (321, 'world');
 ```
 
 ### Querying test data
 
-```bash
-ydb -e grpc://localhost:2136 -d /local sql -s '--!syntax_pg
+```sql
 SELECT COUNT(*) FROM example;
-'
 ```
 
-## Stopping the container
+Output:
+
+```text
+ column0
+---------
+       2
+(1 row)
+```
+
+
+## Stopping the Container
+
+This command will stop the running container and delete all data stored within it.
 
 {% list tabs %}
 
@@ -115,10 +130,22 @@ SELECT COUNT(*) FROM example;
     docker-compose down -vt 1
     ```
 
-- Docker command
+    {% note info %}
+
+    To stop a Docker container and preserve its data, you should run it without the `YDB_USE_IN_MEMORY_PDISKS` environment variable and use the stop command:
 
     ```bash
-    docker rm -f ydb-local
+    docker-compose stop
+    ```
+
+    {% endnote %}
+
+- Docker command
+
+    This command will stop the container and remove the data:
+
+    ```bash
+    docker rm -f ydb-postgres
     ```
 
 {% endlist %}

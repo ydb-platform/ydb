@@ -450,10 +450,6 @@ class StaticConfigGenerator(object):
         return self.__cluster_details.get_service("scan_conveyor_config")
 
     @property
-    def local_pg_wire_config(self):
-        return self.__cluster_details.get_service("local_pg_wire_config")
-
-    @property
     def aws_compatibility_config(self):
         return self.__cluster_details.get_service("aws_compatibility_config")
 
@@ -801,9 +797,6 @@ class StaticConfigGenerator(object):
 
         if self.scan_conveyor_config:
             normalized_config["scan_conveyor_config"] = self.scan_conveyor_config
-
-        if self.local_pg_wire_config:
-            normalized_config["local_pg_wire_config"] = self.local_pg_wire_config
 
         if self.aws_compatibility_config:
             normalized_config["aws_compatibility_config"] = self.aws_compatibility_config

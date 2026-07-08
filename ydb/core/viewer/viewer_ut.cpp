@@ -2366,4 +2366,51 @@ Y_UNIT_TEST_SUITE(Viewer) {
             }
         }
     }
+
+    Y_UNIT_TEST(PipeClientIgnoresLateCancelUndelivered) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        const ui32 nodeId = runtime.GetNodeId(0);
+
+        std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            TStringBuilder() << "GET /viewer/json/sysinfo?node_id=" << nodeId << " HTTP/1.1\r\n\r\n",
+            endpoint,
+            {});
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvWhiteboard::EvSystemStateRequest) {
+                // Reproduce issue #43676: TEvUndelivered for EvSubscribeForCancel was
+                // mishandled as a whiteboard node failure while DataRequests > 0, causing
+                // ReplyAndPassAway and then Cancelled to each call PassAway().
+                runtime.Send(new IEventHandle(
+                    ev->Sender,
+                    ev->Recipient,
+                    new TEvents::TEvUndelivered(
+                        NHttp::TEvHttpProxy::EvSubscribeForCancel,
+                        TEvents::TEvUndelivered::ReasonActorUnknown),
+                    0,
+                    0));
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        runtime.Send(new IEventHandle(
+            NKikimr::NViewer::MakeViewerID(0),
+            sender,
+            new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request),
+            0));
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::Seconds(10));
+    }
 }

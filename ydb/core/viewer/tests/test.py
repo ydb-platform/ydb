@@ -928,7 +928,20 @@ class TestViewer(object):
 
     @classmethod
     def test_viewer_tenantinfo(cls):
-        result = cls.get_viewer_db_normalized("/viewer/tenantinfo")
+        result = {}
+        tries = 15
+        while tries > 0:
+            result = cls.get_viewer_db_normalized("/viewer/tenantinfo")
+            all_ready = True
+            for name in cls.databases_and_no_database:
+                tenant_info = result[name].get('TenantInfo', [{}])
+                if tenant_info and 'CoresUsed' not in tenant_info[0]:
+                    all_ready = False
+                    break
+            if all_ready:
+                break
+            tries -= 1
+            time.sleep(1)
         for name in cls.databases_and_no_database:
             result[name]['TenantInfo'].sort(key=lambda x: x['Name'])
         return result

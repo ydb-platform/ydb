@@ -232,10 +232,7 @@ namespace NYql::NDq {
             auto& split = response.splits(0);
             NConnector::NApi::TReadSplitsRequest readRequest;
 
-            *readRequest.mutable_data_source_instance() = LookupSource.data_source_instance();
-            auto error = CredentialsProvider->FillCredentials(*readRequest.mutable_data_source_instance());
-            if (error) {
-                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
+            if (FillDataSource(*readRequest.mutable_data_source_instance(), ev->Get()->State)) {
                 return;
             }
 
@@ -370,11 +367,17 @@ namespace NYql::NDq {
             auto startCycleCount = GetCycleCountFast();
             NConnector::NApi::TListSplitsRequest splitRequest;
 
-            auto error = FillSelect(*splitRequest.add_selects(), state);
+            auto& select = *splitRequest.add_selects();
+            auto error = FillSelect(select, state);
+
             if (error) {
                 SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
                 return;
-            };
+            }
+
+            if (FillDataSource(*select.mutable_data_source_instance(), state)) {
+                return;
+            }
 
             splitRequest.Setmax_split_count(1);
             Connector->ListSplits(splitRequest, RequestTimeout).Subscribe([
@@ -582,15 +585,20 @@ namespace NYql::NDq {
             }
         }
 
-        // must be called with bound Alloc
-        TString FillSelect(NConnector::NApi::TSelect& select, TLookupState::TPtr state) {
-            auto dsi = LookupSource.data_source_instance();
+        bool FillDataSource(TGenericDataSourceInstance& dsi, TLookupState::TPtr& state) { // return true on error
+            dsi = LookupSource.data_source_instance();
             auto error = CredentialsProvider->FillCredentials(dsi);
             if (error) {
-                return error;
+                // TODO separate handling retrievable and non-retrievable errors;
+                // for now, consider all credentials errors at this stage as retrievable
+                SendRetryOrError(TActivationContext::ActorSystem(), SelfId(), NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAVAILABLE, std::move(error)), std::move(state));
+                return true;
             }
-            *select.mutable_data_source_instance() = dsi;
+            return false;
+        }
 
+        // must be called with bound Alloc
+        TString FillSelect(NConnector::NApi::TSelect& select, TLookupState::TPtr state) {
             for (ui32 i = 0; i != SelectResultType->GetMembersCount(); ++i) {
                 auto c = select.mutable_what()->add_items()->mutable_column();
                 c->Setname((TString(SelectResultType->GetMemberName(i))));

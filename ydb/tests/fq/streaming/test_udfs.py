@@ -35,7 +35,8 @@ def kikimr_udfs(request):
     config.yaml_config["log_config"] = {
         "default_level": 4,
         "entry": [
-            {"component": "KQP_PROXY", "level": 7}
+            {"component": "KQP_PROXY", "level": 7},
+            {"component": "KQP_EXECUTER", "level": 7},
         ]
     }
 
@@ -98,7 +99,7 @@ def get_all_cgi_params(url):
         """)
 
         def validate_query(text: str, previous_ids: int, status: str = "RUNNING", check_issues: bool = True, suffix: Optional[str] = None):
-            result_sets = kikimr_udfs.ydb_client.query("""
+            result_sets = kikimr_udfs.ydb_client.query(f"""
                 SELECT
                     Path,
                     Status,
@@ -111,6 +112,7 @@ def get_all_cgi_params(url):
                     LastExecutionId,
                     PreviousExecutionIds
                 FROM `.sys/streaming_queries`
+                WHERE Path = "{path}"
             """)
             assert len(result_sets) == 1
 
@@ -164,10 +166,10 @@ import time
 
 def hang():
     time.sleep(20)
-    return "result"
+    return None
 @@;
 
-$callable = Python3::hang(Callable<()->String>, $script);
+$callable = Python3::hang(Callable<()->String?>, $script);
 
 $precompute = SELECT Payload || $callable() FROM `{test_table}` LIMIT 1;
 
@@ -187,13 +189,14 @@ END DO
         logger.info(f"Hanging query finished: {exc_info.value}")
 
         kikimr_udfs.ydb_client.stop()
-        kikimr_udfs.first_node.kill()
+        kikimr_udfs.first_node.stop()
+        kikimr_udfs.first_node.set_log_file_prefix("logfile_restarted_")
         kikimr_udfs.first_node.start()
         logger.info("Node with query restarted")
 
         time.sleep(5)
         second_node = list(kikimr_udfs.cluster.nodes.values())[1]
-        kikimr_udfs.ydb_client = YdbClient(database=kikimr_udfs.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}")
+        kikimr_udfs.ydb_client = YdbClient(database=kikimr_udfs.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
         kikimr_udfs.ydb_client.wait_connection()
         logger.info("Checking query state after restart")
 

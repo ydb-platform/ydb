@@ -2,7 +2,7 @@ YQL_UDF_YDB(uuid_udf)
 
 YQL_ABI_VERSION(
     2
-    35
+    46
     0
 )
 

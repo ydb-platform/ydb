@@ -54,7 +54,7 @@ class YdbCluster:
                 LOGGER.debug(f'Failed to get kafka port from {host}:{mon_port}: {e}')
                 return 0
 
-        def __init__(self, desc: dict):
+        def __init__(self, desc: dict, load_kafka_port: bool = False):
             ss = desc.get('SystemState', {})
             self.host: str = ss.get('Host', '')
             ports = {
@@ -64,7 +64,7 @@ class YdbCluster:
             self.ic_port: int = ports.get('ic', 0)
             self.mon_port: int = ports.get('http-mon', 0)
             self.grpc_port: int = ports.get('grpc', 0)
-            self.kafka_port: int = self._load_kafka_port(self.host, self.mon_port)
+            self.kafka_port: int = self._load_kafka_port(self.host, self.mon_port) if load_kafka_port else 0
             self.disconnected: bool = desc.get('Disconnected', False)
             self.version: str = ss.get('Version', '')
             self.start_time: float = 0.001 * int(ss.get('StartTime', time() * 1000))
@@ -146,7 +146,8 @@ class YdbCluster:
 
     @classmethod
     def get_cluster_nodes(cls, path: Optional[str] = None, db_only: bool = False,
-                          role: Optional[YdbCluster.Node.Role] = None
+                          role: Optional[YdbCluster.Node.Role] = None,
+                          load_kafka_port: bool = False,
                           ) -> list[YdbCluster.Node]:
         if cls.ydb_mon_port == 0:
             return []
@@ -180,7 +181,7 @@ class YdbCluster:
                     raise Exception(f'Incorrect response type: {data}')
 
                 # Create nodes from the response
-                nodes = [YdbCluster.Node(n) for n in data.get('Nodes', [])]
+                nodes = [YdbCluster.Node(n, load_kafka_port=load_kafka_port) for n in data.get('Nodes', [])]
 
                 # Filter nodes by role if specified
                 if role is not None:

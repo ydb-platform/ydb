@@ -42,6 +42,7 @@ class StressRunExecutor:
 
         Supported variables:
         - {node_host} - node host
+        - {slot_kafka_port} - kafka proxy port of a random compute slot on the same host
         - {iteration_num} - iteration number
         - {thread_id} - thread ID (usually node host)
         - {run_id} - unique run ID
@@ -60,8 +61,6 @@ class StressRunExecutor:
 
         # Get variable values
         node_host = target_node.host
-        # choose a random slot with the same host
-        slot_kafka_port = random.choice([dyn_node for dyn_node in self.nodes if dyn_node.host == node_host and dyn_node.role == YdbCluster.Node.Role.COMPUTE]).kafka_port
         iteration_num = run_config.get("iteration_num", 1)
         thread_id = run_config.get("thread_id", node_host)
         database = run_config.get("database", 'Root/db1')
@@ -71,11 +70,9 @@ class StressRunExecutor:
         # Create unique run_id
         run_id = f"{node_host}_{iteration_num}_{timestamp}"
 
-        # Substitution dictionary
         substitutions = {
             "{node_host}": node_host,
             "{database}": database,
-            "{slot_kafka_port}": str(slot_kafka_port),
             "{iteration_num}": str(iteration_num),
             "{thread_id}": str(thread_id),
             "{run_id}": run_id,
@@ -83,6 +80,14 @@ class StressRunExecutor:
             "{uuid}": short_uuid,
             "{global_run_id}": str(self.run_counter),
         }
+
+        if "{slot_kafka_port}" in command_args_template:
+            kafka_ports = [
+                dyn_node.kafka_port
+                for dyn_node in self.nodes
+                if dyn_node.host == node_host and dyn_node.role == YdbCluster.Node.Role.COMPUTE
+            ]
+            substitutions["{slot_kafka_port}"] = str(random.choice(kafka_ports or [0]))
 
         # Perform substitutions
         result = command_args_template

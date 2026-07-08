@@ -15,7 +15,8 @@ TColumnsData TColumnsData::Slice(const ui32 offset, const ui32 count) const {
         for (auto&& i : records.GetColumns()) {
             AFL_VERIFY(Stats.GetColumnName(idx) == records.GetSchema()->field(idx)->name());
             if (i->GetRecordsCount() > i->GetNullsCount()) {
-                builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), i->GetValueRawBytes(), i->GetType());
+                builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), i->GetValueRawBytes(), i->GetType(),
+                    Stats.GetValueType(idx));
             } else {
                 indexesToRemove.emplace_back(idx);
             }
@@ -40,7 +41,8 @@ TColumnsData TColumnsData::ApplyFilter(const TColumnFilter& filter) const {
         for (auto&& i : records->GetColumns()) {
             AFL_VERIFY(Stats.GetColumnName(idx) == records->GetSchema()->field(idx)->name());
             if (i->GetRecordsCount() > i->GetNullsCount()) {
-                builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), i->GetValueRawBytes(), i->GetType());
+                builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), i->GetValueRawBytes(), i->GetType(),
+                    Stats.GetValueType(idx));
             } else {
                 indexesToRemove.emplace_back(idx);
             }

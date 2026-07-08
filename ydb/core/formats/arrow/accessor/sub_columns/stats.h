@@ -14,6 +14,30 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
+// Physical scalar type a separated sub-column is stored in. Independent of the accessor type
+// (Array/Sparsed/Dictionary). `BinaryJson` (default) keeps the per-value BinaryJson blob and is the
+// fallback whenever a column is not a homogeneous non-null scalar (mixed types, containers, or a
+// present JSON null); the others store the raw scalar in the corresponding native Arrow array.
+enum class EValueType : ui8 {
+    BinaryJson = 0,
+    Double = 1,
+    Bool = 2,
+    String = 3,
+};
+
+// Arrow storage type for a value type. Note String and BinaryJson are both physically binary,
+// so callers must discriminate them via the value type, not the array type id.
+std::shared_ptr<arrow::DataType> GetArrowTypeForValueType(const EValueType valueType);
+
+// Merge lattice for value types: equal types keep the type, anything divergent (incl. an unset
+// accumulator meeting nothing) falls back to BinaryJson. `acc` is nullopt for a neutral start.
+inline EValueType JoinValueType(const std::optional<EValueType>& acc, const EValueType next) {
+    if (!acc) {
+        return next;
+    }
+    return (*acc == next) ? *acc : EValueType::BinaryJson;
+}
+
 class TSplittedColumns;
 
 class TDictStats {
@@ -25,6 +49,7 @@ private:
     std::shared_ptr<arrow::UInt32Array> DataRecordsCount;
     std::shared_ptr<arrow::UInt32Array> DataSize;
     std::shared_ptr<arrow::UInt8Array> AccessorType;
+    std::shared_ptr<arrow::UInt8Array> ValueType;
     TJsonPathAccessorTriePtr CachedJsonPathAccessorTrie;
 
     TJsonPathAccessorTriePtr GenerateJsonPathAccessorTrie() const {
@@ -55,10 +80,15 @@ public:
         result.InsertValue("records", NArrow::DebugJson(DataRecordsCount, 1000000, 1000000)["data"]);
         result.InsertValue("size", NArrow::DebugJson(DataSize, 1000000, 1000000)["data"]);
         result.InsertValue("accessor", NArrow::DebugJson(AccessorType, 1000000, 1000000)["data"]);
+        result.InsertValue("value_type", NArrow::DebugJson(ValueType, 1000000, 1000000)["data"]);
         return result;
     }
     static TDictStats BuildEmpty();
     TString SerializeAsString(const std::shared_ptr<NSerialization::ISerializer>& serializer) const;
+
+    // Deserialize a stats blob, transparently accepting both the current (5-column, with value_type)
+    // and the legacy (4-column) layout via try-decode-fallback.
+    static TDictStats DeserializeFromBlob(const TString& blob);
 
     void CreateJsonPathAccessorTrieCache() {
         CachedJsonPathAccessorTrie = GenerateJsonPathAccessorTrie();
@@ -88,12 +118,19 @@ public:
     private:
         YDB_READONLY(ui32, RecordsCount, 0);
         YDB_READONLY(ui32, DataSize, 0);
+        // nullopt = no column has contributed a value type yet (neutral element for the join).
+        std::optional<EValueType> ValueTypeJoin;
 
     public:
         TRTStatsValue() = default;
-        TRTStatsValue(const ui32 recordsCount, const ui32 dataSize)
+        TRTStatsValue(const ui32 recordsCount, const ui32 dataSize, const std::optional<EValueType>& valueType = std::nullopt)
             : RecordsCount(recordsCount)
-            , DataSize(dataSize) {
+            , DataSize(dataSize)
+            , ValueTypeJoin(valueType) {
+        }
+
+        EValueType GetValueType() const {
+            return ValueTypeJoin.value_or(EValueType::BinaryJson);
         }
 
         void AddValue(const std::string_view str) {
@@ -104,6 +141,7 @@ public:
         void Add(const TDictStats& stats, const ui32 idx) {
             RecordsCount += stats.GetColumnRecordsCount(idx);
             DataSize += stats.GetColumnSize(idx);
+            ValueTypeJoin = JoinValueType(ValueTypeJoin, stats.GetValueType(idx));
         }
 
         // Decides only the Array-vs-Sparsed axis and never returns Dictionary,
@@ -122,8 +160,8 @@ public:
         TRTStats(const TString& keyName)
             : KeyName(keyName) {
         }
-        TRTStats(const TString& keyName, const ui32 recordsCount, const ui32 dataSize)
-            : TBase(recordsCount, dataSize)
+        TRTStats(const TString& keyName, const ui32 recordsCount, const ui32 dataSize, const std::optional<EValueType>& valueType = std::nullopt)
+            : TBase(recordsCount, dataSize, valueType)
             , KeyName(keyName) {
         }
 
@@ -151,14 +189,17 @@ public:
         arrow::UInt32Builder* Records;
         arrow::UInt32Builder* DataSize;
         arrow::UInt8Builder* AccessorType;
+        arrow::UInt8Builder* ValueType;
 
         std::optional<TString> LastKeyName;
         ui32 RecordsCount = 0;
 
     public:
         TBuilder();
-        void Add(const TString& name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType);
-        void Add(const std::string_view name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType);
+        void Add(const TString& name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType,
+            const EValueType valueType);
+        void Add(const std::string_view name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType,
+            const EValueType valueType);
         TDictStats Finish();
     };
 
@@ -169,8 +210,7 @@ public:
     std::shared_ptr<arrow::Schema> BuildColumnsSchema() const {
         arrow::FieldVector fields;
         for (ui32 i = 0; i < DataNames->length(); ++i) {
-            const auto view = DataNames->GetView(i);
-            fields.emplace_back(std::make_shared<arrow::Field>(std::string(view.data(), view.size()), arrow::binary()));
+            fields.emplace_back(GetField(i));
         }
         return std::make_shared<arrow::Schema>(fields);
     }
@@ -178,12 +218,12 @@ public:
     std::shared_ptr<arrow::Field> GetField(const ui32 index) const {
         AFL_VERIFY(index < DataNames->length());
         auto name = DataNames->GetView(index);
-        return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), arrow::binary());
+        return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), GetArrowTypeForValueType(GetValueType(index)));
     }
 
     TRTStats GetRTStats(const ui32 index) const {
         auto view = GetColumnName(index);
-        return TRTStats(TString(view.data(), view.size()), GetColumnRecordsCount(index), GetColumnSize(index));
+        return TRTStats(TString(view.data(), view.size()), GetColumnRecordsCount(index), GetColumnSize(index), GetValueType(index));
     }
 
     ui32 GetDataNamesCount() const {
@@ -196,6 +236,7 @@ public:
 
     TConstructorContainer GetAccessorConstructor(const ui32 columnIndex) const;
     IChunkedArray::EType GetAccessorType(const ui32 columnIndex) const;
+    EValueType GetValueType(const ui32 columnIndex) const;
 
     std::string_view GetColumnName(const ui32 index) const;
     TString GetColumnNameString(const ui32 index) const {
@@ -206,6 +247,16 @@ public:
     ui32 GetColumnSize(const ui32 index) const;
 
     static std::shared_ptr<arrow::Schema> GetStatsSchema() {
+        static arrow::FieldVector fields = { std::make_shared<arrow::Field>("name", arrow::binary()),
+            std::make_shared<arrow::Field>("count", arrow::uint32()), std::make_shared<arrow::Field>("size", arrow::uint32()),
+            std::make_shared<arrow::Field>("accessor_type", arrow::uint8()), std::make_shared<arrow::Field>("value_type", arrow::uint8()) };
+        static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(fields);
+        return result;
+    }
+
+    // Legacy schema without value_type; used only as the fallback when deserializing blobs written
+    // before native scalar columns existed (see TSubColumnsHeader::ReadHeader).
+    static std::shared_ptr<arrow::Schema> GetStatsSchemaLegacy() {
         static arrow::FieldVector fields = { std::make_shared<arrow::Field>("name", arrow::binary()),
             std::make_shared<arrow::Field>("count", arrow::uint32()), std::make_shared<arrow::Field>("size", arrow::uint32()),
             std::make_shared<arrow::Field>("accessor_type", arrow::uint8()) };

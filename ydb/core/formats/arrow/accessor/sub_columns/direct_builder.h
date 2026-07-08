@@ -193,7 +193,9 @@ public:
             } else if (allowDictionary && settings.IsDictionary(presentCount, enumerateValues)) {
                 accessorType = IChunkedArray::EType::Dictionary;
             }
-            builder.Add(i->GetKeyName(), presentCount, i->GetDataSize(), accessorType);
+            // Native scalar detection fills this in a later phase; today every column stays BinaryJson.
+            const EValueType valueType = EValueType::BinaryJson;
+            builder.Add(i->GetKeyName(), presentCount, i->GetDataSize(), accessorType, valueType);
         }
         return builder.Finish();
     }

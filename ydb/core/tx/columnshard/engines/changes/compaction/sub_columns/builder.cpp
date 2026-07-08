@@ -63,7 +63,7 @@ void TMergedBuilder::FlushData() {
             auto accessor = ColumnBuilders[idx].Finish(RecordIndex);
             accessor = MaybeDictionaryEncode(accessor, ColumnBuilders[idx].GetFilledRecordsCount());
             statsBuilder.Add(ResultColumnStats.GetColumnName(idx), ColumnBuilders[idx].GetFilledRecordsCount(),
-                ColumnBuilders[idx].GetFilledRecordsSize(), accessor->GetType());
+                ColumnBuilders[idx].GetFilledRecordsSize(), accessor->GetType(), ResultColumnStats.GetValueType(idx));
             arrays.emplace_back(std::move(accessor));
         }
     }

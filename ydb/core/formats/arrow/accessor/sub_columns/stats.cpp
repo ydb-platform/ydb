@@ -5,10 +5,25 @@
 #include <ydb/core/formats/arrow/accessor/plain/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/constructor.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/formats/arrow/serializer/native.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
+
+std::shared_ptr<arrow::DataType> GetArrowTypeForValueType(const EValueType valueType) {
+    switch (valueType) {
+        case EValueType::BinaryJson:
+        case EValueType::String:
+            return arrow::binary();
+        case EValueType::Double:
+            return arrow::float64();
+        case EValueType::Bool:
+            return arrow::boolean();
+    }
+}
+
 TSplittedColumns TDictStats::SplitByVolume(const TSettings& settings, const ui32 recordsCount) const {
     std::map<ui64, std::vector<TRTStats>> bySize;
     ui64 sumSize = 0;
@@ -36,10 +51,10 @@ TSplittedColumns TDictStats::SplitByVolume(const TSettings& settings, const ui32
     auto columnsBuilder = MakeBuilder();
     auto othersBuilder = MakeBuilder();
     for (auto&& i : columnStats) {
-        columnsBuilder.Add(i.GetKeyName(), i.GetRecordsCount(), i.GetDataSize(), i.GetAccessorType(settings, recordsCount));
+        columnsBuilder.Add(i.GetKeyName(), i.GetRecordsCount(), i.GetDataSize(), i.GetAccessorType(settings, recordsCount), i.GetValueType());
     }
     for (auto&& i : otherStats) {
-        othersBuilder.Add(i.GetKeyName(), i.GetRecordsCount(), i.GetDataSize(), i.GetAccessorType(settings, recordsCount));
+        othersBuilder.Add(i.GetKeyName(), i.GetRecordsCount(), i.GetDataSize(), i.GetAccessorType(settings, recordsCount), i.GetValueType());
     }
     return TSplittedColumns(columnsBuilder.Finish(), othersBuilder.Finish());
 }
@@ -57,7 +72,8 @@ TDictStats TDictStats::Merge(const std::vector<const TDictStats*>& stats, const 
     }
     auto builder = MakeBuilder();
     for (auto&& i : resultMap) {
-        builder.Add(i.second.GetKeyName(), i.second.GetRecordsCount(), i.second.GetDataSize(), i.second.GetAccessorType(settings, recordsCount));
+        builder.Add(i.second.GetKeyName(), i.second.GetRecordsCount(), i.second.GetDataSize(),
+            i.second.GetAccessorType(settings, recordsCount), i.second.GetValueType());
     }
     return builder.Finish();
 }
@@ -80,15 +96,25 @@ std::string_view TDictStats::GetColumnName(const ui32 index) const {
 
 TDictStats::TDictStats(const std::shared_ptr<arrow::RecordBatch>& original)
     : Original(original) {
-    AFL_VERIFY(Original->num_columns() == 4)("count", Original->num_columns());
+    AFL_VERIFY(Original->num_columns() == 4 || Original->num_columns() == 5)("count", Original->num_columns());
     AFL_VERIFY(Original->column(0)->type()->id() == arrow::binary()->id());
     AFL_VERIFY(Original->column(1)->type()->id() == arrow::uint32()->id());
     AFL_VERIFY(Original->column(2)->type()->id() == arrow::uint32()->id());
     AFL_VERIFY(Original->column(3)->type()->id() == arrow::uint8()->id());
+    if (Original->num_columns() == 4) {
+        // Legacy stats (pre native scalar columns): synthesize an all-BinaryJson value_type column
+        // and normalize to 5 columns so every downstream user sees a uniform layout.
+        auto valueTypeArray = NArrow::TThreadSimpleArraysCache::Get(
+            arrow::uint8(), std::make_shared<arrow::UInt8Scalar>((ui8)EValueType::BinaryJson), Original->num_rows());
+        Original = arrow::RecordBatch::Make(GetStatsSchema(), Original->num_rows(),
+            { Original->column(0), Original->column(1), Original->column(2), Original->column(3), valueTypeArray });
+    }
+    AFL_VERIFY(Original->column(4)->type()->id() == arrow::uint8()->id());
     DataNames = std::static_pointer_cast<arrow::StringArray>(Original->column(0));
     DataRecordsCount = std::static_pointer_cast<arrow::UInt32Array>(Original->column(1));
     DataSize = std::static_pointer_cast<arrow::UInt32Array>(Original->column(2));
     AccessorType = std::static_pointer_cast<arrow::UInt8Array>(Original->column(3));
+    ValueType = std::static_pointer_cast<arrow::UInt8Array>(Original->column(4));
 }
 
 TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex) const {
@@ -115,6 +141,19 @@ TDictStats TDictStats::BuildEmpty() {
     return result;
 }
 
+TDictStats TDictStats::DeserializeFromBlob(const TString& blob) {
+    NSerialization::TNativeSerializer serializer;
+    auto result = serializer.Deserialize(blob, GetStatsSchema());
+    if (result.ok()) {
+        return TDictStats(*result);
+    }
+    // Legacy blob without the value_type column: the current schema has one extra trailing field,
+    // so the payload fails buffer/field-count validation cleanly (no silent misread). Retry legacy.
+    auto legacy = serializer.Deserialize(blob, GetStatsSchemaLegacy());
+    AFL_VERIFY(legacy.ok())("error", legacy.status().ToString());
+    return TDictStats(*legacy);
+}
+
 TString TDictStats::SerializeAsString(const std::shared_ptr<NSerialization::ISerializer>& serializer) const {
     if (serializer) {
         AFL_VERIFY(serializer);
@@ -129,20 +168,28 @@ IChunkedArray::EType TDictStats::GetAccessorType(const ui32 columnIndex) const {
     return (IChunkedArray::EType)AccessorType->Value(columnIndex);
 }
 
+EValueType TDictStats::GetValueType(const ui32 columnIndex) const {
+    AFL_VERIFY(columnIndex < ValueType->length());
+    return (EValueType)ValueType->Value(columnIndex);
+}
+
 TDictStats::TBuilder::TBuilder() {
     Builders = NArrow::MakeBuilders(GetStatsSchema());
-    AFL_VERIFY(Builders.size() == 4);
+    AFL_VERIFY(Builders.size() == 5);
     AFL_VERIFY(Builders[0]->type()->id() == arrow::binary()->id());
     AFL_VERIFY(Builders[1]->type()->id() == arrow::uint32()->id());
     AFL_VERIFY(Builders[2]->type()->id() == arrow::uint32()->id());
     AFL_VERIFY(Builders[3]->type()->id() == arrow::uint8()->id());
+    AFL_VERIFY(Builders[4]->type()->id() == arrow::uint8()->id());
     Names = static_cast<arrow::StringBuilder*>(Builders[0].get());
     Records = static_cast<arrow::UInt32Builder*>(Builders[1].get());
     DataSize = static_cast<arrow::UInt32Builder*>(Builders[2].get());
     AccessorType = static_cast<arrow::UInt8Builder*>(Builders[3].get());
+    ValueType = static_cast<arrow::UInt8Builder*>(Builders[4].get());
 }
 
-void TDictStats::TBuilder::Add(const TString& name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType) {
+void TDictStats::TBuilder::Add(const TString& name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType,
+    const EValueType valueType) {
     AFL_VERIFY(Builders.size());
     if (!LastKeyName) {
         LastKeyName = name;
@@ -156,12 +203,13 @@ void TDictStats::TBuilder::Add(const TString& name, const ui32 recordsCount, con
     TStatusValidator::Validate(Records->Append(recordsCount));
     TStatusValidator::Validate(DataSize->Append(dataSize));
     TStatusValidator::Validate(AccessorType->Append((ui8)accessorType));
+    TStatusValidator::Validate(ValueType->Append((ui8)valueType));
     ++RecordsCount;
 }
 
 void TDictStats::TBuilder::Add(
-    const std::string_view name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType) {
-    Add(TString(name.data(), name.size()), recordsCount, dataSize, accessorType);
+    const std::string_view name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType, const EValueType valueType) {
+    Add(TString(name.data(), name.size()), recordsCount, dataSize, accessorType, valueType);
 }
 
 TDictStats TDictStats::TBuilder::Finish() {

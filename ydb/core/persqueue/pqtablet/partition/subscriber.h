@@ -164,8 +164,6 @@ public:
     //forget on timeout
     TMaybe<TReadInfo> ForgetSubscription(const ui64 cookie);
 
-    TVector<std::pair<TReadInfo, ui64>> FailSubscriptionsForUser(const TString& user);
-
     //form TReadInfo::Cached with new data and return ready reads
     TVector<std::pair<TReadInfo, ui64>> CompleteSubscriptions(const ui64 endOffset);
 private:
@@ -186,8 +184,6 @@ public:
 
     //get completed subscriptions
     TVector<std::pair<TReadInfo, ui64>> GetReads(const ui64 endOffsets);
-
-    TVector<std::pair<TReadInfo, ui64>> FailSubscriptionsForUser(const TString& user);
 
 private:
     TSubscriberLogic Subscriber;

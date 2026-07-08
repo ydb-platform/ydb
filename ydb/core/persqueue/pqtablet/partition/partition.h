@@ -303,8 +303,6 @@ private:
     void ProcessHasDataRequests(const TActorContext& ctx);
     bool ProcessHasDataRequest(const THasDataReq& request, const TActorContext& ctx);
     void FailStaleSessionReadRequests(const TString& user, const TActorContext& ctx);
-    void SendHasDataSessionError(const THasDataReq& request, const TActorContext& ctx);
-    void EraseHasDataDeadlines(const THasDataReq& request);
     void ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription);
     void ProcessReserveRequests(const TActorContext& ctx);
     void ProcessTimestampRead(const TActorContext& ctx);

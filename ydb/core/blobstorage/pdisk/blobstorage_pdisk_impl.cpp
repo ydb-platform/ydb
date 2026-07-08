@@ -1583,6 +1583,9 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
 
         *Mon.NumActiveSlots = TotalOwners;
         *Mon.ExpectedSlotCount = ExpectedSlotCount;
+        if (ExpectedSlotCount) {
+            *Mon.SlotSizeBytes = ui64(Keeper.GetUserChunkPoolSize() / ExpectedSlotCount) * ui64(Format.ChunkSize);
+        }
 
         reportResult->DiskMetrics = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
         i64 minSlotSize = Max<i64>();

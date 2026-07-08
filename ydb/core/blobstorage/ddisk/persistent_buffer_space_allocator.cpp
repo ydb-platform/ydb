@@ -352,7 +352,15 @@ namespace NKikimr::NDDisk {
             return false;
         }
         FreeSpaceMap.erase(LockedChunkIdx);
-        std::erase_if(ChunksByFreeSpace, [this](TPersistentBufferSpaceAllocator::TChunkInfo &x) {return x.ChunkIdx == LockedChunkIdx;});
+        // A fully-free chunk (FreeSpace == SectorsInChunk) has the maximum possible free space,
+        // so in ChunksByFreeSpace (sorted ascending by FreeSpace) it is located at or near the
+        // very end of the vector. Locate it with a binary search on the unique {ChunkIdx, FreeSpace}
+        // key instead of scanning the whole vector, and erase it directly.
+        auto chunkIter = std::lower_bound(ChunksByFreeSpace.begin(), ChunksByFreeSpace.end(),
+            TChunkInfo{LockedChunkIdx, SectorsInChunk}, ChunksByFreeSpaceLess);
+        Y_ABORT_UNLESS(chunkIter != ChunksByFreeSpace.end()
+            && chunkIter->ChunkIdx == LockedChunkIdx && chunkIter->FreeSpace == SectorsInChunk);
+        ChunksByFreeSpace.erase(chunkIter);
         std::erase(OwnedChunks, LockedChunkIdx);
         FreeSpace -= SectorsInChunk;
         Y_DEBUG_ABORT_UNLESS(FreeSpace == VerifyFreeSpace());

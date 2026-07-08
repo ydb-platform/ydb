@@ -346,6 +346,11 @@
                 "ColumnId": 20,
                 "ColumnName": "MaintenanceStatus",
                 "ColumnType": "Byte"
+            },
+            {
+                "ColumnId": 23,
+                "ColumnName": "DiskScope",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -369,7 +374,8 @@
                     17,
                     18,
                     19,
-                    20
+                    20,
+                    23
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1920,11 +1926,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "PDiskConfig",
-                "ColumnType": "String"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "HostConfigId",
                 "ColumnType": "Uint64"
@@ -1953,19 +1954,30 @@
                 "ColumnId": 6,
                 "ColumnName": "Kind",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "PDiskConfig",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "DiskScope",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,

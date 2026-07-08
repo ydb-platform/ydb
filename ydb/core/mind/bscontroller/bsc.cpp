@@ -1267,7 +1267,8 @@ void TBlobStorageController::TStaticGroupInfo::UpdateLayoutCorrect(TBlobStorageC
 
     for (size_t i = 0; i < Info->GetTotalVDisksNum(); ++i) {
         const auto& [nodeId, pdiskId, vdiskSlotId] = DecomposeVDiskServiceId(Info->GetDynamicInfo().ServiceIdForOrderNumber[i]);
-        layout.AddDisk({mapper, controller->HostRecords->GetLocation(nodeId), std::nullopt /* TODO: fill scope info */,
+        TPDiskId fullPDiskId(nodeId, pdiskId);
+        layout.AddDisk({mapper, controller->HostRecords->GetLocation(nodeId), controller->PDisks[fullPDiskId]->DiskScope,
             {nodeId, pdiskId}, geom}, i, false);
     }
 

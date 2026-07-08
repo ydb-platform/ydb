@@ -947,6 +947,16 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
     if (ev->Get()->Record.HasErrorCode() && ev->Get()->Record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
         const auto errorCode = ev->Get()->Record.GetErrorCode();
+        if (errorCode == NPersQueue::NErrorCode::READ_ERROR_NO_SESSION && WaitForData) {
+            YDB_LOG_DEBUG_CTX(ctx, "Session invalidated while waiting for data, unlock partition for next read",
+                {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                {"partition", Partition},
+                {"reason", ev->Get()->Record.GetErrorReason()});
+            WaitForData = false;
+            WaitDataInfly.clear();
+            SendPartitionReady(ctx);
+            return;
+        }
         if (errorCode == NPersQueue::NErrorCode::WRONG_COOKIE
             || errorCode == NPersQueue::NErrorCode::BAD_REQUEST
             || errorCode == NPersQueue::NErrorCode::READ_ERROR_NO_SESSION) {

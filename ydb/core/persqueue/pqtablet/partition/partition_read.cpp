@@ -207,6 +207,77 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
     }
 }
 
+void TPartition::SendHasDataSessionError(const THasDataReq& request, const TActorContext& ctx) {
+    auto response = MakeHolder<TEvPersQueue::TEvResponse>();
+    response->Record.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
+    response->Record.SetErrorCode(NPersQueue::NErrorCode::READ_ERROR_NO_SESSION);
+    response->Record.SetErrorReason(TStringBuilder() << "no such session for consumer '" << request.ClientId << "'");
+    ctx.Send(request.Sender, response.Release());
+}
+
+void TPartition::EraseHasDataDeadlines(const THasDataReq& request) {
+    for (auto it = HasDataDeadlines.begin(); it != HasDataDeadlines.end();) {
+        if (it->Request.Num == request.Num && it->Request.Offset == request.Offset) {
+            it = HasDataDeadlines.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void TPartition::FailStaleSessionReadRequests(const TString& user, const TActorContext& ctx) {
+    const TString error = TStringBuilder() << "no such session for consumer '" << user << "'";
+
+    for (auto it = HasDataRequests.begin(); it != HasDataRequests.end();) {
+        if (it->ClientId != user) {
+            ++it;
+            continue;
+        }
+        SendHasDataSessionError(*it, ctx);
+        EraseHasDataDeadlines(*it);
+        if (InitDone) {
+            auto& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
+            userInfo.ForgetSubscription(GetEndOffset(), ctx.Now());
+        }
+        it = HasDataRequests.erase(it);
+    }
+
+    for (auto& [info, cookie] : Subscriber.FailSubscriptionsForUser(user)) {
+        TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_NO_SESSION].Increment(1);
+        TabletCounters.Cumulative()[COUNTER_PQ_READ_SUBSCRIPTION_ERROR].Increment(1);
+        TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor((ctx.Now() - info.Timestamp).MilliSeconds());
+        ReplyError(ctx, info.Destination, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION, error, info.ReplyTo);
+        if (auto* userInfo = UsersInfoStorage->GetIfExists(user)) {
+            userInfo->ForgetSubscription(GetEndOffset(), ctx.Now());
+        }
+        OnReadRequestFinished(info.Destination, 0, user, ctx);
+        Y_UNUSED(cookie);
+    }
+
+    TVector<ui64> readCookiesToErase;
+    for (auto it = ReadInfo.begin(); it != ReadInfo.end(); ++it) {
+        if (it->second.User != user) {
+            continue;
+        }
+        auto& info = it->second;
+        TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_NO_SESSION].Increment(1);
+        TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR].Increment(1);
+        TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor((ctx.Now() - info.Timestamp).MilliSeconds());
+        ReplyError(ctx, info.Destination, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION, error, info.ReplyTo);
+        if (auto* userInfo = UsersInfoStorage->GetIfExists(user)) {
+            if (info.Destination != 0 && userInfo->ActiveReads > 0) {
+                --userInfo->ActiveReads;
+                userInfo->UpdateReadingState();
+            }
+        }
+        OnReadRequestFinished(info.Destination, 0, user, ctx);
+        readCookiesToErase.push_back(it->first);
+    }
+    for (ui64 cookie : readCookiesToErase) {
+        ReadInfo.erase(cookie);
+    }
+}
+
 void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     PQ_ENSURE(record.HasSender());

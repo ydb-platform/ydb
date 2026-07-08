@@ -17,6 +17,21 @@ TMaybe<TReadInfo> TSubscriberLogic::ForgetSubscription(const ui64 cookie)
     return std::move(res);
 }
 
+TVector<std::pair<TReadInfo, ui64>> TSubscriberLogic::FailSubscriptionsForUser(const TString& user) {
+    TVector<std::pair<TReadInfo, ui64>> res;
+    for (auto it = WaitingReads.begin(); it != WaitingReads.end();) {
+        auto ri = ReadInfo.find(it->Cookie);
+        if (ri != ReadInfo.end() && ri->second.User == user) {
+            res.emplace_back(std::move(ri->second), it->Cookie);
+            ReadInfo.erase(ri);
+            it = WaitingReads.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return res;
+}
+
 void TSubscriberLogic::AddSubscription(TReadInfo&& info, const ui64 cookie)
 {
     AFL_ENSURE(WaitingReads.empty() || WaitingReads.back().Offset == info.Offset);
@@ -76,6 +91,10 @@ TVector<std::pair<TReadInfo, ui64>> TSubscriber::GetReads(const ui64 endOffset) 
     auto res = Subscriber.CompleteSubscriptions(endOffset);
     Counters.Cumulative()[COUNTER_PQ_READ_SUBSCRIPTION_OK].Increment(res.size());
     return res;
+}
+
+TVector<std::pair<TReadInfo, ui64>> TSubscriber::FailSubscriptionsForUser(const TString& user) {
+    return Subscriber.FailSubscriptionsForUser(user);
 }
 
 }// NPQ

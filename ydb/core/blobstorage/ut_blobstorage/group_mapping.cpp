@@ -1,6 +1,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
+#include <ydb/core/mind/bscontroller/layout_helpers.h>
 
 Y_UNIT_TEST_SUITE(GroupReconfiguration) {
 
@@ -500,5 +501,150 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
 
     Y_UNIT_TEST(ReassignsDoNotCauseErrorMessagesBlock4Plus2) {
         TestReassignsDoNotCauseErrorMessages(TBlobStorageGroupType::Erasure4Plus2Block, 1, 12);
+    }
+}
+
+
+Y_UNIT_TEST_SUITE(GroupAllocation) {
+    Y_UNIT_TEST(HalfRacks) {
+        const ui32 numNodes = 4;
+        TBlobStorageGroupType groupType = TBlobStorageGroupType::Erasure4Plus2Block;
+        ui32 pdisksPerScope = 4;
+        TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+            .NodeCount = numNodes,
+            .Erasure = groupType,
+            .ControllerNodeId = numNodes,
+            .LocationGenerator = [&](ui32 nodeId) {
+                NActorsInterconnect::TNodeLocation proto;
+                proto.SetDataCenter("A");
+                proto.SetRack(std::to_string(nodeId));
+                proto.SetUnit("1");
+                return TNodeLocation(proto);
+            },
+        });
+
+        {
+            NKikimrBlobStorage::EPDiskType pdiskType = NKikimrBlobStorage::EPDiskType::ROT;
+            NKikimrBlobStorage::TConfigRequest request;
+            auto *cmd = request.AddCommand()->MutableDefineHostConfig();
+            cmd->SetHostConfigId(1);
+            for (std::string diskScope : {"scope-A", "scope-B"}) {
+                for (ui32 pdiskIdx = 0; pdiskIdx < pdisksPerScope; ++pdiskIdx) {
+                    auto *drive = cmd->AddDrive();
+                    std::string pdiskName = diskScope + std::to_string(pdiskIdx);
+                    drive->SetPath("SectorMap:" + pdiskName + ":1000");
+                    drive->SetType(pdiskType);
+                    drive->SetDiskScope(diskScope.data(), diskScope.size());
+                }
+            }
+
+            auto *cmd1 = request.AddCommand()->MutableDefineBox();
+            cmd1->SetBoxId(1);
+            for (ui32 nodeId : env.Runtime->GetNodes()) {
+                auto *host = cmd1->AddHost();
+                host->MutableKey()->SetNodeId(nodeId);
+                host->SetHostConfigId(1);
+            }
+
+            auto *cmd2 = request.AddCommand()->MutableDefineStoragePool();
+            cmd2->SetBoxId(1);
+            cmd2->SetStoragePoolId(1);
+            cmd2->SetName(env.StoragePoolName);
+            cmd2->SetKind(env.StoragePoolName);
+            cmd2->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(env.Settings.Erasure.GetErasure()));
+            cmd2->SetVDiskKind("Default");
+            cmd2->SetNumGroups(1);
+            cmd2->AddPDiskFilter()->AddProperty()->SetType(pdiskType);
+
+            NKikimrBlobStorage::TGroupGeometry* geometry = cmd2->MutableGeometry();
+            geometry->SetNumFailRealms(1);
+            geometry->SetNumFailDomainsPerFailRealm(8);
+            geometry->SetNumVDisksPerFailDomain(1);
+            geometry->SetRealmLevelBegin(10);
+            geometry->SetRealmLevelEnd(20);
+            geometry->SetDomainLevelBegin(10);
+            geometry->SetDomainLevelEnd(255);
+
+            auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        }
+
+        NKikimrBlobStorage::TBaseConfig base = env.FetchBaseConfig();
+        UNIT_ASSERT_VALUES_EQUAL(base.GroupSize(), 1);
+
+        const ui32 groupId = base.GetGroup(0).GetGroupId();
+
+        TGroupGeometryInfo geom = CreateGroupGeometry(groupType, 1, 8, 1, 10, 20, 10, 255);
+
+        auto getPDiskScopes = [](const NKikimrBlobStorage::TBaseConfig& cfg) {
+            std::map<std::pair<ui32, ui32>, TString> scopes;
+            for (const auto& pdisk : cfg.GetPDisk()) {
+                if (pdisk.HasDiskScope()) {
+                    scopes.emplace(std::make_pair(pdisk.GetNodeId(), pdisk.GetPDiskId()), pdisk.GetDiskScope());
+                }
+            }
+            return scopes;
+        };
+
+        auto checkLayout = [&](const NKikimrBlobStorage::TBaseConfig& cfg) {
+            TString error;
+            UNIT_ASSERT_C(CheckBaseConfigLayout(geom, cfg, true, error), error);
+
+            auto scopes = getPDiskScopes(cfg);
+            std::set<std::pair<ui32, ui32>> usedPDisks;
+            std::set<std::pair<ui32, TString>> usedNodeScopePairs;
+            for (const auto& vslot : cfg.GetVSlot()) {
+                const auto key = std::make_pair(vslot.GetVSlotId().GetNodeId(), vslot.GetVSlotId().GetPDiskId());
+                const auto it = scopes.find(key);
+                UNIT_ASSERT_C(it != scopes.end(), "group VDisk resides on PDisk without DiskScope, nodeId# "
+                        << key.first << " pdiskId# " << key.second);
+                const TString& scope = it->second;
+                usedPDisks.insert(key);
+                const bool inserted = usedNodeScopePairs.emplace(key.first, scope).second;
+                UNIT_ASSERT_C(inserted, "two group VDisks share the same node and DiskScope, nodeId# "
+                        << key.first << " scope# " << scope);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(usedPDisks.size(), 8);
+            UNIT_ASSERT_VALUES_EQUAL(usedNodeScopePairs.size(), 8);
+        };
+
+        auto checkGroupStatus = [&]() {
+            TActorId edge = env.Runtime->AllocateEdgeActor(1);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvStatus(TInstant::Max()));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvStatusResult>(edge, true, TInstant::Max());
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        };
+
+        env.Sim(TDuration::Seconds(30));
+
+        checkLayout(base);
+        checkGroupStatus();
+
+        for (ui32 i = 0; i < 100; ++i) {
+            base = env.FetchBaseConfig();
+            const auto& group = base.GetGroup(0);
+            const ui32 idx = RandomNumber<ui32>(group.VSlotIdSize());
+
+            const NKikimrBlobStorage::TBaseConfig::TVSlot& vslot = base.GetVSlot(idx);
+
+            NKikimrBlobStorage::TConfigRequest request;
+            auto* reassign = request.AddCommand()->MutableReassignGroupDisk();
+            reassign->SetGroupId(vslot.GetGroupId());
+            reassign->SetGroupGeneration(vslot.GetGroupGeneration());
+            reassign->SetFailRealmIdx(vslot.GetFailRealmIdx());
+            reassign->SetFailDomainIdx(vslot.GetFailDomainIdx());
+            reassign->SetVDiskIdx(vslot.GetVDiskIdx());
+
+            auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), "iteration# " << i << " " << response.GetErrorDescription());
+
+            env.Sim(TDuration::Seconds(30));
+
+            base = env.FetchBaseConfig();
+            checkLayout(base);
+            checkGroupStatus();
+        }
     }
 }

@@ -1,4 +1,7 @@
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -697,6 +700,59 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                     {{"idx_bloom_1", {"Key1"}}, {"idx_bloom_2", {"Key1", "Key2"}}});
             }
         });
+    }
+
+    Y_UNIT_TEST(SkipUnfinishedIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        // Create table
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table1"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> indexBlocker(runtime, [&](const auto& ev) {
+            const auto& rec = ev->Get()->Record;
+            return rec.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpApplyIndexBuild;
+        });
+
+        const ui64 buildIndexTx = ++txId;
+        AsyncBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table1",
+            TBuildIndexConfig{"index1", NKikimrSchemeOp::EIndexTypeGlobal, {"value"}, {}, {}});
+        runtime.WaitFor("Index finalize request", [&]{ return indexBlocker.size(); });
+
+        // Perform consistent copy with indexes - it should skip the unfinished index
+        const ui64 copyTx = ++txId;
+        AsyncConsistentCopyTables(runtime, copyTx, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table1"
+                DstPath: "/MyRoot/TableBackup"
+                IsBackup: true
+            }
+        )");
+        env.TestWaitNotification(runtime, copyTx);
+
+        // Let index build finish (it shouldn't fail!)
+        indexBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        // Check that the unfinished index is not copied
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableBackup/index1"), {NLs::PathNotExist});
+
+        // Check that the table is not left locked by dropping it
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
     }
 
     Y_UNIT_TEST(ConsistentCopyTableWithMultiColumnStatistics) {

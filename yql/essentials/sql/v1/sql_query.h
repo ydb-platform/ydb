@@ -39,9 +39,9 @@ private:
     bool AlterTableSetIndexSetting(const TRule_alter_table_set_table_setting_compat& node, TTableSettings& tableSettings, TIndexDescription::TIndexSettings& indexSettings, ETableType tableType);
     bool AlterTableResetTableSetting(const TRule_alter_table_reset_table_setting& node, TTableSettings& tableSettings, ETableType tableType);
     bool AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlterTableParameters& params);
-    void AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params);
+    bool AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params);
     bool AlterTableAddStatistics(const TRule_alter_table_add_statistics& node, TAlterTableParameters& params);
-    void AlterTableDropStatistics(const TRule_alter_table_drop_statistics& node, TAlterTableParameters& params);
+    bool AlterTableDropStatistics(const TRule_alter_table_drop_statistics& node, TAlterTableParameters& params);
     void AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params);
     bool AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params);
     bool AlterTableAlterChangefeed(const TRule_alter_table_alter_changefeed& node, TAlterTableParameters& params);

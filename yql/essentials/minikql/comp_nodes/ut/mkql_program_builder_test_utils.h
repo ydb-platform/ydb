@@ -2,12 +2,21 @@
 
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/udf_value_test_support/struct_variant_type.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
+
+#include <array>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+#include <variant>
 
 namespace NKikimr::NMiniKQL::NTest {
 
 using NYql::NUdf::NTest::TStructMember;
+using NYql::NUdf::NTest::TStructMemberName;
 using NYql::NUdf::NTest::TStructType;
+using NYql::NUdf::NTest::TStructVariant;
 
 namespace NPrivate {
 
@@ -69,6 +78,8 @@ template <typename... Args>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const std::variant<Args...>& v);
 template <typename T>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TVector<T>& nodes);
+template <typename... TMembers>
+TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TStructVariant<TMembers...>& value);
 
 class TSingularVoid {
 public:
@@ -262,6 +273,18 @@ TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TVector<T>& no
                             ? ConvertToMinikqlType<T>(pb)
                             : convertedNodes.front().GetStaticType();
     return pb.NewList(type, std::move(convertedNodes));
+}
+
+template <typename... TMembers>
+TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TStructVariant<TMembers...>& value) {
+    TVector<std::pair<std::string_view, TType*>> members = {
+        {TMembers::MemberName(),
+         ConvertValueToLiteralNode(pb, std::remove_cvref_t<decltype(std::declval<TMembers>().Value)>{}).GetStaticType()}...};
+    auto varType = pb.NewVariantType(pb.NewStructType(members));
+    auto alternative = value.VisitActive([&](const auto& inner) {
+        return ConvertValueToLiteralNode(pb, inner);
+    });
+    return pb.NewVariant(alternative, value.Name(), varType);
 }
 
 } // namespace NKikimr::NMiniKQL::NTest

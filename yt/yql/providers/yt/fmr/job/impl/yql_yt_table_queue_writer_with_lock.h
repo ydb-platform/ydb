@@ -6,7 +6,7 @@
 #include <util/system/mutex.h>
 #include <yt/cpp/mapreduce/interface/io.h>
 #include <memory>
-#include "yql_yt_raw_table_queue.h"
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_raw_table_queue.h>
 
 namespace NYql::NFmr {
 

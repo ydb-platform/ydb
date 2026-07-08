@@ -27,6 +27,26 @@ bool ValidateView(TPosition pos, TContext& ctx, TStringBuf service, TViewDescrip
     return true;
 }
 
+namespace {
+
+bool ValidateColumnIsDefined(TContext& ctx, const TIdentifier& column, const THashSet<TString>& definedColumns, bool allowUndefinedColumns) {
+    if (!allowUndefinedColumns && !definedColumns.contains(column.Name)) {
+        ctx.Error(column.Pos) << "Undefined column: " << column.Name;
+        return false;
+    }
+    return true;
+}
+
+bool ValidateNameIsUnique(TContext& ctx, THashSet<TString>& seenNames, const TIdentifier& name, TStringBuf entityKind) {
+    if (!seenNames.insert(name.Name).second) {
+        ctx.Error(name.Pos) << entityKind << " " << name.Name << " must be defined once";
+        return false;
+    }
+    return true;
+}
+
+} // anonymous namespace
+
 class TUniqueTableKey: public ITableKeys {
 public:
     TUniqueTableKey(TPosition pos, TString service, TDeferredAtom cluster,
@@ -1193,8 +1213,7 @@ public:
 
             THashSet<TString> pkColumns;
             for (auto& keyColumn : Params_.PkColumns) {
-                if (!allowUndefinedColumns && !columnsSet.contains(keyColumn.Name)) {
-                    ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name;
+                if (!ValidateColumnIsDefined(ctx, keyColumn, columnsSet, allowUndefinedColumns)) {
                     return false;
                 }
                 if (!pkColumns.insert(keyColumn.Name).second) {
@@ -1203,35 +1222,30 @@ public:
                 }
             }
             for (auto& keyColumn : Params_.PartitionByColumns) {
-                if (!allowUndefinedColumns && !columnsSet.contains(keyColumn.Name)) {
-                    ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name;
+                if (!ValidateColumnIsDefined(ctx, keyColumn, columnsSet, allowUndefinedColumns)) {
                     return false;
                 }
             }
             for (auto& keyColumn : Params_.OrderByColumns) {
-                if (!allowUndefinedColumns && !columnsSet.contains(keyColumn.first.Name)) {
-                    ctx.Error(keyColumn.first.Pos) << "Undefined column: " << keyColumn.first.Name;
+                if (!ValidateColumnIsDefined(ctx, keyColumn.first, columnsSet, allowUndefinedColumns)) {
                     return false;
                 }
             }
 
             THashSet<TString> indexNames;
             for (const auto& index : Params_.Indexes) {
-                if (!indexNames.insert(index.Name.Name).second) {
-                    ctx.Error(index.Name.Pos) << "Index " << index.Name.Name << " must be defined once";
+                if (!ValidateNameIsUnique(ctx, indexNames, index.Name, "Index")) {
                     return false;
                 }
 
                 for (const auto& indexColumn : index.IndexColumns) {
-                    if (!allowUndefinedColumns && !columnsSet.contains(indexColumn.Name)) {
-                        ctx.Error(indexColumn.Pos) << "Undefined column: " << indexColumn.Name;
+                    if (!ValidateColumnIsDefined(ctx, indexColumn, columnsSet, allowUndefinedColumns)) {
                         return false;
                     }
                 }
 
                 for (const auto& dataColumn : index.DataColumns) {
-                    if (!allowUndefinedColumns && !columnsSet.contains(dataColumn.Name)) {
-                        ctx.Error(dataColumn.Pos) << "Undefined column: " << dataColumn.Name;
+                    if (!ValidateColumnIsDefined(ctx, dataColumn, columnsSet, allowUndefinedColumns)) {
                         return false;
                     }
                 }
@@ -1239,16 +1253,14 @@ public:
 
             THashSet<TString> cfNames;
             for (const auto& cf : Params_.Changefeeds) {
-                if (!cfNames.insert(cf.Name.Name).second) {
-                    ctx.Error(cf.Name.Pos) << "Changefeed " << cf.Name.Name << " must be defined once";
+                if (!ValidateNameIsUnique(ctx, cfNames, cf.Name, "Changefeed")) {
                     return false;
                 }
             }
 
             THashSet<TString> statisticsNames;
             for (const auto& statistics : Params_.Statistics) {
-                if (!statisticsNames.insert(statistics.Name.Name).second) {
-                    ctx.Error(statistics.Name.Pos) << "Statistics " << statistics.Name.Name << " must be defined once";
+                if (!ValidateNameIsUnique(ctx, statisticsNames, statistics.Name, "Statistics")) {
                     return false;
                 }
 
@@ -1258,8 +1270,7 @@ public:
                 }
 
                 for (const auto& statisticsColumn : statistics.Columns) {
-                    if (!allowUndefinedColumns && !columnsSet.contains(statisticsColumn.Name)) {
-                        ctx.Error(statisticsColumn.Pos) << "Undefined column: " << statisticsColumn.Name;
+                    if (!ValidateColumnIsDefined(ctx, statisticsColumn, columnsSet, allowUndefinedColumns)) {
                         return false;
                     }
                 }
@@ -1903,8 +1914,7 @@ public:
         {
             THashSet<TString> statisticsNames;
             for (const auto& statistics : Params_.AddStatistics) {
-                if (!statisticsNames.insert(statistics.Name.Name).second) {
-                    ctx.Error(statistics.Name.Pos) << "Statistics " << statistics.Name.Name << " must be defined once";
+                if (!ValidateNameIsUnique(ctx, statisticsNames, statistics.Name, "Statistics")) {
                     return false;
                 }
 

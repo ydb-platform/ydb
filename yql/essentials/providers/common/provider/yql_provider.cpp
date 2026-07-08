@@ -313,7 +313,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
                     } else if (statItemName == "statisticsTypes") {
                         stat.Types(item.Value().Cast<TCoAtomList>());
                     } else {
-                        YQL_ENSURE(false, "unknown statistics item");
+                        YQL_ENSURE(false, "unknown statistics item " << statItemName);
                     }
                 }
                 statistics.push_back(stat.Done());

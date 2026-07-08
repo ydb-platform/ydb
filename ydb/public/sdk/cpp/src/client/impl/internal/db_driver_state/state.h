@@ -112,6 +112,7 @@ private:
     IInternalClient* DiscoveryClient_;
     std::unordered_map<TStateKey, std::weak_ptr<TDbDriverState>, TStateKeyHash> States_;
     std::shared_mutex Lock_;
+    std::condition_variable_any Notify_;
 };
 
 using TDbDriverStatePtr = TDbDriverState::TPtr;

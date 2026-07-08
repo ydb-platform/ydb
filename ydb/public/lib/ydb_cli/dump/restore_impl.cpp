@@ -622,7 +622,7 @@ TRestoreResult TRestoreClient::WaitForAvailableNodes(const TString& database, TD
     TDuration retrySleep = TDuration::MilliSeconds(1000);
     while (true) {
         auto result = client.ListEndpoints().GetValueSync();
-        if (result.GetStatus() == EStatus::UNAVAILABLE) {
+        if (result.GetStatus() == EStatus::UNAVAILABLE || (result.IsSuccess() && result.GetEndpointsInfo().empty())) {
             auto timeSpent = TDuration::Seconds(timer.Passed());
             if (timeSpent > waitDuration) {
                 auto error = TStringBuilder()

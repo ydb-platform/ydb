@@ -322,7 +322,7 @@ public:
         TString GetUsageForGroup() const {
             //return TStringBuilder() << std::ceil(std::clamp<float>(Usage, 0, 100) / 5) * 5 << '%';
             // we want 0%-95% groups instead of 5%-100% groups
-            // we allow usage > 100%
+            // we allow usage > 100% (a VDisk may overgrow its nominal slot share)
             return TStringBuilder() << std::floor(std::max<float>(Usage, 0) / 5) * 5 << '%';
         }
 
@@ -484,9 +484,12 @@ public:
                     DiskSpaceUsage = std::max(DiskSpaceUsage, itPDisk->second.GetDiskSpaceUsage());
                     MaxPDiskUsage = std::max(MaxPDiskUsage, itPDisk->second.PDiskUsage);
                     ui64 slotSize = itPDisk->second.GetSlotTotalSize() * TPDiskConfig::GetOwnerWeight(GroupSizeInUnits, itPDisk->second.SlotSizeInUnits);
-                    ui64 slotAvailable = slotSize > vdisk.AllocatedSize ? slotSize - vdisk.AllocatedSize : 0;
-                    if (slotAvailable < vdisk.AvailableSize || vdisk.AvailableSize == 0) {
-                        vdisk.AvailableSize = slotAvailable;
+                    // when a vdisk overgrows its nominal slot, keep its real AvailableSize
+                    if (slotSize > vdisk.AllocatedSize) {
+                        ui64 slotAvailable = slotSize - vdisk.AllocatedSize;
+                        if (slotAvailable < vdisk.AvailableSize || vdisk.AvailableSize == 0) {
+                            vdisk.AvailableSize = slotAvailable;
+                        }
                     }
                     limit += slotSize ? slotSize : vdisk.AllocatedSize + vdisk.AvailableSize;
                     available += vdisk.AvailableSize;

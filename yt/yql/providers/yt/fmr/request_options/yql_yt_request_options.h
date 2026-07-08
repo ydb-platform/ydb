@@ -100,9 +100,21 @@ public:
 
 EFmrErrorReason ParseFmrReasonFromErrorMessage(const TString& errorMessage);
 
+struct TFmrWriterSettings {
+    ui64 ChunkSize = 1024 * 1024;
+    ui64 MaxInflightChunks = 4;
+    ui64 MaxRowWeight = 1024 * 1024 * 16;
+    bool SkipSortedCheck = false;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+    bool operator==(const TFmrWriterSettings&) const = default;
+};
+
 struct TFmrUserJobSettings {
     ui64 ThreadPoolSize = 3;
     ui64 QueueSizeLimit = 100;
+    TFmrWriterSettings WriterSettings;
 
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);

@@ -11,6 +11,14 @@ using namespace NThreading;
 
 const TKeepAliveSettings TTableClient::TImpl::KeepAliveSettings = TKeepAliveSettings().ClientTimeout(KEEP_ALIVE_CLIENT_TIMEOUT);
 
+namespace {
+    NThreading::TFuture<void> MakeReadyFuture() {
+        auto promise = NThreading::NewPromise<void>();
+        auto future = promise.GetFuture();
+        promise.SetValue();
+        return future;
+    }
+}
 
 TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings) {
     return Min(settings.CloseIdleThreshold_, settings.KeepAliveIdleThreshold_);
@@ -90,9 +98,7 @@ void TTableClient::TImpl::InitStopper() {
     auto cb = [weak]() mutable {
         auto strong = weak.lock();
         if (!strong) {
-            auto promise = NThreading::NewPromise<void>();
-            promise.SetException("no more client");
-            return promise.GetFuture();
+            return MakeReadyFuture();
         }
         return strong->Drain();
     };
@@ -119,6 +125,9 @@ NThreading::TFuture<void> TTableClient::TImpl::Drain(bool closeRemote) {
         }
     }
     sessions.clear();
+    if (closeResults.empty()) {
+        return MakeReadyFuture();
+    }
     return NThreading::WaitExceptionOrAll(closeResults);
 }
 

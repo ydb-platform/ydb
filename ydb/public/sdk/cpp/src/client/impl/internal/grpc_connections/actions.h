@@ -89,11 +89,16 @@ private:
             LocalContext_.reset();
         }
 
-        if (ok) {
-            OnAlarm();
-        } else {
-            OnError();
-        }
+        auto guardFactory = this->Context_
+            ? this->Context_->GetCallbackGuardFactory()
+            : NYdbGrpc::TQueueClientCallbackGuardFactory();
+        NYdbGrpc::RunQueueClientCallback(guardFactory, [&] {
+            if (ok) {
+                OnAlarm();
+            } else {
+                OnError();
+            }
+        });
 
         return false;
     }

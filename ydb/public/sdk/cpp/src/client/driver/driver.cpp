@@ -366,7 +366,7 @@ TDriver::TDriver(const TDriverConfig& config) {
 }
 
 void TDriver::Stop(bool wait) {
-    if (TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback()) {
+    if (TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback() || IsGRpcCompletionThread()) {
         auto impl = Impl_;
         impl->StopFromCallback(std::move(impl), wait);
         return;

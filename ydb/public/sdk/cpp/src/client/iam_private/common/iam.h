@@ -71,8 +71,8 @@ public:
         return Provider_;
     }
 
-    TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
-        return std::make_shared<TCredentialsProvider>(Params_, std::move(facility));
+    TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> /*facility*/) const override {
+        return CreateProvider();
     }
 
     std::string GetClientIdentity() const override final {

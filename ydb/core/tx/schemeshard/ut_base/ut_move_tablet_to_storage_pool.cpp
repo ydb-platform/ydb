@@ -260,13 +260,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTabletToStoragePool) {
         );
         env.TestWaitNotification(runtime, {txId, txId - 1});
 
-        ui64 tenantSchemaShard = 0;
+        ui64 tenantSchemeShard = 0;
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
             NLs::PathExist,
             NLs::IsExternalSubDomain("USER_0"),
-            NLs::ExtractTenantSchemeshard(&tenantSchemaShard),
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
         });
-        UNIT_ASSERT(tenantSchemaShard != 0 && tenantSchemaShard != (ui64)-1);
+        UNIT_ASSERT(tenantSchemeShard != 0 && tenantSchemeShard != (ui64)-1);
 
         // Root schemeshard shows pool-1 for all channels of the tenant schemeshard.
         {

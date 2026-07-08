@@ -11,6 +11,8 @@
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/backoff_delay_provider.h>
+
 #include <util/generic/vector.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -49,6 +51,10 @@ public:
         THostIndex hostIndex,
         EOperation operation,
         TInstant now) = 0;
+
+    virtual void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) = 0;
+    virtual void OnDDiskConnected(THostIndex hostIndex, TInstant now) = 0;
+    virtual TDuration GetDDiskReconnectDelay(THostIndex hostIndex) = 0;
 
     // Picks the best host (by lowest inflight count) out of the provided set
     // of hosts. Ties are broken uniformly at random.
@@ -104,6 +110,11 @@ public:
         EOperation operation,
         TInstant now) override;
 
+    void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) override;
+    void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
+    [[nodiscard]] TDuration GetDDiskReconnectDelay(
+        THostIndex hostIndex) override;
+
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,
         EOperation operation) const override;
@@ -146,6 +157,7 @@ private:
     TVector<THostStat> HostStatistics;
     TVector<THostState> HostStates;
     TVector<EHostHealth> HostsHealths;
+    TVector<TBackoffDelayProvider> HostsReconnectDelays;
     TVector<TTimePredictor> TimePredictors;
 };
 

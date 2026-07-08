@@ -600,19 +600,23 @@ TExprNode::TPtr TExpression::GetExpressionBody() const {
     return Node->ChildPtr(1);
 }
 
-TVector<TInfoUnit> TExpression::GetInputIUs(bool includeSubplanVars, bool includeCorrelatedDeps) const {
+const TVector<TInfoUnit>& TExpression::GetInputIUs(bool includeSubplanVars, bool includeCorrelatedDeps) const {
     Y_ENSURE(Node->IsLambda(), "Expression node is not lambda");
+    ui32 index = ui32(includeSubplanVars)*2 + ui32(includeCorrelatedDeps);
+
+    if (InputIUs[index].has_value()) {
+        return InputIUs[index].value();
+    }
+
     TVector<TInfoUnit> IUs;
     GetAllMembers(Node, IUs);
-    if (IUs.empty()) {
-        return {};
-    }
-    else {
+    if (!IUs.empty()) {
         IUs.clear();
         Y_ENSURE(PlanProps, "Plan properties null for an expression with members");
         GetAllMembers(Node, IUs, *PlanProps, includeSubplanVars, includeCorrelatedDeps);
-        return IUs;
     }
+    InputIUs[index] = std::move(IUs);
+    return InputIUs[index].value();
 }
 
 TExpression TExpression::ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap) const {

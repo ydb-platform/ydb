@@ -112,6 +112,58 @@
                         "StructType";
                         [
                             [
+                                "v7_dep_unique";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "v7_prefix_dep_unique";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
                                 "prefix_is_uint64";
                                 [
                                     "DataType";

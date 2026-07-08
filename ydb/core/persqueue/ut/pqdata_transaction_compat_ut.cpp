@@ -211,6 +211,31 @@ Y_UNIT_TEST(DowngradeToLegacyTopicWriteClearsSupportivePartition) {
     AssertTopicWriteDualWrite(op, false, Nothing());
 }
 
+Y_UNIT_TEST(DowngradeToLegacyWriteApiNotSetClearsLegacy) {
+    NKikimrPQ::TPartitionOperation op;
+    op.SetPath("topic");
+    op.SetPartitionId(1);
+    op.SetConsumer("consumer");
+    op.SetCommitOffsetsBegin(10);
+    op.SetCommitOffsetsEnd(20);
+    UpgradeFromLegacy(op);
+
+    op.ClearOp();
+    op.MutableWrite()->SetSkipConflictCheck(true);
+
+    DowngradeToLegacy(op);
+
+    UNIT_ASSERT(op.HasWrite());
+    UNIT_ASSERT(op.GetSkipConflictCheck());
+    UNIT_ASSERT_EQUAL(op.GetWrite().GetSkipConflictCheck(), true);
+    UNIT_ASSERT(!op.HasCommitOffsetsBegin());
+    UNIT_ASSERT(!op.HasConsumer());
+    UNIT_ASSERT(!op.HasKafkaProducerInstanceId());
+    UNIT_ASSERT(!op.HasSupportivePartition());
+    UNIT_ASSERT(!op.GetKafkaTransaction());
+    UNIT_ASSERT(IsWriteTxOperation(op));
+}
+
 } // Y_UNIT_TEST_SUITE(TPartitionOperationCompat)
 
 } // namespace

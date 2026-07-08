@@ -232,6 +232,7 @@ void DowngradeToLegacy(NKikimrPQ::TPartitionOperation& op)
                     DowngradeKafkaWriteToLegacy(op.GetWrite(), op);
                     break;
                 case NKikimrPQ::TPartitionOperation::TWriteOp::API_NOT_SET:
+                    ClearLegacyPartitionOpFields(op);
                     if (op.GetWrite().HasSkipConflictCheck()) {
                         op.SetSkipConflictCheck(op.GetWrite().GetSkipConflictCheck());
                     }

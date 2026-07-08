@@ -365,6 +365,16 @@ void BuildDerivedGroups(TCpuTopology& topology) {
     SortGroups(topology.Packages);
 
     topology.PlacementGroups = topology.L3CacheGroups;
+    TCpuMask placementCpus;
+    for (const auto& group : topology.PlacementGroups) {
+        placementCpus = placementCpus | group.Cpus;
+    }
+
+    TCpuMask remainingCpus = topology.AllCpus - placementCpus;
+    if (!remainingCpus.IsEmpty()) {
+        topology.PlacementGroups.push_back(TCpuTopologyGroup{UnknownCpuTopologyId, std::move(remainingCpus)});
+    }
+
     ui32 placementGroupId = 0;
     for (auto& group : topology.PlacementGroups) {
         group.Id = placementGroupId++;
@@ -407,6 +417,7 @@ std::expected<TCpuTopology, TString> BuildFlatCpuTopology(TCpuId cpuCount) {
         result.Cpus.push_back(std::move(cpu));
     }
 
+    result.AllCpus = allCpus;
     result.NumaNodes.push_back(TCpuTopologyGroup{0, allCpus});
     BuildDerivedGroups(result);
     return result;
@@ -455,6 +466,9 @@ std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root) 
     result.Cpus = std::move(*cpus);
     if (result.Cpus.empty()) {
         return std::unexpected("no CPU topology data found under " + CpuRootPath(root).GetPath());
+    }
+    for (const auto& cpu : result.Cpus) {
+        result.AllCpus.Set(cpu.CpuId);
     }
 
     auto numaNodes = ParseNumaNodes(root);

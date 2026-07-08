@@ -85,7 +85,7 @@ void TFmrPartitioner::HandleFmrPartition(
         } else {
             if (curMinChunk != -1) {
                 std::vector<TTableRange> tableRange{TTableRange{.PartId = partId, .MinChunk = static_cast<ui64>(curMinChunk), .MaxChunk = i}};
-                TFmrTableInputRef fmrTableInput{.TableId = fmrTable.FmrTableId.Id, .TableRanges = tableRange, .Columns = fmrTable.Columns, .SerializedColumnGroups = fmrTable.SerializedColumnGroups, .SectionIndex = fmrTable.SectionIndex};
+                TFmrTableInputRef fmrTableInput{.TableId = fmrTable.FmrTableId.Id, .TableRanges = tableRange, .Columns = fmrTable.Columns, .SerializedColumnGroups = fmrTable.SerializedColumnGroups, .TableIndex = fmrTable.TableIndex};
                 currentFmrTasks.emplace_back(TTaskTableInputRef{.Inputs = {fmrTableInput}});
             }
             curMinChunk = -1;
@@ -97,7 +97,7 @@ void TFmrPartitioner::HandleFmrPartition(
                     break;
                 }
                 std::vector<TTableRange> tableRange{TTableRange{.PartId = partId, .MinChunk = j, .MaxChunk = j + 1}};
-                TFmrTableInputRef fmrTableInput{.TableId = fmrTable.FmrTableId.Id, .TableRanges = tableRange, .Columns = fmrTable.Columns, .SerializedColumnGroups = fmrTable.SerializedColumnGroups, .SectionIndex = fmrTable.SectionIndex};
+                TFmrTableInputRef fmrTableInput{.TableId = fmrTable.FmrTableId.Id, .TableRanges = tableRange, .Columns = fmrTable.Columns, .SerializedColumnGroups = fmrTable.SerializedColumnGroups, .TableIndex = fmrTable.TableIndex};
                 currentFmrTasks.emplace_back(TTaskTableInputRef{.Inputs = {fmrTableInput}});
                 ++j;
             }
@@ -107,7 +107,7 @@ void TFmrPartitioner::HandleFmrPartition(
 
     if (curMinChunk != -1) {
         TTableRange leftoverTableRange{.PartId = partId, .MinChunk = static_cast<ui64>(curMinChunk), .MaxChunk = stats.size()};
-        leftoverRanges.emplace_back(TLeftoverRange{.TableId = fmrTable.FmrTableId.Id, .TableRange = leftoverTableRange, .DataWeight = curDataWeight, .Columns = fmrTable.Columns, .SerializedColumnGroups = fmrTable.SerializedColumnGroups, .SectionIndex = fmrTable.SectionIndex});
+        leftoverRanges.emplace_back(TLeftoverRange{.TableId = fmrTable.FmrTableId.Id, .TableRange = leftoverTableRange, .DataWeight = curDataWeight, .Columns = fmrTable.Columns, .SerializedColumnGroups = fmrTable.SerializedColumnGroups, .TableIndex = fmrTable.TableIndex});
     }
 }
 
@@ -124,32 +124,32 @@ void TFmrPartitioner::HandleFmrLeftoverRanges(
     ui64 curDataWeight = 0;
     TFmrTableInputRef curFmrTable;
     TString curTableId;
-    ui32 curSectionIndex = 0;
+    ui32 curTableIndex = 0;
     for (auto& range: leftoverRanges) {
         if (curDataWeight + range.DataWeight > maxDataWeightPerPart) {
             if (curFmrTable != TFmrTableInputRef()) {
                 currentTask.Inputs.emplace_back(curFmrTable);
                 curFmrTable = TFmrTableInputRef();
                 curTableId = range.TableId;
-                curSectionIndex = range.SectionIndex;
+                curTableIndex = range.TableIndex;
             }
             fmrTasks.emplace_back(currentTask);
             currentTask = TTaskTableInputRef();
             curDataWeight = 0;
         }
-        // Same TableId can appear at several original sections (e.g. PROCESS Input1, Input1 USING
-        // ...), so a table switch is any change in (TableId, SectionIndex), not TableId alone.
-        if ((range.TableId != curTableId || range.SectionIndex != curSectionIndex) && curFmrTable != TFmrTableInputRef()) {
+        // Same TableId can appear at several original input positions (e.g. PROCESS Input1, Input1
+        // USING ...), so a table switch is any change in (TableId, TableIndex), not TableId alone.
+        if ((range.TableId != curTableId || range.TableIndex != curTableIndex) && curFmrTable != TFmrTableInputRef()) {
             currentTask.Inputs.emplace_back(curFmrTable);
             curFmrTable = TFmrTableInputRef();
         }
         curTableId = range.TableId;
-        curSectionIndex = range.SectionIndex;
+        curTableIndex = range.TableIndex;
         curFmrTable.TableId = curTableId;
         curFmrTable.TableRanges.emplace_back(range.TableRange);
         curFmrTable.Columns = range.Columns;
         curFmrTable.SerializedColumnGroups = range.SerializedColumnGroups;
-        curFmrTable.SectionIndex = curSectionIndex;
+        curFmrTable.TableIndex = curTableIndex;
         curDataWeight += range.DataWeight;
     }
 

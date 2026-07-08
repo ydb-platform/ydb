@@ -9,28 +9,28 @@ TFmrRawTableQueueWriterWithLock::TFmrRawTableQueueWriterWithLock(
     TFmrRawTableQueue::TPtr rawTableQueue,
     ui64 tableId,
     std::shared_ptr<TOrderedWriteState> orderedWriteState,
-    bool enableSectionIndexMarking,
+    bool enableTableIndexMarking,
     const TTableWriterSettings& settings
 )
     : RawTableQueue_(rawTableQueue)
     , OrderedWriteState_(std::move(orderedWriteState))
     , TableId_(tableId)
-    , EnableSectionIndexMarking_(enableSectionIndexMarking)
-    , NeedsTableIndexMarker_(enableSectionIndexMarking)
+    , EnableTableIndexMarking_(enableTableIndexMarking)
+    , NeedsTableIndexMarker_(enableTableIndexMarking)
     , Settings_(settings)
 {
 }
 
-void TFmrRawTableQueueWriterWithLock::SetSectionIndex(ui32 sectionIndex) {
-    if (EnableSectionIndexMarking_ && sectionIndex != SectionIndex_) {
+void TFmrRawTableQueueWriterWithLock::SetTableIndex(ui32 tableIndex) {
+    if (EnableTableIndexMarking_ && tableIndex != TableIndex_) {
         NeedsTableIndexMarker_ = true;
     }
-    SectionIndex_ = sectionIndex;
+    TableIndex_ = tableIndex;
 }
 
 void TFmrRawTableQueueWriterWithLock::DoWrite(const void* buf, ui64 len) {
     if (NeedsTableIndexMarker_) {
-        AppendTableIndexMarker(BlockContent_, SectionIndex_);
+        AppendTableIndexMarker(BlockContent_, TableIndex_);
         NeedsTableIndexMarker_ = false;
     }
     BlockContent_.Append(static_cast<const char*>(buf), len);
@@ -60,8 +60,8 @@ void TFmrRawTableQueueWriterWithLock::DoFlush() {
     // Deliberately NOT resetting NeedsTableIndexMarker_ here: NextToEmit only advances after this
     // writer's entire turn (every internal flush plus the caller's final Flush()) completes, so no
     // other writer's chunk can be interleaved between two flushes of the same turn — the marker
-    // written at turn/section start still covers this next chunk. Re-marking is only needed when
-    // SetSectionIndex() actually changes the active section mid-turn.
+    // written at turn start still covers this next chunk. Re-marking is only needed when
+    // SetTableIndex() actually changes the active table index mid-turn.
 }
 
 } // namespace NYql::NFmr

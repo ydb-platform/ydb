@@ -28,10 +28,10 @@ private:
         ui64 DataWeight;
         std::vector<TString> Columns;
         TString SerializedColumnGroups;
-        // Original section (see TFmrTableRef::SectionIndex) this range's table came from. The same
-        // TableId can appear at several sections (e.g. PROCESS Input1, Input1 USING ...), so grouping
-        // leftovers must key on (TableId, SectionIndex), not TableId alone.
-        ui32 SectionIndex = 0;
+        // Original input position (see TFmrTableRef::TableIndex) this range's table came from. The
+        // same TableId can appear at several input positions (e.g. PROCESS Input1, Input1 USING
+        // ...), so grouping leftovers must key on (TableId, TableIndex), not TableId alone.
+        ui32 TableIndex = 0;
     };
 
     void HandleFmrPartition(

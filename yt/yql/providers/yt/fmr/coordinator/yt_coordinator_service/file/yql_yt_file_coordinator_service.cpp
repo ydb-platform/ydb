@@ -106,7 +106,7 @@ public:
                             TYtTableTaskRef taskRef;
                             taskRef.RichPaths.emplace_back(std::move(richPath));
                             taskRef.FilePaths.emplace_back(*ytTable.FilePath);
-                            taskRef.SectionIndices.emplace_back(ytTable.SectionIndex);
+                            taskRef.TableIndices.emplace_back(ytTable.TableIndex);
                             ytPartitions.emplace_back(std::move(taskRef));
                         } else {
                             // Part file is large — split into byte ranges.
@@ -120,7 +120,7 @@ public:
                                 TYtTableTaskRef taskRef;
                                 taskRef.RichPaths.emplace_back(std::move(richPath));
                                 taskRef.FilePaths.emplace_back(*ytTable.FilePath);
-                                taskRef.SectionIndices.emplace_back(ytTable.SectionIndex);
+                                taskRef.TableIndices.emplace_back(ytTable.TableIndex);
                                 ytPartitions.emplace_back(std::move(taskRef));
                                 if (ytPartitions.size() > settings.MaxParts) {
                                     return {{}, false};
@@ -146,7 +146,7 @@ public:
                 }
                 curYtTableTaskRef.RichPaths.emplace_back(ytTable.RichPath);
                 curYtTableTaskRef.FilePaths.emplace_back(*ytTable.FilePath);
-                curYtTableTaskRef.SectionIndices.emplace_back(ytTable.SectionIndex);
+                curYtTableTaskRef.TableIndices.emplace_back(ytTable.TableIndex);
                 curFileLength += fileLength;
             } else {
                 // File is too large for one partition — split into byte ranges.
@@ -168,7 +168,7 @@ public:
                     TYtTableTaskRef taskRef;
                     taskRef.RichPaths.emplace_back(std::move(richPath));
                     taskRef.FilePaths.emplace_back(*ytTable.FilePath);
-                    taskRef.SectionIndices.emplace_back(ytTable.SectionIndex);
+                    taskRef.TableIndices.emplace_back(ytTable.TableIndex);
                     ytPartitions.emplace_back(std::move(taskRef));
                     if (ytPartitions.size() > settings.MaxParts) {
                         return {{}, false};

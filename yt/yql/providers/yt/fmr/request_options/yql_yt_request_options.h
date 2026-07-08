@@ -150,10 +150,12 @@ struct TFmrTvmSpec {
 struct TYtTableRef {
     NYT::TRichYPath RichPath; // Path to yt table
     TMaybe<TString> FilePath; // Path to file corresponding to yt table, filled for file gateway
-    // 0-based position of this table among the operation's original Map/PROCESS inputs (sections).
-    // Can't be recovered from RichPath/TableId alone: the same physical table may occur at several
-    // different section positions (e.g. PROCESS Input1, Input1 USING ...).
-    ui32 SectionIndex = 0;
+    // 0-based position of this table among ALL of the operation's original Map/PROCESS inputs, in
+    // the same order used to build the job's TableNames/InputSpec (see TInputInfo::Group, which
+    // drives InputGroups directly from execCtx->InputTables_ and is unrelated to this field). Always
+    // unique per original input position — needed for TableName() to resolve correctly even when two
+    // inputs share a RichPath (self-reference, e.g. PROCESS Input1, Input1 USING ...).
+    ui32 TableIndex = 0;
 
     TString GetPath() const;
     TString GetCluster() const;
@@ -168,10 +170,10 @@ struct TYtTableRef {
 struct TYtTableTaskRef {
     std::vector<NYT::TRichYPath> RichPaths;
     std::vector<TString> FilePaths;
-    // Parallel to RichPaths/FilePaths: SectionIndices[i] is the original section (see
-    // TYtTableRef::SectionIndex) that RichPaths[i]/FilePaths[i] came from, since a single task ref
-    // can bundle physical paths from several original tables.
-    std::vector<ui32> SectionIndices;
+    // Parallel to RichPaths/FilePaths: TableIndices[i] is the original TYtTableRef::TableIndex that
+    // RichPaths[i]/FilePaths[i] came from, since a single task ref can bundle physical paths from
+    // several original tables.
+    std::vector<ui32> TableIndices;
 
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
@@ -208,10 +210,9 @@ struct TFmrTableRef {
     TString SerializedColumnGroups = TString();
     std::vector<ESortOrder> SortOrder = {};
     std::vector<TString> SortColumns = {};
-    // 0-based position of this table among the operation's original Map/PROCESS inputs (sections).
-    // Can't be recovered from FmrTableId alone: the same physical table may occur at several
-    // different section positions (e.g. PROCESS Input1, Input1 USING ...).
-    ui32 SectionIndex = 0;
+    // 0-based position of this table among ALL of the operation's original Map/PROCESS inputs (see
+    // TYtTableRef::TableIndex) — unique per original input position.
+    ui32 TableIndex = 0;
 
     bool operator==(const TFmrTableRef&) const = default;
 };
@@ -238,9 +239,10 @@ struct TFmrTableInputRef {
     TMaybe<TString> FirstRowKeys; // Binary YSON MAP
     TMaybe<TString> LastRowKeys;  // Binary YSON MAP
 
-    // The original section (see TFmrTableRef::SectionIndex) this ref's TableId came from. A single
-    // TFmrTableInputRef always covers ranges of one physical table, so one value suffices.
-    ui32 SectionIndex = 0;
+    // The original input position (see TFmrTableRef::TableIndex) this ref's TableId came from. A
+    // single TFmrTableInputRef always covers ranges of one physical table at one original input
+    // position, so one value suffices.
+    ui32 TableIndex = 0;
 
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);

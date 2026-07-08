@@ -5,6 +5,7 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 
 namespace NYql::NFmr {
 
@@ -40,8 +41,10 @@ public:
             auto client = CreateClient(clusterConnection);
             auto transaction = client->AttachTransaction(GetGuid(clusterConnection.TransactionId));
 
+            const bool isOrdered = settings.PartitionMode == NYT::ETablePartitionMode::Ordered;
+
             // GetTablePartitions returns bare TRichYPaths with no back-reference to which input index
-            // produced them, so SectionIndex has to be recovered by matching on table path — which is
+            // produced them, so TableIndex has to be recovered by matching on table path — which is
             // safe only while every path passed to one call is unique. Split inputs into batches with
             // no duplicate path each (usually just one batch, when no table repeats across sections or
             // via Concat); a repeat spills into a later batch instead of aliasing within the same call.
@@ -52,19 +55,43 @@ public:
             // a returned partition's path carries a concrete server-computed sub-range (e.g. a
             // row_index slice) that the original request path never had, so comparing full
             // (YSON-serialized) paths would never match.
-            // The k-th occurrence of a given path always belongs to batch k (first occurrence to
-            // batch 0, second to batch 1, ...), so a per-path occurrence counter places each table
-            // directly without scanning existing batches (which would be O(N^2) if many inputs share
-            // the same path).
             std::vector<std::vector<TYtTableRef>> batches;
-            THashMap<TString, size_t> pathOccurrenceCount;
-            for (auto& ytTable: ytTables) {
-                auto pathKey = GetTablePathKey(ytTable.RichPath);
-                size_t batchIndex = pathOccurrenceCount[pathKey]++;
-                if (batchIndex == batches.size()) {
-                    batches.emplace_back();
+            if (isOrdered) {
+                // Ordered mode needs a DIFFERENT batching rule than Unordered: batches are later
+                // concatenated in order (see below), and that reconstructs the true original order only
+                // if each batch is a maximal contiguous run with no internal duplicate path. Bucketing
+                // by global occurrence count instead (like Unordered does) would move a later distinct
+                // table ahead of an earlier duplicate's second occurrence — e.g. for [A, B, A, C],
+                // occurrence-count batching gives batch0=[A,B,C], batch1=[A], which concatenates to
+                // [A,B,C,A] instead of the required [A,B,A,C]. Starting a new batch only when the
+                // incoming path already occurs in the currently-open batch avoids that: batch0=[A,B],
+                // batch1=[A,C], concatenating back to [A,B,A,C].
+                THashSet<TString> currentBatchPaths;
+                for (auto& ytTable: ytTables) {
+                    auto pathKey = GetTablePathKey(ytTable.RichPath);
+                    if (batches.empty() || currentBatchPaths.contains(pathKey)) {
+                        batches.emplace_back();
+                        currentBatchPaths.clear();
+                    }
+                    batches.back().emplace_back(ytTable);
+                    currentBatchPaths.insert(pathKey);
                 }
-                batches[batchIndex].emplace_back(ytTable);
+            } else {
+                // The k-th occurrence of a given path always belongs to batch k (first occurrence to
+                // batch 0, second to batch 1, ...), so a per-path occurrence counter places each table
+                // directly without scanning existing batches (which would be O(N^2) if many inputs share
+                // the same path). Order across batches doesn't matter here, so this maximizes how many
+                // never-repeated tables land in batch 0 together (letting GetTablePartitions pack them
+                // in a single call) rather than splitting on every repeat like the Ordered rule above.
+                THashMap<TString, size_t> pathOccurrenceCount;
+                for (auto& ytTable: ytTables) {
+                    auto pathKey = GetTablePathKey(ytTable.RichPath);
+                    size_t batchIndex = pathOccurrenceCount[pathKey]++;
+                    if (batchIndex == batches.size()) {
+                        batches.emplace_back();
+                    }
+                    batches[batchIndex].emplace_back(ytTable);
+                }
             }
 
             struct TWeightedPartition {
@@ -75,12 +102,12 @@ public:
 
             for (auto& batch: batches) {
                 TVector<NYT::TRichYPath> richPaths;
-                THashMap<TString, ui32> sectionIndexByPath;
+                THashMap<TString, ui32> tableIndexByPath;
                 for (auto& ytTable: batch) {
                     auto richPath = ytTable.RichPath;
                     NormalizeRichPath(richPath);
                     richPaths.emplace_back(richPath);
-                    sectionIndexByPath[GetTablePathKey(ytTable.RichPath)] = ytTable.SectionIndex;
+                    tableIndexByPath[GetTablePathKey(ytTable.RichPath)] = ytTable.TableIndex;
                 }
                 try {
                     for (size_t i = 0; i < richPaths.size(); ++i) {
@@ -99,8 +126,7 @@ public:
                         TYtTableTaskRef ytTableTaskRef{};
                         for (const auto& richPath: partition.TableRanges) {
                             ytTableTaskRef.RichPaths.emplace_back(richPath);
-                            ytTableTaskRef.SectionIndices.emplace_back(
-                                sectionIndexByPath.at(GetTablePathKey(richPath)));
+                            ytTableTaskRef.TableIndices.emplace_back(tableIndexByPath.at(GetTablePathKey(richPath)));
                         }
                         weightedPartitions.emplace_back(TWeightedPartition{
                             .TaskRef = std::move(ytTableTaskRef),
@@ -116,7 +142,11 @@ public:
             // Bin-pack partitions (possibly from different tables/batches) sharing this cluster into
             // combined tasks up to MaxDataWeightPerPart, mirroring
             // TFmrPartitioner::HandleFmrLeftoverRanges. GetTablePartitions already does this within a
-            // single batch; this additionally packs across batches split apart above.
+            // single batch; this additionally packs across batches split apart above. This is order-safe
+            // for Ordered mode too: it only ever appends to the end of RichPaths/TableIndices, walking
+            // weightedPartitions (batches-then-partitions-in-order) in order, and the Ordered-mode
+            // batching above guarantees that order already equals the true original order — merging
+            // never reorders, it just groups adjacent entries into fewer tasks.
             TYtTableTaskRef currentTask;
             ui64 currentWeight = 0;
             for (auto& weighted: weightedPartitions) {
@@ -130,8 +160,8 @@ public:
                 currentTask.RichPaths.insert(currentTask.RichPaths.end(),
                     std::make_move_iterator(weighted.TaskRef.RichPaths.begin()),
                     std::make_move_iterator(weighted.TaskRef.RichPaths.end()));
-                currentTask.SectionIndices.insert(currentTask.SectionIndices.end(),
-                    weighted.TaskRef.SectionIndices.begin(), weighted.TaskRef.SectionIndices.end());
+                currentTask.TableIndices.insert(currentTask.TableIndices.end(),
+                    weighted.TaskRef.TableIndices.begin(), weighted.TaskRef.TableIndices.end());
                 currentWeight += weighted.DataWeight;
             }
             if (!currentTask.RichPaths.empty()) {

@@ -84,13 +84,13 @@ message TFmrError {
 message TYtTableRef {
     string RichPath = 1;
     optional string FilePath = 2;
-    uint32 SectionIndex = 3;
+    uint32 TableIndex = 3;
 }
 
 message TYtTableTaskRef {
     repeated string RichPath = 1;
     repeated string FilePath = 2;
-    repeated uint32 SectionIndex = 3;
+    repeated uint32 TableIndex = 3;
 }
 
 message TFmrTableId {
@@ -103,7 +103,7 @@ message TFmrTableRef {
     optional string ColumnGroups = 3;
     repeated ESortOrder SortOrder = 4;
     repeated string SortColumns = 5;
-    uint32 SectionIndex = 6;
+    uint32 TableIndex = 6;
 }
 
 message TTableRange {
@@ -121,7 +121,7 @@ message TFmrTableInputRef {
     optional bool   IsLastRowInclusive = 6;
     optional bytes  FirstRowKeys = 7;
     optional bytes  LastRowKeys = 8;
-    uint32 SectionIndex = 9;
+    uint32 TableIndex = 9;
 }
 
 message TSortingColumns {

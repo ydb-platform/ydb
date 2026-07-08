@@ -239,6 +239,7 @@
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+#include <ydb/library/actors/interconnect/rdma/rdma.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
 #include <ydb/library/slide_limiter/service/service.h>
@@ -695,7 +696,10 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     }
                 }
                 setup->LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
-                    TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(-1, icConfig.GetRdmaMaxWr(), rdmaCqMode, interconectCounters.Get()),
+                    TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(
+                        NInterconnect::NRdma::TRdmaRuntimeParams{-1, static_cast<int>(icConfig.GetRdmaMaxWr()), 0, 0},
+                        rdmaCqMode,
+                        interconectCounters.Get()),
                         TMailboxType::ReadAsFilled, interconnectPoolId));
 
                 // Interconnect uses rdma mem pool directly

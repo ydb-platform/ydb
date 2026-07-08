@@ -206,7 +206,8 @@ public:
             Become(&TKqpDataExecuter::FinalizeState);
             MakeResponseAndPassAway();
             return;
-        }  else if (Request.LocksOp == ELocksOp::Commit && !ReadOnlyTx) {
+        }  else if (Request.LocksOp == ELocksOp::Commit) {
+            AFL_ENSURE(!ReadOnlyTx);
             Become(&TKqpDataExecuter::FinalizeState);
             KQP_STLOG_D(KQPDATA, "Send Commit to BufferActor",
                 (buffer_actor_id, BufferActorId),
@@ -452,13 +453,10 @@ private:
 
 private:
     bool IsReadOnlyTx() const {
-        if (Request.LocksOp == ELocksOp::Commit) {
+        if (Request.LocksOp == ELocksOp::Commit || TxManager->GetTopicOperations().HasOperations()) {
             YQL_ENSURE(!Request.FlushEffects);
             return false;
         }
-
-        // Topic operations can only be executed at commit.
-        AFL_ENSURE(!TxManager->GetTopicOperations().HasOperations());
 
         for (const auto& tx : Request.Transactions) {
             for (const auto& stage : tx.Body->GetStages()) {

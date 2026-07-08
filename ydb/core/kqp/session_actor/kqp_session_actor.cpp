@@ -1566,7 +1566,7 @@ public:
         AFL_ENSURE(txCtx.TxManager);
         const bool broken = !!txCtx.TxManager->GetLockIssue();
 
-        if (!txCtx.DeferredEffects.Empty() && broken) {
+        if ((!txCtx.DeferredEffects.Empty() || txCtx.HasUnflushedEffectsInBuffer) && broken) {
             EmitVictimTliLog(
                 txCtx.TxManager->GetVictimQuerySpanId(),
                 std::nullopt,

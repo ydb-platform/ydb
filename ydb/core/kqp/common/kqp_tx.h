@@ -140,7 +140,7 @@ public:
     }
 
     bool TxHasEffects() const {
-        return HasImmediateEffects || !DeferredEffects.Empty();
+        return HasImmediateEffects || HasUnflushedEffectsInBuffer || !DeferredEffects.Empty();
     }
 
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
@@ -149,6 +149,7 @@ public:
 
     void Finish() final {
         YQL_ENSURE(DeferredEffects.Empty());
+        YQL_ENSURE(!HasUnflushedEffectsInBuffer);
         YQL_ENSURE(!BufferActorId);
 
         FinishTime = TInstant::Now();

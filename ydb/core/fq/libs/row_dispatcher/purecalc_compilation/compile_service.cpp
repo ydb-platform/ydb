@@ -152,8 +152,8 @@ public:
     void Handle(TEvRowDispatcher::TEvPurecalcCompileAbort::TPtr& ev) {
         YDB_LOG_TRACE("Abort compile request with id",
             {"logPrefix", LogPrefix},
-            {"#_ev->Cookie", ev->Cookie},
-            {"#_ev->Sender", ev->Sender});
+            {"cookie", ev->Cookie},
+            {"sender", ev->Sender});
 
         RemoveRequest(ev->Sender, ev->Cookie);
     }
@@ -161,8 +161,8 @@ public:
     void Handle(TEvPrivate::TEvCompileFinished::TPtr& ev) {
         YDB_LOG_TRACE("Compile finished for request with id",
             {"logPrefix", LogPrefix},
-            {"#_ev->Get()->RequestId", ev->Get()->RequestId},
-            {"#_ev->Get()->RequestActor", ev->Get()->RequestActor});
+            {"requestId", ev->Get()->RequestId},
+            {"requestActor", ev->Get()->RequestActor});
 
         InFlightCompilations.erase(ev->Sender);
         Counters.ActiveCompileActors->Dec();

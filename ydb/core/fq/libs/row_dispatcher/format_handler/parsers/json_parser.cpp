@@ -53,7 +53,7 @@ struct TJsonParserBuffer {
             YDB_LOG_WARN("Got message with offset which is less than previous offset",
                 {"logPrefix", LogPrefix},
                 {"offset", offset},
-                {"#_Offsets.back", Offsets.back()});
+                {"offsetsBack", Offsets.back()});
         }
 
         NumberValues++;
@@ -388,11 +388,11 @@ public:
 
         YDB_LOG_INFO("JsonParser was created, simdjson active implementation config: error skip batch latency limit buffer cell max number",
             {"logPrefix", LogPrefix},
-            {"#_simdjson::get_active_implementation()->name", simdjson::get_active_implementation()->name()},
-            {"#_simdjson::get_active_implementation()->description", simdjson::get_active_implementation()->description()},
+            {"name", simdjson::get_active_implementation()->name()},
+            {"description", simdjson::get_active_implementation()->description()},
             {"mode", Config.SkipErrors},
             {"size", Config.BatchSize},
-            {"#_Config.LatencyLimit", Config.LatencyLimit},
+            {"latencyLimit", Config.LatencyLimit},
             {"count", Config.BufferCellCount},
             {"rows", MaxNumberRows});
         Parser.threaded = false;
@@ -429,7 +429,7 @@ public:
     void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
         YDB_LOG_TRACE("Add messages to parse",
             {"logPrefix", LogPrefix},
-            {"#_messages.size", messages.size()});
+            {"messages", messages.size()});
 
         Y_ENSURE(!Buffer.Finished, "Cannot parse messages with finished buffer");
         for (const auto& message : messages) {
@@ -478,8 +478,8 @@ public:
         FillColumnsBuffers();
         YDB_LOG_DEBUG("Parser columns count changed",
             {"logPrefix", LogPrefix},
-            {"#_Columns.size", Columns.size()},
-            {"#_Consumer->GetColumns().size", Consumer->GetColumns().size()});
+            {"columns", Columns.size()},
+            {"consumerColumns", Consumer->GetColumns().size()});
 
         return InitColumnsParsers();
     }
@@ -635,9 +635,9 @@ private:
         }
         YDB_LOG_DEBUG("Unbatched parser, skipped outputRowId recovering",
             {"logPrefix", LogPrefix},
-            {"#_state.ErrorsCount", state.ErrorsCount},
-            {"#_state.OutputRowId", state.OutputRowId},
-            {"#_status.GetErrorMessage", status.GetErrorMessage()});
+            {"errorsCount", state.ErrorsCount},
+            {"outputRowId", state.OutputRowId},
+            {"error", status.GetErrorMessage()});
         ClearRowBuffer(state.OutputRowId);
         if (TryParseOneJson(state)) {
             state.OutputRowId++;
@@ -651,9 +651,9 @@ private:
     EParsingStatus ParseRows(TParsingState& state) {
         YDB_LOG_TRACE("Init parser, skipped outputRowId size",
             {"logPrefix", LogPrefix},
-            {"#_state.ErrorsCount", state.ErrorsCount},
-            {"#_state.OutputRowId", state.OutputRowId},
-            {"#_state.Size", state.Size});
+            {"errorsCount", state.ErrorsCount},
+            {"outputRowId", state.OutputRowId},
+            {"stateSize", state.Size});
 
         /*
            Batch size must be at least maximum of document size.

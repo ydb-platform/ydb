@@ -57,7 +57,7 @@ public:
     void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
         YDB_LOG_TRACE("Add messages to parse",
             {"logPrefix", LogPrefix},
-            {"#_messages.size", messages.size()});
+            {"messages", messages.size()});
 
         for (const auto& message : messages) {
             CurrentMessage = message.GetData();

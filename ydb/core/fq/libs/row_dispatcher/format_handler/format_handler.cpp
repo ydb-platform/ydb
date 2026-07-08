@@ -102,7 +102,7 @@ private:
             YDB_LOG_WARN("Failed to parse column",
                 {"logPrefix", LogPrefix},
                 {"column", column},
-                {"#_status.GetErrorMessage", status.GetErrorMessage()});
+                {"error", status.GetErrorMessage()});
 
             const auto columnIt = Self.ColumnsDesc.find(column.Name);
             if (columnIt == Self.ColumnsDesc.end()) {
@@ -189,7 +189,7 @@ private:
         void OnClientError(TStatus status) {
             YDB_LOG_WARN("OnClientError",
                 {"logPrefix", LogPrefix},
-                {"#_status.GetErrorMessage", status.GetErrorMessage()});
+                {"error", status.GetErrorMessage()});
             Client->OnClientError(std::move(status));
         }
 
@@ -448,7 +448,7 @@ public:
     void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
         YDB_LOG_TRACE("Send messages to parser",
             {"logPrefix", LogPrefix},
-            {"#_messages.size", messages.size()});
+            {"messages", messages.size()});
 
         if (!messages.empty()) {
             CurrentOffset = messages.back().GetOffset();
@@ -473,13 +473,13 @@ public:
     TStatus AddClient(IClientDataConsumer::TPtr client) override {
         YDB_LOG_DEBUG("Add client with id",
             {"logPrefix", LogPrefix},
-            {"#_client->GetClientId", client->GetClientId()});
+            {"clientId", client->GetClientId()});
 
         if (const auto clientOffset = client->GetNextMessageOffset()) {
             if (Parser && CurrentOffset && *CurrentOffset > *clientOffset) {
                 YDB_LOG_DEBUG("Parser was flushed due to new historical offset (previous parser",
                     {"logPrefix", LogPrefix},
-                    {"#_*clientOffset", *clientOffset},
+                    {"clientOffset", *clientOffset},
                     {"offset", *CurrentOffset});
                 Parser->Refresh(true);
             }
@@ -599,7 +599,7 @@ private:
 
         YDB_LOG_DEBUG("UpdateParser to new schema with size",
             {"logPrefix", LogPrefix},
-            {"#_parerSchema.size", parerSchema.size()});
+            {"schemaSize", parerSchema.size()});
         ParserHandler = MakeIntrusive<TParserHandler>(*this, std::move(parerSchema));
 
         if (const ui64 schemaSize = ParserHandler->GetColumns().size()) {
@@ -673,7 +673,7 @@ private:
             if (client->IsStarted()) {
                 YDB_LOG_TRACE("Commit client offset",
                     {"logPrefix", LogPrefix},
-                    {"#_client->GetClient()->GetClientId", client->GetClient()->GetClientId()},
+                    {"clientId", client->GetClient()->GetClientId()},
                     {"lastOffset", lastOffset});
                 client->GetClient()->UpdateClientOffset(lastOffset);
             }

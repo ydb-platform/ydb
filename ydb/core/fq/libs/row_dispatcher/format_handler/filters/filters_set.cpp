@@ -35,7 +35,7 @@ public:
     void ProcessData(const TVector<ui64>& columnIndex, const TVector<ui64>& offsets, const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) override {
         YDB_LOG_TRACE("ProcessData for clients, number",
             {"logPrefix", LogPrefix},
-            {"#_RunHandlers_.size", RunHandlers_.size()},
+            {"runHandlers", RunHandlers_.size()},
             {"rows", numberRows});
 
         if (!numberRows) {
@@ -51,7 +51,7 @@ public:
             if (const auto nextOffset = consumer->GetNextMessageOffset(); nextOffset && offsets[numberRows - 1] < *nextOffset) {
                 YDB_LOG_TRACE("Ignore processing for historical offset",
                     {"logPrefix", LogPrefix},
-                    {"#_consumer->GetClientId", consumer->GetClientId()});
+                    {"clientId", consumer->GetClientId()});
                 continue;
             }
 
@@ -63,13 +63,13 @@ public:
     void OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) override {
         YDB_LOG_TRACE("Got compile response for request with id",
             {"logPrefix", LogPrefix},
-            {"#_ev->Cookie", ev->Cookie});
+            {"cookie", ev->Cookie});
 
         auto compileHandlerStatus = RemoveCompileProgram(ev->Cookie);
         if (compileHandlerStatus.IsFail()) {
             YDB_LOG_ERROR("",
                 {"logPrefix", LogPrefix},
-                {"#_compileHandlerStatus.GetError().GetErrorMessage", compileHandlerStatus.GetError().GetErrorMessage()});
+                {"error", compileHandlerStatus.GetError().GetErrorMessage()});
             return;
         }
         const auto compileHandler = compileHandlerStatus.DetachResult();
@@ -84,7 +84,7 @@ public:
         if (runHandlerStatus.IsFail()) {
             YDB_LOG_ERROR("",
                 {"logPrefix", LogPrefix},
-                {"#_runHandlerStatus.GetError().GetErrorMessage", runHandlerStatus.GetError().GetErrorMessage()});
+                {"error", runHandlerStatus.GetError().GetErrorMessage()});
             return;
         }
 
@@ -124,7 +124,7 @@ private:
 
         YDB_LOG_TRACE("Start program with client id",
             {"logPrefix", LogPrefix},
-            {"#_consumer->GetClientId", consumer->GetClientId()});
+            {"clientId", consumer->GetClientId()});
 
         consumer->OnStart();
     }
@@ -132,7 +132,7 @@ private:
     TStatus AddProgram(IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder) {
         YDB_LOG_TRACE("Create program with client id",
             {"logPrefix", LogPrefix},
-            {"#_consumer->GetClientId", consumer->GetClientId()});
+            {"clientId", consumer->GetClientId()});
 
         if (!programHolder) {
             auto runHandlerStatus = AddRunProgram(std::move(consumer), std::move(programHolder));
@@ -141,7 +141,7 @@ private:
 
         YDB_LOG_TRACE("Create purecalc program for query (client",
             {"logPrefix", LogPrefix},
-            {"#_programHolder->GetQuery", programHolder->GetQuery()},
+            {"query", programHolder->GetQuery()},
             {"id", consumer->GetClientId()});
 
         const auto cookie = NextCookie_++;
@@ -239,7 +239,7 @@ private:
             } else {
                 YDB_LOG_TRACE("Ignore processing for client got parsing error for column",
                     {"logPrefix", LogPrefix},
-                    {"#_consumer->GetClientId", consumer->GetClientId()},
+                    {"clientId", consumer->GetClientId()},
                     {"columnId", columnId});
                 return;
             }

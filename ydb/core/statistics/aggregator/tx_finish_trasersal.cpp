@@ -86,9 +86,9 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
                 {"operationId", OperationId.Quote()},
                 {"actorId", ReplyToActorId});
         } else {
-            YDB_LOG_DEBUG("TTxFinishTraversal::Complete. Send TEvAnalyzeResponse,",
+            YDB_LOG_DEBUG("TTxFinishTraversal::Complete. Send TEvAnalyzeResponse.",
                 {"tabletId", Self->TabletID()},
-                {"operationId", OperationId},
+                {"operationId", OperationId.Quote()},
                 {"actorId", ReplyToActorId});
             auto response = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
             response->Record.SetOperationId(OperationId);

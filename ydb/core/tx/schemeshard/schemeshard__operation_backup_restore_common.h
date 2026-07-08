@@ -475,7 +475,10 @@ public:
         : TxType(type)
         , OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType, TEvColumnShard::TEvProposeTransactionResult::EventType});
+        IgnoreMessages(DebugHint(),
+            { TEvDataShard::TEvProposeTransactionResult::EventType
+            , TEvColumnShard::TEvProposeTransactionResult::EventType }
+        );
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {

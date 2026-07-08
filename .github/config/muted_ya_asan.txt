@@ -781,6 +781,7 @@ ydb/tests/functional/nbs py3test.sole chunk
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerWarnings.test_peer_scan_warnings_increment_on_dead_peer
+ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_basic
 ydb/tests/functional/security test_mon_endpoints_auth.py.test_mon_endpoints_auth[enforce_user_token_disabled]
 ydb/tests/functional/security test_mon_endpoints_auth.py.test_mon_endpoints_auth[enforce_user_token_enabled]
 ydb/tests/functional/security test_mon_endpoints_auth.py.test_mon_endpoints_auth[require_counters_authentication]
@@ -797,7 +798,9 @@ ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_empty_access_key_id[tables_format_v1]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_retryable_iam_error[tables_format_v0]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_retryable_iam_error[tables_format_v1]
+ydb/tests/functional/sqs/migration/compatibility/large ydb.tests.functional.sqs.large.test_leader_start_inflight.py.TestSqsMultinodeCluster.test_limit_leader_start_inflight[tables_format_v0-std]
 ydb/tests/functional/sqs/migration/finished/large ydb.tests.functional.sqs.large.test_leader_start_inflight.py.TestSqsMultinodeCluster.test_limit_leader_start_inflight[tables_format_v0-fifo]
+ydb/tests/functional/sqs/migration/finished/large ydb.tests.functional.sqs.large.test_leader_start_inflight.py.TestSqsMultinodeCluster.test_limit_leader_start_inflight[tables_format_v0-std]
 ydb/tests/functional/statistics py3test.[test_analyze.py */*] chunk
 ydb/tests/functional/statistics test_analyze.py.test_basic
 ydb/tests/functional/statistics test_restarts.py.test_basic

@@ -55,6 +55,9 @@ RUN_PYTHON3(
     SQLParser.pb.data.cc
     SQLParser.pb.classes.h
     SQLParser.pb.main.h
+    OUTPUT_INCLUDES
+    SQLParser.pb.h
+    SQLParser.pb.cc
     CWD ${antlr_output}
 )
 

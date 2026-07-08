@@ -315,8 +315,31 @@ void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
             watermark ? *watermark / BlockSize : BlockCount);
     }
 
+    if (removed.Empty()) {
+        return;
+    }
+
     for (auto indx: removed) {
         DDiskStates[indx].SwitchOffline();
+    }
+
+    TVector<ui64> erased;
+    Inflight.Enumerate(
+        [&](TInflightMap::TFindItem& item)
+        {
+            TInflightInfo& inflightItem = item.Value;
+            inflightItem.RemoveHosts(removed);
+            if (inflightItem.GetState() == TInflightInfo::EState::PBufferErased)
+            {
+                erased.push_back(item.Key);
+            }
+            return TInflightMap::EEnumerateContinuation::Continue;
+        });
+
+    for (auto lsn: erased) {
+        Inflight.RemoveRange(lsn);
+        ReadyToErase.erase(lsn);
+        ReadyToFlush.erase(lsn);
     }
 }
 
@@ -480,22 +503,20 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
 
         auto& val = item->Value;
 
-        for (THostIndex host: val.GetWriteRequested()) {
-            bool rangeRemoved = false;
-            if (val.RequestErase(host)) {
-                if (DisabledHosts.Get(host)) {
-                    // We can't handle this situation properly. Barrier cleanup
-                    // will help us.
-                    if (val.ConfirmErase(host)) {
-                        const bool removed = Inflight.RemoveRange(item->Key);
-                        Y_ABORT_UNLESS(removed);
-                        rangeRemoved = true;
-                    }
-                } else {
-                    result.AddHint(host, item->Key);
+        for (THostIndex host: val.GetEraseNeeded()) {
+            val.RequestErase(host);
+
+            if (DisabledHosts.Get(host)) {
+                // We can't handle this situation properly. Barrier cleanup
+                // will help us.
+                if (val.ConfirmErase(host)) {
+                    const bool removed = Inflight.RemoveRange(item->Key);
+                    Y_ABORT_UNLESS(removed);
+                    break;
                 }
+            } else {
+                result.AddHint(host, item->Key);
             }
-            Y_ABORT_IF(rangeRemoved && !result.Empty());
         }
     }
 
@@ -553,12 +574,16 @@ void TBlocksDirtyMap::FlushFinished(
     const TVector<ui64>& flushOk,
     const TVector<ui64>& flushFailed)
 {
+    if (DisabledHosts.Get(route.DestinationHostIndex)) {
+        return;
+    }
+
     for (ui64 lsn: flushOk) {
         auto item = Inflight.GetValue(lsn);
         Y_ABORT_UNLESS(item);
         auto& inflight = item->Value;
 
-        inflight.ConfirmFlush(route);
+        inflight.ConfirmFlush(route.DestinationHostIndex);
     }
 
     for (ui64 lsn: flushFailed) {
@@ -566,7 +591,7 @@ void TBlocksDirtyMap::FlushFinished(
         Y_ABORT_UNLESS(item);
         auto& inflight = item->Value;
 
-        inflight.FlushFailed(route);
+        inflight.FlushFailed(route.DestinationHostIndex);
     }
 }
 
@@ -577,7 +602,10 @@ void TBlocksDirtyMap::EraseFinished(
 {
     for (ui64 lsn: eraseOk) {
         auto item = Inflight.GetValue(lsn);
-        Y_ABORT_UNLESS(item);
+        if (!item) {
+            // The item was deleted when the host was disabled.
+            continue;
+        }
         auto& inflight = item->Value;
 
         if (inflight.ConfirmErase(host)) {
@@ -588,7 +616,10 @@ void TBlocksDirtyMap::EraseFinished(
 
     for (ui64 lsn: eraseFailed) {
         auto item = Inflight.GetValue(lsn);
-        Y_ABORT_UNLESS(item);
+        if (!item) {
+            // The item was deleted when the host was disabled.
+            continue;
+        }
         auto& inflight = item->Value;
 
         inflight.EraseFailed(host);

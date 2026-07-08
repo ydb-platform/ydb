@@ -1,0 +1,10 @@
+SELECT
+    *
+FROM
+    pq.test_topic_input WITH (
+        FORMAT = json_each_row,
+        SCHEMA (t String, k String, v Int64),
+        WATERMARK = t - Interval('PT5S'),
+        STREAMING = 'TRUE'
+    )
+;

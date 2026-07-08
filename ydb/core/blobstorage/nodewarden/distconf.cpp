@@ -1,5 +1,6 @@
 #include "distconf.h"
 #include "node_warden_impl.h"
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/mind/dynamic_nameserver.h>
 #include <ydb/core/protos/bridge.pb.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
@@ -71,6 +72,11 @@ namespace NKikimr::NStorage {
             ReadConfig(PrevDrivesToRead);
         } else {
             StorageConfigLoaded = true;
+        }
+
+        if (const TIntrusivePtr<NKikimr::TControlBoard>& icb = AppData()->Icb) {
+            TControlBoard::RegisterSharedControl(RootRetroTraceBatchIntervalSec,
+                    icb->RetroTracingControls.RootBatchIntervalSec);
         }
 
         Become(&TThis::StateWaitForInit);

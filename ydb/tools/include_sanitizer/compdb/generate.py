@@ -346,6 +346,11 @@ def run_wrapper_mode(
     log.info("recording compile commands into %s", repo_relative(str(entries_dir)))
 
     env = os.environ.copy()
+    # Pin the repo root for the build-step children. They run with CWD set
+    # to ya's ephemeral build_root, where a bundled binary's __file__ /
+    # marker search would otherwise mis-resolve REPO_ROOT and produce
+    # unstable (absolute) cache keys that never match the later analyze.
+    env["YDB_REPO_ROOT"] = str(REPO_ROOT)
     env["YDB_COMPDB_DIR"] = str(entries_dir)
     env.setdefault("YDB_COMPDB_EXEC", "1")
     if force_retry:

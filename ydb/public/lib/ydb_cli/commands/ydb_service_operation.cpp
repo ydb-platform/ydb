@@ -79,7 +79,8 @@ void TCommandGetOperation::Parse(TConfig& config) {
 }
 
 int TCommandGetOperation::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
 
     switch (OperationId.GetKind()) {
     case TOperationId::EXPORT:
@@ -125,7 +126,8 @@ TCommandCancelOperation::TCommandCancelOperation()
 }
 
 int TCommandCancelOperation::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Cancel(OperationId).GetValueSync());
     return EXIT_SUCCESS;
 }
@@ -136,7 +138,8 @@ TCommandForgetOperation::TCommandForgetOperation()
 }
 
 int TCommandForgetOperation::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Forget(OperationId).GetValueSync());
     return EXIT_SUCCESS;
 }
@@ -221,7 +224,8 @@ void TCommandListOperations::Parse(TConfig& config) {
 }
 
 int TCommandListOperations::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     KindToHandler.at(Kind)(client, PageSize, PageToken, OutputFormat);
     return EXIT_SUCCESS;
 }

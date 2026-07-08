@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import gzip
+import inspect
 import io
 import json
 import logging
@@ -34,13 +35,20 @@ from clickhouse_connect.datatypes.base import ClickHouseType
 from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.driver import httputil, options, tzutil
 from clickhouse_connect.driver.asyncqueue import EOF_SENTINEL, AsyncSyncQueue
-from clickhouse_connect.driver.binding import bind_query, quote_identifier
+from clickhouse_connect.driver.binding import bind_query, quote_identifier, use_form_encoding
 from clickhouse_connect.driver.client import Client, _apply_arrow_tz_policy
 from clickhouse_connect.driver.common import StreamContext, coerce_bool, dict_copy
 from clickhouse_connect.driver.compression import available_compression
 from clickhouse_connect.driver.constants import CH_VERSION_WITH_PROTOCOL, PROTOCOL_VERSION_WITH_LOW_CARD
 from clickhouse_connect.driver.ctypes import RespBuffCls
-from clickhouse_connect.driver.exceptions import DatabaseError, DataError, OperationalError, ProgrammingError
+from clickhouse_connect.driver.exceptions import (
+    DatabaseError,
+    DataError,
+    OperationalError,
+    ProgrammingError,
+    error_code_from_header,
+    error_name_from_body,
+)
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.models import ColumnDef, SettingDef
@@ -60,6 +68,7 @@ from clickhouse_connect.driver.transform import NativeTransform
 logger = logging.getLogger(__name__)
 columns_only_re = re.compile(r"LIMIT 0\s*$", re.IGNORECASE)
 ex_header = "X-ClickHouse-Exception-Code"
+auth_failed_ex_code = "516"  # ClickHouse AUTHENTICATION_FAILED
 ex_tag_header = "X-ClickHouse-Exception-Tag"
 
 if "br" in available_compression:
@@ -197,6 +206,7 @@ class AsyncClient(Client):
         password: str | None = None,
         database: str | None = None,
         access_token: str | None = None,
+        token_provider: Callable[[], str | Awaitable[str]] | None = None,
         compress: bool | str = True,
         connect_timeout: int = 10,
         send_receive_timeout: int = 300,
@@ -224,6 +234,7 @@ class AsyncClient(Client):
         autogenerate_query_id: bool | None = None,
         form_encode_query_params: bool = False,
         rename_response_column: str | None = None,
+        headers: dict[str, str] | None = None,
     ):
         """
         Async HTTP Client using aiohttp. Initialization is handled via _initialize().
@@ -242,6 +253,8 @@ class AsyncClient(Client):
             if isinstance(verify, str) and verify.lower() == "proxy":
                 verify = True
                 tls_mode = tls_mode or "proxy"
+
+        self._token_provider = token_provider  # initial token is resolved in _initialize()
 
         # Priority: access_token > mutual TLS > basic auth
         if client_cert and (tls_mode is None or tls_mode == "mutual"):
@@ -329,6 +342,8 @@ class AsyncClient(Client):
         self._reported_libs = set()
         self._last_pool_reset = None
         self.headers["User-Agent"] = self.headers["User-Agent"].replace("mode:sync;", "mode:async;")
+        if headers:
+            self.headers.update(headers)
 
         # Store aiohttp-specific params for deferred initialization
         self._compress_param = compress
@@ -381,6 +396,9 @@ class AsyncClient(Client):
 
         if self._initialized:
             return
+
+        if self._token_provider:
+            self.set_access_token(await self._resolve_token())
 
         try:
             tz_source = self._deferred_tz_source
@@ -533,6 +551,15 @@ class AsyncClient(Client):
     def get_client_setting(self, key) -> str | None:
         return self._client_settings.get(key)
 
+    async def _resolve_token(self) -> str:
+        # Run sync providers off the event loop; await async providers.
+        # The provider may be called concurrently if multiple requests get a 516 at the same time;
+        # it must be safe to invoke in parallel (e.g. if it hits an IdP, consider rate limiting).
+        result = await asyncio.get_running_loop().run_in_executor(None, self._token_provider)
+        if inspect.isawaitable(result):
+            result = await result
+        return result
+
     def set_access_token(self, access_token: str):
         auth_header = self.headers.get("Authorization")
         if auth_header and not auth_header.startswith("Bearer"):
@@ -560,13 +587,14 @@ class AsyncClient(Client):
             context.block_info = True
         params.update(self._validate_settings(context.settings))
         context.rename_response_column = self._rename_response_column
+        use_form = use_form_encoding(context.final_query, context.bind_params, self.form_encode_query_params)
 
         if not context.is_insert and columns_only_re.search(context.uncommented_query):
             fmt_json_query = f"{context.final_query}\n FORMAT JSON"
             fields = {"query": fmt_json_query}
             fields.update(context.bind_params)
 
-            if self.form_encode_query_params:
+            if use_form:
                 files = {}
                 if context.external_data:
                     params.update(context.external_data.query_params)
@@ -625,7 +653,7 @@ class AsyncClient(Client):
         files = None
         data = None
 
-        if self.form_encode_query_params:
+        if use_form:
             fields = {"query": final_query}
             fields.update(context.bind_params)
 
@@ -1105,10 +1133,11 @@ class AsyncClient(Client):
         files = None
         body = None
 
-        if external_data and not self.form_encode_query_params and isinstance(final_query, bytes):
+        use_form = use_form_encoding(final_query, bind_params, self.form_encode_query_params)
+        if external_data and not use_form and isinstance(final_query, bytes):
             raise ProgrammingError("Binary query cannot be placed in URL when using External Data; enable form encoding.")
 
-        if self.form_encode_query_params:
+        if use_form:
             files = {}
             files["query"] = (None, final_query if isinstance(final_query, str) else final_query.decode())
             for k, v in bind_params.items():
@@ -1870,26 +1899,29 @@ class AsyncClient(Client):
         """
         try:
             body = ""
+            full_body = ""
             try:
                 raw_body = await response.read()
                 encoding = response.headers.get("Content-Encoding")
+                loop = asyncio.get_running_loop()
 
                 if encoding:
-                    loop = asyncio.get_running_loop()
 
                     def decompress_and_decode():
-                        decompressed = decompress_response(raw_body, encoding)
-                        return common.format_error(decompressed.decode(errors="backslashreplace")).strip()
+                        return decompress_response(raw_body, encoding).decode(errors="backslashreplace")
 
-                    body = await loop.run_in_executor(None, decompress_and_decode)
+                    full_body = await loop.run_in_executor(None, decompress_and_decode)
                 else:
-                    loop = asyncio.get_running_loop()
-                    body = await loop.run_in_executor(None, lambda: common.format_error(raw_body.decode(errors="backslashreplace")).strip())
+                    full_body = await loop.run_in_executor(None, lambda: raw_body.decode(errors="backslashreplace"))
+                body = common.format_error(full_body).strip()
             except Exception:
                 logger.warning("Failed to read error response body", exc_info=True)
 
+            err_code = response.headers.get(ex_header)
+            code = error_code_from_header(err_code)
+            name = error_name_from_body(full_body) if self.show_clickhouse_errors else None
+
             if self.show_clickhouse_errors:
-                err_code = response.headers.get(ex_header)
                 if err_code:
                     err_str = f"Received ClickHouse exception, code: {err_code}"
                 else:
@@ -1905,7 +1937,8 @@ class AsyncClient(Client):
         finally:
             response.close()
 
-        raise OperationalError(err_str) if retried else DatabaseError(err_str) from None
+        err_type = OperationalError if retried else DatabaseError
+        raise err_type(err_str, code=code, name=name) from None
 
     async def _raw_request(
         self,
@@ -1950,6 +1983,7 @@ class AsyncClient(Client):
             req_headers["Host"] = self.server_host_name
         query_session = final_params.get("session_id")
         attempts = 0
+        auth_retried = False
 
         while True:
             attempts += 1
@@ -2018,6 +2052,17 @@ class AsyncClient(Client):
                         await asyncio.sleep(0.1 * attempts)
                         response.close()
                         continue
+                if self._token_provider and not auth_retried and response.headers.get(ex_header) == auth_failed_ex_code:
+                    if retry_body is None and not (data is None or isinstance(data, (bytes, bytearray, str, dict))):
+                        await self._error_handler(response)  # non-replayable body, surface the auth error instead of retrying
+                    auth_retried = True
+                    self.set_access_token(await self._resolve_token())
+                    req_headers["Authorization"] = self.headers["Authorization"]
+                    if retry_body is not None:
+                        data = await retry_body()
+                    logger.debug("Refreshing access token after authentication failure")
+                    response.close()
+                    continue
                 await self._error_handler(response)
 
             except aiohttp.ClientConnectionError as e:

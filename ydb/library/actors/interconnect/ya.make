@@ -22,6 +22,7 @@ SRCS(
     interconnect_common.h
     interconnect_counters.cpp
     interconnect.h
+    interconnect_direct_session.h
     interconnect_handshake.cpp
     interconnect_handshake.h
     interconnect_metrics_aggregator.cpp
@@ -34,6 +35,7 @@ SRCS(
     interconnect_proxy_wrapper.cpp
     interconnect_proxy_wrapper.h
     interconnect_resolve.cpp
+    interconnect_session_iface.h
     interconnect_stream.cpp
     interconnect_stream.h
     interconnect_tcp_input_session.cpp
@@ -43,6 +45,8 @@ SRCS(
     interconnect_tcp_server.h
     interconnect_tcp_session.cpp
     interconnect_tcp_session.h
+    interconnect_tcp_session_v2.cpp
+    interconnect_tcp_session_v2.h
     interconnect_zc_processor.cpp
     interconnect_zc_processor.h
     load.cpp

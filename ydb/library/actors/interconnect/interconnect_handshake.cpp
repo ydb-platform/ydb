@@ -959,6 +959,9 @@ namespace NActors {
                 request.SetRequestXxhash(true);
                 request.SetRequestXdcShuffle(true);
                 request.SetRequestAllowDisablingPayloadChecksums(true);
+                // v2 session is incompatible with encryption; only request it when encryption is disabled locally
+                request.SetRequestSessionV2(Common->Settings.EnableInterconnectSessionV2 &&
+                    Common->Settings.EncryptionMode == EEncryptionMode::DISABLED);
                 request.SetHandshakeId(*HandshakeId);
 
                 ui32 pending = 0;
@@ -1053,6 +1056,7 @@ namespace NActors {
                 Params.UseXxhash = success.GetUseXxhash();
                 Params.UseXdcShuffle = success.GetUseXdcShuffle();
                 Params.AllowDisablingPayloadChecksums = success.GetAllowDisablingPayloadChecksums();
+                Params.UseSessionV2 = success.GetUseSessionV2();
                 // Kernel liveness mode is a local transport decision: it depends on whether this side
                 // configured keepalive/user-timeout on its own socket.
                 Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
@@ -1355,6 +1359,9 @@ namespace NActors {
                 Params.UseXdcShuffle = request.GetRequestXdcShuffle();
                 Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
                 Params.AllowDisablingPayloadChecksums = request.GetRequestAllowDisablingPayloadChecksums();
+                // v2 session is used only when both peers enabled it and encryption is not in effect
+                Params.UseSessionV2 = request.GetRequestSessionV2() &&
+                    Common->Settings.EnableInterconnectSessionV2 && !Params.Encryption;
 
                 if (Params.UseExternalDataChannel) {
                     if (request.HasHandshakeId()) {
@@ -1428,6 +1435,7 @@ namespace NActors {
                     success.SetUseXxhash(Params.UseXxhash);
                     success.SetUseXdcShuffle(Params.UseXdcShuffle);
                     success.SetAllowDisablingPayloadChecksums(Params.AllowDisablingPayloadChecksums);
+                    success.SetUseSessionV2(Params.UseSessionV2);
 
                     ui32 pending = 0;
                     auto& actors = Common->ConnectionCheckerActorIds;

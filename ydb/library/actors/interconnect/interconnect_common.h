@@ -80,6 +80,9 @@ namespace NActors {
         ui32 RdmaPayloadCopySizeThreshold = 64 << 10;
         // 5s * 2^8 = 1280s, about 21 minutes with the current RDMA retry base delay.
         ui32 MaxRdmaRetryBackoffLevel = 8;
+        // Enables negotiation and usage of TInterconnectSessionTCPv2 (no session continuation, no encryption).
+        // v2 is used only when both peers have this enabled and encryption is not in effect.
+        bool EnableInterconnectSessionV2 = false;
     };
 
     struct TWhiteboardSessionStatus {

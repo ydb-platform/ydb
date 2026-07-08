@@ -1101,7 +1101,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassPersistBeforePubl
                 continue;
             }
 
-            if (NYql::HasSettingsExcept(persist.Settings().Ref(), EYtSettingType::Unordered)) {
+            if (NYql::HasSettingsExcept(persist.Settings().Ref(), EYtSettingType::Unordered | EYtSettingType::Transparent)) {
                 continue;
             }
 

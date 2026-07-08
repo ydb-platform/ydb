@@ -28,16 +28,18 @@ void TFmrRawTableQueueWriterWithLock::NotifyRowEnd() {
 }
 
 void TFmrRawTableQueueWriterWithLock::DoFlush() {
-    if (BlockContent_.Empty()) {
-        return;
-    }
-
+    // Always wait for this table's turn, even with an empty buffer: the caller
+    // advances NextToEmit right after Flush() returns, so skipping the wait here
+    // would let an empty/already-drained table jump the queue and desync ordering
+    // for tables that haven't taken their turn yet.
     with_lock(OrderedWriteState_->Mutex) {
         OrderedWriteState_->CondVar.Wait(OrderedWriteState_->Mutex, [&] {
             return OrderedWriteState_->NextToEmit == TableId_;
         });
 
-        RawTableQueue_->AddRow(std::move(BlockContent_));
+        if (!BlockContent_.Empty()) {
+            RawTableQueue_->AddRow(std::move(BlockContent_));
+        }
     }
     BlockContent_.Clear();
 }

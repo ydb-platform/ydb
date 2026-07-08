@@ -379,7 +379,6 @@ TIntrusivePtr<NActors::NLog::TSettings> TProxy::BuildLoggerSettings() {
     );
     TString explanation;
     loggerSettings->SetLevel(NActors::NLog::PRI_DEBUG, NKikimrServices::PGWIRE, explanation);
-    loggerSettings->SetLevel(NActors::NLog::PRI_DEBUG, NKikimrServices::PGYDB, explanation);
     return loggerSettings;
 }
 

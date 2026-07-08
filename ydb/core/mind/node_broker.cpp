@@ -106,8 +106,6 @@ void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
     EnableStableNodeNames = appData->FeatureFlags.GetEnableStableNodeNames();
     EnableLongLease = appData->FeatureFlags.GetEnableNodeBrokerLongLease();
 
-    StartTime = ctx.Now();
-
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Committed.ClearState();
 
@@ -515,7 +513,15 @@ void TNodeBroker::TState::ComputeNextEpochDiff(TStateDiff &diff)
 {
     if (Self->EnableLongLease) {
         for (auto &pr : Nodes) {
-            if (pr.second.AliveUntil <= Epoch.End && pr.second.Liveness != ENodeLiveness::Dead) {
+            auto &node = pr.second;
+            // A node that expires in this same diff is erased from Nodes by the
+            // expiration loop in ApplyStateDiff, so it must not also appear in
+            // NodesToMakeDead (that would hit Y_ABORT_UNLESS on the erased node).
+            // Such a node doesn't need the intermediate Dead state anyway.
+            if (node.ExpireV2 <= Epoch.End) {
+                continue;
+            }
+            if (node.AliveUntil <= Epoch.End && node.Liveness != ENodeLiveness::Dead) {
                 diff.NodesToMakeDead.push_back(pr.first);
             }
         }
@@ -844,6 +850,12 @@ void TNodeBroker::TState::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &
     }
 
     LeaseDuration = TDuration::MicroSeconds(config.GetLeaseDuration());
+    if (LeaseDuration < EpochDuration) {
+        LOG_ERROR_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                    LogPrefix() << " Configured lease duration (" << LeaseDuration << ") is smaller"
+                    " than epoch duration (" << EpochDuration << "). Using epoch duration instead.");
+        LeaseDuration = EpochDuration;
+    }
 
     StableNodeNamePrefix = config.GetStableNodeNamePrefix();
 

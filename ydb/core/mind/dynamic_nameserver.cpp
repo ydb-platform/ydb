@@ -97,7 +97,9 @@ private:
         }
 
         TDynamicConfig::TDynamicNodeInfo node(rec.GetNode());
-        if (!exists || !oldNode.EqualExceptExpire(node)) {
+        // EqualExceptExpire() ignores Liveness, but the alive-only list-nodes
+        // cache depends on it, so invalidate on liveness changes as well.
+        if (!exists || !oldNode.EqualExceptExpire(node) || oldNode.Liveness != node.Liveness) {
             Owner->InvalidateListNodesCache();
         }
 

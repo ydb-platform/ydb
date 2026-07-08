@@ -353,8 +353,6 @@ private:
     bool EnableStableNodeNames = false;
     bool EnableLongLease = false;
 
-    TInstant StartTime;
-
     ui64 MaxStaticId;
     ui64 MinDynamicId;
     ui64 MaxDynamicId;

@@ -288,7 +288,7 @@ private:
     TInstant LastResponse;
     TInstant NextPing;
 
-    bool EnableLongLease;
+    bool EnableLongLease = false;
     TInstant Expire_;
     TInstant ExpireV2;
 };

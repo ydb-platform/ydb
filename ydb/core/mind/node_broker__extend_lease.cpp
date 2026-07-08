@@ -67,6 +67,7 @@ public:
         }
 
         Response->Record.SetExpire(node.Expire.GetValue());
+        Response->Record.SetExpireV2(node.ExpireV2.GetValue());
         Response->Record.MutableStatus()->SetCode(TStatus::OK);
         Self->Dirty.Epoch.Serialize(*Response->Record.MutableEpoch());
 

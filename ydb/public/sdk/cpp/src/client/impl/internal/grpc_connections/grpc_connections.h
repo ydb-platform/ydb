@@ -780,6 +780,8 @@ private:
 
     const std::size_t NetworkThreadsNum_;
     bool UsePerChannelTcpConnection_;
+    mutable std::once_flag StopOnce_;
+
     // Must be the last member (first called destructor)
     NYdbGrpc::TGRpcClientLow GRpcClientLow_;
     TLog Log;

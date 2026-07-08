@@ -347,8 +347,10 @@ void TGRpcConnectionsImpl::WaitIdle() {
 }
 
 void TGRpcConnectionsImpl::Stop(bool wait) {
-    StateTracker_.SendNotification(TDbDriverState::ENotifyType::STOP).Wait();
-    GRpcClientLow_.Stop(wait);
+    std::call_once(StopOnce_, [this, wait]() {
+        StateTracker_.SendNotification(TDbDriverState::ENotifyType::STOP).Wait();
+        GRpcClientLow_.Stop(wait);
+    });
 }
 
 void TGRpcConnectionsImpl::SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config, const TDeadline::Duration& timeout, bool permitWithoutCalls) {

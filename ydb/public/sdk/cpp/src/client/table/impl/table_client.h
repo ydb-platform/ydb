@@ -21,6 +21,9 @@
 
 #include <library/cpp/threading/future/core/coroutine_traits.h>
 
+#include <mutex>
+#include <vector>
+
 
 namespace NYdb::inline Dev {
 namespace NTable {
@@ -344,6 +347,8 @@ private:
     NSdkStats::TStatCollector::TClientOperationStatCollector OperationStatCollector_;
     NSessionPool::TSessionPool SessionPool_;
     TRequestMigrator RequestMigrator_;
+    std::mutex InflightClosesMutex_;
+    std::vector<TAsyncStatus> InflightCloses_;
     static const TKeepAliveSettings KeepAliveSettings;
 
     std::shared_ptr<NObservability::TRequestObservation> MakeObservation(const std::string& operationName) {

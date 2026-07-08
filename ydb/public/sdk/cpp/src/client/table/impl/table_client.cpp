@@ -112,6 +112,14 @@ NThreading::TFuture<void> TTableClient::TImpl::Drain() {
         }
     }
     sessions.clear();
+    {
+        std::lock_guard lock(InflightClosesMutex_);
+        closeResults.insert(
+            closeResults.end(),
+            std::make_move_iterator(InflightCloses_.begin()),
+            std::make_move_iterator(InflightCloses_.end()));
+        InflightCloses_.clear();
+    }
     return NThreading::WaitExceptionOrAll(closeResults);
 }
 
@@ -1107,11 +1115,12 @@ TAsyncStatus TTableClient::TImpl::CloseInternal(const TKqpSessionCommon* session
     static const auto internalCloseSessionSettings = TCloseSessionSettings()
             .ClientTimeout(TDuration::Seconds(2));
 
-    auto driver = Connections_;
+    // Keep connections alive until DeleteSession completes. Do not release the
+    // last shared_ptr from this callback: that can destroy TGRpcConnectionsImpl
+    // while Stop() is still running on another thread.
+    auto connections = Connections_;
     return Close(sessionImpl, internalCloseSessionSettings)
-        .Apply([driver{std::move(driver)}](TAsyncStatus status) mutable
-        {
-            driver.reset();
+        .Apply([connections = std::move(connections)](TAsyncStatus status) {
             return status;
         });
 }
@@ -1151,7 +1160,11 @@ void TTableClient::TImpl::DeleteSession(TKqpSessionCommon* sessionImpl) {
     }
 
     if (!sessionImpl->GetId().empty()) {
-        CloseInternal(sessionImpl);
+        auto closeFuture = CloseInternal(sessionImpl);
+        {
+            std::lock_guard lock(InflightClosesMutex_);
+            InflightCloses_.push_back(std::move(closeFuture));
+        }
         DbDriverState_->StatCollector.DecSessionsOnHost(sessionImpl->GetEndpoint());
     }
 

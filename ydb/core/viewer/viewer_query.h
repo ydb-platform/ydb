@@ -390,6 +390,9 @@ public:
         if (Query.empty() && Action != "cancel-query" && Action != "fetch-long-query") {
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Query is empty"), "EmptyQuery");
         }
+        if (Syntax == "pg") {
+            return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "PostgreSQL syntax (syntax=pg) is not supported"), "BadRequest");
+        }
         if (Action == "fetch-long-query") {
             if (!OperationId && ExecutionId.empty()) {
                 return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "operation_id or execution_id required for fetch-long-query"), "BadRequest");
@@ -1520,9 +1523,8 @@ public:
                 description: >
                     query syntax:
                       * `yql_v1` - YQL v1 (default)
-                      * `pg` - PostgreSQL compatible
                 type: string
-                enum: [yql_v1, pg]
+                enum: [yql_v1]
                 required: false
               - name: schema
                 in: query

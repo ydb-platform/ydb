@@ -11,6 +11,3 @@ The operation of PostgreSQL compatibility can be described as follows:
 1. The application sends PostgreSQL-dialect queries to {{ ydb-short-name }} through standard {{ ydb-short-name }} tools.
 2. The query processor translates the PostgreSQL queries into YQL AST.
 3. After the queries are processed, the results are compiled and sent back to the application. During query processing, it can be parallelized and executed on any number of {{ ydb-short-name }} nodes.
-
-The functionality of PostgreSQL compatibility can be graphically represented as follows:
-![Diagram of the PostgreSQL compatibility functionality](./_includes/ydb_pg_scheme_eng.png)

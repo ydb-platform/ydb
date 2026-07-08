@@ -130,6 +130,7 @@ message TConfigItem {
         YamlConfigEnabledItem = 64;
         ScanConveyorConfigItem = 65;
         ColumnShardConfigItem = 66;
+        reserved 69; // LocalPgWireConfigItem
         AwsCompatibilityConfigItem = 70;
         KafkaProxyConfigItem = 71;
         CompConveyorConfigItem = 72;

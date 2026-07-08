@@ -1843,4 +1843,152 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         UNIT_ASSERT_VALUES_EQUAL(forgetResponse.GetStatus(), Ydb::StatusIds::NOT_FOUND);
         UNIT_ASSERT(forgetResponse.IssuesSize() > 0);
     }
+
+    Y_UNIT_TEST(CancelAtDifferentStages) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+        TString root = "/MyRoot";
+
+        // Test cancellation at each stage of the operation
+        // Strategy: intercept the first event of the stage, cancel the operation, then let the event proceed
+        struct TStageTest {
+            TString StageName;
+            std::function<void(TTestActorRuntime&, ui64, const TString&, bool&)> SetupInterceptor;
+        };
+
+        TVector<TStageTest> stages = {
+            {
+                "Locking",
+                [](TTestActorRuntime& runtime, ui64 setConstraintTxId, const TString& root, bool& cancelled) {
+                    ui32 modifySchemeCount = 0;
+                    runtime.SetObserverFunc([&, setConstraintTxId, root](TAutoPtr<IEventHandle>& ev) {
+                        if (!cancelled && ev->GetTypeRewrite() == TEvSchemeShard::TEvModifySchemeTransaction::EventType) {
+                            if (++modifySchemeCount == 1) {
+                                cancelled = true;
+                                auto cancelResponse = TestCancelSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, root, setConstraintTxId);
+                                UNIT_ASSERT_VALUES_EQUAL(cancelResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+                                Cerr << "Cancelled at Locking stage" << Endl;
+                            }
+                        }
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    });
+                }
+            },
+            {
+                "LockingNull Writes",
+                [](TTestActorRuntime& runtime, ui64 setConstraintTxId, const TString& root, bool& cancelled) {
+                    ui32 modifySchemeCount = 0;
+                    runtime.SetObserverFunc([&, setConstraintTxId, root](TAutoPtr<IEventHandle>& ev) {
+                        if (!cancelled && ev->GetTypeRewrite() == TEvSchemeShard::TEvModifySchemeTransaction::EventType) {
+                            if (++modifySchemeCount == 2) {
+                                cancelled = true;
+                                auto cancelResponse = TestCancelSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, root, setConstraintTxId);
+                                UNIT_ASSERT_VALUES_EQUAL(cancelResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+                                Cerr << "Cancelled at LockingNullWrites stage" << Endl;
+                            }
+                        }
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    });
+                }
+            },
+            {
+                "Validating",
+                [](TTestActorRuntime& runtime, ui64 setConstraintTxId, const TString& root, bool& cancelled) {
+                    runtime.SetObserverFunc([&, setConstraintTxId, root](TAutoPtr<IEventHandle>& ev) {
+                        if (!cancelled && ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
+                            cancelled = true;
+                            auto cancelResponse = TestCancelSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, root, setConstraintTxId);
+                            UNIT_ASSERT_VALUES_EQUAL(cancelResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+                            Cerr << "Cancelled at Validating stage" << Endl;
+                        }
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    });
+                }
+            },
+            {
+                "Finishing",
+                [](TTestActorRuntime& runtime, ui64 setConstraintTxId, const TString& root, bool& cancelled) {
+                    ui32 modifySchemeCount = 0;
+                    runtime.SetObserverFunc([&, setConstraintTxId, root](TAutoPtr<IEventHandle>& ev) {
+                        if (!cancelled && ev->GetTypeRewrite() == TEvSchemeShard::TEvModifySchemeTransaction::EventType) {
+                            if (++modifySchemeCount == 3) {
+                                cancelled = true;
+                                auto cancelResponse = TestCancelSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, root, setConstraintTxId);
+                                UNIT_ASSERT_VALUES_EQUAL(cancelResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+                                Cerr << "Cancelled at Finishing stage" << Endl;
+                            }
+                        }
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    });
+                }
+            },
+            {
+                "Unlocking",
+                [](TTestActorRuntime& runtime, ui64 setConstraintTxId, const TString& root, bool& cancelled) {
+                    ui32 modifySchemeCount = 0;
+                    runtime.SetObserverFunc([&, setConstraintTxId, root](TAutoPtr<IEventHandle>& ev) {
+                        if (!cancelled && ev->GetTypeRewrite() == TEvSchemeShard::TEvModifySchemeTransaction::EventType) {
+                            if (++modifySchemeCount == 4) {
+                                cancelled = true;
+                                auto cancelResponse = TestCancelSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, root, setConstraintTxId);
+                                UNIT_ASSERT_VALUES_EQUAL(cancelResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+                                Cerr << "Cancelled at Unlocking stage" << Endl;
+                            }
+                        }
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    });
+                }
+            }
+        };
+
+        ui64 txId = 100;
+
+        for (const auto& stageTest : stages) {
+            Cerr << "=== Testing cancellation at stage: " << stageTest.StageName << " ===" << Endl;
+
+            TString tableName = TStringBuilder() << "Table_" << stageTest.StageName;
+            TString tablePath = root + "/" + tableName;
+
+            TestCreateTable(runtime, ++txId, root, TStringBuilder() << R"(
+                  Name: ")" << tableName << R"("
+                  Columns { Name: "key"   Type: "Uint32" }
+                  Columns { Name: "value" Type: "Utf8"   }
+                  KeyColumnNames: ["key"]
+            )");
+            env.TestWaitNotification(runtime, txId);
+
+            ui64 setConstraintTxId = ++txId;
+            bool cancelled = false;
+            
+            // Setup interceptor before starting the operation
+            stageTest.SetupInterceptor(runtime, setConstraintTxId, root, cancelled);
+
+            auto response = TestSetColumnConstraint(
+                runtime, setConstraintTxId,
+                TTestTxConfig::SchemeShard,
+                root,
+                tablePath,
+                {"value"});
+
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                response.GetStatus(),
+                Ydb::StatusIds::SUCCESS,
+                TStringBuilder() << "Stage: " << stageTest.StageName << ", " << response.ShortDebugString());
+
+            env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+            UNIT_ASSERT_C(cancelled, TStringBuilder() << "Operation was not cancelled at stage: " << stageTest.StageName);
+
+            runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+
+            TestCheckColumnsNotNull(runtime, tablePath, {{"value", false}});
+
+            Cerr << "=== Stage " << stageTest.StageName << " test passed ===" << Endl << Endl;
+        }
+
+        Cerr << "=== All stages tested successfully ===" << Endl;
+    }
 } // Y_UNIT_TEST_SUITE(SetNotNullTest)

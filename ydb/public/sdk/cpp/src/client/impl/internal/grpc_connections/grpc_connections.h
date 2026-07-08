@@ -40,6 +40,12 @@ class ICredentialsProvider;
 // Deferred callbacks
 using TDeferredResultCb = std::function<void(google::protobuf::Any*, TPlainStatus status)>;
 
+class TSdkCallbackGuard {
+public:
+    TSdkCallbackGuard();
+    ~TSdkCallbackGuard();
+};
+
 std::string GetAuthInfo(TDbDriverStatePtr p);
 std::string CreateSDKBuildInfo();
 
@@ -53,6 +59,12 @@ public:
     TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> params);
     ~TGRpcConnectionsImpl();
 
+    static bool IsCurrentThreadInSdkCallback() noexcept;
+
+private:
+    void StopFromCallback(std::shared_ptr<TGRpcConnectionsImpl> self, bool wait);
+
+public:
     void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) override;
     void PostToResponseQueue(std::function<void()>&& f) override;
 
@@ -248,6 +260,8 @@ public:
              requestSettings, context = std::move(context), dbState]
             (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable -> void {
                 if (!status.Ok()) {
+                    context.reset();
+                    TSdkCallbackGuard guard;
                     userResponseCb(
                         nullptr,
                         std::move(status));
@@ -261,6 +275,8 @@ public:
                 try {
                     meta = MakeCallMeta(requestSettings, dbState);
                 } catch (const TYdbException& e) {
+                    context.reset();
+                    TSdkCallbackGuard guard;
                     userResponseCb(
                         nullptr,
                         TPlainStatus(dynamic_cast<const TAuthenticationError*>(&e) ? EStatus::CLIENT_UNAUTHENTICATED : EStatus::UNAVAILABLE, e.what())
@@ -360,10 +376,12 @@ public:
                 } else {
                     NYdb::NIssue::TIssues opIssues;
                     NYdb::NIssue::IssuesFromMessage(operation->issues(), opIssues);
+                    context.reset();
                     userResponseCb(operation, TPlainStatus{static_cast<EStatus>(operation->status()), std::move(opIssues),
                         status.Endpoint, std::move(status.Metadata)});
                 }
             } else {
+                context.reset();
                 userResponseCb(nullptr, status);
             }
         };
@@ -466,6 +484,8 @@ public:
         WithServiceConnection<TService>(
             [this, request, responseCb = std::move(responseCb), rpc, requestSettings, context = std::move(context), dbState](TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
                 if (!status.Ok()) {
+                    context.reset();
+                    TSdkCallbackGuard guard;
                     responseCb(std::move(status), nullptr);
                     return;
                 }
@@ -476,6 +496,8 @@ public:
                 try {
                     meta = MakeCallMeta(requestSettings, dbState);
                 } catch (const TYdbException& e) {
+                    context.reset();
+                    TSdkCallbackGuard guard;
                     responseCb(
                         TPlainStatus(dynamic_cast<const TAuthenticationError*>(&e) ? EStatus::CLIENT_UNAUTHENTICATED : EStatus::UNAVAILABLE, e.what()),
                         nullptr
@@ -500,6 +522,7 @@ public:
                             };
                             processor->AddFinishedCallback(std::move(finishedCallback));
                             TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
+                            TSdkCallbackGuard guard;
                             responseCb(std::move(status), std::move(processor));
                         } else {
                             dbState->StatCollector.IncReqFailDueTransportError();
@@ -508,6 +531,7 @@ public:
                                 dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
                             }
                             TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
+                            TSdkCallbackGuard guard;
                             responseCb(std::move(status), nullptr);
                         }
                     };
@@ -547,6 +571,8 @@ public:
             [this, connectedCallback = std::move(connectedCallback), rpc, requestSettings, context = std::move(context), dbState]
             (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
                 if (!status.Ok()) {
+                    context.reset();
+                    TSdkCallbackGuard guard;
                     connectedCallback(std::move(status), nullptr);
                     return;
                 }
@@ -557,6 +583,8 @@ public:
                 try {
                     meta = MakeCallMeta(requestSettings, dbState);
                 } catch (const TYdbException& e) {
+                    context.reset();
+                    TSdkCallbackGuard guard;
                     connectedCallback(
                         TPlainStatus(dynamic_cast<const TAuthenticationError*>(&e) ? EStatus::CLIENT_UNAUTHENTICATED : EStatus::UNAVAILABLE, e.what()),
                         nullptr
@@ -581,6 +609,7 @@ public:
                             };
                             processor->AddFinishedCallback(std::move(finishedCallback));
                             TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
+                            TSdkCallbackGuard guard;
                             connectedCallback(std::move(status), std::move(processor));
                         } else {
                             dbState->StatCollector.IncReqFailDueTransportError();
@@ -589,6 +618,7 @@ public:
                                 dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
                             }
                             TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
+                            TSdkCallbackGuard guard;
                             connectedCallback(std::move(status), nullptr);
                         }
                     };
@@ -783,6 +813,10 @@ private:
     // Must be the last member (first called destructor)
     NYdbGrpc::TGRpcClientLow GRpcClientLow_;
     TLog Log;
+};
+
+struct TGRpcConnectionsDeleter {
+    void operator()(TGRpcConnectionsImpl* connections) const noexcept;
 };
 
 } // namespace NYdb

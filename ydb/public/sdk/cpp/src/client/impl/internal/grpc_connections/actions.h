@@ -14,6 +14,8 @@
 
 #include <grpcpp/alarm.h>
 
+#include <memory>
+
 namespace NYdb::inline Dev {
 
 using NYdbGrpc::IQueueClientContext;
@@ -135,6 +137,7 @@ public:
             status.Issues.AddIssue(NYdb::NIssue::TIssue(msg));
         }
 
+        this->Context_.reset();
         this->UserResponseCb_(nullptr, status);
         delete this;
     }
@@ -165,6 +168,7 @@ public:
         , Metadata_(std::move(metadata)) {}
 
     void Process(void*) override {
+        this->Context_.reset();
         this->UserResponseCb_(&Response_, TPlainStatus{GRpcStatus_, Endpoint_, std::move(Metadata_)});
         delete this;
     }

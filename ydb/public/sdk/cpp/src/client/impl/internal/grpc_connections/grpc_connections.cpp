@@ -4,10 +4,50 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/src/client/impl/observability/constants.h>
 
+#include <future>
 #include <string>
+#include <thread>
+#include <utility>
 
 
 namespace NYdb::inline Dev {
+
+namespace {
+    thread_local ui32 SdkResponseCallbackDepth = 0;
+    thread_local std::shared_ptr<std::promise<void>> SdkResponseCallbackDonePromise;
+    thread_local std::shared_future<void> SdkResponseCallbackDone;
+
+    template<class TCallback>
+    void RunAfterCurrentSdkCallback(TCallback&& callback) {
+        auto callbackDone = SdkResponseCallbackDone;
+
+        try {
+            std::thread([callback = std::forward<TCallback>(callback), callbackDone = std::move(callbackDone)]() mutable {
+                if (callbackDone.valid()) {
+                    callbackDone.wait();
+                }
+                callback();
+            }).detach();
+        } catch (...) {
+            Y_ABORT("Failed to defer YDB driver action from SDK callback thread");
+        }
+    }
+}
+
+TSdkCallbackGuard::TSdkCallbackGuard() {
+    if (++SdkResponseCallbackDepth == 1) {
+        SdkResponseCallbackDonePromise = std::make_shared<std::promise<void>>();
+        SdkResponseCallbackDone = SdkResponseCallbackDonePromise->get_future().share();
+    }
+}
+
+TSdkCallbackGuard::~TSdkCallbackGuard() {
+    if (--SdkResponseCallbackDepth == 0) {
+        SdkResponseCallbackDonePromise->set_value();
+        SdkResponseCallbackDonePromise.reset();
+        SdkResponseCallbackDone = {};
+    }
+}
 
 bool IsTokenCorrect(const std::string& in) {
     for (char c : in) {
@@ -124,8 +164,9 @@ public:
     }
 
     void OnComplete(bool ok) {
-        Callback(ok);
-        Callback = { };
+        TSdkCallbackGuard guard;
+        auto callback = std::move(Callback);
+        callback(ok);
     }
 
 private:
@@ -232,6 +273,34 @@ TGRpcConnectionsImpl::~TGRpcConnectionsImpl() {
     ResponseQueue_->Stop();
 }
 
+bool TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback() noexcept {
+    return SdkResponseCallbackDepth != 0;
+}
+
+void TGRpcConnectionsImpl::StopFromCallback(std::shared_ptr<TGRpcConnectionsImpl> self, bool wait) {
+    // Waiting on an SDK callback thread may deadlock the response path needed to finish stop.
+    RunAfterCurrentSdkCallback(
+        [self = std::move(self), wait]() mutable {
+            self->Stop(wait);
+        });
+}
+
+void TGRpcConnectionsDeleter::operator()(TGRpcConnectionsImpl* connections) const noexcept {
+    if (!connections) {
+        return;
+    }
+
+    if (!TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback()) {
+        delete connections;
+        return;
+    }
+
+    RunAfterCurrentSdkCallback(
+        [connections] {
+            delete connections;
+        });
+}
+
 void TGRpcConnectionsImpl::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) {
     std::shared_ptr<IQueueClientContext> context;
     if (!TryCreateContext(context)) {
@@ -248,7 +317,11 @@ void TGRpcConnectionsImpl::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration
 }
 
 void TGRpcConnectionsImpl::PostToResponseQueue(std::function<void()>&& f) {
-    ResponseQueue_->Post(std::move(f));
+    ResponseQueue_->Post([f = std::move(f)]() mutable {
+        TSdkCallbackGuard guard;
+        auto callback = std::move(f);
+        callback();
+    });
 }
 
 void TGRpcConnectionsImpl::ScheduleDelayedTask(TSimpleCb&& fn, TDeadline deadline) {
@@ -493,6 +566,7 @@ const TLog& TGRpcConnectionsImpl::GetLog() const {
 
 void TGRpcConnectionsImpl::EnqueueResponse(IObjectInQueue* action) {
     ResponseQueue_->Post([action]() {
+        TSdkCallbackGuard guard;
         action->Process(nullptr);
     });
 }

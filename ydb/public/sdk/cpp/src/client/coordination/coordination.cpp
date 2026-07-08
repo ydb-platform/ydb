@@ -177,11 +177,11 @@ class TSessionContext : public TThrRefBase {
 
 public:
     TSessionContext(
-            TGRpcConnectionsImpl* connections,
+            std::shared_ptr<TGRpcConnectionsImpl> connections,
             TDbDriverStatePtr dbState,
             const std::string& path,
             const TSessionSettings& settings)
-        : Connections_(connections)
+        : Connections_(std::move(connections))
         , DbDriverState_(dbState)
         , Path_(path)
         , Settings_(settings)
@@ -197,8 +197,8 @@ public:
         return result;
     }
 
-    void Start(IQueueClientContextProvider* provider) {
-        auto context = provider->CreateContext();
+    void Start() {
+        auto context = Connections_->CreateContext();
         if (!context) {
             auto status = MakeStatus(EStatus::CLIENT_CANCELLED, "Client is stopped");
             auto promise = std::move(SessionPromise);
@@ -1730,7 +1730,7 @@ private:
     }
 
 private:
-    TGRpcConnectionsImpl* const Connections_;
+    std::shared_ptr<TGRpcConnectionsImpl> Connections_;
     TDbDriverStatePtr DbDriverState_;
     const std::string Path_;
     const TSessionSettings Settings_;
@@ -1850,14 +1850,14 @@ public:
         const TSessionSettings& settings)
     {
         auto session = MakeIntrusive<TSessionContext>(
-            Connections_.get(),
+            Connections_,
             DbDriverState_,
             path,
             settings);
 
         auto result = session->TakeStartResult();
 
-        session->Start(Connections_.get());
+        session->Start();
 
         return result;
     }

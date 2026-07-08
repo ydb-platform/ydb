@@ -288,6 +288,19 @@ enum ESimpleCounters {
     COUNTER_FORMAT_POSITION_TABLE_COUNT = 222 [(CounterOpts) = {Name: "TablesInFormatPosition"}];
 
     COUNTER_IN_FLIGHT_OPS_TxCreateFullBackupOp = 223 [(CounterOpts) = {Name: "InFlightOps/CreateFullBackupOp"}];
+
+    COUNTER_RESERVED_224 = 224;
+    COUNTER_RESERVED_225 = 225;
+    COUNTER_RESERVED_226 = 226;
+    COUNTER_RESERVED_227 = 227;
+
+    COUNTER_SMALL_BLOBS_VOLUME_BYTES = 228               [(CounterOpts) = {Name: "SmallBlobsVolumeBytes"}];
+    COUNTER_SMALL_BLOBS_COUNT = 229                      [(CounterOpts) = {Name: "SmallBlobsCount"}];
+    COUNTER_SMALL_BLOBS_VOLUME_HARD_QUOTA_BYTES = 230    [(CounterOpts) = {Name: "SmallBlobsVolumeHardQuotaBytes"}];
+    COUNTER_SMALL_BLOBS_VOLUME_SOFT_QUOTA_BYTES = 231    [(CounterOpts) = {Name: "SmallBlobsVolumeSoftQuotaBytes"}];
+    COUNTER_SMALL_BLOBS_COUNT_HARD_QUOTA = 232           [(CounterOpts) = {Name: "SmallBlobsCountHardQuota"}];
+    COUNTER_SMALL_BLOBS_COUNT_SOFT_QUOTA = 233           [(CounterOpts) = {Name: "SmallBlobsCountSoftQuota"}];
+    COUNTER_SMALL_BLOBS_QUOTA_EXCEEDED = 234             [(CounterOpts) = {Name: "SmallBlobsQuotaExceeded"}];
 }
 
 enum ECumulativeCounters {

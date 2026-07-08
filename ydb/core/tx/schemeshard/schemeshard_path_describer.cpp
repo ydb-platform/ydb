@@ -940,6 +940,10 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
         entry->MutableDomainState()->SetDiskQuotaExceeded(true);
     }
 
+    if (subDomainInfo->GetSmallBlobsQuotaExceeded()) {
+        entry->MutableDomainState()->SetSmallBlobsQuotaExceeded(true);
+    }
+
     if (const auto& auditSettings = subDomainInfo->GetAuditSettings()) {
         entry->MutableAuditSettings()->CopyFrom(*auditSettings);
     }

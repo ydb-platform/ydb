@@ -968,7 +968,7 @@ private:
         PkCellsScratch.resize(n);
         for (ui32 i = 0; i < n; ++i) {
             const ui32 pos = PostingCovers ? CoveredPkPositions[i] : i;
-            PkCellsScratch[i] = NMiniKQL::MakeCell(MainKeyTypeInfos[i], value.GetElement(pos), TypeEnv, /* copy */ true);
+            PkCellsScratch[i] = NMiniKQL::MakeCell(MainKeyTypeInfos[i], value.GetElement(pos), TypeEnv, /* copy */ false);
         }
         return TSerializedCellVec::Serialize(PkCellsScratch);
     }

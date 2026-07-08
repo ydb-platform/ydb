@@ -10,10 +10,6 @@ The installation method depends on your Superset setup. For detailed instruction
 
 ## Adding a database connection to {{ ydb-short-name }} {#add-database-connection}
 
-There is one supported way to connect to {{ ydb-short-name }}:
-
-1. Native connection using the SQLAlchemy driver (starting from version 5.0.0)
-
 ### Native connection using SQLAlchemy driver
 
 To connect to {{ ydb-short-name }} from Apache Superset **version 5.0.0 and higher**, follow these steps:

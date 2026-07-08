@@ -569,7 +569,6 @@ public:
         }
 
         const auto& settings = request.settings();
-        const bool exportFilteringEnabled = NBackup::IsExportFilteringEnabled(*AppData());
         InitCommonSourcePath();
 
         if constexpr (TTraits::HasEncryption) {
@@ -620,7 +619,7 @@ public:
             }
         } else {
             const bool commonDestSpecified = TTraits::HasDestination(settings);
-            if (!exportFilteringEnabled) {
+            if (!NBackup::IsExportFilteringEnabled(*AppData())) {
                 // Check that no new fields are specified
                 if constexpr (IsS3Export) {
                     if (commonDestSpecified) {

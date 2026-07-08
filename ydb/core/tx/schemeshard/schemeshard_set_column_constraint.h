@@ -71,7 +71,6 @@ struct TEvSetColumnConstraint {
 
     struct TEvGetResponse: public TEventPB<TEvGetResponse, NKikimrSetColumnConstraint::TEvGetResponse, EvGetResponse> {};
 
-<<<<<<< HEAD
     struct TEvListRequest: public TEventPB<TEvListRequest, NKikimrSetColumnConstraint::TEvListRequest, EvListRequest> {
         TEvListRequest() = default;
 
@@ -84,7 +83,8 @@ struct TEvSetColumnConstraint {
 
     struct TEvListResponse: public TEventPB<TEvListResponse, NKikimrSetColumnConstraint::TEvListResponse, EvListResponse> {
         TEvListResponse() = default;
-=======
+    };
+
     struct TEvForgetRequest: public TEventPB<TEvForgetRequest, NKikimrSetColumnConstraint::TEvForgetRequest, EvForgetRequest> {
         TEvForgetRequest() = default;
 
@@ -105,7 +105,6 @@ struct TEvSetColumnConstraint {
         explicit TEvForgetResponse(const ui64 txId) {
             Record.SetTxId(txId);
         }
->>>>>>> 2c2e9baa213 (init)
     };
 }; // TEvSetColumnConstraint
 

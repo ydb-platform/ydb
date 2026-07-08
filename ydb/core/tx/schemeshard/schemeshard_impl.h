@@ -1938,11 +1938,8 @@ public:
         class TTxCreateSetColumnConstraint;
         struct TTxProgressSetColumnConstraint;
         struct TTxGetSetColumnConstraint;
-<<<<<<< HEAD
         struct TTxListSetColumnConstraint;
-=======
         struct TTxForgetSetColumnConstraint;
->>>>>>> 2c2e9baa213 (init)
     };
 
     NTabletFlatExecutor::ITransaction* CreateTxCreate(TEvIndexBuilder::TEvCreateRequest::TPtr& ev);

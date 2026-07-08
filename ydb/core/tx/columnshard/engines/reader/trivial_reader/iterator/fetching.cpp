@@ -417,17 +417,21 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
     }
     AFL_VERIFY(!source->GetStageResult().IsEmpty());
     auto* sSource = source->MutableAs<IDataSource>();
-    for (auto&& i : source->GetStageResult().GetPagesToResultVerified()) {
-        if (sSource->GetIsStartedByCursor() && !context->GetCommonContext()->GetScanCursor()->CheckSourceIntervalUsage(
-                                                   source->GetSourceIdx(), i.GetIndexStart(), i.GetRecordsCount())) {
+    if (sSource->GetIsStartedByCursor()) {
+        const auto& scanCursor = context->GetCommonContext()->GetScanCursor();
+        while (!source->GetStageResult().IsFinished()) {
+            const auto& page = source->GetStageResult().GetPagesToResultVerified().front();
+            if (scanCursor->CheckSourceIntervalUsage(source->GetSourceIdx(), page.GetIndexStart(), page.GetRecordsCount())) {
+                break;
+            }
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep_SKIP_CURSOR")(
                 "source_idx", source->GetSourceIdx());
             source->MutableStageResult().ExtractPageForResult();
-            continue;
-        } else {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep")("source_idx", source->GetSourceIdx());
         }
-        acc.AddStep(std::make_shared<TBuildResultStep>(i.GetIndexStart(), i.GetRecordsCount()));
+    }
+    for (const auto& page : source->GetStageResult().GetPagesToResultVerified()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep")("source_idx", source->GetSourceIdx());
+        acc.AddStep(std::make_shared<TBuildResultStep>(page.GetIndexStart(), page.GetRecordsCount()));
     }
     auto plan = std::move(acc).Build();
     ReportTracing(source, step, TMonotonic::Now() - startExecution);

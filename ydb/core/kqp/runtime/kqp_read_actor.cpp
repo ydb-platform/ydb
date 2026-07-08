@@ -283,6 +283,10 @@ public:
             Points.push_back(std::move(point));
         }
 
+        void ReservePoints(size_t count) {
+            Points.reserve(count);
+        }
+
     private:
         TSmallVec<TSerializedTableRange> Ranges;
         TSmallVec<TSerializedCellVec> Points;
@@ -442,6 +446,7 @@ public:
                 }
             } else {
                 YQL_ENSURE(Settings->GetRanges().KeyPointsSize() > 0);
+                state.ReservePoints(Settings->GetRanges().KeyPointsSize());
                 for (const auto& point : Settings->GetRanges().GetKeyPoints()) {
                     state.AddPoint(TSerializedCellVec(point));
                 }

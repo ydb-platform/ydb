@@ -102,12 +102,14 @@ namespace {
                 }
             }
 
-            auto callableInput = input->Child(1);
-            if (TCoApply::Match(callableInput) && !IsConstantUdf(callableInput)) {
-                return false;
-            }
-            else if (callableInput->GetTypeAnn()->GetKind() != NYql::ETypeAnnotationKind::Type && !IsConstantExpr(callableInput)) {
-                return false;
+            for (size_t i=1; i<input->ChildrenSize(); i++) {
+                auto callableInput = input->Child(i);
+                if (TCoApply::Match(callableInput) && !IsConstantUdf(callableInput)) {
+                    return false;
+                }
+                else if (callableInput->GetTypeAnn()->GetKind() != NYql::ETypeAnnotationKind::Type && !IsConstantExpr(callableInput)) {
+                    return false;
+                }
             }
             return true;
         }

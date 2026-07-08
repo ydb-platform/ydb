@@ -3,6 +3,7 @@ import traceback
 import uuid
 import allure
 import logging
+import random
 import time as time_module
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -22,12 +23,13 @@ from ydb.tests.library.stability.utils.remote_execution import execute_command
 
 
 class StressRunExecutor:
-    def __init__(self, ignore_stderr_content, event_process_mode, database):
+    def __init__(self, ignore_stderr_content, event_process_mode, database, nodes):
         self.database = database
         self._ignore_stderr_content = ignore_stderr_content
         self.event_process_mode = event_process_mode
         self.run_counter_lock = threading.Lock()
         self.run_counter = 0
+        self.nodes = nodes
 
     def __substitute_variables_in_template(
         self,
@@ -58,6 +60,8 @@ class StressRunExecutor:
 
         # Get variable values
         node_host = target_node.host
+        # choose a random slot with the same host
+        slot_kafka_port = random.choice([dyn_node for dyn_node in self.nodes if dyn_node.host == node_host and dyn_node.role == YdbCluster.Node.Role.COMPUTE]).kafka_port
         iteration_num = run_config.get("iteration_num", 1)
         thread_id = run_config.get("thread_id", node_host)
         database = run_config.get("database", 'Root/db1')
@@ -71,6 +75,7 @@ class StressRunExecutor:
         substitutions = {
             "{node_host}": node_host,
             "{database}": database,
+            "{slot_kafka_port}": str(slot_kafka_port),
             "{iteration_num}": str(iteration_num),
             "{thread_id}": str(thread_id),
             "{run_id}": run_id,

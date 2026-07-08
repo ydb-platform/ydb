@@ -21,13 +21,17 @@ void ReadCompressedProfile(IInputStream* in, NProto::Profile* profile)
 {
     TZLibDecompress decompress(in);
     profile->Clear();
-    profile->ParseFromArcadiaStream(&decompress);
+    TProtobufInputStreamAdaptor adaptor(&decompress);
+    Y_UNUSED(profile->ParseFromZeroCopyStream(&adaptor));
 }
 
 void WriteCompressedProfile(IOutputStream* out, const NProto::Profile& profile)
 {
     TZLibCompress compress(out, ZLib::StreamType::GZip);
-    profile.SerializeToArcadiaStream(&compress);
+    {
+        TProtobufOutputStreamAdaptor adaptor(&compress);
+        Y_UNUSED(profile.SerializeToZeroCopyStream(&adaptor));
+    }
     compress.Finish();
 }
 

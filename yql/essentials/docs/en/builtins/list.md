@@ -450,6 +450,7 @@ Specifics:
 * If the step is neither positive nor negative (0 or NaN), the result list is empty.
 * If any of the parameters is optional, the result list is optional.
 * If any of the parameters is `NULL`, the result is `NULL`.
+* If any of the parameters is `double/float("inf")`, the result list is empty.
 
 #### Examples
 

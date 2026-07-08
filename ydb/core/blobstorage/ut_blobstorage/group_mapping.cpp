@@ -509,7 +509,8 @@ Y_UNIT_TEST_SUITE(GroupAllocation) {
     Y_UNIT_TEST(HalfRacks) {
         const ui32 numNodes = 4;
         TBlobStorageGroupType groupType = TBlobStorageGroupType::Erasure4Plus2Block;
-        ui32 pdisksPerScope = 4;
+        const ui32 pdisksPerScope = 4;
+        const ui32 domainLevelEnd = 51;
         TEnvironmentSetup env(TEnvironmentSetup::TSettings{
             .NodeCount = numNodes,
             .Erasure = groupType,
@@ -563,7 +564,7 @@ Y_UNIT_TEST_SUITE(GroupAllocation) {
             geometry->SetRealmLevelBegin(10);
             geometry->SetRealmLevelEnd(20);
             geometry->SetDomainLevelBegin(10);
-            geometry->SetDomainLevelEnd(255);
+            geometry->SetDomainLevelEnd(domainLevelEnd);
 
             auto response = env.Invoke(request);
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
@@ -574,7 +575,7 @@ Y_UNIT_TEST_SUITE(GroupAllocation) {
 
         const ui32 groupId = base.GetGroup(0).GetGroupId();
 
-        TGroupGeometryInfo geom = CreateGroupGeometry(groupType, 1, 8, 1, 10, 20, 10, 255);
+        TGroupGeometryInfo geom = CreateGroupGeometry(groupType, 1, 8, 1, 10, 20, 10, domainLevelEnd);
 
         auto getPDiskScopes = [](const NKikimrBlobStorage::TBaseConfig& cfg) {
             std::map<std::pair<ui32, ui32>, TString> scopes;

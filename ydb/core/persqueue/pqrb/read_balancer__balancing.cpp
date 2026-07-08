@@ -1240,7 +1240,7 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
     } else if (!partition.IsInactive()) {
         auto delay = std::min<size_t>(1ul << partition.Iteration, Balancer.GetLifetimeSeconds()); // TODO use split/merge time
 
-        YDB_LOG_DEBUG("Reading of the partition was finished by Scheduled release of the partition for re-reading. seconds,",
+        YDB_LOG_DEBUG("Reading of the partition was finished by Scheduled release of the partition for re-reading. seconds",
             {"logPrefix", LogPrefix()},
             {"partitionId", partitionId},
             {"consumer", r.GetConsumer()},
@@ -1811,7 +1811,7 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActor
 void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_DEBUG("Pipe disconnected",
         {"logPrefix", LogPrefix()},
-        {"ClientId", ev->Get()->ClientId});
+        {"clientId", ev->Get()->ClientId});
     Subscriptions.erase(ev->Get()->ClientId);
 
     auto it = Sessions.find(ev->Get()->ClientId);
@@ -1819,13 +1819,13 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
     if (it == Sessions.end()) {
         YDB_LOG_DEBUG("Pipe disconnected but there aren't sessions exists",
             {"logPrefix", LogPrefix()},
-            {"ClientId", ev->Get()->ClientId});
+            {"clientId", ev->Get()->ClientId});
         return;
     }
 
     YDB_LOG_INFO("Pipe disconnected; active server",
         {"logPrefix", LogPrefix()},
-        {"ClientId", ev->Get()->ClientId},
+        {"clientId", ev->Get()->ClientId},
         {"actors", (it != Sessions.end() ? it->second->ServerActors : -1)});
 
     auto& session = it->second;
@@ -1836,8 +1836,8 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
     if (!session->SessionName.empty()) {
         YDB_LOG_NOTICE("Pipe client disconnected session",
             {"logPrefix", LogPrefix()},
-            {"ClientId", ev->Get()->ClientId},
-            {"clientId", session->ClientId},
+            {"eventClientId", ev->Get()->ClientId},
+            {"sessionClientId", session->ClientId},
             {"sessionName", session->SessionName});
 
         auto* consumer = GetConsumer(session->ClientId);
@@ -1856,7 +1856,7 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
     } else {
         YDB_LOG_INFO("Pipe disconnected no session",
             {"logPrefix", LogPrefix()},
-            {"ClientId", ev->Get()->ClientId});
+            {"clientId", ev->Get()->ClientId});
 
         Sessions.erase(it);
     }

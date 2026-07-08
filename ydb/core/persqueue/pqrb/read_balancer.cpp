@@ -404,7 +404,7 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
 
         YDB_LOG_ERROR("TEvClientConnected Status TabletId",
             {"logPrefix", LogPrefix()},
-            {"Status", ev->Get()->Status},
+            {"status", ev->Get()->Status},
             {"tabletId", tabletId});
         return;
     }
@@ -419,8 +419,8 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
         YDB_LOG_DEBUG("TEvClientConnected TabletId NodeId Generation",
             {"logPrefix", LogPrefix()},
             {"tabletId", tabletId},
-            {"ServerId.NodeId", ev->Get()->ServerId.NodeId()},
-            {"Generation", ev->Get()->Generation});
+            {"nodeId", ev->Get()->ServerId.NodeId()},
+            {"generation", ev->Get()->Generation});
     }
     else
         YDB_LOG_INFO("TEvClientConnected Pipe is not found, TabletId",

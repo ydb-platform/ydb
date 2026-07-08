@@ -5,6 +5,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
+
 namespace NKikimr::NPQ::NBalancing {
 
 namespace {
@@ -226,7 +228,9 @@ TPrepareGetPartitionResponse TMLPBalancer::PrepareGetPartitionResponse(
     }
 
     if (consumerConfig->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
-        PQ_LOG_D("Consumer '" << consumerName << "' is not MLP consumer");
+        YDB_LOG_DEBUG("Consumer is not MLP consumer",
+            {"logPrefix", LogPrefix()},
+            {"consumerName", consumerName});
         result.IsError = true;
         result.ErrorStatus = Ydb::StatusIds::SCHEME_ERROR;
         result.ErrorMessage = TStringBuilder() << "Consumer '" << consumerName << "' is not MLP consumer";

@@ -130,9 +130,6 @@ public:
         const auto& settings = request.settings();
         const bool exportFilteringEnabled = NBackup::IsExportFilteringEnabled(*AppData());
         const bool encryptedExportEnabled = NBackup::IsEncryptedExportEnabled(*AppData());
-        if (!exportFilteringEnabled && !settings.exclude_regexps().empty()) {
-            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Import filtering is not supported in current configuration");
-        }
         try {
             // Validate regexps
             NBackup::CombineRegexps(settings.exclude_regexps());

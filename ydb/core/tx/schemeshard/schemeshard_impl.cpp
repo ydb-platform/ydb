@@ -3262,7 +3262,7 @@ void ClearBackupRestoreHistory(NIceDb::TNiceDb& db, TPathId pathId, ui64 tabletI
             db.Table<Schema::TxShardStatus>().Key(txId, shard.GetOwnerId(), shard.GetLocalId()).Delete();
         }
 
-        if (pathId.OwnerId == tabletId) {
+        if (IsLocalId(pathId)) {
             db.Table<Schema::CompletedBackups>().Key(pathId.LocalPathId, txId, result.CompletionDateTime).Delete();
         }
         db.Table<Schema::MigratedCompletedBackups>().Key(pathId.OwnerId, pathId.LocalPathId, txId, result.CompletionDateTime).Delete();

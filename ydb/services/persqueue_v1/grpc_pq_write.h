@@ -104,10 +104,10 @@ template <typename WriteRequest>
 void TPQWriteService::HandleWriteRequest(typename WriteRequest::TPtr& ev, const TActorContext& ctx) {
     constexpr bool UseMigrationProtocol = std::is_same_v<WriteRequest, NGRpcService::TEvStreamPQWriteRequest>;
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection");
+    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New grpc connection");
 
     if (TooMuchSessions()) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - too much sessions");
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New grpc connection failed - too much sessions");
         ev->Get()->Attach(ctx.SelfID);
         ev->Get()->WriteAndFinish(
             FillWriteResponse<UseMigrationProtocol>("proxy overloaded", PersQueue::ErrorCode::OVERLOAD),
@@ -120,10 +120,10 @@ void TPQWriteService::HandleWriteRequest(typename WriteRequest::TPtr& ev, const 
     if (HaveClusters && localCluster.empty()) {
         ev->Get()->Attach(ctx.SelfID);
         if (LocalCluster) {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - cluster disabled");
+            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New grpc connection failed - cluster disabled");
             ev->Get()->WriteAndFinish(FillWriteResponse<UseMigrationProtocol>("cluster disabled", PersQueue::ErrorCode::CLUSTER_DISABLED), Ydb::StatusIds::UNSUPPORTED); //CANCELLED
         } else {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - initializing");
+            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New grpc connection failed - initializing");
             ev->Get()->WriteAndFinish(FillWriteResponse<UseMigrationProtocol>("initializing", PersQueue::ErrorCode::INITIALIZING), Ydb::StatusIds::UNAVAILABLE); //CANCELLED
         }
         return;
@@ -138,7 +138,8 @@ void TPQWriteService::HandleWriteRequest(typename WriteRequest::TPtr& ev, const 
         );
         const ui64 cookie = NextCookie();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new session created cookie " << cookie);
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New session created cookie",
+            {"cookie", cookie});
 
         auto ip = ev->Get()->GetPeerName();
         TActorId worker = ctx.Register(new TWriteSessionActor<UseMigrationProtocol>(

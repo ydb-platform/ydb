@@ -14,7 +14,7 @@
 #include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/utils/log/log.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 namespace NKikimr::NKqp::NOpt {
 

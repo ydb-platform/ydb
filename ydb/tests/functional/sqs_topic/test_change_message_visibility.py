@@ -1,14 +1,34 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import botocore
 import time
 
-from hamcrest import assert_that, equal_to, has_length, not_none
+from hamcrest import assert_that, equal_to, has_length, not_none, raises
 
 from ydb.tests.library.sqs_topic.test_base import KikimrSqsTopicTestBase
 
 
 class TestSqsTopicChangeMessageVisibility(KikimrSqsTopicTestBase):
+    def test_change_message_visibility_invalid_receipt_handle(self):
+        queue_name = self._make_queue_name('change_message_visibility_invalid_receipt_handle')
+        self._queue_url = self._boto_client.create_queue(QueueName=queue_name)['QueueUrl']
+
+        def change_message_visibility_with_invalid_handle():
+            self._boto_client.change_message_visibility(
+                QueueUrl=self._queue_url,
+                ReceiptHandle='not_a_receipt_handle',
+                VisibilityTimeout=30,
+            )
+
+        assert_that(
+            change_message_visibility_with_invalid_handle,
+            raises(
+                botocore.exceptions.ClientError,
+                pattern='ReceiptHandleIsInvalid',
+            ),
+        )
+
     def test_change_message_visibility(self):
         queue_name = self._make_queue_name('change_message_visibility')
         self._queue_url = self._boto_client.create_queue(QueueName=queue_name)['QueueUrl']

@@ -2565,7 +2565,9 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         case TRule_alter_table_action::kAltAlterTableAction10: {
             // DROP INDEX
             const auto& dropIndex = node.GetAlt_alter_table_action10().GetRule_alter_table_drop_index1();
-            AlterTableDropIndex(dropIndex, params);
+            if (!AlterTableDropIndex(dropIndex, params)) {
+                return false;
+            }
             break;
         }
         case TRule_alter_table_action::kAltAlterTableAction11: {
@@ -2690,6 +2692,22 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
                 return false;
             }
 
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction24: {
+            // ADD STATISTICS
+            const auto& addStatistics = node.GetAlt_alter_table_action24().GetRule_alter_table_add_statistics1();
+            if (!AlterTableAddStatistics(addStatistics, params)) {
+                return false;
+            }
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction25: {
+            // DROP STATISTICS
+            const auto& dropStatistics = node.GetAlt_alter_table_action25().GetRule_alter_table_drop_statistics1();
+            if (!AlterTableDropStatistics(dropStatistics, params)) {
+                return false;
+            }
             break;
         }
         case TRule_alter_table_action::ALT_NOT_SET:
@@ -3025,8 +3043,18 @@ bool TSqlQuery::AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlt
     return CreateTableIndex(node.GetRule_table_index2(), params.AddIndexes);
 }
 
-void TSqlQuery::AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params) {
+bool TSqlQuery::AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params) {
     params.DropIndexes.emplace_back(IdEx(node.GetRule_an_id3(), *this));
+    return !Ctx_.HasPendingErrors;
+}
+
+bool TSqlQuery::AlterTableAddStatistics(const TRule_alter_table_add_statistics& node, TAlterTableParameters& params) {
+    return CreateTableStatistics(node.GetRule_table_statistics2(), params.AddStatistics);
+}
+
+bool TSqlQuery::AlterTableDropStatistics(const TRule_alter_table_drop_statistics& node, TAlterTableParameters& params) {
+    params.DropStatistics.emplace_back(IdEx(node.GetRule_an_id3(), *this));
+    return !Ctx_.HasPendingErrors;
 }
 
 void TSqlQuery::AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params) {

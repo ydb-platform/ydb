@@ -35,11 +35,11 @@
     * `--encoding=utf_8` — {{ ydb-short-name }} поддерживает строковые данные только в [UTF-8](https://ru.wikipedia.org/wiki/UTF-8).
 
 2. Привести дамп к виду, который поддерживается {{ ydb-short-name }} командой `ydb tools pg-convert` [YDB CLI](../reference/ydb-cli/index.md).
-3. Результат загрузить в {{ ydb-short-name }} в режиме postgres-совместимости.
+3. Результат загрузить в {{ ydb-short-name }} с помощью {{ ydb-short-name }} CLI и маркера `--!syntax_pg`.
 
 ## Команда pg-convert {#pg-convert}
 
-Команда `ydb tools pg-convert` считывает из файла или stdin'а дамп, полученный утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), выполняет преобразования и выводит в stdout дамп, который можно отправить в PostgreSQL-совместимую прослойку {{ ydb-short-name }}.
+Команда `ydb tools pg-convert` считывает из файла или stdin'а дамп, полученный утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), выполняет преобразования и выводит в stdout SQL-скрипт, который можно выполнить в {{ ydb-short-name }} с маркером `--!syntax_pg`.
 
 `ydb tools pg-convert` выполняет следующие преобразования:
 
@@ -86,9 +86,8 @@
         -e POSTGRES_USER=pgroot -e POSTGRES_PASSWORD=1234 \
         -e POSTGRES_DB=local \
         -p 5433:5433 -d postgres:14 -c 'port=5433'
-    docker run --name ydb-postgres -d --pull always -p 5432:5432 -p 8765:8765 \
-        -e POSTGRES_USER=ydbroot -e POSTGRES_PASSWORD=4321 \
-        -e YDB_FEATURE_FLAGS=enable_temp_tables,enable_table_pg_types \
+    docker run --name ydb-local -d --pull always -p 2136:2136 -p 8765:8765 \
+        -e YDB_FEATURE_FLAGS=enable_temp_tables,enable_table_pg_types,enable_pg_syntax \
         -e YDB_USE_IN_MEMORY_PDISKS=true \
         ghcr.io/ydb-platform/local-ydb:latest
     ```
@@ -97,11 +96,11 @@
 
     #|
     || База данных | PostgreSQL | YDB ||
-    || Имя контейнера | postgres_container | ydb-postgres ||
-    || Адрес | postgres://pgroot:1234@localhost:5433/local | postgresql://ydbroot:4321@localhost:5432/local ||
-    || Порт | 5433 | 5432 ||
-    || Имя пользователя | pgroot | ydbroot ||
-    || Пароль | 1234 | 4321 ||
+    || Имя контейнера | postgres_container | ydb-local ||
+    || Адрес | postgres://pgroot:1234@localhost:5433/local | grpc://localhost:2136/local ||
+    || Порт | 5433 | 2136 ||
+    || Имя пользователя | pgroot | root ||
+    || Пароль | 1234 | — ||
     |#
 
 2. Сгенерировать данные через [pgbench](https://www.postgresql.org/docs/current/pgbench.html):
@@ -120,7 +119,8 @@
 4. Загрузить дамп базы в {{ ydb-short-name }}:
 
     ```bash
-    ydb tools pg-convert --ignore-unsupported -i dump.sql | psql postgresql://ydbroot:4321@localhost:5432/local
+    ydb tools pg-convert --ignore-unsupported -i dump.sql > converted.sql
+    ydb -e grpc://localhost:2136 -d /local sql -s "$(printf '%s\n' '--!syntax_pg' "$(cat converted.sql)")"
     ```
 
-    Эта команда использует {{ ydb-short-name }} CLI для преобразования файла `dump.sql` в формат, поддерживаемый {{ ydb-short-name }} в режиме совместимости с PostgreSQL. Затем преобразованный файл перенаправляется в утилиту `psql` для загрузки данных в {{ ydb-short-name }} по протоколу PostgreSQL.
+    Эта команда использует {{ ydb-short-name }} CLI для преобразования файла `dump.sql` в формат, поддерживаемый {{ ydb-short-name }}, а затем выполняет полученный SQL-скрипт через gRPC API.

@@ -7827,14 +7827,14 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         auto &appData = env->GetAppData();
         appData.FeatureFlags.SetEnableCutHistory(true);
         TRowsModel data;
-        bool wasCutHistory = false;
+        unsigned wasCutHistory = 0;
         auto observer = env.Env.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvTablet::EvCutTabletHistory) {
                 auto* event = ev->Get<TEvTablet::TEvCutTabletHistory>();
                 UNIT_ASSERT_VALUES_EQUAL(event->Record.GetChannel(), 1);
                 UNIT_ASSERT_LE(event->Record.GetFromGeneration(), 1);
                 UNIT_ASSERT_LE(event->Record.GetGroupID(), 1);
-                wasCutHistory = true;
+                ++wasCutHistory;
                 ev.Reset();
             }
         });
@@ -7857,7 +7857,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
             return new TTestFlatTablet(env.Edge, tablet, info);
         }, 0, &starter);
 
-        env->WaitFor("cutting history", [&] { return wasCutHistory; });
+        env->WaitFor("cutting history", [&] { return wasCutHistory >= 2; });
 
     }
 
@@ -7875,14 +7875,14 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         auto &appData = env->GetAppData();
         appData.FeatureFlags.SetEnableCutHistory(true);
         TRowsModel data;
-        bool wasCutHistory = false;
+        unsigned wasCutHistory = 0;
         auto observer = env.Env.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvTablet::EvCutTabletHistory) {
                 auto* event = ev->Get<TEvTablet::TEvCutTabletHistory>();
                 UNIT_ASSERT_VALUES_EQUAL(event->Record.GetChannel(), 0);
                 UNIT_ASSERT_LE(event->Record.GetFromGeneration(), 1);
                 UNIT_ASSERT_LE(event->Record.GetGroupID(), 1);
-                wasCutHistory = true;
+                ++wasCutHistory;
                 ev.Reset();
             }
         });
@@ -7905,7 +7905,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
             return new TTestFlatTablet(env.Edge, tablet, info);
         }, 0, &starter);
 
-        env->WaitFor("cutting history", [&] { return wasCutHistory; });
+        env->WaitFor("cutting history", [&] { return wasCutHistory >= 2; });
 
     }
 
@@ -8043,7 +8043,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         auto &appData = env->GetAppData();
         appData.FeatureFlags.SetEnableCutHistory(true);
         TRowsModel data;
-        bool wasCutHistory = false;
+        unsigned wasCutHistory = 0;
         std::set<ui32> barriers;
         auto observer = env.Env.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
@@ -8051,7 +8051,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
                     auto* event = ev->Get<TEvTablet::TEvCutTabletHistory>();
                     UNIT_ASSERT_VALUES_EQUAL(event->Record.GetChannel(), 1);
                     UNIT_ASSERT_LE(event->Record.GetFromGeneration(), 2);
-                    wasCutHistory = true;
+                    ++wasCutHistory;
                     ev.Reset();
                     break;
                 }
@@ -8084,7 +8084,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
             return new TTestFlatTablet(env.Edge, tablet, info);
         }, 0, &starter);
 
-        env->WaitFor("cutting history", [&] { return wasCutHistory; });
+        env->WaitFor("cutting history", [&] { return wasCutHistory >= 2; });
         for (auto b : barriers) {
             Cerr << b << Endl;
         }

@@ -117,6 +117,12 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveBoot(
             for (const auto &blobId : entry.References) {
                 SeenBlob(blobId);
             }
+            for (const auto &blobId : entry.GcDiscovered) {
+                SeenBlob(blobId);
+            }
+            for (const auto &blobId : entry.GcLeft) {
+                SeenBlob(blobId);
+            }
         }
     }
 

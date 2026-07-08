@@ -204,9 +204,10 @@ void TExecutorGCLogic::Confirm(const TActorContext &ctx) {
         auto& channel = ChannelInfo[channelId];
         auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);
         std::unordered_set<ui32> seenGroups;
-        auto allHistoryIt = TabletStorageInfo->Channels[channelId].History.begin();
+        auto& channelHistory = TabletStorageInfo->Channels[channelId].History;
+        auto allHistoryIt = channelHistory.begin();
         for (const auto* historyEntry : historyToCut) {
-            while (allHistoryIt->FromGeneration < historyEntry->FromGeneration) {
+            while (allHistoryIt != channelHistory.end() && allHistoryIt->FromGeneration < historyEntry->FromGeneration) {
                 seenGroups.insert(allHistoryIt->GroupID);
                 ++allHistoryIt;
             }

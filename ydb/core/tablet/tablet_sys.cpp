@@ -1521,7 +1521,7 @@ void TTablet::SendBarriersForCutHistory() {
     auto allHistoryIt = channelHistory.begin();
     bool sentHardGc = false;
     for (const auto* historyEntry : historyToCut) {
-        while (allHistoryIt->FromGeneration < historyEntry->FromGeneration) {
+        while (allHistoryIt != channelHistory.end() && allHistoryIt->FromGeneration < historyEntry->FromGeneration) {
             seenGroups.insert(allHistoryIt->GroupID);
             ++allHistoryIt;
         }

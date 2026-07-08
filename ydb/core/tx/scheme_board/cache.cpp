@@ -907,6 +907,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 KeyColumnTypes[i] = column->PType;
             }
 
+            MultiColumnStatistics.reserve(desc.MultiColumnStatisticsSize());
+            for (const auto& statistics : desc.GetMultiColumnStatistics()) {
+                MultiColumnStatistics.push_back(statistics);
+            }
+
             if (pathDesc.HasDomainDescription()) {
                 DomainInfo = new NSchemeCache::TDomainInfo(pathDesc.GetDomainDescription());
             }

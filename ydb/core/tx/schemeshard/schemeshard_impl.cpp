@@ -4661,12 +4661,8 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId,
     }
 
     auto clearHistory = [&](const TMap<TTxId, TTableInfo::TBackupRestoreResult>& history) {
-        for (auto& bItem: history) {
-            TTxId txId = bItem.first;
-            const auto& result = bItem.second;
-
-            for (auto& sItem: result.ShardStatuses) {
-                auto shard = sItem.first;
+        for (const auto& [txId, result] : history) {
+            for (const auto& [shard, _] : result.ShardStatuses) {
                 if (IsLocalId(shard)) {
                     db.Table<Schema::ShardBackupStatus>().Key(txId, shard.GetLocalId()).Delete();
                 }

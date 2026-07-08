@@ -297,7 +297,7 @@ void TMapElement::SetElementName(const TInfoUnit& elementName) {
     ElementName = elementName;
 }
 
-TExpression TMapElement::GetExpression() const {
+const TExpression& TMapElement::GetExpression() const {
     return Expr;
 }
 
@@ -619,8 +619,7 @@ TVector<std::reference_wrapper<TExpression>> TOpFilter::GetExpressions() {
 }
 
 void TOpFilter::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext & ctx) {
-    TOptimizeExprSettings settings(&ctx.TypeCtx);
-    FilterExpr.ApplyReplaceMap(map, ctx);
+    FilterExpr = FilterExpr.ApplyReplaceMap(map, ctx);
 }
 
 TVector<TInfoUnit> TOpFilter::GetFilterIUs(TPlanProps& props) const {

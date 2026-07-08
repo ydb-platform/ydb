@@ -8,9 +8,11 @@
 #include <util/string/cast.h>
 #include <util/string/strip.h>
 #include <util/system/error.h>
+#include <util/system/info.h>
 
 #include <algorithm>
 #include <cctype>
+#include <limits>
 #include <optional>
 #include <utility>
 
@@ -363,11 +365,64 @@ void BuildDerivedGroups(TCpuTopology& topology) {
     SortGroups(topology.Packages);
 
     topology.PlacementGroups = topology.L3CacheGroups;
+    TCpuMask placementCpus;
+    for (const auto& group : topology.PlacementGroups) {
+        placementCpus = placementCpus | group.Cpus;
+    }
+
+    TCpuMask remainingCpus = topology.AllCpus - placementCpus;
+    if (!remainingCpus.IsEmpty()) {
+        topology.PlacementGroups.push_back(TCpuTopologyGroup{UnknownCpuTopologyId, std::move(remainingCpus)});
+    }
+
     ui32 placementGroupId = 0;
     for (auto& group : topology.PlacementGroups) {
         group.Id = placementGroupId++;
     }
 }
+
+#if defined(_win_)
+std::expected<TCpuTopology, TString> BuildFlatCpuTopology(TCpuId cpuCount) {
+    if (cpuCount == 0) {
+        return std::unexpected("no CPU topology data found: CPU count is zero");
+    }
+
+    TCpuMask allCpus;
+    for (TCpuId cpuId = 0; cpuId < cpuCount; ++cpuId) {
+        allCpus.Set(cpuId);
+    }
+
+    TCpuTopology result;
+    result.Cpus.reserve(cpuCount);
+    for (TCpuId cpuId = 0; cpuId < cpuCount; ++cpuId) {
+        TLogicalCpuInfo cpu;
+        cpu.CpuId = cpuId;
+        cpu.Online = true;
+
+        cpu.CoreId = cpuId;
+        cpu.CoreCpus.Set(cpuId);
+        cpu.ThreadSiblings.Set(cpuId);
+
+        cpu.ClusterId = 0;
+        cpu.ClusterCpus = allCpus;
+        cpu.L3CacheId = 0;
+        cpu.L3CacheCpus = allCpus;
+        cpu.DieId = 0;
+        cpu.DieCpus = allCpus;
+        cpu.PackageId = 0;
+        cpu.PackageCpus = allCpus;
+        cpu.NumaNodeId = 0;
+        cpu.NumaNodeCpus = allCpus;
+
+        result.Cpus.push_back(std::move(cpu));
+    }
+
+    result.AllCpus = allCpus;
+    result.NumaNodes.push_back(TCpuTopologyGroup{0, allCpus});
+    BuildDerivedGroups(result);
+    return result;
+}
+#endif
 
 } // namespace
 
@@ -412,6 +467,9 @@ std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root) 
     if (result.Cpus.empty()) {
         return std::unexpected("no CPU topology data found under " + CpuRootPath(root).GetPath());
     }
+    for (const auto& cpu : result.Cpus) {
+        result.AllCpus.Set(cpu.CpuId);
+    }
 
     auto numaNodes = ParseNumaNodes(root);
     if (!numaNodes) {
@@ -430,4 +488,16 @@ std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root) 
 
     BuildDerivedGroups(result);
     return result;
+}
+
+std::expected<TCpuTopology, TString> ParseCpuTopology() {
+#if defined(_win_)
+    const size_t cpuCount = NSystemInfo::CachedNumberOfCpus();
+    if (cpuCount > std::numeric_limits<TCpuId>::max()) {
+        return std::unexpected("CPU count is too large: " + ToString(cpuCount));
+    }
+    return BuildFlatCpuTopology(static_cast<TCpuId>(cpuCount));
+#else
+    return ParseSysfsCpuTopology(TFsPath("/sys/devices/system"));
+#endif
 }

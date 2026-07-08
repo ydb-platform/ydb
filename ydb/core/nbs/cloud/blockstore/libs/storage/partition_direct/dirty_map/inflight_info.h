@@ -148,8 +148,8 @@ public:
     [[nodiscard]] THostIndex RequestFlush(
         THostIndex destination,
         THostMask disabledHosts);
-    void ConfirmFlush(THostRoute route);
-    void FlushFailed(THostRoute route);
+    void ConfirmFlush(THostIndex host);
+    void FlushFailed(THostIndex host);
     [[nodiscard]] THostMask GetRequestedFlushes() const;
 
     void RequestErase(THostIndex host);

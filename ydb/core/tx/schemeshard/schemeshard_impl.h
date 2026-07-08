@@ -72,7 +72,7 @@
 
 #include <util/generic/ptr.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
 namespace NKikimr::NSchemeShard::NBackground {
 struct TEvListRequest;
@@ -83,6 +83,10 @@ namespace NKikimr::TEvKeyValue {
     using TEvVacuumResponse__HandlePtr = TAutoPtr<NActors::TEventHandle<TEvVacuumResponse>>;
 }
 
+namespace NKikimr::NTestShard {
+    struct TEvControlResponse;
+    using TEvControlResponse__HandlePtr = TAutoPtr<NActors::TEventHandle<TEvControlResponse>>;
+}
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -318,6 +322,7 @@ public:
     THashMap<TPathId, TSecretInfo::TPtr> Secrets;
     THashMap<TPathId, TStreamingQueryInfo::TPtr> StreamingQueries;
     THashSet<TPathId> TableInBackupCollections;
+    THashMap<TPathId, TTestShardSetInfo::TPtr> TestShardSets;
 
     TTempDirsState TempDirsState;
 
@@ -1024,6 +1029,10 @@ public:
     void PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
     void PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
 
+    // TestShardSet
+    void PersistTestShardSet(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistRemoveTestShardSet(NIceDb::TNiceDb& db, TPathId pathId);
+
     void PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op);
 
     // Secret
@@ -1575,6 +1584,8 @@ public:
 
     void Handle(TEvPrivate::TEvProgressTablePartitionsFormatSweep::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(NKikimr::NTestShard::TEvControlResponse__HandlePtr& ev, const TActorContext& ctx);
+
     void RestartPipeTx(TTabletId tabletId, const TActorContext& ctx);
 
     TOperationId RouteIncoming(TTabletId tabletId, const TActorContext& ctx);
@@ -2034,6 +2045,8 @@ public:
     TInstant ForcedCompactionProgressStartTime;
     TDuration ForcedCompactionPersistBatchMaxTime = TDuration::MilliSeconds(100);
     bool ForcedCompactionNeedsImmediatePersist = false;
+    ui32 ForcedCompactionStoredOperationsLimit = 1000; // total operations, 0 means unlimited
+    bool ForcedCompactionAutoForgetOperations = true;
 
     struct TCancellingForcedCompaction {
         struct TWaiter {
@@ -2072,6 +2085,11 @@ public:
 
     void PersistForcedCompactionState(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo);
     void PersistForcedCompactionForget(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo);
+    void ForgetForcedCompaction(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo);
+    // Ensures there is room to store one more operation within ForcedCompactionStoredOperationsLimit,
+    // auto-forgetting the oldest finished operations when ForcedCompactionAutoForgetOperations is enabled.
+    // Returns false if the limit is reached and no room could be made.
+    bool TryFreeForcedCompactionSlot(NIceDb::TNiceDb& db, const TActorContext& ctx);
     void PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo, const TVector<std::pair<TShardIdx, TPathId>>& shardsToCompact);
     void PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo, const TVector<TShardIdx>& shardsToCompact);
     void PersistForcedCompactionDoneShard(NIceDb::TNiceDb& db, const TShardIdx& shardId);
@@ -2180,10 +2198,16 @@ public:
     void ChangeDiskSpaceTablesTotalBytes(i64 delta) override;
     void AddDiskSpaceTables(EUserFacingStorageType storageType, ui64 data, ui64 index) override;
     void ChangeDiskSpaceTopicsTotalBytes(ui64 value) override;
-    void ChangeDiskSpaceQuotaExceeded(i64 delta) override;
     void ChangeDiskSpaceHardQuotaBytes(i64 delta) override;
     void ChangeDiskSpaceSoftQuotaBytes(i64 delta) override;
     void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) override;
+    void ChangeSmallBlobsVolumeBytes(i64 delta) override;
+    void ChangeSmallBlobsCount(i64 delta) override;
+    void ChangeSmallBlobsVolumeHardQuotaBytes(i64 delta) override;
+    void ChangeSmallBlobsVolumeSoftQuotaBytes(i64 delta) override;
+    void ChangeSmallBlobsCountHardQuota(i64 delta) override;
+    void ChangeSmallBlobsCountSoftQuota(i64 delta) override;
+    void ChangeSimpleCounter(ESimpleCounters counter, i64 delta) override;
     void ChangePathCount(i64 delta) override;
     void SetPathCount(ui64 value) override;
     void SetPathsQuota(ui64 value) override;

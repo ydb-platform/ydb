@@ -307,7 +307,7 @@ inline int CompareKeys(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedV
     if (isTuple) {
         if (left && right) {
             for (ui32 i = 0; i < types.size(); ++i) {
-                if (const auto cmp = CompareValues(types[i].first, true,
+                if (const auto cmp = CompareValues(types[i].first, /*asc=*/true,
                                                    types[i].second,
                                                    left.GetElement(i), right.GetElement(i))) {
                     return cmp;
@@ -321,7 +321,7 @@ inline int CompareKeys(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedV
 
         return 0;
     } else {
-        return CompareValues(types.front().first, true, types.front().second, left, right);
+        return CompareValues(types.front().first, /*asc=*/true, types.front().second, left, right);
     }
 }
 

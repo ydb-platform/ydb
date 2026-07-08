@@ -1,4 +1,5 @@
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/caching_iam_credentials_provider_service.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
@@ -37,8 +38,14 @@ class TIamResolverActor : public NActors::TActor<TIamResolverActor> {
                     const auto& serviceControl = NKikimr::AppData()->ReplicationConfig.GetIamServiceControl();
 
                     NYdb::TIamServiceParams iamParams;
-                    iamParams.SystemServiceAccountCredentials = NYdb::CreateIamCredentialsProviderFactory();
+                    NYdb::TIamHost vmMetadataParams;
+                    if (NKikimr::AppData()->AuthConfig.HasLocalMetadataService()) {
+                        vmMetadataParams.Host = NKikimr::AppData()->AuthConfig.GetLocalMetadataService().GetHost();
+                        vmMetadataParams.Port = NKikimr::AppData()->AuthConfig.GetLocalMetadataService().GetPort();
+                    }
+                    iamParams.SystemServiceAccountCredentials = NYdb::CreateIamCredentialsProviderFactory(vmMetadataParams);
                     iamParams.Endpoint = serviceControl.GetEndpoint();
+                    iamParams.EnableSsl = serviceControl.GetEnableSsl();
                     iamParams.ServiceId = serviceControl.GetServiceId();
                     iamParams.MicroserviceId = serviceControl.GetMicroserviceId();
                     iamParams.ResourceType = serviceControl.GetResourceType();

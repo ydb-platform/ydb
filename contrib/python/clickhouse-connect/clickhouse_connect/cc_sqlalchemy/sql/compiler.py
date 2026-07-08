@@ -1,9 +1,15 @@
+import re
+
 from sqlalchemy.exc import CompileError
 from sqlalchemy.sql import elements, sqltypes
 from sqlalchemy.sql.compiler import SQLCompiler
+from sqlalchemy.util import memoized_property
 
 from clickhouse_connect.cc_sqlalchemy.datatypes.base import ChSqlaType
 from clickhouse_connect.cc_sqlalchemy.sql import format_table
+
+# The driver's external_bind_re only recognizes \w+ placeholder names.
+_bind_name_re = re.compile(r"\w+\Z")
 
 
 def _find_outermost_marker(text, markers):
@@ -40,12 +46,8 @@ def _find_outermost_marker(text, markers):
     return -1
 
 
-def _resolve_ch_type_name(sqla_type):
-    """Resolve a SQLAlchemy type instance to a ClickHouse type name string.
-
-    Handles both native ChSqlaType instances which carry their ClickHouse name
-    directly and generic SQLAlchemy types by mapping to reasonable ClickHouse defaults.
-    """
+def _ch_type_name(sqla_type):
+    """Map a SQLAlchemy type to a ClickHouse type name, or None if unmapped."""
     if isinstance(sqla_type, ChSqlaType):
         return sqla_type.name
     # Order matters so we need to check subtypes before parent types
@@ -69,10 +71,93 @@ def _resolve_ch_type_name(sqla_type):
         return "Date"
     if isinstance(sqla_type, sqltypes.String):
         return "String"
-    return "String"
+    return None
+
+
+def _resolve_ch_type_name(sqla_type):
+    """ClickHouse type name for a VALUES column, falling back to String."""
+    return _ch_type_name(sqla_type) or "String"
+
+
+def _resolve_ch_bind_type(sqla_type):
+    """ClickHouse type name for a server-side bind, raising on unmapped types."""
+    if isinstance(sqla_type, sqltypes.TupleType):
+        return f"Tuple({', '.join(_resolve_ch_bind_type(t) for t in sqla_type.types)})"
+    name = _ch_type_name(sqla_type)
+    if name is None:
+        raise CompileError(f"server_side_params needs an explicit type for every bind; none resolved for {sqla_type!r}.")
+    return name
 
 
 class ChStatementCompiler(SQLCompiler):
+    # SQLAlchemy 1.4 does not pass bindparam_type to bindparam_string, so stash it here.
+    _ch_bind_type = None
+
+    @property
+    def _server_side_params(self):
+        return getattr(self.dialect, "server_side_params", False)
+
+    @property
+    def _ch_array_binds(self):
+        return self.__dict__.setdefault("_ch_array_bind_names", set())
+
+    @memoized_property
+    def _bind_processors(self):
+        """Bind processors with array-bound params dropped; the driver formats those."""
+        processors = SQLCompiler._bind_processors.fget(self)
+        if self._ch_array_binds:
+            return {k: v for k, v in processors.items() if k not in self._ch_array_binds}
+        return processors
+
+    def _ch_check_bind_name(self, name):
+        if not _bind_name_re.match(name):
+            raise CompileError(
+                f"server_side_params cannot bind parameter {name!r}: ClickHouse server-side "
+                "parameter names must match [A-Za-z0-9_]. Rename the bind parameter."
+            )
+
+    def visit_bindparam(self, bindparam, **kw):
+        if not self._server_side_params:
+            return super().visit_bindparam(bindparam, **kw)
+        if bindparam.expanding and not kw.get("literal_binds") and not bindparam.literal_execute:
+            return self._ch_expanding_bindparam(bindparam, **kw)
+        prev = self._ch_bind_type
+        self._ch_bind_type = bindparam.type
+        try:
+            return super().visit_bindparam(bindparam, **kw)
+        finally:
+            self._ch_bind_type = prev
+
+    def _ch_has_bind_processor(self, sqla_type):
+        if isinstance(sqla_type, sqltypes.TupleType):
+            return any(self._ch_has_bind_processor(t) for t in sqla_type.types)
+        return sqla_type._cached_bind_processor(self.dialect) is not None
+
+    def _ch_expanding_bindparam(self, bindparam, **kw):
+        """Render an IN-family bind as a single {name:Array(Type)} placeholder."""
+        # Array binds skip per-element processors, so a type that needs one can't be bound.
+        if self._ch_has_bind_processor(bindparam.type):
+            raise CompileError(f"server_side_params cannot bind an IN list of {bindparam.type!r}: it needs a bind processor.")
+        # Drop the param from post-compile expansion so its list reaches the driver intact.
+        super().visit_bindparam(bindparam, **kw)
+        self.post_compile_params = self.post_compile_params.difference([bindparam])
+        name = self._truncate_bindparam(bindparam)
+        actual = self.escaped_bind_names.get(name, name) if self.escaped_bind_names else name
+        self._ch_check_bind_name(actual)
+        self._ch_array_binds.add(actual)
+        return "{" + actual + ":Array(" + _resolve_ch_bind_type(bindparam.type) + ")}"
+
+    def bindparam_string(self, name, **kw):
+        base = super().bindparam_string(name, **kw)
+        if not self._server_side_params or kw.get("post_compile") or kw.get("expanding"):
+            return base
+        actual = self.escaped_bind_names.get(name, name) if self.escaped_bind_names else name
+        self._ch_check_bind_name(actual)
+        ch_type = kw.get("bindparam_type") or self._ch_bind_type
+        if ch_type is None:
+            raise CompileError(f"server_side_params requires a typed bind parameter, but none was available for {name!r}.")
+        return "{" + actual + ":" + _resolve_ch_bind_type(ch_type) + "}"
+
     def _raise_on_escape(self, binary, operator_name: str):
         if binary.modifiers.get("escape") is not None:
             raise CompileError(f"ClickHouse does not support the ESCAPE clause on {operator_name}")

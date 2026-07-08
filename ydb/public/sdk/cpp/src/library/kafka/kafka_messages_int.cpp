@@ -1,5 +1,7 @@
 #include "kafka_messages_int.h"
 
+#include <util/string/builder.h>
+
 namespace NKafka {
 
 TKafkaWritable& TKafkaWritable::operator<<(const TKafkaRawBytes& val) {

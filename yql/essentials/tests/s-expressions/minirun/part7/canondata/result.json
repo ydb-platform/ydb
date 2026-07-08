@@ -309,9 +309,9 @@
     ],
     "test.test[Join-ListJoinCore-default.txt-Debug]": [
         {
-            "checksum": "466e642640bbca7ecbbc277200d4ed33",
-            "size": 972,
-            "uri": "https://{canondata_backend}/1889210/d8cf4f29f3b12a7f532ef52c2e2d59bfeab373f0/resource.tar.gz#test.test_Join-ListJoinCore-default.txt-Debug_/opt.yql"
+            "checksum": "1c1cf90b1f302b842d3455362087c949",
+            "size": 971,
+            "uri": "https://{canondata_backend}/995452/ad892267d23cfdcfc3102b1832e7407551c63a10/resource.tar.gz#test.test_Join-ListJoinCore-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[Join-ListJoinCore-default.txt-Results]": [

@@ -25,6 +25,9 @@ public:
     [[nodiscard]] size_t GetHostCount() const;
     [[nodiscard]] ui32 GetVChunkIndex() const;
 
+    void SetDBGIndex(ui32 dbgIndex);
+    [[nodiscard]] ui32 GetDBGIndex() const;
+
     // Enables the host to work. If the total count of ddisks is not enough to
     // reach the quorum, then can make a promotion for ddisk.
     void EnableHost(THostIndex hostIndex);
@@ -73,6 +76,7 @@ public:
 
 private:
     size_t HostCount = 0;
+    ui32 DBGIndex = 0;
     ui32 VChunkIndex = 0;
     THostRoles PBufferHosts;
     THostRoles DDiskHosts;

@@ -89,6 +89,16 @@ ui32 TVChunkConfig::GetVChunkIndex() const
     return VChunkIndex;
 }
 
+void TVChunkConfig::SetDBGIndex(ui32 dbgIndex)
+{
+    DBGIndex = dbgIndex;
+}
+
+ui32 TVChunkConfig::GetDBGIndex() const
+{
+    return DBGIndex;
+}
+
 void TVChunkConfig::EnableHost(THostIndex hostIndex)
 {
     EnabledHosts.Set(hostIndex);

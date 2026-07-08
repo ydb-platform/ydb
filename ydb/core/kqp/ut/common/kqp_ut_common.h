@@ -144,6 +144,10 @@ public:
     TKikimrSettings& SetUseLocalCheckpointsInStreamingQueries(bool value) { UseLocalCheckpointsInStreamingQueries = value; return *this; };
     TKikimrSettings& SetCheckpointPeriod(TDuration value) { CheckpointPeriod = value; return *this; };
     TKikimrSettings& SetLogSettings(TTestLogSettings value) { LogSettings = value; return *this; };
+    TKikimrSettings& SetEnableStrictSerializableIsolation(bool value) {
+        AppConfig.MutableTableServiceConfig()->SetEnableStrictSerializableIsolation(value);
+        return *this;
+    }
     TKikimrSettings& SetVerbose(bool value) { Verbose = value; return *this; };
 };
 

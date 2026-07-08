@@ -20,7 +20,6 @@ public:
     };
     enum class EQuerySyntax {
         YQL /* "yql" */,
-        PG /* "pg"*/
     };
     enum class EDatetimeTypes {
         DateTime32 /* "dt32" */,

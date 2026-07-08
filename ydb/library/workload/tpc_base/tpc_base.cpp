@@ -164,9 +164,6 @@ void TTpcBaseWorkloadGenerator::FilterHeader(IOutputStream& result, TStringBuf h
 
 TString TTpcBaseWorkloadGenerator::GetHeader(const TString& query) const {
     TStringBuilder header;
-    if (Params.GetSyntax() == TWorkloadBaseParams::EQuerySyntax::PG) {
-        header << "--!syntax_pg" << Endl;
-    }
     switch (FloatMode) {
     case TTpcBaseWorkloadParams::EFloatMode::DOUBLE:
         FilterHeader(header.Out, NResource::Find("consts.yql"), query);
@@ -189,8 +186,6 @@ void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComm
         << "    Use Decimal type with canonical precision and scale." << Endl;
     switch (commandType) {
     case TWorkloadParams::ECommandType::Run:
-        opts.AddLongOption( "syntax", "Query syntax [" + GetEnumAllNames<EQuerySyntax>() + "].")
-            .StoreResult(&Syntax).DefaultValue(Syntax);
         opts.AddLongOption("scale", "Sets the percentage of the benchmark's data size and workload to use, relative to full scale.")
             .DefaultValue(Scale).StoreResult(&Scale);
         break;

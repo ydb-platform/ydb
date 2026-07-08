@@ -2250,7 +2250,7 @@ public:
             RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, Settings.TliConfig, CreateUserContext()),
             AsyncIoFactory, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
-            QueryState ? QueryState->StatementResultIndex : 0,             FederatedQuerySetup,
+            QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             nullptr, TPartitionPrunerConfig{}, std::move(tableIdsForSnapshot), txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
             llvmSettings, Settings.QueryService, QueryState ? QueryState->Generation : 0, ChannelService,
             (QueryState && QueryState->PreparedQuery)

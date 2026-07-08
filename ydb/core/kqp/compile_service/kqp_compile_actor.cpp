@@ -207,7 +207,7 @@ private:
     TVector<TQueryAst> GetAstStatements(const TActorContext &ctx) {
         TString cluster = QueryId.Cluster;
         TKqpTranslationSettingsBuilder settingsBuilder(ConvertType(QueryId.Settings.QueryType), cluster, QueryId.Text, Config->GetYqlBindingsMode(), GUCSettings);
-            settingsBuilder.SetKqpTablePathPrefix(Config->_KqpTablePathPrefix.Get().GetRef())
+        settingsBuilder.SetKqpTablePathPrefix(Config->_KqpTablePathPrefix.Get().GetRef())
             .SetIsEnableExternalDataSources(AppData(ctx)->FeatureFlags.GetEnableExternalDataSources())
             .SetApplicationName(ApplicationName)
             .SetQueryParameters(QueryId.QueryParameterTypes)

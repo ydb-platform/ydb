@@ -77,7 +77,7 @@ The unavailable pile will be transitioned to the `DISCONNECTED` state, and when 
 
 {% note warning %}
 
-If mandatory authentication is enabled on the cluster, login and password authentication does not work when performing failover — use client certificate authentication instead. For details, see [{#T}](#emergency-auth).
+If mandatory authentication is enabled on the cluster, login and password authentication cannot be used while the cluster is in an emergency state — use client certificate authentication instead. For details, see [{#T}](#emergency-auth).
 
 {% endnote %}
 
@@ -93,15 +93,15 @@ Immediately after the operation starts, the pile transitions to the `NOT_SYNCHRO
 
 ### Authentication specifics when the cluster is in an emergency state {#emergency-auth}
 
-Bridge cluster management commands require administrative privileges. On a cluster with mandatory authentication enabled ([`enforce_user_token_requirement: true`](../../../reference/configuration/security_config.md)), all authentication methods work on a healthy cluster, including [login and password authentication](../../../security/authentication.md#static-credentials).
+Bridge cluster management commands require cluster administrator privileges. If mandatory authentication is enabled ([`enforce_user_token_requirement: true`](../../../reference/configuration/security_config.md)), all authentication methods are available during normal cluster operation, including [login and password authentication](../../../security/authentication.md#static-credentials).
 
-However, when a pile fails, the cluster suspends serving requests until [failover](#failover) is performed. In this state, login and password authentication does not work: validating credentials requires access to [SchemeShard](../../../concepts/glossary.md#scheme-shard), which is unavailable while the cluster is in an emergency state. A login attempt fails with the following error:
+However, when a pile fails, the cluster suspends serving requests until [failover](#failover) is performed. In this state, login and password authentication cannot be used: validating credentials requires access to [SchemeShard](../../../concepts/glossary.md#scheme-shard), which is unavailable while the cluster is in an emergency state. A login attempt fails with the following error:
 
 ```text
 SchemeShard is unreachable
 ```
 
-The only authentication method that works while the cluster is in an emergency state is [client certificate authentication](../../../reference/configuration/client_certificate_authorization.md). The client certificate is verified locally by the node that received the request, so this check does not depend on the availability of the cluster as a whole.
+The only authentication method available while the cluster is in an emergency state is [client certificate authentication](../../../reference/configuration/client_certificate_authorization.md). The client certificate is verified locally by the node that received the request, so this check does not depend on the availability of the cluster as a whole.
 
 Client certificate authentication must be configured on the cluster in advance:
 
@@ -147,6 +147,6 @@ where:
 
 {% note warning %}
 
-Verify that client certificate authentication works in advance, before an emergency occurs: it is impossible to change the cluster configuration while the cluster is in an emergency state.
+Verify that client certificate authentication works in advance, before an emergency occurs. If client certificate authentication was not configured before the emergency, bringing the cluster out of the emergency state becomes significantly more complicated and requires manual intervention on the cluster nodes.
 
 {% endnote %}

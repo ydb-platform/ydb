@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 #include <ydb/core/kqp/opt/rbo/analysis/logical_name_constraints.h>
+#include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_aggregation_builder.h>
 #include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_join_builder.h>
 #include <ydb/core/kqp/opt/rbo/traces/kqp_rbo_trace_output.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
@@ -1701,6 +1702,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             .EndStruct();
         rows.AddListItem().BeginStruct()
             .AddMember("id").Int64(3)
+            .AddMember("k").Int64(10)
+            .AddMember("v").Int64(101)
+            .EndStruct();
+        rows.AddListItem().BeginStruct()
+            .AddMember("id").Int64(4)
             .AddMember("k").Int64(20)
             .AddMember("v").Int64(200)
             .EndStruct();
@@ -1714,16 +1720,19 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto result = querySession.ExecuteQuery(R"(
             PRAGMA YqlSelect = 'force';
 
-            SELECT DISTINCT k AS k, v AS v
-            FROM `/Root/dups`
-            ORDER BY k, v;
+            SELECT d.k
+            FROM (
+                SELECT DISTINCT k, v
+                FROM `/Root/dups`
+            ) AS d
+            ORDER BY d.k;
         )",
             NYdb::NQuery::TTxControl::NoTx(),
             NYdb::NQuery::TExecuteQuerySettings())
             .ExtractValueSync();
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([[10;100];[20;200]])");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([[10];[10];[20]])");
     }
 
     bool HasParam(const std::string& ast, const std::string& param) {
@@ -4509,6 +4518,45 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL_C(rightExpandLambda->ChildrenSize(), 2, dump);
         UNIT_ASSERT_C(rightExpandLambda->Child(1)->IsCallable("Member"), dump);
         UNIT_ASSERT_VALUES_EQUAL(TString(rightExpandLambda->Child(1)->Child(1)->Content()), "a");
+    }
+
+    Y_UNIT_TEST(PhysicalAggregationDoesNotEmitDeadKeyColumns) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("key"), TInfoUnit("value")}, pos);
+        SetTestListType(read, read->GetOutputIUs(), testContext.ExprCtx);
+
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{
+                TOpAggregationTraits(TInfoUnit("value"), "sum", TInfoUnit("sum_value")),
+            },
+            TVector<TInfoUnit>{TInfoUnit("key")},
+            EOpPhase::Final,
+            false,
+            pos
+        );
+        SetTestListType(aggregate, aggregate->GetOutputIUs(), testContext.ExprCtx);
+        TOpRoot root(aggregate, pos, {"sum_value"});
+
+        ComputeLogicalTestProps(root);
+
+        const auto& aggLiveOut = GetLiveOut(aggregate.get());
+        UNIT_ASSERT_VALUES_EQUAL(aggLiveOut.size(), 1);
+        UNIT_ASSERT(aggLiveOut.contains(TInfoUnit("sum_value")));
+
+        auto physical = TPhysicalAggregationBuilder(aggregate, testContext.ExprCtx, pos)
+            .BuildPhysicalOp(testContext.ExprCtx.NewArgument(pos, "input"), std::nullopt);
+
+        TExprNode::TListType narrowMaps;
+        CollectCallableNodes(physical, "NarrowMap", narrowMaps);
+        UNIT_ASSERT_VALUES_EQUAL_C(narrowMaps.size(), 1, KqpExprToPrettyString(TExprBase(physical), testContext.ExprCtx));
+
+        const auto body = TCoLambda(narrowMaps.front()->ChildPtr(1)).Body().Ptr();
+        UNIT_ASSERT_C(body->IsCallable("AsStruct"), KqpExprToPrettyString(TExprBase(physical), testContext.ExprCtx));
+        UNIT_ASSERT_VALUES_EQUAL_C(body->ChildrenSize(), 1, KqpExprToPrettyString(TExprBase(physical), testContext.ExprCtx));
+        UNIT_ASSERT_VALUES_EQUAL(TString(body->Child(0)->Child(0)->Content()), "sum_value");
     }
 
     Y_UNIT_TEST(PruneDeadAggregateTraitsEnablesReadColumnPruning) {

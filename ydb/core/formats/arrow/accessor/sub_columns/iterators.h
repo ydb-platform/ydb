@@ -1,5 +1,6 @@
 #pragma once
 #include "columns_storage.h"
+#include "native_scalars.h"
 #include "others_storage.h"
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
@@ -15,6 +16,8 @@ private:
     bool HasValueFlag = false;
     std::string_view RawValue;
     bool IsColumnKeyFlag = false;
+    EValueType ValueType = EValueType::BinaryJson;
+    NBinaryJson::TBinaryJson NormalizedRawValue;
 
     void InitFromIterator(const TColumnsData::TIterator& iterator) {
         RecordIndex = iterator.GetCurrentRecordIndex();
@@ -63,9 +66,10 @@ private:
     }
 
 public:
-    TGeneralIterator(TColumnsData::TIterator&& iterator, const std::optional<ui32> remappedKey = {})
+    TGeneralIterator(TColumnsData::TIterator&& iterator, const EValueType valueType, const std::optional<ui32> remappedKey = {})
         : Iterator(iterator)
-        , RemappedKey(remappedKey) {
+        , RemappedKey(remappedKey)
+        , ValueType(valueType) {
         Initialize();
     }
     TGeneralIterator(TOthersData::TIterator&& iterator, const std::vector<ui32>& remapKeys = {})
@@ -149,9 +153,15 @@ public:
         return KeyIndex;
     }
 
-    std::string_view GetRawValue() const {
+    // For native columns the stored raw value is the bare scalar; consumers of the "raw" form (the
+    // ordered iterator feeding compaction) expect BinaryJson, so re-encode into an owned buffer.
+    std::string_view GetRawValue() {
         AFL_VERIFY(IsValidFlag);
-        return RawValue;
+        if (ValueType == EValueType::BinaryJson) {
+            return RawValue;
+        }
+        NormalizedRawValue = NativeScalarToBinaryJson(TStringBuf(RawValue.data(), RawValue.size()), ValueType);
+        return std::string_view(NormalizedRawValue.data(), NormalizedRawValue.size());
     }
 
     NJson::TJsonValue GetValue() const;
@@ -181,7 +191,7 @@ public:
         : ColumnsData(columnsData)
         , OthersData(othersData) {
         for (ui32 i = 0; i < ColumnsData.GetStats().GetColumnsCount(); ++i) {
-            Iterators.emplace_back(ColumnsData.BuildIterator(i));
+            Iterators.emplace_back(ColumnsData.BuildIterator(i), ColumnsData.GetStats().GetValueType(i));
         }
         Iterators.emplace_back(OthersData.BuildIterator());
         for (auto&& i : Iterators) {
@@ -294,7 +304,7 @@ public:
             }
         }
         for (ui32 i = 0; i < ColumnsData.GetStats().GetColumnsCount(); ++i) {
-            Iterators.emplace_back(ColumnsData.BuildIterator(i), remapColumns[i]);
+            Iterators.emplace_back(ColumnsData.BuildIterator(i), ColumnsData.GetStats().GetValueType(i), remapColumns[i]);
         }
         Iterators.emplace_back(OthersData.BuildIterator(), remapOthers);
         for (auto&& i : Iterators) {

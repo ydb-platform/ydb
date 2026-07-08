@@ -1,4 +1,5 @@
 #pragma once
+#include "native_scalars.h"
 #include "others_storage.h"
 #include "settings.h"
 #include "stats.h"
@@ -36,9 +37,9 @@ public:
         return Accessor;
     }
 
-    void BuildSparsedAccessor(const ui32 recordsCount);
-    void BuildPlainAccessor(const ui32 recordsCount);
-    void BuildDictionaryAccessor(const ui32 recordsCount);
+    void BuildSparsedAccessor(const ui32 recordsCount, const EValueType valueType);
+    void BuildPlainAccessor(const ui32 recordsCount, const EValueType valueType);
+    void BuildDictionaryAccessor(const ui32 recordsCount, const EValueType valueType);
 
     TColumnElements(const TStringBuf key)
         : KeyName(key) {
@@ -193,8 +194,12 @@ public:
             } else if (allowDictionary && settings.IsDictionary(presentCount, enumerateValues)) {
                 accessorType = IChunkedArray::EType::Dictionary;
             }
-            // Native scalar detection fills this in a later phase; today every column stays BinaryJson.
-            const EValueType valueType = EValueType::BinaryJson;
+            // Native scalar storage applies only to separated columns (allowDictionary marks them);
+            // the Others store is always BinaryJson.
+            EValueType valueType = EValueType::BinaryJson;
+            if (allowDictionary && settings.GetEnableNativeScalarColumns()) {
+                valueType = DetectNativeValueType(i->GetValues());
+            }
             builder.Add(i->GetKeyName(), presentCount, i->GetDataSize(), accessorType, valueType);
         }
         return builder.Finish();

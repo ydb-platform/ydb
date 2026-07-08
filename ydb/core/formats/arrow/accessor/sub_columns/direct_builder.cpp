@@ -13,30 +13,41 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
-void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount) {
+namespace {
+
+// Bytes to store in the native/binary array for value `idx`: the raw scalar for native columns,
+// the BinaryJson blob itself for BinaryJson columns. The view points into the source blob.
+std::string_view StorageView(const NBinaryJson::TBinaryJson& rec, const EValueType valueType) {
+    if (valueType == EValueType::BinaryJson) {
+        return std::string_view(rec.Data(), rec.Size());
+    }
+    const auto scalar = ExtractNativeScalar(TStringBuf(rec.Data(), rec.Size()), valueType);
+    return std::string_view(scalar.data(), scalar.size());
+}
+}   // namespace
+
+void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount, const EValueType valueType) {
     AFL_VERIFY(!Accessor);
     auto recordsBuilder = TSparsedArray::MakeBuilderBinary(RecordIndexes.size(), DataSize);
     for (ui32 idx = 0; idx < RecordIndexes.size(); ++idx) {
-        const auto& rec = Values[idx];
-        recordsBuilder.AddRecord(RecordIndexes[idx], std::string_view(rec.Data(), rec.Size()));
+        recordsBuilder.AddRecord(RecordIndexes[idx], StorageView(Values[idx], valueType));
     }
     Accessor = recordsBuilder.Finish(recordsCount);
 }
 
-void TColumnElements::BuildPlainAccessor(const ui32 recordsCount) {
+void TColumnElements::BuildPlainAccessor(const ui32 recordsCount, const EValueType valueType) {
     AFL_VERIFY(!Accessor);
     auto builder = TTrivialArray::MakeBuilderBinary(recordsCount, DataSize);
     for (auto it = RecordIndexes.begin(); it != RecordIndexes.end(); ++it) {
-        const auto& rec = Values[it - RecordIndexes.begin()];
-        builder.AddRecord(*it, std::string_view(rec.Data(), rec.Size()));
+        builder.AddRecord(*it, StorageView(Values[it - RecordIndexes.begin()], valueType));
     }
     Accessor = builder.Finish(recordsCount);
 }
 
-void TColumnElements::BuildDictionaryAccessor(const ui32 recordsCount) {
-    BuildPlainAccessor(recordsCount);
+void TColumnElements::BuildDictionaryAccessor(const ui32 recordsCount, const EValueType valueType) {
+    BuildPlainAccessor(recordsCount, valueType);
     const TChunkConstructionData cData(
-        recordsCount, nullptr, arrow::binary(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        recordsCount, nullptr, GetArrowTypeForValueType(valueType), NSerialization::TSerializerContainer::GetDefaultSerializer());
     Accessor = NDictionary::TConstructor().Construct(Accessor, cData).DetachResult();
 }
 
@@ -71,15 +82,16 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
     {
         ui32 columnIdx = 0;
         for (auto&& i : columnElements) {
+            const EValueType valueType = columnStats.GetValueType(columnIdx);
             switch (columnStats.GetAccessorType(columnIdx)) {
                 case IChunkedArray::EType::Array:
-                    i->BuildPlainAccessor(CurrentRecordIndex);
+                    i->BuildPlainAccessor(CurrentRecordIndex, valueType);
                     break;
                 case IChunkedArray::EType::SparsedArray:
-                    i->BuildSparsedAccessor(CurrentRecordIndex);
+                    i->BuildSparsedAccessor(CurrentRecordIndex, valueType);
                     break;
                 case IChunkedArray::EType::Dictionary:
-                    i->BuildDictionaryAccessor(CurrentRecordIndex);
+                    i->BuildDictionaryAccessor(CurrentRecordIndex, valueType);
                     break;
                 case IChunkedArray::EType::Undefined:
                 case IChunkedArray::EType::SerializedChunkedArray:
@@ -96,8 +108,8 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
     TOthersData rbOthers = MergeOthers(otherElements, CurrentRecordIndex);
 
     auto records = std::make_shared<TGeneralContainer>(CurrentRecordIndex);
-    for (auto&& i : columnElements) {
-        records->AddField(std::make_shared<arrow::Field>(std::string(i->GetKeyName()), arrow::binary()), i->GetAccessorVerified()).Validate();
+    for (size_t idx = 0; idx < columnElements.size(); ++idx) {
+        records->AddField(columnStats.GetField(idx), columnElements[idx]->GetAccessorVerified()).Validate();
     }
     TColumnsData cData(std::move(columnStats), std::move(records));
     return std::make_shared<TSubColumnsArray>(std::move(cData), std::move(rbOthers), Type, CurrentRecordIndex, Settings);

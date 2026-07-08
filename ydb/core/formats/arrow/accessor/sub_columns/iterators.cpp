@@ -1,5 +1,5 @@
 #include "iterators.h"
-#include <yql/essentials/types/binary_json/read.h>
+#include "native_scalars.h"
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
@@ -8,10 +8,7 @@ NJson::TJsonValue TGeneralIterator::GetValue() const {
     if (RawValue.empty()) {
         return NJson::TJsonValue(NJson::JSON_UNDEFINED);
     }
-    auto data = NBinaryJson::SerializeToJson(TStringBuf(RawValue.data(), RawValue.size()));
-    NJson::TJsonValue res;
-    AFL_VERIFY(NJson::ReadJsonTree(data, &res));
-    return res;
+    return NativeScalarToJsonValue(TStringBuf(RawValue.data(), RawValue.size()), ValueType);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

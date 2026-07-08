@@ -27,6 +27,9 @@ TConclusionStatus TRequestedConstuctor::DoDeserializeFromRequest(NYql::TFeatures
         }
         Settings.SetDictionaryUniqueFraction(*fraction);
     }
+    if (auto enable = features.Extract<bool>("ENABLE_NATIVE_SCALAR_COLUMNS")) {
+        Settings.SetEnableNativeScalarColumns(*enable);
+    }
     THolder<IDataAdapter> extractor;
     if (auto dataExtractorClassName = features.Extract<TString>("DATA_EXTRACTOR_CLASS_NAME")) {
         extractor = IDataAdapter::TFactory::MakeHolder(*dataExtractorClassName);

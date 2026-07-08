@@ -12,6 +12,32 @@
 
 #include <regex>
 
+namespace {
+// Reconstruct the JSON documents of a sub-columns array as text, for round-trip assertions.
+TString PrintBinaryJsons(const std::shared_ptr<arrow::ChunkedArray>& array) {
+    TStringBuilder sb;
+    sb << "[";
+    for (auto&& i : array->chunks()) {
+        sb << "[";
+        AFL_VERIFY(i->type()->id() == arrow::binary()->id());
+        auto views = std::static_pointer_cast<arrow::BinaryArray>(i);
+        for (ui32 r = 0; r < views->length(); ++r) {
+            if (views->IsNull(r)) {
+                sb << "null";
+            } else {
+                sb << NKikimr::NBinaryJson::SerializeToJson(TStringBuf(views->GetView(r).data(), views->GetView(r).size()));
+            }
+            if (r + 1 != views->length()) {
+                sb << ",";
+            }
+        }
+        sb << "]";
+    }
+    sb << "]";
+    return sb;
+}
+}   // namespace
+
 Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
     using namespace NKikimr::NArrow::NAccessor;
     using namespace NKikimr::NArrow;
@@ -19,29 +45,6 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
 
     std::string PrepareToCompare(const std::string& str) {
         return std::regex_replace(str, std::regex(" |\\n"), "");
-    }
-
-    TString PrintBinaryJsons(const std::shared_ptr<arrow::ChunkedArray>& array) {
-        TStringBuilder sb;
-        sb << "[";
-        for (auto&& i : array->chunks()) {
-            sb << "[";
-            AFL_VERIFY(i->type()->id() == arrow::binary()->id());
-            auto views = std::static_pointer_cast<arrow::BinaryArray>(i);
-            for (ui32 r = 0; r < views->length(); ++r) {
-                if (views->IsNull(r)) {
-                    sb << "null";
-                } else {
-                    sb << NBinaryJson::SerializeToJson(TStringBuf(views->GetView(r).data(), views->GetView(r).size()));
-                }
-                if (r + 1 != views->length()) {
-                    sb << ",";
-                }
-            }
-            sb << "]";
-        }
-        sb << "]";
-        return sb;
     }
 
     Y_UNIT_TEST(EmptyOthers){
@@ -555,5 +558,133 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             expected[str] = 1;
             UNIT_ASSERT_VALUES_EQUAL(expected, restorer.GetResult());
         }
+    }
+};
+
+Y_UNIT_TEST_SUITE(SubColumnsNativeScalars) {
+    using namespace NKikimr;
+    using namespace NKikimr::NArrow;
+    using namespace NKikimr::NArrow::NAccessor;
+    using namespace NKikimr::NArrow::NAccessor::NSubColumns;
+
+    NSubColumns::TSettings NativeSettings(const double dictFraction) {
+        NSubColumns::TSettings s(4, 1024, 0, /*othersFraction*/ 0, TDataAdapterContainer::GetDefault(), dictFraction);
+        s.SetEnableNativeScalarColumns(true);
+        return s;
+    }
+
+    NSubColumns::TSettings OffSettings() {
+        return NSubColumns::TSettings(4, 1024, 0, 0, TDataAdapterContainer::GetDefault());
+    }
+
+    std::shared_ptr<TSubColumnsArray> BuildSubColumns(const std::vector<TString>& jsons, const NSubColumns::TSettings& settings) {
+        TTrivialArray::TPlainBuilder<arrow::BinaryType> b;
+        ui32 idx = 0;
+        for (auto&& j : jsons) {
+            if (j != "null") {
+                auto v = NBinaryJson::SerializeToBinaryJson(j);
+                auto* bj = std::get_if<NBinaryJson::TBinaryJson>(&v);
+                UNIT_ASSERT(bj);
+                b.AddRecord(idx, std::string_view(bj->data(), bj->size()));
+            }
+            ++idx;
+        }
+        auto arr = b.Finish(jsons.size());
+        return TSubColumnsArray::Make(arr, settings, arr->GetDataType()).DetachResult();
+    }
+
+    // Number of separated columns stored with the given value type.
+    ui32 CountValueType(const std::shared_ptr<TSubColumnsArray>& arr, const EValueType vt) {
+        const auto& stats = arr->GetColumnsData().GetStats();
+        ui32 n = 0;
+        for (ui32 i = 0; i < stats.GetColumnsCount(); ++i) {
+            n += (stats.GetValueType(i) == vt);
+        }
+        return n;
+    }
+
+    std::shared_ptr<TSubColumnsArray> SerializeRoundTrip(const std::shared_ptr<TSubColumnsArray>& arr, const NSubColumns::TSettings& settings) {
+        auto serializer = NSerialization::TSerializerContainer::GetDefaultSerializer();
+        TChunkConstructionData cData(arr->GetRecordsCount(), nullptr, arrow::binary(), serializer);
+        NSubColumns::TConstructor constructor(settings);
+        return std::static_pointer_cast<TSubColumnsArray>(constructor.DeserializeFromString(arr->SerializeToString(cData), cData).DetachResult());
+    }
+
+    // An all-string key becomes a native String column while a numeric key stays BinaryJson; the
+    // reconstructed documents are identical to the input.
+    Y_UNIT_TEST(Detection) {
+        const std::vector<TString> docs = {
+            R"({"a":"x","n":1})",
+            R"({"a":"yy","n":2})",
+            R"({"a":"zzz","n":3})",
+        };
+        auto arr = BuildSubColumns(docs, NativeSettings(0));
+        UNIT_ASSERT_VALUES_EQUAL(PrintBinaryJsons(arr->GetChunkedArray()), R"([[{"a":"x","n":1},{"a":"yy","n":2},{"a":"zzz","n":3}]])");
+        UNIT_ASSERT_VALUES_EQUAL_C(CountValueType(arr, EValueType::String), 1, arr->DebugJson().GetStringRobust());
+        UNIT_ASSERT_VALUES_EQUAL_C(CountValueType(arr, EValueType::BinaryJson), 1, arr->DebugJson().GetStringRobust());
+    }
+
+    // With the setting off (the default), the same all-string key stays BinaryJson.
+    Y_UNIT_TEST(OffByDefault) {
+        const std::vector<TString> docs = { R"({"a":"x"})", R"({"a":"yy"})" };
+        auto arr = BuildSubColumns(docs, OffSettings());
+        UNIT_ASSERT_VALUES_EQUAL(CountValueType(arr, EValueType::String), 0);
+        UNIT_ASSERT_VALUES_EQUAL(PrintBinaryJsons(arr->GetChunkedArray()), R"([[{"a":"x"},{"a":"yy"}]])");
+    }
+
+    // A full serialize -> deserialize round-trip (exercising the 5-column stats blob) preserves the
+    // native String column and reconstructs identical documents.
+    Y_UNIT_TEST(SerializeRoundTripPreservesNative) {
+        const std::vector<TString> docs = { R"({"a":"x","n":1})", R"({"a":"yy","n":2})" };
+        auto arr = BuildSubColumns(docs, NativeSettings(0));
+        auto restored = SerializeRoundTrip(arr, NativeSettings(0));
+        UNIT_ASSERT_VALUES_EQUAL(PrintBinaryJsons(restored->GetChunkedArray()), PrintBinaryJsons(arr->GetChunkedArray()));
+        UNIT_ASSERT_VALUES_EQUAL_C(CountValueType(restored, EValueType::String), 1, restored->DebugJson().GetStringRobust());
+    }
+
+    // String composes with dictionary encoding: a low-cardinality string key at fraction 1 is both
+    // Dictionary and String, and round-trips.
+    Y_UNIT_TEST(ComposesWithDictionary) {
+        std::vector<TString> docs;
+        for (ui32 i = 0; i < 40; ++i) {
+            docs.push_back(TStringBuilder() << R"({"a":")" << (i % 2 ? "xxxx" : "yyyy") << R"("})");
+        }
+        auto arr = BuildSubColumns(docs, NativeSettings(1));
+        const auto& stats = arr->GetColumnsData().GetStats();
+        bool dictString = false;
+        for (ui32 i = 0; i < stats.GetColumnsCount(); ++i) {
+            dictString |= (stats.GetAccessorType(i) == IChunkedArray::EType::Dictionary && stats.GetValueType(i) == EValueType::String);
+        }
+        UNIT_ASSERT_C(dictString, "expected a String dictionary column: " + arr->DebugJson().GetStringRobust());
+        auto restored = SerializeRoundTrip(arr, NativeSettings(1));
+        UNIT_ASSERT_VALUES_EQUAL(PrintBinaryJsons(restored->GetChunkedArray()), PrintBinaryJsons(arr->GetChunkedArray()));
+    }
+
+    // A key with mixed scalar types across records is not native.
+    Y_UNIT_TEST(MixedTypeFallback) {
+        auto arr = BuildSubColumns({ R"({"a":"x"})", R"({"a":7})" }, NativeSettings(0));
+        UNIT_ASSERT_VALUES_EQUAL(CountValueType(arr, EValueType::String), 0);
+        UNIT_ASSERT_VALUES_EQUAL(PrintBinaryJsons(arr->GetChunkedArray()), R"([[{"a":"x"},{"a":7}]])");
+    }
+
+    // A present JSON null cannot be a native scalar (validity bit already means "absent"), so a
+    // string key that also has an explicit null stays BinaryJson.
+    Y_UNIT_TEST(NullFallback) {
+        auto arr = BuildSubColumns({ R"({"a":"x"})", R"({"a":null})" }, NativeSettings(0));
+        UNIT_ASSERT_VALUES_EQUAL(CountValueType(arr, EValueType::String), 0);
+        UNIT_ASSERT_VALUES_EQUAL(PrintBinaryJsons(arr->GetChunkedArray()), R"([[{"a":"x"},{"a":null}]])");
+    }
+
+    // Strings with quotes, escapes and unicode survive raw native storage: native reconstruction
+    // matches the BinaryJson (native-off) reconstruction of the same input.
+    Y_UNIT_TEST(SpecialCharsRoundTrip) {
+        const std::vector<TString> docs = {
+            R"({"a":"he said \"hi\""})",
+            R"({"a":"tab\tend"})",
+            R"({"a":"юникод"})",
+        };
+        auto arr = BuildSubColumns(docs, NativeSettings(0));
+        UNIT_ASSERT_VALUES_EQUAL_C(CountValueType(arr, EValueType::String), 1, arr->DebugJson().GetStringRobust());
+        UNIT_ASSERT_VALUES_EQUAL(PrintBinaryJsons(arr->GetChunkedArray()), PrintBinaryJsons(BuildSubColumns(docs, OffSettings())->GetChunkedArray()));
     }
 };

@@ -1947,7 +1947,7 @@ public:
 
         if (request.FlushEffects || commit) {
             txCtx.HasUnflushedEffectsInBuffer = false;
-        } else if (tx && tx->GetHasEffects() && !request.FlushEffects) {
+        } else if (tx && tx->GetHasEffects()) {
             // Has unflushed effects in buffer (used for RETURNING)
             txCtx.HasUnflushedEffectsInBuffer = true;
         }

@@ -397,6 +397,9 @@ def deploy(arguments):
     if is_tiny_mode():
         optionals['tiny_mode'] = True
 
+    enforce_user_token_requirement = os.getenv('YDB_ENFORCE_USER_TOKEN_REQUIREMENT') == 'true'
+    default_clusteradmin = os.getenv('YDB_DEFAULT_CLUSTERADMIN')
+
     configuration = KikimrConfigGenerator(
         erasure=parse_erasure(arguments),
         binary_paths=[arguments.ydb_binary_path] if arguments.ydb_binary_path else None,
@@ -419,6 +422,8 @@ def deploy(arguments):
         extra_grpc_services=enabled_grpc_services,
         generic_connector_config=generic_connector_config(),
         verbose_memory_limit_exception=True,
+        enforce_user_token_requirement=enforce_user_token_requirement,
+        default_clusteradmin=default_clusteradmin,
         **optionals
     )
 

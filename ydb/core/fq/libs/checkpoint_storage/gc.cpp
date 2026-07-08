@@ -146,13 +146,14 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
         Success,
         Inflight);
 
+    Inflight->Inc();
+
     if (event->Type != NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT) {
         YDB_LOG_DEBUG("GC skip increment checkpoint for graph",
             {"graphId", graphId});
         SendGcFinished(context);
         return;
     }
-    Inflight->Inc();
 
     // 1-2.
     CheckpointStorage->MarkCheckpointsGC(graphId, checkpointUpperBound)

@@ -560,7 +560,7 @@ class TBackupRestoreOperationBase: public TSubOperation {
         case TTxState::CreateParts:
             return TTxState::ConfigureParts;
         case TTxState::ConfigureParts: {
-            TTxState* txState = context.SS->FindTx(OperationId);
+            const TTxState* txState = context.SS->FindTx(OperationId);
             Y_ABORT_UNLESS(txState);
             Y_ABORT_UNLESS(txState->TxType == TxType);
 

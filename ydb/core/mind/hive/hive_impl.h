@@ -258,7 +258,7 @@ protected:
     void StartHiveStorageBalancer(TStorageBalancerSettings settings);
     void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback);
     void StartReassignActor(std::vector<TReassignOperation> operations);
-    void StartCompactActor(std::vector<TTabletId> tablets, const TString& poolName);
+    void StartCompactActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TString& poolName);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     NJson::TJsonValue GetBalancerProgressJson();
     ITransaction* CreateDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev);

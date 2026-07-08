@@ -4108,7 +4108,7 @@ bool THive::CompactInactiveGroups(TStoragePoolInfo& pool) {
         return false;
     } else {
         BLOG_I("ShrinkPool - starting compact for " << tabletsToCompact.size() << " tablets");
-        StartCompactActor(std::move(tabletsToCompact), pool.Name);
+        StartCompactActor(std::move(tabletsToCompact), pool.InactiveGroups, pool.Name);
         return true;
     }
 }

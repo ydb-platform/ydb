@@ -18,14 +18,16 @@ public:
 
     std::vector<TTabletId> Tablets;
     std::vector<TTabletId>::const_iterator NextTablet;
+    std::vector<TStorageGroupId> Groups;
     TString PoolName;
     std::vector<TPipeClient> PipeClients;
     i64 CompactsInFlight = 0;
     THive* Hive;
 
-    TCompactActor(std::vector<TTabletId> tablets, const TString& poolName, ui64 maxInFlight, THive* hive)
+    TCompactActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TString& poolName, ui64 maxInFlight, THive* hive)
         : Tablets(std::move(tablets))
         , NextTablet(Tablets.begin())
+        , Groups(groups)
         , PoolName(poolName)
         , PipeClients(maxInFlight)
         , Hive(hive)
@@ -54,7 +56,9 @@ public:
         pipeConfig.RetryPolicy = {.RetryLimitCount = 13};
         pipeConfig.CheckAliveness = true;
         PipeClients[index] = {Register(NTabletPipe::CreateClient(SelfId(), tablet, pipeConfig)), tablet};
-        NTabletPipe::SendData(SelfId(), PipeClients[index].Client, new TEvTablet::TEvMoveData());
+        auto ev = std::make_unique<TEvTablet::TEvMoveData>();
+        ev->Record.MutableGroups()->Assign(Groups.begin(), Groups.end());
+        NTabletPipe::SendData(SelfId(), PipeClients[index].Client, ev.release());
         ++CompactsInFlight;
     }
 
@@ -124,8 +128,8 @@ public:
     }
 };
 
-void THive::StartCompactActor(std::vector<TTabletId> tablets, const TString& poolName) {
-    auto* actor = new TCompactActor(std::move(tablets), poolName, 1, this);
+void THive::StartCompactActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TString& poolName) {
+    auto* actor = new TCompactActor(std::move(tablets), groups, poolName, 1, this);
     SubActors.emplace_back(actor);
     RegisterWithSameMailbox(actor);
 }

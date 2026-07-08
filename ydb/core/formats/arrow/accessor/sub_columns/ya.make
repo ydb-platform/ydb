@@ -27,7 +27,7 @@ SRCS(
     json_value_path.cpp
     accessor.cpp
     direct_builder.cpp
-    native_scalars.cpp
+    types.cpp
     settings.cpp
     stats.cpp
     others_storage.cpp

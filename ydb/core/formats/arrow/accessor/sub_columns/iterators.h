@@ -1,6 +1,6 @@
 #pragma once
 #include "columns_storage.h"
-#include "native_scalars.h"
+#include "types.h"
 #include "others_storage.h"
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
@@ -14,17 +14,19 @@ private:
     ui32 KeyIndex = 0;
     bool IsValidFlag = false;
     bool HasValueFlag = false;
-    std::string_view RawValue;
     bool IsColumnKeyFlag = false;
     EValueType ValueType = EValueType::BinaryJson;
-    NBinaryJson::TBinaryJson NormalizedRawValue;
+    // Current value as (array, local index); the reader interprets it per ValueType (types.h).
+    const arrow::Array* CurrentArray = nullptr;
+    i64 LocalIndex = 0;
 
     void InitFromIterator(const TColumnsData::TIterator& iterator) {
         RecordIndex = iterator.GetCurrentRecordIndex();
         KeyIndex = RemappedKey.value_or(iterator.GetKeyIndex());
         IsValidFlag = true;
         HasValueFlag = iterator.HasValue();
-        RawValue = iterator.GetRawValue();
+        CurrentArray = &iterator.GetArray();
+        LocalIndex = iterator.GetLocalIndex();
     }
 
     void InitFromIterator(const TOthersData::TIterator& iterator) {
@@ -32,7 +34,8 @@ private:
         KeyIndex = RemapKeys.size() ? RemapKeys[iterator.GetKeyIndex()] : iterator.GetKeyIndex();
         IsValidFlag = true;
         HasValueFlag = iterator.HasValue();
-        RawValue = iterator.GetRawValue();
+        CurrentArray = &iterator.GetArray();
+        LocalIndex = iterator.GetLocalIndex();
     }
 
     bool Initialize() {
@@ -153,15 +156,16 @@ public:
         return KeyIndex;
     }
 
-    // For native columns the stored raw value is the bare scalar; consumers of the "raw" form (the
-    // ordered iterator feeding compaction) expect BinaryJson, so re-encode into an owned buffer.
-    std::string_view GetRawValue() {
+    // The ordered iterator (compaction's reader) expects BinaryJson. BinaryJson columns pass their
+    // bytes through directly; native columns are re-encoded into an owned buffer.
+    std::string_view GetValueAsBinaryJson() {
         AFL_VERIFY(IsValidFlag);
         if (ValueType == EValueType::BinaryJson) {
-            return RawValue;
+            const auto view = static_cast<const arrow::BinaryArray&>(*CurrentArray).GetView(LocalIndex);
+            return std::string_view(view.data(), view.size());
         }
-        NormalizedRawValue = NativeScalarToBinaryJson(TStringBuf(RawValue.data(), RawValue.size()), ValueType);
-        return std::string_view(NormalizedRawValue.data(), NormalizedRawValue.size());
+        auto binaryJson = ArrayElementToBinaryJson(*CurrentArray, LocalIndex, ValueType);
+        return std::string_view(binaryJson.data(), binaryJson.size());
     }
 
     NJson::TJsonValue GetValue() const;
@@ -335,7 +339,7 @@ public:
             while (SortedIterators.size() && SortedIterators.front()->GetRecordIndex() == recordIndex) {
                 std::pop_heap(SortedIterators.begin(), SortedIterators.end(), TIteratorsComparator());
                 auto& itColumn = *SortedIterators.back();
-                kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn.GetRawValue(), itColumn.IsColumnKey());
+                kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn.GetValueAsBinaryJson(), itColumn.IsColumnKey());
                 if (!itColumn.Next()) {
                     SortedIterators.pop_back();
                 } else {

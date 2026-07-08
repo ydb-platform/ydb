@@ -15,19 +15,40 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 namespace {
 
-// Bytes to store in the native/binary array for value `idx`: the raw scalar for native columns,
-// the BinaryJson blob itself for BinaryJson columns. The view points into the source blob.
+// Bytes stored in a binary column for value `rec`: the BinaryJson blob for BinaryJson columns, the
+// raw string for String columns. The view points into the source blob.
 std::string_view StorageView(const NBinaryJson::TBinaryJson& rec, const EValueType valueType) {
     if (valueType == EValueType::BinaryJson) {
         return std::string_view(rec.Data(), rec.Size());
     }
-    const auto scalar = ExtractNativeScalar(TStringBuf(rec.Data(), rec.Size()), valueType);
+    AFL_VERIFY(valueType == EValueType::String)("value_type", (ui32)valueType);
+    const auto scalar = ExtractStringScalar(rec);
     return std::string_view(scalar.data(), scalar.size());
+}
+
+// Build a dense plain array of arrow type TArrow, filling gaps (absent records) with nulls, where
+// `extract(blob)` yields the value to append (an arrow::util::string_view or a native c_type).
+template <class TArrow, class TExtractor>
+std::shared_ptr<IChunkedArray> BuildTypedPlain(const std::deque<NBinaryJson::TBinaryJson>& values,
+    const std::vector<ui32>& recordIndexes, const ui32 recordsCount, const ui32 reserveData, const TExtractor& extract) {
+    auto builder = NArrow::MakeBuilder(arrow::TypeTraits<TArrow>::type_singleton(), recordsCount, reserveData);
+    ui32 nextExpected = 0;
+    for (ui32 i = 0; i < recordIndexes.size(); ++i) {
+        AFL_VERIFY(nextExpected <= recordIndexes[i]);
+        TStatusValidator::Validate(builder->AppendNulls(recordIndexes[i] - nextExpected));
+        AFL_VERIFY(NArrow::Append<TArrow>(*builder, extract(values[i])));
+        nextExpected = recordIndexes[i] + 1;
+    }
+    AFL_VERIFY(nextExpected <= recordsCount);
+    TStatusValidator::Validate(builder->AppendNulls(recordsCount - nextExpected));
+    return std::make_shared<TTrivialArray>(NArrow::FinishBuilder(std::move(builder)));
 }
 }   // namespace
 
 void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount, const EValueType valueType) {
     AFL_VERIFY(!Accessor);
+    // Sparsed encoding currently applies only to BinaryJson/String columns (IsSparsed is disabled
+    // for now, and native Double/Bool never take this path).
     auto recordsBuilder = TSparsedArray::MakeBuilderBinary(RecordIndexes.size(), DataSize);
     for (ui32 idx = 0; idx < RecordIndexes.size(); ++idx) {
         recordsBuilder.AddRecord(RecordIndexes[idx], StorageView(Values[idx], valueType));
@@ -37,11 +58,24 @@ void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount, const EValue
 
 void TColumnElements::BuildPlainAccessor(const ui32 recordsCount, const EValueType valueType) {
     AFL_VERIFY(!Accessor);
-    auto builder = TTrivialArray::MakeBuilderBinary(recordsCount, DataSize);
-    for (auto it = RecordIndexes.begin(); it != RecordIndexes.end(); ++it) {
-        builder.AddRecord(*it, StorageView(Values[it - RecordIndexes.begin()], valueType));
+    switch (valueType) {
+        case EValueType::BinaryJson:
+        case EValueType::String:
+            Accessor = BuildTypedPlain<arrow::BinaryType>(Values, RecordIndexes, recordsCount, DataSize,
+                [valueType](const NBinaryJson::TBinaryJson& rec) {
+                    const auto sv = StorageView(rec, valueType);
+                    return arrow::util::string_view(sv.data(), sv.size());
+                });
+            break;
+        case EValueType::Double:
+            Accessor = BuildTypedPlain<arrow::DoubleType>(Values, RecordIndexes, recordsCount, DataSize,
+                &ExtractDoubleScalar);
+            break;
+        case EValueType::Bool:
+            Accessor = BuildTypedPlain<arrow::BooleanType>(Values, RecordIndexes, recordsCount, DataSize,
+                &ExtractBoolScalar);
+            break;
     }
-    Accessor = builder.Finish(recordsCount);
 }
 
 void TColumnElements::BuildDictionaryAccessor(const ui32 recordsCount, const EValueType valueType) {

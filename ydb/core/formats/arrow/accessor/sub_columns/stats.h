@@ -1,5 +1,6 @@
 #pragma once
 #include "settings.h"
+#include "types.h"
 
 #include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
@@ -13,30 +14,6 @@
 #include <util/generic/string.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
-
-// Physical scalar type a separated sub-column is stored in. Independent of the accessor type
-// (Array/Sparsed/Dictionary). `BinaryJson` (default) keeps the per-value BinaryJson blob and is the
-// fallback whenever a column is not a homogeneous non-null scalar (mixed types, containers, or a
-// present JSON null); the others store the raw scalar in the corresponding native Arrow array.
-enum class EValueType : ui8 {
-    BinaryJson = 0,
-    Double = 1,
-    Bool = 2,
-    String = 3,
-};
-
-// Arrow storage type for a value type. Note String and BinaryJson are both physically binary,
-// so callers must discriminate them via the value type, not the array type id.
-std::shared_ptr<arrow::DataType> GetArrowTypeForValueType(const EValueType valueType);
-
-// Merge lattice for value types: equal types keep the type, anything divergent (incl. an unset
-// accumulator meeting nothing) falls back to BinaryJson. `acc` is nullopt for a neutral start.
-inline EValueType JoinValueType(const std::optional<EValueType>& acc, const EValueType next) {
-    if (!acc) {
-        return next;
-    }
-    return (*acc == next) ? *acc : EValueType::BinaryJson;
-}
 
 class TSplittedColumns;
 
@@ -141,7 +118,7 @@ public:
         void Add(const TDictStats& stats, const ui32 idx) {
             RecordsCount += stats.GetColumnRecordsCount(idx);
             DataSize += stats.GetColumnSize(idx);
-            ValueTypeJoin = JoinValueType(ValueTypeJoin, stats.GetValueType(idx));
+            ValueTypeJoin = MergeValueTypes(ValueTypeJoin, stats.GetValueType(idx));
         }
 
         // Decides only the Array-vs-Sparsed axis and never returns Dictionary,

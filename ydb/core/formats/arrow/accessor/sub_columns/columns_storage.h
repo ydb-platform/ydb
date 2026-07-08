@@ -51,7 +51,7 @@ public:
     private:
         ui32 KeyIndex;
         std::shared_ptr<IChunkedArray> GlobalChunkedArray;
-        const arrow::BinaryArray* CurrentArrayData;
+        const arrow::Array* CurrentArray;
         std::optional<IChunkedArray::TFullChunkedArrayAddress> FullArrayAddress;
         std::optional<IChunkedArray::TFullDataAddress> ChunkAddress;
         ui32 CurrentIndex = 0;
@@ -73,15 +73,26 @@ public:
             return KeyIndex;
         }
 
-        std::string_view GetRawValue() const {
-            auto view = CurrentArrayData->GetView(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
-            return std::string_view(view.data(), view.size());
+        // The current value is exposed as (array, local index); the reader interprets it per the
+        // column's value type (see types.h). The physical array is binary (String/BinaryJson),
+        // float64 (Double) or boolean (Bool).
+        const arrow::Array& GetArray() const {
+            return *CurrentArray;
+        }
+        i64 GetLocalIndex() const {
+            return ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex);
         }
 
-        NArrow::NAccessor::TBinaryJsonValueView GetValue() const;
+        // Scalar view for the index extractor. The iterator has no value type, so this only serves
+        // BinaryJson columns (the physical array is binary); making the index path native-aware
+        // requires the value type and is done at the extractor level.
+        NArrow::NAccessor::TBinaryJsonValueView GetValue() const {
+            auto view = static_cast<const arrow::BinaryArray&>(*CurrentArray).GetView(GetLocalIndex());
+            return NArrow::NAccessor::TBinaryJsonValueView(TStringBuf(view.data(), view.size()));
+        }
 
         bool HasValue() const {
-            return !CurrentArrayData->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
+            return !CurrentArray->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
         }
 
         bool IsValid() const {
@@ -96,7 +107,7 @@ public:
             AFL_VERIFY(ChunkAddress->GetAddress().Contains(CurrentIndex));
             CurrentIndex = recordIndex;
             for (; CurrentIndex < ChunkAddress->GetAddress().GetGlobalFinishPosition(); ++CurrentIndex) {
-                if (CurrentArrayData->IsNull(CurrentIndex - ChunkAddress->GetAddress().GetGlobalStartPosition())) {
+                if (CurrentArray->IsNull(CurrentIndex - ChunkAddress->GetAddress().GetGlobalStartPosition())) {
                     continue;
                 }
                 return true;
@@ -110,7 +121,7 @@ public:
             AFL_VERIFY(ChunkAddress->GetAddress().Contains(CurrentIndex));
             ++CurrentIndex;
             for (; CurrentIndex < ChunkAddress->GetAddress().GetGlobalFinishPosition(); ++CurrentIndex) {
-                if (CurrentArrayData->IsNull(CurrentIndex - ChunkAddress->GetAddress().GetGlobalStartPosition())) {
+                if (CurrentArray->IsNull(CurrentIndex - ChunkAddress->GetAddress().GetGlobalStartPosition())) {
                     continue;
                 }
                 return true;
@@ -132,8 +143,9 @@ public:
         : Stats(dict)
         , Records(data) {
         AFL_VERIFY(Records->num_columns() == Stats.GetColumnsCount())("records", Records->num_columns())("stats", Stats.GetColumnsCount());
-        for (auto&& i : Records->GetColumns()) {
-            AFL_VERIFY(i->GetDataType()->id() == arrow::binary()->id());
+        for (ui32 i = 0; i < (ui32)Records->num_columns(); ++i) {
+            AFL_VERIFY(Records->GetColumnVerified(i)->GetDataType()->id() == Stats.GetField(i)->type()->id())(
+                "column", Records->GetColumnVerified(i)->GetDataType()->ToString())("stats", Stats.GetField(i)->type()->ToString());
         }
     }
 };

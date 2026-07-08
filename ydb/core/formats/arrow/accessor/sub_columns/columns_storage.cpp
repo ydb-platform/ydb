@@ -64,22 +64,23 @@ void TColumnsData::TIterator::InitArrays() {
         }
         const ui32 localIndex = FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex);
         ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, localIndex);
-        AFL_VERIFY(ChunkAddress->GetArray()->type()->id() == arrow::binary()->id());
-        CurrentArrayData = static_cast<const arrow::BinaryArray*>(ChunkAddress->GetArray().get());
-        // Dictionary columns materialize (decode) to a dense binary array, so they are
+        // Physical type is binary (BinaryJson/String), float64 (Double) or boolean (Bool); the value
+        // type in the stats tells the reader how to interpret this element.
+        CurrentArray = ChunkAddress->GetArray().get();
+        // Dictionary columns materialize (decode) to a dense array, so they are
         // read exactly like a plain Array here.
         if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array ||
             FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Dictionary) {
-            if (CurrentArrayData->IsNull(localIndex)) {
+            if (CurrentArray->IsNull(localIndex)) {
                 Next();
             }
             break;
         } else if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::SparsedArray) {
-            AFL_VERIFY(localIndex < CurrentArrayData->length())
+            AFL_VERIFY(localIndex < CurrentArray->length())
                 ("localIndex", localIndex)
-                ("CurrentArrayData->length()", CurrentArrayData->length())
-                ("CurrentArrayData", CurrentArrayData->ToString());
-            if (CurrentArrayData->IsNull(localIndex) &&
+                ("CurrentArray->length()", CurrentArray->length())
+                ("CurrentArray", CurrentArray->ToString());
+            if (CurrentArray->IsNull(localIndex) &&
                 std::static_pointer_cast<TSparsedArray>(FullArrayAddress->GetArray())->GetDefaultValue() == nullptr) {
                 CurrentIndex = ChunkAddress->GetAddress().GetGlobalFinishPosition();
             } else {
@@ -90,11 +91,6 @@ void TColumnsData::TIterator::InitArrays() {
         }
     }
     AFL_VERIFY(CurrentIndex <= GlobalChunkedArray->GetRecordsCount())("index", CurrentIndex)("count", GlobalChunkedArray->GetRecordsCount());
-}
-
-NArrow::NAccessor::TBinaryJsonValueView TColumnsData::TIterator::GetValue() const {
-    auto view = CurrentArrayData->GetView(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
-    return NArrow::NAccessor::TBinaryJsonValueView(TStringBuf(view.data(), view.size()));
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

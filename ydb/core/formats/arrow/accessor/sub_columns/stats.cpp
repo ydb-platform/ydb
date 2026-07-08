@@ -12,18 +12,6 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
-std::shared_ptr<arrow::DataType> GetArrowTypeForValueType(const EValueType valueType) {
-    switch (valueType) {
-        case EValueType::BinaryJson:
-        case EValueType::String:
-            return arrow::binary();
-        case EValueType::Double:
-            return arrow::float64();
-        case EValueType::Bool:
-            return arrow::boolean();
-    }
-}
-
 TSplittedColumns TDictStats::SplitByVolume(const TSettings& settings, const ui32 recordsCount) const {
     std::map<ui64, std::vector<TRTStats>> bySize;
     ui64 sumSize = 0;
@@ -110,7 +98,7 @@ TDictStats::TDictStats(const std::shared_ptr<arrow::RecordBatch>& original)
             { Original->column(0), Original->column(1), Original->column(2), Original->column(3), valueTypeArray });
     }
     AFL_VERIFY(Original->column(4)->type()->id() == arrow::uint8()->id());
-    DataNames = std::static_pointer_cast<arrow::StringArray>(Original->column(0));
+    DataNames = std::static_pointer_cast<arrow::BinaryArray>(Original->column(0));
     DataRecordsCount = std::static_pointer_cast<arrow::UInt32Array>(Original->column(1));
     DataSize = std::static_pointer_cast<arrow::UInt32Array>(Original->column(2));
     AccessorType = std::static_pointer_cast<arrow::UInt8Array>(Original->column(3));
@@ -181,7 +169,7 @@ TDictStats::TBuilder::TBuilder() {
     AFL_VERIFY(Builders[2]->type()->id() == arrow::uint32()->id());
     AFL_VERIFY(Builders[3]->type()->id() == arrow::uint8()->id());
     AFL_VERIFY(Builders[4]->type()->id() == arrow::uint8()->id());
-    Names = static_cast<arrow::StringBuilder*>(Builders[0].get());
+    Names = static_cast<arrow::BinaryBuilder*>(Builders[0].get());
     Records = static_cast<arrow::UInt32Builder*>(Builders[1].get());
     DataSize = static_cast<arrow::UInt32Builder*>(Builders[2].get());
     AccessorType = static_cast<arrow::UInt8Builder*>(Builders[3].get());

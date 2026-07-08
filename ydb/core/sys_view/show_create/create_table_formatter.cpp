@@ -1752,6 +1752,13 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
                         EscapeValue(settings.GetDictionaryUniqueFraction(), paramsStr);
                         del = ", ";
                     }
+                    if (settings.HasEnableNativeScalarColumns() && settings.GetEnableNativeScalarColumns()) {
+                        paramsStr << del;
+                        EscapeName("ENABLE_NATIVE_SCALAR_COLUMNS", paramsStr);
+                        paramsStr << "=";
+                        EscapeValue(settings.GetEnableNativeScalarColumns(), paramsStr);
+                        del = ", ";
+                    }
                     if (settings.HasDataExtractor()) {
                         const auto& dataExtractor = settings.GetDataExtractor();
                         if (dataExtractor.HasClassName() && !dataExtractor.GetClassName().empty()) {

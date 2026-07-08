@@ -1,5 +1,5 @@
 #pragma once
-#include "native_scalars.h"
+#include "types.h"
 #include "others_storage.h"
 #include "settings.h"
 #include "stats.h"
@@ -198,7 +198,7 @@ public:
             // the Others store is always BinaryJson.
             EValueType valueType = EValueType::BinaryJson;
             if (allowDictionary && settings.GetEnableNativeScalarColumns()) {
-                valueType = DetectNativeValueType(i->GetValues());
+                valueType = DetectValueTypeForArray(i->GetValues());
             }
             builder.Add(i->GetKeyName(), presentCount, i->GetDataSize(), accessorType, valueType);
         }

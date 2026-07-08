@@ -323,7 +323,6 @@ void PrintUsage(IOutputStream& os) {
             ServerSettings_->SetEnableNotNullColumns(true);
             ServerSettings_->SetEnableMoveIndex(true);
             ServerSettings_->SetEnableTablePgTypes(true);
-            ServerSettings_->SetEnablePgSyntax(true);
             ServerSettings_->SetEnableOlapCompression(true);
 
             Server_ = MakeIntrusive<Tests::TServer>(*ServerSettings_);

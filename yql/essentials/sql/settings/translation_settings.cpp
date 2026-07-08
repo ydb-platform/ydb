@@ -143,8 +143,6 @@ bool ParseTranslationSettingsFromComments(const TString& query, TParsedSettings&
             parsed.HasAnsiLexer = true;
         } else if (value == "antlr4_parser") {
             // Is always turned on, ignore
-        } else if (value == "syntax_pg") {
-            parsed.HasPgParser = true;
         } else {
             issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, lineNumber), NYql::TIssuesIds::DEFAULT_ERROR,
                                            TStringBuilder() << "Unknown SQL translation setting: " << value));

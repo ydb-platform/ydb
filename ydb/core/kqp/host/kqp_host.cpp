@@ -1413,7 +1413,6 @@ private:
                 .SetIsEnablePgConstsToParams(SessionCtx->Config().GetEnablePgConstsToParams())
                 .SetQueryParameters(query.ParameterTypes)
                 .SetApplicationName(ApplicationName)
-                .SetIsEnablePgSyntax(SessionCtx->Config().FeatureFlags.GetEnablePgSyntax())
                 .SetFromConfig(SessionCtx->Config());
             NSQLTranslation::TTranslationSettings effectiveSettings;
             auto astRes = ParseQuery(
@@ -1527,7 +1526,6 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false)
-            .SetUsePgParser(settings.UsePgParser)
             .SetFromConfig(SessionCtx->Config());
 
         auto compileResult = CompileYqlQuery(query, isSql, ctx, sqlVersion, settingsBuilder);
@@ -1684,7 +1682,6 @@ private:
         if (!expr) {
             TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
             settingsBuilder.SetSqlAutoCommit(false)
-                .SetUsePgParser(settings.UsePgParser)
                 .SetFromConfig(SessionCtx->Config())
                 .SetValidateViewStatement(!settings.IsInternalCall.GetOrElse(false))
                 .SetYqlSelect(settings.YqlSelect);
@@ -1713,7 +1710,6 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder
             .SetSqlAutoCommit(false)
-            .SetUsePgParser(settings.UsePgParser)
             .SetFromConfig(SessionCtx->Config());
         auto compileResult = CompileQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(compileResult.NeedToSplit);
@@ -1816,7 +1812,6 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, script.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(true)
-            .SetUsePgParser(settings.UsePgParser)
             .SetFromConfig(SessionCtx->Config());
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(!compileResult.NeedToSplit);
@@ -1846,7 +1841,6 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, script.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(true)
-            .SetUsePgParser(settings.UsePgParser)
             .SetFromConfig(SessionCtx->Config());
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(!compileResult.NeedToSplit);

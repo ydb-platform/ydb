@@ -182,13 +182,9 @@ TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(co
 
 NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql::TExprContext& ctx) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.PgParser = UsePgParser && *UsePgParser;
+    settings.PgParser = false;
     settings.LangVer = LangVer;
     settings.BackportMode = BackportMode;
-    if (settings.PgParser) {
-        settings.AutoParametrizeEnabled = IsEnablePgConstsToParams ;
-        settings.AutoParametrizeValuesStmt = IsEnablePgConstsToParams;
-    }
 
     if (QueryType == NYql::EKikimrQueryType::Scan || QueryType == NYql::EKikimrQueryType::Query) {
         SqlVersion = SqlVersion ? *SqlVersion : 1;
@@ -212,7 +208,7 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
         settings.SaveWorldDependencies = true;
     }
 
-    settings.PGDisable = !IsEnablePgSyntax;
+    settings.PGDisable = true;
     settings.InferSyntaxVersion = true;
     settings.V0ForceDisable = false;
     settings.WarnOnV0 = false;
@@ -338,13 +334,17 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
 }
 
 TQueryAst ParseQuery(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder) {
+    if (syntax && *syntax == Ydb::Query::Syntax::SYNTAX_PG) {
+        NYql::TExprContext ctx;
+        ctx.IssueManager.RaiseIssue(NYql::YqlIssue(NYql::TPosition(0, 0), NYql::TIssuesIds::DEFAULT_ERROR,
+            "PostgreSQL syntax is not supported"));
+        return TQueryAst(std::make_shared<NYql::TAstParseResult>(NYql::TAstParseResult(ctx.IssueManager.GetIssues())), {}, true, false, {});
+    }
+
     bool deprecatedSQL;
     bool keepInCache;
     TMaybe<TString> commandTagName;
     TMaybe<ui16> sqlVersion;
-    if (syntax && *syntax == Ydb::Query::Syntax::SYNTAX_PG) {
-        settingsBuilder.SetUsePgParser(true);
-    }
 
     NYql::TExprContext ctx;
     auto astRes = ParseQuery(queryText, isSql, sqlVersion, deprecatedSQL, ctx, settingsBuilder, keepInCache, commandTagName);
@@ -392,12 +392,14 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Q
     if (!perStatementExecution) {
         return {ParseQuery(queryText, syntax, isSql, settingsBuilder)};
     }
+    if (syntax && *syntax == Ydb::Query::Syntax::SYNTAX_PG) {
+        NYql::TExprContext ctx;
+        ctx.IssueManager.RaiseIssue(NYql::YqlIssue(NYql::TPosition(0, 0), NYql::TIssuesIds::DEFAULT_ERROR,
+            "PostgreSQL syntax is not supported"));
+        return {{std::make_shared<NYql::TAstParseResult>(NYql::TAstParseResult(ctx.IssueManager.GetIssues())), {}, true, false, {}}};
+    }
     bool deprecatedSQL;
     TMaybe<ui16> sqlVersion;
-    if (syntax && *syntax == Ydb::Query::Syntax::SYNTAX_PG) {
-        settingsBuilder.SetUsePgParser(true);
-    }
-
     NYql::TExprContext ctx;
     return ParseStatements(queryText, isSql, sqlVersion, deprecatedSQL, ctx, settingsBuilder);
 }

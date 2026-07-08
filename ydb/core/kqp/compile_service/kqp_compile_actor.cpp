@@ -212,7 +212,6 @@ private:
             .SetIsEnablePgConstsToParams(Config->GetEnablePgConstsToParams())
             .SetApplicationName(ApplicationName)
             .SetQueryParameters(QueryId.QueryParameterTypes)
-            .SetIsEnablePgSyntax(AppData(ctx)->FeatureFlags.GetEnablePgSyntax())
             .SetFromConfig(*Config);
 
         return ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, PerStatementResult);
@@ -404,7 +403,7 @@ private:
                 break;
 
             case Ydb::Query::Syntax::SYNTAX_PG:
-                prepareSettings.UsePgParser = true;
+                ythrow yexception() << "PostgreSQL syntax is not supported";
                 break;
 
             default:

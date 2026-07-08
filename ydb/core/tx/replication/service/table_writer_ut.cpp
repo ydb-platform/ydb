@@ -46,8 +46,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         TEnv env(TFeatureFlags()
             .SetEnableTableDatetime64(true)
             .SetEnableTablePgTypes(true)
-            .SetEnableParameterizedDecimal(true)
-            .SetEnablePgSyntax(true));
+            .SetEnableParameterizedDecimal(true));
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
 
         env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{

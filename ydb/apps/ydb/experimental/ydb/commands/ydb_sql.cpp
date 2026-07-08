@@ -73,7 +73,7 @@ void TCommandExecuteSqlBase::DeclareScriptOptions(TClientCommand::TConfig& confi
 void TCommandExecuteSqlBase::DeclareCommonInputOptions(TClientCommand::TConfig& config) {
     config.Opts->AddLongOption("stats", "Execution statistics collection mode [none, basic, full, profile]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
-    config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
+    config.Opts->AddLongOption("syntax", "Query syntax [yql]")
         .RequiredArgument("[String]").DefaultValue("yql").StoreResult(&Syntax)
         .Hidden();
     config.Opts->AddLongOption("results-ttl", "Amount of time to store script execution results on server "
@@ -143,8 +143,6 @@ int TCommandExecuteSqlBase::ExecuteScriptAsync(TClientCommand::TConfig& config, 
 
     if (Syntax == "yql") {
         settings.Syntax(NQuery::ESyntax::YqlV1);
-    } else if (Syntax == "pg") {
-        settings.Syntax(NQuery::ESyntax::Pg);
     } else {
         throw TMisuseException() << "Unknown syntax option \"" << Syntax << "\"";
     }
@@ -362,8 +360,6 @@ int TCommandSqlExperimental::StreamExecuteQuery(NQuery::TQueryClient& client) {
     }
     if (Syntax == "yql") {
         settings.Syntax(NQuery::ESyntax::YqlV1);
-    } else if (Syntax == "pg") {
-        settings.Syntax(NQuery::ESyntax::Pg);
     } else {
         throw TMisuseException() << "Unknown syntax option \"" << Syntax << "\"";
     }

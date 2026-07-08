@@ -648,8 +648,6 @@ public:
         }
         if (Syntax == "yql_v1") {
             request.SetSyntax(Ydb::Query::Syntax::SYNTAX_YQL_V1);
-        } else if (Syntax == "pg") {
-            request.SetSyntax(Ydb::Query::Syntax::SYNTAX_PG);
         }
         if (OutputChunkMaxSize) {
             request.SetOutputChunkMaxSize(OutputChunkMaxSize);

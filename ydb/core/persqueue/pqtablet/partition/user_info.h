@@ -195,7 +195,8 @@ public:
         const TString& DbId,
         const TString& DbPath,
         const bool isServerless,
-        const TString& FolderId);
+        const TString& FolderId,
+        bool isSupportive);
 
     void Init(TActorId tabletActor, TActorId partitionActor, const TActorContext& ctx);
 
@@ -293,6 +294,7 @@ private:
     TString DbPath;
     bool IsServerless;
     TString FolderId;
+    bool IsSupportive;
     mutable ui64 CurReadRuleGeneration;
 
     TInstant LastReadMetricsUpdateTime;

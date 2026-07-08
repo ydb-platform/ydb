@@ -1938,18 +1938,18 @@ public:
             if (!txCtx.CanDeferEffects()) {
                 request.FlushEffects = true;
             } else {
-                // RETURNING
+                // When CanDeferEffects() is true, GetCurrentPhyTx() defers all
+                // effect-only txs (ResultsSize() == 0), so the remaining tx
+                // must have results (RETURNING clause).
                 AFL_ENSURE(tx->ResultsSize() > 0);
             }
         }
 
-        if (tx && tx->GetHasEffects() && !request.FlushEffects) {
-            // Has unflushed effects (used for RETURNING)
-            txCtx.HasUnflushedEffectsInBuffer = true;
-        }
-
         if (request.FlushEffects || commit) {
             txCtx.HasUnflushedEffectsInBuffer = false;
+        } else if (tx && tx->GetHasEffects() && !request.FlushEffects) {
+            // Has unflushed effects in buffer (used for RETURNING)
+            txCtx.HasUnflushedEffectsInBuffer = true;
         }
 
         LWTRACK(KqpSessionPhyQueryProposeTx,

@@ -3,6 +3,7 @@
 #include "kqp_rbo_physical_sort_builder.h"
 #include "kqp_rbo_physical_aggregation_builder.h"
 #include "kqp_rbo_physical_map_builder.h"
+#include "kqp_rbo_physical_union_all_builder.h"
 #include "kqp_rbo_physical_join_builder.h"
 #include "kqp_rbo_physical_filter_builder.h"
 #include "kqp_rbo_physical_source_builder.h"
@@ -182,7 +183,6 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             YQL_CLOG(TRACE, CoreDq) << "Converted Join " << opStageId;
         } else if (op->Kind == EOperator::UnionAll) {
             auto unionAll = CastOperator<TOpUnionAll>(op);
-            const auto unionOutput = unionAll->GetOutputIUs();
 
             auto [leftArg, leftInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
             stageArgs[opStageId].push_back(leftArg);
@@ -190,45 +190,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             auto [rightArg, rightInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
             stageArgs[opStageId].push_back(rightArg);
 
-            auto projectInput = [&](TExprNode::TPtr input, const TIntrusivePtr<IOperator>& inputOp) {
-                const auto inputOutput = inputOp->GetOutputIUs();
-                THashSet<TInfoUnit, TInfoUnit::THashFunction> inputOutputSet;
-                inputOutputSet.insert(inputOutput.begin(), inputOutput.end());
-
-                TVector<std::pair<TString, TString>> renames;
-                renames.reserve(unionAll->Columns.size());
-                bool identity = inputOutput.size() == unionOutput.size();
-                for (size_t i = 0; i < unionAll->Columns.size(); ++i) {
-                    const auto& column = unionAll->Columns[i];
-                    Y_ENSURE(inputOutputSet.contains(column), "UnionAll column " << column.GetFullName() << " is not visible");
-                    renames.emplace_back(column.GetFullName(), column.GetFullName());
-                    identity = identity && inputOutput[i] == column;
-                }
-
-                if (identity) {
-                    return input;
-                }
-                return NPhysicalConvertionUtils::BuildRenameMap(input, renames, ctx);
-            };
-
-            TVector<TExprNode::TPtr> extendArgs{
-                projectInput(leftArg, unionAll->GetLeftInput()),
-                projectInput(rightArg, unionAll->GetRightInput())
-            };
-
-            if (unionAll->Ordered) {
-                // clang-format off
-                currentStageBody = Build<TCoOrderedExtend>(ctx, op->Pos)
-                    .Add(extendArgs)
-                .Done().Ptr();
-                // clang-format on
-            } else {
-                // clang-format off
-                currentStageBody = Build<TCoExtend>(ctx, op->Pos)
-                    .Add(extendArgs)
-                .Done().Ptr();
-                // clang-format on
-            }
+            currentStageBody = Build<TPhysicalUnionAllBuilder>(unionAll, ctx, op->Pos, leftInput, rightInput);
 
             if (!unionAll->IsSingleConsumer()) {
                 currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, unionAll->GetNumOfConsumers(), ctx, op->Pos);

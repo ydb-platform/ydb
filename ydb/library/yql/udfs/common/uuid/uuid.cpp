@@ -74,50 +74,6 @@ TUnboxedValue MakeUuidValue(const IValueBuilder* valueBuilder, bool isV8, ui64 p
         bytes.size()));
 }
 
-class TNewPrefix: public TBoxedValue {
-public:
-    explicit TNewPrefix(TSourcePosition pos)
-        : Pos_(pos)
-    {
-    }
-
-    static const TStringRef& Name() {
-        static auto name = TStringRef::Of("newPrefix");
-        return name;
-    }
-
-    static bool DeclareSignature(
-        const TStringRef& name,
-        TType*,
-        IFunctionTypeInfoBuilder& builder,
-        bool typesOnly)
-    {
-        if (Name() != name) {
-            return false;
-        }
-
-        builder.Args()->Done();
-        builder.Returns<ui64>().IsStrict();
-
-        if (!typesOnly) {
-            builder.Implementation(new TNewPrefix(GetSourcePosition(builder)));
-        }
-        return true;
-    }
-
-private:
-    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
-        Y_UNUSED(args);
-        try {
-            return TUnboxedValuePod(NUuidKeyGen::NewPrefixValue());
-        } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos_) << " " << e.what()).data());
-        }
-    }
-
-    TSourcePosition Pos_;
-};
-
 template <bool IsV8, bool HasPrefix>
 class TNewUuid: public TBoxedValue {
 public:
@@ -229,8 +185,6 @@ public:
         static const TString newV8PolyArgs = BuildNoPrefixPolyArgs("Unexpected arguments for Uuid::newV8");
         static const TString newPrefixV8PolyArgs = BuildPrefixPolyArgs("Unexpected arguments for Uuid::newPrefixV8");
 
-        sink.Add(TNewPrefix::Name());
-
         auto newV7 = sink.Add(TNewUuid<false, false>::Name());
         newV7->SetTypeAwareness();
         newV7->SetPolyArgs(TStringRef(newV7PolyArgs));
@@ -258,8 +212,7 @@ public:
         Y_UNUSED(typeConfig);
         try {
             const bool typesOnly = (flags & TFlags::TypesOnly);
-            const bool found = TNewPrefix::DeclareSignature(name, userType, builder, typesOnly)
-                || TNewUuid<false, false>::DeclareSignature(name, userType, builder, typesOnly)
+            const bool found = TNewUuid<false, false>::DeclareSignature(name, userType, builder, typesOnly)
                 || TNewUuid<false, true>::DeclareSignature(name, userType, builder, typesOnly)
                 || TNewUuid<true, false>::DeclareSignature(name, userType, builder, typesOnly)
                 || TNewUuid<true, true>::DeclareSignature(name, userType, builder, typesOnly);

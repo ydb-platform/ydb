@@ -1,4 +1,4 @@
-$p = Uuid::newPrefix();
+$p = RandomNumber(1);
 
 SELECT Uuid::newV7() != Uuid::newV7() AS v7_unique;
 SELECT Uuid::newV8() != Uuid::newV8() AS v8_unique;

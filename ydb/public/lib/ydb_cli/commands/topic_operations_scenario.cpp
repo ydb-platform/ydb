@@ -1,5 +1,7 @@
 #include "topic_readwrite_scenario.h"
 
+#include <ydb/public/lib/ydb_cli/common/scoped_driver.h>
+
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_defines.h>
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_describe.h>
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_reader.h>
@@ -96,9 +98,9 @@ void TTopicOperationsScenario::InitLog(TConfig& config)
 
 void TTopicOperationsScenario::InitDriver(TConfig& config)
 {
-    Driver =
-        std::make_unique<NYdb::TDriver>(TYdbCommand::CreateDriver(config,
-                                                                  std::unique_ptr<TLogBackend>(MakeLogBackend(config.VerbosityLevel).Release())));
+    Driver = std::make_unique<TScopedDriver>(TYdbCommand::CreateDriver(
+        config,
+        std::unique_ptr<TLogBackend>(MakeLogBackend(config.VerbosityLevel).Release())));
 }
 
 void TTopicOperationsScenario::InitStatsCollector()

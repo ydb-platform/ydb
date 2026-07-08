@@ -5,6 +5,13 @@
 namespace NKikimr::NPQ {
 namespace {
 
+bool IsWriteTxOperation(const NKikimrPQ::TPartitionOperation& operation)
+{
+    const bool isRead = operation.HasCommitOffsetsBegin()
+        || (operation.GetKafkaTransaction() && operation.HasCommitOffsetsEnd());
+    return !isRead;
+}
+
 void AssertTopicReadDualWrite(const NKikimrPQ::TPartitionOperation& op)
 {
     UNIT_ASSERT(op.HasRead());
@@ -30,6 +37,9 @@ void AssertKafkaReadDualWrite(const NKikimrPQ::TPartitionOperation& op)
     UNIT_ASSERT(op.GetKafkaTransaction());
     UNIT_ASSERT_EQUAL(op.GetConsumer(), kafkaRead.GetConsumer());
     UNIT_ASSERT_EQUAL(op.GetCommitOffsetsEnd(), kafkaRead.GetCommitOffsetsEnd());
+    UNIT_ASSERT(!op.HasCommitOffsetsBegin());
+    UNIT_ASSERT(!op.HasSupportivePartition());
+    UNIT_ASSERT(!op.HasKafkaProducerInstanceId());
 }
 
 void AssertTopicWriteDualWrite(const NKikimrPQ::TPartitionOperation& op, bool skipConflictCheck, TMaybe<ui32> supportivePartition)
@@ -42,6 +52,8 @@ void AssertTopicWriteDualWrite(const NKikimrPQ::TPartitionOperation& op, bool sk
         UNIT_ASSERT(op.GetWrite().HasTopic());
         UNIT_ASSERT_EQUAL(op.GetSupportivePartition(), *supportivePartition);
         UNIT_ASSERT_EQUAL(op.GetWrite().GetTopic().GetSupportivePartition(), *supportivePartition);
+    } else {
+        UNIT_ASSERT(!op.HasSupportivePartition());
     }
     UNIT_ASSERT(!op.GetKafkaTransaction());
 }
@@ -158,6 +170,45 @@ Y_UNIT_TEST(UpgradeFromLegacyKafkaWriteRoundTrip) {
 
     DowngradeToLegacy(legacy);
     AssertKafkaWriteDualWrite(legacy, true, 11, 12);
+}
+
+Y_UNIT_TEST(DowngradeToLegacyKafkaWriteClearsTopicReadLegacy) {
+    NKikimrPQ::TPartitionOperation op;
+    op.SetPath("topic");
+    op.SetPartitionId(1);
+    op.SetConsumer("consumer");
+    op.SetCommitOffsetsBegin(10);
+    op.SetCommitOffsetsEnd(20);
+    UpgradeFromLegacy(op);
+
+    op.ClearOp();
+    auto* write = op.MutableWrite()->MutableKafka();
+    write->MutableKafkaProducerInstanceId()->SetId(7);
+    write->MutableKafkaProducerInstanceId()->SetEpoch(3);
+    op.MutableWrite()->SetSkipConflictCheck(false);
+
+    DowngradeToLegacy(op);
+
+    AssertKafkaWriteDualWrite(op, false, 7, 3);
+    UNIT_ASSERT(!op.HasCommitOffsetsBegin());
+    UNIT_ASSERT(IsWriteTxOperation(op));
+}
+
+Y_UNIT_TEST(DowngradeToLegacyTopicWriteClearsSupportivePartition) {
+    NKikimrPQ::TPartitionOperation op;
+    op.SetPath("topic");
+    op.SetPartitionId(2);
+    op.SetSupportivePartition(100'001);
+    op.SetSkipConflictCheck(true);
+    UpgradeFromLegacy(op);
+
+    op.ClearOp();
+    op.MutableWrite()->SetSkipConflictCheck(false);
+    op.MutableWrite()->MutableTopic();
+
+    DowngradeToLegacy(op);
+
+    AssertTopicWriteDualWrite(op, false, Nothing());
 }
 
 } // Y_UNIT_TEST_SUITE(TPartitionOperationCompat)

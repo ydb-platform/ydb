@@ -47,10 +47,26 @@ bool HasLegacy(const NKikimrPQ::TWriteId& writeId)
         || writeId.HasNodeId() || writeId.HasKeyId();
 }
 
+void ClearLegacyPartitionOpFields(NKikimrPQ::TPartitionOperation& op)
+{
+    op.ClearCommitOffsetsBegin();
+    op.ClearCommitOffsetsEnd();
+    op.ClearConsumer();
+    op.ClearSupportivePartition();
+    op.ClearForceCommit();
+    op.ClearKillReadSession();
+    op.ClearOnlyCheckCommitedToFinish();
+    op.ClearReadSessionId();
+    op.SetKafkaTransaction(false);
+    op.ClearKafkaProducerInstanceId();
+    op.ClearSkipConflictCheck();
+}
+
 void DowngradeTopicReadToLegacy(
     const NKikimrPQ::TPartitionOperation::TReadOp::TTopicApi& topicRead,
     NKikimrPQ::TPartitionOperation& op)
 {
+    ClearLegacyPartitionOpFields(op);
     op.SetConsumer(topicRead.GetConsumer());
     op.SetCommitOffsetsBegin(topicRead.GetCommitOffsetsBegin());
     op.SetCommitOffsetsEnd(topicRead.GetCommitOffsetsEnd());
@@ -65,6 +81,7 @@ void DowngradeKafkaReadToLegacy(
     const NKikimrPQ::TPartitionOperation::TReadOp::TKafkaApi& kafkaRead,
     NKikimrPQ::TPartitionOperation& op)
 {
+    ClearLegacyPartitionOpFields(op);
     op.SetConsumer(kafkaRead.GetConsumer());
     op.SetCommitOffsetsEnd(kafkaRead.GetCommitOffsetsEnd());
     op.SetKafkaTransaction(true);
@@ -74,6 +91,7 @@ void DowngradeTopicWriteToLegacy(
     const NKikimrPQ::TPartitionOperation::TWriteOp& write,
     NKikimrPQ::TPartitionOperation& op)
 {
+    ClearLegacyPartitionOpFields(op);
     op.SetSkipConflictCheck(write.GetSkipConflictCheck());
     if (write.GetTopic().HasSupportivePartition()) {
         op.SetSupportivePartition(write.GetTopic().GetSupportivePartition());
@@ -85,6 +103,7 @@ void DowngradeKafkaWriteToLegacy(
     const NKikimrPQ::TPartitionOperation::TWriteOp& write,
     NKikimrPQ::TPartitionOperation& op)
 {
+    ClearLegacyPartitionOpFields(op);
     op.SetSkipConflictCheck(write.GetSkipConflictCheck());
     op.SetKafkaTransaction(true);
     CopyKafkaProducerInstanceId(

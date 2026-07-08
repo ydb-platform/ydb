@@ -163,34 +163,33 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         Place(p, TInstant::Now());
     }
 
-    void Place(typename TPortion::TPtr p, TInstant now, bool accumulatorAllowed = true, std::optional<ui8> forcedLevel = std::nullopt) {
+    void Place(typename TPortion::TPtr p, TInstant now, bool accumulatorAllowed = true, std::optional<ui8> forcedLevel = std::nullopt,
+        bool forceCandidate = false) {
         const ui64 portionId = p->GetPortionId();
         PortionRegistry[portionId] = p;
         ui8 level = 0;
         ui64 measure = 0;
 
-        if (accumulatorAllowed && p->GetTotalBlobBytes() < Settings.AccumulatorPortionSizeLimit) {
+        if (p->GetCompactionLevel() == 1 && State != EState::COMPATIBILITY) {
+            level = 1;
+        } else if (accumulatorAllowed && p->GetTotalBlobBytes() < Settings.AccumulatorPortionSizeLimit) {
             level = 0;
+        } else if (forcedLevel.has_value()) {
+            level = *forcedLevel;
         } else {
             measure = LastLevel.Measure(p);
-            if (p->GetCompactionLevel() == 1 && State != EState::COMPATIBILITY) {
+            ui8 measuredLevel = 1;
+            if (measure > 0) {
+                ui64 threshold = 1;
+                while (threshold * Settings.K <= measure) {
+                    threshold *= Settings.K;
+                    ++measuredLevel;
+                }
+            }
+            if (measuredLevel <= 1) {
                 level = 1;
-            } else if (forcedLevel.has_value()) {
-                level = *forcedLevel;
             } else {
-                ui8 measuredLevel = 1;
-                if (measure > 0) {
-                    ui64 threshold = 1;
-                    while (threshold * Settings.K <= measure) {
-                        threshold *= Settings.K;
-                        ++measuredLevel;
-                    }
-                }
-                if (measuredLevel <= 1) {
-                    level = 1;
-                } else {
-                    level = std::min(measuredLevel, static_cast<ui8>(Settings.MiddleLevelCount - 1));
-                }
+                level = std::min(measuredLevel, static_cast<ui8>(Settings.MiddleLevelCount - 1));
             }
         }
 
@@ -198,7 +197,11 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
             Accumulator.AddPortion(p);
             InternalLevel[portionId] = { .Level = 0, .Width = 0 };
         } else if (level == 1) {
-            LastLevel.AddPortion(p);
+            if (forceCandidate) {
+                LastLevel.AddCandidatePortion(p);
+            } else {
+                LastLevel.AddPortion(p);
+            }
             InternalLevel[portionId] = { .Level = 1, .Width = measure };
         } else {
             MiddleLevels.at(level).RegisterRoutingWidth(portionId, measure);
@@ -206,7 +209,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
             InternalLevel[portionId] = { .Level = level, .Width = measure };
         }
 
-        if (level != 1 && Settings.AgingSettings.Enabled) {
+        if (level >= 2 && Settings.AgingSettings.Enabled) {
             InsertTimeByPortionId[portionId] = now;
             PortionsByTime.insert({ now, portionId });
         }
@@ -271,7 +274,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
             if (pit != PortionRegistry.end()) {
                 auto lit = InternalLevel.find(it->second);
                 if (lit != InternalLevel.end()) {
-                    if ((State == EState::BORED && lit->second.Level != 0) || it->first + wait <= currentInstant) {
+                    if ((State == EState::BORED) || it->first + wait <= currentInstant) {
                         expired.push_back(pit->second);
                     }
                 }
@@ -288,27 +291,66 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
                 continue;
             }
             const ui8 currentLevel = lit->second.Level;
-            std::optional<ui8> nextLevel;
-            if (currentLevel == 0) {
-                // Promote out of accumulator: acc no longer allowed, use natural routing.
-                nextLevel = std::nullopt;
-            } else if (currentLevel >= 2) {
-                // Middle level promotion: force one level lower; acc impossible.
-                nextLevel = static_cast<ui8>(currentLevel - 1);
-            } else {
-                AFL_VERIFY(false)("reason", "last_level_portion_should_not_have_timer")("portion_id", portionId);
-                continue;
-            }
+            AFL_VERIFY(currentLevel >= 2)("reason", "only_middle_levels_should_have_aging_timers")("portion_id", portionId)(
+                "level", (ui32)currentLevel);
+            const auto nextLevel = static_cast<ui8>(currentLevel - 1);
             DoRemovePortion(p);
             Place(p, currentInstant, /*accumulatorAllowed=*/false, nextLevel);
+        }
+
+        const auto neverLocked = [](typename TPortion::TConstPtr) {
+            return false;
+        };
+        if (!HasOtherLevelWork(neverLocked) && Accumulator.Portions.size() == 1) {
+            auto it = Accumulator.Portions.begin();
+            auto pit = PortionRegistry.find((*it)->GetPortionId());
+            if (pit != PortionRegistry.end()) {
+                typename TPortion::TPtr p = pit->second;
+                DoRemovePortion(p);
+                // Promote as a last-level candidate (not a stable portion) so it stays compactable
+                // and eventually merges with a neighbour instead of stranding as an INSERTED portion.
+                Place(p, currentInstant, /*accumulatorAllowed=*/false, /*forcedLevel=*/static_cast<ui8>(1), /*forceCandidate=*/true);
+            }
         }
 
         ConsiderState();
     }
 
+    bool AreOtherLevelsEmpty() const {
+        if (!LastLevel.CandidateIds.empty()) {
+            return false;
+        }
+        for (const auto& [_, middleLevel] : MiddleLevels) {
+            if (!middleLevel.PortionById.empty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool AreMiddleLevelsEmpty() const {
+        for (const auto& [_, middleLevel] : MiddleLevels) {
+            if (!middleLevel.PortionById.empty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Whether a below-threshold accumulator should defer to the other levels. Middle levels suppress
+    // structurally (a lone middle portion ages down on its own), while the last level suppresses only
+    // when it can actually produce a task — a promoted last-level candidate with no merge partner
+    // yields no task and must not stall the accumulator that would feed it a neighbour.
+    bool HasOtherLevelWork(TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const {
+        if (!AreMiddleLevelsEmpty()) {
+            return true;
+        }
+        return LastLevel.DoGetNextOptimizationTask(isLocked).has_value();
+    }
+
     std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
         TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
-        auto result = Accumulator.DoGetNextOptimizationTask(isLocked);
+        std::optional<CompactionTask<TKey, TPortion>> result;
         const auto consider = [&result](std::optional<CompactionTask<TKey, TPortion>>&& candidate) {
             if (candidate && (!result || result->Priority < candidate->Priority)) {
                 result = std::move(candidate);
@@ -317,6 +359,14 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         consider(LastLevel.DoGetNextOptimizationTask(isLocked));
         for (const auto& [_, middleLevel] : MiddleLevels) {
             consider(middleLevel.DoGetNextOptimizationTask(isLocked));
+        }
+
+        // An above-threshold accumulator always competes on priority; a below-threshold accumulator
+        // only compacts when no other level has work — either a pending task or a structurally
+        // occupied middle level — so small batches don't starve larger compactions yet never stall.
+        const bool yieldToOthers = result.has_value() || !AreMiddleLevelsEmpty();
+        if (!Accumulator.IsBelowThreshold() || !yieldToOthers) {
+            consider(Accumulator.DoGetNextOptimizationTask(isLocked));
         }
 
         return result;

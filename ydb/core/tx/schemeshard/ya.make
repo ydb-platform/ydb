@@ -314,6 +314,7 @@ SRCS(
     schemeshard_self_pinger.h
     schemeshard_set_column_constraint.cpp
     schemeshard_set_column_constraint.h
+    schemeshard_set_column_constraint__cancel.cpp
     schemeshard_set_column_constraint__create.cpp
     schemeshard_set_column_constraint__forget.cpp
     schemeshard_set_column_constraint__get.cpp

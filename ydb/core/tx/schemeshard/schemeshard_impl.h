@@ -1941,6 +1941,7 @@ public:
         struct TTxGetSetColumnConstraint;
         struct TTxListSetColumnConstraint;
         struct TTxForgetSetColumnConstraint;
+        struct TTxCancelSetColumnConstraint;
     };
 
     NTabletFlatExecutor::ITransaction* CreateTxCreate(TEvIndexBuilder::TEvCreateRequest::TPtr& ev);

@@ -1,42 +1,23 @@
-#include "schemeshard_impl.h"
-#include "schemeshard_set_column_constraint.h"
-#include "schemeshard_path.h"
+#include <ydb/core/tx/schemeshard/index/build_index.h>
+#include <ydb/core/tx/schemeshard/index/build_index_helpers.h>
+#include <ydb/core/tx/schemeshard/index/build_index_tx_base.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TTxSetColumnConstraintCancel : public TSchemeShard::TIndexBuilder::TTxBase {
-private:
-    TEvSetColumnConstraint::TEvCancelRequest::TPtr Request;
-    THolder<TEvSetColumnConstraint::TEvCancelResponse> Response;
-
+struct TSchemeShard::TIndexBuilder::TTxCancelSetColumnConstraint : public TSchemeShard::TIndexBuilder::TTxSimple<TEvSetColumnConstraint::TEvCancelRequest, TEvSetColumnConstraint::TEvCancelResponse> {
 public:
-    explicit TTxSetColumnConstraintCancel(TSelf* self, TEvSetColumnConstraint::TEvCancelRequest::TPtr& ev)
-        : TTxBase(self, TIndexBuildId(ev->Get()->Record.GetOperationId()), TXTYPE_CANCEL_SET_COLUMN_CONSTRAINT)
-        , Request(ev)
+    explicit TTxCancelSetColumnConstraint(TSelf* self, TEvSetColumnConstraint::TEvCancelRequest::TPtr& ev)
+        : TTxSimple(self, TIndexBuildId(ev->Get()->Record.GetOperationId()), ev, TXTYPE_CANCEL_SET_COLUMN_CONSTRAINT)
     {}
-
-    bool Reply(Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const TString& errorMessage = TString()) {
-        auto& record = Response->Record;
-        record.SetStatus(status);
-        if (errorMessage) {
-            AddIssue(record.MutableIssues(), errorMessage);
-        }
-
-        LOG_N("TTxSetColumnConstraintCancel: Reply"
-              << ", operationId: " << BuildId
-              << ", status: " << Ydb::StatusIds::StatusCode_Name(status)
-              << ", error: " << errorMessage);
-
-        Send(Request->Sender, std::move(Response), 0, Request->Cookie);
-        return true;
-    }
 
     bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
-        LOG_I("TTxSetColumnConstraintCancel: DoExecute " << record.ShortDebugString());
+        LOG_D("TTxGetSetColumnConstraint::DoExecute " << record.ShortDebugString());
 
         Response = MakeHolder<TEvSetColumnConstraint::TEvCancelResponse>(record.GetOperationId());
 
@@ -77,28 +58,20 @@ public:
         operationInfo.MarkAsCancelled(TString("Cancelled by user request"));
         Self->PersistSetColumnConstraintCancellation(db, operationInfo);
 
-        // Trigger progress to handle the cancellation
+        // Note: The operation will continue through its natural stages:
+        // - TTxReplyValidateRowCondition ignores incoming validation messages due to IsCancelled flag
+        // - AlterMainTableUnlockNullWritesPropose will NOT set NOT NULL constraint due to IsCancelled check
+        // - The operation will complete naturally in Done state without setting the constraint
         Progress(BuildId);
 
         return Reply();
     }
 
     void DoComplete(const TActorContext&) override {}
-
-    void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
-        TIndexBuildInfo* /*operationInfo*/, const std::exception& exc) override
-    {
-        LOG_E("TTxSetColumnConstraintCancel: OnUnhandledException"
-            ", id# " << BuildId << ", exception: " << exc.what());
-    }
 };
 
 ITransaction* TSchemeShard::CreateTxSetColumnConstraintCancel(TEvSetColumnConstraint::TEvCancelRequest::TPtr& ev) {
-    return new TTxSetColumnConstraintCancel(this, ev);
-}
-
-void TSchemeShard::Handle(TEvSetColumnConstraint::TEvCancelRequest::TPtr& ev, const TActorContext& ctx) {
-    Execute(CreateTxSetColumnConstraintCancel(ev), ctx);
+    return new TIndexBuilder::TTxCancelSetColumnConstraint(this, ev);
 }
 
 } // NSchemeShard

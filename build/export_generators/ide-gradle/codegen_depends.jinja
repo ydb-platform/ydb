@@ -28,7 +28,7 @@
 {%-     endfor -%}
 {%- endif -%}
 
-{%- if current_target.custom_runs|length or current_target.runs|length -%}
+{%- if current_target.custom_runs|length or current_target.runs|length or copy_files|length -%}
 {%-     set collectTask = varprefix + "Collect" %}
 
 val {{ collectTask }} = tasks.register<Sync>("{{ collectTask }}") {
@@ -46,6 +46,14 @@ val {{ collectTask }} = tasks.register<Sync>("{{ collectTask }}") {
 {%-             endif -%}
 {%-         endfor -%}
 {%-     endif %}
+{%-     if copy_files|length -%}
+{%-         for copy_task in copy_files -%}
+{%-             if not(copy_task['_parent_object_index'] is defined) or not(copy_task['_parent_object_index'] in current_target_object_indexes) %}
+    from("$projectCodegenDir/{{ varprefix }}.{{ copy_task['_object_index'] }}")
+{%-             endif -%}
+{%-         endfor -%}
+{%-     endif -%}
+
     into("$projectCodegenDir/{{ varprefix }}.collect")
 }
 
@@ -61,6 +69,13 @@ tasks.named("{{ collectTask }}").configure {
 {%-         for run in current_target.runs -%}
 {%-             if not(run['_parent_object_index'] is defined) or not(run['_parent_object_index'] in current_target_object_indexes) %}
     dependsOn({{ varprefix }}{{ run['_object_index'] }})
+{%-             endif -%}
+{%-         endfor -%}
+{%-     endif %}
+{%-     if copy_files|length -%}
+{%-         for copy_task in copy_files -%}
+{%-             if not(copy_task['_parent_object_index'] is defined) or not(copy_task['_parent_object_index'] in current_target_object_indexes) %}
+    dependsOn({{ varprefix }}{{ copy_task['_object_index'] }})
 {%-             endif -%}
 {%-         endfor -%}
 {%-     endif %}

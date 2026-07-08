@@ -58,10 +58,11 @@ protected:
 
                 auto* reflection = proto.GetReflection();
                 if (field.is_repeated()) {
+                    json.WriteKey(key).BeginList();
                     for (int i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) {
-                        PrintStringValue<false>(field, TStringBuf(),
-                            maybeBase64Encode(reflection->GetRepeatedString(proto, &field, i)), json);
+                        json.Write(maybeBase64Encode(reflection->GetRepeatedString(proto, &field, i)));
                     }
+                    json.EndList();
                 } else {
                     PrintStringValue<true>(field, key,
                         maybeBase64Encode(reflection->GetString(proto, &field)), json);

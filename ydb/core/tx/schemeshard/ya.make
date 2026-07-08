@@ -316,6 +316,7 @@ SRCS(
     schemeshard_set_column_constraint.h
     schemeshard_set_column_constraint__create.cpp
     schemeshard_set_column_constraint__get.cpp
+    schemeshard_set_column_constraint__list.cpp
     schemeshard_set_column_constraint__progress.cpp
     schemeshard_shard_deleter.cpp
     schemeshard_shard_deleter.h

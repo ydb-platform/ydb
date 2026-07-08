@@ -44,6 +44,7 @@ CLUSTER_CONFIG = dict(
         'TX_PROXY': LogLevels.CRIT,
     },
     enable_audit_log=True,
+    extra_feature_flags=['enable_column_statistics'],
     audit_log_config={
         'file_backend': {
             'format': 'json',

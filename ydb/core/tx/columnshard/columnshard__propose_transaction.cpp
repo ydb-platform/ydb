@@ -91,7 +91,7 @@ public:
             TxOperator->SendReply(*Self, ctx);
             return;
         }
-        auto internalOp = Self->GetProgressTxController().GetTxOperatorOptional(txId);
+        auto internalOp = Self->GetProgressTxController().GetTxOperator(txId, ETxOperatorStatus::InProgress, /*optional*/ true);
         if (!internalOp) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "removed tx operator");
             return;
@@ -104,7 +104,8 @@ public:
         }
 
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "actual tx operator");
-        if (internalOp->IsAsync() && !internalOp->NeedResendReply()) {
+        const bool waitForAsyncCompletion = internalOp->IsAsync() && (!internalOp->NeedResendReply() || !internalOp->IsProposeReplyReady(*Self));
+        if (waitForAsyncCompletion) {
             Self->GetProgressTxController().StartProposeOnComplete(*internalOp, ctx);
         } else {
             Self->GetProgressTxController().FinishProposeOnComplete(*internalOp, ctx);

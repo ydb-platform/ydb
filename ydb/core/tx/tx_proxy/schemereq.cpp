@@ -115,11 +115,11 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         NTabletPipe::TClientConfig clientConfig;
         clientConfig.RetryPolicy = {.RetryLimitCount = 3};
         PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, shardToRequest, clientConfig));
-        YDB_LOG_DEBUG_CTX(ctx, "SEND shardToRequest",
-            {"actor", ctx.SelfID},
-            {"txid", TxId},
+        YDB_LOG_DEBUG_CTX(ctx, "Send propose",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId},
             {"to", shardToRequest},
-            {"req", req->ToString()});
+            {"ev", req->ToString()});
         NTabletPipe::SendData(ctx, PipeClient, req.Release());
     }
 
@@ -659,11 +659,11 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 {"txId", TxId},
                 {"issues", result->Record.GetIssues()});
         }
-        YDB_LOG_DEBUG_CTX(ctx, "SEND Source",
-            {"actor", ctx.SelfID},
-            {"txid", TxId},
+        YDB_LOG_DEBUG_CTX(ctx, "SEND status",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId},
             {"to", Source},
-            {"result", result->ToString()});
+            {"ev", result->ToString()});
         ctx.Send(Source, result);
     }
 
@@ -1338,7 +1338,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         }
 
         YDB_LOG_ERROR_CTX(ctx, "Unexpected response from scheme cache",
-            {"navigate", navigate->ToString(*AppData()->TypeRegistry)});
+            {"response", navigate->ToString(*AppData()->TypeRegistry)});
         Y_DEBUG_ABORT("Unreachable");
 
         TxProxyMon->ResolveKeySetFail->Inc();
@@ -1614,9 +1614,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr &ev, const TActorContext &ctx) {
         const NKikimrScheme::TEvModifySchemeTransactionResult &record = ev->Get()->Record;
-        YDB_LOG_DEBUG_CTX(ctx, "Status HANDLE",
-            {"actor", ctx.SelfID},
-            {"txid", TxId},
+        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvModifySchemeTransactionResult",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId},
             {"status", record.GetStatus()},
             {"ev", ev->Get()->ToString()});
 

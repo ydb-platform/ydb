@@ -1401,11 +1401,11 @@ private:
             count += v.Rows.size();
         }
 
-        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Retry iteration for rows / shards",
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Retry",
             {"selfId", ctx.SelfID},
             {"iteration", Backoff.GetIteration()},
-            {"count", count},
-            {"shardUploadRetryStates", ShardUploadRetryStates.size()});
+            {"rows", count},
+            {"shards", ShardUploadRetryStates.size()});
 
         auto rows = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>();
         rows->reserve(count);
@@ -1433,7 +1433,7 @@ private:
     void ReplyIfDone(const NActors::TActorContext& ctx) {
         if (!ShardRepliesLeft.empty()) {
             YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: waiting for shards replies",
-                {"shardRepliesLeftSize", ShardRepliesLeft.size()});
+                {"shards", ShardRepliesLeft.size()});
             return;
         }
 
@@ -1456,7 +1456,7 @@ private:
         AFL_VERIFY(status.GetCode() != Ydb::StatusIds::SUCCESS);
         YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "",
             {"logPrefix", LogPrefix()},
-            {"status", status.GetErrorMessage()});
+            {"error", status.GetErrorMessage()});
         RaiseIssue(NYql::TIssue(LogPrefix() << status.GetErrorMessage()));
         ReplyWithResult(status, ctx);
     }

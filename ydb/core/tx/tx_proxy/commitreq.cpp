@@ -242,7 +242,7 @@ private:
                     << " to tableId# " << entry.KeyDescription->TableId;
 
                 YDB_LOG_ERROR_CTX(ctx, "Error",
-                    {"explanation", explanation.Str()});
+                    {"error", explanation.Str()});
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, explanation.Str()));
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, NKikimrIssues::TStatusIds::ACCESS_DENIED, true, ctx);
                 return Die(ctx);

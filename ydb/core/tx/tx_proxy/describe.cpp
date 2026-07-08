@@ -269,8 +269,8 @@ public:
 void TDescribeReq::Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TActorContext &ctx) {
     TEvTxProxyReq::TEvNavigateScheme *msg = ev->Get();
     const auto &record = msg->Ev->Get()->Record;
-    YDB_LOG_DEBUG_CTX(ctx, "HANDLE EvNavigateScheme",
-        {"actor", ctx.SelfID},
+    YDB_LOG_DEBUG_CTX(ctx, "Handle TEvNavigateScheme",
+        {"selfId", ctx.SelfID},
         {"path", record.GetDescribePath().GetPath()});
 
     WallClockStarted = ctx.Now();
@@ -313,10 +313,10 @@ void TDescribeReq::Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TAct
             options->CopyFrom(record.GetDescribePath().GetOptions());
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "SEND shardToRequest",
-            {"actor", ctx.SelfID},
+        YDB_LOG_DEBUG_CTX(ctx, "Send TEvDescribeScheme",
+            {"selfId", ctx.SelfID},
             {"to", shardToRequest},
-            {"req", req->ToString()});
+            {"ev", req->ToString()});
 
         Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), shardToRequest, true), 0, SourceCookie);
 
@@ -433,10 +433,10 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
         }
     }
 
-    YDB_LOG_DEBUG_CTX(ctx, "SEND shardToRequest",
-        {"actor", ctx.SelfID},
+    YDB_LOG_DEBUG_CTX(ctx, "Send TEvDescribeScheme",
+        {"selfId", ctx.SelfID},
         {"to", shardToRequest},
-        {"req", req->ToString()});
+        {"ev", req->ToString()});
 
     Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), shardToRequest, true), 0, SourceCookie);
     Become(&TThis::StateWaitExec);

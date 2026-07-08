@@ -911,7 +911,7 @@ private:
         const TString txBody = tx.SerializeAsString();
         const ui64 txFlags = 0;
 
-        YDB_LOG_DEBUG("Sending CreateVolatileSnapshot tx to shard",
+        YDB_LOG_DEBUG("Sending CreateVolatileSnapshot tx",
             {"logPrefix", LogPrefix},
             {"shardId", state.ShardId});
         ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
@@ -1413,7 +1413,6 @@ private:
         if (msg->GetTxId() != TxId) {
             YDB_LOG_ERROR("Unexpected TEvProposeTransactionResult (snapshot expected)",
                 {"logPrefix", LogPrefix},
-                {"msgTxId", msg->GetTxId()},
                 {"txId", TxId});
             return;
         }
@@ -2193,7 +2192,7 @@ private:
         Quota.MessageSize = record.GetMessageSizeLimit();
         Quota.MessageRows = record.GetMessageRowsLimit();
 
-        YDB_LOG_DEBUG("Updated quotas, allocated message size message rows available",
+        YDB_LOG_DEBUG("Updated quotas",
             {"logPrefix", LogPrefix},
             {"allocated", Quota.Allocated},
             {"messageSize", Quota.MessageSize},

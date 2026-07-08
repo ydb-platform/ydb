@@ -1701,7 +1701,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
                 << " to tableId# " << entry.KeyDescription->TableId;
 
             YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Error",
-                {"explanation", explanation.Str()});
+                {"error", explanation.Str()});
             IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, explanation.Str()));
             ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, NKikimrIssues::TStatusIds::ACCESS_DENIED, true, ctx);
             return Die(ctx);
@@ -2378,8 +2378,8 @@ void TDataReq::HandlePlan(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TAct
             case TPerTablet::ETabletStatus::StatusWait:
                 // should be impossible, just handle as if it's an error
                 YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Shard has unexpected state on delivery problem in planning state",
-                    {"actor", ctx.SelfID},
-                    {"txid", TxId},
+                    {"selfId", ctx.SelfID},
+                    {"txId", TxId},
                     {"tabletId", msg->TabletId},
                     {"tabletStatus", perTablet->TabletStatus});
                 wasRestarting = false;
@@ -2613,8 +2613,8 @@ void TDataReq::MergeResult(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, 
         perTablet->Stats.Reset(new NKikimrQueryStats::TTxStats);
         perTablet->Stats->Swap(record.MutableTxStats());
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Got stats",
-            {"txid", TxId},
-            {"datashard", tabletId},
+            {"txId", TxId},
+            {"tabletId", tabletId},
             {"stats", *perTablet->Stats});
     }
 

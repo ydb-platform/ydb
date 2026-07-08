@@ -436,7 +436,7 @@ public:
         TxAllocatorClient.Bootstrap(ctx);
 
         Become(&TThis::StateWork);
-        YDB_LOG_DEBUG_CTX(ctx, "Become StateWork (SchemeCache",
+        YDB_LOG_DEBUG_CTX(ctx, "Become StateWork SchemeCache",
             {"selfId", SelfId()},
             {"schemeCache", Services.SchemeCache});
     }

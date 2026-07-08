@@ -289,6 +289,11 @@ enum ESimpleCounters {
 
     COUNTER_IN_FLIGHT_OPS_TxCreateFullBackupOp = 223 [(CounterOpts) = {Name: "InFlightOps/CreateFullBackupOp"}];
 
+    COUNTER_RESERVED_224 = 224;
+    COUNTER_RESERVED_225 = 225;
+    COUNTER_RESERVED_226 = 226;
+    COUNTER_RESERVED_227 = 227;
+
     COUNTER_SMALL_BLOBS_VOLUME_BYTES = 228               [(CounterOpts) = {Name: "SmallBlobsVolumeBytes"}];
     COUNTER_SMALL_BLOBS_COUNT = 229                      [(CounterOpts) = {Name: "SmallBlobsCount"}];
     COUNTER_SMALL_BLOBS_VOLUME_HARD_QUOTA_BYTES = 230    [(CounterOpts) = {Name: "SmallBlobsVolumeHardQuotaBytes"}];

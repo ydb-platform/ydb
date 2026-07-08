@@ -37,12 +37,7 @@ bool TRlHelpers::IsQuotaInflight() const {
 
 bool TRlHelpers::IsQuotaRequired() const {
     Y_ENSURE(MeteringMode.Defined());
-    return IsRequestUnitsMeteringMode() && Ctx;
-}
-
-bool TRlHelpers::IsRequestUnitsMeteringMode() const {
-    Y_ENSURE(MeteringMode.Defined());
-    return MeteringMode == NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS;
+    return MeteringMode == NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS && Ctx;
 }
 
 void TRlHelpers::SetRlContext(const TRlContext& ctx) {

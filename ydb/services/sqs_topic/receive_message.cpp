@@ -56,7 +56,11 @@ namespace NKikimr::NSqsTopic::V1 {
 
 
 
-    class TReceiveMessageActor: public TQueueUrlHolder, public TGrpcActorBase<TReceiveMessageActor, TEvSqsTopicReceiveMessageRequest>, private NPQ::TRlHelpers {
+    class TReceiveMessageActor:
+        public TQueueUrlHolder,
+        public TGrpcActorBase<TReceiveMessageActor, TEvSqsTopicReceiveMessageRequest>,
+        private NPQ::TRlHelpers,
+        public TCdcStreamCompatible {
     protected:
         using TBase = TGrpcActorBase<TReceiveMessageActor, TEvSqsTopicReceiveMessageRequest>;
         using TProtoRequest = typename TBase::TProtoRequest;
@@ -88,6 +92,9 @@ namespace NKikimr::NSqsTopic::V1 {
                 return;
             }
             ReaderSettings_ = std::move(readerSettings);
+
+            NACLib::TUserToken token(this->Request_->GetSerializedToken());
+            ShouldBeCharged_ = FindPtr(AppData(ctx)->PQConfig.GetNonChargeableUser(), token.GetUserSID()) == nullptr;
 
             this->SendDescribeProposeRequest(ctx);
             this->Become(&TReceiveMessageActor::StateWork);
@@ -232,12 +239,6 @@ namespace NKikimr::NSqsTopic::V1 {
             ReaderActorId_ = {};
             auto& response = *ev->Get();
 
-            // The message payload must be measured before ConvertMessage() moves
-            // the data out of the response.
-            PayloadSize_ = 0;
-            for (const auto& message : response.Messages) {
-                PayloadSize_ += message.Data.size();
-            }
             switch (response.Status) {
                 case Ydb::StatusIds::SUCCESS: {
                     break;
@@ -275,15 +276,17 @@ namespace NKikimr::NSqsTopic::V1 {
                     });
             }
 
+            ui64 payloadSize = 0;
             Result_.Clear();
             for (auto& message : response.Messages) {
+                payloadSize += message.Data.size();
                 Ydb::Ymq::V1::Message m = ConvertMessage(std::move(message), ctx);
                 *Result_.add_messages() = std::move(m);
             }
 
-            if (IsQuotaRequired()) {
-                const ui64 ru = NBilling::CalcReadRu(
-                    CalcRuConsumption(PayloadSize_), Result_.messages_size(), Fifo_, Dedup_);
+            if (ShouldBeCharged_ && IsQuotaRequired()) {
+                const ui64 ru = NBilling::CalcRu(
+                    CalcRuConsumption(payloadSize), NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, Fifo_, false);
                 Y_ABORT_UNLESS(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx));
                 return;
             }
@@ -318,6 +321,12 @@ namespace NKikimr::NSqsTopic::V1 {
             Y_ABORT_UNLESS(result->ResultSet.size() == 1);
             const auto& response = result->ResultSet.front();
             if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
+                    if (this->ProcessCdc(response)) {
+                        return;
+                    }
+                    return this->ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION, TStringBuilder() << "Reading from the Changefeed is not supported"));
+                }
                 if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
                     return this->ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, TStringBuilder() << "Queue name used by another scheme object"));
                 }
@@ -329,24 +338,22 @@ namespace NKikimr::NSqsTopic::V1 {
                                                 TStringBuilder() << "Failed to describe topic: " << response.Status));
             }
 
-            const auto& pqTabletConfig = response.PQGroupInfo->Description.GetPQTabletConfig();
-            SetMeteringMode(pqTabletConfig.GetMeteringMode());
-            Fifo_ = QueueUrl_->Fifo;
-            Dedup_ = Fifo_ && pqTabletConfig.GetContentBasedDeduplication();
+            if (ShouldBeCharged_) {
+                // Always put in request units metering mode
+                SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+                Fifo_ = QueueUrl_->Fifo;
 
-            // RU-metered topics need the rate-limiter path, which is not carried
-            // by DoLocalRpc requests. Resolve it from the database attributes
-            // before reading so the charge in Handle(TEvReadResponse) can fire.
-            if (IsRequestUnitsMeteringMode()) {
+                // RU-metered topics need the rate-limiter path, which is not carried
+                // by DoLocalRpc requests. Resolve it from the database attributes
+                // before reading so the charge in Handle(TEvReadResponse) can fire.
                 this->SendRlPathNavigate();
-                return;
+            } else {
+                CreateReader();
             }
-            CreateReader();
         }
 
         void CreateReader() {
-            std::unique_ptr<IActor> actorPtr{NKikimr::NPQ::NMLP::CreateReader(this->SelfId(), std::move(*ReaderSettings_))};
-            ReaderActorId_ = this->ActorContext().RegisterWithSameMailbox(actorPtr.release());
+            ReaderActorId_ = this->ActorContext().RegisterWithSameMailbox(NKikimr::NPQ::NMLP::CreateReader(this->SelfId(), std::move(*ReaderSettings_)));
         }
 
     private:
@@ -356,12 +363,11 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
     private:
+        bool ShouldBeCharged_{};
         TActorId ReaderActorId_;
         TMaybe<NKikimr::NPQ::NMLP::TReaderSettings> ReaderSettings_;
         Ydb::Ymq::V1::ReceiveMessageResult Result_;
-        ui64 PayloadSize_{};
         bool Fifo_{};
-        bool Dedup_{};
     };
 
     std::unique_ptr<NActors::IActor> CreateReceiveMessageActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

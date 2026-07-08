@@ -1755,7 +1755,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(deleteJson["Failed"][0]["Id"], "delete-invalid");
     }
 
-    // Number of messages and per-message size shared by the RU metering tests.
+    // Per-message size shared by the RU metering tests.
     // The bodies sum to 24 KiB (> 8 KiB) so that a single request transfers more
     // than one payload block. Each body is exactly READ_BLOCK_SIZE bytes, and the
     // topic uses the RAW codec (see CreateRequestUnitsTopic), so the bytes read
@@ -1809,13 +1809,13 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         auto charges = recorder.Take();
         UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one write RU charge");
         // Total payload = count * size (24 KiB) mapped onto WRITE_BLOCK_SIZE
-        // blocks by a fresh calculator. count messages written; non-FIFO topic
-        // => cost multiplier 1. Cost = base + blocks + count*perMessage.
+        // blocks by a fresh calculator. 
+        // => Cost = base + blocks
         const ui64 blocks = RuPayloadBlocks(
             RuMetering_MessageCount * RuMetering_MessageSize, NBilling::WRITE_BLOCK_SIZE);
-        const ui64 expected = NBilling::CalcWriteRu(blocks, RuMetering_MessageCount, false, false);
+        const ui64 expected = NBilling::CalcRu(blocks, NBilling::WRITE_BASE_COST, NBilling::WRITE_COST_PER_BLOCK, false, false);
         UNIT_ASSERT_VALUES_EQUAL(blocks, 5);
-        UNIT_ASSERT_VALUES_EQUAL(expected, 9);
+        UNIT_ASSERT_VALUES_EQUAL(expected, 7);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Resource, ru.ResourcePath);
@@ -1858,11 +1858,6 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
             auto charges = recorder.Take(1);
             UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one read RU charge");
-            // Payload of this response = k * size mapped onto READ_BLOCK_SIZE
-            // blocks by a fresh calculator; k messages returned; multiplier 1.
-            const ui64 blocks = RuPayloadBlocks(k * RuMetering_MessageSize, NBilling::READ_BLOCK_SIZE);
-            const ui64 expected = NBilling::CalcReadRu(blocks, k, false, false);
-            UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
             UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
             UNIT_ASSERT_VALUES_EQUAL(charges[0].Resource, ru.ResourcePath);
 
@@ -1870,10 +1865,13 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             collected += k;
         }
         UNIT_ASSERT_VALUES_EQUAL(collected, RuMetering_MessageCount);
-        // Each 8 KiB message (== READ_BLOCK_SIZE) costs 2 RU (base+block share 1,
-        // per-message 1), so the total is independent of how the messages were
-        // split across receive responses.
-        UNIT_ASSERT_VALUES_EQUAL(totalReadRu, RuMetering_MessageCount * 2);
+        // Total payload = count * size (24 KiB) mapped onto READ_BLOCK_SIZE
+        // blocks by a fresh calculator. 
+        // => Cost = base + blocks
+        const ui64 blocks = RuPayloadBlocks(
+            RuMetering_MessageCount * RuMetering_MessageSize, NBilling::READ_BLOCK_SIZE);
+        const ui64 expected = NBilling::CalcRu(blocks, NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, false, false);
+        UNIT_ASSERT_VALUES_EQUAL(totalReadRu, expected);
     }
 
     Y_UNIT_TEST_F(TestDeleteMessageChargesRequestUnits, TFixture) {
@@ -1933,10 +1931,10 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         auto charges = recorder.Take();
         UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one delete RU charge");
-        // count messages deleted; non-FIFO => multiplier 1.
-        // Cost = base(1) + count*perMessage(1).
-        const ui64 expected = NBilling::CalcDeleteRu(RuMetering_MessageCount, false, false);
-        UNIT_ASSERT_VALUES_EQUAL(expected, 4);
+        // adjunct 0.
+        // Cost = base(2).
+        const ui64 expected = NBilling::CalcRu(0, NBilling::DELETE_BASE_COST, 0, false, false);
+        UNIT_ASSERT_VALUES_EQUAL(expected, 2);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Resource, ru.ResourcePath);

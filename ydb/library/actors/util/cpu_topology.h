@@ -74,4 +74,5 @@ struct TCpuTopology {
     const TLogicalCpuInfo* FindCpu(TCpuId cpuId) const;
 };
 
-std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root = TFsPath("/sys/devices/system"));
+std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root);
+std::expected<TCpuTopology, TString> ParseCpuTopology();

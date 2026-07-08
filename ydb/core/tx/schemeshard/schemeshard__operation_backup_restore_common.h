@@ -563,7 +563,7 @@ class TBackupRestoreOperationBase: public TSubOperation {
             TTxState* txState = context.SS->FindTx(OperationId);
             Y_ABORT_UNLESS(txState);
             Y_ABORT_UNLESS(txState->TxType == TxType);
-            
+
             const TPath path = TPath::Init(txState->TargetPathId, context.SS);
             if (txState->Cancel && path->IsColumnTable()) {
                 if (txState->State == TTxState::Propose) {

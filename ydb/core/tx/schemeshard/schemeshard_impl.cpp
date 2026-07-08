@@ -4659,7 +4659,7 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId,
     if (!skipStatsUpdate) {
         UpdateDiskSpaceUsage(db, pathId, TPartitionStats(), tableInfo.GetStats().Aggregated, ctx);
     }
-    
+
     auto clearHistory = [&](const TMap<TTxId, TTableInfo::TBackupRestoreResult>& history) {
         for (auto& bItem: history) {
             TTxId txId = bItem.first;

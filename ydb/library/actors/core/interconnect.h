@@ -209,11 +209,13 @@ namespace NActors {
 
         struct TEvListNodes: public TEventLocal<TEvListNodes, EvListNodes> {
             const bool SubscribeToStaticNodeChanges = false;
+            const bool OnlyAliveNodes = false;
 
             TEvListNodes() = default;
 
-            TEvListNodes(bool subscribeToStaticNodeChanges)
+            TEvListNodes(bool subscribeToStaticNodeChanges, bool onlyAliveNodes = false)
                 : SubscribeToStaticNodeChanges(subscribeToStaticNodeChanges)
+                , OnlyAliveNodes(onlyAliveNodes)
             {}
         };
 

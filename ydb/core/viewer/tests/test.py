@@ -930,6 +930,7 @@ class TestViewer(object):
     def test_viewer_tenantinfo(cls):
         result = {}
         tries = 15
+        all_ready = False
         while tries > 0:
             result = cls.get_viewer_db_normalized("/viewer/tenantinfo")
             all_ready = True
@@ -942,6 +943,7 @@ class TestViewer(object):
                 break
             tries -= 1
             time.sleep(1)
+        assert all_ready, "CoresUsed was not populated in /viewer/tenantinfo response after %d retries" % 15
         for name in cls.databases_and_no_database:
             result[name]['TenantInfo'].sort(key=lambda x: x['Name'])
         return result

@@ -1,6 +1,6 @@
 # How partitioning works {#how-partitioning-works}
 
-A row-oriented table in {{ ydb-short-name }} can be split into **partitions** — non-overlapping ranges of the [primary key](../../../concepts/datamodel/table.md#primary-key). Each partition is served by a [Data shard](../../../concepts/glossary.md#data-shard) tablet; partitions can live on different cluster nodes and move during rebalancing and failures.
+A row-oriented table in {{ ydb-short-name }} can be split into **partitions** — non-overlapping ranges of the [primary key](../../../concepts/datamodel/table.md). Each partition is served by a [Data shard](../../../concepts/glossary.md#data-shard) tablet; partitions can live on different cluster nodes and move during rebalancing and failures.
 
 The authoritative description of the model, `WITH (...)` parameters, and scaling behavior is in [{#T}](../../../concepts/datamodel/table.md) — see [Row-oriented table partitioning](../../../concepts/datamodel/table.md#partitioning_row_table) and the `AUTO_PARTITIONING_*` parameter list.
 

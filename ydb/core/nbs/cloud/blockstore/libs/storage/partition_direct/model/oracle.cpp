@@ -14,8 +14,13 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
 
+////////////////////////////////////////////////////////////////////////////////
+
 constexpr TDuration MinReconnectDelay = TDuration::MilliSeconds(20);
 constexpr TDuration MaxReconnectDelay = TDuration::Seconds(10);
+constexpr TDuration FlushRequestCooldownPenalty = TDuration::MilliSeconds(10);
+
+////////////////////////////////////////////////////////////////////////////////
 
 TDuration GetFromConfig(ui64 milliseconds, TDuration defaultValue)
 {
@@ -316,6 +321,11 @@ TDuration TOracle::GetReadRequestTimeout() const
     return DefaultReadRequestTimeout;
 }
 
+EWriteMode TOracle::GetWriteMode() const
+{
+    return DefaultWriteMode;
+}
+
 TDuration TOracle::GetWriteHedgingDelay(THostMask hosts, bool indirect) const
 {
     TDuration result = GetTimePredictor(
@@ -335,6 +345,25 @@ TDuration TOracle::GetIndirectWriteReplyTimeout() const
     return DefaultIndirectWriteReplyTimeout;
 }
 
+TDuration TOracle::GetFlushRequestCooldown(THostMask hosts) const
+{
+    auto cooldown = [&](THostIndex host) -> TDuration
+    {
+        const size_t errorCount =
+            HostStatistics[host].GetConsecutiveErrorCount();
+        if (!errorCount) {
+            return TDuration::Zero();
+        }
+        return errorCount * FlushRequestCooldownPenalty;
+    };
+
+    TDuration result;
+    for (auto host: hosts) {
+        result = Max(result, cooldown(host));
+    }
+    return Min(result, MaxReconnectDelay);
+}
+
 TDuration TOracle::GetFlushRequestTimeout() const
 {
     return DefaultFlushRequestTimeout;
@@ -343,11 +372,6 @@ TDuration TOracle::GetFlushRequestTimeout() const
 TDuration TOracle::GetEraseRequestTimeout() const
 {
     return DefaultEraseRequestTimeout;
-}
-
-EWriteMode TOracle::GetWriteMode() const
-{
-    return DefaultWriteMode;
 }
 
 const THostStat& TOracle::GetHostStatistics(THostIndex hostIndex) const

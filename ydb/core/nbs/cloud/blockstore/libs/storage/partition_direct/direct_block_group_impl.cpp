@@ -109,10 +109,9 @@ TDirectBlockGroup::TDirectBlockGroup(
           GetCycleCount(),
           TLogTitle::TDirectBlockGroup{
               .DiskId = diskId,
+              .DBGIndex = DirectBlockGroupIndex,
               .TabletId = TabletId,
-              .Generation = TabletGeneration,
-              .DirectBlockGroupIndex = DirectBlockGroupIndex,
-          })
+              .Generation = TabletGeneration})
     , Oracle(StorageConfig, this)
 {
     Y_ASSERT(pbufferIds.size() == DirectBlockGroupHostCount);

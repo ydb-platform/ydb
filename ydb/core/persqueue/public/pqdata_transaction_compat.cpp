@@ -27,6 +27,7 @@ void UpgradeKafkaApiFromLegacy(NKikimrPQ::TWriteId& writeId)
 
 void DowngradeTopicApiToLegacy(const NKikimrPQ::TWriteId::TTopicApi& topicApi, NKikimrPQ::TWriteId& writeId)
 {
+    writeId.ClearKafkaProducerInstanceId();
     writeId.SetKafkaTransaction(false);
     writeId.SetNodeId(topicApi.GetNodeId());
     writeId.SetKeyId(topicApi.GetKeyId());
@@ -34,6 +35,8 @@ void DowngradeTopicApiToLegacy(const NKikimrPQ::TWriteId::TTopicApi& topicApi, N
 
 void DowngradeKafkaApiToLegacy(const NKikimrPQ::TWriteId::TKafkaApi& kafkaApi, NKikimrPQ::TWriteId& writeId)
 {
+    writeId.ClearNodeId();
+    writeId.ClearKeyId();
     writeId.SetKafkaTransaction(true);
     CopyKafkaProducerInstanceId(kafkaApi.GetKafkaProducerInstanceId(), writeId.MutableKafkaProducerInstanceId());
 }

@@ -63,6 +63,39 @@ Y_UNIT_TEST(DowngradeToLegacyKeepsCanonical) {
     UNIT_ASSERT_VALUES_EQUAL(proto.GetTopicApi().GetKeyId(), 2u);
 }
 
+Y_UNIT_TEST(DowngradeToLegacyTopicClearsKafkaLegacy) {
+    auto writeId = MakeLegacyKafkaWriteId(7, 8);
+    UpgradeFromLegacy(writeId);
+    writeId.ClearId();
+    auto* topicApi = writeId.MutableTopicApi();
+    topicApi->SetNodeId(1);
+    topicApi->SetKeyId(2);
+
+    DowngradeToLegacy(writeId);
+
+    UNIT_ASSERT(!writeId.GetKafkaTransaction());
+    UNIT_ASSERT(!writeId.HasKafkaProducerInstanceId());
+    UNIT_ASSERT_VALUES_EQUAL(writeId.GetNodeId(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(writeId.GetKeyId(), 2u);
+}
+
+Y_UNIT_TEST(DowngradeToLegacyKafkaClearsTopicLegacy) {
+    auto writeId = MakeLegacyTopicWriteId(10, 20);
+    UpgradeFromLegacy(writeId);
+    writeId.ClearId();
+    auto* producerId = writeId.MutableKafkaApi()->MutableKafkaProducerInstanceId();
+    producerId->SetId(7);
+    producerId->SetEpoch(8);
+
+    DowngradeToLegacy(writeId);
+
+    UNIT_ASSERT(writeId.GetKafkaTransaction());
+    UNIT_ASSERT(!writeId.HasNodeId());
+    UNIT_ASSERT(!writeId.HasKeyId());
+    UNIT_ASSERT_VALUES_EQUAL(writeId.GetKafkaProducerInstanceId().GetId(), 7);
+    UNIT_ASSERT_VALUES_EQUAL(writeId.GetKafkaProducerInstanceId().GetEpoch(), 8);
+}
+
 Y_UNIT_TEST(SetWriteIdWritesCanonicalAndLegacy) {
     TWriteId writeId(NKafka::TProducerInstanceId{7, 8});
     NKikimrPQ::TDataTransaction tx;

@@ -3703,6 +3703,7 @@ bool TPersQueue::CanProcessTxWrites() const
 void TPersQueue::SubscribeWriteId(const TWriteId& writeId,
                                   const TActorContext& ctx)
 {
+    PQ_ENSURE(writeId.IsTopicApiTransaction());
     PQ_LOG_TX_D("send TEvSubscribeLock for WriteId " << writeId);
     ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.GetNodeId()),
              new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId.GetKeyId(), writeId.GetNodeId()));
@@ -3711,6 +3712,7 @@ void TPersQueue::SubscribeWriteId(const TWriteId& writeId,
 void TPersQueue::UnsubscribeWriteId(const TWriteId& writeId,
                                     const TActorContext& ctx)
 {
+    PQ_ENSURE(writeId.IsTopicApiTransaction());
     PQ_LOG_TX_D("send TEvUnsubscribeLock for WriteId " << writeId);
     ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.GetNodeId()),
              new NLongTxService::TEvLongTxService::TEvUnsubscribeLock(writeId.GetKeyId(), writeId.GetNodeId()));

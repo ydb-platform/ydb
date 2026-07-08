@@ -2548,6 +2548,7 @@ public:
         const TPDiskCategory Category;
         const Schema::PDisk::Guid::Type Guid;
         Schema::PDisk::PDiskConfig::Type PDiskConfig;
+        std::optional<Schema::PDisk::DiskScope::Type> DiskScope; // null when not set in host config
         ui32 ExpectedSlotCount = 0; // explicit
         ui32 SlotSizeInUnits = 0; // explicit
 
@@ -2570,6 +2571,9 @@ public:
                 Y_ABORT_UNLESS(success);
                 ExpectedSlotCount = cfg.GetExpectedSlotCount();
                 SlotSizeInUnits = cfg.GetSlotSizeInUnits();
+                if (pdisk.HasDiskScope()) {
+                    DiskScope = pdisk.GetDiskScope();
+                }
             }
 
             const TPDiskId pdiskId(NodeId, PDiskId);

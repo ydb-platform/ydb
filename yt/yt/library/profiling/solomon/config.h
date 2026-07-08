@@ -62,6 +62,8 @@ DEFINE_REFCOUNTED_TYPE(TSolomonRegistryDynamicConfig)
 struct TSolomonExporterConfig
     : public NYTree::TYsonStruct
 {
+    bool Enable;
+
     TDuration GridStep;
 
     TDuration LingerTimeout;

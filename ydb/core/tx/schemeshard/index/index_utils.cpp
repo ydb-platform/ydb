@@ -544,12 +544,16 @@ auto CalcFulltextRowIdSrcImplTableDescImpl(
     const auto& baseTable,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
+    const TString& indexColumn,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
 {
+    Y_UNUSED(indexDesc);
+    // The indexed column is passed explicitly: fulltext builds carry it in the fulltext settings, but JSON
+    // builds carry no settings (the column lives in buildInfo.IndexColumns), so we cannot read it here.
     THashSet<TString> valueColumns = indexDataColumns;
-    Y_ENSURE(indexDesc.GetSettings().columns().size() == 1);
-    valueColumns.insert(indexDesc.GetSettings().columns().at(0).column());
+    Y_ENSURE(indexColumn);
+    valueColumns.insert(indexColumn);
 
     NKikimrSchemeOp::TTableDescription implTableDesc;
     implTableDesc.SetName(NTableIndex::ImplTable);
@@ -934,20 +938,22 @@ NKikimrSchemeOp::TTableDescription CalcFulltextRowIdSrcImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
+    const TString& indexColumn,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
 {
-    return CalcFulltextRowIdSrcImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc);
+    return CalcFulltextRowIdSrcImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexColumn, indexTableDesc, indexDesc);
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextRowIdSrcImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
+    const TString& indexColumn,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
 {
-    return CalcFulltextRowIdSrcImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc);
+    return CalcFulltextRowIdSrcImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexColumn, indexTableDesc, indexDesc);
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
@@ -1086,6 +1092,7 @@ TFulltextRowIdClassification ClassifyFulltextRowId(
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
             break;
         default:
             // Non-fulltext indexes have nothing to decide.
@@ -1093,7 +1100,9 @@ TFulltextRowIdClassification ClassifyFulltextRowId(
             return result;
     }
     // Used in user-facing error messages so a JSON index build does not talk about "Fulltext".
-    const TStringBuf indexKind = (indexType == NKikimrSchemeOp::EIndexTypeGlobalJson) ? "JSON" : "Fulltext";
+    const bool isJson = indexType == NKikimrSchemeOp::EIndexTypeGlobalJson
+        || indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact;
+    const TStringBuf indexKind = isJson ? "JSON" : "Fulltext";
 
     // Feature-flag gate: when __ydb_row_id support is disabled, no row_id column or unique index is
     // used or auto-provisioned. Only the legacy doc_id=PK layout is allowed, which requires a single
@@ -1223,14 +1232,22 @@ TFulltextRowIdClassification ClassifyFulltextRowIdForCreate(
     TFulltextRowIdClassification result;
 
     const auto indexType = GetIndexType(indexDesc);
+    // Compact variants are reachable here too: with EnableCompactFulltextIndex on, the KQP DDL layer emits
+    // the Compact index type directly (see yql_kikimr_type_ann.cpp), so an inline CREATE TABLE with a
+    // fulltext/JSON index over a non-integer PK must auto-provision __ydb_row_id just like the plain type.
     if (indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain &&
         indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance &&
-        indexType != NKikimrSchemeOp::EIndexTypeGlobalJson) {
+        indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact &&
+        indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance &&
+        indexType != NKikimrSchemeOp::EIndexTypeGlobalJson &&
+        indexType != NKikimrSchemeOp::EIndexTypeGlobalJsonCompact) {
         result.Plan = EFulltextRowIdPlan::NotApplicable;
         return result;
     }
     // Used in user-facing error messages so a JSON index create does not talk about "Fulltext".
-    const TStringBuf indexKind = (indexType == NKikimrSchemeOp::EIndexTypeGlobalJson) ? "JSON" : "Fulltext";
+    const bool isJson = indexType == NKikimrSchemeOp::EIndexTypeGlobalJson
+        || indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact;
+    const TStringBuf indexKind = isJson ? "JSON" : "Fulltext";
 
     const auto& tableDesc = createConfig.GetTableDescription();
 

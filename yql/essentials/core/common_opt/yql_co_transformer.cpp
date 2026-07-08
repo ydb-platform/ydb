@@ -254,6 +254,7 @@ TCoCallableRules::TCoCallableRules() {
     RegisterCoSimpleCallables3(SimpleCallables[SIMPLE_STEP_3]);
     RegisterCoFlowCallables1(FlowCallables[FLOW_STEP_1]);
     RegisterCoFlowCallables2(FlowCallables[FLOW_STEP_2]);
+    RegisterCoFlowCallables3(FlowCallables[FLOW_STEP_3]);
     RegisterCoFinalizers(Finalizers);
     RegisterCoFinalCallables(FinalCallables);
 }

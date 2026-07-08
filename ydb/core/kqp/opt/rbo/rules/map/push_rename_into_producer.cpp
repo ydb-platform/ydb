@@ -120,6 +120,10 @@ bool TryRenameProducerOutput(const TIntrusivePtr<IOperator>& producer, const TIn
 
 } // anonymous namespace
 
+bool TPushRenameIntoProducerRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Map;
+}
+
 bool TPushRenameIntoProducerRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     if (input->Kind != EOperator::Map) {
         return false;

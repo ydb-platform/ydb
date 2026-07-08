@@ -14,6 +14,9 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
 
+constexpr TDuration MinReconnectDelay = TDuration::MilliSeconds(20);
+constexpr TDuration MaxReconnectDelay = TDuration::Seconds(10);
+
 TDuration GetFromConfig(ui64 milliseconds, TDuration defaultValue)
 {
     return milliseconds ? TDuration::MilliSeconds(milliseconds) : defaultValue;
@@ -128,6 +131,9 @@ TOracle::TOracle(
     , DefaultWriteMode(GetWriteModeFromProto(StorageConfig->GetWriteMode()))
     , HostStatistics(DirectBlockGroupHostCount)
     , HostStates(DirectBlockGroupHostCount)
+    , HostsReconnectDelays(
+          DirectBlockGroupHostCount,
+          TBackoffDelayProvider(MinReconnectDelay, MaxReconnectDelay))
     , TimePredictors(
           OperationCount,
           TTimePredictor(
@@ -222,6 +228,22 @@ void TOracle::OnRequestFailed(
     TInstant now)
 {
     HostStatistics[hostIndex].OnError(now, operation);
+}
+
+void TOracle::OnDDiskDisconnected(THostIndex hostIndex, TInstant now)
+{
+    Y_UNUSED(hostIndex, now);
+}
+
+void TOracle::OnDDiskConnected(THostIndex hostIndex, TInstant now)
+{
+    Y_UNUSED(now);
+    HostsReconnectDelays[hostIndex].Reset();
+}
+
+TDuration TOracle::GetDDiskReconnectDelay(THostIndex hostIndex)
+{
+    return HostsReconnectDelays[hostIndex].GetDelayAndIncrease();
 }
 
 void TOracle::OnRequestCancelled(

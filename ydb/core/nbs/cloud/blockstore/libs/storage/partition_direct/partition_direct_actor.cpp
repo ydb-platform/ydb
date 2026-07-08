@@ -11,6 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport_actor.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>
@@ -199,7 +200,8 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
             std::make_unique<NTransport::TICStorageTransport>(
-                TActivationContext::ActorSystem()));
+                TActivationContext::ActorSystem(),
+                NTransport::CreateTransportActor()));
 
         directBlockGroups.emplace_back(std::move(directBlockGroup));
     }

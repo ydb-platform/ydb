@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from hamcrest import assert_that, equal_to, has_length, not_none
+from hamcrest import assert_that, equal_to, has_length, not_none, not_
 
 from ydb.tests.library.sqs_topic.test_base import KikimrSqsTopicTestBase
 
@@ -129,6 +129,128 @@ class TestSqsTopicReceiveMessage(KikimrSqsTopicTestBase):
             messages[0]['Attributes']['MessageDeduplicationId'],
             equal_to(deduplication_id),
         )
+
+    def test_receive_message_fifo_with_receive_request_attempt_id(self):
+        self._queue_url = self._boto_client.create_queue(
+            QueueName=self._make_fifo_queue_name('receive_message_fifo_with_receive_request_attempt_id'),
+            Attributes={
+                'FifoQueue': 'true',
+                'VisibilityTimeout': '0',
+            },
+        )['QueueUrl']
+
+        message_body = 'hello from fifo sqs'
+        self._boto_client.send_message(
+            QueueUrl=self._queue_url,
+            MessageBody=message_body,
+            MessageGroupId='message-group-1',
+            MessageDeduplicationId='deduplication-id-1',
+        )
+
+        attempt_id = 'attempt-0'
+        response1 = self._boto_client.receive_message(
+            QueueUrl=self._queue_url,
+            ReceiveRequestAttemptId=attempt_id,
+            VisibilityTimeout=40000,
+            MaxNumberOfMessages=1,
+        )
+        messages1 = response1.get('Messages')
+        assert_that(messages1, not_none())
+        assert_that(messages1, has_length(1))
+        message_id = messages1[0]['MessageId']
+
+        response2 = self._boto_client.receive_message(
+            QueueUrl=self._queue_url,
+            ReceiveRequestAttemptId=attempt_id,
+            VisibilityTimeout=40000,
+            MaxNumberOfMessages=1,
+        )
+        messages2 = response2.get('Messages')
+        assert_that(messages2, not_none())
+        assert_that(messages2, has_length(1))
+        assert_that(messages2[0]['MessageId'], equal_to(message_id))
+        assert_that(messages2[0]['Body'], equal_to(message_body))
+
+        response3 = self._boto_client.receive_message(
+            QueueUrl=self._queue_url,
+            ReceiveRequestAttemptId=attempt_id,
+            MaxNumberOfMessages=1,
+        )
+        messages3 = response3.get('Messages')
+        assert_that(messages3, not_none())
+        assert_that(messages3, has_length(1))
+        assert_that(messages3[0]['MessageId'], equal_to(message_id))
+
+    def test_receive_message_fifo_with_different_receive_request_attempt_ids(self):
+        self._create_fifo_queue('receive_message_fifo_with_different_receive_request_attempt_ids')
+
+        for group_number in range(2):
+            self._boto_client.send_message(
+                QueueUrl=self._queue_url,
+                MessageBody='message-body-{}'.format(group_number),
+                MessageGroupId='message-group-{}'.format(group_number),
+                MessageDeduplicationId='deduplication-id-{}'.format(group_number),
+            )
+
+        response1 = self._boto_client.receive_message(
+            QueueUrl=self._queue_url,
+            ReceiveRequestAttemptId='attempt-1',
+            VisibilityTimeout=3600,
+            MaxNumberOfMessages=1,
+        )
+        messages1 = response1.get('Messages')
+        assert_that(messages1, not_none())
+        assert_that(messages1, has_length(1))
+        message_id1 = messages1[0]['MessageId']
+
+        response2 = self._boto_client.receive_message(
+            QueueUrl=self._queue_url,
+            ReceiveRequestAttemptId='attempt-2',
+            VisibilityTimeout=3600,
+            MaxNumberOfMessages=10,
+            WaitTimeSeconds=1,
+        )
+        messages2 = response2.get('Messages')
+        assert_that(messages2, not_none())
+        assert_that(messages2, has_length(1))
+        assert_that(messages2[0]['MessageId'], not_(equal_to(message_id1)))
+
+    def test_receive_message_fifo_change_visibility_invalidates_receive_request_attempt_id(self):
+        self._create_fifo_queue('receive_message_fifo_change_visibility_invalidates_receive_request_attempt_id')
+
+        self._boto_client.send_message(
+            QueueUrl=self._queue_url,
+            MessageBody='hello from fifo sqs',
+            MessageGroupId='message-group-1',
+            MessageDeduplicationId='deduplication-id-1',
+        )
+
+        attempt_id = 'attempt-visibility'
+        response1 = self._boto_client.receive_message(
+            QueueUrl=self._queue_url,
+            ReceiveRequestAttemptId=attempt_id,
+            VisibilityTimeout=3600,
+            MaxNumberOfMessages=1,
+        )
+        messages1 = response1.get('Messages')
+        assert_that(messages1, not_none())
+        assert_that(messages1, has_length(1))
+        receipt_handle = messages1[0]['ReceiptHandle']
+
+        self._boto_client.change_message_visibility(
+            QueueUrl=self._queue_url,
+            ReceiptHandle=receipt_handle,
+            VisibilityTimeout=3600,
+        )
+
+        response2 = self._boto_client.receive_message(
+            QueueUrl=self._queue_url,
+            ReceiveRequestAttemptId=attempt_id,
+            VisibilityTimeout=3600,
+            MaxNumberOfMessages=10,
+            WaitTimeSeconds=1,
+        )
+        assert_that(response2.get('Messages'), equal_to(None))
 
     def test_receive_message_fifo_with_content_based_deduplication(self):
         queue_name = self._make_fifo_queue_name('receive_message_fifo_with_content_based_deduplication')

@@ -40,7 +40,12 @@ protected:
                 return;
             }
 
-            const TReceipt receipt = DecodeReceiptHandle(entry.GetReceiptHandle()); // can throw
+            TReceipt receipt;
+            if (!TryDecodeReceiptHandle(entry.GetReceiptHandle(), receipt)) {
+                RLOG_SQS_WARN("Failed to decode receipt handle " << entry.GetReceiptHandle());
+                MakeError(resp, NErrors::RECEIPT_HANDLE_IS_INVALID);
+                return;
+            }
             RLOG_SQS_DEBUG("Decoded receipt handle: " << receipt);
             if (receipt.GetSource() == TReceipt::Table) {
                 if (receipt.GetShard() >= Shards_) {
@@ -218,9 +223,17 @@ private:
             if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
                 return TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::Failed;
             }
-            return message.Success ?
-                  TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::OK
-                : TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::Failed;
+            switch (message.Status) {
+                case NPQ::NMLP::EOperationResult::Success:
+                    return TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::OK;
+                case NPQ::NMLP::EOperationResult::NotFound:
+                    return TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::NotFound;
+                case NPQ::NMLP::EOperationResult::NotInFlight:
+                    return TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::NotInFly;
+                case NPQ::NMLP::EOperationResult::Failed:
+                    return TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::Failed;
+            }
+            Y_UNREACHABLE();
         };
 
         if (IsBatch_) {

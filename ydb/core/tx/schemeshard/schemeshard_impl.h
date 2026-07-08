@@ -72,7 +72,7 @@
 
 #include <util/generic/ptr.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
 namespace NKikimr::NSchemeShard::NBackground {
 struct TEvListRequest;

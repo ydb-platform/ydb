@@ -84,6 +84,33 @@ TEST(GrpcIamCredentialsProvider, TeardownWhileIamCreatePendingCompletesViaFactor
     server.Stop();
 }
 
+TEST(GrpcIamCredentialsProvider, CreateProviderAsyncDoesNotBlockOnFirstToken) {
+    TBlockingIamTokenService iamService;
+    TBlockingIamReleaseGuard releaseGuard(iamService);
+    TIamGrpcServer server(&iamService);
+    ASSERT_TRUE(server.Start());
+
+    TIamOAuth params = MakeOAuthParams(server.Endpoint());
+    auto factory = std::make_shared<TIamOAuthCredentialsProviderFactory<
+        CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>>(params);
+
+    auto providerFuture = factory->CreateProviderAsync();
+
+    ASSERT_TRUE(iamService.WaitUntilRpcEntered(std::chrono::seconds(5)))
+        << "async provider creation should start the IAM Create call";
+    ASSERT_FALSE(providerFuture.Wait(TDuration::MilliSeconds(100)))
+        << "future must not become ready before the first token arrives";
+
+    iamService.Release();
+
+    ASSERT_TRUE(providerFuture.Wait(TDuration::Seconds(5)))
+        << "future should become ready after the first token arrives";
+    auto provider = providerFuture.GetValue();
+    EXPECT_EQ(provider->GetAuthInfo(), "released-token");
+
+    server.Stop();
+}
+
 namespace {
 
 class TSlowBlockingAuthProvider final : public ICredentialsProvider {

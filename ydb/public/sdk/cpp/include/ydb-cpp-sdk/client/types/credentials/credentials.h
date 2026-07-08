@@ -2,6 +2,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fwd.h>
 
+#include <library/cpp/threading/future/future.h>
+
 #include <memory>
 #include <string>
 
@@ -20,8 +22,10 @@ class ICoreFacility;
 class ICredentialsProviderFactory {
 public:
     virtual ~ICredentialsProviderFactory() = default;
-    // deprecated, use CreateProvider(std::weak_ptr<ICoreFacility> facility) instead
     virtual TCredentialsProviderPtr CreateProvider() const = 0;
+    virtual NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const {
+        return NThreading::MakeFuture(CreateProvider());
+    }
     virtual TCredentialsProviderPtr CreateProvider([[maybe_unused]] std::weak_ptr<ICoreFacility> facility) const {
         return CreateProvider();
     }

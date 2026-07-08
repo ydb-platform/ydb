@@ -2,6 +2,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/common/generic_provider.h>
 
+#include <exception>
+
 namespace NYdb::inline Dev {
 
 template<typename TRequest, typename TResponse, typename TService>
@@ -40,12 +42,14 @@ private:
         // because TSimpleCoreFacility allows only one periodic task.
         TCredentialsProvider(const TIamServiceParams& params,
                              std::weak_ptr<ICoreFacility> outerFacility,
-                             TCredentialsProviderPtr authProvider)
+                             TCredentialsProviderPtr authProvider,
+                             bool waitForToken = true)
             : TGrpcIamCredentialsProvider<TRequest, TResponse, TService>(params,
                 MakeRequestFiller(params),
                 MakeRpc(),
                 std::move(outerFacility),
-                std::move(authProvider))
+                std::move(authProvider),
+                waitForToken)
         {}
     };
 
@@ -54,7 +58,6 @@ public:
         : Params_(params)
     {}
 
-    // Deprecated. Kept for backward compatibility — see comment on TIamJwtCredentialsProviderFactory.
     // The nested auth provider gets its own facility (via a recursive no-arg CreateProvider() that
     // returns a TOwningFacilityCredentialsProvider). Sharing a TSimpleCoreFacility between two gRPC
     // IAM providers would abort: each one registers a periodic task and the facility allows only one.
@@ -65,6 +68,38 @@ public:
             Params_, std::weak_ptr<ICoreFacility>(outerFacility), std::move(authProvider));
         return std::make_shared<TOwningFacilityCredentialsProvider>(
             std::move(outerFacility), std::move(serviceProvider));
+    }
+
+    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const override {
+        auto promise = NThreading::NewPromise<TCredentialsProviderPtr>();
+        Params_.SystemServiceAccountCredentials->CreateProviderAsync().Subscribe(
+            [params = Params_, promise](const NThreading::TFuture<TCredentialsProviderPtr>& authProviderFuture) mutable {
+                try {
+                    auto authProvider = authProviderFuture.GetValue();
+                    auto outerFacility = CreateSimpleCoreFacility();
+                    auto serviceProvider = std::make_shared<TCredentialsProvider>(
+                        params,
+                        std::weak_ptr<ICoreFacility>(outerFacility),
+                        std::move(authProvider),
+                        false);
+                    auto ready = serviceProvider->GetReadyFuture();
+                    TCredentialsProviderPtr provider = std::make_shared<TOwningFacilityCredentialsProvider>(
+                        std::move(outerFacility),
+                        std::move(serviceProvider));
+
+                    ready.Subscribe([provider = std::move(provider), promise](const NThreading::TFuture<void>& readyFuture) mutable {
+                        try {
+                            readyFuture.GetValue();
+                            promise.SetValue(std::move(provider));
+                        } catch (...) {
+                            promise.SetException(std::current_exception());
+                        }
+                    });
+                } catch (...) {
+                    promise.SetException(std::current_exception());
+                }
+            });
+        return promise.GetFuture();
     }
 
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {

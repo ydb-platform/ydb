@@ -155,70 +155,62 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
     Inflight->Inc();
 
     // 1-2.
-    auto future = CheckpointStorage->MarkCheckpointsGC(graphId, checkpointUpperBound).Apply(
-        [context] (const TFuture<TIssues>& future) {
-            auto issues = future.GetValue();
-            if (!issues.Empty()) {
-                TStringStream ss;
-                ss << "GC failed to mark checkpoints of graph '" << context->CoordinatorId.GraphId
-                   << "' up to " << context->UpperBound << ", issues:";
-                issues.PrintTo(ss);
-                YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
-                context->Stage = TContext::StageFailed;
-                return future;
-            }
+    CheckpointStorage->MarkCheckpointsGC(graphId, checkpointUpperBound)
+        .Apply(
+            [context] (const TFuture<TIssues>& future) {
+                auto issues = future.GetValue();
+                if (!issues.Empty()) {
+                    TStringStream ss;
+                    ss << "GC failed to mark checkpoints of graph '" << context->CoordinatorId.GraphId
+                        << "' up to " << context->UpperBound << ", issues:";
+                    issues.PrintTo(ss);
+                    YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
+                    context->Stage = TContext::StageFailed;
+                    return future;
+                }
 
-            return context->StateStorage->DeleteCheckpoints(context->CoordinatorId.GraphId, context->UpperBound);
-        });
+                return context->StateStorage->DeleteCheckpoints(context->CoordinatorId.GraphId, context->UpperBound);
+            })
+        .Apply(         // 2-3. check StateStorage->DeleteCheckpoints and if OK DeleteMarkedCheckpoints
+            [context] (const TFuture<TIssues>& future) {
+                if (context->Stage == TContext::StageFailed) {
+                    return future;
+                }
+                auto issues = future.GetValue();
+                if (!issues.Empty()) {
+                    TStringStream ss;
+                    ss << "GC failed to delete states of checkpoints of graph '" << context->CoordinatorId.GraphId
+                        << "' up to " << context->UpperBound << ", issues:";
+                    issues.PrintTo(ss);
+                    YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
+                    context->Stage = TContext::StageFailed;
+                    return future;
+                }
+                return context->CheckpointStorage->DeleteMarkedCheckpoints(context->CoordinatorId.GraphId, context->UpperBound);
+            })
+        .Subscribe(         // Final step: log result and always notify StorageProxy that GC cycle is done.
+            [context] (const TFuture<TIssues>& future) {
+                if (context->Stage == TContext::StageFailed) {
+                    context->Errors->Inc();
+                    SendGcFinished(context);
+                    return;
+                }
 
-    // 2-3. check StateStorage->DeleteCheckpoints and if OK DeleteMarkedCheckpoints
-    future.Apply(
-        [context] (const TFuture<TIssues>& future) {
-            if (context->Stage == TContext::StageFailed) {
-                return future;
-            }
-
-            auto issues = future.GetValue();
-            if (!issues.Empty()) {
-                TStringStream ss;
-                ss << "GC failed to delete states of checkpoints of graph '" << context->CoordinatorId.GraphId
-                   << "' up to " << context->UpperBound << ", issues:";
-                issues.PrintTo(ss);
-                YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
-                context->Stage = TContext::StageFailed;
-                return future;
-            }
-
-            return context->CheckpointStorage->DeleteMarkedCheckpoints(context->CoordinatorId.GraphId, context->UpperBound);
-         });
-
-    // Final step: log result and always notify StorageProxy that GC cycle is done.
-    future.Apply(
-        [context] (const TFuture<TIssues>& future) {
-            if (context->Stage == TContext::StageFailed) {
-                context->Errors->Inc();
-                SendGcFinished(context);
-                return future;
-            }
-
-            auto issues = future.GetValue();
-            if (!issues.Empty()) {
-                TStringStream ss;
-                ss << "GC failed to delete marked checkpoints of graph '" << context->CoordinatorId.GraphId
-                   << "' up to " << context->UpperBound << ", issues:";
-                issues.PrintTo(ss);
-                YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
-                context->Errors->Inc();
-            } else {
-                TStringStream ss;
-                ss << "GC deleted checkpoints of graph '" << context->CoordinatorId.GraphId
-                   << "' up to " << context->UpperBound;
-                YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
+                auto issues = future.GetValue();
+                if (!issues.Empty()) {
+                    TStringStream ss;
+                    ss << "GC failed to delete marked checkpoints of graph '" << context->CoordinatorId.GraphId
+                        << "' up to " << context->UpperBound << ", issues:";
+                    issues.PrintTo(ss);
+                    YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
+                    context->Errors->Inc();
+                    return;
+                }
+                YDB_LOG_DEBUG_CTX(*context->ActorSystem, 
+                    "GC deleted checkpoints of graph '" << context->CoordinatorId.GraphId << "' up to " << context->UpperBound);
                 context->Success->Inc();
-            }
-            SendGcFinished(context);
-            return future;
-        });
+                SendGcFinished(context);
+            });
 }
 
 void TActorGC::SendGcFinished(TIntrusivePtr<TContext> context) {

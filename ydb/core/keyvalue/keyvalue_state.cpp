@@ -2011,7 +2011,8 @@ bool TKeyValueState::TryStartOrPostponeIntermediate(THolder<TIntermediate> &inte
 
     intermediate->Stat.EnqueuedAs = PostponedIntermediatesCount + 1;
     ++PostponedIntermediatesCount;
-    Y_DEBUG_ABORT_UNLESS(intermediate.Release() == rawIntermediate);
+    // Queued raw pointers keep this intermediate alive via PostponedQueuesLeft.
+    Y_UNUSED(intermediate.Release());
     return false;
 }
 

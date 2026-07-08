@@ -727,7 +727,7 @@ void TConfigsManager::DbRemoveItem(ui64 id,
                                    const TActorContext &ctx) const
 {
     YDB_LOG_TRACE_CTX(ctx, "Database: removing config item",
-        {"id", id});
+        {"subscriptionId", id});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::ConfigItems>().Key(id).Delete();

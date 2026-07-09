@@ -648,7 +648,7 @@ document.addEventListener("DOMContentLoaded", ready);
                         KEYVALUE_UP("Data, bytes", "data", FormatByteSize(Data->GetTotalStoredDataSize()));
                         KEYVALUE_UP("Data in S3, bytes", "data_s3", FormatByteSize(Data->GetTotalS3DataSize()));
                         KEYVALUE_UP("Trash in flight, bytes", "trash_in_flight", FormatByteSize(Data->GetInFlightTrashSize()));
-                        KEYVALUE_UP("Trash pending, bytes", "trash_pending", FormatByteSize(Data->GetTotalStoredTrashSize()));
+                        KEYVALUE_UP("Loaded trash pending, bytes", "trash_pending", FormatByteSize(Data->GetTotalStoredTrashSize()));
 
                         std::vector<ui32> groups;
                         for (const auto& [groupId, _] : Groups) {
@@ -728,11 +728,15 @@ document.addEventListener("DOMContentLoaded", ready);
             }
         };
 
+        const auto trashLoadState = TData::TrashLoadStateToString(Data->GetTrashLoadState());
+
         NJson::TJsonMap data{
             {"data", formatSize(Data->GetTotalStoredDataSize())},
             {"data_s3", formatSize(Data->GetTotalS3DataSize())},
             {"trash_in_flight", formatSize(Data->GetInFlightTrashSize())},
             {"trash_pending", formatSize(Data->GetTotalStoredTrashSize())},
+            {"trash_load_state", trashLoadState},
+            {"loaded_trash_blobs", Data->GetLoadedTrashRecords()},
         };
 
         for (const auto& [groupId, group] : Groups) {

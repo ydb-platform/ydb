@@ -126,7 +126,7 @@ private:
     void Handle(typename TResponse::TPtr& ev) {
         YDB_LOG_DEBUG_COMP(Service, "Handle response",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"ev", ev->Get()->Record});
+            {"ev", ev->Get()->Record.ShortDebugString()});
         auto partitionId = ev->Cookie;
 
         auto it = PendingPartitions.find(partitionId);
@@ -153,7 +153,7 @@ private:
     void Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
         YDB_LOG_DEBUG_COMP(Service, "Handle TEvPQ::TEvMLPErrorResponse",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"ev", ev->Get()->Record});
+            {"ev", ev->Get()->Record.ShortDebugString()});
 
         auto partitionId = ev->Cookie;
 

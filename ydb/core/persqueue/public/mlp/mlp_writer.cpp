@@ -266,13 +266,13 @@ bool TWriterActor::IsSuccess(const NKikimrClient::TResponse& record) {
     if (record.HasErrorCode() && record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
         YDB_LOG_WARN("Write",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"error", record});
+            {"error", record.ShortDebugString()});
         return false;
     }
     if (!record.HasPartitionResponse()) {
         YDB_LOG_WARN("Missing partition",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"response", record});
+            {"response", record.ShortDebugString()});
         return false;
     }
 

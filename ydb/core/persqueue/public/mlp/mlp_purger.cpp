@@ -76,7 +76,7 @@ void TPurgerActor::Handle(TEvPQ::TEvMLPPurgeResponse::TPtr& ev)
 {
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPPurgeResponse",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
 
     auto partitionId = ev->Get()->GetPartitionId();
     auto& partitionStatus = Partitions[partitionId];
@@ -109,7 +109,7 @@ void TPurgerActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev)
 {
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPErrorResponse",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
 
     auto partitionId = ev->Get()->GetPartitionId();
     auto& partitionStatus = Partitions[partitionId];

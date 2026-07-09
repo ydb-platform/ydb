@@ -248,7 +248,7 @@ public:
             tabletInfo.PartitionIndexes.push_back(partitionIndex);
             YDB_LOG_DEBUG("Sending TEvPersQueue::TEvHasDataInfo",
                 {"logPrefix", LOG_PREFIX},
-                {"fetchInfoRecord", fetchInfo->Record});
+                {"fetchInfoRecord", fetchInfo->Record.ShortDebugString()});
             NTabletPipe::SendData(ctx, tabletInfo.PipeClient, fetchInfo.Release());
             PartitionStatus[partitionIndex] = EPartitionStatus::HasDataRequested;
         }
@@ -333,7 +333,7 @@ public:
             auto request = CreateReadRequest(topic, req);
             YDB_LOG_DEBUG("Sending",
                 {"logPrefix", LOG_PREFIX},
-                {"request", request->Record});
+                {"request", request->Record.ShortDebugString()});
             NTabletPipe::SendData(ctx, tabletInfo.PipeClient, request.release());
 
             break;
@@ -345,7 +345,7 @@ public:
         auto partitionIndex = record.GetCookie();
         YDB_LOG_DEBUG("Handle TEvPersQueue::TEvHasDataInfoResponse",
             {"logPrefix", LOG_PREFIX},
-            {"ev", record});
+            {"ev", record.ShortDebugString()});
         if (partitionIndex >= PartitionStatus.size()) {
             Y_VERIFY_DEBUG(partitionIndex < PartitionStatus.size());
             return;
@@ -378,7 +378,7 @@ public:
         auto& record = ev->Get()->Record;
         YDB_LOG_DEBUG("Handle TEvPersQueue::TEvResponse",
             {"logPrefix", LOG_PREFIX},
-            {"ev", record});
+            {"ev", record.ShortDebugString()});
         AFL_ENSURE(record.HasPartitionResponse());
 
         if (record.GetPartitionResponse().GetCookie() != FetchRequestCurrentPartitionIndex || FetchRequestCurrentReadTablet == 0) {
@@ -520,7 +520,7 @@ public:
                 auto tabletId = topicInfo.PartitionToTablet[p.Partition];
                 YDB_LOG_DEBUG("Sending TEvPersQueue::TEvHasDataInfo",
                     {"logPrefix", LOG_PREFIX},
-                    {"fetchInfoRecord", fetchInfo->Record});
+                    {"fetchInfoRecord", fetchInfo->Record.ShortDebugString()});
                 NTabletPipe::SendData(ctx, TabletInfo[tabletId].PipeClient, fetchInfo.release());
             }
         }
@@ -575,7 +575,7 @@ public:
         YDB_LOG_DEBUG("Reply",
             {"logPrefix", LOG_PREFIX},
             {"requesterId", RequesterId},
-            {"response", event->Response});
+            {"response", event->Response.ShortDebugString()});
         ctx.Send(RequesterId, event.Release());
         Die(ctx);
     }

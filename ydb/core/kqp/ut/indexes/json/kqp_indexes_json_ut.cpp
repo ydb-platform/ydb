@@ -32,6 +32,7 @@ TKikimrRunner KikimrJsonRowIdCompact() {
     featureFlags.SetEnableFulltextIndexRowId(true);
     featureFlags.SetEnableCompactFulltextIndex(true);
     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
     settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
     return TKikimrRunner(settings);
 }

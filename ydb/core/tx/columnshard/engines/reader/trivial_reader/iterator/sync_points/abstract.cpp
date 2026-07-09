@@ -2,9 +2,10 @@
 
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/plain_read_data.h>
 
+#include <ydb/library/actors/struct_log/log_stack.h>
+
 #include <library/cpp/lwtrace/all.h>
 #include <util/string/builder.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NReader::NTrivial {
 

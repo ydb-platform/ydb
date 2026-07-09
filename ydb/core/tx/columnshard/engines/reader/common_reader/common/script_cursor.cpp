@@ -2,8 +2,9 @@
 
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 
-#include <yql/essentials/minikql/mkql_terminator.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
+
+#include <yql/essentials/minikql/mkql_terminator.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 

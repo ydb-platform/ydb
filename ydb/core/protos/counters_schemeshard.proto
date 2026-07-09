@@ -801,4 +801,5 @@ enum ETxTypes {
     TXTYPE_TEST_SHARD_CONTROL = 126 [(TxTypeOpts) = {Name: "TxTestShardControl"}];
 
     TXTYPE_LIST_SET_COLUMN_CONSTRAINT = 127             [(TxTypeOpts) = {Name: "TxListSetColumnConstraint"}];
+    TXTYPE_FORGET_SET_COLUMN_CONSTRAINT = 128          [(TxTypeOpts) = {Name: "TxForgetSetColumnConstraint"}];
 }

@@ -6,6 +6,8 @@
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/message_seqno.h>
 
+#include <ydb/library/actors/struct_log/log_stack.h>
+
 namespace NKikimr::NOlap::NTxInteractions {
 class TManager;
 }
@@ -319,13 +321,16 @@ public:
         }
 
         std::unique_ptr<NTabletFlatExecutor::ITransaction> BuildTxPrepareForProgress(TColumnShard* owner) const {
-            const NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tx_id", GetTxId());
+            YDB_LOG_CREATE_CONTEXT(
+                {"txId", GetTxId()});
             if (!IsInProgress()) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "not_in_progress");
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
+                    {"event", "not_in_progress"});
                 return nullptr;
             }
             if (PreparationsStarted.Val()) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "prepared_already");
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
+                    {"event", "prepared_already"});
                 return nullptr;
             }
             PreparationsStarted.Inc();

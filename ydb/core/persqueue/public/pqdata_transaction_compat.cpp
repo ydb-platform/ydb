@@ -120,11 +120,12 @@ void DowngradeKafkaWriteToLegacy(
 }
 
 void DowngradeDeferredPublicationWriteToLegacy(
-    const NKikimrPQ::TPartitionOperation::TWriteOp& /*write*/,
+    const NKikimrPQ::TPartitionOperation::TWriteOp& write,
     NKikimrPQ::TPartitionOperation& op)
 {
-    // Legacy wire has no deferred-publication representation; do not populate legacy write fields.
+    // Legacy wire has no deferred-publication API; keep only SkipConflictCheck in sync with canonical write.
     ClearLegacyPartitionOpFields(op);
+    op.SetSkipConflictCheck(write.GetSkipConflictCheck());
 }
 
 bool HasLegacyPartitionOp(const NKikimrPQ::TPartitionOperation& op)

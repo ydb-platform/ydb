@@ -149,7 +149,9 @@ Y_UNIT_TEST(DowngradeToLegacyDeferredPublicationWriteClearsLegacy) {
 
     UNIT_ASSERT(op.HasWrite());
     UNIT_ASSERT(op.GetWrite().HasDeferredPublication());
-    UNIT_ASSERT(!op.HasSkipConflictCheck());
+    UNIT_ASSERT(op.HasSkipConflictCheck());
+    UNIT_ASSERT(op.GetSkipConflictCheck());
+    UNIT_ASSERT_EQUAL(op.GetSkipConflictCheck(), op.GetWrite().GetSkipConflictCheck());
     UNIT_ASSERT(!op.GetKafkaTransaction());
     UNIT_ASSERT(!op.HasConsumer());
     UNIT_ASSERT(!op.HasSupportivePartition());

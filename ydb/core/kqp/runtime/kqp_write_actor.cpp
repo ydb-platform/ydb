@@ -4580,7 +4580,10 @@ public:
                 NKikimrPQ::TWriteId proto;
                 auto* deferred = proto.MutableDeferredPublicationApi();
                 deferred->SetIntPublicationId(topicOps.GetDeferredPublicationIntId());
-                deferred->SetExtPublicationId(topicOps.GetDeferredPublicationExtId());
+                const auto& extPublicationId = topicOps.GetDeferredPublicationExtId();
+                if (!extPublicationId.empty()) {
+                    deferred->SetExtPublicationId(extPublicationId);
+                }
                 NPQ::SetWriteId(transaction, NPQ::TWriteId{std::move(proto)});
             } else if (t.hasWrite && writeId.Defined() && !kafkaTransaction) {
                 NPQ::SetWriteId(transaction, NPQ::TWriteId{SelfId().NodeId(), *writeId});

@@ -377,6 +377,8 @@ TESTCASES = [
                 ),
             ]
         ),
+        "FullscanLimit",
+        "2",
     ),
     # 7
     (
@@ -869,6 +871,8 @@ TESTCASES = [
         "5",
         "MaxDelayedRows",
         "100",
+        "FullscanLimit",
+        "0",
     ),
 ]
 
@@ -974,6 +978,8 @@ class TestJoinStreaming(TestYdsBase):
         )
         sql = f'PRAGMA dq.ComputeActorType = "{ca}";\n{sql}'
 
+        options_dict = dict(zip(islice(options, 0, None, 2), islice(options, 1, None, 2)))
+
         one_time_waiter.wait()
 
         query_id = fq_client.create_query(title, sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
@@ -1009,6 +1015,11 @@ class TestJoinStreaming(TestYdsBase):
                     labels={"operation": query_id, "component": component},
                     key_label="sensor",
                 )
+                if component == "LookupSrc":
+                    if options_dict.get("FullscanLimit") == "0" or (
+                        "FullscanLimit" not in options_dict and options_dict.get("MaxCachedRows") == "0"
+                    ):
+                        assert componentSensors.get("Fullscans", 0) == 0
                 for k in componentSensors:
                     print(
                         f'node[{node_index}].operation[{query_id}].component[{component}].{k} = {componentSensors[k]}',

@@ -1051,13 +1051,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }, /* sort  */ true);
     }
 
-    Y_UNIT_TEST_TWIN_F(StreamingQueryWithStreamLookupJoin, WithFeatureFlag, TStreamingTestFixture) {
+    Y_UNIT_TEST_QUAD_F(StreamingQueryWithStreamLookupJoin, WithFeatureFlag, WithFullscanFlag, TStreamingTestFixture) {
+        if (!WithFeatureFlag && WithFullscanFlag) {
+            // legal, but nothing to check
+            return;
+        }
+        constexpr ui32 combinations = WithFeatureFlag && !WithFullscanFlag ? 2 : 1;
         {
             auto& setupAppConfig = SetupAppConfig();
             setupAppConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
-            if (WithFeatureFlag) {
-                setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
-            }
+            setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(WithFeatureFlag);
+            setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinFullscan(WithFullscanFlag);
         }
 
         const auto connectorClient = SetupMockConnectorClient();
@@ -1091,10 +1095,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             SetupMockConnectorTableDescription(connectorClient, {
                 .TableName = ydbTable,
                 .Columns = columns,
-                .DescribeCount = 2,
-                // Now List Split is done after type annotation, that is the
-                // reason why this value equal to 4 not 5
-                .ListSplitsCount = WithFeatureFlag ? 4 : 0,
+                .DescribeCount = 2*combinations,
+                // 1 for table-vs-topic, 1 for compilation, doubled for *Bad query compilation
+                .ListSplitsCount = WithFeatureFlag ? (WithFullscanFlag ? 1 + 3 * 2 : 1 + 3 + 1) : 0,
+                // 1 for compilation (and another one for *Bad query compilation)
+                // 3 for lookups, doubled for fullscan mode
                 .ValidateListSplitsArgs = false
             });
 
@@ -1104,11 +1109,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 SetupMockConnectorTableData(connectorClient, {
                     .TableName = ydbTable,
                     .Columns = columns,
-                    .NumberReadSplits = 3,
+                    .NumberReadSplits = (WithFullscanFlag ? 3*2 : 3),
                     .ValidateReadSplitsArgs = false,
                     .ResultFactory = [&]() {
                         readSplitsCount += 1;
-                        const auto payloadColumn = readSplitsCount < 3
+                        const auto payloadColumn = readSplitsCount <= (WithFullscanFlag ? 4 : 2)
                             ? std::vector<std::string>{"P1", "P2", "P3"}
                             : std::vector<std::string>{"P4", "P5", "P6"};
 
@@ -1190,6 +1195,42 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             UNIT_ASSERT(ast);
             UNIT_ASSERT_STRING_CONTAINS(*ast, "DqCnStreamLookup");
         });
+
+        if (!WithFullscanFlag) {
+            // extra check that fullscan option without fullscan feature-flag fails
+            ExecQuery(fmt::format(R"(
+                CREATE STREAMING QUERY `{query_name}Bad` AS
+                DO BEGIN
+                    $ydb_lookup = SELECT * FROM `{ydb_source}`.`{ydb_table}`;
+
+                    $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                        FORMAT = "json_each_row",
+                        SCHEMA (
+                            time Int32 NOT NULL,
+                            event String,
+                            host String
+                        )
+                    );
+
+                    $joined = SELECT l.payload AS payload, p.* FROM $pq_source AS p
+                    LEFT JOIN /*+ streamlookup(FullscanLimit 123) */ ANY $ydb_lookup AS l
+                    ON (l.fqdn = p.host);
+
+                    INSERT INTO `{pq_source}`.`{output_topic}`
+                    SELECT Unwrap(event || "-" || payload) FROM $joined
+                END DO;)",
+                "query_name"_a = queryName,
+                "pq_source"_a = pqSourceName,
+                "ydb_source"_a = ydbSourceName,
+                "ydb_table"_a = ydbTable,
+                "input_topic"_a = inputTopicName,
+                "output_topic"_a = outputTopicName
+            ),
+            EStatus::GENERIC_ERROR,
+            "EnableDqSourceStreamLookupJoinFullscan disabled, but FullscanLimit is 123");
+
+            CheckScriptExecutionsCount(2, 1);
+        }
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithLocalYdbJoin, TStreamingTestFixture) {
@@ -1997,6 +2038,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         {
             auto& setupAppConfig = SetupAppConfig();
             setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+            setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinFullscan(true);
         }
         const auto connectorClient = SetupMockConnectorClient();
 
@@ -2029,7 +2071,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 .TableName = ydbTable,
                 .Columns = columns,
                 .DescribeCount = 2,
-                .ListSplitsCount = 4,
+                .ListSplitsCount = 7,
                 .ValidateListSplitsArgs = false
             });
 
@@ -2038,7 +2080,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             SetupMockConnectorTableData(connectorClient, {
                 .TableName = ydbTable,
                 .Columns = columns,
-                .NumberReadSplits = 3,
+                .NumberReadSplits = 6,
                 .ValidateReadSplitsArgs = false,
                 .ResultFactory = [&]() {
                     return MakeRecordBatch(

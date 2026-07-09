@@ -450,10 +450,10 @@ namespace NActors {
             return EActivityType::INTERCONNECT_SESSION_TCP;
         }
 
-        TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params);
+        explicit TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy);
         ~TInterconnectSessionTCP();
 
-        void Init() override;
+        void Init(const TSessionParams& params) override;
         void CloseInputSession() override;
         bool IsRdmaInUse() override;
         bool HasRdmaState() const override;
@@ -608,7 +608,7 @@ namespace NActors {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        const TSessionParams Params;
+        TSessionParams Params;
         std::unique_ptr<TEventHolderPool> Pool;
         TMaybe<TChannelScheduler> ChannelScheduler;
         ui64 TotalOutputQueueSize;

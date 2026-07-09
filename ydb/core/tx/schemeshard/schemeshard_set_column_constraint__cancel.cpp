@@ -47,17 +47,17 @@ public:
             );
         }
 
-        if (operationInfo.IsCloseToCompletion()) {
-            return Reply(
-                Ydb::StatusIds::PRECONDITION_FAILED,
-                TStringBuilder() << "SetColumnConstraint operation with id <" << BuildId << "> has already finished or is too close to completion to be cancelled"
-            );
-        }
-
         if (operationInfo.IsCancelled) {
             return Reply(
                 Ydb::StatusIds::PRECONDITION_FAILED,
                 TStringBuilder() << "SetColumnConstraint operation with id <" << BuildId << "> is already cancelled"
+            );
+        }
+
+        if (operationInfo.IsCloseToCompletion()) {
+            return Reply(
+                Ydb::StatusIds::PRECONDITION_FAILED,
+                TStringBuilder() << "SetColumnConstraint operation with id <" << BuildId << "> has already finished or is too close to completion to be cancelled"
             );
         }
 

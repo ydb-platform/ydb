@@ -638,10 +638,9 @@ void TBlocksDirtyMap::EraseFinished(
 
 void TBlocksDirtyMap::UpdateBelatedEraseQueue(
     THostMask completedWrites,
-    ui64 lsn,
-    TBlockRange64 range)
+    ui64 lsn)
 {
-    auto item = Inflight.GetValue(lsn);
+    const auto item = Inflight.GetValue(lsn);
     const bool unknownLsn = item == std::nullopt;
     const bool erasingInProgress =
         item &&
@@ -649,10 +648,8 @@ void TBlocksDirtyMap::UpdateBelatedEraseQueue(
          item->Value.GetState() == TInflightInfo::EState::PBufferErased);
 
     if (unknownLsn || erasingInProgress) {
-        ReadyToEraseBelated.emplace(TInfoEraseBelated{
-            .Lsn = lsn,
-            .Hosts = completedWrites,
-            .Range = range});
+        ReadyToEraseBelated.emplace(
+            TInfoEraseBelated{.Lsn = lsn, .Hosts = completedWrites});
     }
 }
 
@@ -998,13 +995,12 @@ TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
 bool TBlocksDirtyMap::TInfoEraseBelated::operator<(
     const TInfoEraseBelated& other) const
 {
-    if (Lsn != other.Lsn) {
-        return Lsn < other.Lsn;
-    }
-    if (Hosts != other.Hosts) {
-        return Hosts < other.Hosts;
-    }
-    return TBlockRangeComparator{}(Range, other.Range);
+    auto makeTuple = [](const TInfoEraseBelated& info)
+    {
+        return std::tie(info.Lsn, info.Hosts);
+    };
+
+    return makeTuple(*this) < makeTuple(other);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

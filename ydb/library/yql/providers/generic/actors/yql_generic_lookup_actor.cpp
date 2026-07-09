@@ -591,7 +591,7 @@ namespace NYql::NDq {
             if (error) {
                 // TODO separate handling retrievable and non-retrievable errors;
                 // for now, consider all credentials errors at this stage as retrievable
-                SendRetryOrError(TActivationContext::ActorSystem(), SelfId(), NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAVAILABLE, std::move(error)), std::move(state));
+                SendRetryOrError(TActivationContext::ActorSystem(), SelfId(), NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAVAILABLE, error), std::move(state));
                 return true;
             }
             return false;

@@ -1,9 +1,9 @@
 {
-  "op_name":"LeftJoin (BlockHash)",
+  "op_name":"LeftJoin (Grace)",
   "args":
     [
       {
-        "op_name":"LeftJoin (BlockHash)",
+        "op_name":"LeftJoin (Grace)",
         "args":
           [
             {
@@ -15,7 +15,7 @@
                     "args":
                       [
                         {
-                          "op_name":"LeftJoin (BlockHash)",
+                          "op_name":"LeftJoin (Grace)",
                           "args":
                             [
                               {
@@ -63,7 +63,7 @@
                     "args":
                       [
                         {
-                          "op_name":"LeftJoin (BlockHash)",
+                          "op_name":"LeftJoin (Grace)",
                           "args":
                             [
                               {
@@ -113,7 +113,7 @@
               "args":
                 [
                   {
-                    "op_name":"LeftJoin (BlockHash)",
+                    "op_name":"LeftJoin (Grace)",
                     "args":
                       [
                         {

@@ -3,7 +3,7 @@
   "args":
     [
       {
-        "op_name":"InnerJoin (BlockHash)",
+        "op_name":"InnerJoin (Grace)",
         "args":
           [
             {
@@ -11,7 +11,7 @@
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (BlockHash)",
+                    "op_name":"InnerJoin (Grace)",
                     "args":
                       [
                         {
@@ -29,7 +29,7 @@
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (BlockHash)",
+                                "op_name":"InnerJoin (Grace)",
                                 "args":
                                   [
                                     {
@@ -37,7 +37,7 @@
                                       "args":
                                         [
                                           {
-                                            "op_name":"InnerJoin (BlockHash)",
+                                            "op_name":"InnerJoin (Grace)",
                                             "args":
                                               [
                                                 {

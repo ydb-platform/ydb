@@ -168,9 +168,7 @@ TZStdCompressionProcessor* TS3Buffer::CreateCompression(const TMaybe<TS3ExportBu
 }
 
 void TS3Buffer::ColumnsOrder(const TVector<ui32>& tags) {
-    if (!DataFormat->ColumnsOrder(tags)) {
-        ErrorString = DataFormat->GetError();
-    }
+    Y_ENSURE(DataFormat->ColumnsOrder(tags), DataFormat->GetError());
 }
 
 bool TS3Buffer::Collect(const NTable::IScan::TRow& row) {

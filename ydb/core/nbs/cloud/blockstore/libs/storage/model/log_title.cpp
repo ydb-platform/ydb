@@ -75,9 +75,8 @@ TString ToString(const TLogTitle::TVolume& data)
 {
     TStringBuilder stream;
 
-    stream << "[v:" << data.TabletId;
-    stream << " g:" << TOptional{data.Generation};
-    stream << " d:" << TOptional{data.DiskId};
+    stream << "[v:" << TOptional{data.DiskId} << "/" << data.TabletId << "/"
+           << data.Generation;
 
     return stream;
 }
@@ -86,9 +85,8 @@ TString ToString(const TLogTitle::TPartitionDirect& data)
 {
     TStringBuilder stream;
 
-    stream << "[pd:" << data.TabletId;
-    stream << " g:" << TOptional{data.Generation};
-    stream << " d:" << TOptional{data.DiskId};
+    stream << "[pd:" << TOptional{data.DiskId} << "/" << data.TabletId << "/"
+           << data.Generation;
 
     return stream;
 }
@@ -97,10 +95,8 @@ TString ToString(const TLogTitle::TDirectBlockGroup& data)
 {
     TStringBuilder stream;
 
-    stream << "[dbg:" << data.TabletId;
-    stream << " g:" << TOptional{data.Generation};
-    stream << " d:" << TOptional{data.DiskId};
-    stream << " indx:" << data.DirectBlockGroupIndex;
+    stream << "[dbg:" << data.DiskId << "/" << data.DBGIndex;
+    stream << " t:" << TOptional{data.TabletId} << "/" << data.Generation;
 
     return stream;
 }
@@ -109,8 +105,8 @@ TString ToString(const TLogTitle::TVChunk& data)
 {
     TStringBuilder stream;
 
-    stream << "[vchk:" << data.DiskId;
-    stream << " indx:" << data.VChunkIndex;
+    stream << "[vchk:" << data.DiskId << "/" << data.DBGIndex << "/"
+           << data.VChunkIndex;
 
     return stream;
 }

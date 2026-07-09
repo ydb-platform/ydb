@@ -114,4 +114,13 @@ ISessionLogic::TStatus TSessionsManager::GetStatus(const TString& className, con
     return session->GetStatus();
 }
 
+bool TSessionsManager::IsSessionComplete(const TString& className, const TString& identifier) const {
+    auto session = Storage->GetSession(className, identifier);
+    if (!session) {
+        return true;
+    }
+    const auto& logic = session->GetLogicContainer();
+    return logic->IsFinished() || logic->IsReadyForRemoveOnFinished();
+}
+
 }   // namespace NKikimr::NOlap::NBackground

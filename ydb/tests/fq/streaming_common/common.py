@@ -125,7 +125,9 @@ class YdbClient:
         settings = None
         if timeout is not None:
             settings = ydb.BaseRequestSettings().with_timeout(timeout)
-        return self.session_pool.execute_with_retries_async(statement, settings=settings, retry_settings=self.retry_settings)
+        return self.session_pool.execute_with_retries_async(
+            statement, settings=settings, retry_settings=self.retry_settings
+        )
 
 
 class Kikimr:

@@ -291,6 +291,24 @@ void SetNodeBrokerLongLease(TTestActorRuntime& runtime,
     runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(handle);
 }
 
+// Toggle the EnableNodeBrokerLongLease feature flag on the node-0 dynamic
+// nameserver at runtime via a config notification, and wait for the ack.
+void SetNameserverLongLease(TTestActorRuntime& runtime,
+                            TActorId sender,
+                            bool enable)
+{
+    auto event = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    auto& featureFlags = *event->Record.MutableConfig()->MutableFeatureFlags();
+    // Keep the delta protocol flag unchanged (these tests use the epoch
+    // protocol); a differing value would make the nameserver reset its pipe.
+    featureFlags.SetEnableNodeBrokerDeltaProtocol(false);
+    featureFlags.SetEnableNodeBrokerLongLease(enable);
+    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
+
+    TAutoPtr<IEventHandle> handle;
+    runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(handle);
+}
+
 void AsyncSetBannedIds(TTestActorRuntime& runtime,
     TActorId sender,
     const TVector<std::pair<ui32, ui32>> ids)
@@ -5337,6 +5355,45 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
 
         // No pending cache miss requests are left
         CheckNoPendingCacheMissesLeft(runtime, 0);
+    }
+
+    Y_UNIT_TEST(LongLeaseFeatureFlagToggledAtRuntime)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ true);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        SetLeaseDuration(runtime, sender, TDuration::Minutes(5));
+
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1);
+
+        // Drive the node into the Dead-but-not-expired window. The NodeBroker
+        // keeps the long lease feature enabled the whole time, so the node stays
+        // registered (its ExpireV2 is still in the future) while we toggle the
+        // feature on the nameserver only.
+        WaitForEpochUpdate(runtime, sender);
+        WaitForEpochUpdate(runtime, sender);
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Dead);
+
+        // Nameserver has long lease ON: the dead node is served from ExpireV2 in
+        // the full list and hidden from the alive-only list.
+        UNIT_ASSERT(GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ false).contains(NODE1));
+        UNIT_ASSERT(!GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ true).contains(NODE1));
+
+        // Turn the feature OFF at runtime. The nameserver invalidates its caches
+        // and switches to the shorter Expire; the node (whose Expire is already in
+        // the past) drops out of both lists, and the alive-only filter is disabled.
+        SetNameserverLongLease(runtime, sender, false);
+        UNIT_ASSERT(!GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ false).contains(NODE1));
+        UNIT_ASSERT(!GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ true).contains(NODE1));
+
+        // Turn it back ON: the node reappears in the full list (served from
+        // ExpireV2 again) and is again hidden from the alive-only list, proving the
+        // flag switch and cache invalidation took effect.
+        SetNameserverLongLease(runtime, sender, true);
+        UNIT_ASSERT(GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ false).contains(NODE1));
+        UNIT_ASSERT(!GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ true).contains(NODE1));
     }
 }
 

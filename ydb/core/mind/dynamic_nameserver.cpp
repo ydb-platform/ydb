@@ -97,14 +97,12 @@ private:
         }
 
         TDynamicConfig::TDynamicNodeInfo node(rec.GetNode());
-        // EqualExceptExpire() ignores Liveness, but the alive-only list-nodes
-        // cache depends on it, so invalidate on liveness changes as well.
-        if (!exists || !oldNode.EqualExceptExpire(node) || oldNode.Liveness != node.Liveness) {
+        if (!exists || !oldNode.EqualExceptExpireAndLiveness(node) || oldNode.Liveness != node.Liveness) {
             Owner->InvalidateListNodesCache();
         }
 
         // If ID is re-used by another node then proxy has to be reset.
-        if (exists && !oldNode.EqualExceptExpire(node))
+        if (exists && !oldNode.EqualExceptExpireAndLiveness(node))
             ResetInterconnectProxyConfig(NodeId, ctx);
         Config->DynamicNodes.emplace(NodeId, node);
 
@@ -368,7 +366,7 @@ void TDynamicNameserver::ResolveDynamicNode(ui32 nodeId,
     auto it = config->DynamicNodes.find(nodeId);
 
     if (it != config->DynamicNodes.end()
-        && it->second.GetExpire(EnableLongLease) > ctx.Now())
+        && it->second.EffectiveExpire(EnableLongLease) > ctx.Now())
     {
         RegisterWithSameMailbox(CreateResolveActor(it->second.ResolveHost, it->second.Port, nodeId, it->second.Address, ev->Sender, SelfId(), deadline));
     } else if (config->ExpiredNodes.contains(nodeId)
@@ -406,6 +404,7 @@ void TDynamicNameserver::SendNodesList(TActorId recipient, bool onlyAliveNodes, 
 {
     auto now = ctx.Now();
     auto& cache = onlyAliveNodes ? ListNodesCacheAlive : ListNodesCacheAll;
+
     if (cache->NeedUpdate(now)) {
         auto newNodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
         auto newExpire = TInstant::Max();
@@ -437,24 +436,20 @@ void TDynamicNameserver::SendNodesList(TActorId recipient, bool onlyAliveNodes, 
 
         for (auto &config : DynamicConfigs) {
             for (auto &pr : config->DynamicNodes) {
-                const auto &node = pr.second;
-                const TInstant expire = node.GetExpire(EnableLongLease);
-                if (expire <= now) {
-                    continue;
+                if (EnableLongLease) {
+                    if (onlyAliveNodes && pr.second.Liveness != ENodeLiveness::Alive) {
+                        continue; // dead nodes are not included in alive-only list
+                    }
+                } else if (pr.second.Expire <= now) {
+                    continue; // expired nodes are not included
                 }
-                // The alive-nodes cache excludes nodes marked dead, but only
-                // when long lease is enabled (otherwise liveness is not tracked
-                // and expiration is the only aliveness signal).
-                if (onlyAliveNodes && EnableLongLease
-                    && node.Liveness != ENodeLiveness::Alive) {
-                    continue;
-                }
-                newNodes->emplace_back(pr.first, node.Address,
-                                       node.Host, node.ResolveHost,
-                                       node.Port, node.Location, false);
-                newExpire = std::min(newExpire, expire);
+
+                newNodes->emplace_back(pr.first, pr.second.Address,
+                    pr.second.Host, pr.second.ResolveHost,
+                    pr.second.Port, pr.second.Location, false);
+                newExpire = std::min(newExpire, pr.second.Expire);
                 if (newPileMap) {
-                    TNodeLocation location(node.Location);
+                    TNodeLocation location(pr.second.Location);
                     const auto& bridgePileName = location.GetBridgePileName();
                     if (bridgePileName && pileNameMap.contains(*bridgePileName)) {
                         newPileMap->at(pileNameMap[*bridgePileName]).push_back(pr.first);
@@ -516,7 +511,7 @@ void TDynamicNameserver::UpdateState(const NKikimrNodeBroker::TNodesInfo &rec,
             if (it == config->DynamicNodes.end()) {
                 config->DynamicNodes.emplace(nodeId, info);
             } else {
-                if (it->second.EqualExceptExpire(info)) {
+                if (it->second.EqualExceptExpireAndLiveness(info)) {
                     it->second.Expire = info.Expire;
                     it->second.ExpireV2 = info.ExpireV2;
                     it->second.Liveness = info.Liveness;
@@ -549,7 +544,7 @@ void TDynamicNameserver::UpdateState(const NKikimrNodeBroker::TNodesInfo &rec,
             if (it == config->DynamicNodes.end()) {
                 config->DynamicNodes.emplace(nodeId, info);
             } else {
-                if (it->second.EqualExceptExpire(info)) {
+                if (it->second.EqualExceptExpireAndLiveness(info)) {
                     it->second.Expire = info.Expire;
                     it->second.ExpireV2 = info.ExpireV2;
                     it->second.Liveness = info.Liveness;
@@ -673,7 +668,7 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TAc
         ui32 domain = AppData()->DomainsInfo->GetDomain()->DomainUid;
         const auto& config = DynamicConfigs[domain];
         auto it = config->DynamicNodes.find(nodeId);
-        if (it != config->DynamicNodes.end() && it->second.GetExpire(EnableLongLease) > ctx.Now()) {
+        if (it != config->DynamicNodes.end() && it->second.EffectiveExpire(EnableLongLease) > ctx.Now()) {
             reply->Node = MakeHolder<TEvInterconnect::TNodeInfo>(it->first, it->second.Address,
                                                          it->second.Host, it->second.ResolveHost,
                                                          it->second.Port, it->second.Location);
@@ -832,7 +827,7 @@ void TDynamicNameserver::Handle(TEvNodeBroker::TEvUpdateNodes::TPtr &ev, const T
                 if (it == config->DynamicNodes.end()) {
                     config->DynamicNodes.emplace(nodeId, info);
                 } else {
-                    if (it->second.EqualExceptExpire(info)) {
+                    if (it->second.EqualExceptExpireAndLiveness(info)) {
                         it->second.Expire = info.Expire;
                         it->second.ExpireV2 = info.ExpireV2;
                         it->second.Liveness = info.Liveness;

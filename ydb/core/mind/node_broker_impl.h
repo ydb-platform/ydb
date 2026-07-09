@@ -140,7 +140,7 @@ private:
 
         TString AliveUntilString() const
         {
-            return ExpirationString(AliveUntil);
+            return AliveUntil.ToRfc822StringLocal();
         }
 
         // Lease is incremented each time node extends its lifetime.

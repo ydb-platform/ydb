@@ -309,7 +309,7 @@ void TNodeBroker::TState::AddNode(const TNodeInfo &info)
 
 bool TNodeBroker::TState::IsLeaseExtendable(const TNodeInfo &node) const
 {
-    return node.ExpireV2 < Epoch.NextEnd + LeaseDuration;
+    return node.Expire < Epoch.NextEnd || node.ExpireV2 < Epoch.NextEnd + LeaseDuration;
 }
 
 void TNodeBroker::TState::ExtendLease(TNodeInfo &node)
@@ -324,8 +324,8 @@ void TNodeBroker::TState::ExtendLease(TNodeInfo &node)
     node.Liveness = ENodeLiveness::Alive;
 
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                LogPrefix() << " Extended lease of " << node.IdString() << " up to "
-                << node.ExpirationString() << " and " << node.ExpirationV2String()
+                LogPrefix() << " Extended lease of " << node.IdString() << " up to v1: "
+                << node.ExpirationString() << " and v2: " << node.ExpirationV2String()
                 << " (lease " << node.Lease << ")");
 }
 
@@ -513,15 +513,7 @@ void TNodeBroker::TState::ComputeNextEpochDiff(TStateDiff &diff)
 {
     if (Self->EnableLongLease) {
         for (auto &pr : Nodes) {
-            auto &node = pr.second;
-            // A node that expires in this same diff is erased from Nodes by the
-            // expiration loop in ApplyStateDiff, so it must not also appear in
-            // NodesToMakeDead (that would hit Y_ABORT_UNLESS on the erased node).
-            // Such a node doesn't need the intermediate Dead state anyway.
-            if (node.ExpireV2 <= Epoch.End) {
-                continue;
-            }
-            if (node.AliveUntil <= Epoch.End && node.Liveness != ENodeLiveness::Dead) {
+            if (pr.second.AliveUntil <= Epoch.End && pr.second.Liveness == ENodeLiveness::Alive) {
                 diff.NodesToMakeDead.push_back(pr.first);
             }
         }
@@ -844,17 +836,17 @@ void TNodeBroker::TState::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &
     EpochDuration = TDuration::MicroSeconds(config.GetEpochDuration());
     if (EpochDuration < MIN_LEASE_DURATION) {
         LOG_ERROR_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                    LogPrefix() << " Configured lease duration (" << EpochDuration << ") is too"
+                    LogPrefix() << " Configured epoch duration (" << EpochDuration << ") is too"
                     " small. Using min. value: " << MIN_LEASE_DURATION);
         EpochDuration = MIN_LEASE_DURATION;
     }
 
     LeaseDuration = TDuration::MicroSeconds(config.GetLeaseDuration());
-    if (LeaseDuration < EpochDuration) {
+    if (LeaseDuration < MIN_LEASE_DURATION) {
         LOG_ERROR_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                    LogPrefix() << " Configured lease duration (" << LeaseDuration << ") is smaller"
-                    " than epoch duration (" << EpochDuration << "). Using epoch duration instead.");
-        LeaseDuration = EpochDuration;
+                    LogPrefix() << " Configured lease duration (" << LeaseDuration << ") is too"
+                    " small. Using min. value: " << MIN_LEASE_DURATION);
+        LeaseDuration = MIN_LEASE_DURATION;
     }
 
     StableNodeNamePrefix = config.GetStableNodeNamePrefix();
@@ -1174,25 +1166,21 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadNodes(auto &nodesRowset,
             info.Lease = nodesRowset.template GetValue<Schema::Nodes::Lease>();
             info.Expire = expire;
             info.ExpireV2 = expireV2;
-            if (nodesRowset.template HaveValue<Schema::Nodes::AliveUntil>()) {
-                info.AliveUntil = TInstant::FromValue(nodesRowset.template GetValue<Schema::Nodes::AliveUntil>());
-            } else {
-                info.AliveUntil = info.Expire;
-            }
-
-            if (nodesRowset.template HaveValue<Schema::Nodes::Liveness>()) {
-                info.Liveness = nodesRowset.template GetValue<Schema::Nodes::Liveness>();
-            } else {
-                info.Liveness = ENodeLiveness::Alive;
-            }
+            info.AliveUntil = Max(expire, TInstant::FromValue(nodesRowset.template GetValue<Schema::Nodes::AliveUntil>()));
+            info.Liveness = nodesRowset.template GetValue<Schema::Nodes::Liveness>();
 
             info.ServicedSubDomain = TSubDomainKey(nodesRowset.template GetValueOrDefault<Schema::Nodes::ServicedSubDomain>());
             if (nodesRowset.template HaveValue<Schema::Nodes::SlotIndex>()) {
                 info.SlotIndex = nodesRowset.template GetValue<Schema::Nodes::SlotIndex>();
             }
             info.AuthorizedByCertificate = nodesRowset.template GetValue<Schema::Nodes::AuthorizedByCertificate>();
-            auto effectiveExpire = Self->EnableLongLease ? expireV2 : expire;
-            info.State = effectiveExpire > Epoch.Start ? ENodeState::Active : ENodeState::Expired;
+
+            if (Self->EnableLongLease) {
+                info.State = expireV2 > Epoch.Start ? ENodeState::Active : ENodeState::Expired;
+            } else {
+                // Dead nodes are stay active until epoch end
+                info.State = info.Liveness == ENodeLiveness::Dead || expire > Epoch.Start ? ENodeState::Active : ENodeState::Expired;
+            }
             AddNode(info);
 
             LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,

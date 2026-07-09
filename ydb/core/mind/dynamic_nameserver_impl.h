@@ -107,7 +107,7 @@ struct TDynamicConfig : public TThrRefBase {
         TDynamicNodeInfo(const TDynamicNodeInfo &other) = default;
         TDynamicNodeInfo &operator=(const TDynamicNodeInfo &other) = default;
 
-        bool EqualExceptExpire(const TDynamicNodeInfo &other) const
+        bool EqualExceptExpireAndLiveness(const TDynamicNodeInfo &other) const
         {
             return Host == other.Host
                 && Address == other.Address
@@ -116,13 +116,12 @@ struct TDynamicConfig : public TThrRefBase {
                 && Location == other.Location;
         }
 
-        TInstant GetExpire(bool enableLongLease) const {
+        TInstant EffectiveExpire(bool enableLongLease) const {
             return enableLongLease ? ExpireV2 : Expire;
         }
 
         TInstant Expire;
         TInstant ExpireV2;
-        // Liveness value broadcast by the NodeBroker.
         ENodeLiveness Liveness = ENodeLiveness::Alive;
     };
 
@@ -302,10 +301,7 @@ private:
 private:
     TIntrusivePtr<TTableNameserverSetup> StaticConfig;
     std::array<TDynamicConfigPtr, DOMAINS_COUNT> DynamicConfigs;
-    // Each queued request remembers whether it wants only alive nodes.
     TVector<std::pair<TActorId, bool>> ListNodesQueue;
-    // Cache of all not-yet-expired nodes (including dead ones) and a cache of
-    // only alive nodes. Which one is served depends on the request.
     TIntrusivePtr<TListNodesCache> ListNodesCacheAll;
     TIntrusivePtr<TListNodesCache> ListNodesCacheAlive;
     TBridgeInfo::TPtr BridgeInfo;

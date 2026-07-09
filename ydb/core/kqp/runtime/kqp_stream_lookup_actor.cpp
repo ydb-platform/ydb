@@ -937,12 +937,8 @@ private:
         }
     }
 
-    bool CanSendLockRequest() const {
-        return Reads.InFlightLocks() < MaxInFlightLocks;
-    }
-
     void DrainPendingLocks() {
-        while (CanSendLockRequest()) {
+        while (!IsLockWorkerOverloaded()) {
             auto [shardId, request] = StreamLockWorker->PopNextLockRequest();
             if (!request) {
                 break;
@@ -954,8 +950,9 @@ private:
     void ReleaseLockQuota(ui64 lockId) {
         auto bytes = StreamLockWorker ? StreamLockWorker->GetBatchBytes(lockId) : std::nullopt;
         if (bytes) {
-            TotalBytesQuota -= Min(TotalBytesQuota, *bytes);
-            Counters->StreamLookupLockTotalQuotaBytesInFlight->Sub(*bytes);
+            const size_t clamped = Min(TotalBytesQuota, *bytes);
+            TotalBytesQuota -= clamped;
+            Counters->StreamLookupLockTotalQuotaBytesInFlight->Sub(clamped);
         }
     }
 
@@ -1090,6 +1087,11 @@ private:
 
         ReleaseLockQuota(requestId);
 
+        auto lockIt = Reads.findLock(requestId);
+        if (lockIt != Reads.endLocks()) {
+            Reads.eraseLock(lockIt->second);
+        }
+
         bool hasModifiedRows = false;
         bool hasUnmodifiedRows = false;
         {
@@ -1113,11 +1115,6 @@ private:
 
         if (hasUnmodifiedRows) {
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
-        }
-
-        auto lockIt = Reads.findLock(requestId);
-        if (lockIt != Reads.endLocks()) {
-            Reads.eraseLock(lockIt->second);
         }
     }
 

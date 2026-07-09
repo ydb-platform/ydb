@@ -949,8 +949,8 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
         auto locksAfter = counters.SentLocks->Val();
         auto evLockCounter = locksAfter - locksBefore;
  
-        UNIT_ASSERT_VALUES_EQUAL_C(evLockCounter == 50 + 1, true,
-            TStringBuilder() << "expected 51 lock request, got " << evLockCounter);
+        UNIT_ASSERT_VALUES_EQUAL_C(evLockCounter, 51,
+            TStringBuilder() << "expected 51 lock requests, got " << evLockCounter);
 
         auto verify = kikimr.RunCall([&] {
             return session.ExecuteQuery(Q_(R"(
@@ -1027,11 +1027,11 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
         auto locksAfter = counters.SentLocks->Val();
         auto evLockCounter = locksAfter - locksBefore;
 
-        UNIT_ASSERT_VALUES_EQUAL_C(evLockCounter == 1 + 1, true,
-            TStringBuilder() << "expected at least 2 lock request, got " << evLockCounter);
+        UNIT_ASSERT_VALUES_EQUAL_C(evLockCounter, 2,
+            TStringBuilder() << "expected 2 lock requests, got " << evLockCounter);
 
         auto quotaExceededAfter = counters.StreamLookupLockTotalQuotaBytesExceeded->Val();
-        UNIT_ASSERT_VALUES_EQUAL_C(quotaExceededAfter > quotaExceededBefore, true,
+        UNIT_ASSERT_GT_C(quotaExceededAfter, quotaExceededBefore,
             TStringBuilder() << "expected StreamLookupLockTotalQuotaBytesExceeded to increase, "
             << "before=" << quotaExceededBefore << ", after=" << quotaExceededAfter);
 

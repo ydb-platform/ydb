@@ -117,8 +117,9 @@ message TKafkaApiOperationsRequest {
 
 message TTopicDeferredPublicationRequest {
     enum EOp {
-        Publish = 0;
-        Cancel = 1;
+        Unspecified = 0;
+        Publish = 1;
+        Cancel = 2;
     }
 
     message TDestination {

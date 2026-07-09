@@ -684,7 +684,9 @@ ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTa
 ydb/public/sdk/cpp/tests/unit/client/driver CppGrpcClientSimpleTest.WithoutDiscoveryClientLevel
 ydb/public/sdk/cpp/tests/unit/client/driver CppGrpcClientSimpleTest.WithoutDiscoveryDriverLevel
 ydb/public/sdk/cpp/tests/unit/client/table TableTest.AlterTableDroppedMetricsSettings
+ydb/public/sdk/cpp/tests/unit/client/table TableTest.AlterTableNoMetricsSettings
 ydb/public/sdk/cpp/tests/unit/client/table TableTest.AlterTableSetMetricsSettings
+ydb/public/sdk/cpp/tests/unit/client/table TableTest.CreateTableNoMetricsSettings
 ydb/public/sdk/cpp/tests/unit/client/table TableTest.CreateTableWithMetricsSettings
 ydb/services/cms/ut TGRpcCmsTest.AlterRemoveTest
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS

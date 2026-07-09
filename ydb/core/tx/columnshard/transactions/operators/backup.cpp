@@ -185,14 +185,6 @@ bool TBackupTransactionOperator::DoIsAsync() const {
     return !AlreadyCompleted;
 }
 
-bool TBackupTransactionOperator::DoIsProposeReplyReady(TColumnShard& owner) const {
-    if (AlreadyCompleted || !ExportTask) {
-        return true;
-    }
-    const auto schemeShardLocalPathId = ExportTask->GetIdentifier().GetSchemeShardLocalPathId();
-    return owner.GetBackgroundSessionsManager()->IsSessionComplete(ExportTask->GetClassName(), ::ToString(schemeShardLocalPathId.GetRawValue()));
-}
-
 TString TBackupTransactionOperator::DoGetOpType() const {
     return "Backup";
 }

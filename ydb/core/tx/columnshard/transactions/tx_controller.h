@@ -243,10 +243,6 @@ public:
             return false;
         }
 
-        virtual bool DoIsProposeReplyReady(TColumnShard& /*owner*/) const {
-            return true;
-        }
-
         virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* /*owner*/) const {
             return nullptr;
         }
@@ -260,13 +256,13 @@ public:
         virtual void DoOnTabletInit(TColumnShard& /*owner*/) {
         }
 
-        void ResetStatusOnUpdate(const bool sourceChanged) {
+        void ResetStatusOnUpdate() {
             if (Status) {
                 switch (*Status) {
+                    case EStatus::Failed:
                     case EStatus::ReplySent:
-                        NeedResendReplyFlag = sourceChanged;
+                        NeedResendReplyFlag = true;
                         return;
-                    case EStatus::ProposeStartedOnExecute:
                     case EStatus::ProposeFinishedOnExecute:
                     case EStatus::ProposeFinishedOnComplete:
                         NeedResendReplyFlag = true;
@@ -274,9 +270,6 @@ public:
                     default:
                         break;
                 }
-            } else if (ProposeStartInfo) {
-                // Transaction was loaded from DB after tablet restart; propose had already been accepted.
-                NeedResendReplyFlag = true;
             }
             Status = {};
         }
@@ -290,14 +283,6 @@ public:
 
         bool IsInProgress() const {
             return DoIsInProgress();
-        }
-
-        bool NeedResendReply() const {
-            return NeedResendReplyFlag;
-        }
-
-        bool IsProposeReplyReady(TColumnShard& owner) const {
-            return DoIsProposeReplyReady(owner);
         }
 
         bool PingTimeout(TColumnShard& owner, const TMonotonic now) {
@@ -372,7 +357,7 @@ public:
         }
 
         bool IsAsync() const {
-            return DoIsAsync() && Status != EStatus::Failed && Status != EStatus::ReplySent;
+            return DoIsAsync() && Status != EStatus::Failed && Status != EStatus::ReplySent && !NeedResendReplyFlag;
         }
 
         virtual ~ITransactionOperator() {

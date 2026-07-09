@@ -171,14 +171,6 @@ bool TRestoreTransactionOperator::DoIsAsync() const {
     return !AlreadyCompleted;
 }
 
-bool TRestoreTransactionOperator::DoIsProposeReplyReady(TColumnShard& owner) const {
-    if (AlreadyCompleted || !ImportTask) {
-        return true;
-    }
-    const auto schemeShardLocalPathId = ImportTask->GetSchemeShardLocalPathId();
-    return owner.GetBackgroundSessionsManager()->IsSessionComplete(ImportTask->GetClassName(), ::ToString(schemeShardLocalPathId.GetRawValue()));
-}
-
 TString TRestoreTransactionOperator::DoGetOpType() const {
     return "Restore";
 }

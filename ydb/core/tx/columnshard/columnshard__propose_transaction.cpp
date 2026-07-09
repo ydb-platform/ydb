@@ -119,8 +119,7 @@ public:
 
         YDB_LOG_DEBUG("",
             {"event", "actual tx operator"});
-        const bool waitForAsyncCompletion = internalOp->IsAsync() && (!internalOp->NeedResendReply() || !internalOp->IsProposeReplyReady(*Self));
-        if (waitForAsyncCompletion) {
+        if (internalOp->IsAsync()) {
             Self->GetProgressTxController().StartProposeOnComplete(*internalOp, ctx);
         } else {
             Self->GetProgressTxController().FinishProposeOnComplete(*internalOp, ctx);

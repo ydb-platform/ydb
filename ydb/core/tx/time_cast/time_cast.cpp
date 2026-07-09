@@ -1025,7 +1025,7 @@ void TMediatorTimecastProxy::Handle(TEvTxProxy::TEvSubscribeReadStepResult::TPtr
     const auto& record = ev->Get()->Record;
     YDB_LOG_DEBUG_CTX(ctx, "HANDLE TEvSubscribeReadStepResult",
         {"actor", ctx.SelfID},
-        {"ev", record});
+        {"ev", record.ShortDebugString()});
 
     const ui64 coordinatorId = record.GetCoordinatorID();
     auto itCoordinator = Coordinators.find(coordinatorId);
@@ -1076,7 +1076,7 @@ void TMediatorTimecastProxy::Handle(TEvTxProxy::TEvSubscribeReadStepUpdate::TPtr
     const auto& record = ev->Get()->Record;
     YDB_LOG_DEBUG_CTX(ctx, "HANDLE TEvSubscribeReadStepUpdate",
         {"actor", ctx.SelfID},
-        {"ev", record});
+        {"ev", record.ShortDebugString()});
 
     const ui64 coordinatorId = record.GetCoordinatorID();
     auto itCoordinator = Coordinators.find(coordinatorId);

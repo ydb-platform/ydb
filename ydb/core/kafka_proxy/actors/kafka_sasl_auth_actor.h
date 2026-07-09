@@ -125,6 +125,7 @@ private:
 
     TAuthData ClientAuthData;
     TString DatabasePath;
+    TString AuthDatabasePath;
 
     TString Ticket;
     TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> TicketParserEntries;

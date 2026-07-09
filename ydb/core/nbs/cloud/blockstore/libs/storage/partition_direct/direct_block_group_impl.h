@@ -11,6 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ddisk_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
@@ -126,7 +127,13 @@ public:
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
-    ui64 GetDDiskSessionSeqNo(size_t index) const;
+    void OnAddHostResult(
+        const NProto::TError& error,
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
+
+    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() override;
 
     // IHostStateController implementation
     void SetHostState(
@@ -134,6 +141,10 @@ public:
         EHostState oldState,
         EHostState newState) override;
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
+    void QueryAddHost() override;
+
+    // Own methods (not part of any interface).
+    ui64 GetDDiskSessionSeqNo(size_t index) const;
 
 private:
     using TEvSyncResult = NKikimrBlobStorage::NDDisk::TEvSyncResult;
@@ -169,6 +180,14 @@ private:
 
     void DoEstablishConnections();
     void DoEstablishConnection(size_t index, EConnectionType connectionType);
+
+    // Live AddHost: grow all vchunks and the Oracle to the new connection.
+    void SyncHostsWithConnections();
+
+    // Catch one vchunk / the Oracle up to the current connection count.
+    void GrowVChunkToConnections(TVChunk& vChunk);
+    void GrowOracleToConnections();
+
     void OnConnectionEstablished(
         EConnectionType connectionType,
         size_t index,
@@ -179,6 +198,11 @@ private:
 
     [[nodiscard]] bool HasPBufferQuorum() const;
     [[nodiscard]] bool HasLockedQuorum() const;
+
+    [[nodiscard]] bool IsInitialized() const
+    {
+        return InitialReadyPromise.HasValue();
+    }
 
     void DoListPBuffers();
     void OnPBuffersListed(const TAggregatedListPBufferResponse& response);
@@ -225,6 +249,8 @@ private:
     [[nodiscard]] bool WaitForSessionLock(THostIndex hostIndex);
 
     TDBGDumpResponse DoDebugPrintDirtyMap();
+
+    TDbgSnapshot DoBuildMonSnapshot();
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;

@@ -282,6 +282,7 @@ namespace {
             hFunc(TEvSync, handleQuery)
             hFunc(TEvDeleteTabletChunks, handleQuery)
             hFunc(TEvPrivate::TEvIssuePersistentBufferChunkAllocation, Handle)
+            hFunc(TEvPrivate::TEvDeallocatePersistentBufferChunk, Handle)
 
             hFunc(TEvents::TEvUndelivered, Handle)
 
@@ -330,6 +331,7 @@ namespace {
             hFunc(TEvents::TEvUndelivered, Handle)
 
             hFunc(TEvPrivate::TEvHandlePersistentBufferEventForChunk, Handle)
+            hFunc(TEvPrivate::TEvDeallocatePersistentBufferChunkResult, Handle)
 
             hFunc(NPDisk::TEvChunkWriteRawResult, Handle)
             hFunc(NPDisk::TEvChunkReadRawResult, Handle)

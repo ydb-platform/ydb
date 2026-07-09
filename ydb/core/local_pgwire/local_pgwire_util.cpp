@@ -186,10 +186,13 @@ Ydb::TypedValue GetTypedValueFromParam(int16_t format, const std::vector<uint8_t
     NYdb::TTypeParser parser(type);
     if (parser.GetKind() == NYdb::TTypeParser::ETypeKind::Pg) {
         typedValue.mutable_type()->CopyFrom(type);
+        const TString paramValue = value.empty()
+            ? TString()
+            : TString(reinterpret_cast<const char*>(value.data()), value.size());
         if (format == EFormatText) {
-            typedValue.mutable_value()->set_text_value(TString(reinterpret_cast<const char*>(&value.front()), value.size()));
+            typedValue.mutable_value()->set_text_value(paramValue);
         } else if (format == EFormatBinary) {
-            typedValue.mutable_value()->set_bytes_value(TString(reinterpret_cast<const char*>(&value.front()), value.size()));
+            typedValue.mutable_value()->set_bytes_value(paramValue);
         } else {
             Y_ABORT_UNLESS(false/*unknown format type*/);
         }

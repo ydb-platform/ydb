@@ -8,6 +8,7 @@
 #include <util/stream/str.h>
 #include <util/stream/file.h>
 #include <util/string/cast.h>
+#include <util/system/info.h>
 
 #include <map>
 
@@ -164,6 +165,7 @@ Y_UNIT_TEST_SUITE(CpuTopology) {
         auto topology = ParseSysfsCpuTopology(tempDir.Name());
         UNIT_ASSERT_C(topology.has_value(), topology.error());
         UNIT_ASSERT_VALUES_EQUAL(topology->Cpus.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ToCpuListString(topology->AllCpus), "0");
 
         const TLogicalCpuInfo& cpu = topology->Cpus[0];
         UNIT_ASSERT_VALUES_EQUAL(ToCpuListString(cpu.CoreCpus), "0,4");
@@ -194,6 +196,7 @@ Y_UNIT_TEST_SUITE(CpuTopology) {
 
         auto topology = ParseSysfsCpuTopology(tempDir.Name());
         UNIT_ASSERT_C(topology.has_value(), topology.error());
+        UNIT_ASSERT_VALUES_EQUAL(ToCpuListString(topology->AllCpus), "0-1");
 
         UNIT_ASSERT_VALUES_EQUAL(topology->Dies.size(), 2);
         AssertGroup(topology->Dies, 0, 0, "0");
@@ -208,6 +211,7 @@ Y_UNIT_TEST_SUITE(CpuTopology) {
         const TCpuTopology topology = LoadSnapshot("amd-epyc-9654");
 
         UNIT_ASSERT_VALUES_EQUAL(topology.Cpus.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(ToCpuListString(topology.AllCpus), "0,104,192");
         UNIT_ASSERT_VALUES_EQUAL(topology.NumaNodes.size(), 2);
         AssertGroup(topology.NumaNodes, 0, 0, "0-95,192-287");
         AssertGroup(topology.NumaNodes, 1, 1, "96-191,288-383");
@@ -278,6 +282,7 @@ Y_UNIT_TEST_SUITE(CpuTopology) {
         const TCpuTopology topology = LoadSnapshot("intel-xeon-gold-6230");
 
         UNIT_ASSERT_VALUES_EQUAL(topology.Cpus.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(ToCpuListString(topology.AllCpus), "0,20,40");
         UNIT_ASSERT_VALUES_EQUAL(topology.NumaNodes.size(), 2);
         AssertGroup(topology.NumaNodes, 0, 0, "0-19,40-59");
         AssertGroup(topology.NumaNodes, 1, 1, "20-39,60-79");
@@ -343,10 +348,11 @@ Y_UNIT_TEST_SUITE(CpuTopology) {
         AssertGroup(topology.PlacementGroups, 1, 1, "20-39,60-79");
     }
 
-    Y_UNIT_TEST(IntelMeteorLakeSnapshotUsesL3PlacementGroupWithCpuWithoutL3Cache) {
+    Y_UNIT_TEST(IntelMeteorLakeSnapshotUsesL3AndRemainingPlacementGroups) {
         const TCpuTopology topology = LoadSnapshot("intel-meteor-lake");
 
         UNIT_ASSERT_VALUES_EQUAL(topology.Cpus.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(ToCpuListString(topology.AllCpus), "0,10,20");
         UNIT_ASSERT_VALUES_EQUAL(topology.NumaNodes.size(), 1);
         AssertGroup(topology.NumaNodes, 0, 0, "0-21");
 
@@ -373,9 +379,38 @@ Y_UNIT_TEST_SUITE(CpuTopology) {
         AssertGroup(topology.Dies, 0, 0, "0-21");
         UNIT_ASSERT_VALUES_EQUAL(topology.L3CacheGroups.size(), 1);
         AssertGroup(topology.L3CacheGroups, 0, 0, "0-19");
-        UNIT_ASSERT_VALUES_EQUAL(topology.PlacementGroups.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(topology.PlacementGroups.size(), 2);
         AssertSequentialPlacementGroupIds(topology);
         AssertGroup(topology.PlacementGroups, 0, 0, "0-19");
+        AssertGroup(topology.PlacementGroups, 1, 1, "20");
     }
+
+#if defined(_win_)
+    Y_UNIT_TEST(ParseCpuTopologyUsesSinglePlacementGroupOnWindows) {
+        auto topology = ParseCpuTopology();
+        UNIT_ASSERT_C(topology.has_value(), topology.error());
+
+        const TCpuId cpuCount = static_cast<TCpuId>(NSystemInfo::CachedNumberOfCpus());
+        UNIT_ASSERT_VALUES_EQUAL(topology->Cpus.size(), cpuCount);
+
+        const TString expectedCpus = cpuCount == 1
+            ? TString("0")
+            : TString("0-") + ToString(cpuCount - 1);
+        UNIT_ASSERT_VALUES_EQUAL(ToCpuListString(topology->AllCpus), expectedCpus);
+
+        UNIT_ASSERT_VALUES_EQUAL(topology->NumaNodes.size(), 1);
+        AssertGroup(topology->NumaNodes, 0, 0, expectedCpus);
+        UNIT_ASSERT_VALUES_EQUAL(topology->L3CacheGroups.size(), 1);
+        AssertGroup(topology->L3CacheGroups, 0, 0, expectedCpus);
+        UNIT_ASSERT_VALUES_EQUAL(topology->PlacementGroups.size(), 1);
+        AssertGroup(topology->PlacementGroups, 0, 0, expectedCpus);
+
+        const TLogicalCpuInfo* cpu0 = topology->FindCpu(0);
+        UNIT_ASSERT(cpu0);
+        UNIT_ASSERT(cpu0->Online);
+        UNIT_ASSERT_VALUES_EQUAL(ToCpuListString(cpu0->CoreCpus), "0");
+        UNIT_ASSERT_VALUES_EQUAL(ToCpuListString(cpu0->L3CacheCpus), expectedCpus);
+    }
+#endif
 
 }

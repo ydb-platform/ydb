@@ -81,14 +81,9 @@ namespace NActors {
         NSan::CheckMemIsInitialized(data, size);
         while (size) {
             if (const size_t bytesToAppend = Min<size_t>(size, SizeRemain)) {
-                const void *produce = data;
-                if ((reinterpret_cast<uintptr_t>(data) & 63) + bytesToAppend <= 64 &&
-                        (Chunks.empty() || data != Chunks.back().first + Chunks.back().second)) {
-                    memcpy(BufferPtr, data, bytesToAppend);
-                    produce = BufferPtr;
-                    BufferPtr += bytesToAppend;
-                }
-                Produce(produce, bytesToAppend);
+                memcpy(BufferPtr, data, bytesToAppend);
+                Produce(BufferPtr, bytesToAppend);
+                BufferPtr += bytesToAppend;
                 data = static_cast<const char*>(data) + bytesToAppend;
                 size -= bytesToAppend;
             } else {

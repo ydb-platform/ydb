@@ -398,7 +398,7 @@ void TQueryBase::FinishStreamRequest() {
     try {
         (this->*QueryResultHandler)();
     } catch (const std::exception& ex) {
-        Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to process query result", NYql::TIssues{NYql::TIssue{ex.what()}}) );
+        Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to process stream query result", NYql::TIssues{NYql::TIssue{ex.what()}}) );
     }
     Y_ABORT_UNLESS(Finished || RunningQuery || RunningCommit);
 }

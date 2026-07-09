@@ -1,4 +1,3 @@
-/* postgres can not */
 select
     key, subkey,
     nanvl(correlation(cast(key as double), cast(subkey as double)) over w, NULL) as corr,

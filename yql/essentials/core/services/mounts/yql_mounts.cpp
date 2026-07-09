@@ -22,7 +22,7 @@ void AddLibraryFromResource(TUserDataTable& userDataTable, const TString& resour
     auto& block = userDataTable[TUserDataKey::File(resourceName)];
     block.Data = NResource::Find(resourceName);
     block.Type = EUserDataType::RAW_INLINE_DATA;
-    block.Usage.Set(EUserDataBlockUsage::Library, true);
+    block.Usage.Set(EUserDataBlockUsage::Library, /*val=*/true);
 }
 
 TUserDataKey CreateKey(const NUserData::TUserData& item) {
@@ -68,13 +68,13 @@ void AddUserDataToTable(
 
     switch (item.Type) {
         case EType::LIBRARY:
-            block.Usage.Set(EUserDataBlockUsage::Library, true);
+            block.Usage.Set(EUserDataBlockUsage::Library, /*val=*/true);
             break;
         case EType::FILE:
-            block.Usage.Set(EUserDataBlockUsage::Content, true);
+            block.Usage.Set(EUserDataBlockUsage::Content, /*val=*/true);
             break;
         case EType::UDF:
-            block.Usage.Set(EUserDataBlockUsage::Udf, true);
+            block.Usage.Set(EUserDataBlockUsage::Udf, /*val=*/true);
             break;
         default:
             ythrow yexception() << "Unknown type for user data \"" << item.Name << "\": " << item.Type;
@@ -180,6 +180,6 @@ bool GetYqlDefaultModuleResolverWithContext(
     const THashMap<TString, TString>& clusterMapping,
     bool optimizeLibraries,
     TModuleResolver::TModuleChecker moduleChecker) {
-    return !GetYqlModuleResolverImpl(nullptr, moduleResolver, {}, clusterMapping, {}, optimizeLibraries, MakeHolder<TExprContext>(), moduleChecker).empty();
+    return !GetYqlModuleResolverImpl(/*rawCtx=*/nullptr, moduleResolver, {}, clusterMapping, {}, optimizeLibraries, MakeHolder<TExprContext>(), moduleChecker).empty();
 }
 } // namespace NYql

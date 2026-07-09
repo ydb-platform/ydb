@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.34.89)
+VERSION(1.35.99)
 
 LICENSE(Apache-2.0)
 
@@ -124,10 +124,6 @@ RESOURCE_FILES(
     botocore/data/acm/2015-12-08/paginators-1.json
     botocore/data/acm/2015-12-08/service-2.json
     botocore/data/acm/2015-12-08/waiters-2.json
-    botocore/data/alexaforbusiness/2017-11-09/endpoint-rule-set-1.json
-    botocore/data/alexaforbusiness/2017-11-09/examples-1.json
-    botocore/data/alexaforbusiness/2017-11-09/paginators-1.json
-    botocore/data/alexaforbusiness/2017-11-09/service-2.json
     botocore/data/amp/2020-08-01/endpoint-rule-set-1.json
     botocore/data/amp/2020-08-01/examples-1.json
     botocore/data/amp/2020-08-01/paginators-1.json
@@ -183,6 +179,10 @@ RESOURCE_FILES(
     botocore/data/application-insights/2018-11-25/examples-1.json
     botocore/data/application-insights/2018-11-25/paginators-1.json
     botocore/data/application-insights/2018-11-25/service-2.json
+    botocore/data/application-signals/2024-04-15/endpoint-rule-set-1.json
+    botocore/data/application-signals/2024-04-15/paginators-1.json
+    botocore/data/application-signals/2024-04-15/paginators-1.sdk-extras.json
+    botocore/data/application-signals/2024-04-15/service-2.json
     botocore/data/applicationcostprofiler/2020-09-10/endpoint-rule-set-1.json
     botocore/data/applicationcostprofiler/2020-09-10/examples-1.json
     botocore/data/applicationcostprofiler/2020-09-10/paginators-1.json
@@ -208,12 +208,17 @@ RESOURCE_FILES(
     botocore/data/appsync/2017-07-25/examples-1.json
     botocore/data/appsync/2017-07-25/paginators-1.json
     botocore/data/appsync/2017-07-25/service-2.json
+    botocore/data/apptest/2022-12-06/endpoint-rule-set-1.json
+    botocore/data/apptest/2022-12-06/paginators-1.json
+    botocore/data/apptest/2022-12-06/service-2.json
+    botocore/data/apptest/2022-12-06/waiters-2.json
     botocore/data/arc-zonal-shift/2022-10-30/endpoint-rule-set-1.json
     botocore/data/arc-zonal-shift/2022-10-30/paginators-1.json
     botocore/data/arc-zonal-shift/2022-10-30/service-2.json
     botocore/data/artifact/2018-05-10/endpoint-rule-set-1.json
     botocore/data/artifact/2018-05-10/paginators-1.json
     botocore/data/artifact/2018-05-10/service-2.json
+    botocore/data/artifact/2018-05-10/waiters-2.json
     botocore/data/athena/2017-05-18/endpoint-rule-set-1.json
     botocore/data/athena/2017-05-18/examples-1.json
     botocore/data/athena/2017-05-18/paginators-1.json
@@ -242,9 +247,10 @@ RESOURCE_FILES(
     botocore/data/backup/2018-11-15/examples-1.json
     botocore/data/backup/2018-11-15/paginators-1.json
     botocore/data/backup/2018-11-15/service-2.json
-    botocore/data/backupstorage/2018-04-10/endpoint-rule-set-1.json
-    botocore/data/backupstorage/2018-04-10/paginators-1.json
-    botocore/data/backupstorage/2018-04-10/service-2.json
+    botocore/data/backupsearch/2018-05-10/endpoint-rule-set-1.json
+    botocore/data/backupsearch/2018-05-10/paginators-1.json
+    botocore/data/backupsearch/2018-05-10/service-2.json
+    botocore/data/backupsearch/2018-05-10/waiters-2.json
     botocore/data/batch/2016-08-10/endpoint-rule-set-1.json
     botocore/data/batch/2016-08-10/examples-1.json
     botocore/data/batch/2016-08-10/paginators-1.json
@@ -252,12 +258,23 @@ RESOURCE_FILES(
     botocore/data/bcm-data-exports/2023-11-26/endpoint-rule-set-1.json
     botocore/data/bcm-data-exports/2023-11-26/paginators-1.json
     botocore/data/bcm-data-exports/2023-11-26/service-2.json
+    botocore/data/bcm-pricing-calculator/2024-06-19/endpoint-rule-set-1.json
+    botocore/data/bcm-pricing-calculator/2024-06-19/paginators-1.json
+    botocore/data/bcm-pricing-calculator/2024-06-19/service-2.json
+    botocore/data/bcm-pricing-calculator/2024-06-19/waiters-2.json
     botocore/data/bedrock-agent-runtime/2023-07-26/endpoint-rule-set-1.json
     botocore/data/bedrock-agent-runtime/2023-07-26/paginators-1.json
+    botocore/data/bedrock-agent-runtime/2023-07-26/paginators-1.sdk-extras.json
     botocore/data/bedrock-agent-runtime/2023-07-26/service-2.json
     botocore/data/bedrock-agent/2023-06-05/endpoint-rule-set-1.json
     botocore/data/bedrock-agent/2023-06-05/paginators-1.json
     botocore/data/bedrock-agent/2023-06-05/service-2.json
+    botocore/data/bedrock-data-automation-runtime/2024-06-13/endpoint-rule-set-1.json
+    botocore/data/bedrock-data-automation-runtime/2024-06-13/paginators-1.json
+    botocore/data/bedrock-data-automation-runtime/2024-06-13/service-2.json
+    botocore/data/bedrock-data-automation/2023-07-26/endpoint-rule-set-1.json
+    botocore/data/bedrock-data-automation/2023-07-26/paginators-1.json
+    botocore/data/bedrock-data-automation/2023-07-26/service-2.json
     botocore/data/bedrock-runtime/2023-09-30/endpoint-rule-set-1.json
     botocore/data/bedrock-runtime/2023-09-30/paginators-1.json
     botocore/data/bedrock-runtime/2023-09-30/service-2.json
@@ -266,6 +283,10 @@ RESOURCE_FILES(
     botocore/data/bedrock/2023-04-20/paginators-1.json
     botocore/data/bedrock/2023-04-20/service-2.json
     botocore/data/bedrock/2023-04-20/waiters-2.json
+    botocore/data/billing/2023-09-07/endpoint-rule-set-1.json
+    botocore/data/billing/2023-09-07/paginators-1.json
+    botocore/data/billing/2023-09-07/service-2.json
+    botocore/data/billing/2023-09-07/waiters-2.json
     botocore/data/billingconductor/2021-07-30/endpoint-rule-set-1.json
     botocore/data/billingconductor/2021-07-30/examples-1.json
     botocore/data/billingconductor/2021-07-30/paginators-1.json
@@ -315,6 +336,7 @@ RESOURCE_FILES(
     botocore/data/cleanroomsml/2023-09-06/endpoint-rule-set-1.json
     botocore/data/cleanroomsml/2023-09-06/paginators-1.json
     botocore/data/cleanroomsml/2023-09-06/service-2.json
+    botocore/data/cleanroomsml/2023-09-06/waiters-2.json
     botocore/data/cloud9/2017-09-23/endpoint-rule-set-1.json
     botocore/data/cloud9/2017-09-23/examples-1.json
     botocore/data/cloud9/2017-09-23/paginators-1.json
@@ -505,10 +527,6 @@ RESOURCE_FILES(
     botocore/data/codestar-notifications/2019-10-15/examples-1.json
     botocore/data/codestar-notifications/2019-10-15/paginators-1.json
     botocore/data/codestar-notifications/2019-10-15/service-2.json
-    botocore/data/codestar/2017-04-19/endpoint-rule-set-1.json
-    botocore/data/codestar/2017-04-19/examples-1.json
-    botocore/data/codestar/2017-04-19/paginators-1.json
-    botocore/data/codestar/2017-04-19/service-2.json
     botocore/data/cognito-identity/2014-06-30/endpoint-rule-set-1.json
     botocore/data/cognito-identity/2014-06-30/examples-1.json
     botocore/data/cognito-identity/2014-06-30/paginators-1.json
@@ -548,6 +566,9 @@ RESOURCE_FILES(
     botocore/data/connectcampaigns/2021-01-30/endpoint-rule-set-1.json
     botocore/data/connectcampaigns/2021-01-30/paginators-1.json
     botocore/data/connectcampaigns/2021-01-30/service-2.json
+    botocore/data/connectcampaignsv2/2024-04-23/endpoint-rule-set-1.json
+    botocore/data/connectcampaignsv2/2024-04-23/paginators-1.json
+    botocore/data/connectcampaignsv2/2024-04-23/service-2.json
     botocore/data/connectcases/2022-10-03/endpoint-rule-set-1.json
     botocore/data/connectcases/2022-10-03/paginators-1.json
     botocore/data/connectcases/2022-10-03/service-2.json
@@ -558,6 +579,7 @@ RESOURCE_FILES(
     botocore/data/controlcatalog/2018-05-10/endpoint-rule-set-1.json
     botocore/data/controlcatalog/2018-05-10/paginators-1.json
     botocore/data/controlcatalog/2018-05-10/service-2.json
+    botocore/data/controlcatalog/2018-05-10/waiters-2.json
     botocore/data/controltower/2018-05-10/endpoint-rule-set-1.json
     botocore/data/controltower/2018-05-10/paginators-1.json
     botocore/data/controltower/2018-05-10/service-2.json
@@ -565,6 +587,7 @@ RESOURCE_FILES(
     botocore/data/cost-optimization-hub/2022-07-26/paginators-1.json
     botocore/data/cost-optimization-hub/2022-07-26/paginators-1.sdk-extras.json
     botocore/data/cost-optimization-hub/2022-07-26/service-2.json
+    botocore/data/cost-optimization-hub/2022-07-26/waiters-2.json
     botocore/data/cur/2017-01-06/endpoint-rule-set-1.json
     botocore/data/cur/2017-01-06/examples-1.json
     botocore/data/cur/2017-01-06/paginators-1.json
@@ -572,6 +595,7 @@ RESOURCE_FILES(
     botocore/data/customer-profiles/2020-08-15/endpoint-rule-set-1.json
     botocore/data/customer-profiles/2020-08-15/examples-1.json
     botocore/data/customer-profiles/2020-08-15/paginators-1.json
+    botocore/data/customer-profiles/2020-08-15/paginators-1.sdk-extras.json
     botocore/data/customer-profiles/2020-08-15/service-2.json
     botocore/data/databrew/2017-07-25/endpoint-rule-set-1.json
     botocore/data/databrew/2017-07-25/examples-1.json
@@ -644,10 +668,18 @@ RESOURCE_FILES(
     botocore/data/drs/2020-02-26/examples-1.json
     botocore/data/drs/2020-02-26/paginators-1.json
     botocore/data/drs/2020-02-26/service-2.json
+    botocore/data/ds-data/2023-05-31/endpoint-rule-set-1.json
+    botocore/data/ds-data/2023-05-31/paginators-1.json
+    botocore/data/ds-data/2023-05-31/paginators-1.sdk-extras.json
+    botocore/data/ds-data/2023-05-31/service-2.json
     botocore/data/ds/2015-04-16/endpoint-rule-set-1.json
     botocore/data/ds/2015-04-16/examples-1.json
     botocore/data/ds/2015-04-16/paginators-1.json
     botocore/data/ds/2015-04-16/service-2.json
+    botocore/data/dsql/2018-05-10/endpoint-rule-set-1.json
+    botocore/data/dsql/2018-05-10/paginators-1.json
+    botocore/data/dsql/2018-05-10/service-2.json
+    botocore/data/dsql/2018-05-10/waiters-2.json
     botocore/data/dynamodb/2011-12-05/endpoint-rule-set-1.json
     botocore/data/dynamodb/2011-12-05/examples-1.json
     botocore/data/dynamodb/2012-08-10/endpoint-rule-set-1.json
@@ -838,6 +870,15 @@ RESOURCE_FILES(
     botocore/data/gamelift/2015-10-01/examples-1.json
     botocore/data/gamelift/2015-10-01/paginators-1.json
     botocore/data/gamelift/2015-10-01/service-2.json
+    botocore/data/geo-maps/2020-11-19/endpoint-rule-set-1.json
+    botocore/data/geo-maps/2020-11-19/paginators-1.json
+    botocore/data/geo-maps/2020-11-19/service-2.json
+    botocore/data/geo-places/2020-11-19/endpoint-rule-set-1.json
+    botocore/data/geo-places/2020-11-19/paginators-1.json
+    botocore/data/geo-places/2020-11-19/service-2.json
+    botocore/data/geo-routes/2020-11-19/endpoint-rule-set-1.json
+    botocore/data/geo-routes/2020-11-19/paginators-1.json
+    botocore/data/geo-routes/2020-11-19/service-2.json
     botocore/data/glacier/2012-06-01/endpoint-rule-set-1.json
     botocore/data/glacier/2012-06-01/examples-1.json
     botocore/data/glacier/2012-06-01/paginators-1.json
@@ -850,10 +891,12 @@ RESOURCE_FILES(
     botocore/data/glue/2017-03-31/endpoint-rule-set-1.json
     botocore/data/glue/2017-03-31/examples-1.json
     botocore/data/glue/2017-03-31/paginators-1.json
+    botocore/data/glue/2017-03-31/paginators-1.sdk-extras.json
     botocore/data/glue/2017-03-31/service-2.json
     botocore/data/grafana/2020-08-18/endpoint-rule-set-1.json
     botocore/data/grafana/2020-08-18/examples-1.json
     botocore/data/grafana/2020-08-18/paginators-1.json
+    botocore/data/grafana/2020-08-18/paginators-1.sdk-extras.json
     botocore/data/grafana/2020-08-18/service-2.json
     botocore/data/greengrass/2017-06-07/endpoint-rule-set-1.json
     botocore/data/greengrass/2017-06-07/paginators-1.json
@@ -879,11 +922,6 @@ RESOURCE_FILES(
     botocore/data/healthlake/2017-07-01/examples-1.json
     botocore/data/healthlake/2017-07-01/paginators-1.json
     botocore/data/healthlake/2017-07-01/service-2.json
-    botocore/data/honeycode/2020-03-01/endpoint-rule-set-1.json
-    botocore/data/honeycode/2020-03-01/examples-1.json
-    botocore/data/honeycode/2020-03-01/paginators-1.json
-    botocore/data/honeycode/2020-03-01/paginators-1.sdk-extras.json
-    botocore/data/honeycode/2020-03-01/service-2.json
     botocore/data/iam/2010-05-08/endpoint-rule-set-1.json
     botocore/data/iam/2010-05-08/examples-1.json
     botocore/data/iam/2010-05-08/paginators-1.json
@@ -918,6 +956,10 @@ RESOURCE_FILES(
     botocore/data/internetmonitor/2021-06-03/paginators-1.json
     botocore/data/internetmonitor/2021-06-03/service-2.json
     botocore/data/internetmonitor/2021-06-03/waiters-2.json
+    botocore/data/invoicing/2024-12-01/endpoint-rule-set-1.json
+    botocore/data/invoicing/2024-12-01/paginators-1.json
+    botocore/data/invoicing/2024-12-01/service-2.json
+    botocore/data/invoicing/2024-12-01/waiters-2.json
     botocore/data/iot-data/2015-05-28/endpoint-rule-set-1.json
     botocore/data/iot-data/2015-05-28/examples-1.json
     botocore/data/iot-data/2015-05-28/paginators-1.json
@@ -930,13 +972,6 @@ RESOURCE_FILES(
     botocore/data/iot/2015-05-28/examples-1.json
     botocore/data/iot/2015-05-28/paginators-1.json
     botocore/data/iot/2015-05-28/service-2.json
-    botocore/data/iot1click-devices/2018-05-14/endpoint-rule-set-1.json
-    botocore/data/iot1click-devices/2018-05-14/paginators-1.json
-    botocore/data/iot1click-devices/2018-05-14/service-2.json
-    botocore/data/iot1click-projects/2018-05-14/endpoint-rule-set-1.json
-    botocore/data/iot1click-projects/2018-05-14/examples-1.json
-    botocore/data/iot1click-projects/2018-05-14/paginators-1.json
-    botocore/data/iot1click-projects/2018-05-14/service-2.json
     botocore/data/iotanalytics/2017-11-27/endpoint-rule-set-1.json
     botocore/data/iotanalytics/2017-11-27/examples-1.json
     botocore/data/iotanalytics/2017-11-27/paginators-1.json
@@ -987,6 +1022,7 @@ RESOURCE_FILES(
     botocore/data/ivs-realtime/2020-07-14/endpoint-rule-set-1.json
     botocore/data/ivs-realtime/2020-07-14/paginators-1.json
     botocore/data/ivs-realtime/2020-07-14/service-2.json
+    botocore/data/ivs-realtime/2020-07-14/waiters-2.json
     botocore/data/ivs/2020-07-14/endpoint-rule-set-1.json
     botocore/data/ivs/2020-07-14/examples-1.json
     botocore/data/ivs/2020-07-14/paginators-1.json
@@ -995,6 +1031,7 @@ RESOURCE_FILES(
     botocore/data/ivschat/2020-07-14/examples-1.json
     botocore/data/ivschat/2020-07-14/paginators-1.json
     botocore/data/ivschat/2020-07-14/service-2.json
+    botocore/data/ivschat/2020-07-14/waiters-2.json
     botocore/data/kafka/2018-11-14/endpoint-rule-set-1.json
     botocore/data/kafka/2018-11-14/paginators-1.json
     botocore/data/kafka/2018-11-14/service-2.json
@@ -1002,6 +1039,7 @@ RESOURCE_FILES(
     botocore/data/kafkaconnect/2021-09-14/examples-1.json
     botocore/data/kafkaconnect/2021-09-14/paginators-1.json
     botocore/data/kafkaconnect/2021-09-14/service-2.json
+    botocore/data/kafkaconnect/2021-09-14/waiters-2.json
     botocore/data/kendra-ranking/2022-10-19/endpoint-rule-set-1.json
     botocore/data/kendra-ranking/2022-10-19/paginators-1.json
     botocore/data/kendra-ranking/2022-10-19/service-2.json
@@ -1099,6 +1137,7 @@ RESOURCE_FILES(
     botocore/data/location/2020-11-19/endpoint-rule-set-1.json
     botocore/data/location/2020-11-19/examples-1.json
     botocore/data/location/2020-11-19/paginators-1.json
+    botocore/data/location/2020-11-19/paginators-1.sdk-extras.json
     botocore/data/location/2020-11-19/service-2.json
     botocore/data/logs/2014-03-28/endpoint-rule-set-1.json
     botocore/data/logs/2014-03-28/examples-1.json
@@ -1128,6 +1167,9 @@ RESOURCE_FILES(
     botocore/data/macie2/2020-01-01/paginators-1.json
     botocore/data/macie2/2020-01-01/service-2.json
     botocore/data/macie2/2020-01-01/waiters-2.json
+    botocore/data/mailmanager/2023-10-17/endpoint-rule-set-1.json
+    botocore/data/mailmanager/2023-10-17/paginators-1.json
+    botocore/data/mailmanager/2023-10-17/service-2.json
     botocore/data/managedblockchain-query/2023-05-04/endpoint-rule-set-1.json
     botocore/data/managedblockchain-query/2023-05-04/paginators-1.json
     botocore/data/managedblockchain-query/2023-05-04/service-2.json
@@ -1150,6 +1192,10 @@ RESOURCE_FILES(
     botocore/data/marketplace-entitlement/2017-01-11/examples-1.json
     botocore/data/marketplace-entitlement/2017-01-11/paginators-1.json
     botocore/data/marketplace-entitlement/2017-01-11/service-2.json
+    botocore/data/marketplace-reporting/2018-05-10/endpoint-rule-set-1.json
+    botocore/data/marketplace-reporting/2018-05-10/paginators-1.json
+    botocore/data/marketplace-reporting/2018-05-10/service-2.json
+    botocore/data/marketplace-reporting/2018-05-10/waiters-2.json
     botocore/data/marketplacecommerceanalytics/2015-07-01/endpoint-rule-set-1.json
     botocore/data/marketplacecommerceanalytics/2015-07-01/examples-1.json
     botocore/data/marketplacecommerceanalytics/2015-07-01/paginators-1.json
@@ -1160,6 +1206,7 @@ RESOURCE_FILES(
     botocore/data/mediaconnect/2018-11-14/waiters-2.json
     botocore/data/mediaconvert/2017-08-29/endpoint-rule-set-1.json
     botocore/data/mediaconvert/2017-08-29/paginators-1.json
+    botocore/data/mediaconvert/2017-08-29/paginators-1.sdk-extras.json
     botocore/data/mediaconvert/2017-08-29/service-2.json
     botocore/data/medialive/2017-10-14/endpoint-rule-set-1.json
     botocore/data/medialive/2017-10-14/paginators-1.json
@@ -1224,10 +1271,6 @@ RESOURCE_FILES(
     botocore/data/migrationhubstrategy/2020-02-19/paginators-1.json
     botocore/data/migrationhubstrategy/2020-02-19/paginators-1.sdk-extras.json
     botocore/data/migrationhubstrategy/2020-02-19/service-2.json
-    botocore/data/mobile/2017-07-01/endpoint-rule-set-1.json
-    botocore/data/mobile/2017-07-01/examples-1.json
-    botocore/data/mobile/2017-07-01/paginators-1.json
-    botocore/data/mobile/2017-07-01/service-2.json
     botocore/data/mq/2017-11-27/endpoint-rule-set-1.json
     botocore/data/mq/2017-11-27/paginators-1.json
     botocore/data/mq/2017-11-27/service-2.json
@@ -1256,6 +1299,11 @@ RESOURCE_FILES(
     botocore/data/network-firewall/2020-11-12/examples-1.json
     botocore/data/network-firewall/2020-11-12/paginators-1.json
     botocore/data/network-firewall/2020-11-12/service-2.json
+    botocore/data/networkflowmonitor/2023-04-19/endpoint-rule-set-1.json
+    botocore/data/networkflowmonitor/2023-04-19/paginators-1.json
+    botocore/data/networkflowmonitor/2023-04-19/paginators-1.sdk-extras.json
+    botocore/data/networkflowmonitor/2023-04-19/service-2.json
+    botocore/data/networkflowmonitor/2023-04-19/waiters-2.json
     botocore/data/networkmanager/2019-07-05/endpoint-rule-set-1.json
     botocore/data/networkmanager/2019-07-05/examples-1.json
     botocore/data/networkmanager/2019-07-05/paginators-1.json
@@ -1264,14 +1312,21 @@ RESOURCE_FILES(
     botocore/data/networkmonitor/2023-08-01/paginators-1.json
     botocore/data/networkmonitor/2023-08-01/service-2.json
     botocore/data/networkmonitor/2023-08-01/waiters-2.json
-    botocore/data/nimble/2020-08-01/endpoint-rule-set-1.json
-    botocore/data/nimble/2020-08-01/examples-1.json
-    botocore/data/nimble/2020-08-01/paginators-1.json
-    botocore/data/nimble/2020-08-01/service-2.json
-    botocore/data/nimble/2020-08-01/waiters-2.json
+    botocore/data/notifications/2018-05-10/endpoint-rule-set-1.json
+    botocore/data/notifications/2018-05-10/paginators-1.json
+    botocore/data/notifications/2018-05-10/service-2.json
+    botocore/data/notifications/2018-05-10/waiters-2.json
+    botocore/data/notificationscontacts/2018-05-10/endpoint-rule-set-1.json
+    botocore/data/notificationscontacts/2018-05-10/paginators-1.json
+    botocore/data/notificationscontacts/2018-05-10/service-2.json
+    botocore/data/notificationscontacts/2018-05-10/waiters-2.json
     botocore/data/oam/2022-06-10/endpoint-rule-set-1.json
     botocore/data/oam/2022-06-10/paginators-1.json
     botocore/data/oam/2022-06-10/service-2.json
+    botocore/data/observabilityadmin/2018-05-10/endpoint-rule-set-1.json
+    botocore/data/observabilityadmin/2018-05-10/paginators-1.json
+    botocore/data/observabilityadmin/2018-05-10/service-2.json
+    botocore/data/observabilityadmin/2018-05-10/waiters-2.json
     botocore/data/omics/2022-11-28/endpoint-rule-set-1.json
     botocore/data/omics/2022-11-28/paginators-1.json
     botocore/data/omics/2022-11-28/service-2.json
@@ -1310,9 +1365,13 @@ RESOURCE_FILES(
     botocore/data/panorama/2019-07-24/paginators-1.json
     botocore/data/panorama/2019-07-24/service-2.json
     botocore/data/partitions.json
+    botocore/data/partnercentral-selling/2022-07-26/endpoint-rule-set-1.json
+    botocore/data/partnercentral-selling/2022-07-26/paginators-1.json
+    botocore/data/partnercentral-selling/2022-07-26/service-2.json
     botocore/data/payment-cryptography-data/2022-02-03/endpoint-rule-set-1.json
     botocore/data/payment-cryptography-data/2022-02-03/paginators-1.json
     botocore/data/payment-cryptography-data/2022-02-03/service-2.json
+    botocore/data/payment-cryptography-data/2022-02-03/waiters-2.json
     botocore/data/payment-cryptography/2021-09-14/endpoint-rule-set-1.json
     botocore/data/payment-cryptography/2021-09-14/paginators-1.json
     botocore/data/payment-cryptography/2021-09-14/service-2.json
@@ -1320,6 +1379,14 @@ RESOURCE_FILES(
     botocore/data/pca-connector-ad/2018-05-10/endpoint-rule-set-1.json
     botocore/data/pca-connector-ad/2018-05-10/paginators-1.json
     botocore/data/pca-connector-ad/2018-05-10/service-2.json
+    botocore/data/pca-connector-scep/2018-05-10/endpoint-rule-set-1.json
+    botocore/data/pca-connector-scep/2018-05-10/paginators-1.json
+    botocore/data/pca-connector-scep/2018-05-10/service-2.json
+    botocore/data/pca-connector-scep/2018-05-10/waiters-2.json
+    botocore/data/pcs/2023-02-10/endpoint-rule-set-1.json
+    botocore/data/pcs/2023-02-10/paginators-1.json
+    botocore/data/pcs/2023-02-10/service-2.json
+    botocore/data/pcs/2023-02-10/waiters-2.json
     botocore/data/personalize-events/2018-03-22/endpoint-rule-set-1.json
     botocore/data/personalize-events/2018-03-22/examples-1.json
     botocore/data/personalize-events/2018-03-22/paginators-1.json
@@ -1354,6 +1421,7 @@ RESOURCE_FILES(
     botocore/data/pipes/2015-10-07/endpoint-rule-set-1.json
     botocore/data/pipes/2015-10-07/paginators-1.json
     botocore/data/pipes/2015-10-07/service-2.json
+    botocore/data/pipes/2015-10-07/waiters-2.json
     botocore/data/polly/2016-06-10/endpoint-rule-set-1.json
     botocore/data/polly/2016-06-10/examples-1.json
     botocore/data/polly/2016-06-10/paginators-1.json
@@ -1371,10 +1439,15 @@ RESOURCE_FILES(
     botocore/data/proton/2020-07-20/paginators-1.json
     botocore/data/proton/2020-07-20/service-2.json
     botocore/data/proton/2020-07-20/waiters-2.json
+    botocore/data/qapps/2023-11-27/endpoint-rule-set-1.json
+    botocore/data/qapps/2023-11-27/paginators-1.json
+    botocore/data/qapps/2023-11-27/service-2.json
+    botocore/data/qapps/2023-11-27/waiters-2.json
     botocore/data/qbusiness/2023-11-27/endpoint-rule-set-1.json
     botocore/data/qbusiness/2023-11-27/paginators-1.json
     botocore/data/qbusiness/2023-11-27/paginators-1.sdk-extras.json
     botocore/data/qbusiness/2023-11-27/service-2.json
+    botocore/data/qbusiness/2023-11-27/waiters-2.json
     botocore/data/qconnect/2020-10-19/endpoint-rule-set-1.json
     botocore/data/qconnect/2020-10-19/paginators-1.json
     botocore/data/qconnect/2020-10-19/service-2.json
@@ -1446,6 +1519,7 @@ RESOURCE_FILES(
     botocore/data/resource-groups/2017-11-27/endpoint-rule-set-1.json
     botocore/data/resource-groups/2017-11-27/examples-1.json
     botocore/data/resource-groups/2017-11-27/paginators-1.json
+    botocore/data/resource-groups/2017-11-27/paginators-1.sdk-extras.json
     botocore/data/resource-groups/2017-11-27/service-2.json
     botocore/data/resourcegroupstaggingapi/2017-01-26/endpoint-rule-set-1.json
     botocore/data/resourcegroupstaggingapi/2017-01-26/examples-1.json
@@ -1495,6 +1569,7 @@ RESOURCE_FILES(
     botocore/data/s3/2006-03-01/paginators-1.json
     botocore/data/s3/2006-03-01/paginators-1.sdk-extras.json
     botocore/data/s3/2006-03-01/service-2.json
+    botocore/data/s3/2006-03-01/service-2.sdk-extras.json
     botocore/data/s3/2006-03-01/waiters-2.json
     botocore/data/s3control/2018-08-20/endpoint-rule-set-1.json
     botocore/data/s3control/2018-08-20/examples-1.json
@@ -1504,6 +1579,10 @@ RESOURCE_FILES(
     botocore/data/s3outposts/2017-07-25/examples-1.json
     botocore/data/s3outposts/2017-07-25/paginators-1.json
     botocore/data/s3outposts/2017-07-25/service-2.json
+    botocore/data/s3tables/2018-05-10/endpoint-rule-set-1.json
+    botocore/data/s3tables/2018-05-10/paginators-1.json
+    botocore/data/s3tables/2018-05-10/service-2.json
+    botocore/data/s3tables/2018-05-10/waiters-2.json
     botocore/data/sagemaker-a2i-runtime/2019-11-07/endpoint-rule-set-1.json
     botocore/data/sagemaker-a2i-runtime/2019-11-07/examples-1.json
     botocore/data/sagemaker-a2i-runtime/2019-11-07/paginators-1.json
@@ -1551,6 +1630,11 @@ RESOURCE_FILES(
     botocore/data/secretsmanager/2017-10-17/paginators-1.json
     botocore/data/secretsmanager/2017-10-17/service-2.json
     botocore/data/secretsmanager/2017-10-17/service-2.sdk-extras.json
+    botocore/data/security-ir/2018-05-10/endpoint-rule-set-1.json
+    botocore/data/security-ir/2018-05-10/paginators-1.json
+    botocore/data/security-ir/2018-05-10/paginators-1.sdk-extras.json
+    botocore/data/security-ir/2018-05-10/service-2.json
+    botocore/data/security-ir/2018-05-10/waiters-2.json
     botocore/data/securityhub/2018-10-26/endpoint-rule-set-1.json
     botocore/data/securityhub/2018-10-26/examples-1.json
     botocore/data/securityhub/2018-10-26/paginators-1.json
@@ -1617,6 +1701,9 @@ RESOURCE_FILES(
     botocore/data/sns/2010-03-31/examples-1.json
     botocore/data/sns/2010-03-31/paginators-1.json
     botocore/data/sns/2010-03-31/service-2.json
+    botocore/data/socialmessaging/2024-01-01/endpoint-rule-set-1.json
+    botocore/data/socialmessaging/2024-01-01/paginators-1.json
+    botocore/data/socialmessaging/2024-01-01/service-2.json
     botocore/data/sqs/2012-11-05/endpoint-rule-set-1.json
     botocore/data/sqs/2012-11-05/examples-1.json
     botocore/data/sqs/2012-11-05/paginators-1.json
@@ -1630,6 +1717,9 @@ RESOURCE_FILES(
     botocore/data/ssm-incidents/2018-05-10/paginators-1.json
     botocore/data/ssm-incidents/2018-05-10/service-2.json
     botocore/data/ssm-incidents/2018-05-10/waiters-2.json
+    botocore/data/ssm-quicksetup/2018-05-10/endpoint-rule-set-1.json
+    botocore/data/ssm-quicksetup/2018-05-10/paginators-1.json
+    botocore/data/ssm-quicksetup/2018-05-10/service-2.json
     botocore/data/ssm-sap/2018-05-10/endpoint-rule-set-1.json
     botocore/data/ssm-sap/2018-05-10/paginators-1.json
     botocore/data/ssm-sap/2018-05-10/service-2.json
@@ -1680,6 +1770,9 @@ RESOURCE_FILES(
     botocore/data/synthetics/2017-10-11/examples-1.json
     botocore/data/synthetics/2017-10-11/paginators-1.json
     botocore/data/synthetics/2017-10-11/service-2.json
+    botocore/data/taxsettings/2018-05-10/endpoint-rule-set-1.json
+    botocore/data/taxsettings/2018-05-10/paginators-1.json
+    botocore/data/taxsettings/2018-05-10/service-2.json
     botocore/data/textract/2018-06-27/endpoint-rule-set-1.json
     botocore/data/textract/2018-06-27/examples-1.json
     botocore/data/textract/2018-06-27/paginators-1.json
@@ -1749,10 +1842,6 @@ RESOURCE_FILES(
     botocore/data/workdocs/2016-05-01/examples-1.json
     botocore/data/workdocs/2016-05-01/paginators-1.json
     botocore/data/workdocs/2016-05-01/service-2.json
-    botocore/data/worklink/2018-09-25/endpoint-rule-set-1.json
-    botocore/data/worklink/2018-09-25/examples-1.json
-    botocore/data/worklink/2018-09-25/paginators-1.json
-    botocore/data/worklink/2018-09-25/service-2.json
     botocore/data/workmail/2017-10-01/endpoint-rule-set-1.json
     botocore/data/workmail/2017-10-01/examples-1.json
     botocore/data/workmail/2017-10-01/paginators-1.json

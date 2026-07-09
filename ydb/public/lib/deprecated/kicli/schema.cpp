@@ -254,6 +254,7 @@ static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry)
         return TSchemaObject::EPathType::Secret;
     case NKikimrSchemeOp::EPathTypeStreamingQuery:
         return TSchemaObject::EPathType::StreamingQuery;
+    case NKikimrSchemeOp::EPathTypeTestShardSet:
     case NKikimrSchemeOp::EPathTypeTableIndex:
     case NKikimrSchemeOp::EPathTypeExtSubDomain:
     case NKikimrSchemeOp::EPathTypeCdcStream:

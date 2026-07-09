@@ -390,6 +390,10 @@ namespace NKikimr::NDDisk {
                 ProcessPersistentBufferBatchWrite();
                 break;
             }
+            case EWakeupTag::WakeupProcessDeallocatePersistentBufferChunk: {
+                ProcessDeallocatePersistentBufferChunk(true);
+                break;
+            }
         }
     }
 

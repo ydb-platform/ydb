@@ -108,9 +108,9 @@ public:
         }
         read.AddName(Pool->Config.GetName());
 
-        YDB_LOG_DEBUG("Read pool",
+        YDB_LOG_DEBUG("Read pool state",
             {"logPrefix", LogPrefix},
-            {"state", request->Record.ShortDebugString()});
+            {"ev", request->Record.ShortDebugString()});
 
         NTabletPipe::SendData(ctx, BSControllerPipe, request.Release());
     }
@@ -124,9 +124,9 @@ public:
             pool->SetKind(Pool->Kind);
         }
 
-        YDB_LOG_DEBUG("Send pool",
+        YDB_LOG_DEBUG("Send pool request",
             {"logPrefix", LogPrefix},
-            {"request", request->Record.ShortDebugString()});
+            {"ev", request->Record.ShortDebugString()});
 
         NTabletPipe::SendData(ctx, BSControllerPipe, request.Release());
     }
@@ -148,9 +148,9 @@ public:
         del.SetStoragePoolId(PoolId);
         del.SetItemConfigGeneration(Pool->Config.GetItemConfigGeneration());
 
-        YDB_LOG_DEBUG("Send pool",
+        YDB_LOG_DEBUG("Send pool request",
             {"logPrefix", LogPrefix},
-            {"request", request->Record.ShortDebugString()});
+            {"ev", request->Record.ShortDebugString()});
 
         NTabletPipe::SendData(ctx, BSControllerPipe, request.Release());
     }
@@ -688,7 +688,7 @@ public:
         auto *domain = AppData(ctx)->DomainsInfo->GetDomainByName(ExtractDomain(Tenant->Path));
         if (!domain) {
             TString error = "cannot find domain info";
-            YDB_LOG_CRIT("TSubdomainManip: cannot find domain info",
+            YDB_LOG_CRIT("TSubdomainManip error",
                 {"tenantPath", Tenant->Path},
                 {"error", error});
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed(Tenant, error), ctx);
@@ -861,9 +861,9 @@ public:
 
     void HandleSubdomain(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx)
     {
-        YDB_LOG_DEBUG("TSubdomainManip got propose",
+        YDB_LOG_DEBUG("TSubdomainManip got propose result",
             {"tenantPath", Tenant->Path},
-            {"result", ev->Get()->Record.ShortDebugString()});
+            {"ev", ev->Get()->Record.ShortDebugString()});
 
         auto &rec = ev->Get()->Record;
         switch (rec.GetStatus()) {
@@ -912,9 +912,9 @@ public:
     {
         const auto &rec = ev->Get()->GetRecord();
 
-        YDB_LOG_DEBUG("TSubdomainManip got describe",
+        YDB_LOG_DEBUG("TSubdomainManip got describe result",
             {"tenantPath", Tenant->Path},
-            {"result", rec.ShortDebugString()});
+            {"ev", rec.ShortDebugString()});
 
         if (Action == REMOVE) {
             switch (rec.GetStatus()) {

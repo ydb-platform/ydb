@@ -434,7 +434,7 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
     auto tx = Serialize(state);
     YDB_LOG_DEBUG("Save tx",
         {"logPrefix", LogPrefix()},
-        {"tx", tx});
+        {"tx", tx.ShortDebugString()});
 
     TString value;
     TX_ENSURE(tx.SerializeToString(&value));

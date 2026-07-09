@@ -226,42 +226,42 @@ TString TConsumerActor::BuildLogPrefix() const {
 void TConsumerActor::Queue(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Queue TEvPQ::TEvMLPReadRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     ReadRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPQ::TEvMLPCommitRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Queue TEvPQ::TEvMLPCommitRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     CommitRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPQ::TEvMLPUnlockRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Queue TEvPQ::TEvMLPUnlockRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     UnlockRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Queue TEvPQ::TEvMLPChangeMessageDeadlineRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     ChangeMessageDeadlineRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Queue TEvPQ::TEvMLPPurgeRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     PurgeRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& ev) {
     YDB_LOG_DEBUG("Queue TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     UpdateExternalLockedMessageGroupsIdRequestsQueue.push_back(std::move(ev));
 }
 
@@ -432,7 +432,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
 void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
     YDB_LOG_DEBUG("HandleOnWrite TEvKeyValue::TEvResponse",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
 
     auto& record = ev->Get()->Record;
 
@@ -513,7 +513,7 @@ void TConsumerActor::UpdateStorageConfig() {
     YDB_LOG_DEBUG("Update config",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"retentionPeriod", (RetentionPeriod.has_value() ? RetentionPeriod->ToString() : "infinity")},
-        {"config", Config});
+        {"config", Config.ShortDebugString()});
 
     AFL_ENSURE(Storage->GetKeepMessageOrder() == Config.GetKeepMessageOrder())("initial", Storage->GetKeepMessageOrder())("new", Config.GetKeepMessageOrder());
     Storage->SetMaxMessageProcessingCount(Config.GetMaxProcessingAttempts());

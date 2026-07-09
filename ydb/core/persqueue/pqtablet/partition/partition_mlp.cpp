@@ -9,35 +9,35 @@ namespace NKikimr::NPQ {
 void TPartition::HandleOnInit(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
     YDB_LOG_DEBUG("HandleOnInit TEvPQ::TEvMLPReadRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     MLPPendingEvents.emplace_back(ev);
 }
 
 void TPartition::HandleOnInit(TEvPQ::TEvMLPCommitRequest::TPtr& ev) {
     YDB_LOG_DEBUG("HandleOnInit TEvPQ::TEvMLPCommitRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     MLPPendingEvents.emplace_back(ev);
 }
 
 void TPartition::HandleOnInit(TEvPQ::TEvMLPUnlockRequest::TPtr& ev) {
     YDB_LOG_DEBUG("HandleOnInit TEvPQ::TEvMLPUnlockRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     MLPPendingEvents.emplace_back(ev);
 }
 
 void TPartition::HandleOnInit(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
     YDB_LOG_DEBUG("HandleOnInit TEvPQ::TEvMLPChangeMessageDeadlineRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     MLPPendingEvents.emplace_back(ev);
 }
 
 void TPartition::HandleOnInit(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
     YDB_LOG_DEBUG("HandleOnInit TEvPQ::TEvMLPPurgeRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     MLPPendingEvents.emplace_back(ev);
 }
 
@@ -73,35 +73,35 @@ void TPartition::ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHa
 void TPartition::Handle(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPReadRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
 void TPartition::Handle(TEvPQ::TEvMLPCommitRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPCommitRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
 void TPartition::Handle(TEvPQ::TEvMLPUnlockRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPUnlockRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
 void TPartition::Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPChangeMessageDeadlineRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
 void TPartition::Handle(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPPurgeRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
@@ -126,7 +126,7 @@ void TPartition::Handle(TEvPQ::TEvMLPConsumerState::TPtr& ev) {
 
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPConsumerState",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"metrics", metrics});
+        {"metrics", metrics.ShortDebugString()});
     auto it = MLPConsumers.find(metrics.GetConsumer());
     if (it == MLPConsumers.end()) {
         return;
@@ -143,7 +143,7 @@ void TPartition::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
     auto& record = ev->Get()->Record;
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPConsumerStatus",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", record});
+        {"ev", record.ShortDebugString()});
 
     auto it = MLPConsumers.find(record.GetConsumer());
     if (it == MLPConsumers.end()) {

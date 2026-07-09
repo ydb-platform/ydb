@@ -409,7 +409,7 @@ void TPersQueue::ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
 
     YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Apply new config",
         {"logPrefix", LogPrefix()},
-        {"config", Config});
+        {"config", Config.ShortDebugString()});
 
     ui32 cacheSize = CACHE_SIZE;
     if (Config.HasCacheSize()) {
@@ -859,7 +859,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
             {"state", NKikimrPQ::TTransaction_EState_Name(tx.GetState())},
             {"predicate", tx.GetPredicate()},
             {"predicateMarker", (tx.HasPredicate() ? "+" : "-")},
-            {"writeId", tx.GetWriteId()});
+            {"writeId", tx.GetWriteId().ShortDebugString()});
 
         Txs.emplace(tx.GetTxId(), tx);
 
@@ -3451,7 +3451,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
     const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->GetRecord();
     YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Handle TEvPersQueue::TEvProposeTransaction",
         {"logPrefix", LogPrefix()},
-        {"event", event});
+        {"event", event.ShortDebugString()});
 
     auto span = GenerateSpan("Topic.Transaction", *SamplingControl, std::move(ev->TraceId));
     span.Attribute("TxId", static_cast<i64>(event.GetTxId()));
@@ -3688,7 +3688,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorCont
 
     YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Handle TEvTxProcessing::TEvPlanStep",
         {"logPrefix", LogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
 
     const TActorId sender = ev->Sender;
     std::unique_ptr<TEvTxProcessing::TEvPlanStep> event{ev->Release().Release()};
@@ -3705,7 +3705,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
 
     YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Handle TEvTxProcessing::TEvReadSet",
         {"logPrefix", LogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
 
     NKikimrTx::TEvReadSet& event = ev->Get()->Record;
     PQ_ENSURE(event.HasTxId());
@@ -3785,7 +3785,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorCo
 {
     YDB_LOG_INFO_COMP(NKikimrServices::PQ_TX, "Handle TEvTxProcessing::TEvReadSetAck",
         {"logPrefix", LogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
 
     NKikimrTx::TEvReadSetAck& event = ev->Get()->Record;
     PQ_ENSURE(event.HasTxId());
@@ -5554,7 +5554,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransactionAttach::TPtr &ev, con
 
     YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Handle TEvPersQueue::TEvProposeTransactionAttach",
         {"logPrefix", LogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
 
     const ui64 txId = ev->Get()->Record.GetTxId();
     NKikimrProto::EReplyStatus status = NKikimrProto::NODATA;
@@ -5633,7 +5633,7 @@ void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& e
 {
     YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Handle TEvLongTxService::TEvLockStatus",
         {"logPrefix", LogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
 
     auto& record = ev->Get()->Record;
     const TWriteId writeId(record.GetLockNode(), record.GetLockId());
@@ -5903,7 +5903,7 @@ void TPersQueue::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
     auto& record = ev->Get()->Record;
     YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Handle TEvPQ::TEvMLPConsumerStatus",
         {"logPrefix", LogPrefix()},
-        {"ev", record});
+        {"ev", record.ShortDebugString()});
     Forward(ev, ReadBalancerActorId);
 }
 

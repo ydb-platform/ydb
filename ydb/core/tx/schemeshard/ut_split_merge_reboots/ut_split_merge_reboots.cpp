@@ -1,3 +1,4 @@
+#include <ydb/core/testlib/actors/wait_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
@@ -1177,24 +1178,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             UNIT_ASSERT(req1.GetErrors().empty());
 
             // Split partition #2 into 2
+            const auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
+            UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+            TWaitForFirstEvent<TEvDataShard::TEvSplit> startSplit(runtime);
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table",
-                            R"(
-                                SourceTabletId: 72075186233409547
+                            Sprintf(R"(
+                                SourceTabletId: %lu
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Text: "Marla" } }
                                     }
                                 }
-                            )");
+                            )", shards[1]));
 
             // Wait for split to reach src DS
             int retries = 3;
             while (retries--) {
-                {
-                    TDispatchOptions opts;
-                    opts.FinalEvents.emplace_back(TEvDataShard::EvSplit);
-                    runtime.DispatchEvents(opts);
-                }
+                startSplit.Wait();
 
                 ++dataTxId;
                 TFakeDataReq req2(runtime, dataTxId, "/MyRoot/Table",

@@ -557,6 +557,30 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
+    void CreateOriginalRowsHintTables(TKikimrRunner& kikimr) {
+        auto db = kikimr.GetTableClient();
+        auto sessionResult = db.CreateSession().GetValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/R` (
+                id Int64 NOT NULL,
+                primary key(id)
+            ) WITH (STORE = column);
+
+            CREATE TABLE `/Root/S` (
+                id Int64 NOT NULL,
+                primary key(id)
+            ) WITH (STORE = column);
+
+            CREATE TABLE `/Root/T` (
+                id Int64 NOT NULL,
+                primary key(id)
+            ) WITH (STORE = column);
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
     NYdb::NQuery::TSession CreateQuerySession(TKikimrRunner& kikimr) {
         auto db = kikimr.GetQueryClient();
         auto res = db.GetSession().GetValueSync();
@@ -631,6 +655,62 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(!GetStringField(*joinOp, "JoinAlgo").empty(), plan);
         const auto condition = GetStringField(*joinOp, "Condition");
         UNIT_ASSERT_C(condition.Contains("t1.a") && condition.Contains("t2.b") && condition.Contains(" = "), plan);
+    }
+
+    Y_UNIT_TEST(ExplainReadRowsHints) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA ydb.OptimizerHints = '
+                Rows(left_alias # 123)
+                Rows(t2 # 456)
+            ';
+            select left_alias.a, right_alias.b
+            from `/Root/t1` as left_alias
+            inner join `/Root/t2` as right_alias on left_alias.a = right_alias.b;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* leftRead = FindOperatorByStringField(simplifiedPlan, "Table", "t1");
+        const auto* rightRead = FindOperatorByStringField(simplifiedPlan, "Table", "t2");
+
+        UNIT_ASSERT_C(leftRead, plan);
+        UNIT_ASSERT_C(rightRead, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*leftRead, "E-Rows"), "123", plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*rightRead, "E-Rows"), "456", plan);
+    }
+
+    Y_UNIT_TEST(ExplainOriginalRowsHints) {
+        TExplainPlanTestContext testContext;
+        CreateOriginalRowsHintTables(testContext.GetKikimr());
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA ydb.OptimizerHints =
+            '
+                Rows(R # 20e8)
+                Rows(T # 777)
+                Rows(S # 30e8)
+                Rows(R T # 1)
+                Rows(R S # 10e8)
+            ';
+            SELECT * FROM
+                `/Root/R` AS R INNER JOIN `/Root/S` AS S on R.id = S.id
+                    INNER JOIN `/Root/T` AS T on R.id = T.id;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* readR = FindOperatorByStringField(simplifiedPlan, "Table", "R");
+        const auto* readS = FindOperatorByStringField(simplifiedPlan, "Table", "S");
+        const auto* readT = FindOperatorByStringField(simplifiedPlan, "Table", "T");
+
+        UNIT_ASSERT_C(readR, plan);
+        UNIT_ASSERT_C(readS, plan);
+        UNIT_ASSERT_C(readT, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readR, "E-Rows"), "2000000000", plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readS, "E-Rows"), "3000000000", plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readT, "E-Rows"), "777", plan);
     }
 
     Y_UNIT_TEST(EliminateUnusedLeftJoin) {
@@ -3897,6 +3977,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(rewrittenAggregate->KeyColumns.size(), 1);
         UNIT_ASSERT(rewrittenAggregate->KeyColumns.front() == TInfoUnit("key"));
 
+        ComputeRequiredProps(root, /*props=*/0, testContext.RboCtx, "Focused push rename");
         const auto aggregateOutput = rewrittenAggregate->GetOutputIUs();
         UNIT_ASSERT(std::find(aggregateOutput.begin(), aggregateOutput.end(), TInfoUnit("total")) != aggregateOutput.end());
         UNIT_ASSERT(std::find(aggregateOutput.begin(), aggregateOutput.end(), TInfoUnit("sum_value")) == aggregateOutput.end());

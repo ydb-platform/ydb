@@ -127,14 +127,25 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         class TSstRatioThreadSafeHolder {
         public:
-            void Set(TSstRatioPtr ratio) {
-                TGuard<TSpinLock> g(Lock);
-                Ratio = ratio;
+            void Set(TSstRatioPtr ratio, TInstant calculationTime) {
+                {
+                    TGuard<TSpinLock> g(Lock);
+                    Ratio = ratio;
+                }
+                CalculationTime = calculationTime;
             }
 
             TSstRatioPtr Get() const {
                 TGuard<TSpinLock> g(Lock);
                 return Ratio;
+            }
+
+            void SetCalculationTime(TInstant calculationTime) {
+                CalculationTime = calculationTime;
+            }
+
+            TInstant GetCalculationTime() const {
+                return CalculationTime;
             }
 
             void OutputProto(NKikimrVDisk::StorageRatio* proto) const {
@@ -157,6 +168,7 @@ namespace NKikimr {
         private:
             TSpinLock Lock;
             TIntrusivePtr<TSstRatio> Ratio;
+            TInstant CalculationTime = TInstant::Zero();
         };
 
 

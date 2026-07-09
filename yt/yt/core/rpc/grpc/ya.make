@@ -12,6 +12,7 @@ SRCS(
     server.cpp
     helpers.cpp
     channel.cpp
+    GLOBAL backend.cpp
     proto/grpc.proto
 )
 

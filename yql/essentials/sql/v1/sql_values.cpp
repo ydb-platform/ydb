@@ -54,7 +54,7 @@ TSourcePtr TSqlValues::Build(const TRule_values_stmt& node, TPosition& valuesPos
     auto list = new TCallNodeImpl(valuesPos, "AsListMayWarn", items);
     list = new TCallNodeImpl(valuesPos, "PersistableRepr", {list});
     list = new TCallNodeImpl(valuesPos, "AssumeColumnOrder", {list, BuildTuple(valuesPos, labels)});
-    auto result = BuildNodeSource(valuesPos, list, false);
+    auto result = BuildNodeSource(valuesPos, list, /*wrapToList=*/false);
     result->AllColumns();
     return result;
 }

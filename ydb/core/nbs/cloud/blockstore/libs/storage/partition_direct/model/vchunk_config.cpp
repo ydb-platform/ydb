@@ -89,6 +89,16 @@ ui32 TVChunkConfig::GetVChunkIndex() const
     return VChunkIndex;
 }
 
+void TVChunkConfig::SetDBGIndex(ui32 dbgIndex)
+{
+    DBGIndex = dbgIndex;
+}
+
+ui32 TVChunkConfig::GetDBGIndex() const
+{
+    return DBGIndex;
+}
+
 void TVChunkConfig::EnableHost(THostIndex hostIndex)
 {
     EnabledHosts.Set(hostIndex);
@@ -104,6 +114,18 @@ void TVChunkConfig::EnableHost(THostIndex hostIndex)
 void TVChunkConfig::DisableHost(THostIndex hostIndex)
 {
     EnabledHosts.Reset(hostIndex);
+}
+
+void TVChunkConfig::AppendHost()
+{
+    Y_ABORT_UNLESS(PBufferHosts.HostCount() == DDiskHosts.HostCount());
+    const auto newHostIndex = static_cast<THostIndex>(HostCount);
+
+    PBufferHosts.AppendRole(EHostRole::None);
+    DDiskHosts.AppendRole(EHostRole::None);
+    EnabledHosts.Reset(newHostIndex);
+    Watermarks.push_back(std::nullopt);
+    ++HostCount;
 }
 
 TString TVChunkConfig::EvacuateHost(THostIndex hostIndex)

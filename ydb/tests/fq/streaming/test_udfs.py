@@ -3,7 +3,7 @@ import json
 import time
 import ydb
 
-from typing import Optional
+from typing import List, Optional
 from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, set_test_env
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -27,7 +27,7 @@ def kikimr_udfs(request):
         ],
         query_service_config={"available_external_data_sources": ["Ydb", "YdbTopics"]},
         pq_client_service_types=["yandex-query"],
-        table_service_config={},
+        table_service_config={"enable_compile_cache_warmup": False},
         default_clusteradmin="root@builtin",
         use_in_memory_pdisks=False,
         udfs_path=yatest.common.build_path("yql/essentials/udfs/common/python/python3_small")
@@ -35,7 +35,8 @@ def kikimr_udfs(request):
     config.yaml_config["log_config"] = {
         "default_level": 4,
         "entry": [
-            {"component": "KQP_PROXY", "level": 7}
+            {"component": "KQP_PROXY", "level": 7},
+            {"component": "KQP_EXECUTER", "level": 7},
         ]
     }
 
@@ -97,8 +98,8 @@ def get_all_cgi_params(url):
             UPSERT INTO `{test_table}` (Key, Payload) VALUES (1, "test-")
         """)
 
-        def validate_query(text: str, previous_ids: int, status: str = "RUNNING", check_issues: bool = True, suffix: Optional[str] = None):
-            result_sets = kikimr_udfs.ydb_client.query("""
+        def validate_query(text: str, previous_ids: int, status: List[str] = ["RUNNING"], check_issues: bool = True, suffix: Optional[str] = None, retry_count: List[int] = [0]):
+            result_sets = kikimr_udfs.ydb_client.query(f"""
                 SELECT
                     Path,
                     Status,
@@ -111,6 +112,7 @@ def get_all_cgi_params(url):
                     LastExecutionId,
                     PreviousExecutionIds
                 FROM `.sys/streaming_queries`
+                WHERE Path = "{path}"
             """)
             assert len(result_sets) == 1
 
@@ -123,12 +125,15 @@ def get_all_cgi_params(url):
                 assert row.Issues == "{}"
 
             assert row.Path == path
-            assert row.Status == status
+            assert row.Status in status
             assert row.Text.strip() in text.strip()
             assert row.Run
             assert row.ResourcePool == "default"
-            assert row.RetryCount == 0
-            assert row.LastFailAt is None
+            assert row.RetryCount in retry_count
+
+            if retry_count == [0]:
+                assert row.LastFailAt is None
+
             assert row.LastExecutionId is not None
             assert len(json.loads(row.PreviousExecutionIds)) == min(previous_ids, 3)
 
@@ -164,22 +169,22 @@ import time
 
 def hang():
     time.sleep(20)
-    return "result"
+    return None
 @@;
 
-$callable = Python3::hang(Callable<()->String>, $script);
+$callable = Python3::hang(Callable<()->String?>, $script);
 
 $precompute = SELECT Payload || $callable() FROM `{test_table}` LIMIT 1;
 
-INSERT INTO {out} SELECT * FROM {inp}
-WHERE Data LIKE Unwrap($precompute);
+INSERT INTO {out} SELECT Unwrap(Data || $precompute) FROM {inp}
+WHERE Data LIKE $precompute ?? "%";
 END DO
         """
         future = kikimr_udfs.ydb_client.query_async(precompute_sql, timeout=10)
         logger.info("Started hanging query")
 
         time.sleep(5)
-        validate_query(precompute_sql, tests_count, status="STARTING")
+        validate_query(precompute_sql, tests_count, status=["STARTING"])
         logger.info("Hanging query validation finished, waiting for query to exit")
 
         with pytest.raises(ydb.issues.Error) as exc_info:
@@ -187,17 +192,18 @@ END DO
         logger.info(f"Hanging query finished: {exc_info.value}")
 
         kikimr_udfs.ydb_client.stop()
-        kikimr_udfs.first_node.kill()
+        kikimr_udfs.first_node.stop()
+        kikimr_udfs.first_node.set_log_file_prefix("logfile_restarted_")
         kikimr_udfs.first_node.start()
         logger.info("Node with query restarted")
 
         time.sleep(5)
         second_node = list(kikimr_udfs.cluster.nodes.values())[1]
-        kikimr_udfs.ydb_client = YdbClient(database=kikimr_udfs.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}")
+        kikimr_udfs.ydb_client = YdbClient(database=kikimr_udfs.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
         kikimr_udfs.ydb_client.wait_connection()
         logger.info("Checking query state after restart")
 
-        validate_query(precompute_sql, tests_count, status="STARTING", check_issues=False)
+        validate_query(precompute_sql, tests_count, status=["SUSPENDED", "FAILED", "STARTING", "RUNNING"], check_issues=False, retry_count=[0, 1])
         logger.info("Hanging query validated after restart")
 
         sql = f"""

@@ -40,7 +40,7 @@ public:
                                                NYql::TAstNode::NewList({}, pool,
                                                                        NYql::TAstNode::NewLiteralAtom({}, TStringBuf("return"), pool), parsedType));
         NYql::TExprNode::TPtr exprRoot;
-        if (!CompileExpr(*astRoot, exprRoot, *exprCtxPtr, nullptr, nullptr)) {
+        if (!CompileExpr(*astRoot, exprRoot, *exprCtxPtr, /*resolver=*/nullptr, /*urlListerManager=*/nullptr)) {
             UdfTerminate(exprCtxPtr->IssueManager.GetIssues().ToString().data());
         }
 

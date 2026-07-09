@@ -4,6 +4,7 @@ PEERDIR(
     contrib/libs/apache/arrow
     library/cpp/json/writer
     ydb/library/actors/core
+    ydb/library/formats/arrow/protos
     yql/essentials/types/binary_json
 )
 

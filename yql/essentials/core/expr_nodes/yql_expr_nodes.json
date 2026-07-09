@@ -52,6 +52,20 @@
             "ListBase": "TCoIndex"
         },
         {
+            "Name": "TCoStatistics",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 2, "Name": "Types", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TCoStatisticsList",
+            "ListBase": "TCoStatistics"
+        },
+        {
             "Name": "TCoChangefeed",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},

@@ -12,6 +12,7 @@ import "yt_proto/yt/core/misc/proto/hyperloglog.proto";
 import "yt_proto/yt/core/rpc/proto/rpc.proto";
 import "yt_proto/yt/core/ytree/proto/attributes.proto";
 import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
+import "yt_proto/yt/client/api/common/proto/schema.proto";
 import "yt_proto/yt/client/chunk_client/proto/data_statistics.proto";
 import "yt_proto/yt/client/chaos_client/proto/replication_card.proto";
 import "yt_proto/yt/client/hive/proto/timestamp_map.proto";
@@ -19,6 +20,7 @@ import "yt_proto/yt/client/node_tracker_client/proto/node.proto";
 import "yt_proto/yt/client/scheduler/proto/spec_patch.proto";
 import "yt_proto/yt/client/table_client/proto/versioned_io_options.proto";
 import "yt_proto/yt/client/tablet_client/proto/lock_mask.proto";
+import "yt_proto/yt/client/tablet_client/proto/secondary_index.proto";
 import "yt_proto/yt/client/table_chunk_format/proto/chunk_meta.proto";
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1516,38 +1518,6 @@ message TRspCreateObject
 
 ////////////////////////////////////////////////////////////////////////////////
 
-message TColumnSchema
-{
-    required string name = 1;
-    optional string stable_name = 12;
-
-    optional int32 type = 2;
-    optional int32 logical_type = 3;
-    optional bytes type_v3 = 11; // YSON representation of type_v3
-
-    optional string lock = 4;
-    optional string expression = 5;
-    optional bool materialized = 13;
-    optional string aggregate = 6;
-    optional int32 sort_order = 7;
-    optional string group = 8;
-    optional bool required = 9 [default = false];
-    optional int64 max_inline_hunk_size = 10;
-}
-
-message TDeletedColumn
-{
-    required string stable_name = 1;
-}
-
-message TTableSchema
-{
-    repeated TColumnSchema columns = 1;
-    optional bool strict = 2 [default = true];
-    optional bool unique_keys = 3 [default = false];
-    repeated TDeletedColumn deleted_columns = 5;
-}
-
 message TTabletInfo
 {
     required NYT.NProto.TGuid tablet_id = 1;
@@ -1566,23 +1536,6 @@ message TReplicaInfo
     required int32 mode = 4; // ETableReplicaMode
 }
 
-message TUnfoldedColumns
-{
-    required string table_column = 1;
-    required string index_column = 2;
-}
-
-message TIndexInfo
-{
-    required NYT.NProto.TGuid index_table_id = 1;
-    required int32 index_kind = 2; // NTableClient::ESecondaryIndexKind
-    optional string predicate = 3;
-    optional string unfolded_column = 4;
-    optional int32 index_correspondence = 6; // NTableClient::ESecondaryIndexState
-    optional TTableSchema evaluated_columns_schema = 7;
-    optional TUnfoldedColumns unfolded_columns = 8;
-}
-
 message TReqGetTableMountInfo
 {
     required bytes path = 1; // RichYPath
@@ -1597,7 +1550,7 @@ message TRspGetTableMountInfo
     required NYT.NProto.TGuid upstream_replica_id = 5;
     repeated TReplicaInfo replicas = 6;
     optional bytes physical_path = 7; // YPath
-    repeated TIndexInfo indices = 8;
+    repeated NYT.NTabletClient.NProto.TIndexInfo indices = 8;
     optional int32 tablet_count = 9;
 }
 
@@ -2155,6 +2108,11 @@ message TReqAlterReplicationCard
     optional bool enable_replicated_table_tracker = 3;
     optional NYT.NProto.TGuid replication_card_collocation_id = 4;
     optional bytes collocation_options = 5; // NTabletClient::TReplicationCollocationOptions
+    oneof secondary_index {
+        bytes create_secondary_index = 6;
+        NYT.NProto.TGuid destroy_secondary_index = 7;
+        bytes progress_secondary_index_correspondence = 8;
+    }
 
     optional TMutatingOptions mutating_options = 100;
 }

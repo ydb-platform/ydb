@@ -225,7 +225,7 @@ TTo ConvertTo(const TFrom& value)
 namespace NDetail {
 
 double ConvertYsonStringBufToDouble(const NYson::TYsonStringBuf& yson);
-TString ConvertYsonStringBufToString(const NYson::TYsonStringBuf& yson);
+std::string ConvertYsonStringBufToString(const NYson::TYsonStringBuf& yson);
 
 } // namespace NDetail
 

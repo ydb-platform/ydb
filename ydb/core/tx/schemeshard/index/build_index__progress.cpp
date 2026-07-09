@@ -503,8 +503,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextRowIdSrcP
     auto& op = *modifyScheme.MutableCreateTable();
 
     THashSet<TString> dataColumns(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end());
+    // Index columns are [prefix..., text]; the indexed text/JSON column is the last one. JSON builds carry
+    // no fulltext settings, so the column name must be taken from here rather than the index description.
+    Y_ENSURE(!buildInfo.IndexColumns.empty());
     op = CalcFulltextRowIdSrcImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
         dataColumns,
+        buildInfo.IndexColumns.back(),
         NKikimrSchemeOp::TTableDescription(),
         std::get<NKikimrSchemeOp::TFulltextIndexDescription>(buildInfo.SpecializedIndexDescription));
 
@@ -2519,6 +2523,16 @@ public:
             return true;
         }
 
+        if (!buildInfo.DependencyTxIds.empty()) {
+            TStringBuilder msg;
+            msg << "TTxBuildProgress: " << BuildId << " " << buildInfo.State << ": waiting for dependencies:";
+            for (auto& txId: buildInfo.DependencyTxIds) {
+                msg << " " << txId;
+            }
+            LOG_N(msg);
+            return true;
+        }
+
         switch (buildInfo.State) {
         case TIndexBuildInfo::EState::Invalid:
             Y_ENSURE(false, "Unreachable");
@@ -2688,9 +2702,7 @@ public:
                 buildInfo.ApplyTxDone = false;
 
                 NIceDb::TNiceDb db(txc.DB);
-                Self->PersistBuildIndexApplyTxId(db, buildInfo);
-                Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-                Self->PersistBuildIndexApplyTxDone(db, buildInfo);
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
                 Progress(BuildId);
@@ -2721,9 +2733,7 @@ public:
                 buildInfo.ApplyTxDone = false;
 
                 NIceDb::TNiceDb db(txc.DB);
-                Self->PersistBuildIndexApplyTxId(db, buildInfo);
-                Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-                Self->PersistBuildIndexApplyTxDone(db, buildInfo);
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
                 Progress(BuildId);
@@ -2766,9 +2776,7 @@ public:
                 buildInfo.ApplyTxDone = false;
 
                 NIceDb::TNiceDb db(txc.DB);
-                Self->PersistBuildIndexApplyTxId(db, buildInfo);
-                Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-                Self->PersistBuildIndexApplyTxDone(db, buildInfo);
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
                 Progress(BuildId);
@@ -2789,9 +2797,7 @@ public:
                 buildInfo.ApplyTxDone = false;
 
                 NIceDb::TNiceDb db(txc.DB);
-                Self->PersistBuildIndexApplyTxId(db, buildInfo);
-                Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-                Self->PersistBuildIndexApplyTxDone(db, buildInfo);
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
                 Progress(BuildId);
@@ -2811,9 +2817,7 @@ public:
                 buildInfo.ApplyTxDone = false;
 
                 NIceDb::TNiceDb db(txc.DB);
-                Self->PersistBuildIndexApplyTxId(db, buildInfo);
-                Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-                Self->PersistBuildIndexApplyTxDone(db, buildInfo);
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
                 Progress(BuildId);
@@ -3753,6 +3757,23 @@ public:
         const auto txId = CompletedTxId;
 
         const auto* buildIdPtr = Self->TxIdToIndexBuilds.FindPtr(txId);
+
+        if (Self->TxIdToDependentIndexBuild.contains(txId)) {
+            THashSet<TIndexBuildId> deps = std::move(Self->TxIdToDependentIndexBuild.at(txId));
+            Self->TxIdToDependentIndexBuild.erase(txId);
+            for (auto& dependentBuildId: deps) {
+                LOG_N("TTxReply txId: " << txId << " : trying to resume dependent index build " << dependentBuildId);
+                if (Self->IndexBuilds.contains(dependentBuildId)) {
+                    auto& buildInfo = *Self->IndexBuilds.at(dependentBuildId);
+                    buildInfo.DependencyTxIds.erase(txId);
+                    Progress(dependentBuildId);
+                }
+            }
+            if (!buildIdPtr) {
+                return true;
+            }
+        }
+
         if (!buildIdPtr) {
             LOG_I("TTxReply : TEvNotifyTxCompletionResult superfluous message"
                 << ", txId: " << txId
@@ -3776,7 +3797,7 @@ public:
             Y_ENSURE(txId == buildInfo.LockTxId);
 
             buildInfo.LockTxDone = true;
-            Self->PersistBuildIndexLockTxDone(db, buildInfo);
+            Self->PersistBuildIndexLockTx(db, buildInfo);
             break;
         }
         case TIndexBuildInfo::EState::AlterMainTable:
@@ -3784,7 +3805,7 @@ public:
             Y_ENSURE(txId == buildInfo.AlterMainTableTxId);
 
             buildInfo.AlterMainTableTxDone = true;
-            Self->PersistBuildIndexAlterMainTableTxDone(db, buildInfo);
+            Self->PersistBuildIndexAlterMainTableTx(db, buildInfo);
             break;
         }
         case TIndexBuildInfo::EState::CreateBuildSequence:
@@ -3792,7 +3813,7 @@ public:
             Y_ENSURE(txId == buildInfo.CreateBuildSequenceTxId);
 
             buildInfo.CreateBuildSequenceTxDone = true;
-            Self->PersistBuildIndexCreateBuildSequenceTxDone(db, buildInfo);
+            Self->PersistBuildIndexCreateBuildSequenceTx(db, buildInfo);
             break;
         }
         case TIndexBuildInfo::EState::Initiating:
@@ -3800,7 +3821,7 @@ public:
             Y_ENSURE(txId == buildInfo.InitiateTxId);
 
             buildInfo.InitiateTxDone = true;
-            Self->PersistBuildIndexInitiateTxDone(db, buildInfo);
+            Self->PersistBuildIndexInitiateTx(db, buildInfo);
             break;
         }
         case TIndexBuildInfo::EState::Cancellation_DroppingColumns:
@@ -3809,7 +3830,7 @@ public:
             Y_ENSURE(txId == buildInfo.DropColumnsTxId);
 
             buildInfo.DropColumnsTxDone = true;
-            Self->PersistBuildIndexDropColumnsTxDone(db, buildInfo);
+            Self->PersistBuildIndexDropColumnsTx(db, buildInfo);
             break;
         }
         case TIndexBuildInfo::EState::DropBuild:
@@ -3824,7 +3845,7 @@ public:
             Y_ENSURE(txId == buildInfo.ApplyTxId, state);
 
             buildInfo.ApplyTxDone = true;
-            Self->PersistBuildIndexApplyTxDone(db, buildInfo);
+            Self->PersistBuildIndexApplyTx(db, buildInfo);
             break;
         }
         case TIndexBuildInfo::EState::Unlocking:
@@ -3834,7 +3855,7 @@ public:
             Y_ENSURE(txId == buildInfo.UnlockTxId, state);
 
             buildInfo.UnlockTxDone = true;
-            Self->PersistBuildIndexUnlockTxDone(db, buildInfo);
+            Self->PersistBuildIndexUnlockTx(db, buildInfo);
             break;
         }
         case TIndexBuildInfo::EState::Invalid:
@@ -3937,19 +3958,37 @@ public:
             return true;
         };
 
+        auto shouldRetry = [&]() {
+            if (record.GetStatus() == NKikimrScheme::StatusMultipleModifications) {
+                // most modifications are forbidden during index build, however,
+                // copying the main table without indexes, or at least without the
+                // new unfinished index is allowed. in this case the main table will
+                // have PathStateCopying and we just need to retry our proposal when
+                // copying finishes.
+                auto it = Self->PathsById.find(buildInfo.TablePathId);
+                if (it != Self->PathsById.end() && it->second->PathState == NKikimrSchemeOp::EPathStateCopying) {
+                    auto copyTxId = it->second->LastTxId;
+                    LOG_I("TTxReply : Waiting for txId " << copyTxId << " to retry index build id# " << BuildId);
+                    buildInfo.DependencyTxIds.insert(copyTxId);
+                    Self->TxIdToDependentIndexBuild[copyTxId].insert(buildInfo.Id);
+                    // subscribe to tx notification
+                    Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(copyTxId)));
+                    return true;
+                }
+            }
+            return false;
+        };
+
         auto ifErrorMoveTo = [&] (TIndexBuildInfo::EState to) {
             if (record.GetStatus() == NKikimrScheme::StatusAccepted) {
                 // no op
-            } else if (record.GetStatus() == NKikimrScheme::StatusAlreadyExists) {
-                Y_ENSURE(false, "NEED MORE TESTING");
-                // no op
-            } else {
-                Self->PersistBuildIndexAddIssue(db, buildInfo, TStringBuilder()
-                    << "At " << state << " state got unsuccess propose result"
-                    << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
-                    << ", reason: " << record.GetReason());
-                ChangeState(buildInfo.Id, to);
+                return;
             }
+            Self->PersistBuildIndexAddIssue(db, buildInfo, TStringBuilder()
+                << "At " << state << " state got unsuccess propose result"
+                << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
+                << ", reason: " << record.GetReason());
+            ChangeState(buildInfo.Id, to);
         };
 
         switch (state) {
@@ -3958,7 +3997,7 @@ public:
             Y_ENSURE(txId == buildInfo.LockTxId);
 
             buildInfo.LockTxStatus = record.GetStatus();
-            Self->PersistBuildIndexLockTxStatus(db, buildInfo);
+            Self->PersistBuildIndexLockTx(db, buildInfo);
 
             if (!replyOnCreation()) {
                 return false;
@@ -3969,20 +4008,32 @@ public:
         {
             Y_ENSURE(txId == buildInfo.AlterMainTableTxId);
 
-            buildInfo.AlterMainTableTxStatus = record.GetStatus();
-            Self->PersistBuildIndexAlterMainTableTxStatus(db, buildInfo);
-
-            ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            if (shouldRetry()) {
+                buildInfo.AlterMainTableTxId = InvalidTxId;
+                buildInfo.AlterMainTableTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.AlterMainTableTxDone = false;
+                Self->PersistBuildIndexAlterMainTableTx(db, buildInfo);
+            } else {
+                buildInfo.AlterMainTableTxStatus = record.GetStatus();
+                Self->PersistBuildIndexAlterMainTableTx(db, buildInfo);
+                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            }
             break;
         }
         case TIndexBuildInfo::EState::CreateBuildSequence:
         {
             Y_ENSURE(txId == buildInfo.CreateBuildSequenceTxId);
 
-            buildInfo.CreateBuildSequenceTxStatus = record.GetStatus();
-            Self->PersistBuildIndexCreateBuildSequenceTxStatus(db, buildInfo);
-
-            ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            if (shouldRetry()) {
+                buildInfo.CreateBuildSequenceTxId = InvalidTxId;
+                buildInfo.CreateBuildSequenceTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.CreateBuildSequenceTxDone = false;
+                Self->PersistBuildIndexCreateBuildSequenceTx(db, buildInfo);
+            } else {
+                buildInfo.CreateBuildSequenceTxStatus = record.GetStatus();
+                Self->PersistBuildIndexCreateBuildSequenceTx(db, buildInfo);
+                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            }
             break;
         }
         case TIndexBuildInfo::EState::Initiating:
@@ -3990,7 +4041,7 @@ public:
             Y_ENSURE(txId == buildInfo.InitiateTxId);
 
             buildInfo.InitiateTxStatus = record.GetStatus();
-            Self->PersistBuildIndexInitiateTxStatus(db, buildInfo);
+            Self->PersistBuildIndexInitiateTx(db, buildInfo);
 
             if (buildInfo.IsBuildColumns()) {
                 ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_DroppingColumns);
@@ -4007,31 +4058,43 @@ public:
         {
             Y_ENSURE(txId == buildInfo.ApplyTxId);
 
-            if (record.GetStatus() != NKikimrScheme::StatusAccepted &&
-                record.GetStatus() != NKikimrScheme::StatusAlreadyExists) {
-                // Otherwise we won't cancel the index build correctly
-                buildInfo.ApplyTxId = {};
+            if (shouldRetry()) {
+                buildInfo.ApplyTxId = InvalidTxId;
                 buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
                 buildInfo.ApplyTxDone = false;
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
             } else {
-                buildInfo.ApplyTxStatus = record.GetStatus();
+                if (record.GetStatus() != NKikimrScheme::StatusAccepted &&
+                    record.GetStatus() != NKikimrScheme::StatusAlreadyExists) {
+                    // Otherwise we won't cancel the index build correctly
+                    buildInfo.ApplyTxId = {};
+                    buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+                    buildInfo.ApplyTxDone = false;
+                } else {
+                    buildInfo.ApplyTxStatus = record.GetStatus();
+                }
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
+                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Applying);
             }
-            Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-
-            ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Applying);
             break;
         }
         case TIndexBuildInfo::EState::Applying:
         {
             Y_ENSURE(txId == buildInfo.ApplyTxId);
 
-            buildInfo.ApplyTxStatus = record.GetStatus();
-            Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-
-            if (buildInfo.IsBuildColumns()) {
-                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_DroppingColumns);
+            if (shouldRetry()) {
+                buildInfo.ApplyTxId = InvalidTxId;
+                buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.ApplyTxDone = false;
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
             } else {
-                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+                buildInfo.ApplyTxStatus = record.GetStatus();
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
+                if (buildInfo.IsBuildColumns()) {
+                    ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_DroppingColumns);
+                } else {
+                    ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+                }
             }
             break;
         }
@@ -4039,23 +4102,35 @@ public:
         {
             Y_ENSURE(txId == buildInfo.ApplyTxId);
 
-            buildInfo.ApplyTxStatus = record.GetStatus();
-            Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-
-            ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            if (shouldRetry()) {
+                buildInfo.ApplyTxId = InvalidTxId;
+                buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.ApplyTxDone = false;
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
+            } else {
+                buildInfo.ApplyTxStatus = record.GetStatus();
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
+                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            }
             break;
         }
         case TIndexBuildInfo::EState::Unlocking:
         {
             Y_ENSURE(txId == buildInfo.UnlockTxId);
 
-            buildInfo.UnlockTxStatus = record.GetStatus();
-            Self->PersistBuildIndexUnlockTxStatus(db, buildInfo);
-
-            if (buildInfo.IsBuildColumns()) {
-                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_DroppingColumns);
+            if (shouldRetry()) {
+                buildInfo.UnlockTxId = InvalidTxId;
+                buildInfo.UnlockTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.UnlockTxDone = false;
+                Self->PersistBuildIndexUnlockTx(db, buildInfo);
             } else {
-                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+                buildInfo.UnlockTxStatus = record.GetStatus();
+                Self->PersistBuildIndexUnlockTx(db, buildInfo);
+                if (buildInfo.IsBuildColumns()) {
+                    ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_DroppingColumns);
+                } else {
+                    ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+                }
             }
             break;
         }
@@ -4063,24 +4138,36 @@ public:
         {
             Y_ENSURE(txId == buildInfo.DropColumnsTxId);
 
-            buildInfo.DropColumnsTxStatus = record.GetStatus();
-            Self->PersistBuildIndexDropColumnsTxStatus(db, buildInfo);
-
-            ifErrorMoveTo(TIndexBuildInfo::EState::Cancellation_Applying);
+            if (shouldRetry()) {
+                buildInfo.DropColumnsTxId = InvalidTxId;
+                buildInfo.DropColumnsTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.DropColumnsTxDone = false;
+                Self->PersistBuildIndexDropColumnsTx(db, buildInfo);
+            } else {
+                buildInfo.DropColumnsTxStatus = record.GetStatus();
+                Self->PersistBuildIndexDropColumnsTx(db, buildInfo);
+                ifErrorMoveTo(TIndexBuildInfo::EState::Cancellation_Applying);
+            }
             break;
         }
         case TIndexBuildInfo::EState::Rejection_DroppingColumns:
         {
             Y_ENSURE(txId == buildInfo.DropColumnsTxId);
 
-            buildInfo.DropColumnsTxStatus = record.GetStatus();
-            Self->PersistBuildIndexDropColumnsTxStatus(db, buildInfo);
-
-            auto notApplied = !buildInfo.ApplyTxDone && buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess;
-            if (buildInfo.InitiateTxDone && notApplied) {
-                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Applying);
+            if (shouldRetry()) {
+                buildInfo.DropColumnsTxId = InvalidTxId;
+                buildInfo.DropColumnsTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.DropColumnsTxDone = false;
+                Self->PersistBuildIndexDropColumnsTx(db, buildInfo);
             } else {
-                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+                buildInfo.DropColumnsTxStatus = record.GetStatus();
+                Self->PersistBuildIndexDropColumnsTx(db, buildInfo);
+                auto notApplied = !buildInfo.ApplyTxDone && buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess;
+                if (buildInfo.InitiateTxDone && notApplied) {
+                    ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Applying);
+                } else {
+                    ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+                }
             }
             break;
         }
@@ -4088,30 +4175,48 @@ public:
         {
             Y_ENSURE(txId == buildInfo.ApplyTxId);
 
-            buildInfo.ApplyTxStatus = record.GetStatus();
-            Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-
-            ifErrorMoveTo(TIndexBuildInfo::EState::Cancellation_Unlocking);
+            if (shouldRetry()) {
+                buildInfo.ApplyTxId = InvalidTxId;
+                buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.ApplyTxDone = false;
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
+            } else {
+                buildInfo.ApplyTxStatus = record.GetStatus();
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
+                ifErrorMoveTo(TIndexBuildInfo::EState::Cancellation_Unlocking);
+            }
             break;
         }
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         {
             Y_ENSURE(txId == buildInfo.UnlockTxId);
 
-            buildInfo.UnlockTxStatus = record.GetStatus();
-            Self->PersistBuildIndexUnlockTxStatus(db, buildInfo);
-
-            ifErrorMoveTo(TIndexBuildInfo::EState::Cancelled);
+            if (shouldRetry()) {
+                buildInfo.UnlockTxId = InvalidTxId;
+                buildInfo.UnlockTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.UnlockTxDone = false;
+                Self->PersistBuildIndexUnlockTx(db, buildInfo);
+            } else {
+                buildInfo.UnlockTxStatus = record.GetStatus();
+                Self->PersistBuildIndexUnlockTx(db, buildInfo);
+                ifErrorMoveTo(TIndexBuildInfo::EState::Cancelled);
+            }
             break;
         }
         case TIndexBuildInfo::EState::Rejection_Unlocking:
         {
             Y_ENSURE(txId == buildInfo.UnlockTxId);
 
-            buildInfo.UnlockTxStatus = record.GetStatus();
-            Self->PersistBuildIndexUnlockTxStatus(db, buildInfo);
-
-            ifErrorMoveTo(TIndexBuildInfo::EState::Rejected);
+            if (shouldRetry()) {
+                buildInfo.UnlockTxId = InvalidTxId;
+                buildInfo.UnlockTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.UnlockTxDone = false;
+                Self->PersistBuildIndexUnlockTx(db, buildInfo);
+            } else {
+                buildInfo.UnlockTxStatus = record.GetStatus();
+                Self->PersistBuildIndexUnlockTx(db, buildInfo);
+                ifErrorMoveTo(TIndexBuildInfo::EState::Rejected);
+            }
             break;
         }
         case TIndexBuildInfo::EState::Invalid:
@@ -4167,25 +4272,25 @@ public:
         case TIndexBuildInfo::EState::AlterMainTable:
             if (!buildInfo.AlterMainTableTxId) {
                 buildInfo.AlterMainTableTxId = txId;
-                Self->PersistBuildIndexAlterMainTableTxId(db, buildInfo);
+                Self->PersistBuildIndexAlterMainTableTx(db, buildInfo);
             }
             break;
         case TIndexBuildInfo::EState::CreateBuildSequence:
             if (!buildInfo.CreateBuildSequenceTxId) {
                 buildInfo.CreateBuildSequenceTxId = txId;
-                Self->PersistBuildIndexCreateBuildSequenceTxId(db, buildInfo);
+                Self->PersistBuildIndexCreateBuildSequenceTx(db, buildInfo);
             }
             break;
         case TIndexBuildInfo::EState::Locking:
             if (!buildInfo.LockTxId) {
                 buildInfo.LockTxId = txId;
-                Self->PersistBuildIndexLockTxId(db, buildInfo);
+                Self->PersistBuildIndexLockTx(db, buildInfo);
             }
             break;
         case TIndexBuildInfo::EState::Initiating:
             if (!buildInfo.InitiateTxId) {
                 buildInfo.InitiateTxId = txId;
-                Self->PersistBuildIndexInitiateTxId(db, buildInfo);
+                Self->PersistBuildIndexInitiateTx(db, buildInfo);
             }
             break;
         case TIndexBuildInfo::EState::ProvisioningRowIdColumn:
@@ -4217,14 +4322,14 @@ public:
         case TIndexBuildInfo::EState::Rejection_Applying:
             if (!buildInfo.ApplyTxId) {
                 buildInfo.ApplyTxId = txId;
-                Self->PersistBuildIndexApplyTxId(db, buildInfo);
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
             }
             break;
         case TIndexBuildInfo::EState::Cancellation_DroppingColumns:
         case TIndexBuildInfo::EState::Rejection_DroppingColumns:
             if (!buildInfo.DropColumnsTxId) {
                 buildInfo.DropColumnsTxId = txId;
-                Self->PersistBuildIndexDropColumnsTxId(db, buildInfo);
+                Self->PersistBuildIndexDropColumnsTx(db, buildInfo);
             }
             break;
         case TIndexBuildInfo::EState::Unlocking:
@@ -4232,7 +4337,7 @@ public:
         case TIndexBuildInfo::EState::Rejection_Unlocking:
             if (!buildInfo.UnlockTxId) {
                 buildInfo.UnlockTxId = txId;
-                Self->PersistBuildIndexUnlockTxId(db, buildInfo);
+                Self->PersistBuildIndexUnlockTx(db, buildInfo);
             }
             break;
         case TIndexBuildInfo::EState::Invalid:

@@ -287,7 +287,7 @@ namespace NKikimr::NSqsTopic::V1 {
             if constexpr (!std::is_same_v<Ydb::Ymq::V1::SendMessageResult, std::remove_cvref_t<decltype(result)>>) {
                 result.set_id(item.BatchId);
             }
-            result.set_sequence_number("0");
+            result.set_sequence_number(ToString(item.MessageId->Offset));
 
             Y_ASSERT(result.IsInitialized());
         }

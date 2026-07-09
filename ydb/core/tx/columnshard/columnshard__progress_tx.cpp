@@ -3,8 +3,8 @@
 
 #include <ydb/core/tx/columnshard/operations/write.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_TX
 

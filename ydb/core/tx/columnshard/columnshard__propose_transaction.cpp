@@ -2,9 +2,9 @@
 #include "columnshard_private_events.h"
 #include "columnshard_schema.h"
 
+#include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/dq.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 

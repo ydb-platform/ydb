@@ -14,12 +14,12 @@
 #include <ydb/core/wrappers/s3_wrapper.h>
 
 #include <ydb/library/actors/core/av_bootstrapped.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/metadata/service.h>
 
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/hostname.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 

@@ -4,9 +4,9 @@
 #include <ydb/core/formats/arrow/splitter/scheme_info.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap {
 

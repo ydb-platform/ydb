@@ -4,6 +4,7 @@
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/subscriber/events/tx_completed/event.h>
+
 #include <ydb/library/actors/struct_log/log_stack.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_TX

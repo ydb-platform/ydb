@@ -3,6 +3,7 @@
 #include "configs_dispatcher.h"
 #include "console_audit.h"
 #include "console_configs_provider.h"
+#include "console_tenants_manager.h"
 #include "console_impl.h"
 #include "http.h"
 
@@ -248,7 +249,27 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
                 ythrow yexception() << errors.front();
             }
 
-            // TODO: validate databaseConfig.AllowedLabels & databaseConfig.Selectors too
+            if (!databaseConfig.Selectors.empty() || !databaseConfig.AllowedLabels.empty()) {
+                if (!IsDatabaseConfigSelectorsAllowed(opCtx.TargetDatabase)) {
+                    ythrow yexception()
+                        << "Database config 'selector_config' and 'allowed_labels' are not allowed for database '"
+                        << opCtx.TargetDatabase << "'";
+                }
+
+                if (databaseConfig.AllowedLabels.contains("tenant")) {
+                    ythrow yexception()
+                        << "'tenant' label is forbidden (not applicable) for database configs";
+                }
+
+                for (const auto& selector : databaseConfig.Selectors) {
+                    if (selector.Selector.In.contains("tenant")
+                        || selector.Selector.NotIn.contains("tenant"))
+                    {
+                        ythrow yexception()
+                            << "'tenant' label is forbidden (not applicable) for database configs";
+                    }
+                }
+            }
 
             auto tree = NFyaml::TDocument::Parse(MainYamlConfig);
             NYamlConfig::AppendDatabaseConfig(tree, databaseTree);
@@ -286,6 +307,29 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
         opCtx.Error = e.what();
     }
 }
+
+
+bool TConfigsManager::IsDatabaseConfigSelectorsAllowed(const TString& database) const
+{
+    auto* tm = Self.TenantsManager;
+    auto tenant = tm ? tm->GetTenant(database) : nullptr;
+
+    if (!tenant) {
+        return false;
+    }
+
+    for (const auto& attr : tenant->Attributes.GetUserAttributes()) {
+        if (attr.GetKey() == TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS) {
+            bool value = false;
+            if (TryFromString<bool>(attr.GetValue(), value) && value) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 
 void TConfigsManager::Bootstrap(const TActorContext &ctx)
 {

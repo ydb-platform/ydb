@@ -8,6 +8,15 @@
 
 namespace NYql::NFmr {
 
+// Exposes CheckIsSorted (protected) so the empty-chunkIndexes edge case can be
+// tested directly, without needing to force TParserFragmentListIndex into
+// producing zero row markups for non-empty table content.
+class TTestableSortedWriter: public TFmrTableDataServiceSortedWriter {
+public:
+    using TFmrTableDataServiceSortedWriter::TFmrTableDataServiceSortedWriter;
+    using TFmrTableDataServiceSortedWriter::CheckIsSorted;
+};
+
 const std::vector<TString> TextTableYsonRows = {
     "{\"key\"=\"075\";\"subkey\"=\"1\";\"value\"=\"abc\"};\n",
     "{\"key\"=\"800\";\"subkey\"=\"2\";\"value\"=\"ddd\"};\n",
@@ -156,6 +165,26 @@ Y_UNIT_TEST_SUITE(FmrWriterTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(chunk2Stats.SortedChunkStats.FirstRowKeys["key"].AsInt64(), 75);
         UNIT_ASSERT_VALUES_EQUAL(chunk2Stats.SortedChunkStats.LastRowKeys["key"].AsInt64(), 150);
+    }
+
+    Y_UNIT_TEST(CheckIsSortedWithEmptyChunkIndexesDoesNotUnderflow) {
+        ITableDataService::TPtr tableDataService = MakeLocalTableDataService();
+        TSortingColumns sortingColumns;
+        sortingColumns.Columns = {"key"};
+        sortingColumns.SortOrders = {ESortOrder::Ascending};
+
+        TTestableSortedWriter writer(
+            "tableId",
+            "partId",
+            tableDataService,
+            TString(),
+            TFmrWriterSettings(),
+            sortingColumns
+        );
+
+        // chunkIndexes.size() - 1 underflows to SIZE_MAX for an empty vector;
+        // this must not attempt any out-of-bounds indexing.
+        writer.CheckIsSorted(TStringBuf(), {});
     }
 }
 

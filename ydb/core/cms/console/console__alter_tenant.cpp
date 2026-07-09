@@ -1,6 +1,8 @@
 #include "console_tenants_manager.h"
 #include "console_impl.h"
 
+#include <ydb/core/tx/schemeshard/schemeshard_user_attr_limits.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
 
 namespace NKikimr::NConsole {
@@ -280,12 +282,29 @@ public:
         // Check attributes.
         THashSet<TString> attrNames;
         for (const auto& [key, value] : rec.alter_attributes()) {
+
             if (!key)
                return Error(Ydb::StatusIds::BAD_REQUEST,
                              "Attribute name shouldn't be empty", ctx);
+
+            if (key.size() > NSchemeShard::TUserAttributesLimits::MaxNameLen) {
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                    Sprintf("Key '%s' is too long, max: " PRIu32 ", actual: " PRIu32,
+                        key.data(), NSchemeShard::TUserAttributesLimits::MaxNameLen, key.size()),
+                    ctx);
+            }
+
+            if (value.size() > NSchemeShard::TUserAttributesLimits::MaxValueLen) {
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                    Sprintf("Value for key '%s' is too long, max: " PRIu32 ", actual: " PRIu32,
+                        key.data(), NSchemeShard::TUserAttributesLimits::MaxValueLen, value.size()),
+                    ctx);
+            }
+
             if (attrNames.contains(key))
                 return Error(Ydb::StatusIds::BAD_REQUEST,
                              Sprintf("Multiple attributes with name '%s'", key.data()), ctx);
+
             attrNames.insert(key);
         }
 
@@ -359,6 +378,11 @@ public:
             Self->DbUpdateTenantAlterIdempotencyKey(Tenant, Tenant->AlterIdempotencyKey, txc, ctx);
         }
 
+        // Attributes with empty values are kept forever as tombstones
+        // to self-heal divergence with subdomain if subdomain AlterUserAttributes
+        // request didn't reach SchemeShard (due to Console restart
+        // right after persisting updated Tenant->Attributes in local db
+        // but before sending request into subdomain, etc)
         if (!rec.alter_attributes().empty()) {
             for (const auto& [key, value] : rec.alter_attributes()) {
                 const auto it = attributeMap.find(key);

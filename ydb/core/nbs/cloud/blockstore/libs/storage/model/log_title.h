@@ -22,7 +22,7 @@ public:
 
     struct TVolume
     {
-        ui64 TabletId;
+        ui64 TabletId = 0;
         TString DiskId;
         ui32 Generation = 0;
     };
@@ -37,15 +37,16 @@ public:
     struct TDirectBlockGroup
     {
         TString DiskId;
+        size_t DBGIndex = 0;
         ui64 TabletId = 0;
         ui32 Generation = 0;
-        size_t DirectBlockGroupIndex = 0;
     };
 
     struct TVChunk
     {
         TString DiskId;
-        ui32 VChunkIndex;
+        ui32 DBGIndex = 0;
+        ui32 VChunkIndex = 0;
     };
 
     struct TDDiskDataCopier

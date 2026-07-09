@@ -10,6 +10,7 @@ message TKafkaProducerInstanceId {
 };
 
 message TPartitionOperation {
+    // Legacy flat representation (wire/KV backward compatibility). Prefer oneof Op for new code.
     optional uint32 PartitionId = 1;
     optional uint64 CommitOffsetsBegin = 2;
     optional uint64 CommitOffsetsEnd = 3;
@@ -23,13 +24,72 @@ message TPartitionOperation {
     optional bool KafkaTransaction = 11 [default = false];
     optional TKafkaProducerInstanceId KafkaProducerInstanceId = 12;
     optional bool SkipConflictCheck = 13;
+
+    message TReadOp {
+        message TTopicApi {
+            optional string Consumer = 1;
+            optional uint64 CommitOffsetsBegin = 2;
+            optional uint64 CommitOffsetsEnd = 3;
+            optional bool ForceCommit = 4;
+            optional bool KillReadSession = 5;
+            optional bool OnlyCheckCommitedToFinish = 6;
+            optional string ReadSessionId = 7;
+        };
+
+        message TKafkaApi {
+            optional string Consumer = 1;
+            optional uint64 CommitOffsetsEnd = 2;
+        };
+
+        oneof Api {
+            TTopicApi Topic = 1;
+            TKafkaApi Kafka = 2;
+        };
+    };
+
+    message TWriteOp {
+        optional bool SkipConflictCheck = 4;
+
+        message TTopicApi {
+            optional uint32 SupportivePartition = 1;
+        };
+
+        message TKafkaApi {
+            optional TKafkaProducerInstanceId KafkaProducerInstanceId = 1;
+        };
+
+        oneof Api {
+            TTopicApi Topic = 1;
+            TKafkaApi Kafka = 2;
+        };
+    };
+
+    oneof Op {
+        TReadOp Read = 14;
+        TWriteOp Write = 15;
+    }
 };
 
 message TWriteId {
+    // Legacy flat representation (wire/KV backward compatibility). Prefer oneof Id for new code.
     optional uint64 NodeId = 1;
     optional fixed64 KeyId = 2;
     optional bool KafkaTransaction = 3 [default = false];
     optional TKafkaProducerInstanceId KafkaProducerInstanceId = 4;
+
+    message TTopicApi {
+        optional uint64 NodeId = 1;
+        optional fixed64 KeyId = 2;
+    };
+
+    message TKafkaApi {
+        optional TKafkaProducerInstanceId KafkaProducerInstanceId = 1;
+    };
+
+    oneof Id {
+        TTopicApi TopicApi = 5;
+        TKafkaApi KafkaApi = 6;
+    }
 };
 
 message TDataTransaction {

@@ -59,4 +59,12 @@ NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExterna
 
 NActors::IActor* CreateDescribeResourceIdServiceActor(const std::shared_ptr<NYdb::TDriver>& driver);
 
+NThreading::TFuture<void> AuthorizeServiceAccountUse(
+    const TString& serviceAccount,
+    const TString& token,
+    NActors::TActorSystem* actorSystem
+);
+
+NActors::IActor* CreateAccessServiceActor();
+
 }  // namespace NKikimr::NKqp

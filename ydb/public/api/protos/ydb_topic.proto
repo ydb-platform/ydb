@@ -801,6 +801,66 @@ message CommitOffsetResult {
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ResetOffset
+//
+// Resets committed read positions for a consumer across all partitions of a topic.
+// This is a relatively common administrative operation. It is usually done to allow
+// an application to reprocess data or otherwise to skip existing records.
+//
+// Unlike CommitOffset, which updates progress for a single partition,
+// ResetOffset updates the committed offset in every partition of the topic.
+//
+// All active read sessions for this consumer and topic are restarted after the reset.
+// They continue reading from the new committed positions.
+//
+// Position can be specified as earliest, latest, or as the offset of the first message
+// with written_at greater or equal to the given timestamp.
+
+
+// Reset offset request sent from client to server.
+message ResetOffsetRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Topic path.
+    string path = 2;
+    // Consumer whose committed offsets are reset.
+    string consumer = 3;
+
+    // Reset committed offset to the earliest available position in each partition.
+    // After reset, the next read will start from the first available message in the partition.
+    message Earliest {
+    }
+
+    // Reset committed offset to the latest position in each partition.
+    // After reset, the consumer will only receive messages written after the reset.
+    message Latest {
+    }
+
+    // Reset committed offset to the offset of the message with the nearest written_at
+    // that is greater or equal to the given timestamp.
+    message FromWrittenAt {
+        google.protobuf.Timestamp written_at = 1;
+    }
+
+    // Target position for the committed offset in each partition of the topic.
+    oneof position {
+        Earliest earliest = 4;
+        Latest latest = 5;
+        FromWrittenAt from_written_at = 6;
+    }
+}
+
+// Reset offset response sent from server to client.
+message ResetOffsetResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+// Reset offset result message inside ResetOffsetResponse.operation.
+message ResetOffsetResult {
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Control messages
 
 

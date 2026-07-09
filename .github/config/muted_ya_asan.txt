@@ -455,6 +455,7 @@ ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery14
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery15
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery16
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery17
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery18
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery19
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery20
 ydb/core/kqp/executer_actor/ut unittest.sole chunk
@@ -676,6 +677,7 @@ ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRe
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.TypedProducer_BasicWrite
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePartitionPermissions
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopics_2_Query
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/bulk_upsert BulkUpsert.RetryOverheadOnHappyPath
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/0
@@ -683,7 +685,9 @@ ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTa
 ydb/public/sdk/cpp/tests/unit/client/driver CppGrpcClientSimpleTest.WithoutDiscoveryClientLevel
 ydb/public/sdk/cpp/tests/unit/client/driver CppGrpcClientSimpleTest.WithoutDiscoveryDriverLevel
 ydb/public/sdk/cpp/tests/unit/client/table TableTest.AlterTableDroppedMetricsSettings
+ydb/public/sdk/cpp/tests/unit/client/table TableTest.AlterTableNoMetricsSettings
 ydb/public/sdk/cpp/tests/unit/client/table TableTest.AlterTableSetMetricsSettings
+ydb/public/sdk/cpp/tests/unit/client/table TableTest.CreateTableNoMetricsSettings
 ydb/public/sdk/cpp/tests/unit/client/table TableTest.CreateTableWithMetricsSettings
 ydb/services/cms/ut TGRpcCmsTest.AlterRemoveTest
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS

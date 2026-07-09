@@ -5993,6 +5993,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSetColumnConstraint::TEvCreateRequest, Handle);
         HFuncTraced(TEvSetColumnConstraint::TEvGetRequest, Handle);
         HFuncTraced(TEvSetColumnConstraint::TEvListRequest, Handle);
+        HFuncTraced(TEvSetColumnConstraint::TEvForgetRequest, Handle);
         HFuncTraced(TEvDataShard::TEvValidateRowConditionResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvCreateRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvGetRequest, Handle);
@@ -7979,7 +7980,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
         Execute(CreateTxProgressIncrementalRestore(txId, ctx), ctx);
         executed = true;
     }
-    if (TxIdToIndexBuilds.contains(txId)) {
+    if (TxIdToIndexBuilds.contains(txId) || TxIdToDependentIndexBuild.contains(txId)) {
         Execute(CreateTxReply(txId), ctx);
         executed = true;
     }

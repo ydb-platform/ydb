@@ -1585,4 +1585,262 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
     }
+
+    Y_UNIT_TEST(ForgetNonExistentOperation) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        TString root = "/MyRoot";
+
+        auto forgetResponse = TestForgetSetColumnConstraint(
+            runtime, ++txId, root, 999999, Ydb::StatusIds::NOT_FOUND);
+
+        Cerr << "FORGET RESPONSE: " << forgetResponse.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(forgetResponse.GetStatus(), Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT(forgetResponse.IssuesSize() > 0);
+    }
+
+    Y_UNIT_TEST(ForgetOperationInProgress) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        THolder<IEventHandle> delayedValidateRequest;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!delayedValidateRequest && ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
+                delayedValidateRequest.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        ui64 setConstraintTxId = ++txId;
+        auto createResponse = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        UNIT_ASSERT_VALUES_EQUAL(createResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+        ui64 operationId = setConstraintTxId;
+
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&delayedValidateRequest](IEventHandle&) -> bool {
+                return bool(delayedValidateRequest);
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        UNIT_ASSERT_C(delayedValidateRequest, "Failed to intercept TEvValidateRowConditionRequest");
+
+        auto forgetResponse = TestForgetSetColumnConstraint(
+            runtime, ++txId, root, operationId, Ydb::StatusIds::PRECONDITION_FAILED);
+
+        Cerr << "FORGET IN PROGRESS RESPONSE: " << forgetResponse.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(forgetResponse.GetStatus(), Ydb::StatusIds::PRECONDITION_FAILED);
+        UNIT_ASSERT(forgetResponse.IssuesSize() > 0);
+
+        runtime.SetObserverFunc(prevObserver);
+        runtime.Send(delayedValidateRequest.Release(), 0, true);
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+    }
+
+    Y_UNIT_TEST(ForgetCompletedOperation) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 setConstraintTxId = ++txId;
+        auto createResponse = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        UNIT_ASSERT_VALUES_EQUAL(createResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+        ui64 operationId = setConstraintTxId;
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+
+        // check that operation exists
+        DoGetRequest(operationId, runtime, root, Ydb::StatusIds::SUCCESS);
+
+        auto forgetResponse = TestForgetSetColumnConstraint(
+            runtime, ++txId, root, operationId, Ydb::StatusIds::SUCCESS);
+
+        Cerr << "FORGET COMPLETED RESPONSE: " << forgetResponse.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(forgetResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+
+        DoGetRequest(operationId, runtime, root, Ydb::StatusIds::NOT_FOUND);
+
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+    }
+
+    Y_UNIT_TEST(ForgetOperationPersistsAfterReboot) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 setConstraintTxId = ++txId;
+        auto createResponse = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        UNIT_ASSERT_VALUES_EQUAL(createResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+        ui64 operationId = setConstraintTxId;
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        auto forgetResponse = TestForgetSetColumnConstraint(
+            runtime, ++txId, root, operationId, Ydb::StatusIds::SUCCESS);
+
+        UNIT_ASSERT_VALUES_EQUAL(forgetResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        DoGetRequest(operationId, runtime, root, Ydb::StatusIds::NOT_FOUND);
+
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+    }
+
+    Y_UNIT_TEST(ForgetOperationTwice) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 setConstraintTxId = ++txId;
+        auto createResponse = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        UNIT_ASSERT_VALUES_EQUAL(createResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+        ui64 operationId = setConstraintTxId;
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        auto forgetResponse1 = TestForgetSetColumnConstraint(
+            runtime, ++txId, root, operationId, Ydb::StatusIds::SUCCESS);
+
+        UNIT_ASSERT_VALUES_EQUAL(forgetResponse1.GetStatus(), Ydb::StatusIds::SUCCESS);
+
+        auto forgetResponse2 = TestForgetSetColumnConstraint(
+            runtime, ++txId, root, operationId, Ydb::StatusIds::NOT_FOUND);
+
+        UNIT_ASSERT_VALUES_EQUAL(forgetResponse2.GetStatus(), Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT(forgetResponse2.IssuesSize() > 0);
+    }
+
+    Y_UNIT_TEST(ForgetOperationWrongDatabase) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 setConstraintTxId = ++txId;
+        auto createResponse = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        UNIT_ASSERT_VALUES_EQUAL(createResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+        ui64 operationId = setConstraintTxId;
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        auto forgetResponse = TestForgetSetColumnConstraint(
+            runtime, ++txId, "/WrongRoot", operationId, Ydb::StatusIds::NOT_FOUND);
+
+        UNIT_ASSERT_VALUES_EQUAL(forgetResponse.GetStatus(), Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT(forgetResponse.IssuesSize() > 0);
+    }
 } // Y_UNIT_TEST_SUITE(SetNotNullTest)

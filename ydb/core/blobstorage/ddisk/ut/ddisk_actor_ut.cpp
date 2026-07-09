@@ -3281,6 +3281,214 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         UNIT_ASSERT_VALUES_EQUAL(GetPBAllocatedChunks(ctx, disk), PersistentBufferInitChunks);
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Integration tests for proactive chunk deallocation
+    // (TPersistentBufferFormat::DeallocateFreeSpaceThresholdPercent /
+    //  DeallocateThresholdSeconds).
+    //
+    // ProcessDeallocatePersistentBufferChunk (called after every Free()) locks
+    // owned chunks round-robin and, once a locked chunk turns out to be fully
+    // free, sends TEvPrivate::TEvDeallocatePersistentBufferChunk to the DDisk
+    // actor, which writes a chunk-map log record and issues NPDisk::TEvChunkForget
+    // for the physical chunk.
+    //
+    // Shared setup: reuse MakeProactiveAllocationFormat / DoPBWriteRoundTrip /
+    // GetPBFreeSectors from the proactive-allocation tests above. 12 writes with
+    // PreallocateFreeSpaceThresholdPercent = 99 leave the buffer with 5 owned
+    // chunks (4 original + 1 proactively allocated), where the 5th chunk (index
+    // PersistentBufferInitChunks) is fully free -- exactly the state needed to
+    // exercise deallocation.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    NDDisk::TPersistentBufferFormat MakeDeallocationFormat(ui32 deallocateFreeSpaceThresholdPercent, ui32 deallocateThresholdSeconds) {
+        NDDisk::TPersistentBufferFormat fmt = MakeProactiveAllocationFormat(256 /*maxChunks*/, 99 /*preallocateFreeSpaceThresholdPercent*/);
+        fmt.DeallocateFreeSpaceThresholdPercent = deallocateFreeSpaceThresholdPercent;
+        fmt.DeallocateThresholdSeconds = deallocateThresholdSeconds;
+        return fmt;
+    }
+
+    // Drives 12 writes (as in PersistentBufferProactiveChunkAllocation) to reach
+    // PersistentBufferInitChunks + 1 owned chunks, with the extra (last) chunk
+    // fully free. Returns the physical chunk id of that extra chunk.
+    ui32 ReachFiveChunksWithLastFullyFree(TTestContext& ctx, const TDiskHandle& disk, const NDDisk::TQueryCredentials& creds) {
+        for (ui32 i = 0; i < 11; ++i) {
+            DoPBWriteRoundTrip(ctx, disk, creds, /*lsn=*/10 + i, 'A' + i);
+        }
+        {
+            const ui32 writeSize = BlockSize * 128;
+            const NDDisk::TBlockSelector selector{3, 0, writeSize};
+            auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
+                creds, selector, /*lsn=*/21, NDDisk::TWriteInstruction(0));
+            write->AddPayload(TRope(MakeData('M', writeSize)));
+            SendToDDisk(ctx, disk.PBServiceId, write.release());
+
+            auto pbWriteRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+            ctx.SendPDiskResponse(disk, *pbWriteRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+
+            auto log = ctx.WaitPDiskRequest<NPDisk::TEvLog>(disk);
+            auto logReply = std::make_unique<NPDisk::TEvLogResult>(NKikimrProto::OK, 0, "", 0);
+            logReply->Results.emplace_back(log->Get()->Lsn, log->Get()->Cookie);
+            ctx.SendPDiskResponse(disk, *log, logReply.release());
+
+            auto reserve = ctx.WaitPDiskRequest<NPDisk::TEvChunkReserve>(disk);
+            UNIT_ASSERT_VALUES_EQUAL(reserve->Get()->SizeChunks, 1u);
+            auto reserveReply = std::make_unique<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, 0);
+            reserveReply->ChunkIds.push_back(disk.FirstChunkId + PersistentBufferInitChunks + MinChunksReserved);
+            ctx.SendPDiskResponse(disk, *reserve, reserveReply.release());
+
+            auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
+            AssertStatus(writeResult, TReplyStatus::OK);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(GetPBAllocatedChunks(ctx, disk), PersistentBufferInitChunks + 1);
+        return disk.FirstChunkId + PersistentBufferInitChunks; // the proactively allocated (5th) chunk
+    }
+
+    // Erase lsn=10 (the very first write, on the very first owned chunk) via
+    // TEvBatchErasePersistentBuffer with fast erases effectively bypassed
+    // (EnableFastErases = false in the format), so the erase goes through the
+    // plain ErasePersistentBuffer -> ClearPersistentBufferRecords path, which is
+    // the one that calls ProcessDeallocatePersistentBufferChunk().
+    void EraseFirstRecordSlowPath(TTestContext& ctx, const TDiskHandle& disk, const NDDisk::TQueryCredentials& creds) {
+        auto batchErase = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(creds);
+        batchErase->AddErase(/*lsn=*/10, creds.Generation);
+        SendToDDisk(ctx, disk.PBServiceId, batchErase.release());
+
+        auto eraseRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        ctx.SendPDiskResponse(disk, *eraseRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+
+        auto eraseResult = WaitFromDDisk<NDDisk::TEvErasePersistentBufferResult>(ctx);
+        AssertStatus(eraseResult, TReplyStatus::OK);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test: after 12 writes leave a 5th, fully-free chunk and DeallocateFreeSpaceThresholdPercent
+    // is set very low (so the free-space precondition is always true once the buffer can shrink),
+    // erasing a record frees sectors and triggers ProcessDeallocatePersistentBufferChunk, which
+    // round-robins the lock through the owned chunks (starting at chunk 0) until it reaches the
+    // fully-free 5th chunk, then issues TEvPrivate::TEvDeallocatePersistentBufferChunk -> a
+    // persistent-buffer-chunk-map log record -> NPDisk::TEvChunkForget for that physical chunk.
+    //
+    // Covers: ProcessDeallocatePersistentBufferChunk, TPersistentBufferSpaceAllocator::LockNextChunk/
+    //         DeallocateChunk, TDDiskActor::Handle(TEvDeallocatePersistentBufferChunk),
+    //         TDDiskActor::Handle(TEvChunkForgetResult).
+    // ─────────────────────────────────────────────────────────────────────────
+    Y_UNIT_TEST(PersistentBufferProactiveDeallocationAfterErase) {
+        TTestContext ctx;
+        auto fmt = MakeDeallocationFormat(/*deallocateFreeSpaceThresholdPercent=*/90, /*deallocateThresholdSeconds=*/1);
+        fmt.EnableFastErases = false;
+        const TDiskHandle disk = ctx.CreateDDisk(40, 1, fmt);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.PBServiceId, 90, 1);
+
+        const ui32 extraChunk = ReachFiveChunksWithLastFullyFree(ctx, disk, creds);
+        const ui32 freeSectorsBeforeErase = GetPBFreeSectors(ctx, disk);
+
+        // Erase the very first write (lsn=10, physically on chunk #0): frees 129
+        // sectors and triggers ProcessDeallocatePersistentBufferChunk(). The
+        // free-space precondition is satisfied (5 owned chunks, well above the
+        // 90% threshold), so the allocator starts round-robin locking, beginning
+        // at chunk #0. Chunks 0..3 all still hold occupied sectors from the 12
+        // writes, so each lock attempt fails and reschedules a 1-second wakeup
+        // with forceToNextChunk=true, advancing the lock to the next chunk. Only
+        // the 5th chunk (never written to) is fully free, so the deallocation
+        // succeeds on the 5th lock attempt (chunks 0,1,2,3,4).
+        EraseFirstRecordSlowPath(ctx, disk, creds);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPBFreeSectors(ctx, disk), freeSectorsBeforeErase + 129);
+
+        // Drain the persistent-buffer-chunk-map log record for the deallocation
+        // (the simulated clock advances through the intermediate 1-second wakeup
+        // cycles automatically while waiting for this event).
+        auto log = ctx.WaitPDiskRequest<NPDisk::TEvLog>(disk);
+        auto logReply = std::make_unique<NPDisk::TEvLogResult>(NKikimrProto::OK, 0, "", 0);
+        logReply->Results.emplace_back(log->Get()->Lsn, log->Get()->Cookie);
+        ctx.SendPDiskResponse(disk, *log, logReply.release());
+
+        // The DDisk actor must now ask PDisk to forget exactly the extra chunk.
+        auto forget = ctx.WaitPDiskRequest<NPDisk::TEvChunkForget>(disk);
+        UNIT_ASSERT_VALUES_EQUAL(forget->Get()->ForgetChunks.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(forget->Get()->ForgetChunks[0], extraChunk);
+        ctx.SendPDiskResponse(disk, *forget, new NPDisk::TEvChunkForgetResult(NKikimrProto::OK, 0));
+
+        // The deallocated chunk's capacity (32768 sectors) must be gone from the
+        // free pool: free sectors after deallocation must be exactly
+        // (freeSectorsBeforeErase + 129 [reclaimed by the erase] - 32768 [chunk
+        // capacity removed]).
+        constexpr ui32 SectorsPerChunk = TTestContext::ChunkSize / BlockSize;
+        UNIT_ASSERT_VALUES_EQUAL(GetPBFreeSectors(ctx, disk),
+            freeSectorsBeforeErase + 129 - SectorsPerChunk);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test: DeallocateFreeSpaceThresholdPercent = 100 disables proactive
+    // deallocation completely (freeSpace * 100 > ownedChunks * SectorInChunk * 100
+    // is never true), even though a 5th, fully-free chunk exists and an erase
+    // frees additional sectors.
+    //
+    // Covers: ProcessDeallocatePersistentBufferChunk -> canDeallocate threshold
+    //         sub-condition.
+    // ─────────────────────────────────────────────────────────────────────────
+    Y_UNIT_TEST(PersistentBufferDeallocationDisabledByFullThreshold) {
+        TTestContext ctx;
+        auto fmt = MakeDeallocationFormat(/*deallocateFreeSpaceThresholdPercent=*/100, /*deallocateThresholdSeconds=*/1);
+        fmt.EnableFastErases = false;
+        const TDiskHandle disk = ctx.CreateDDisk(41, 1, fmt);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.PBServiceId, 91, 1);
+
+        ReachFiveChunksWithLastFullyFree(ctx, disk, creds);
+        const ui32 freeSectorsBeforeErase = GetPBFreeSectors(ctx, disk);
+
+        EraseFirstRecordSlowPath(ctx, disk, creds);
+        UNIT_ASSERT_VALUES_EQUAL(GetPBFreeSectors(ctx, disk), freeSectorsBeforeErase + 129);
+
+        // No deallocation may be issued: verify no TEvLog / TEvChunkForget shows
+        // up at the PDisk edge by racing a sentinel wakeup through the same
+        // edge actor. If a chunk-map log request were in flight it would arrive
+        // before the sentinel (FIFO per-actor delivery), causing the assertion
+        // below to observe the log/forget event's recipient instead of the
+        // sentinel edge.
+        TActorId sentinelEdge = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+        ctx.Runtime.Send(new IEventHandle(sentinelEdge, ctx.Edge, new TEvents::TEvWakeup()), NodeId);
+        auto ev = ctx.Runtime.WaitForEdgeActorEvent({disk.PDiskEdge, sentinelEdge});
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Recipient, sentinelEdge,
+            "no PDisk request (deallocation) should be issued when DeallocateFreeSpaceThresholdPercent=100");
+
+        // Still exactly PersistentBufferInitChunks + 1 owned chunks worth of free space.
+        UNIT_ASSERT_VALUES_EQUAL(GetPBFreeSectors(ctx, disk), freeSectorsBeforeErase + 129);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test: deallocation must not fire while the buffer owns exactly InitChunks
+    // chunks, even if free space is at 100% (canDeallocate requires
+    // ownedChunks > InitChunks).
+    //
+    // Covers: ProcessDeallocatePersistentBufferChunk -> "ownedChunks > InitChunks"
+    //         sub-condition of canDeallocate.
+    // ─────────────────────────────────────────────────────────────────────────
+    Y_UNIT_TEST(PersistentBufferDeallocationSkippedAtInitChunks) {
+        TTestContext ctx;
+        auto fmt = MakeDeallocationFormat(/*deallocateFreeSpaceThresholdPercent=*/1, /*deallocateThresholdSeconds=*/1);
+        fmt.EnableFastErases = false;
+        fmt.PreallocateFreeSpaceThresholdPercent = 0; // keep exactly InitChunks owned chunks
+        const TDiskHandle disk = ctx.CreateDDisk(42, 1, fmt);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.PBServiceId, 92, 1);
+
+        DoPBWriteRoundTrip(ctx, disk, creds, /*lsn=*/10, 'A');
+        UNIT_ASSERT_VALUES_EQUAL(GetPBAllocatedChunks(ctx, disk), PersistentBufferInitChunks);
+
+        EraseFirstRecordSlowPath(ctx, disk, creds);
+
+        // No deallocation may be issued: the buffer owns exactly InitChunks
+        // chunks, so canDeallocate's "ownedChunks > InitChunks" sub-condition is
+        // always false, regardless of how low the free-space threshold is set.
+        TActorId sentinelEdge = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+        ctx.Runtime.Send(new IEventHandle(sentinelEdge, ctx.Edge, new TEvents::TEvWakeup()), NodeId);
+        auto ev = ctx.Runtime.WaitForEdgeActorEvent({disk.PDiskEdge, sentinelEdge});
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Recipient, sentinelEdge,
+            "no PDisk request (deallocation) should be issued when ownedChunks == InitChunks");
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPBAllocatedChunks(ctx, disk), PersistentBufferInitChunks);
+    }
+
 } // Y_UNIT_TEST_SUITE
 
 } // NKikimr

@@ -128,13 +128,6 @@ void TNodeWarden::StartVirtualGroupAgent(ui32 groupId) {
     as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
 }
 
-void TNodeWarden::StartStaticProxies() {
-    Y_ABORT_UNLESS(Cfg->BlobStorageConfig.HasServiceSet());
-    for (const auto& group : Cfg->BlobStorageConfig.GetServiceSet().GetGroups()) {
-        StartLocalProxy(group.GetGroupID());
-    }
-}
-
 void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
     const TGroupID groupId(GroupIDFromBlobStorageProxyID(ev->GetForwardOnNondeliveryRecipient()));
     const ui32 id = groupId.GetRaw();

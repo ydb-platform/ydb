@@ -22,6 +22,15 @@ static constexpr ui64 V8PrefixMask = 0xFFC0000000000000ULL;
 static constexpr ui64 V8TimestampMask = 0x003FFFFFFF000000ULL;
 
 static constexpr ui64 V7TimestampPrefixMask = static_cast<ui64>(PrefixMask10) << (48 - PrefixBits);
+static constexpr ui32 V8PrefixShift = 64 - PrefixBits;
+
+inline ui64 NormalizePrefixBits(ui64 prefix) {
+    return prefix & PrefixMask10;
+}
+
+inline ui64 PrefixBitsForV8Msb(ui64 prefix) {
+    return NormalizePrefixBits(prefix) << V8PrefixShift;
+}
 
 inline ui64 ReorderMsb(ui64 v) {
     const ui64 b0 = (v >> 56) & 0xff;
@@ -96,12 +105,12 @@ inline ui64 UpdateMsb(ui64 msb, ui64 prefix, ui64 epochSeconds, bool hasPrefix) 
         return (msb & ~tsMask) | (tsCode & tsMask);
     }
     return (msb & ~(prefixMask | tsMask))
-        | ((prefix & prefixMask) | (tsCode & tsMask));
+        | (PrefixBitsForV8Msb(prefix) | (tsCode & tsMask));
 }
 
 inline ui64 ApplyV7Prefix(ui64 timestampMs, ui64 prefix) {
     return (timestampMs & ~V7TimestampPrefixMask)
-        | ((prefix & PrefixMask10) << (48 - PrefixBits));
+        | (NormalizePrefixBits(prefix) << (48 - PrefixBits));
 }
 
 inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeV7Bytes(ui64 timestampMs) {

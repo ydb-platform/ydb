@@ -16,6 +16,9 @@ namespace {
 
 using TUuidBytes = std::array<ui8, NKikimr::NUuid::UUID_LEN>;
 
+constexpr ui64 kTestPrefix = 0x2A5ULL;
+constexpr ui64 kSmallPrefix = 3ULL;
+
 int CompareUuidBytes(const TUuidBytes& lhs, const TUuidBytes& rhs) {
     return std::memcmp(lhs.data(), rhs.data(), rhs.size());
 }
@@ -69,9 +72,31 @@ TUuidBytes GenerateV8WithFixedRandom(ui64 prefix, ui64 epochSeconds) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TUuidSortOrder) {
+    Y_UNIT_TEST(V7AndV8UseBottom10PrefixBits) {
+        const ui64 rawPrefix = 0xAABBCCDDEEFF0011ULL;
+        const ui64 timestampMs = 1'700'000'000'000ULL;
+        const ui64 epochSeconds = timestampMs / 1000;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            ApplyV7Prefix(timestampMs, rawPrefix),
+            ApplyV7Prefix(timestampMs, rawPrefix & PrefixMask10));
+
+        SetRandomSeed(77);
+        const auto v8FromRaw = MakeV8Bytes(rawPrefix, epochSeconds, true);
+        SetRandomSeed(77);
+        const auto v8FromBottomBits = MakeV8Bytes(rawPrefix & PrefixMask10, epochSeconds, true);
+        UNIT_ASSERT_VALUES_EQUAL(v8FromRaw, v8FromBottomBits);
+
+        SetRandomSeed(88);
+        const auto v8WithSmallPrefix = MakeV8Bytes(kSmallPrefix, epochSeconds, true);
+        SetRandomSeed(88);
+        const auto v8WithoutPrefix = MakeV8Bytes(0, epochSeconds, true);
+        UNIT_ASSERT(CompareUuidBytes(v8WithSmallPrefix, v8WithoutPrefix) != 0);
+    }
+
     Y_UNIT_TEST(V8LsbMatchesRfcBytesToYdbInternal) {
         SetRandomSeed(4242);
-        const auto v8 = MakeV8Bytes(0x2A5ULL << 54, 1'700'000'000ULL, true);
+        const auto v8 = MakeV8Bytes(kTestPrefix, 1'700'000'000ULL, true);
 
         SetRandomSeed(4242);
         std::array<ui8, NKikimr::NUuid::UUID_LEN> rfc{};
@@ -103,13 +128,12 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
     }
 
     Y_UNIT_TEST(V7SortOrderWithFixedPrefixAndFixedRandom) {
-        const ui64 prefix = 0x2A5ULL;
         const ui64 baseTimestampMs = MilliSeconds();
         TVector<TUuidBytes> generated;
         generated.reserve(10);
 
         for (ui32 i = 0; i < 10; ++i) {
-            generated.push_back(GenerateV7WithPrefixAndFixedRandom(prefix, baseTimestampMs + i * 2));
+            generated.push_back(GenerateV7WithPrefixAndFixedRandom(kTestPrefix, baseTimestampMs + i * 2));
             if (i + 1 < 10) {
                 Sleep(TDuration::MilliSeconds(2));
             }
@@ -119,13 +143,12 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
     }
 
     Y_UNIT_TEST(V8SortOrderWithFixedPrefixAndFixedRandom) {
-        const ui64 prefix = NewPrefixValue() & V8PrefixMask;
         const ui64 baseEpochSeconds = MilliSeconds() / 1000;
         TVector<TUuidBytes> generated;
         generated.reserve(3);
 
         for (ui32 i = 0; i < 3; ++i) {
-            generated.push_back(GenerateV8WithFixedRandom(prefix, baseEpochSeconds + i));
+            generated.push_back(GenerateV8WithFixedRandom(kTestPrefix, baseEpochSeconds + i));
             if (i + 1 < 3) {
                 Sleep(TDuration::MilliSeconds(1100));
             }
@@ -153,13 +176,12 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
 
     Y_UNIT_TEST(V7SortOrderWithPrefixVaryingRandom) {
         SetRandomSeed(54321);
-        const ui64 prefix = 0x2A5ULL;
         const ui64 baseTimestampMs = MilliSeconds();
         TVector<TUuidBytes> generated;
         generated.reserve(10);
 
         for (ui32 i = 0; i < 10; ++i) {
-            generated.push_back(MakeV7Bytes(ApplyV7Prefix(baseTimestampMs + i * 2, prefix)));
+            generated.push_back(MakeV7Bytes(ApplyV7Prefix(baseTimestampMs + i * 2, kTestPrefix)));
             if (i + 1 < 10) {
                 Sleep(TDuration::MilliSeconds(2));
             }
@@ -198,13 +220,12 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
 
     Y_UNIT_TEST(V8DistinctAcrossTimestampsWithVaryingRandom) {
         SetRandomSeed(24680);
-        const ui64 prefix = 0x2A5ULL << 54;
         const ui64 baseEpochSeconds = MilliSeconds() / 1000;
         TVector<TUuidBytes> generated;
         generated.reserve(10);
 
         for (ui32 i = 0; i < 10; ++i) {
-            generated.push_back(MakeV8Bytes(prefix, baseEpochSeconds + i, true));
+            generated.push_back(MakeV8Bytes(kTestPrefix, baseEpochSeconds + i, true));
         }
 
         AssertAllDistinct(generated);
@@ -212,13 +233,12 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
 
     Y_UNIT_TEST(V8DistinctRandomSuffixAtSameTimestamp) {
         SetRandomSeed(112233);
-        const ui64 prefix = 0x2A5ULL << 54;
         const ui64 epochSeconds = MilliSeconds() / 1000;
         TVector<TUuidBytes> generated;
         generated.reserve(32);
 
         for (ui32 i = 0; i < 32; ++i) {
-            generated.push_back(MakeV8Bytes(prefix, epochSeconds, true));
+            generated.push_back(MakeV8Bytes(kTestPrefix, epochSeconds, true));
         }
 
         AssertAllDistinct(generated);

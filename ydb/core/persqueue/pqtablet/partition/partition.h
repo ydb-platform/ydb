@@ -377,7 +377,7 @@ private:
 
     template<typename T>
     std::function<void(bool, T& r)> GetResultPostProcessor(const TString& consumer = "");
-    TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished = false, bool sessionInvalidated = false);
+    TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished = false);
 
     void ProcessTxsAndUserActs(const TActorContext& ctx);
     void RunPersist();

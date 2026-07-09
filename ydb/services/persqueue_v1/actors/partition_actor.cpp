@@ -1520,6 +1520,16 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     if (!WaitForData)
         return;
 
+    if (record.GetSessionInvalidated()) {
+        YDB_LOG_DEBUG_CTX(ctx, "Session invalidated while waiting for data, unlock partition for next read",
+            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {"partition", Partition});
+        WaitForData = false;
+        WaitDataInfly.clear();
+        SendPartitionReady(ctx);
+        return;
+    }
+
     if (Counters.WaitsForData) {
         Counters.WaitsForData.Inc();
     }
@@ -1543,16 +1553,6 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
 
     EndOffset = record.GetEndOffset();
     SizeLag = record.GetSizeLag();
-
-    if (record.GetSessionInvalidated()) {
-        YDB_LOG_DEBUG_CTX(ctx, "Session invalidated while waiting for data, unlock partition for next read",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
-            {"partition", Partition});
-        WaitForData = false;
-        WaitDataInfly.clear();
-        SendPartitionReady(ctx);
-        return;
-    }
 
     if (!record.GetReadingFinished()) {
         if (IsPartitionDataReady()) {

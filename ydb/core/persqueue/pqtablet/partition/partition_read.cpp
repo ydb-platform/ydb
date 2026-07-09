@@ -128,7 +128,7 @@ void TPartition::FillReadFromTimestamps(const TActorContext& ctx) {
     }
 }
 
-TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished, bool sessionInvalidated) {
+TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished) {
     TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> res(new TEvPersQueue::TEvHasDataInfoResponse());
 
     res->Record.SetEndOffset(GetEndOffset());
@@ -136,9 +136,6 @@ TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoRespon
     res->Record.SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
     if (cookie) {
         res->Record.SetCookie(*cookie);
-    }
-    if (sessionInvalidated) {
-        res->Record.SetSessionInvalidated(true);
     }
     GetResultPostProcessor<NKikimrPQ::THasDataInfoResponse>()(readingFinished, res->Record);
 
@@ -224,7 +221,8 @@ void TPartition::FailStaleSessionReadRequests(const TString& user, const TActorC
             ++it;
             continue;
         }
-        auto response = MakeHasDataInfoResponse(0, it->Cookie, false, true);
+        auto response = MakeHasDataInfoResponse(0, it->Cookie);
+        response->Record.SetSessionInvalidated(true);
         ctx.Send(it->Sender, response.Release());
 
         for (auto dlIt = HasDataDeadlines.begin(); dlIt != HasDataDeadlines.end(); ++dlIt) {

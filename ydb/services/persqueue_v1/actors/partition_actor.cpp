@@ -954,8 +954,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
                 {"reason", ev->Get()->Record.GetErrorReason()});
             WaitForData = false;
             WaitDataInfly.clear();
-            const ui64 offset = Min(ReadOffset, EndOffset);
-            ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Partition, WTime, SizeLag, offset, EndOffset));
+            SendPartitionReady(ctx);
             return;
         }
         if (errorCode == NPersQueue::NErrorCode::WRONG_COOKIE
@@ -1134,7 +1133,7 @@ void TPartitionActor::SendPartitionReady(const TActorContext& ctx) {
         ctx.Send(ParentId, new TEvPQProxy::TEvReadingStarted(Topic->GetInternalName(), Partition.Partition));
         FirstRead = false;
     }
-    ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Partition, WTime, SizeLag, ReadOffset, EndOffset));
+    ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Partition, WTime, SizeLag, Min(ReadOffset, EndOffset), EndOffset));
 }
 
 

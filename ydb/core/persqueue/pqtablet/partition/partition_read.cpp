@@ -227,11 +227,10 @@ void TPartition::FailStaleSessionReadRequests(const TString& user, const TActorC
         response->Record.SetErrorReason(TStringBuilder() << "no such session for consumer '" << it->ClientId << "'");
         ctx.Send(it->Sender, response.Release());
 
-        for (auto dlIt = HasDataDeadlines.begin(); dlIt != HasDataDeadlines.end();) {
+        for (auto dlIt = HasDataDeadlines.begin(); dlIt != HasDataDeadlines.end(); ++dlIt) {
             if (dlIt->Request.Num == it->Num && dlIt->Request.Offset == it->Offset) {
-                dlIt = HasDataDeadlines.erase(dlIt);
-            } else {
-                ++dlIt;
+                HasDataDeadlines.erase(dlIt);
+                break;
             }
         }
 

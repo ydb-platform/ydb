@@ -65,7 +65,7 @@ bool TOlapMultiColumnStatisticsSchema::ApplyUpsert(const TOlapSchema& currentSch
     for (const auto rawType : upsert.GetTypes()) {
         const auto type = static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(rawType);
         switch (type) {
-            case NKikimrSchemeOp::EMultiColumnStatisticsType::UNSPECIFIED:
+            case NKikimrSchemeOp::EMultiColumnStatisticsType::MULTI_COLUMN_STATISTICS_UNSPECIFIED:
                 errors.AddError(NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "MultiColumnStatistics '" << Name << "' type must be specified");
                 return false;
             case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:

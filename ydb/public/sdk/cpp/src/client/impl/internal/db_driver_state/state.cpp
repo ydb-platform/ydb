@@ -8,8 +8,10 @@
 #include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/threading/future/core/coroutine_traits.h>
 
+#include <util/generic/yexception.h>
+
+#include <algorithm>
 #include <atomic>
-#include <thread>
 #include <unordered_map>
 
 namespace {
@@ -29,6 +31,30 @@ using namespace std::chrono_literals;
 constexpr int PESSIMIZATION_DISCOVERY_THRESHOLD = 50; // percent of endpoints pessimized by transport error to start recheck
 constexpr TDuration ENDPOINT_UPDATE_PERIOD = TDuration::Minutes(1); // period to perform endpoints update in "normal" case
 constexpr TDeadline::Duration DISCOVERY_RECHECK_PERIOD = 5s; // period to run periodic discovery task
+constexpr TDeadline::Duration CREDENTIALS_INIT_RETRY_PERIOD = 1s;
+constexpr TDeadline::Duration CREDENTIALS_INIT_RETRY_MAX_PERIOD = 30s;
+
+NThreading::TFuture<void> DelayCredentialsInitRetry(
+    std::weak_ptr<TDbDriverState> weakSelf,
+    TDeadline::Duration retryPeriod)
+{
+    auto promise = NThreading::NewPromise<void>();
+    auto self = weakSelf.lock();
+    if (!self) {
+        promise.SetException(std::make_exception_ptr(yexception() << "Driver state was destroyed before credentials were initialized"));
+        return promise.GetFuture();
+    }
+
+    self->AddPeriodicTask([promise](NYdb::NIssue::TIssues&&, EStatus status) mutable {
+        if (status == EStatus::SUCCESS) {
+            promise.TrySetValue();
+        } else {
+            promise.SetException(std::make_exception_ptr(yexception() << "Credentials initialization retry was cancelled"));
+        }
+        return false;
+    }, retryPeriod);
+    return promise.GetFuture();
+}
 
 TDbDriverState::TDbDriverState(
     const std::string& database,
@@ -65,8 +91,9 @@ void TDbDriverState::SetCredentialsProvider(std::shared_ptr<ICredentialsProvider
     auto authenticatorProvider = credentialsProvider;
     std::atomic_store(&CredentialsProvider, std::move(credentialsProvider));
 #ifndef YDB_GRPC_UNSECURE_AUTH
-    CallCredentials = grpc::MetadataCredentialsFromPlugin(
+    auto callCredentials = grpc::MetadataCredentialsFromPlugin(
         std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(std::move(authenticatorProvider))));
+    std::atomic_store(&CallCredentials, std::move(callCredentials));
 #endif
 }
 
@@ -75,13 +102,25 @@ NThreading::TFuture<void> TDbDriverState::InitCredentials(
 ) {
     std::weak_ptr<TDbDriverState> weakSelf = shared_from_this();
     std::weak_ptr<ICoreFacility> facility = weakSelf;
-    auto provider = co_await credentialsProviderFactory->CreateProviderAsync(std::move(facility));
-    auto self = weakSelf.lock();
-    if (!self) {
-        co_return;
+    auto retryPeriod = CREDENTIALS_INIT_RETRY_PERIOD;
+    while (!weakSelf.expired()) {
+        try {
+            auto provider = co_await credentialsProviderFactory->CreateProviderAsync(facility);
+            auto self = weakSelf.lock();
+            if (!self) {
+                ythrow yexception() << "Driver state was destroyed before credentials were initialized";
+            }
+            self->SetCredentialsProvider(std::move(provider));
+            co_return;
+        } catch (...) {
+            if (weakSelf.expired()) {
+                throw;
+            }
+        }
+        co_await DelayCredentialsInitRetry(weakSelf, retryPeriod);
+        retryPeriod = std::min(retryPeriod * 2, CREDENTIALS_INIT_RETRY_MAX_PERIOD);
     }
-    self->SetCredentialsProvider(std::move(provider));
-    co_return;
+    ythrow yexception() << "Driver state was destroyed before credentials were initialized";
 }
 
 NThreading::TFuture<void> TDbDriverState::GetCredentialsReady() const {

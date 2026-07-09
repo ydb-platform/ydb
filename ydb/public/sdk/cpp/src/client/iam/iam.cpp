@@ -10,7 +10,6 @@
 
 #include <exception>
 #include <mutex>
-#include <thread>
 
 using namespace yandex::cloud::iam::v1;
 
@@ -142,11 +141,11 @@ public:
     }
 
     NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const final {
-        return CreateProviderInBackground(Params_);
+        return CreateProviderAsync(std::weak_ptr<ICoreFacility>{});
     }
 
-    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility>) const final {
-        return CreateProviderAsync();
+    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const final {
+        return CreateProviderInBackground(Params_, std::move(facility));
     }
 
     std::string GetClientIdentity() const final {
@@ -156,15 +155,27 @@ public:
     }
 
 private:
-    static NThreading::TFuture<TCredentialsProviderPtr> CreateProviderInBackground(TIamHost params) {
+    static NThreading::TFuture<TCredentialsProviderPtr> CreateProviderInBackground(
+        TIamHost params,
+        std::weak_ptr<ICoreFacility> facility)
+    {
         auto promise = NThreading::NewPromise<TCredentialsProviderPtr>();
-        std::thread([params = std::move(params), promise]() mutable {
+        auto createProvider = [params = std::move(params), promise]() mutable {
             try {
                 promise.SetValue(std::make_shared<TIAMCredentialsProvider>(params));
             } catch (...) {
                 promise.SetException(std::current_exception());
             }
-        }).detach();
+        };
+        if (auto core = facility.lock()) {
+            try {
+                core->PostToResponseQueue(std::move(createProvider));
+            } catch (...) {
+                promise.SetException(std::current_exception());
+            }
+        } else {
+            createProvider();
+        }
         return promise.GetFuture();
     }
 

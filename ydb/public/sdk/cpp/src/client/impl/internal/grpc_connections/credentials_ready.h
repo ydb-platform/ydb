@@ -79,6 +79,7 @@ public:
     {}
 
     void Complete(TWaitResult status) {
+        Y_ABORT_UNLESS(Callback_.has_value());
         auto callback = std::move(*Callback_);
         Callback_.reset();
         callback(std::move(status));

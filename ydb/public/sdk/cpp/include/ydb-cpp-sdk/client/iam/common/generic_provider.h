@@ -567,7 +567,7 @@ public:
             << '\t' << Params_.EnableSsl
             << '\t' << Params_.CaCerts
             << '\t' << Params_.OAuthToken.size()
-            << '\t' << Params_.OAuthToken;
+            << '\t' << std::hash<std::string>{}(Params_.OAuthToken);
     }
 
 private:

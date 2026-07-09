@@ -7,6 +7,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <atomic>
 
 
 namespace NYdb::inline Dev {
@@ -721,7 +722,7 @@ TCallMeta TGRpcConnectionsImpl::MakeCallMeta(const TRpcRequestSettings& requestS
     meta.Timeout = requestSettings.Deadline;
 #ifndef YDB_GRPC_UNSECURE_AUTH
     if (requestSettings.UseAuth) {
-        meta.CallCredentials = dbState->CallCredentials;
+        meta.CallCredentials = std::atomic_load(&dbState->CallCredentials);
     }
 #else
     auto credentialsProvider = dbState->GetCredentialsProvider();

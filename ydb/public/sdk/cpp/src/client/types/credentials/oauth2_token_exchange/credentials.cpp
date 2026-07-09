@@ -531,7 +531,7 @@ public:
         return CreateProviderAsync(std::weak_ptr<ICoreFacility>{});
     }
 
-    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility>) const override {
+    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const override {
         auto promise = NThreading::NewPromise<TCredentialsProviderPtr>();
         auto future = promise.GetFuture();
 
@@ -546,7 +546,7 @@ public:
             State_->ProviderFuture = future;
         }
 
-        std::thread([state = State_, promise]() mutable {
+        auto createProvider = [state = State_, promise]() mutable {
             try {
                 TCredentialsProviderPtr provider = std::make_shared<TOauth2TokenExchangeProvider>(state->Params);
                 {
@@ -563,7 +563,23 @@ public:
                 }
                 promise.SetException(std::current_exception());
             }
-        }).detach();
+        };
+
+        if (auto core = facility.lock()) {
+            try {
+                core->PostToResponseQueue(std::move(createProvider));
+            } catch (...) {
+                {
+                    std::lock_guard lock(State_->Lock);
+                    if (!State_->Provider) {
+                        State_->ProviderFuture = {};
+                    }
+                }
+                promise.SetException(std::current_exception());
+            }
+        } else {
+            createProvider();
+        }
 
         return future;
     }

@@ -202,7 +202,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         static void CheckHistogram(
             TTestBasicRuntime& runtime,
             const char* name,
-            const std::vector<ui64>& goldValuesNew,
+            const std::vector<ui64>& goldValues,
             const TTabletTypes::EType tabletType
         )
         {
@@ -211,14 +211,14 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             auto snapshot = histogram->Snapshot();
             UNIT_ASSERT(snapshot);
 
-            UNIT_ASSERT_VALUES_EQUAL(snapshot->Count(), goldValuesNew.size());
+            UNIT_ASSERT_VALUES_EQUAL(snapshot->Count(), goldValues.size());
             {
                 // for pretty printing the diff
                 std::vector<ui64> values;
-                values.reserve(goldValuesNew.size());
-                for (auto i: xrange(goldValuesNew.size()))
+                values.reserve(goldValues.size());
+                for (auto i: xrange(goldValues.size()))
                     values.push_back(snapshot->Value(i));
-                UNIT_ASSERT_VALUES_EQUAL(values, goldValuesNew);
+                UNIT_ASSERT_VALUES_EQUAL(values, goldValues);
             }
         }
 

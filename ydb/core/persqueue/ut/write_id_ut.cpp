@@ -187,7 +187,10 @@ Y_UNIT_TEST(DowngradeToLegacyDeferredClearsStaleLegacyFields) {
     DowngradeToLegacy(writeId);
 
     UNIT_ASSERT(HasCanonical(writeId));
-    UNIT_ASSERT(!HasLegacy(writeId));
+    UNIT_ASSERT(!writeId.HasNodeId());
+    UNIT_ASSERT(!writeId.HasKeyId());
+    UNIT_ASSERT(!writeId.GetKafkaTransaction());
+    UNIT_ASSERT(!writeId.HasKafkaProducerInstanceId());
     UNIT_ASSERT_VALUES_EQUAL(writeId.GetDeferredPublicationApi().GetIntPublicationId(), 7u);
 }
 

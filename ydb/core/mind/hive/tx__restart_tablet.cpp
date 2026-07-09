@@ -42,7 +42,7 @@ public:
                         db.Table<Schema::TabletFollowerTablet>().Key(tablet->GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0);
                     }
                 }
-                tablet->InitiateStop(SideEffects, PreferredNodeId != 0);
+                tablet->InitiateStop(SideEffects, true);
             }
             if (tablet->IsLeader() && tablet->AsLeader().ChannelProfileNewGroup.any()) {
                 tablet->AsLeader().InitiateAssignTabletGroups();

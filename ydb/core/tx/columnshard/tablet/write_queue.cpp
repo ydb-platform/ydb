@@ -11,7 +11,7 @@ namespace NKikimr::NColumnShard {
 LWTRACE_USING(YDB_CS);
 
 bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
-    owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(TMonotonic::Now() - Created);
+    owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(ctx.Monotonic() - Created);
 
     if (const auto lock = owner->OperationsManager->GetLockOptional(LockId); lock) {
         if (lock->NeedsAborting()) {
@@ -31,7 +31,7 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
 
     AFL_VERIFY(writeOperation);
     writeOperation->SetBehaviour(Behaviour);
-    const auto& applyToMvccSnapshot = MvccSnapshot.Valid() ? MvccSnapshot : NOlap::TSnapshot::Max();
+    const auto applyToMvccSnapshot = MvccSnapshot.Valid() ? MvccSnapshot : owner->GetMaxReadVersionForSchema(Schema->GetVersion());
     NOlap::TWritingContext wContext(owner->TabletID(), owner->SelfId(), Schema, owner->StoragesManager,
         owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, applyToMvccSnapshot, LockId,
         LockMode, writeOperation->GetActivityChecker(), Behaviour == EOperationBehaviour::NoTxWrite, owner->BufferizationPortionsWriteActorId,
@@ -65,7 +65,7 @@ bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
         WriteTasksOverloadCheckerScheduled = false;
     }
     ui32 countTasks = 0;
-    const TMonotonic now = TMonotonic::Now();
+    const TMonotonic now = ctx.Monotonic();
     std::set<TInternalPathId> overloaded;
     for (auto it = WriteTasks.begin(); it != WriteTasks.end();) {
         if (it->IsDeprecated(now)) {

@@ -148,7 +148,7 @@ public:
 
         return TColumnContext{
             .WithoutByTableAlias = {
-                {std::move(table), {{std::move(*column)}}},
+                {table, {{std::move(*column)}}},
             },
         };
     }

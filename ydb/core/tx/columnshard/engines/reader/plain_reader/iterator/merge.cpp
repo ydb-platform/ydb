@@ -2,6 +2,7 @@
 #include "plain_read_data.h"
 #include "source.h"
 
+#include <ydb/core/formats/arrow/hash/calcer.h>
 #include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/formats/arrow/reader/result_builder.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
@@ -55,7 +56,7 @@ TConclusionStatus TBaseMergeTask::PrepareResultBatch() {
     }
     if (ResultBatch && ResultBatch->num_rows()) {
         const auto& shardingPolicy = Context->GetCommonContext()->GetComputeShardingPolicy();
-        if (NArrow::THashConstructor::BuildHashUI64(ResultBatch, shardingPolicy.GetColumnNames(), "__compute_sharding_hash")) {
+        if (NArrow::NHash::THashConstructor::BuildHashUI64(ResultBatch, shardingPolicy.GetColumnNames(), "__compute_sharding_hash")) {
             ShardedBatch = NArrow::TShardingSplitIndex::Apply(shardingPolicy.GetShardsCount(), ResultBatch, "__compute_sharding_hash");
         } else {
             ShardedBatch = NArrow::TShardedRecordBatch(ResultBatch);

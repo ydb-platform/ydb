@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/persqueue/public/pqdata_transaction_compat.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 #include <ydb/library/actors/core/log.h>
@@ -234,19 +235,22 @@ void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs, 
         NKikimrPQ::TPartitionOperation* o = t.tx.MutableOperations()->Add();
         o->SetPath(*Topic_);
         o->SetPartitionId(*Partition_);
-        o->SetConsumer(consumer);
         if (operations.IsKafkaApiOperation()) {
-            o->SetCommitOffsetsEnd(operations.GetKafkaCommitOffset());
-            o->SetKafkaTransaction(true);
+            auto* kafkaRead = o->MutableRead()->MutableKafka();
+            kafkaRead->SetConsumer(consumer);
+            kafkaRead->SetCommitOffsetsEnd(operations.GetKafkaCommitOffset());
         } else {
             auto [begin, end] = operations.GetOffsetsCommitRange();
-            o->SetCommitOffsetsBegin(begin);
-            o->SetCommitOffsetsEnd(end);
-            o->SetKillReadSession(operations.GetKillReadSession());
-            o->SetForceCommit(operations.GetForceCommit());
-            o->SetOnlyCheckCommitedToFinish(operations.GetOnlyCheckCommitedToFinish());
-            o->SetReadSessionId(operations.GetReadSessionId());
+            auto* topicRead = o->MutableRead()->MutableTopic();
+            topicRead->SetConsumer(consumer);
+            topicRead->SetCommitOffsetsBegin(begin);
+            topicRead->SetCommitOffsetsEnd(end);
+            topicRead->SetForceCommit(operations.GetForceCommit());
+            topicRead->SetKillReadSession(operations.GetKillReadSession());
+            topicRead->SetOnlyCheckCommitedToFinish(operations.GetOnlyCheckCommitedToFinish());
+            topicRead->SetReadSessionId(operations.GetReadSessionId());
         }
+        NPQ::DowngradeToLegacy(*o);
     }
 
     if (HasWriteOperations_) {
@@ -254,14 +258,16 @@ void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs, 
         o->SetPartitionId(*Partition_);
         o->SetPath(*Topic_);
 
+        auto* write = o->MutableWrite();
+        write->SetSkipConflictCheck(skipConflictCheck);
         if (KafkaProducerInstanceId_.Defined()) { // kafka transaction
-            o->SetKafkaTransaction(true);
-            o->MutableKafkaProducerInstanceId()->SetId(KafkaProducerInstanceId_->Id);
-            o->MutableKafkaProducerInstanceId()->SetEpoch(KafkaProducerInstanceId_->Epoch);
+            auto* producerId = write->MutableKafka()->MutableKafkaProducerInstanceId();
+            producerId->SetId(KafkaProducerInstanceId_->Id);
+            producerId->SetEpoch(KafkaProducerInstanceId_->Epoch);
         } else if (SupportivePartition_.Defined()) {
-            o->SetSupportivePartition(*SupportivePartition_);
+            write->MutableTopic()->SetSupportivePartition(*SupportivePartition_);
         }
-        o->SetSkipConflictCheck(skipConflictCheck);
+        NPQ::DowngradeToLegacy(*o);
         t.hasWrite = true;
     }
 }

@@ -526,7 +526,7 @@ function ruleHasFields(ref) {
 }
 
 function ruleHasPinned(ref) {
-    if (pinnedColumnCount() === 0) return false;
+    if (pinnedFieldCount() === 0) return false;
     if (ruleIsTextTile(ref)) return false;
     return cachedRuleFeature(ref, 'pinned', function() {
         var summary = TraceStore.ruleSummaryForRef(currentTraceStore(), ref);
@@ -547,7 +547,7 @@ function fullscreenFeatureButtonsHtml(ref) {
     var html = '';
 
     html += fullscreenDiffRuleFeatureButtonHtml(ref, 'fields', 'Toggle fields', 'info');
-    html += fullscreenDiffRuleFeatureButtonHtml(ref, 'pinned', 'Toggle pinned columns', 'drawing-pin');
+    html += fullscreenDiffRuleFeatureButtonHtml(ref, 'pinned', 'Toggle pinned fields', 'drawing-pin');
     html += fullscreenDiffRuleFeatureButtonHtml(ref, 'info', 'Toggle info', 'file-text');
 
     return html;
@@ -623,14 +623,14 @@ function fullscreenDiffInfoHtml(ref, side) {
 }
 
 function diffTreePinnedHeaderHtml(key, showPinned, minWidth) {
-    if (pinnedColumnCount() <= 0 || !showPinned) return '';
+    if (pinnedFieldCount() <= 0 || !showPinned) return '';
     var width = Math.max(1, Number(minWidth) || 0);
     var html = '<div class="tree-pinned-header visible" id="pinhdr-' + key + '"' +
         (width ? ' style="min-width:' + width + 'px"' : '') + '>';
-    for (var col = 0; col < pinnedColumnCount(); col++) {
-        html += pinnedColumnHeaderCellHtml(
+    for (var col = 0; col < pinnedFieldCount(); col++) {
+        html += pinnedFieldHeaderCellHtml(
             col,
-            htmlEscape(tracePinnedColumnName(col)),
+            htmlEscape(tracePinnedFieldName(col)),
             { unpinTitle: null }
         );
     }
@@ -839,7 +839,7 @@ function renderDiffRuleTree(ref, side, diffResult) {
         diffSide: side,
         showFields: effectiveRuleFeature(ref.si, ref.gi, ref.ri, 'fields'),
         showPinned: effectiveRuleFeature(ref.si, ref.gi, ref.ri, 'pinned'),
-        columns: nodeColumnRenderSignature(),
+        pinnedFields: pinnedFieldRenderSignature(),
         diffFields: diffFieldSelectionSignature()
     };
     updateRuleFeatureButtons(ref.si, ref.gi, ref.ri);

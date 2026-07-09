@@ -1,4 +1,3 @@
-/* postgres can not */
 /* custom error:Member not found: Value3. Did you mean Value1?*/
 
 $data = AsList(

@@ -1715,6 +1715,34 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
     }
 
+    Y_UNIT_TEST(PartitionSplit_AutosplitByMinPartitionCount) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto tableClient = setup.MakeTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TOPIC `/Root/dir/origin`
+                WITH (
+                    AUTO_PARTITIONING_STRATEGY = 'SCALE_UP_AND_DOWN',
+                    MIN_ACTIVE_PARTITIONS = 3
+                );
+        )");
+
+        AssertPartitionCount(setup, "/Root/dir/origin", 3);
+
+        // MAX_ACTIVE_PARTITIONS has to be not less than MIN_ACTIVE_PARTITIONS
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            ALTER TOPIC `/Root/dir/origin`
+                SET (
+                    MAX_ACTIVE_PARTITIONS = 20,
+                    MIN_ACTIVE_PARTITIONS = 20
+                );
+        )");
+        WaitAndAssertPartitionCount(setup, "/Root/dir/origin", 37); // 17 inactive, 20 active
+    }
+
     Y_UNIT_TEST(BalancingAfterSplit_sessionsWithPartition) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);

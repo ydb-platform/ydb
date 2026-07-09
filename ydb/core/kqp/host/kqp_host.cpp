@@ -1658,6 +1658,7 @@ private:
             YQL_ENSURE(*settings.ConcurrentResults || queryType == EKikimrQueryType::Query);
             SessionCtx->Query().ConcurrentResults = *settings.ConcurrentResults;
         }
+        SessionCtx->Query().IsolateEffects = settings.UsePessimisticLocks;
         if (settings.RuntimeParameterSizeLimitSatisfied) {
             SessionCtx->Query().RuntimeParameterSizeLimitSatisfied = settings.RuntimeParameterSizeLimitSatisfied;
         }
@@ -2039,6 +2040,7 @@ private:
         state->EnableUserAttributesInTopicQuery = Config->FeatureFlags.GetEnableUserAttributesInTopicQuery();
         state->StreamingTopicsReadByDefault = false;
         state->EnableTopicsPredicatePushdown = Config->FeatureFlags.GetEnableTopicsPredicatePushdown();
+        state->ForbidYqlSysColumnsAndSystemMetadata = QueryServiceConfig.GetStreamingQueries().GetForbidYqlSysColumnsAndSystemMetadata();
         state->EnablePqConstraintsTransformer = Config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false);
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;

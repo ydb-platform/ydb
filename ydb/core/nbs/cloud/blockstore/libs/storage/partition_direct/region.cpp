@@ -44,11 +44,12 @@ TRegion::TRegion(
             counters->GetSubgroup("vchunk", ToString(vChunkIndex));
 
         const auto* persisted = vChunkConfigs.FindPtr(vChunkIndex);
-        const auto vChunkConfig = persisted ? *persisted
-                                            : TVChunkConfig::MakeDefault(
-                                                  vChunkIndex,
-                                                  DirectBlockGroupHostCount,
-                                                  DefaultPrimaryCount);
+        auto vChunkConfig = persisted ? *persisted
+                                      : TVChunkConfig::MakeDefault(
+                                            vChunkIndex,
+                                            DirectBlockGroupHostCount,
+                                            DefaultPrimaryCount);
+        vChunkConfig.SetDBGIndex(dbgIndex);
         Y_ABORT_UNLESS(vChunkConfig.IsValid());
         Y_ABORT_UNLESS(vChunkConfig.GetVChunkIndex() == vChunkIndex);
 
@@ -71,12 +72,24 @@ void TRegion::Run()
     }
 }
 
-void TRegion::Stop()
+NThreading::TFuture<void> TRegion::Stop()
 {
+    TVector<NThreading::TFuture<void>> stopFutures;
     for (const auto& vChunk: VChunks) {
-        vChunk->Stop();
+        stopFutures.push_back(vChunk->Stop());
     }
-    VChunks.clear();
+    auto result = WaitAll(stopFutures);
+    result.Subscribe(
+        [weakSelf = weak_from_this()]   //
+        (const NThreading::TFuture<void>& f)
+        {
+            Y_UNUSED(f);
+
+            if (auto self = weakSelf.lock()) {
+                self->OnVChunksStopped();
+            }
+        });
+    return result;
 }
 
 NThreading::TFuture<TReadBlocksLocalResponse> TRegion::ReadBlocksLocal(
@@ -103,6 +116,11 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
         traceId);
+}
+
+void TRegion::OnVChunksStopped()
+{
+    VChunks.clear();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,6 +1,7 @@
 #include "batch_cutter.h"
 
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/core/persqueue/public/codecs/kafka.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
@@ -15,10 +16,6 @@
 
 namespace NKikimr::NPQ::NBatching {
 namespace {
-
-NPersQueueCommon::ECodec KafkaBatchCodec() {
-    return static_cast<NPersQueueCommon::ECodec>(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1);
-}
 
 NPersQueueCommon::ECodec ToDataChunkCodec(NKafka::ECompressionType compressionType) {
     switch (compressionType) {
@@ -90,7 +87,7 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const 
         TReadResult item = data.ReadResult;
         item.SetOffset(offset);
         item.SetSeqNo(seqNo);
-        item.SetMessageCount(1);
+        item.SetLogicalMessageCount(1);
         item.SetIsBatch(false);
         item.ClearUncompressedSize();
 
@@ -114,6 +111,36 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const 
             item.SetCreateTimestampMS(timestamp);
         }
         result.push_back(std::move(item));
+    }
+
+    return result;
+}
+
+THashMap<TString, ui64> TKafkaBatchCutter::GetKeys(const TBatchCutterData& data, const ui64 readStartOffset) const {
+    THashMap<TString, ui64> result;
+
+    const auto& dataChunk = data.DataChunk;
+    if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
+        return result;
+    }
+
+    Y_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec());
+
+    const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
+    const ui64 baseOffset = data.ReadResult.GetOffset();
+    for (const auto& record : batch.Records) {
+        const auto offset = baseOffset + record.OffsetDelta;
+        if (offset < readStartOffset) {
+            continue;
+        }
+
+        if (!record.Key) {
+            continue;
+        }
+
+        TString key;
+        key.assign(record.Key->data(), record.Key->size());
+        result[key] = offset;
     }
 
     return result;

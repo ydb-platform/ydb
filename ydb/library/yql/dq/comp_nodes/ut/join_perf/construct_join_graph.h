@@ -20,6 +20,8 @@ struct TJoinDescription {
     std::optional<TDqUserRenames> CustomRenames;
     int BlockSize = 128;
     bool SliceBlocks = false;
+    TVector<int> ScalarizeLeftColumns;
+    TVector<int> ScalarizeRightColumns;
 };
 
 bool IsBlockJoin(ETestedJoinAlgo algo);

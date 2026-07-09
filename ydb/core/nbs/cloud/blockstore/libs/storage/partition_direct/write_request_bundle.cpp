@@ -74,6 +74,11 @@ NWilson::TSpan& TWriteRequestBundle::GetSpan()
     return Span;
 }
 
+TBlockRange64 TWriteRequestBundle::GetRange() const
+{
+    return Request->Headers.Range;
+}
+
 TBlockRange64 TWriteRequestBundle::GetVChunkRange() const
 {
     return VChunkRange;

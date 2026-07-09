@@ -17,6 +17,8 @@
 
 #include <yt/yt/core/yson/async_writer.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 namespace NYT::NDriver {
 
 using namespace NYPath;
@@ -112,7 +114,7 @@ void TGetSupportedFeaturesCommand::DoExecute(ICommandContextPtr context)
     }
     auto features = meta.Features;
     for (auto staticFeature : StaticFeatures) {
-        features->AddChild(TString(staticFeature.first), BuildYsonNodeFluently().Value(staticFeature.second));
+        features->AddChild(staticFeature.first, BuildYsonNodeFluently().Value(staticFeature.second));
     }
     features->AddChild(
         "flow_pipelines",
@@ -409,8 +411,8 @@ private:
     TStringInput SyncInput_;
     IAsyncZeroCopyInputStreamPtr AsyncInput_;
 
-    TString Output_;
-    TStringOutput SyncOutput_;
+    std::string Output_;
+    TStdStringOutput SyncOutput_;
     IFlushableAsyncOutputStreamPtr AsyncOutput_;
 
     TYsonString OnResponse(const TError& error)

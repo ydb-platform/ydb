@@ -210,10 +210,4 @@ namespace NKikimr::NHttpProxy {
         return TActorId(0, TStringBuf(x, 12));
     }
 
-#define LOG_SP_ERROR_S(actorCtxOrSystem, component, stream) LOG_ERROR_S(actorCtxOrSystem, component, LogPrefix() << " " << stream)
-#define LOG_SP_WARN_S(actorCtxOrSystem, component, stream) LOG_WARN_S(actorCtxOrSystem, component, LogPrefix() << " " << stream)
-#define LOG_SP_INFO_S(actorCtxOrSystem, component, stream) LOG_INFO_S(actorCtxOrSystem, component, LogPrefix() << " " << stream)
-#define LOG_SP_DEBUG_S(actorCtxOrSystem, component, stream) LOG_DEBUG_S(actorCtxOrSystem, component, LogPrefix() << " " << stream)
-
-
 } // namespace NKikimr::NHttpProxy

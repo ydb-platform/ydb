@@ -3,7 +3,7 @@
 #include "config.h"
 #include "private.h"
 
-#include <yt/yt/library/profiling/percpu.h>
+#include <yt/yt/library/profiling/per_cpu_sensor_impl.h>
 
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>

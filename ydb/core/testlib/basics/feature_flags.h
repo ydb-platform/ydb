@@ -50,6 +50,7 @@ public:
     FEATURE_FLAG_SETTER(EnableTablePgTypes)
     FEATURE_FLAG_SETTER(EnableServerlessExclusiveDynamicNodes)
     FEATURE_FLAG_SETTER(EnableAccessServiceBulkAuthorization)
+    FEATURE_FLAG_SETTER(EnableAccessServiceV2Interface)
     FEATURE_FLAG_SETTER(EnableAddColumsWithDefaults)
     FEATURE_FLAG_SETTER(EnableReplaceIfExistsForExternalEntities)
     FEATURE_FLAG_SETTER(EnableCMSRequestPriorities)
@@ -77,7 +78,6 @@ public:
     FEATURE_FLAG_SETTER(EnableStreamingQueries)
     FEATURE_FLAG_SETTER(EnableSecureScriptExecutions)
     FEATURE_FLAG_SETTER(EnableSkipConflictCheckForTopicsInTransaction)
-    FEATURE_FLAG_SETTER(DisableMissingDefaultColumnsInBulkUpsert)
     FEATURE_FLAG_SETTER(EnableTopicMessageLevelParallelism)
     FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForReplication)
     FEATURE_FLAG_SETTER(EnableAccessToIndexImplTables)
@@ -88,6 +88,7 @@ public:
     FEATURE_FLAG_SETTER(EnableDataShardSplitHistogramOmission)
     FEATURE_FLAG_SETTER(EnableCsDictionaryEncoding)
     FEATURE_FLAG_SETTER(EnableDataShardDetailedMetrics)
+    FEATURE_FLAG_SETTER(EnableTopicDeferredPublish)
     #undef FEATURE_FLAG_SETTER
 };
 

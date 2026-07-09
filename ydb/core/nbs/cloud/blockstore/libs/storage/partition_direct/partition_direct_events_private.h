@@ -29,7 +29,11 @@ struct TEvPartitionDirectPrivate
                   LocalEventsOffset,
 
         EvUpdateVChunkConfig,
-        EvDBGsInitiallyReady,
+        EvFastPathServiceReady,
+
+        EvFastPathServiceShutdown,
+        EvFastPathServiceStopped,
+        EvAddHostToDBG,
 
         EvEnd,
     };
@@ -48,8 +52,32 @@ struct TEvPartitionDirectPrivate
     // Signals that FastPathServiceReady (and its DBGs) are ready.
     struct TEvFastPathServiceReady
         : public NActors::
-              TEventLocal<TEvFastPathServiceReady, EvDBGsInitiallyReady>
+              TEventLocal<TEvFastPathServiceReady, EvFastPathServiceReady>
     {
+    };
+
+    // Triggers the shutdown of the fast path service
+    struct TEvFastPathServiceShutdown
+        : public NActors::
+              TEventLocal<TEvFastPathServiceShutdown, EvFastPathServiceShutdown>
+    {
+    };
+
+    // Signals that FastPathService stopped.
+    struct TEvFastPathServiceStopped
+        : public NActors::
+              TEventLocal<TEvFastPathServiceStopped, EvFastPathServiceStopped>
+    {
+    };
+
+    struct TEvAddHostToDBG
+        : public NActors::TEventLocal<TEvAddHostToDBG, EvAddHostToDBG>
+    {
+        size_t DirectBlockGroupId;
+
+        explicit TEvAddHostToDBG(size_t dbgId)
+            : DirectBlockGroupId(dbgId)
+        {}
     };
 };
 

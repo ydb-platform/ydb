@@ -54,6 +54,7 @@ SRCS(
     ydb_status_codes.proto
     ydb_table.proto
     ydb_topic.proto
+    ydb_topic_deferred_publish.proto
     ydb_value.proto
 )
 

@@ -45,7 +45,7 @@ struct TEvPrivate {
     };
 };
 
-class TRanksCheckerActor : public NKikimr::TQueryBase {
+class TRanksCheckerActor : public NKikimr::TQueryBase, public TQueryRetryActorMixin<TRanksCheckerActor, TEvPrivate::TEvRanksCheckerResponse> {
     using TBase = NKikimr::TQueryBase;
 
 public:
@@ -279,7 +279,7 @@ private:
             }
         }
 
-        Register(new TQueryRetryActor<TRanksCheckerActor, TEvPrivate::TEvRanksCheckerResponse, TString, TString, TString, std::unordered_map<i64, TString>>(
+        Register(TRanksCheckerActor::MakeRetry(
             SelfId(), Context.GetExternalData().GetDatabaseId(), AlterContext.GetSessionId(), AlterContext.GetTransactionId(), ranksToNames
         ));
     }

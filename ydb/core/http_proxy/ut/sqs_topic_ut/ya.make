@@ -13,12 +13,15 @@ PEERDIR(
     ydb/core/base
     ydb/core/http_proxy
     ydb/core/http_proxy/ut/datastreams_fixture
+    ydb/core/persqueue/ut/common
     ydb/core/testlib/default
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/library/aclib
     ydb/library/persqueue/tests
     ydb/public/sdk/cpp/src/client/discovery
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types
+    ydb/services/sqs_topic
     ydb/services/ydb
 )
 

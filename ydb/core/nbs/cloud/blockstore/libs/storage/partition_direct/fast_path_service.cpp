@@ -40,6 +40,7 @@ namespace {
 void DumpToFile(
     const TString& diskId,
     size_t index,
+    const TString& config,
     TMap<size_t, TDBGDumpResponse> debugDumps)
 {
     TVector<TDBGDumpResponse::TVChunkDump> dumps;
@@ -63,6 +64,9 @@ void DumpToFile(
 
     auto path = TStringBuilder() << dirPath << diskId << "." << index;
     TFile file(path, EOpenModeFlag::CreateAlways);
+
+    file.Write(config.data(), config.size());
+    file.Write("\n", 1);
 
     for (const auto& [dbgIndex, dump]: debugDumps) {
         file.Write(dump.Dump.data(), dump.Dump.size());
@@ -95,7 +99,7 @@ size_t RegionCount(ui64 blockCount, ui32 blockSize)
     return AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
 }
 
-TVector<std::shared_ptr<TRegion>> CreateRegions(
+TVector<TRegionPtr> CreateRegions(
     IPartitionDirectService* partitionDirectService,
     ui64 blockCount,
     ui32 blockSize,
@@ -105,7 +109,7 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     NMonitoring::TDynamicCounterPtr counters)
 {
     const size_t regionCount = RegionCount(blockCount, blockSize);
-    TVector<std::shared_ptr<TRegion>> regions(regionCount);
+    TVector<TRegionPtr> regions(regionCount);
     for (size_t i = 0; i < regionCount; i++) {
         NMonitoring::TDynamicCounterPtr regionCounters =
             counters->GetSubgroup("region", ToString(i));
@@ -179,12 +183,6 @@ TFastPathService::~TFastPathService()
         NKikimrServices::NBS_PARTITION,
         "TFastPathService::Destroy %s",
         DiskId.Quote().c_str());
-
-    // TODO. Should stop and destroy regions before TFastPathService
-    // destruction.
-    for (const auto& region: Regions) {
-        region->Stop();
-    }
 }
 
 NThreading::TFuture<void> TFastPathService::Run()
@@ -206,6 +204,22 @@ NThreading::TFuture<void> TFastPathService::Run()
     ScheduleDirtyMapDebugPrint();
 
     return NThreading::WaitAll(initialReadyFutures);
+}
+
+NThreading::TFuture<void> TFastPathService::Stop()
+{
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TFastPathService::Stop %s",
+        DiskId.Quote().c_str());
+
+    TVector<NThreading::TFuture<void>> stopFutures;
+    for (const auto& region: Regions) {
+        stopFutures.push_back(region->Stop());
+    }
+
+    return NThreading::WaitAll(stopFutures);
 }
 
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
@@ -361,11 +375,29 @@ void TFastPathService::UpdateVChunkConfig(const TVChunkConfig& cfg)
     ActorSystem->Send(PartitionActorId, event.release());
 }
 
+void TFastPathService::RequestAddHost(size_t directBlockGroupId)
+{
+    auto event = std::make_unique<TEvPartitionDirectPrivate::TEvAddHostToDBG>(
+        directBlockGroupId);
+    ActorSystem->Send(PartitionActorId, event.release());
+}
+
 ui64 TFastPathService::GenerateLsn()
 {
     const ui64 lsn = ++SequenceGenerator;
     MaybeTriggerPBufferCleanup(lsn);
     return lsn;
+}
+
+TFastPathServiceInfo TFastPathService::GetMonInfo() const
+{
+    const ui64 vchunkSize = StorageConfig->GetVChunkSize();
+    Y_ABORT_UNLESS(vchunkSize != 0);
+    return {
+        .LsnCounter = SequenceGenerator.load(),
+        .TotalVChunks = Regions.size() * (RegionSize / vchunkSize),
+        .DbgCount = DirectBlockGroups.size(),
+    };
 }
 
 void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
@@ -480,7 +512,11 @@ void TFastPathService::OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump)
     }
 
     try {
-        DumpToFile(DiskId, DumpCount, std::move(DebugDumps));
+        DumpToFile(
+            DiskId,
+            DumpCount,
+            StorageConfig->Dump(),
+            std::move(DebugDumps));
     } catch (const std::exception& e) {
         LOG_ERROR(
             *ActorSystem,

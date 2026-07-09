@@ -261,4 +261,40 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
             "https://grafana.example.net/d/cpu?var-workspace=ydb-workspace&var-ds=3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63&var-cluster=ydb-global&var-host=storage-1.example.net&var-custom_label=kept"
         );
     }
+
+    Y_UNIT_TEST(ResolveUsesExplicitMappingsForIdentityParametersButKeepsNonIdentityParameters) {
+        TGrafanaDashboardTestContext context;
+        auto* databaseMapping = context.Config.AddLinkParameterMappings();
+        databaseMapping->SetParameter("db_path");
+        databaseMapping->SetFromRequest("database");
+        context.UrlParameters = MakeUrlParameters("cluster=ydb-global&database=%2Froot%2Ftest&custom_label=kept");
+        context.EntityType = EEntityType::Database;
+        auto result = context.Resolve();
+
+        AssertSingleResolvedLink(
+            result,
+            "https://grafana.example.net/d/cpu?var-custom_label=kept&var-db_path=/root/test"
+        );
+    }
+
+    Y_UNIT_TEST(ResolveUsesClusterInfoAndStaticMappingsAndSkipsMissingValues) {
+        TGrafanaDashboardTestContext context;
+        auto* workspaceMapping = context.Config.AddLinkParameterMappings();
+        workspaceMapping->SetParameter("workspace");
+        workspaceMapping->SetFromClusterInfo("custom_namespace");
+        auto* bucketMapping = context.Config.AddLinkParameterMappings();
+        bucketMapping->SetParameter("bucket");
+        bucketMapping->SetStaticValue("ydb");
+        auto* missingMapping = context.Config.AddLinkParameterMappings();
+        missingMapping->SetParameter("missing");
+        missingMapping->SetFromClusterInfo("missing_namespace");
+        context.ClusterInfo["custom_namespace"] = "custom-workspace";
+        context.UrlParameters = MakeUrlParameters("custom_label=kept");
+        auto result = context.Resolve();
+
+        AssertSingleResolvedLink(
+            result,
+            "https://grafana.example.net/d/cpu?var-custom_label=kept&var-workspace=custom-workspace&var-bucket=ydb"
+        );
+    }
 }

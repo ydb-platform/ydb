@@ -79,6 +79,8 @@ items:
       href: parameterized-query-execution.md
     - name: Interactive query execution mode
       href: interactive-cli.md
+    - name: AI assistant mode
+      href: interactive-cli-ai.md
     - name: Scan queries
       href: scan-query.md
 # Deprecated commands:

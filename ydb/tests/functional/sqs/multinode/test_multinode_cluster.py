@@ -58,6 +58,10 @@ class TestSqsMultinodeCluster(KikimrSqsTestBase):
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     @pytest.mark.parametrize(**STOP_NODE_PARAMS)
+    @pytest.mark.skipif(
+        KikimrSqsTestBase._is_topic_migration_stage(),
+        reason='MessagesCount counters use different semantics on topic path',
+    )
     def test_has_messages_counters(self, is_fifo, stop_node):
         self._init_with_params(is_fifo, tables_format=0)
         self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)

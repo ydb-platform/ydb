@@ -83,8 +83,8 @@ vector                YDB vector workload.
 | `--vector-type <тип>` | Тип векторов. Один из `float`, `int8`, `uint8`, `bit`. | `float` |
 | `--vector-dimension <значение>` | Размерность векторов. | `1024` |
 | `--distance <значение>` | Функция расстояния или сходства. Один из `inner_product`, `cosine`, `euclidean`, `manhattan`. | `inner_product` |
-| `--kmeans-tree-levels <значение>` | Количество уровней в дереве k-means. См. [тип kmeans-tree](../../dev/vector-indexes.md#kmeans-tree-type). | `1` |
-| `--kmeans-tree-clusters <значение>` | Количество кластеров k-means. См. [тип kmeans-tree](../../dev/vector-indexes.md#kmeans-tree-type). | `10` |
+| `--kmeans-tree-levels <значение>` | Количество уровней в дереве k-means. Если не задано, определяется сервером автоматически. См. [тип kmeans-tree](../../dev/vector-indexes.md#kmeans-tree-type). | Автоопределение |
+| `--kmeans-tree-clusters <значение>` | Количество кластеров k-means. Если не задано, определяется сервером автоматически. См. [тип kmeans-tree](../../dev/vector-indexes.md#kmeans-tree-type). | Автоопределение |
 | `--kmeans-tree-covering <значение>` | Создавать покрывающий индекс (`1` — да, `0` — нет). | `0` |
 | `--kmeans-tree-prefixed <значение>` | Создавать prefixed (фильтрующий) индекс (`1` — да, `0` — нет). Таблица должна быть создана с параметром `--prefixed`. | `0` |
 
@@ -117,8 +117,8 @@ vector                YDB vector workload.
 | `--vector-type <тип>` | Тип векторов. Один из `float`, `int8`, `uint8`, `bit`. | `float` |
 | `--vector-dimension <значение>` | Размерность векторов. | `1024` |
 | `--distance <значение>` | Функция расстояния или сходства. | `inner_product` |
-| `--kmeans-tree-levels <значение>` | Количество уровней в дереве k-means. | `1` |
-| `--kmeans-tree-clusters <значение>` | Количество кластеров k-means. | `10` |
+| `--kmeans-tree-levels <значение>` | Количество уровней в дереве k-means. Если не задано, определяется сервером автоматически. | Автоопределение |
+| `--kmeans-tree-clusters <значение>` | Количество кластеров k-means. Если не задано, определяется сервером автоматически. | Автоопределение |
 | `--kmeans-tree-covering <значение>` | Создавать покрывающий индекс. | `0` |
 | `--kmeans-tree-prefixed <значение>` | Создавать prefixed-индекс. | `0` |
 
@@ -147,8 +147,8 @@ vector                YDB vector workload.
 | `--vector-type <тип>` | Тип векторов. Один из `float`, `int8`, `uint8`, `bit`. | `float` |
 | `--vector-dimension <значение>` | Размерность векторов. | `1024` |
 | `--distance <значение>` | Функция расстояния или сходства. | `inner_product` |
-| `--kmeans-tree-levels <значение>` | Количество уровней в дереве k-means. | `1` |
-| `--kmeans-tree-clusters <значение>` | Количество кластеров k-means. | `10` |
+| `--kmeans-tree-levels <значение>` | Количество уровней в дереве k-means. Если не задано, определяется сервером автоматически. | Автоопределение |
+| `--kmeans-tree-clusters <значение>` | Количество кластеров k-means. Если не задано, определяется сервером автоматически. | Автоопределение |
 | `--dry-run` | Только вывести DDL-запрос, не выполняя его. | |
 
 {% note info %}

@@ -67,7 +67,7 @@ STFUNC(TReaderActor::DescribeState) {
 void TReaderActor::DoSelectPartition() {
     LOG_D("Start select partition");
     Become(&TReaderActor::SelectPartitionState);
-    SendToTablet(Info->Description.GetBalancerTabletID(), new TEvPQ::TEvMLPGetPartitionRequest(Settings.TopicName, Settings.Consumer));
+    SendToTablet(Info->Description.GetBalancerTabletID(), new TEvPQ::TEvMLPGetPartitionRequest(Settings.TopicName, Settings.Consumer, Settings.ReceiveAttemptId));
 }
 
 void TReaderActor::Handle(TEvPQ::TEvMLPGetPartitionResponse::TPtr& ev) {
@@ -116,7 +116,8 @@ void TReaderActor::DoRead() {
         Settings.WaitTime ? Settings.WaitTime->ToDeadLine() : TDuration::MilliSeconds(ConsumerConfig->GetDefaultReceiveMessageWaitTimeMs()).ToDeadLine(),
         Settings.ProcessingTimeout ? Settings.ProcessingTimeout.value() : TDuration::Seconds(ConsumerConfig->GetDefaultProcessingTimeoutSeconds()),
         Settings.MaxNumberOfMessage,
-        Settings.SkipMessageGroups
+        Settings.SkipMessageGroups,
+        Settings.ReceiveAttemptId
     );
     SendToTablet(PQTabletId, request);
 }
@@ -125,6 +126,7 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvMLPReadResponse");
 
     auto response = std::make_unique<TEvReadResponse>();
+    response->BalancerTabletId = Info->Description.GetBalancerTabletID();
     for (auto& message : *ev->Get()->Record.MutableMessage()) {
         NKikimrPQClient::TDataChunk proto;
         bool res = proto.ParseFromString(message.GetData());

@@ -329,6 +329,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
     const bool scalarAggregation = aggregate->KeyColumns.empty();
     TPositionHandle pos = aggregate->Pos;
     const auto aggregationPhase = aggregate->GetAggregationPhase();
+    Y_ENSURE(!aggregate->AggregationTraitsList.empty(), "There are no traits for aggregation.");
 
     TVector<const TItemExprType*> newItemTypes;
     THashMap<TString, const TTypeAnnotationNode*> aggTraitsMap;
@@ -445,9 +446,9 @@ TStatus ComputeTypes(TIntrusivePtr<TOpJoin> join, TRBOContext& ctx) {
         } while (status == IGraphTransformer::TStatus::Repeat);
     }
 
-    if (join->JoinKind == "LeftOnly" || join->JoinKind == "LeftSemi") {
+    if (!JoinOutputsRight(join->JoinKind)) {
         rightItemTypes = {};
-    } else if (join->JoinKind == "RightOnly" || join->JoinKind == "RightSemi") {
+    } else if (!JoinOutputsLeft(join->JoinKind)) {
         leftItemTypes = {};
     } else if (join->JoinKind == "Left") {
         rightItemTypes = AddOptional(rightItemTypes, ctx);

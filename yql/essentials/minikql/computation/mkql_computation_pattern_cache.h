@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mkql_computation_node.h"
+#include "mkql_computation_pattern_cache_program_key.h"
 
 #include <yql/essentials/minikql/mkql_node.h>
 #include <library/cpp/threading/future/future.h>
@@ -98,13 +99,13 @@ public:
         return std::make_shared<TPatternCacheEntry>(useAlloc);
     }
 
-    TPatternCacheEntryPtr Find(const TString& serializedProgram);
-    TPatternCacheEntryFuture FindOrSubscribe(const TString& serializedProgram);
+    TPatternCacheEntryPtr Find(const TProgramKey& key);
+    TPatternCacheEntryFuture FindOrSubscribe(const TProgramKey& key);
 
-    void EmplacePattern(const TString& serializedProgram, TPatternCacheEntryPtr patternWithEnv);
+    void EmplacePattern(const TProgramKey& key, TPatternCacheEntryPtr patternWithEnv);
 
-    void NotifyPatternCompiled(const TString& serializedProgram);
-    void NotifyPatternMissing(const TString& serializedProgram);
+    void NotifyPatternCompiled(const TProgramKey& key);
+    void NotifyPatternMissing(const TProgramKey& key);
 
     size_t GetSize() const;
 
@@ -140,7 +141,7 @@ public:
         return PatternsToCompile_.size();
     }
 
-    void GetPatternsToCompile(THashMap<TString, TPatternCacheEntryPtr>& result) {
+    void GetPatternsToCompile(THashMap<TProgramKey, TPatternCacheEntryPtr>& result) {
         std::lock_guard lock(Mutex_);
         result.swap(PatternsToCompile_);
     }
@@ -150,12 +151,12 @@ private:
 
     static constexpr size_t CacheMaxElementsSize = 10000;
 
-    void AccessPattern(const TString& serializedProgram, TPatternCacheEntryPtr entry);
+    void AccessPattern(const TProgramKey& key, TPatternCacheEntryPtr entry);
 
     mutable std::mutex Mutex_;
-    THashMap<TString, TVector<NThreading::TPromise<TPatternCacheEntryPtr>>> Notify_; // protected by Mutex
-    std::unique_ptr<TLRUPatternCacheImpl> Cache_;                                    // protected by Mutex
-    THashMap<TString, TPatternCacheEntryPtr> PatternsToCompile_;                     // protected by Mutex
+    THashMap<TProgramKey, TVector<NThreading::TPromise<TPatternCacheEntryPtr>>> Notify_; // protected by Mutex
+    std::unique_ptr<TLRUPatternCacheImpl> Cache_;                                        // protected by Mutex
+    THashMap<TProgramKey, TPatternCacheEntryPtr> PatternsToCompile_;                     // protected by Mutex
 
     TConfig Configuration_;
 

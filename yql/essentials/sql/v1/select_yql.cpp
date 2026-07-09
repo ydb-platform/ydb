@@ -16,11 +16,16 @@ public:
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        Y_UNUSED(src);
+        TNodePtr source = BuildDataSource();
+        TNodePtr key = BuildKey(ctx);
+
+        if (!source->Init(ctx, src) || !key->Init(ctx, src)) {
+            return false;
+        }
 
         const TString ref = ctx.MakeName("yql_read");
-        TNodePtr read = Y("Read!", "world", BuildDataSource(), BuildKey(), Y("Void"), Q(Y()));
 
+        TNodePtr read = Y("Read!", "world", std::move(source), std::move(key), Y("Void"), Q(Y()));
         TBlocks& blocks = ctx.GetCurrentBlocks();
         blocks.emplace_back(Y("let", ref, std::move(read)));
         blocks.emplace_back(Y("let", "world", Y("Left!", ref)));
@@ -40,18 +45,38 @@ public:
 private:
     TNodePtr BuildDataSource() const {
         TNodePtr service = BuildQuotedAtom(Pos_, Service);
-        TNodePtr cluster = BuildQuotedAtom(Pos_, Cluster);
+        TNodePtr cluster = ToAtom(Cluster);
         return Y("DataSource", std::move(service), std::move(cluster));
     }
 
-    TNodePtr BuildKey() const {
-        TNodePtr key = BuildQuotedAtom(Pos_, Key);
-
+    TNodePtr BuildKey(TContext& ctx) const {
         if (IsAnonymous) {
+            TNodePtr key = ToAtom(Key);
             return Y("TempTable", std::move(key));
         }
 
-        return Y("Key", Q(Y(Q("table"), Y("String", std::move(key)))));
+        auto cluster = ToDeferredAtom(Cluster, ctx);
+        auto key = ToDeferredAtom(Key, ctx);
+
+        TNodePtr prefixed = ctx.GetPrefixedPath(Service, cluster, key);
+        YQL_ENSURE(prefixed);
+        return Y("Key", Q(Y(Q("table"), Y("String", std::move(prefixed)))));
+    }
+
+    TDeferredAtom ToDeferredAtom(TDeferredAtom atom, TContext& ctx) const {
+        if (atom.GetLiteral()) {
+            return atom;
+        }
+
+        return TDeferredAtom(Y("EvaluateAtom", atom.Build()), ctx);
+    }
+
+    TNodePtr ToAtom(TDeferredAtom atom) const {
+        if (atom.GetLiteral()) {
+            return BuildQuotedAtom(Pos_, *atom.GetLiteral());
+        }
+
+        return Y("EvaluateAtom", atom.Build());
     }
 
     TNodePtr Node_;
@@ -124,7 +149,7 @@ private:
                 name = Columns_->at(i);
             }
 
-            columns->Add(BuildQuotedAtom(Pos_, std::move(name)));
+            columns->Add(BuildQuotedAtom(Pos_, name));
         }
         return columns;
     }
@@ -350,7 +375,7 @@ private:
             TString label = TermAlias(term, i, used);
             used.emplace(label);
 
-            term->SetLabel(std::move(label));
+            term->SetLabel(label);
         }
 
         return ::NSQLTranslationV1::Init(ctx, src, terms);
@@ -478,7 +503,7 @@ private:
     }
 
     TNodePtr BuildYqlResultItem(TString name, TNodePtr term) const {
-        TNodePtr nameAtom = BuildQuotedAtom(Pos_, std::move(name));
+        TNodePtr nameAtom = BuildQuotedAtom(Pos_, name);
         return Y("YqlResultItem", std::move(nameAtom), Y("Void"), Y("lambda", Q(Y()), std::move(term)));
     }
 
@@ -499,33 +524,41 @@ private:
     }
 
     TMaybe<TNodePtr> BuildFromElement(TContext& ctx, const TYqlSource& source) const {
-        const auto build = [this](TNodePtr node, TString name) {
+        const auto build = [this](TNodePtr node, TString name, const TVector<TString>& columns) {
             YQL_ENSURE(!name.empty(), "An empty source name is unsupported");
 
-            TNodePtr nameAtom = BuildQuotedAtom(Pos_, std::move(name));
-            return Q(Y(
-                std::move(node),
-                std::move(nameAtom),
-                Q(Y(/* Columns are passed through SetColumns */))));
+            TNodePtr columnList = Y();
+            for (const TString& column : columns) {
+                columnList = L(std::move(columnList), BuildQuotedAtom(Pos_, column));
+            }
+
+            TNodePtr nameAtom = BuildQuotedAtom(Pos_, name);
+            return Q(Y(std::move(node), std::move(nameAtom), Q(std::move(columnList))));
         };
 
         if (!source.Alias) {
-            return build(source.Node, ctx.MakeName("_yql_source_"));
+            return build(source.Node, ctx.MakeName("_yql_source_"), /*columns=*/{});
         }
 
         if (auto& columns = source.Alias->Columns) {
             if (auto* values = dynamic_cast<TYqlValuesNode*>(source.Node.Get())) {
-                if (!values->SetColumns(std::move(columns), ctx)) {
+                if (!values->SetColumns(columns, ctx)) {
                     return Nothing();
                 }
-            } else {
-                ctx.Error() << "Qualified by column names source alias "
-                            << "is viable only for VALUES statement";
-                return Nothing();
+
+                return build(source.Node, source.Alias->Name, /*columns=*/{});
             }
+
+            if (source.Alias->Kind == TYqlSourceAlias::EKind::CTE) {
+                return build(source.Node, source.Alias->Name, columns);
+            }
+
+            ctx.Error() << "Qualified by column names source alias "
+                        << "is viable only for VALUES statement";
+            return Nothing();
         }
 
-        return build(source.Node, source.Alias->Name);
+        return build(source.Node, source.Alias->Name, /*columns=*/{});
     }
 
     TNodePtr BuildJoinConstraint(const TYqlJoinConstraint& constraint) const {
@@ -854,7 +887,7 @@ public:
             if (auto columns = Columns()) {
                 TNodePtr list = Y();
                 for (TString& column : *columns) {
-                    TNodePtr columnAtom = BuildQuotedAtom(Pos_, std::move(column));
+                    TNodePtr columnAtom = BuildQuotedAtom(Pos_, column);
                     list = L(std::move(list), std::move(columnAtom));
                 }
 
@@ -1083,12 +1116,12 @@ TNodePtr WrapYqlSelectSubExpr(TNodePtr node) {
 
 TNodePtr BuildYqlScalarSubquery(TNodePtr node) {
     TYqlSubLinkNode::TScalar variant = {};
-    return new TYqlSubLinkNode(std::move(node), std::move(variant));
+    return new TYqlSubLinkNode(std::move(node), variant);
 }
 
 TNodePtr BuildYqlExistsSubquery(TNodePtr node) {
     TYqlSubLinkNode::TExists variant = {};
-    return new TYqlSubLinkNode(std::move(node), std::move(variant));
+    return new TYqlSubLinkNode(std::move(node), variant);
 }
 
 TNodePtr BuildYqlInSubquery(TNodePtr node, TNodePtr expression) {

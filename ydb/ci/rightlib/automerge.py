@@ -4,7 +4,6 @@ import shutil
 import datetime
 import logging
 import subprocess
-import argparse
 from typing import Optional
 from github import Github
 from github.GithubException import GithubException
@@ -115,6 +114,17 @@ class PrAutomerger:
             self.add_failed_comment(pr, "Unable to push merged revision (failed to schedule retry).")
             self.add_pr_failed_label(pr)
 
+    def refresh_base_and_merge(self, pr: PullRequest, commit_msg: str) -> bool:
+        base_ref = pr.base.ref
+        self.git_run("fetch", "origin", base_ref)
+        self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR")
+        self.git_run("reset", "--hard", f"origin/{base_ref}")
+        try:
+            self.git_run("merge", "PR", "-m", commit_msg)
+        except subprocess.CalledProcessError:
+            return False
+        return True
+
     def git_merge_pr(self, pr: PullRequest):
         shutil.rmtree("merge-repo", ignore_errors=True)
         original_dir = os.getcwd()
@@ -129,13 +139,9 @@ class PrAutomerger:
                 "merge-repo",
             )
             os.chdir("merge-repo")
-            self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR")
-            self.git_run("checkout", pr.base.ref)
 
             commit_msg = f"Merge pull request #{pr.number} from {pr.head.user.login}/{pr.head.ref}"
-            try:
-                self.git_run("merge", "PR", "-m", commit_msg)
-            except subprocess.CalledProcessError:
+            if not self.refresh_base_and_merge(pr, commit_msg):
                 self.add_failed_comment(pr, "Unable to merge PR.")
                 self.add_pr_failed_label(pr)
                 self.clear_retry_label(pr)
@@ -199,13 +205,27 @@ class PrAutomerger:
 
         self.logger.info("run: %r", args)
         try:
-            output = subprocess.check_output(args).decode()
+            completed = subprocess.run(
+                args,
+                capture_output=True,
+                check=True,
+            )
         except subprocess.CalledProcessError as e:
-            self.logger.error(e.output.decode())
+            stdout = (e.stdout or b"").decode()
+            stderr = (e.stderr or b"").decode()
+            if stdout:
+                self.logger.error("stdout:\n%s", stdout)
+            if stderr:
+                self.logger.error("stderr:\n%s", stderr)
             raise
-        else:
-            self.logger.info("output:\n%s", output)
-        return output
+
+        stdout = completed.stdout.decode()
+        stderr = completed.stderr.decode()
+        if stdout:
+            self.logger.info("stdout:\n%s", stdout)
+        if stderr:
+            self.logger.info("stderr:\n%s", stderr)
+        return stdout
 
     def git_revparse_head(self):
         return self.git_run("rev-parse", "HEAD").strip()

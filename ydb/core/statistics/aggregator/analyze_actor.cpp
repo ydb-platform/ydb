@@ -1,10 +1,12 @@
 #include "analyze_actor.h"
 
 #include <ydb/library/query_actor/query_actor.h>
-#include <ydb/core/statistics/common.h>
 #include <ydb/core/statistics/events.h>
 #include <util/generic/size_literals.h>
 #include <util/string/vector.h>
+#include <algorithm>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
 
 namespace NKikimr::NStat {
 
@@ -77,7 +79,8 @@ private:
     }
 
     void Handle(TEvents::TEvPoison::TPtr&) {
-        SA_LOG_D("[" << SelfId() << "]: Got TEvPoison");
+        YDB_LOG_DEBUG("Got TEvPoison",
+            {"selfId", SelfId()});
         Finish(Ydb::StatusIds::ABORTED, "Query aborted");
     }
 
@@ -130,10 +133,12 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = request.ResultSet.front();
 
     if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-        SA_LOG_W("[" << SelfId() << "]: Navigate request failed with " << entry.Status
-            << ", operationId: " << OperationId.Quote()
-            << ", PathId: " << PathId
-            << ", DatabaseName: " << DatabaseName);
+        YDB_LOG_WARN("Navigate request failed",
+            {"selfId", SelfId()},
+            {"status", entry.Status},
+            {"operationId", OperationId.Quote()},
+            {"pathId", PathId},
+            {"databaseName", DatabaseName});
 
         FinishWithFailure(
             entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown
@@ -229,10 +234,12 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& 
     const NSchemeCache::TSchemeCacheRequest::TEntry& entry = request.ResultSet.front();
 
     if (entry.Status != NSchemeCache::TSchemeCacheRequest::EStatus::OkData) {
-        SA_LOG_W("[" << SelfId() << "]: Resolve request failed with " << entry.Status
-            << ", operationId: " << OperationId.Quote()
-            << ", PathId: " << PathId
-            << ", DatabaseName: " << DatabaseName);
+        YDB_LOG_WARN("Resolve request failed",
+            {"selfId", SelfId()},
+            {"status", entry.Status},
+            {"operationId", OperationId.Quote()},
+            {"pathId", PathId},
+            {"databaseName", DatabaseName});
 
         FinishWithFailure(
             entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist
@@ -257,6 +264,10 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvRequestTableDistribution::TPtr&) {
         new TEvPipeCache::TEvForward(req.release(), HiveId, true));
 }
 
+void TAnalyzeActor::SendProgressEvent(ui32 shardsTotal, ui32 shardsDone) {
+    Send(Parent, new TEvStatistics::TEvAnalyzeActorProgress(OperationId, PathId, shardsTotal, shardsDone));
+}
+
 void TAnalyzeActor::Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev) {
     const auto& msg = ev->Get()->Record;
     for (const auto& node : msg.GetNodes()) {
@@ -269,10 +280,16 @@ void TAnalyzeActor::Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev) {
     }
 
     if (!TabletIdsToLocate.empty()) {
-        SA_LOG_W("[" << SelfId() << "]: unable to locate " << TabletIdsToLocate.size() << " tablets");
+        YDB_LOG_WARN("Unable to locate tablets",
+            {"selfId", SelfId()},
+            {"tabletIdsToLocateCount", TabletIdsToLocate.size()});
         TryScheduleHiveRetry("Unable to locate some tablets.");
         return;
     }
+
+    // Report initial progress: shards known, none done yet
+    ui32 shardsTotal = IsColumnTable ? static_cast<ui32>(TabletId2NodeId.size()) : 1;
+    SendProgressEvent(shardsTotal, 0);
 
     Send(MakePipePerNodeCacheID(EPipePerNodeCache::Leader), new TEvPipeCache::TEvUnlink(0));
     StartColumnStatEvalTasks();
@@ -280,7 +297,8 @@ void TAnalyzeActor::Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev) {
 }
 
 void TAnalyzeActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
-    SA_LOG_W("[" << SelfId() << "]: got TEvDeliveryProblem");
+    YDB_LOG_WARN("Got TEvDeliveryProblem",
+        {"selfId", SelfId()});
     TryScheduleHiveRetry("Problem connecting to Hive");
 }
 
@@ -301,6 +319,7 @@ void TAnalyzeActor::StartColumnStatEvalTasks() {
     Y_ENSURE(NodeId2State.empty());
     Y_ENSURE(InProgressTasks.empty());
     Y_ENSURE(!PendingTasks.empty());
+
 
     if (IsColumnTable) {
         for (const auto& [tabletId, nodeId] : TabletId2NodeId) {
@@ -352,7 +371,8 @@ void TAnalyzeActor::DispatchSomeScanActors() {
 
     if (!IsColumnTable) {
         Y_ENSURE(ScanActorsInFlight.empty());
-        SA_LOG_D("[" << SelfId() << "]: Dispatching scan actor for the whole table");
+        YDB_LOG_DEBUG("Dispatching scan actor for the whole table",
+            {"selfId", SelfId()});
         dispatchActor(0, std::nullopt);
         return;
     }
@@ -385,8 +405,10 @@ void TAnalyzeActor::DispatchSomeScanActors() {
         Y_ENSURE(!node->PendingTablets.empty());
         ui64 tabletId = node->PendingTablets.back();
 
-        SA_LOG_D("[" << SelfId() << "]: Dispatching scan actor"
-            << ", tabletId: " << tabletId << ", nodeId: " << node->Id);
+        YDB_LOG_DEBUG("Dispatching scan actor",
+            {"selfId", SelfId()},
+            {"tabletId", tabletId},
+            {"nodeId", node->Id});
         dispatchActor(node->Id, tabletId);
         node->PendingTablets.pop_back();
         ++node->TabletsInFlight;
@@ -402,6 +424,13 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     Y_ENSURE(actorIt != ScanActorsInFlight.end());
     const ui32 tabletNodeId = actorIt->second.TabletNodeId;
     ScanActorsInFlight.erase(actorIt);
+
+    ++ScansCompletedTotal;
+    const ui32 shardsTotal = IsColumnTable ? static_cast<ui32>(TabletId2NodeId.size()) : 1;
+    // Cap intermediate progress below 100%: simple-stats and stage-2 rounds share
+    // ScansCompletedTotal, so 100% is only emitted from the final-result branch.
+    const ui32 shardsDoneCap = shardsTotal > 0 ? shardsTotal - 1 : 0;
+    SendProgressEvent(shardsTotal, std::min(ScansCompletedTotal, shardsDoneCap));
 
     auto& result = *ev->Get();
     if (result.Status != Ydb::StatusIds::SUCCESS) {
@@ -497,6 +526,8 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     Send(Parent, response.release());
 
     if (isFinalResult) {
+        // Only emit 100% once, when all scan rounds are done.
+        SendProgressEvent(shardsTotal, shardsTotal);
         PassAway();
     } else {
         StartColumnStatEvalTasks();

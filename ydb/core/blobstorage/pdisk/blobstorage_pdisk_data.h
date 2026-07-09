@@ -986,6 +986,8 @@ struct TDiskFormat {
     }
 };
 
+static_assert(sizeof(TDiskFormat) >= MagicIncompleteFormatSize, "Magic format should be less or equal than TDiskFormat");
+
 union TDiskFormatSector {
     TDiskFormat Format;
     char Raw[FormatSectorSize];

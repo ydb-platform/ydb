@@ -51,6 +51,7 @@ private:
     NYql::TTypeAnnotationContext& TypeCtx;
     NOpt::TKqpOptimizeContext& KqpCtx;
     ui64 UniqueSourceIdCounter = 0;
+    bool RboTraceRewriteSelectStarted = false;
 };
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePtr<NOpt::TKqpOptimizeContext>& kqpCtx,

@@ -40,6 +40,7 @@ runs:
             -tA --build profile
             --clang-coverage --coverage-report
             -DCOVERAGE_TARGET_REGEXP=ydb/public/sdk/cpp
+            --coverage-prefix-filter=ydb/public/sdk/cpp
             --test-threads "${{ inputs.test_threads }}"
             --link-threads "${{ inputs.link_threads }}"
             --output "$out_dir"
@@ -49,7 +50,12 @@ runs:
             params+=(--bazel-remote-store --bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
             params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
             params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
-            params+=(--bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs)
+            params+=(
+              --bazel-remote-put
+              --dist-cache-max-file-size=209715200
+              --dist-cache-evict-test-runs
+              --dist-cache-evict-bins
+            )
           fi
           ./ya make "${params[@]}" ydb/public/sdk/cpp
         }
@@ -64,10 +70,10 @@ runs:
         git fetch origin "$BASE_REF"
         git checkout "origin/$BASE_REF"
         run_sdk_coverage "$BASE_OUT"
-        python3 .github/scripts/tests/compare_cpp_sdk_coverage.py extract \
-          "$BASE_OUT/coverage.report" "$BASE_COVERAGE_JSON"
 
         git checkout "$MERGE_HEAD"
+        python3 .github/scripts/tests/compare_cpp_sdk_coverage.py extract \
+          "$BASE_OUT/coverage.report" "$BASE_COVERAGE_JSON"
         run_sdk_coverage "$PR_OUT"
         python3 .github/scripts/tests/compare_cpp_sdk_coverage.py extract \
           "$PR_OUT/coverage.report" "$PR_COVERAGE_JSON"

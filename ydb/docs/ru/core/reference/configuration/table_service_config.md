@@ -31,6 +31,53 @@ table_service_config:
 **По умолчанию:** `33554432` (32 МиБ)  
 **Описание:** Шаг увеличения размера кэша level table. Кэш растёт порциями такого размера до значения `kqp_level_cache_max_size_bytes` и уменьшается такими же порциями при снижении лимита.
 
+### Лимиты памяти выполнения запросов {#query-execution-memory-limits}
+
+В подсекции `resource_manager` задаётся порог спиллинга относительно пула памяти запросов на [узле](../../concepts/glossary.md#node). Размер этого пула регулируется параметрами [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit) в `memory_controller_config`.
+
+```yaml
+table_service_config:
+  resource_manager:
+    spilling_percent: 80
+```
+
+#### resource_manager.spilling_percent {#spilling-percent}
+
+**Тип:** `double`  
+**По умолчанию:** `80`  
+**Описание:** Порог заполнения пула памяти запросов, при котором {{ ydb-short-name }} начинает считать [спиллинг](../../concepts/query_execution/spilling.md) предпочтительным способом управления памятью. Базой для расчёта служит пул Query Processor, размер которого задаётся [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit).
+
+Когда суммарное потребление памяти запросами на узле превышает `spilling_percent` процентов от доступного пула, вычислительные операции, поддерживающие спиллинг (Grace Hash Join, агрегации и др.), получают сигнал выгружать промежуточные данные на диск вместо дальнейшего наращивания потребления RAM.
+
+Например, при значении по умолчанию `80` спиллинг активируется, когда пул запросов заполнен примерно на 80%.
+
+Порог применяется:
+
+- к общему пулу памяти запросов на узле (размер — см. [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit));
+- к [resource pool](../../concepts/glossary.md#resource-pool), если запрос выполняется в workload-пуле с ограничением `total_memory_limit_percent_per_node`.
+
+{% note info %}
+
+`spilling_percent` не задаёт лимит на объём файлов спиллинга на диске. За дисковые квоты отвечает [`local_file_config.max_total_size`](#local-file-config-max-total-size) в секции `spilling_service_config`.
+
+{% endnote %}
+
+##### Взаимодействие с другими параметрами
+
+| Параметр | Уровень | Роль |
+| --- | --- | --- |
+| `query_execution_limit_percent` / `query_execution_limit_bytes` | Узел (QP) | Размер пула памяти запросов |
+| `spilling_percent` | Запрос / пул | Порог заполнения пула, после которого предпочтителен спиллинг |
+| `activities_limit_percent` | Узел | Общий лимит памяти для всех компонентов-активностей (QP, компактизация и др.) |
+
+`spilling_percent` определяет, когда пул запросов на узле настолько заполнен, что дальнейший рост в RAM должен уступить место спиллингу. `activities_limit_percent` ограничивает память активностей в целом и косвенно влияет на доступный объём RAM, но не заменяет пул, относительно которого считается `spilling_percent`.
+
+##### Рекомендации
+
+- Уменьшайте `spilling_percent` (например, до `70`), если нужно раньше переводить тяжёлые запросы на диск и снизить риск исчерпания пула памяти;
+- Увеличивайте `spilling_percent` (например, до `90`), если дисковый спиллинг слишком часто снижает производительность, а на узле достаточно RAM;
+- Согласовывайте `spilling_percent` с [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit): при увеличении лимита пула запросов можно поднять порог спиллинга, если на узле достаточно RAM.
+
 ## spilling_service_config
 
 [Спиллинг](../../concepts/query_execution/spilling.md) — это механизм управления памятью в {{ ydb-short-name }}, который временно сохраняет данные на диск при нехватке оперативной памяти.
@@ -112,7 +159,7 @@ table_service_config:
 
 - `Permission denied` — недостаточные права доступа к директории. См. [{#T}](../../troubleshooting/spilling/permission-denied.md)
 
-#### local_file_config.max_total_size
+#### local_file_config.max_total_size {#local-file-config-max-total-size}
 
 **Тип:** `uint64`  
 **По умолчанию:** `21474836480` (20 GiB)  
@@ -134,14 +181,20 @@ table_service_config:
 
 Ключевым параметром для спиллинга является **`activities_limit_percent`**, который определяет объем памяти, выделяемый для активностей по обработке запросов. От этого параметра зависит доступная память для пользовательских запросов и, соответственно, частота активации спиллинга.
 
+#### Порог спиллинга в resource_manager
+
+Непосредственный порог, при котором вычислительные операции переключаются на спиллинг, регулируется параметром [`resource_manager.spilling_percent`](#spilling-percent). Он определяет, при каком заполнении пула памяти Query Processor промежуточные данные запроса начинают выгружаться на диск. Размер пула задаётся в [`memory_controller_config`](memory_controller_config.md#query-execution-limit). Подробнее см. раздел [Лимиты памяти выполнения запросов](#query-execution-memory-limits).
+
 #### Влияние на спиллинг
 
 - При увеличении `activities_limit_percent` больше памяти доступно для запросов → спиллинг активируется реже
 - При уменьшении `activities_limit_percent` меньше памяти доступно для запросов → спиллинг активируется чаще
+- При уменьшении `spilling_percent` спиллинг включается при меньшем заполнении пула запросов
+- При увеличении `spilling_percent` задачи дольше наращивают потребление RAM, прежде чем перейти к спиллингу
 
 {% note warning %}
 
-Однако важно учитывать, что сам спиллинг также требует память. Если установить `activities_limit_percent` слишком высоким, память может все равно закончиться несмотря на спиллинг, поскольку механизм спиллинга сам потребляет ресурсы памяти.
+Важно учитывать, что сам спиллинг также требует память. Если установить `activities_limit_percent` слишком высоким, память может все равно закончиться несмотря на спиллинг, поскольку механизм спиллинга сам потребляет ресурсы памяти.
 
 {% endnote %}
 

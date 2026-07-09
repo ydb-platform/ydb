@@ -47,10 +47,7 @@ int CompareWriteIdProto(const NKikimrPQ::TWriteId& lhs, const NKikimrPQ::TWriteI
         case NKikimrPQ::TWriteId::kDeferredPublicationApi: {
             const auto& l = lhs.GetDeferredPublicationApi();
             const auto& r = rhs.GetDeferredPublicationApi();
-            if (auto cmp = CompareScalars(l.GetIntPublicationId(), r.GetIntPublicationId()); cmp != 0) {
-                return cmp;
-            }
-            return l.GetExtPublicationId().compare(r.GetExtPublicationId());
+            return CompareScalars(l.GetIntPublicationId(), r.GetIntPublicationId());
         }
         case NKikimrPQ::TWriteId::ID_NOT_SET:
             return 0;
@@ -111,10 +108,8 @@ size_t TWriteId::GetHash() const
             return MultiHash(Proto.GetTopicApi().GetNodeId(), Proto.GetTopicApi().GetKeyId());
         case NKikimrPQ::TWriteId::kKafkaApi:
             return MultiHash(KafkaProducerInstanceId.Id, KafkaProducerInstanceId.Epoch);
-        case NKikimrPQ::TWriteId::kDeferredPublicationApi: {
-            const auto& deferredPublicationApi = Proto.GetDeferredPublicationApi();
-            return MultiHash(deferredPublicationApi.GetIntPublicationId(), deferredPublicationApi.GetExtPublicationId());
-        }
+        case NKikimrPQ::TWriteId::kDeferredPublicationApi:
+            return Proto.GetDeferredPublicationApi().GetIntPublicationId();
         case NKikimrPQ::TWriteId::ID_NOT_SET:
             return 0;
     }

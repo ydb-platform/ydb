@@ -220,6 +220,17 @@ Y_UNIT_TEST(DeferredWriteIdsAreDistinct) {
     UNIT_ASSERT_VALUES_UNEQUAL(first.GetHash(), second.GetHash());
 }
 
+Y_UNIT_TEST(DeferredWriteIdsIgnoreExtPublicationId) {
+    const TWriteId withExt(MakeDeferredWriteId(42, "ext-42"));
+    const TWriteId withoutExt(MakeDeferredWriteId(42, ""));
+    const TWriteId otherExt(MakeDeferredWriteId(42, "other-ext"));
+
+    UNIT_ASSERT_VALUES_EQUAL(withExt, withoutExt);
+    UNIT_ASSERT_VALUES_EQUAL(withExt, otherExt);
+    UNIT_ASSERT_VALUES_EQUAL(withExt.GetHash(), withoutExt.GetHash());
+    UNIT_ASSERT_VALUES_EQUAL(withExt.GetHash(), otherExt.GetHash());
+}
+
 } // Y_UNIT_TEST_SUITE(TWriteIdEquality)
 
 } // namespace

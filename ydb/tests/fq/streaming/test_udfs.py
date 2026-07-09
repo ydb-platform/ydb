@@ -216,9 +216,12 @@ END DO
         for _ in range(5):
             try:
                 kikimr_udfs.ydb_client.query(sql)
+                break
             except ydb.issues.Error as e:
                 logger.info(f"Failed to create streaming query {e}")
                 time.sleep(5)
+        else:
+            raise Exception("Failed to create streaming query after several retries")
 
         time.sleep(1)
         validate_query(sql, tests_count)

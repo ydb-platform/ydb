@@ -102,7 +102,9 @@ class YdbClient:
         )
         self.driver = None
         self.session_pool = None
-        self.retry_settings = ydb.RetrySettings(on_ydb_error_callback=lambda e: logger.error(f"Query execution failed and my be retried: {e}"))
+        self.retry_settings = ydb.RetrySettings(
+            on_ydb_error_callback=lambda e: logger.error(f"Query execution failed and may be retried: {e}")
+        )
         self.start()
 
     def start(self):

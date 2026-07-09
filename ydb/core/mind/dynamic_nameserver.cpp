@@ -447,7 +447,7 @@ void TDynamicNameserver::SendNodesList(TActorId recipient, bool onlyAliveNodes, 
                 newNodes->emplace_back(pr.first, pr.second.Address,
                     pr.second.Host, pr.second.ResolveHost,
                     pr.second.Port, pr.second.Location, false);
-                newExpire = std::min(newExpire, pr.second.Expire);
+                newExpire = std::min(newExpire, pr.second.EffectiveExpire(EnableLongLease));
                 if (newPileMap) {
                     TNodeLocation location(pr.second.Location);
                     const auto& bridgePileName = location.GetBridgePileName();

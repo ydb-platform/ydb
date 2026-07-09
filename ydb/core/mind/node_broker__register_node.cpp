@@ -172,11 +172,12 @@ public:
             if (rec.GetFixedNodeId()) {
                 Node->Expire = TInstant::Max();
                 Node->ExpireV2 = TInstant::Max();
+                Node->AliveUntil = TInstant::Max();
             } else {
                 Node->Expire = Self->Dirty.Epoch.NextEnd;
                 Node->ExpireV2 = Self->Dirty.Epoch.NextEnd + Self->Dirty.LeaseDuration;
+                Node->AliveUntil = Self->Dirty.Epoch.NextEnd;
             }
-            Node->AliveUntil = Self->Dirty.Epoch.NextEnd;
             Node->Liveness = ENodeLiveness::Alive;
             Node->Version = Self->Dirty.Epoch.Version + 1;
             Node->State = ENodeState::Active;

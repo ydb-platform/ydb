@@ -1178,7 +1178,7 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadNodes(auto &nodesRowset,
             if (Self->EnableLongLease) {
                 info.State = expireV2 > Epoch.Start ? ENodeState::Active : ENodeState::Expired;
             } else {
-                // Dead nodes are stay active until epoch end
+                // Dead nodes stay active until epoch end
                 info.State = info.Liveness == ENodeLiveness::Dead || expire > Epoch.Start ? ENodeState::Active : ENodeState::Expired;
             }
             AddNode(info);

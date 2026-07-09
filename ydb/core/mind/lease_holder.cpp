@@ -242,8 +242,8 @@ private:
 
     void ScheduleExpire(const TActorContext &ctx)
     {
+        ExpireCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
         if (EffectiveExpire() != TInstant::Max()) {
-            ExpireCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
             ctx.Schedule(EffectiveExpire() - ctx.Now(), new TEvPrivate::TEvExpire, ExpireCookieHolder.Get());
         }
     }

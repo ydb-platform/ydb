@@ -6,15 +6,67 @@
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/wcache.h>
 
+#include <util/generic/vector.h>
+#include <util/string/builder.h>
 #include <util/string/split.h>
 
 namespace NKikimr::NStorage {
-
     static const std::unordered_map<NPDisk::EDeviceType, ui64> DefaultSpeedLimit{
         {NPDisk::DEVICE_TYPE_ROT, 100000000},
         {NPDisk::DEVICE_TYPE_SSD, 200000000},
         {NPDisk::DEVICE_TYPE_NVME, 300000000},
     };
+
+    void TNodeWarden::UpdateStorageActorPoolMap() {
+        auto previousStorageActorPoolByPDiskId = std::move(StorageActorPoolByPDiskId);
+        StorageActorPoolByPDiskId.clear();
+
+        const TVector<ui32>& storagePools = AppData()->StoragePools;
+        if (storagePools.empty()) {
+            return;
+        }
+
+        ui32 index = 0;
+        for (const auto& item : LocalPDisks) {
+            const TPDiskKey& key = item.first;
+            if (key.NodeId == LocalNodeId) {
+                const auto it = previousStorageActorPoolByPDiskId.find(key.PDiskId);
+                const ui32 storagePoolId = it != previousStorageActorPoolByPDiskId.end()
+                    ? it->second
+                    : storagePools[index % storagePools.size()];
+                const auto [_, inserted] = StorageActorPoolByPDiskId.emplace(key.PDiskId, storagePoolId);
+                if (inserted) {
+                    ++index;
+                }
+            }
+        }
+
+        auto addPDisk = [&](const TServiceSetPDisk& pdisk) {
+            if (!pdisk.HasNodeID() || pdisk.GetNodeID() == LocalNodeId) {
+                const ui32 pdiskId = pdisk.GetPDiskID();
+                const auto [_, inserted] = StorageActorPoolByPDiskId.emplace(pdiskId, storagePools[index % storagePools.size()]);
+                if (inserted) {
+                    ++index;
+                }
+            }
+        };
+        for (const auto& pdisk : StaticServices.GetPDisks()) {
+            addPDisk(pdisk);
+        }
+        for (const auto& pdisk : DynamicServices.GetPDisks()) {
+            addPDisk(pdisk);
+        }
+    }
+
+    ui32 TNodeWarden::GetStorageActorPoolId(ui32 pdiskId) {
+        if (AppData()->StoragePools.empty()) {
+            return AppData()->SystemPoolId;
+        }
+        const auto it = StorageActorPoolByPDiskId.find(pdiskId);
+        Y_ABORT_UNLESS(it != StorageActorPoolByPDiskId.end(), "No storage actor pool allocated for PDiskId# %u",
+            static_cast<unsigned>(pdiskId));
+        return it->second;
+    }
 
     TIntrusivePtr<TPDiskConfig> TNodeWarden::CreatePDiskConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk)  {
         const TString& path = pdisk.GetPath();
@@ -190,21 +242,23 @@ namespace NKikimr::NStorage {
             record.ReplPDiskWriteQuoter = std::make_shared<TReplQuoter>(*writeBytesPerSecond);
         }
 
+        const ui32 pdiskID = pdisk.GetPDiskID();
+        const ui32 storageActorPoolId = temporary ? AppData()->SystemPoolId : GetStorageActorPoolId(pdiskID);
+
         STLOG(PRI_DEBUG, BS_NODE, NW04, "StartLocalPDisk", (NodeId, key.NodeId), (PDiskId, key.PDiskId),
             (Path, TString(TStringBuilder() << '"' << pdisk.GetPath() << '"')),
             (PDiskCategory, TPDiskCategory(record.Record.GetPDiskCategory())),
-            (Temporary, temporary));
+            (Temporary, temporary), (StorageActorPoolId, storageActorPoolId));
 
         auto pdiskConfig = CreatePDiskConfig(pdisk);
         if (temporary) {
             pdiskConfig->MetadataOnly = true;
         }
 
-        const ui32 pdiskID = pdisk.GetPDiskID();
         const ui64 pdiskGuid = pdisk.GetPDiskGuid();
         const ui64 pdiskCategory = pdisk.GetPDiskCategory();
         Cfg->PDiskKey.Initialize();
-        Cfg->PDiskServiceFactory->Create(ActorContext(), pdiskID, pdiskConfig, Cfg->PDiskKey, AppData()->SystemPoolId, LocalNodeId);
+        Cfg->PDiskServiceFactory->Create(ActorContext(), pdiskID, pdiskConfig, Cfg->PDiskKey, storageActorPoolId, LocalNodeId);
         if (!temporary) {
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate(pdiskID, path, pdiskGuid, pdiskCategory));
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("Storage"));
@@ -407,7 +461,7 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::MergeServiceSetPDisks(NProtoBuf::RepeatedPtrField<TServiceSetPDisk> *to,
-            const NProtoBuf::RepeatedPtrField<TServiceSetPDisk>& from) {
+            const NProtoBuf::RepeatedPtrField<TServiceSetPDisk>& from, TVector<TServiceSetPDisk>& pdisksToRestart) {
         THashMap<TPDiskKey, TServiceSetPDisk*> pdiskMap;
         for (int i = 0; i < to->size(); ++i) {
             TServiceSetPDisk *pdisk = to->Mutable(i);
@@ -442,7 +496,7 @@ namespace NKikimr::NStorage {
                     if (localPdiskIt != LocalPDisks.end()) {
                         localPdiskIt->second.Record = pdisk;
                     }
-                    DoRestartLocalPDisk(pdisk);
+                    pdisksToRestart.push_back(pdisk);
                     [[fallthrough]];
                 case NKikimrBlobStorage::INITIAL:
                 case NKikimrBlobStorage::CREATE: {

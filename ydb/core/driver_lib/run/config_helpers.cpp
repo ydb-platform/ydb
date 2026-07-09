@@ -9,6 +9,9 @@
 
 #include <util/string/builder.h>
 
+#include <optional>
+#include <utility>
+
 namespace NKikimr {
 
 namespace NActorSystemConfigHelpers {
@@ -76,7 +79,8 @@ void AddExecutorPool(
     ui32 poolId,
     const TString& poolName,
     NMonitoring::TDynamicCounterPtr counters,
-    const TCpuTopologyGroup* placementGroup = nullptr)
+    const std::optional<TCpuTopologyGroup>& placementGroup = std::nullopt,
+    const std::optional<TCpuMask>& defaultAffinity = std::nullopt)
 {
     switch (poolConfig.GetType()) {
         case TExecutorConfig::BASIC:
@@ -97,7 +101,14 @@ void AddExecutorPool(
             } else {
                 Y_ABORT_UNLESS(!placementGroup);
                 basic.Threads = Max(poolConfig.GetThreads(), poolConfig.GetMaxThreads());
-                basic.Affinity = ParseAffinity(poolConfig.GetAffinity());
+                if (!poolConfig.HasAffinity() && defaultAffinity) {
+                    Y_ABORT_UNLESS(defaultAffinity->CpuCount(),
+                        "NUMA placement groups consume all CPUs; executor pool '%s' has no CPUs left and no explicit Affinity",
+                        poolName.c_str());
+                    basic.Affinity = *defaultAffinity;
+                } else {
+                    basic.Affinity = ParseAffinity(poolConfig.GetAffinity());
+                }
                 basic.MinThreadCount = poolConfig.GetMinThreads();
                 basic.MaxThreadCount = poolConfig.GetMaxThreads();
                 basic.DefaultThreadCount = poolConfig.GetThreads();
@@ -149,9 +160,16 @@ void AddExecutorPool(
             io.PoolId = poolId;
             io.PoolName = poolName;
             io.Threads = poolConfig.GetThreads();
-            io.Affinity = ParseAffinity(poolConfig.GetAffinity());
-            cpuManager.IO.emplace_back(std::move(io));
+            if (!poolConfig.HasAffinity() && defaultAffinity) {
+                Y_ABORT_UNLESS(defaultAffinity->CpuCount(),
+                    "NUMA placement groups consume all CPUs; executor pool '%s' has no CPUs left and no explicit Affinity",
+                    poolName.c_str());
+                io.Affinity = *defaultAffinity;
+            } else {
+                io.Affinity = ParseAffinity(poolConfig.GetAffinity());
+            }
             io.UseRingQueue = systemConfig.HasUseRingQueue() && systemConfig.GetUseRingQueue();
+            cpuManager.IO.emplace_back(std::move(io));
             break;
         }
 
@@ -174,8 +192,7 @@ TVector<ui32> GetStoragePoolIds(const NKikimrConfig::TActorSystemConfig& systemC
         const ui32 placementGroups = poolConfig.GetPlacementGroups();
         Y_ABORT_UNLESS(placementGroups, "NUMA executor must have non-zero placement group count");
         for (ui32 group = 0; group < placementGroups; ++group) {
-            storagePoolIds.push_back(poolId + group);
-            ++poolId;
+            storagePoolIds.push_back(poolId++);
         }
     }
     return storagePoolIds;
@@ -184,28 +201,52 @@ TVector<ui32> GetStoragePoolIds(const NKikimrConfig::TActorSystemConfig& systemC
 void AddExecutorPools(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig::TActorSystemConfig& systemConfig, NMonitoring::TDynamicCounterPtr counters) {
     cpuManager.PingInfoByPool.resize(GetExecutorPoolCount(systemConfig));
 
-    auto parsedCpuTopology = ParseCpuTopology();
-    Y_ABORT_UNLESS(parsedCpuTopology, "Failed to parse CPU topology for NUMA placement groups: %s", parsedCpuTopology.error().c_str());
-    const TCpuTopology& cpuTopology = *parsedCpuTopology;
-
-    ui32 poolId = 0;
+    std::optional<TCpuTopology> cpuTopology;
+    std::optional<TCpuMask> remainingCpus;
+    TCpuMask usedPlacementCpus;
     for (const auto& poolConfig : systemConfig.GetExecutor()) {
         if (poolConfig.GetType() != TExecutorConfig::NUMA) {
-            const TString poolName = poolConfig.GetName();
-            AddExecutorPool(cpuManager, poolConfig, systemConfig, poolId, poolName, counters);
-            ++poolId;
             continue;
         }
 
         const ui32 placementGroups = poolConfig.GetPlacementGroups();
         Y_ABORT_UNLESS(placementGroups, "NUMA executor must have non-zero placement group count");
-        Y_ABORT_UNLESS(placementGroups <= cpuTopology.PlacementGroups.size(),
+        Y_ABORT_UNLESS(!poolConfig.HasAffinity(), "NUMA executor must not define Affinity together with PlacementGroups");
+
+        if (!cpuTopology) {
+            auto parsedCpuTopology = ParseCpuTopology();
+            Y_ABORT_UNLESS(parsedCpuTopology, "Failed to parse CPU topology for NUMA placement groups: %s", parsedCpuTopology.error().c_str());
+            cpuTopology.emplace(std::move(*parsedCpuTopology));
+        }
+
+        Y_ABORT_UNLESS(placementGroups <= cpuTopology->PlacementGroups.size(),
             "NUMA executor requested %" PRIu32 " placement groups, but CPU topology has only %zu placement groups",
-            placementGroups, cpuTopology.PlacementGroups.size());
+            placementGroups, cpuTopology->PlacementGroups.size());
 
         for (ui32 group = 0; group < placementGroups; ++group) {
+            usedPlacementCpus = usedPlacementCpus | cpuTopology->PlacementGroups[group].Cpus;
+        }
+    }
+    if (cpuTopology) {
+        remainingCpus = cpuTopology->AllCpus - usedPlacementCpus;
+    }
+
+    ui32 poolId = 0;
+    for (const auto& poolConfig : systemConfig.GetExecutor()) {
+        if (poolConfig.GetType() != TExecutorConfig::NUMA) {
+            const TString poolName = poolConfig.GetName();
+            AddExecutorPool(cpuManager, poolConfig, systemConfig, poolId, poolName, counters,
+                std::nullopt, remainingCpus);
+            ++poolId;
+            continue;
+        }
+
+        Y_ABORT_UNLESS(cpuTopology);
+
+        const ui32 placementGroups = poolConfig.GetPlacementGroups();
+        for (ui32 group = 0; group < placementGroups; ++group) {
             const TString poolName = GetStoragePoolName(poolConfig, group, placementGroups);
-            AddExecutorPool(cpuManager, poolConfig, systemConfig, poolId, poolName, counters, &cpuTopology.PlacementGroups[group]);
+            AddExecutorPool(cpuManager, poolConfig, systemConfig, poolId, poolName, counters, cpuTopology->PlacementGroups[group]);
             ++poolId;
         }
     }

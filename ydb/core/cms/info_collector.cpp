@@ -239,7 +239,7 @@ void TInfoCollector::Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev
         const auto& currentBootstrapConfig = config->GetBootstrapConfig();
 
         YDB_LOG_TRACE("[InfoCollector] Got Bootstrap config",
-            {"record", currentBootstrapConfig});
+            {"record", currentBootstrapConfig.ShortDebugString()});
 
         if (!::google::protobuf::util::MessageDifferencer::Equals(initialBootstrapConfig, currentBootstrapConfig)) {
             YDB_LOG_DEBUG("[InfoCollector] Local Bootstrap config is different from the config from the console");
@@ -289,7 +289,7 @@ void TInfoCollector::RequestBaseConfig() {
 void TInfoCollector::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
     const auto& record = ev->Get()->Record.GetResponse();
     YDB_LOG_TRACE("[InfoCollector] Got base config",
-        {"record", record});
+        {"record", record.ShortDebugString()});
 
     if (!record.GetSuccess() || !record.StatusSize() || !record.GetStatus(0).GetSuccess()) {
         YDB_LOG_ERROR("[InfoCollector] Couldn't get base config");

@@ -578,7 +578,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
 
         YDB_LOG_DEBUG("Handle TEvCms::TEvClusterStateResponse",
             {"name", Name()},
-            {"response", record});
+            {"response", record.ShortDebugString()});
 
         if (!record.HasStatus() || !record.GetStatus().HasCode() || record.GetStatus().GetCode() != NKikimrCms::TStatus::OK) {
             TString error = "<no description>";
@@ -636,7 +636,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
 
         YDB_LOG_DEBUG("Handle TEvBlobStorage::TEvControllerConfigResponse",
             {"name", Name()},
-            {"response", response});
+            {"response", response.ShortDebugString()});
 
         if (!response.GetSuccess() || !response.StatusSize() || !response.GetStatus(0).GetSuccess()) {
             TString error = "<no description>";
@@ -823,7 +823,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
         YDB_LOG_DEBUG("Handle TEvWhiteboard::TEvPDiskStateResponse",
             {"name", Name()},
             {"nodeId", nodeId},
-            {"response", record});
+            {"response", record.ShortDebugString()});
 
         if (!AcceptNodeReply(nodeId)) {
             YDB_LOG_WARN("PDisk info from unknown node",
@@ -1407,7 +1407,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
         YDB_LOG_DEBUG("Handle TEvBlobStorage::TEvControllerConfigResponse",
             {"name", Name()},
-            {"response", response},
+            {"response", response.ShortDebugString()},
             {"cookie", ev->Cookie});
 
         if (ev->Cookie != SentinelState->ChangeRequestId) {

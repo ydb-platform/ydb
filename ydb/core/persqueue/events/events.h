@@ -9,6 +9,7 @@ enum class EServices {
     GLOBAL = 0,
     DESCRIBER_SERVICE,
     MLP,
+    CLOUD_EVENTS,
     END
 };
 

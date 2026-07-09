@@ -832,6 +832,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             for (const auto rawType : add.GetTypes()) {
                 const auto type = static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(rawType);
                 switch (type) {
+                    case NKikimrSchemeOp::EMultiColumnStatisticsType::UNSPECIFIED:
+                        errStr = TStringBuilder() << "MultiColumnStatistics " << add.GetName() << " type must be specified";
+                        return nullptr;
                     case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
                         break;
                     default:

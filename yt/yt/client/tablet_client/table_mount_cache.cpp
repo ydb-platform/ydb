@@ -63,7 +63,7 @@ bool TTableMountInfo::IsChaosReplica() const
     return TypeFromId(UpstreamReplicaId) == EObjectType::ChaosTableReplica;
 }
 
-TTabletInfoPtr TTableMountInfo::GetTabletByIndexOrThrow(int tabletIndex) const
+TTabletInfoPtr TTableMountInfo::GetTabletByIndexOrThrow(i64 tabletIndex) const
 {
     if (tabletIndex < 0 || tabletIndex >= std::ssize(Tablets)) {
         if (Tablets.empty()) {
@@ -244,16 +244,6 @@ void TTabletRedirectionHint::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("reshard_redirection_hint", &TThis::ReshardRedirectionHint)
         .Default();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TUnfoldedColumns::Persist(const TStreamPersistenceContext& context)
-{
-    using NYT::Persist;
-
-    Persist(context, TableColumn);
-    Persist(context, IndexColumn);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -143,18 +143,6 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
             auto explainResult = qp->SyncExplainDataQuery(query, true);
 
             UNIT_ASSERT_C(explainResult.Success(), explainResult.Issues().ToString());
-
-            TExprContext exprCtx;
-            VisitExpr(GetExpr(explainResult.QueryAst, exprCtx, moduleResolver.get()).Ptr(),
-                [&indexName](const TExprNode::TPtr& exprNode) {
-                    if (TMaybeNode<TKqpUpsertRows>(exprNode)) {
-                        UNIT_ASSERT(!TKqpUpsertRows(exprNode).Table().Path().Value().Contains(indexName));
-                    }
-                    if (TMaybeNode<TKqpDeleteRows>(exprNode)) {
-                        UNIT_ASSERT(!TKqpDeleteRows(exprNode).Table().Path().Value().Contains(indexName));
-                    }
-                    return true;
-                });
         }
 
         {

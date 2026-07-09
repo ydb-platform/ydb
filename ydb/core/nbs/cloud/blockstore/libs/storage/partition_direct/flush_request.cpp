@@ -31,6 +31,8 @@ TFlushRequestExecutor::TFlushRequestExecutor(
     , Span(std::move(span))
     , Route(route)
     , Hint(std::move(hint))
+    , Cooldown(DirectBlockGroup->GetOracle()->GetFlushRequestCooldown(
+          THostMask::MakeFromRoute(Route)))
     , RequestTimeout(DirectBlockGroup->GetOracle()->GetFlushRequestTimeout())
 {
     Y_ABORT_UNLESS(Route.SourceHostIndex != InvalidHostIndex);
@@ -52,6 +54,44 @@ TFlushRequestExecutor::~TFlushRequestExecutor()
 
 void TFlushRequestExecutor::Run()
 {
+    if (!Cooldown) {
+        DoRun();
+    } else {
+        LOG_INFO(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s Flush cooldown time %s",
+            LogTitle.GetWithTime().c_str(),
+            FormatDuration(Cooldown).c_str());
+        DirectBlockGroup->Schedule(
+            Cooldown,
+            [self = shared_from_this()]()
+            {
+                self->DoRun();   //
+            });
+    }
+}
+
+TString TFlushRequestExecutor::Print()
+{
+    TStringBuilder result;
+    result << LogTitle.GetWithTime();
+    result << Hint.DebugPrint(true);
+    if (Cooldown) {
+        result << ",Cooldown=" << FormatDuration(Cooldown);
+    }
+    result << (Promise.IsReady() ? ",Replied" : ",NotReplied");
+    return result;
+}
+
+NThreading::TFuture<TFlushRequestExecutor::TResponse>
+TFlushRequestExecutor::GetFuture() const
+{
+    return Promise.GetFuture();
+}
+
+void TFlushRequestExecutor::DoRun()
+{
     ScheduleRequestTimeout();
 
     auto future = DirectBlockGroup->SyncWithPBuffer(
@@ -64,24 +104,8 @@ void TFlushRequestExecutor::Run()
         [self = shared_from_this()]   //
         (const NThreading::TFuture<TDBGFlushResponse>& f)
         {
-            //
-            self->OnFlushResponse(f.GetValue());
+            self->OnFlushResponse(f.GetValue());   //
         });
-}
-
-TString TFlushRequestExecutor::Print()
-{
-    TStringBuilder result;
-    result << LogTitle.GetWithTime();
-    result << Hint.DebugPrint(true);
-    result << (Promise.IsReady() ? ",Replied" : ",NotReplied");
-    return result;
-}
-
-NThreading::TFuture<TFlushRequestExecutor::TResponse>
-TFlushRequestExecutor::GetFuture() const
-{
-    return Promise.GetFuture();
 }
 
 void TFlushRequestExecutor::OnFlushResponse(const TDBGFlushResponse& response)
@@ -156,7 +180,7 @@ void TFlushRequestExecutor::OnRequestTimeout()
         "%s OnRequestTimeout.",
         LogTitle.GetWithTime().c_str());
 
-    Reply({}, Hint.MakeLsnVector());
+    Reply({}, MakeLsnVector(Hint.Segments));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

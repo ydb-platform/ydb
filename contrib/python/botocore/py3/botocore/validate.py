@@ -210,7 +210,7 @@ class ParamValidator:
         if special_validator:
             special_validator(params, shape, errors, name)
         else:
-            getattr(self, '_validate_%s' % shape.type_name)(
+            getattr(self, f'_validate_{shape.type_name}')(
                 params, shape, errors, name
             )
 

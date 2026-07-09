@@ -13,6 +13,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_CONTROL_PLANE_PROXY
+
 namespace NFq::NPrivate {
 
 using namespace NActors;
@@ -137,7 +139,8 @@ public:
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_YDB_SCHEMA_QUERY_ACTOR";
 
     void BootstrapImpl() override {
-        CPP_LOG_I("TSchemaQueryYDBActor BootstrapImpl. Actor id: " << TBase::SelfId());
+        YDB_LOG_INFO("TSchemaQueryYDBActor BootstrapImpl. Actor",
+            {"id", TBase::SelfId()});
         ScheduleNextTask();
     }
 
@@ -278,8 +281,8 @@ public:
     }
 
     void TransitionToRollbackState() {
-        CPP_LOG_I("TSchemaQueryYDBActor TransitionToRollbackState. Actor id: "
-                  << TBase::SelfId());
+        YDB_LOG_INFO("TSchemaQueryYDBActor TransitionToRollbackState. Actor",
+            {"id", TBase::SelfId()});
         CompletionStatuses[CurrentTaskIndex] = ETaskCompletionStatus::ERROR;
         CurrentTaskIndex--;
         Become(&TSchemaQueryYDBActor::RollbackStateFunc);
@@ -287,15 +290,15 @@ public:
     }
 
     void TransitionToNormalState() {
-        CPP_LOG_I("TSchemaQueryYDBActor TransitionToNormalState. Actor id: "
-                  << TBase::SelfId());
+        YDB_LOG_INFO("TSchemaQueryYDBActor TransitionToNormalState. Actor",
+            {"id", TBase::SelfId()});
         Become(&TSchemaQueryYDBActor::StateFunc);
         ScheduleNextTask();
     }
 
     void TransitionToRecoveryState() {
-        CPP_LOG_I("TSchemaQueryYDBActor TransitionToRecoveryState. Actor id: "
-                  << TBase::SelfId());
+        YDB_LOG_INFO("TSchemaQueryYDBActor TransitionToRecoveryState. Actor",
+            {"id", TBase::SelfId()});
         Become(&TSchemaQueryYDBActor::RecoveryStateFunc);
     }
 
@@ -338,8 +341,9 @@ public:
     }
 
     void InitiateSchemaQueryExecution(const TString& schemeQuery) {
-        CPP_LOG_I("TSchemaQueryYDBActor Executing schema query. Actor id: "
-                  << TBase::SelfId() << " SchemeQuery: " << HideSecrets(schemeQuery));
+        YDB_LOG_INFO("TSchemaQueryYDBActor Executing schema query. Actor",
+            {"id", TBase::SelfId()},
+            {"schemeQuery", HideSecrets(schemeQuery)});
         Request->Get()
             ->YDBClient
             ->RetryOperation([query = schemeQuery](TSession session) {
@@ -356,14 +360,11 @@ public:
 
     void LogCurrentState(const TString& message) {
         using TEnumToString = TString(const ETaskCompletionStatus&);
-        CPP_LOG_I("TSchemaQueryYDBActor Logging current state. Message: '"
-                  << message << "', Actor id: " << TBase::SelfId()
-                  << ". CompletionStatuses: ["
-                  << JoinMapRange(", ",
-                                  CompletionStatuses.cbegin(),
-                                  CompletionStatuses.cend(),
-                                  (TEnumToString*)ToString<ETaskCompletionStatus>)
-                  << "], CurrentTaskIndex: " << CurrentTaskIndex);
+        YDB_LOG_INFO("TSchemaQueryYDBActor Logging current state. Message: Actor. CompletionStatuses",
+            {"message", message},
+            {"id", TBase::SelfId()},
+            {"completionStatuses", JoinMapRange(", ",                                   CompletionStatuses.cbegin(),                                   CompletionStatuses.cend(),                                   (TEnumToString*)ToString<ETaskCompletionStatus>)},
+            {"currentTaskIndex", CurrentTaskIndex});
     }
 
 private:

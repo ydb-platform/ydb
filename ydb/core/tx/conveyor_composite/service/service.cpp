@@ -7,6 +7,8 @@
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_CONVEYOR
+
 namespace NKikimr::NConveyorComposite {
 
 LWTRACE_USING(YDB_CONVEYOR_COMPOSITE_PROVIDER);
@@ -23,8 +25,12 @@ TDistributor::~TDistributor() {
 void TDistributor::Bootstrap() {
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CONVEYOR_COMPOSITE_PROVIDER));
     Manager = std::make_unique<TTasksManager>(ConveyorName, Config, SelfId(), Counters);
-    AFL_NOTICE(NKikimrServices::TX_CONVEYOR)("name", ConveyorName)("action", "conveyor_registered")("config", Config.DebugString())(
-        "actor_id", SelfId())("manager", Manager->DebugString());
+    YDB_LOG_NOTICE("",
+        {"name", ConveyorName},
+        {"action", "conveyor_registered"},
+        {"config", Config.DebugString()},
+        {"actorId", SelfId()},
+        {"manager", Manager->DebugString()});
     Become(&TDistributor::StateMain);
 }
 

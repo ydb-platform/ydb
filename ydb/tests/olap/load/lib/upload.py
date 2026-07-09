@@ -107,12 +107,12 @@ class UploadClusterBase(UploadSuiteBase):
     @classmethod
     def __compaction_complete_for_table(cls, table_full_path: str) -> bool:
         sth = ScenarioTestHelper(None)
-        result = sth.execute_scan_query(f'''
+        result = sth.execute_query(f'''
             SELECT COUNT(*)
             FROM `{table_full_path}/.sys/primary_index_optimizer_stats`
             WHERE CAST(JSON_VALUE(CAST(Details AS JsonDocument), "$.weight") AS Uint64) > 0
         ''')
-        return result.result_set.rows[0][0] == 0
+        return result[0].rows[0][0] == 0
 
     @classmethod
     def __compaction_complete(cls) -> bool:

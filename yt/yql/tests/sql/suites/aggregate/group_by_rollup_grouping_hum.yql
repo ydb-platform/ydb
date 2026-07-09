@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 select count(1) as elements, key_first, val_first, case grouping(key_first, val_first)
   when 1 then 'Total By First digit key'
   when 2 then 'Total By First char value'

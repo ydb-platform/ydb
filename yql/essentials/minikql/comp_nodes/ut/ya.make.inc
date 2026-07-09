@@ -35,6 +35,8 @@ SET(ORIG_SOURCES
     mkql_block_test_helper.cpp
     mkql_block_fuzzer.cpp
     mkql_block_getelem_ut.cpp
+    mkql_block_guess_ut.cpp
+    mkql_block_way_ut.cpp
     mkql_block_just_ut.cpp
     mkql_block_top_sort_ut.cpp
     mkql_block_variant_ut.cpp

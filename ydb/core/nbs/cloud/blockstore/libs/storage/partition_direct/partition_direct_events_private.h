@@ -33,6 +33,7 @@ struct TEvPartitionDirectPrivate
 
         EvFastPathServiceShutdown,
         EvFastPathServiceStopped,
+        EvAddHostToDBG,
 
         EvEnd,
     };
@@ -67,6 +68,16 @@ struct TEvPartitionDirectPrivate
         : public NActors::
               TEventLocal<TEvFastPathServiceStopped, EvFastPathServiceStopped>
     {
+    };
+
+    struct TEvAddHostToDBG
+        : public NActors::TEventLocal<TEvAddHostToDBG, EvAddHostToDBG>
+    {
+        size_t DirectBlockGroupId;
+
+        explicit TEvAddHostToDBG(size_t dbgId)
+            : DirectBlockGroupId(dbgId)
+        {}
     };
 };
 

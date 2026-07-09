@@ -57,8 +57,12 @@ public:
         Y_ABORT_UNLESS(MaxSize > 0, "TCircularSparseQueue must not have zero size");
     }
 
+    // Returns {index, pointer-to-emplaced-element} on success, or an error string.
+    // The pointer is valid until the element is Erase()d or the queue is Clear()ed.
+    // Note: T& cannot be used inside std::expected (its internal union forbids
+    // reference members), so T* is used instead.
     template <typename... Args>
-    std::expected<ui64, TString> Emplace(Args&&... args) {
+    std::expected<std::pair<ui64, T*>, TString> Emplace(Args&&... args) {
         if (LiveCount >= MaxSize) {
             return std::unexpected(
                 TStringBuilder() << "TCircularSparseQueue is full, MaxSize# " << MaxSize);
@@ -84,12 +88,16 @@ public:
         Deleted[slot] = false;
         ++End;
         ++LiveCount;
-        return index;
+        return std::pair<ui64, T*>{index, &Data[slot]};
     }
 
     template <typename U>
     std::expected<ui64, TString> Push(U&& item) {
-        return Emplace(std::forward<U>(item));
+        auto res = Emplace(std::forward<U>(item));
+        if (!res) {
+            return std::unexpected(std::move(res.error()));
+        }
+        return res->first;
     }
 
     T* Find(ui64 index) {

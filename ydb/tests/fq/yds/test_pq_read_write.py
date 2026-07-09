@@ -119,7 +119,7 @@ class TestPqReadWrite(TestYdsBase):
                 INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
                 SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow())))
                 FROM (
-                    SELECT field1, field2, SystemMetadata("offset") as field3
+                    SELECT field1, field2, __ydb_offset as field3
                     FROM {YDS_CONNECTION}.`{self.input_topic}`
                     WITH (
                         format=json_each_row,

@@ -2,9 +2,11 @@
   "version":"2.0",
   "metadata":{
     "apiVersion":"2021-12-01",
+    "auth":["aws.auth#sigv4"],
     "endpointPrefix":"verifiedpermissions",
     "jsonVersion":"1.0",
     "protocol":"json",
+    "protocols":["json"],
     "serviceFullName":"Amazon Verified Permissions",
     "serviceId":"VerifiedPermissions",
     "signatureVersion":"v4",
@@ -13,6 +15,22 @@
     "uid":"verifiedpermissions-2021-12-01"
   },
   "operations":{
+    "BatchGetPolicy":{
+      "name":"BatchGetPolicy",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"BatchGetPolicyInput"},
+      "output":{"shape":"BatchGetPolicyOutput"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Retrieves information about a group (batch) of policies.</p> <note> <p>The <code>BatchGetPolicy</code> operation doesn't have its own IAM permission. To authorize this operation for Amazon Web Services principals, include the permission <code>verifiedpermissions:GetPolicy</code> in their IAM policies.</p> </note>"
+    },
     "BatchIsAuthorized":{
       "name":"BatchIsAuthorized",
       "http":{
@@ -64,7 +82,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Creates a reference to an Amazon Cognito user pool as an external identity provider (IdP). </p> <p>After you create an identity source, you can use the identities provided by the IdP as proxies for the principal in authorization queries that use the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorizedWithToken.html\">IsAuthorizedWithToken</a> operation. These identities take the form of tokens that contain claims about the user, such as IDs, attributes and group memberships. Amazon Cognito provides both identity tokens and access tokens, and Verified Permissions can use either or both. Any combination of identity and access tokens results in the same Cedar principal. Verified Permissions automatically translates the information about the identities into the standard Cedar attributes that can be evaluated by your policies. Because the Amazon Cognito identity and access tokens can contain different information, the tokens you choose to use determine which principal attributes are available to access when evaluating Cedar policies.</p> <important> <p>If you delete a Amazon Cognito user pool or user, tokens from that deleted pool or that deleted user continue to be usable until they expire.</p> </important> <note> <p>To reference a user from this identity source in your Cedar policies, use the following syntax.</p> <p> <i>IdentityType::\"&lt;CognitoUserPoolIdentifier&gt;|&lt;CognitoClientId&gt;</i> </p> <p>Where <code>IdentityType</code> is the string that you provide to the <code>PrincipalEntityType</code> parameter for this operation. The <code>CognitoUserPoolId</code> and <code>CognitoClientId</code> are defined by the Amazon Cognito user pool.</p> </note> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
+      "documentation":"<p>Adds an identity source to a policy store–an Amazon Cognito user pool or OpenID Connect (OIDC) identity provider (IdP). </p> <p>After you create an identity source, you can use the identities provided by the IdP as proxies for the principal in authorization queries that use the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorizedWithToken.html\">IsAuthorizedWithToken</a> or <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_BatchIsAuthorizedWithToken.html\">BatchIsAuthorizedWithToken</a> API operations. These identities take the form of tokens that contain claims about the user, such as IDs, attributes and group memberships. Identity sources provide identity (ID) tokens and access tokens. Verified Permissions derives information about your user and session from token claims. Access tokens provide action <code>context</code> to your policies, and ID tokens provide principal <code>Attributes</code>.</p> <important> <p>Tokens from an identity source user continue to be usable until they expire. Token revocation and resource deletion have no effect on the validity of a token in your policy store</p> </important> <note> <p>To reference a user from this identity source in your Cedar policies, refer to the following syntax examples.</p> <ul> <li> <p>Amazon Cognito user pool: <code>Namespace::[Entity type]::[User pool ID]|[user principal attribute]</code>, for example <code>MyCorp::User::us-east-1_EXAMPLE|a1b2c3d4-5678-90ab-cdef-EXAMPLE11111</code>.</p> </li> <li> <p>OpenID Connect (OIDC) provider: <code>Namespace::[Entity type]::[entityIdPrefix]|[user principal attribute]</code>, for example <code>MyCorp::User::MyOIDCProvider|a1b2c3d4-5678-90ab-cdef-EXAMPLE22222</code>.</p> </li> </ul> </note> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
       "idempotent":true
     },
     "CreatePolicy":{
@@ -317,7 +335,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Makes an authorization decision about a service request described in the parameters. The principal in this request comes from an external identity source in the form of an identity token formatted as a <a href=\"https://wikipedia.org/wiki/JSON_Web_Token\">JSON web token (JWT)</a>. The information in the parameters can also define additional context that Verified Permissions can include in the evaluation. The request is evaluated against all matching policies in the specified policy store. The result of the decision is either <code>Allow</code> or <code>Deny</code>, along with a list of the policies that resulted in the decision.</p> <p>At this time, Verified Permissions accepts tokens from only Amazon Cognito.</p> <p>Verified Permissions validates each token that is specified in a request by checking its expiration date and its signature.</p> <important> <p>If you delete a Amazon Cognito user pool or user, tokens from that deleted pool or that deleted user continue to be usable until they expire.</p> </important>"
+      "documentation":"<p>Makes an authorization decision about a service request described in the parameters. The principal in this request comes from an external identity source in the form of an identity token formatted as a <a href=\"https://wikipedia.org/wiki/JSON_Web_Token\">JSON web token (JWT)</a>. The information in the parameters can also define additional context that Verified Permissions can include in the evaluation. The request is evaluated against all matching policies in the specified policy store. The result of the decision is either <code>Allow</code> or <code>Deny</code>, along with a list of the policies that resulted in the decision.</p> <p>Verified Permissions validates each token that is specified in a request by checking its expiration date and its signature.</p> <important> <p>Tokens from an identity source user continue to be usable until they expire. Token revocation and resource deletion have no effect on the validity of a token in your policy store</p> </important>"
     },
     "ListIdentitySources":{
       "name":"ListIdentitySources",
@@ -422,7 +440,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Updates the specified identity source to use a new identity provider (IdP) source, or to change the mapping of identities from the IdP to a different principal entity type.</p> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
+      "documentation":"<p>Updates the specified identity source to use a new identity provider (IdP), or to change the mapping of identities from the IdP to a different principal entity type.</p> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
       "idempotent":true
     },
     "UpdatePolicy":{
@@ -519,6 +537,10 @@
       },
       "documentation":"<p>Contains information about an action for a request for which an authorization decision is made.</p> <p>This data type is used as a request parameter to the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorized.html\">IsAuthorized</a>, <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_BatchIsAuthorized.html\">BatchIsAuthorized</a>, and <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorizedWithToken.html\">IsAuthorizedWithToken</a> operations.</p> <p>Example: <code>{ \"actionId\": \"&lt;action name&gt;\", \"actionType\": \"Action\" }</code> </p>"
     },
+    "ActionIdentifierList":{
+      "type":"list",
+      "member":{"shape":"ActionIdentifier"}
+    },
     "ActionType":{
       "type":"string",
       "max":200,
@@ -552,10 +574,161 @@
         "record":{
           "shape":"RecordAttribute",
           "documentation":"<p>An attribute value of <a href=\"https://docs.cedarpolicy.com/policies/syntax-datatypes.html#record\">Record</a> type.</p> <p>Example: <code>{\"record\": { \"keyName\": {} } }</code> </p>"
+        },
+        "ipaddr":{
+          "shape":"IpAddr",
+          "documentation":"<p>An attribute value of <a href=\"https://docs.cedarpolicy.com/policies/syntax-datatypes.html#datatype-ipaddr\">ipaddr</a> type.</p> <p>Example: <code>{\"ip\": \"192.168.1.100\"}</code> </p>"
+        },
+        "decimal":{
+          "shape":"Decimal",
+          "documentation":"<p>An attribute value of <a href=\"https://docs.cedarpolicy.com/policies/syntax-datatypes.html#datatype-decimal\">decimal</a> type.</p> <p>Example: <code>{\"decimal\": \"1.1\"}</code> </p>"
         }
       },
       "documentation":"<p>The value of an attribute.</p> <p>Contains information about the runtime context for a request for which an authorization decision is made. </p> <p>This data type is used as a member of the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ContextDefinition.html\">ContextDefinition</a> structure which is uses as a request parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorized.html\">IsAuthorized</a>, <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_BatchIsAuthorized.html\">BatchIsAuthorized</a>, and <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorizedWithToken.html\">IsAuthorizedWithToken</a> operations.</p>",
       "union":true
+    },
+    "Audience":{
+      "type":"string",
+      "max":255,
+      "min":1
+    },
+    "Audiences":{
+      "type":"list",
+      "member":{"shape":"Audience"},
+      "max":255,
+      "min":1
+    },
+    "BatchGetPolicyErrorCode":{
+      "type":"string",
+      "enum":[
+        "POLICY_STORE_NOT_FOUND",
+        "POLICY_NOT_FOUND"
+      ]
+    },
+    "BatchGetPolicyErrorItem":{
+      "type":"structure",
+      "required":[
+        "code",
+        "policyStoreId",
+        "policyId",
+        "message"
+      ],
+      "members":{
+        "code":{
+          "shape":"BatchGetPolicyErrorCode",
+          "documentation":"<p>The error code that was returned.</p>"
+        },
+        "policyStoreId":{
+          "shape":"String",
+          "documentation":"<p>The identifier of the policy store associated with the failed request.</p>"
+        },
+        "policyId":{
+          "shape":"String",
+          "documentation":"<p>The identifier of the policy associated with the failed request.</p>"
+        },
+        "message":{
+          "shape":"String",
+          "documentation":"<p>A detailed error message.</p>"
+        }
+      },
+      "documentation":"<p>Contains the information about an error resulting from a <code>BatchGetPolicy</code> API call.</p>"
+    },
+    "BatchGetPolicyErrorList":{
+      "type":"list",
+      "member":{"shape":"BatchGetPolicyErrorItem"}
+    },
+    "BatchGetPolicyInput":{
+      "type":"structure",
+      "required":["requests"],
+      "members":{
+        "requests":{
+          "shape":"BatchGetPolicyInputList",
+          "documentation":"<p>An array of up to 100 policies you want information about.</p>"
+        }
+      }
+    },
+    "BatchGetPolicyInputItem":{
+      "type":"structure",
+      "required":[
+        "policyStoreId",
+        "policyId"
+      ],
+      "members":{
+        "policyStoreId":{
+          "shape":"PolicyStoreId",
+          "documentation":"<p>The identifier of the policy store where the policy you want information about is stored.</p>"
+        },
+        "policyId":{
+          "shape":"PolicyId",
+          "documentation":"<p>The identifier of the policy you want information about.</p>"
+        }
+      },
+      "documentation":"<p>Information about a policy that you include in a <code>BatchGetPolicy</code> API request.</p>"
+    },
+    "BatchGetPolicyInputList":{
+      "type":"list",
+      "member":{"shape":"BatchGetPolicyInputItem"},
+      "max":100,
+      "min":1
+    },
+    "BatchGetPolicyOutput":{
+      "type":"structure",
+      "required":[
+        "results",
+        "errors"
+      ],
+      "members":{
+        "results":{
+          "shape":"BatchGetPolicyOutputList",
+          "documentation":"<p>Information about the policies listed in the request that were successfully returned. These results are returned in the order they were requested.</p>"
+        },
+        "errors":{
+          "shape":"BatchGetPolicyErrorList",
+          "documentation":"<p>Information about the policies from the request that resulted in an error. These results are returned in the order they were requested.</p>"
+        }
+      }
+    },
+    "BatchGetPolicyOutputItem":{
+      "type":"structure",
+      "required":[
+        "policyStoreId",
+        "policyId",
+        "policyType",
+        "definition",
+        "createdDate",
+        "lastUpdatedDate"
+      ],
+      "members":{
+        "policyStoreId":{
+          "shape":"PolicyStoreId",
+          "documentation":"<p>The identifier of the policy store where the policy you want information about is stored.</p>"
+        },
+        "policyId":{
+          "shape":"PolicyId",
+          "documentation":"<p>The identifier of the policy you want information about.</p>"
+        },
+        "policyType":{
+          "shape":"PolicyType",
+          "documentation":"<p>The type of the policy. This is one of the following values:</p> <ul> <li> <p> <code>STATIC</code> </p> </li> <li> <p> <code>TEMPLATE_LINKED</code> </p> </li> </ul>"
+        },
+        "definition":{
+          "shape":"PolicyDefinitionDetail",
+          "documentation":"<p>The policy definition of an item in the list of policies returned.</p>"
+        },
+        "createdDate":{
+          "shape":"TimestampFormat",
+          "documentation":"<p>The date and time the policy was created.</p>"
+        },
+        "lastUpdatedDate":{
+          "shape":"TimestampFormat",
+          "documentation":"<p>The date and time the policy was most recently updated.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about a policy returned from a <code>BatchGetPolicy</code> API request.</p>"
+    },
+    "BatchGetPolicyOutputList":{
+      "type":"list",
+      "member":{"shape":"BatchGetPolicyOutputItem"}
     },
     "BatchIsAuthorizedInput":{
       "type":"structure",
@@ -611,7 +784,7 @@
       "members":{
         "results":{
           "shape":"BatchIsAuthorizedOutputList",
-          "documentation":"<p>A series of <code>Allow</code> or <code>Deny</code> decisions for each request, and the policies that produced them.</p>"
+          "documentation":"<p>A series of <code>Allow</code> or <code>Deny</code> decisions for each request, and the policies that produced them. These results are returned in the order they were requested.</p>"
         }
       }
     },
@@ -709,7 +882,7 @@
         },
         "results":{
           "shape":"BatchIsAuthorizedWithTokenOutputList",
-          "documentation":"<p>A series of <code>Allow</code> or <code>Deny</code> decisions for each request, and the policies that produced them.</p>"
+          "documentation":"<p>A series of <code>Allow</code> or <code>Deny</code> decisions for each request, and the policies that produced them. These results are returned in the order they were requested.</p>"
         }
       }
     },
@@ -754,6 +927,11 @@
       "box":true,
       "sensitive":true
     },
+    "Claim":{
+      "type":"string",
+      "min":1,
+      "sensitive":true
+    },
     "ClientId":{
       "type":"string",
       "max":255,
@@ -776,7 +954,7 @@
           "documentation":"<p>The name of the schema entity type that's mapped to the user pool group. Defaults to <code>AWS::CognitoGroup</code>.</p>"
         }
       },
-      "documentation":"<p>A list of user groups and entities from an Amazon Cognito user pool identity source.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CognitoUserPoolConfiguration.html\">CognitoUserPoolConfiguration</a> structure and is a request parameter in <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CreateIdentitySource.html\">CreateIdentitySource</a>.</p>"
+      "documentation":"<p>The type of entity that a policy store maps to groups from an Amazon Cognito user pool identity source.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CognitoUserPoolConfiguration.html\">CognitoUserPoolConfiguration</a> structure and is a request parameter in <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CreateIdentitySource.html\">CreateIdentitySource</a>.</p>"
     },
     "CognitoGroupConfigurationDetail":{
       "type":"structure",
@@ -786,7 +964,7 @@
           "documentation":"<p>The name of the schema entity type that's mapped to the user pool group. Defaults to <code>AWS::CognitoGroup</code>.</p>"
         }
       },
-      "documentation":"<p>A list of user groups and entities from an Amazon Cognito user pool identity source.</p> <p>This data type is part of an <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CognitoUserPoolConfigurationItem.html\">CognitoUserPoolConfigurationDetail</a> structure and is a response parameter to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_GetIdentitySource.html\">GetIdentitySource</a>.</p>"
+      "documentation":"<p>The type of entity that a policy store maps to groups from an Amazon Cognito user pool identity source.</p> <p>This data type is part of an <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CognitoUserPoolConfigurationItem.html\">CognitoUserPoolConfigurationDetail</a> structure and is a response parameter to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_GetIdentitySource.html\">GetIdentitySource</a>.</p>"
     },
     "CognitoGroupConfigurationItem":{
       "type":"structure",
@@ -796,7 +974,7 @@
           "documentation":"<p>The name of the schema entity type that's mapped to the user pool group. Defaults to <code>AWS::CognitoGroup</code>.</p>"
         }
       },
-      "documentation":"<p>A list of user groups and entities from an Amazon Cognito user pool identity source.</p> <p>This data type is part of an <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CognitoUserPoolConfigurationDetail.html\">CognitoUserPoolConfigurationItem</a> structure and is a response parameter to <a href=\"http://forums.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListIdentitySources.html\">ListIdentitySources</a>.</p>"
+      "documentation":"<p>The type of entity that a policy store maps to groups from an Amazon Cognito user pool identity source.</p> <p>This data type is part of an <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CognitoUserPoolConfigurationDetail.html\">CognitoUserPoolConfigurationItem</a> structure and is a response parameter to <a href=\"http://forums.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListIdentitySources.html\">ListIdentitySources</a>.</p>"
     },
     "CognitoUserPoolConfiguration":{
       "type":"structure",
@@ -812,10 +990,10 @@
         },
         "groupConfiguration":{
           "shape":"CognitoGroupConfiguration",
-          "documentation":"<p>The configuration of the user groups from an Amazon Cognito user pool identity source.</p>"
+          "documentation":"<p>The type of entity that a policy store maps to groups from an Amazon Cognito user pool identity source.</p>"
         }
       },
-      "documentation":"<p>The configuration for an identity source that represents a connection to an Amazon Cognito user pool used as an identity provider for Verified Permissions.</p> <p>This data type is used as a field that is part of an <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_Configuration.html\">Configuration</a> structure that is used as a parameter to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CreateIdentitySource.html\">CreateIdentitySource</a>.</p> <p>Example:<code>\"CognitoUserPoolConfiguration\":{\"UserPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"ClientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"]}</code> </p>"
+      "documentation":"<p>The configuration for an identity source that represents a connection to an Amazon Cognito user pool used as an identity provider for Verified Permissions.</p> <p>This data type part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_Configuration.html\">Configuration</a> structure that is used as a parameter to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CreateIdentitySource.html\">CreateIdentitySource</a>.</p> <p>Example:<code>\"CognitoUserPoolConfiguration\":{\"UserPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"ClientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"],\"groupConfiguration\": {\"groupEntityType\": \"MyCorp::Group\"}}</code> </p>"
     },
     "CognitoUserPoolConfigurationDetail":{
       "type":"structure",
@@ -839,10 +1017,10 @@
         },
         "groupConfiguration":{
           "shape":"CognitoGroupConfigurationDetail",
-          "documentation":"<p>The configuration of the user groups from an Amazon Cognito user pool identity source.</p>"
+          "documentation":"<p>The type of entity that a policy store maps to groups from an Amazon Cognito user pool identity source.</p>"
         }
       },
-      "documentation":"<p>The configuration for an identity source that represents a connection to an Amazon Cognito user pool used as an identity provider for Verified Permissions.</p> <p>This data type is used as a field that is part of an <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ConfigurationDetail.html\">ConfigurationDetail</a> structure that is part of the response to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_GetIdentitySource.html\">GetIdentitySource</a>.</p> <p>Example:<code>\"CognitoUserPoolConfiguration\":{\"UserPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"ClientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"]}</code> </p>"
+      "documentation":"<p>The configuration for an identity source that represents a connection to an Amazon Cognito user pool used as an identity provider for Verified Permissions.</p> <p>This data type is used as a field that is part of an <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ConfigurationDetail.html\">ConfigurationDetail</a> structure that is part of the response to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_GetIdentitySource.html\">GetIdentitySource</a>.</p> <p>Example:<code>\"CognitoUserPoolConfiguration\":{\"UserPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"ClientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"],\"groupConfiguration\": {\"groupEntityType\": \"MyCorp::Group\"}}</code> </p>"
     },
     "CognitoUserPoolConfigurationItem":{
       "type":"structure",
@@ -866,10 +1044,10 @@
         },
         "groupConfiguration":{
           "shape":"CognitoGroupConfigurationItem",
-          "documentation":"<p>The configuration of the user groups from an Amazon Cognito user pool identity source.</p>"
+          "documentation":"<p>The type of entity that a policy store maps to groups from an Amazon Cognito user pool identity source.</p>"
         }
       },
-      "documentation":"<p>The configuration for an identity source that represents a connection to an Amazon Cognito user pool used as an identity provider for Verified Permissions.</p> <p>This data type is used as a field that is part of the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ConfigurationItem.html\">ConfigurationItem</a> structure that is part of the response to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListIdentitySources.html\">ListIdentitySources</a>.</p> <p>Example:<code>\"CognitoUserPoolConfiguration\":{\"UserPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"ClientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"]}</code> </p>"
+      "documentation":"<p>The configuration for an identity source that represents a connection to an Amazon Cognito user pool used as an identity provider for Verified Permissions.</p> <p>This data type is used as a field that is part of the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ConfigurationItem.html\">ConfigurationItem</a> structure that is part of the response to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListIdentitySources.html\">ListIdentitySources</a>.</p> <p>Example:<code>\"CognitoUserPoolConfiguration\":{\"UserPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"ClientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"],\"groupConfiguration\": {\"groupEntityType\": \"MyCorp::Group\"}}</code> </p>"
     },
     "Configuration":{
       "type":"structure",
@@ -877,9 +1055,13 @@
         "cognitoUserPoolConfiguration":{
           "shape":"CognitoUserPoolConfiguration",
           "documentation":"<p>Contains configuration details of a Amazon Cognito user pool that Verified Permissions can use as a source of authenticated identities as entities. It specifies the <a href=\"https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html\">Amazon Resource Name (ARN)</a> of a Amazon Cognito user pool and one or more application client IDs.</p> <p>Example: <code>\"configuration\":{\"cognitoUserPoolConfiguration\":{\"userPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"clientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"],\"groupConfiguration\": {\"groupEntityType\": \"MyCorp::Group\"}}}</code> </p>"
+        },
+        "openIdConnectConfiguration":{
+          "shape":"OpenIdConnectConfiguration",
+          "documentation":"<p>Contains configuration details of an OpenID Connect (OIDC) identity provider, or identity source, that Verified Permissions can use to generate entities from authenticated identities. It specifies the issuer URL, token type that you want to use, and policy store entity details.</p> <p>Example:<code>\"configuration\":{\"openIdConnectConfiguration\":{\"issuer\":\"https://auth.example.com\",\"tokenSelection\":{\"accessTokenOnly\":{\"audiences\":[\"https://myapp.example.com\",\"https://myapp2.example.com\"],\"principalIdClaim\":\"sub\"}},\"entityIdPrefix\":\"MyOIDCProvider\",\"groupConfiguration\":{\"groupClaim\":\"groups\",\"groupEntityType\":\"MyCorp::UserGroup\"}}}</code> </p>"
         }
       },
-      "documentation":"<p>Contains configuration information used when creating a new identity source.</p> <note> <p>At this time, the only valid member of this structure is a Amazon Cognito user pool configuration.</p> <p>You must specify a <code>userPoolArn</code>, and optionally, a <code>ClientId</code>.</p> </note> <p>This data type is used as a request parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CreateIdentitySource.html\">CreateIdentitySource</a> operation.</p>",
+      "documentation":"<p>Contains configuration information used when creating a new identity source.</p> <p>This data type is used as a request parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CreateIdentitySource.html\">CreateIdentitySource</a> operation.</p>",
       "union":true
     },
     "ConfigurationDetail":{
@@ -887,7 +1069,11 @@
       "members":{
         "cognitoUserPoolConfiguration":{
           "shape":"CognitoUserPoolConfigurationDetail",
-          "documentation":"<p>Contains configuration details of a Amazon Cognito user pool that Verified Permissions can use as a source of authenticated identities as entities. It specifies the <a href=\"https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html\">Amazon Resource Name (ARN)</a> of a Amazon Cognito user pool and one or more application client IDs.</p> <p>Example: <code>\"configuration\":{\"cognitoUserPoolConfiguration\":{\"userPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"clientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"],\"groupConfiguration\": {\"groupEntityType\": \"MyCorp::Group\"}}}</code> </p>"
+          "documentation":"<p>Contains configuration details of a Amazon Cognito user pool that Verified Permissions can use as a source of authenticated identities as entities. It specifies the <a href=\"https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html\">Amazon Resource Name (ARN)</a> of a Amazon Cognito user pool, the policy store entity that you want to assign to user groups, and one or more application client IDs.</p> <p>Example: <code>\"configuration\":{\"cognitoUserPoolConfiguration\":{\"userPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"clientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"],\"groupConfiguration\": {\"groupEntityType\": \"MyCorp::Group\"}}}</code> </p>"
+        },
+        "openIdConnectConfiguration":{
+          "shape":"OpenIdConnectConfigurationDetail",
+          "documentation":"<p>Contains configuration details of an OpenID Connect (OIDC) identity provider, or identity source, that Verified Permissions can use to generate entities from authenticated identities. It specifies the issuer URL, token type that you want to use, and policy store entity details.</p> <p>Example:<code>\"configuration\":{\"openIdConnectConfiguration\":{\"issuer\":\"https://auth.example.com\",\"tokenSelection\":{\"accessTokenOnly\":{\"audiences\":[\"https://myapp.example.com\",\"https://myapp2.example.com\"],\"principalIdClaim\":\"sub\"}},\"entityIdPrefix\":\"MyOIDCProvider\",\"groupConfiguration\":{\"groupClaim\":\"groups\",\"groupEntityType\":\"MyCorp::UserGroup\"}}}</code> </p>"
         }
       },
       "documentation":"<p>Contains configuration information about an identity source.</p> <p>This data type is a response parameter to the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_GetIdentitySource.html\">GetIdentitySource</a> operation.</p>",
@@ -898,7 +1084,11 @@
       "members":{
         "cognitoUserPoolConfiguration":{
           "shape":"CognitoUserPoolConfigurationItem",
-          "documentation":"<p>Contains configuration details of a Amazon Cognito user pool that Verified Permissions can use as a source of authenticated identities as entities. It specifies the <a href=\"https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html\">Amazon Resource Name (ARN)</a> of a Amazon Cognito user pool and one or more application client IDs.</p> <p>Example: <code>\"configuration\":{\"cognitoUserPoolConfiguration\":{\"userPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"clientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"],\"groupConfiguration\": {\"groupEntityType\": \"MyCorp::Group\"}}}</code> </p>"
+          "documentation":"<p>Contains configuration details of a Amazon Cognito user pool that Verified Permissions can use as a source of authenticated identities as entities. It specifies the <a href=\"https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html\">Amazon Resource Name (ARN)</a> of a Amazon Cognito user pool, the policy store entity that you want to assign to user groups, and one or more application client IDs.</p> <p>Example: <code>\"configuration\":{\"cognitoUserPoolConfiguration\":{\"userPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"clientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"],\"groupConfiguration\": {\"groupEntityType\": \"MyCorp::Group\"}}}</code> </p>"
+        },
+        "openIdConnectConfiguration":{
+          "shape":"OpenIdConnectConfigurationItem",
+          "documentation":"<p>Contains configuration details of an OpenID Connect (OIDC) identity provider, or identity source, that Verified Permissions can use to generate entities from authenticated identities. It specifies the issuer URL, token type that you want to use, and policy store entity details.</p> <p>Example:<code>\"configuration\":{\"openIdConnectConfiguration\":{\"issuer\":\"https://auth.example.com\",\"tokenSelection\":{\"accessTokenOnly\":{\"audiences\":[\"https://myapp.example.com\",\"https://myapp2.example.com\"],\"principalIdClaim\":\"sub\"}},\"entityIdPrefix\":\"MyOIDCProvider\",\"groupConfiguration\":{\"groupClaim\":\"groups\",\"groupEntityType\":\"MyCorp::UserGroup\"}}}</code> </p>"
         }
       },
       "documentation":"<p>Contains configuration information about an identity source.</p> <p>This data type is a response parameter to the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListIdentitySources.html\">ListIdentitySources</a> operation.</p>",
@@ -934,7 +1124,8 @@
     "ContextMap":{
       "type":"map",
       "key":{"shape":"String"},
-      "value":{"shape":"AttributeValue"}
+      "value":{"shape":"AttributeValue"},
+      "sensitive":true
     },
     "CreateIdentitySourceInput":{
       "type":"structure",
@@ -954,7 +1145,7 @@
         },
         "configuration":{
           "shape":"Configuration",
-          "documentation":"<p>Specifies the details required to communicate with the identity provider (IdP) associated with this identity source.</p> <note> <p>At this time, the only valid member of this structure is a Amazon Cognito user pool configuration.</p> <p>You must specify a <code>UserPoolArn</code>, and optionally, a <code>ClientId</code>.</p> </note>"
+          "documentation":"<p>Specifies the details required to communicate with the identity provider (IdP) associated with this identity source.</p>"
         },
         "principalEntityType":{
           "shape":"PrincipalEntityType",
@@ -1041,6 +1232,10 @@
           "shape":"EntityIdentifier",
           "documentation":"<p>The resource specified in the new policy's scope. This response element isn't present when the <code>resource</code> isn't specified in the policy content.</p>"
         },
+        "actions":{
+          "shape":"ActionIdentifierList",
+          "documentation":"<p>The action that a policy permits or forbids. For example, <code>{\"actions\": [{\"actionId\": \"ViewPhoto\", \"actionType\": \"PhotoFlash::Action\"}, {\"entityID\": \"SharePhoto\", \"entityType\": \"PhotoFlash::Action\"}]}</code>.</p>"
+        },
         "createdDate":{
           "shape":"TimestampFormat",
           "documentation":"<p>The date and time the policy was originally created.</p>"
@@ -1048,6 +1243,10 @@
         "lastUpdatedDate":{
           "shape":"TimestampFormat",
           "documentation":"<p>The date and time the policy was last updated.</p>"
+        },
+        "effect":{
+          "shape":"PolicyEffect",
+          "documentation":"<p>The effect of the decision that a policy returns to an authorization request. For example, <code>\"effect\": \"Permit\"</code>.</p>"
         }
       }
     },
@@ -1149,6 +1348,13 @@
           "documentation":"<p>The date and time the policy template was most recently updated.</p>"
         }
       }
+    },
+    "Decimal":{
+      "type":"string",
+      "max":23,
+      "min":3,
+      "pattern":"-?\\d{1,15}\\.\\d{1,4}",
+      "sensitive":true
     },
     "Decision":{
       "type":"string",
@@ -1282,6 +1488,12 @@
       "pattern":".*",
       "sensitive":true
     },
+    "EntityIdPrefix":{
+      "type":"string",
+      "max":100,
+      "min":1,
+      "sensitive":true
+    },
     "EntityIdentifier":{
       "type":"structure",
       "required":[
@@ -1314,7 +1526,7 @@
         },
         "parents":{
           "shape":"ParentList",
-          "documentation":"<p>The parents in the hierarchy that contains the entity.</p>"
+          "documentation":"<p>The parent entities in the hierarchy that contains the entity. A principal or resource entity can be defined with at most 99 <i>transitive parents</i> per authorization request. </p> <p>A transitive parent is an entity in the hierarchy of entities including all direct parents, and parents of parents. For example, a user can be a member of 91 groups if one of those groups is a member of eight groups, for a total of 100: one entity, 91 entity parents, and eight parents of parents. </p>"
         }
       },
       "documentation":"<p>Contains information about an entity that can be referenced in a Cedar policy.</p> <p>This data type is used as one of the fields in the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_EntitiesDefinition.html\">EntitiesDefinition</a> structure.</p> <p> <code>{ \"identifier\": { \"entityType\": \"Photo\", \"entityId\": \"VacationPhoto94.jpg\" }, \"attributes\": {}, \"parents\": [ { \"entityType\": \"Album\", \"entityId\": \"alice_folder\" } ] }</code> </p>"
@@ -1468,6 +1680,10 @@
           "shape":"EntityIdentifier",
           "documentation":"<p>The resource specified in the policy's scope. This element isn't included in the response when <code>Resource</code> isn't present in the policy content.</p>"
         },
+        "actions":{
+          "shape":"ActionIdentifierList",
+          "documentation":"<p>The action that a policy permits or forbids. For example, <code>{\"actions\": [{\"actionId\": \"ViewPhoto\", \"actionType\": \"PhotoFlash::Action\"}, {\"entityID\": \"SharePhoto\", \"entityType\": \"PhotoFlash::Action\"}]}</code>.</p>"
+        },
         "definition":{
           "shape":"PolicyDefinitionDetail",
           "documentation":"<p>The definition of the requested policy.</p>"
@@ -1479,6 +1695,10 @@
         "lastUpdatedDate":{
           "shape":"TimestampFormat",
           "documentation":"<p>The date and time that the policy was last updated.</p>"
+        },
+        "effect":{
+          "shape":"PolicyEffect",
+          "documentation":"<p>The effect of the decision that a policy returns to an authorization request. For example, <code>\"effect\": \"Permit\"</code>.</p>"
         }
       }
     },
@@ -1779,6 +1999,13 @@
       "fault":true,
       "retryable":{"throttling":false}
     },
+    "IpAddr":{
+      "type":"string",
+      "max":44,
+      "min":1,
+      "pattern":"[0-9a-fA-F\\.:\\/]*",
+      "sensitive":true
+    },
     "IsAuthorizedInput":{
       "type":"structure",
       "required":["policyStoreId"],
@@ -1911,7 +2138,7 @@
         },
         "maxResults":{
           "shape":"ListIdentitySourcesMaxResults",
-          "documentation":"<p>Specifies the total number of results that you want included in each response. If additional items exist beyond the number you specify, the <code>NextToken</code> response element is returned with a value (not null). Include the specified value as the <code>NextToken</code> request parameter in the next call to the operation to get the next set of results. Note that the service might return fewer results than the maximum even when there are more results available. You should check <code>NextToken</code> after every operation to ensure that you receive all of the results.</p> <p>If you do not specify this parameter, the operation defaults to 10 identity sources per response. You can specify a maximum of 200 identity sources per response.</p>"
+          "documentation":"<p>Specifies the total number of results that you want included in each response. If additional items exist beyond the number you specify, the <code>NextToken</code> response element is returned with a value (not null). Include the specified value as the <code>NextToken</code> request parameter in the next call to the operation to get the next set of results. Note that the service might return fewer results than the maximum even when there are more results available. You should check <code>NextToken</code> after every operation to ensure that you receive all of the results.</p> <p>If you do not specify this parameter, the operation defaults to 10 identity sources per response. You can specify a maximum of 50 identity sources per response.</p>"
         },
         "filters":{
           "shape":"IdentitySourceFilters",
@@ -2046,7 +2273,7 @@
     "Namespace":{
       "type":"string",
       "max":100,
-      "min":1,
+      "min":0,
       "pattern":".*",
       "sensitive":true
     },
@@ -2060,15 +2287,274 @@
       "min":1,
       "pattern":"[A-Za-z0-9-_=+/\\.]*"
     },
+    "OpenIdConnectAccessTokenConfiguration":{
+      "type":"structure",
+      "members":{
+        "principalIdClaim":{
+          "shape":"Claim",
+          "documentation":"<p>The claim that determines the principal in OIDC access tokens. For example, <code>sub</code>.</p>"
+        },
+        "audiences":{
+          "shape":"Audiences",
+          "documentation":"<p>The access token <code>aud</code> claim values that you want to accept in your policy store. For example, <code>https://myapp.example.com, https://myapp2.example.com</code>.</p>"
+        }
+      },
+      "documentation":"<p>The configuration of an OpenID Connect (OIDC) identity source for handling access token claims. Contains the claim that you want to identify as the principal in an authorization request, and the values of the <code>aud</code> claim, or audiences, that you want to accept.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_OpenIdConnectTokenSelection.html\">OpenIdConnectTokenSelection</a> structure, which is a parameter of <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CreateIdentitySource.html\">CreateIdentitySource</a>.</p>"
+    },
+    "OpenIdConnectAccessTokenConfigurationDetail":{
+      "type":"structure",
+      "members":{
+        "principalIdClaim":{
+          "shape":"Claim",
+          "documentation":"<p>The claim that determines the principal in OIDC access tokens. For example, <code>sub</code>.</p>"
+        },
+        "audiences":{
+          "shape":"Audiences",
+          "documentation":"<p>The access token <code>aud</code> claim values that you want to accept in your policy store. For example, <code>https://myapp.example.com, https://myapp2.example.com</code>.</p>"
+        }
+      },
+      "documentation":"<p>The configuration of an OpenID Connect (OIDC) identity source for handling access token claims. Contains the claim that you want to identify as the principal in an authorization request, and the values of the <code>aud</code> claim, or audiences, that you want to accept.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_OpenIdConnectTokenSelectionDetail.html\">OpenIdConnectTokenSelectionDetail</a> structure, which is a parameter of <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_GetIdentitySource.html\">GetIdentitySource</a>.</p>"
+    },
+    "OpenIdConnectAccessTokenConfigurationItem":{
+      "type":"structure",
+      "members":{
+        "principalIdClaim":{
+          "shape":"Claim",
+          "documentation":"<p>The claim that determines the principal in OIDC access tokens. For example, <code>sub</code>.</p>"
+        },
+        "audiences":{
+          "shape":"Audiences",
+          "documentation":"<p>The access token <code>aud</code> claim values that you want to accept in your policy store. For example, <code>https://myapp.example.com, https://myapp2.example.com</code>.</p>"
+        }
+      },
+      "documentation":"<p>The configuration of an OpenID Connect (OIDC) identity source for handling access token claims. Contains the claim that you want to identify as the principal in an authorization request, and the values of the <code>aud</code> claim, or audiences, that you want to accept.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_OpenIdConnectTokenSelectionItem.html\">OpenIdConnectTokenSelectionItem</a> structure, which is a parameter of <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListIdentitySources.html\">ListIdentitySources</a>.</p>"
+    },
+    "OpenIdConnectConfiguration":{
+      "type":"structure",
+      "required":[
+        "issuer",
+        "tokenSelection"
+      ],
+      "members":{
+        "issuer":{
+          "shape":"Issuer",
+          "documentation":"<p>The issuer URL of an OIDC identity provider. This URL must have an OIDC discovery endpoint at the path <code>.well-known/openid-configuration</code>.</p>"
+        },
+        "entityIdPrefix":{
+          "shape":"EntityIdPrefix",
+          "documentation":"<p>A descriptive string that you want to prefix to user entities from your OIDC identity provider. For example, if you set an <code>entityIdPrefix</code> of <code>MyOIDCProvider</code>, you can reference principals in your policies in the format <code>MyCorp::User::MyOIDCProvider|Carlos</code>.</p>"
+        },
+        "groupConfiguration":{
+          "shape":"OpenIdConnectGroupConfiguration",
+          "documentation":"<p>The claim in OIDC identity provider tokens that indicates a user's group membership, and the entity type that you want to map it to. For example, this object can map the contents of a <code>groups</code> claim to <code>MyCorp::UserGroup</code>.</p>"
+        },
+        "tokenSelection":{
+          "shape":"OpenIdConnectTokenSelection",
+          "documentation":"<p>The token type that you want to process from your OIDC identity provider. Your policy store can process either identity (ID) or access tokens from a given OIDC identity source.</p>"
+        }
+      },
+      "documentation":"<p>Contains configuration details of an OpenID Connect (OIDC) identity provider, or identity source, that Verified Permissions can use to generate entities from authenticated identities. It specifies the issuer URL, token type that you want to use, and policy store entity details.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_Configuration.html\">Configuration</a> structure, which is a parameter to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CreateIdentitySource.html\">CreateIdentitySource</a>.</p>"
+    },
+    "OpenIdConnectConfigurationDetail":{
+      "type":"structure",
+      "required":[
+        "issuer",
+        "tokenSelection"
+      ],
+      "members":{
+        "issuer":{
+          "shape":"Issuer",
+          "documentation":"<p>The issuer URL of an OIDC identity provider. This URL must have an OIDC discovery endpoint at the path <code>.well-known/openid-configuration</code>.</p>"
+        },
+        "entityIdPrefix":{
+          "shape":"EntityIdPrefix",
+          "documentation":"<p>A descriptive string that you want to prefix to user entities from your OIDC identity provider. For example, if you set an <code>entityIdPrefix</code> of <code>MyOIDCProvider</code>, you can reference principals in your policies in the format <code>MyCorp::User::MyOIDCProvider|Carlos</code>.</p>"
+        },
+        "groupConfiguration":{
+          "shape":"OpenIdConnectGroupConfigurationDetail",
+          "documentation":"<p>The claim in OIDC identity provider tokens that indicates a user's group membership, and the entity type that you want to map it to. For example, this object can map the contents of a <code>groups</code> claim to <code>MyCorp::UserGroup</code>.</p>"
+        },
+        "tokenSelection":{
+          "shape":"OpenIdConnectTokenSelectionDetail",
+          "documentation":"<p>The token type that you want to process from your OIDC identity provider. Your policy store can process either identity (ID) or access tokens from a given OIDC identity source.</p>"
+        }
+      },
+      "documentation":"<p>Contains configuration details of an OpenID Connect (OIDC) identity provider, or identity source, that Verified Permissions can use to generate entities from authenticated identities. It specifies the issuer URL, token type that you want to use, and policy store entity details.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ConfigurationDetail.html\">ConfigurationDetail</a> structure, which is a parameter to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_GetIdentitySource.html\">GetIdentitySource</a>.</p>"
+    },
+    "OpenIdConnectConfigurationItem":{
+      "type":"structure",
+      "required":[
+        "issuer",
+        "tokenSelection"
+      ],
+      "members":{
+        "issuer":{
+          "shape":"Issuer",
+          "documentation":"<p>The issuer URL of an OIDC identity provider. This URL must have an OIDC discovery endpoint at the path <code>.well-known/openid-configuration</code>.</p>"
+        },
+        "entityIdPrefix":{
+          "shape":"EntityIdPrefix",
+          "documentation":"<p>A descriptive string that you want to prefix to user entities from your OIDC identity provider. For example, if you set an <code>entityIdPrefix</code> of <code>MyOIDCProvider</code>, you can reference principals in your policies in the format <code>MyCorp::User::MyOIDCProvider|Carlos</code>.</p>"
+        },
+        "groupConfiguration":{
+          "shape":"OpenIdConnectGroupConfigurationItem",
+          "documentation":"<p>The claim in OIDC identity provider tokens that indicates a user's group membership, and the entity type that you want to map it to. For example, this object can map the contents of a <code>groups</code> claim to <code>MyCorp::UserGroup</code>.</p>"
+        },
+        "tokenSelection":{
+          "shape":"OpenIdConnectTokenSelectionItem",
+          "documentation":"<p>The token type that you want to process from your OIDC identity provider. Your policy store can process either identity (ID) or access tokens from a given OIDC identity source.</p>"
+        }
+      },
+      "documentation":"<p>Contains configuration details of an OpenID Connect (OIDC) identity provider, or identity source, that Verified Permissions can use to generate entities from authenticated identities. It specifies the issuer URL, token type that you want to use, and policy store entity details.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ConfigurationDetail.html\">ConfigurationItem</a> structure, which is a parameter to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListIdentitySources.html\">ListIdentitySources</a>.</p>"
+    },
+    "OpenIdConnectGroupConfiguration":{
+      "type":"structure",
+      "required":[
+        "groupClaim",
+        "groupEntityType"
+      ],
+      "members":{
+        "groupClaim":{
+          "shape":"Claim",
+          "documentation":"<p>The token claim that you want Verified Permissions to interpret as group membership. For example, <code>groups</code>.</p>"
+        },
+        "groupEntityType":{
+          "shape":"GroupEntityType",
+          "documentation":"<p>The policy store entity type that you want to map your users' group claim to. For example, <code>MyCorp::UserGroup</code>. A group entity type is an entity that can have a user entity type as a member.</p>"
+        }
+      },
+      "documentation":"<p>The claim in OIDC identity provider tokens that indicates a user's group membership, and the entity type that you want to map it to. For example, this object can map the contents of a <code>groups</code> claim to <code>MyCorp::UserGroup</code>.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_OpenIdConnectConfiguration.html\">OpenIdConnectConfiguration</a> structure, which is a parameter of <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CreateIdentitySource.html\">CreateIdentitySource</a>.</p>"
+    },
+    "OpenIdConnectGroupConfigurationDetail":{
+      "type":"structure",
+      "required":[
+        "groupClaim",
+        "groupEntityType"
+      ],
+      "members":{
+        "groupClaim":{
+          "shape":"Claim",
+          "documentation":"<p>The token claim that you want Verified Permissions to interpret as group membership. For example, <code>groups</code>.</p>"
+        },
+        "groupEntityType":{
+          "shape":"GroupEntityType",
+          "documentation":"<p>The policy store entity type that you want to map your users' group claim to. For example, <code>MyCorp::UserGroup</code>. A group entity type is an entity that can have a user entity type as a member.</p>"
+        }
+      },
+      "documentation":"<p>The claim in OIDC identity provider tokens that indicates a user's group membership, and the entity type that you want to map it to. For example, this object can map the contents of a <code>groups</code> claim to <code>MyCorp::UserGroup</code>.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_OpenIdConnectConfigurationDetail.html\">OpenIdConnectConfigurationDetail</a> structure, which is a parameter of <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_GetIdentitySource.html\">GetIdentitySource</a>.</p>"
+    },
+    "OpenIdConnectGroupConfigurationItem":{
+      "type":"structure",
+      "required":[
+        "groupClaim",
+        "groupEntityType"
+      ],
+      "members":{
+        "groupClaim":{
+          "shape":"Claim",
+          "documentation":"<p>The token claim that you want Verified Permissions to interpret as group membership. For example, <code>groups</code>.</p>"
+        },
+        "groupEntityType":{
+          "shape":"GroupEntityType",
+          "documentation":"<p>The policy store entity type that you want to map your users' group claim to. For example, <code>MyCorp::UserGroup</code>. A group entity type is an entity that can have a user entity type as a member.</p>"
+        }
+      },
+      "documentation":"<p>The claim in OIDC identity provider tokens that indicates a user's group membership, and the entity type that you want to map it to. For example, this object can map the contents of a <code>groups</code> claim to <code>MyCorp::UserGroup</code>.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_OpenIdConnectConfigurationItem.html\">OpenIdConnectConfigurationItem</a> structure, which is a parameter of <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListIdentitySources.html\">ListIdentitySourcea</a>.</p>"
+    },
+    "OpenIdConnectIdentityTokenConfiguration":{
+      "type":"structure",
+      "members":{
+        "principalIdClaim":{
+          "shape":"Claim",
+          "documentation":"<p>The claim that determines the principal in OIDC access tokens. For example, <code>sub</code>.</p>"
+        },
+        "clientIds":{
+          "shape":"ClientIds",
+          "documentation":"<p>The ID token audience, or client ID, claim values that you want to accept in your policy store from an OIDC identity provider. For example, <code>1example23456789, 2example10111213</code>.</p>"
+        }
+      },
+      "documentation":"<p>The configuration of an OpenID Connect (OIDC) identity source for handling identity (ID) token claims. Contains the claim that you want to identify as the principal in an authorization request, and the values of the <code>aud</code> claim, or audiences, that you want to accept.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_OpenIdConnectTokenSelection.html\">OpenIdConnectTokenSelection</a> structure, which is a parameter of <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CreateIdentitySource.html\">CreateIdentitySource</a>.</p>"
+    },
+    "OpenIdConnectIdentityTokenConfigurationDetail":{
+      "type":"structure",
+      "members":{
+        "principalIdClaim":{
+          "shape":"Claim",
+          "documentation":"<p>The claim that determines the principal in OIDC access tokens. For example, <code>sub</code>.</p>"
+        },
+        "clientIds":{
+          "shape":"ClientIds",
+          "documentation":"<p>The ID token audience, or client ID, claim values that you want to accept in your policy store from an OIDC identity provider. For example, <code>1example23456789, 2example10111213</code>.</p>"
+        }
+      },
+      "documentation":"<p>The configuration of an OpenID Connect (OIDC) identity source for handling identity (ID) token claims. Contains the claim that you want to identify as the principal in an authorization request, and the values of the <code>aud</code> claim, or audiences, that you want to accept.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_OpenIdConnectTokenSelectionDetail.html\">OpenIdConnectTokenSelectionDetail</a> structure, which is a parameter of <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_GetIdentitySource.html\">GetIdentitySource</a>.</p>"
+    },
+    "OpenIdConnectIdentityTokenConfigurationItem":{
+      "type":"structure",
+      "members":{
+        "principalIdClaim":{
+          "shape":"Claim",
+          "documentation":"<p>The claim that determines the principal in OIDC access tokens. For example, <code>sub</code>.</p>"
+        },
+        "clientIds":{
+          "shape":"ClientIds",
+          "documentation":"<p>The ID token audience, or client ID, claim values that you want to accept in your policy store from an OIDC identity provider. For example, <code>1example23456789, 2example10111213</code>.</p>"
+        }
+      },
+      "documentation":"<p>The configuration of an OpenID Connect (OIDC) identity source for handling identity (ID) token claims. Contains the claim that you want to identify as the principal in an authorization request, and the values of the <code>aud</code> claim, or audiences, that you want to accept.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_OpenIdConnectTokenSelectionItem.html\">OpenIdConnectTokenSelectionItem</a> structure, which is a parameter of <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListIdentitySources.html\">ListIdentitySources</a>.</p>"
+    },
+    "OpenIdConnectTokenSelection":{
+      "type":"structure",
+      "members":{
+        "accessTokenOnly":{
+          "shape":"OpenIdConnectAccessTokenConfiguration",
+          "documentation":"<p>The OIDC configuration for processing access tokens. Contains allowed audience claims, for example <code>https://auth.example.com</code>, and the claim that you want to map to the principal, for example <code>sub</code>.</p>"
+        },
+        "identityTokenOnly":{
+          "shape":"OpenIdConnectIdentityTokenConfiguration",
+          "documentation":"<p>The OIDC configuration for processing identity (ID) tokens. Contains allowed client ID claims, for example <code>1example23456789</code>, and the claim that you want to map to the principal, for example <code>sub</code>.</p>"
+        }
+      },
+      "documentation":"<p>The token type that you want to process from your OIDC identity provider. Your policy store can process either identity (ID) or access tokens from a given OIDC identity source.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_OpenIdConnectConfiguration.html\">OpenIdConnectConfiguration</a> structure, which is a parameter of <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CreateIdentitySource.html\">CreateIdentitySource</a>.</p>",
+      "union":true
+    },
+    "OpenIdConnectTokenSelectionDetail":{
+      "type":"structure",
+      "members":{
+        "accessTokenOnly":{
+          "shape":"OpenIdConnectAccessTokenConfigurationDetail",
+          "documentation":"<p>The OIDC configuration for processing access tokens. Contains allowed audience claims, for example <code>https://auth.example.com</code>, and the claim that you want to map to the principal, for example <code>sub</code>.</p>"
+        },
+        "identityTokenOnly":{
+          "shape":"OpenIdConnectIdentityTokenConfigurationDetail",
+          "documentation":"<p>The OIDC configuration for processing identity (ID) tokens. Contains allowed client ID claims, for example <code>1example23456789</code>, and the claim that you want to map to the principal, for example <code>sub</code>.</p>"
+        }
+      },
+      "documentation":"<p>The token type that you want to process from your OIDC identity provider. Your policy store can process either identity (ID) or access tokens from a given OIDC identity source.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_OpenIdConnectConfigurationDetail.html\">OpenIdConnectConfigurationDetail</a> structure, which is a parameter of <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_GetIdentitySource.html\">GetIdentitySource</a>.</p>",
+      "union":true
+    },
+    "OpenIdConnectTokenSelectionItem":{
+      "type":"structure",
+      "members":{
+        "accessTokenOnly":{
+          "shape":"OpenIdConnectAccessTokenConfigurationItem",
+          "documentation":"<p>The OIDC configuration for processing access tokens. Contains allowed audience claims, for example <code>https://auth.example.com</code>, and the claim that you want to map to the principal, for example <code>sub</code>.</p>"
+        },
+        "identityTokenOnly":{
+          "shape":"OpenIdConnectIdentityTokenConfigurationItem",
+          "documentation":"<p>The OIDC configuration for processing identity (ID) tokens. Contains allowed client ID claims, for example <code>1example23456789</code>, and the claim that you want to map to the principal, for example <code>sub</code>.</p>"
+        }
+      },
+      "documentation":"<p>The token type that you want to process from your OIDC identity provider. Your policy store can process either identity (ID) or access tokens from a given OIDC identity source.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_OpenIdConnectConfigurationItem.html\">OpenIdConnectConfigurationItem</a> structure, which is a parameter of <a href=\"http://amazonaws.com/verifiedpermissions/latest/apireference/API_ListIdentitySources.html\">ListIdentitySources</a>.</p>",
+      "union":true
+    },
     "OpenIdIssuer":{
       "type":"string",
       "enum":["COGNITO"]
     },
     "ParentList":{
       "type":"list",
-      "member":{"shape":"EntityIdentifier"},
-      "max":100,
-      "min":0
+      "member":{"shape":"EntityIdentifier"}
     },
     "PolicyDefinition":{
       "type":"structure",
@@ -2115,6 +2601,13 @@
       "documentation":"<p>A structure that describes a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_PolicyDefinintion.html\">PolicyDefinintion</a>. It will always have either an <code>StaticPolicy</code> or a <code>TemplateLinkedPolicy</code> element.</p> <p>This data type is used as a response parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CreatePolicy.html\">CreatePolicy</a> and <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListPolicies.html\">ListPolicies</a> operations. </p>",
       "union":true
     },
+    "PolicyEffect":{
+      "type":"string",
+      "enum":[
+        "Permit",
+        "Forbid"
+      ]
+    },
     "PolicyFilter":{
       "type":"structure",
       "members":{
@@ -2156,7 +2649,7 @@
       "members":{
         "policyStoreId":{
           "shape":"PolicyStoreId",
-          "documentation":"<p>The identifier of the PolicyStore where the policy you want information about is stored.</p>"
+          "documentation":"<p>The identifier of the policy store where the policy you want information about is stored.</p>"
         },
         "policyId":{
           "shape":"PolicyId",
@@ -2164,7 +2657,7 @@
         },
         "policyType":{
           "shape":"PolicyType",
-          "documentation":"<p>The type of the policy. This is one of the following values:</p> <ul> <li> <p> <code>static</code> </p> </li> <li> <p> <code>templateLinked</code> </p> </li> </ul>"
+          "documentation":"<p>The type of the policy. This is one of the following values:</p> <ul> <li> <p> <code>STATIC</code> </p> </li> <li> <p> <code>TEMPLATE_LINKED</code> </p> </li> </ul>"
         },
         "principal":{
           "shape":"EntityIdentifier",
@@ -2173,6 +2666,10 @@
         "resource":{
           "shape":"EntityIdentifier",
           "documentation":"<p>The resource associated with the policy.</p>"
+        },
+        "actions":{
+          "shape":"ActionIdentifierList",
+          "documentation":"<p>The action that a policy permits or forbids. For example, <code>{\"actions\": [{\"actionId\": \"ViewPhoto\", \"actionType\": \"PhotoFlash::Action\"}, {\"entityID\": \"SharePhoto\", \"entityType\": \"PhotoFlash::Action\"}]}</code>.</p>"
         },
         "definition":{
           "shape":"PolicyDefinitionItem",
@@ -2185,6 +2682,10 @@
         "lastUpdatedDate":{
           "shape":"TimestampFormat",
           "documentation":"<p>The date and time the policy was most recently updated.</p>"
+        },
+        "effect":{
+          "shape":"PolicyEffect",
+          "documentation":"<p>The effect of the decision that a policy returns to an authorization request. For example, <code>\"effect\": \"Permit\"</code>.</p>"
         }
       },
       "documentation":"<p>Contains information about a policy.</p> <p>This data type is used as a response parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListPolicies.html\">ListPolicies</a> operation.</p>"
@@ -2421,7 +2922,7 @@
       "members":{
         "cedarJson":{
           "shape":"SchemaJson",
-          "documentation":"<p>A JSON string representation of the schema supported by applications that use this policy store. For more information, see <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/userguide/schema.html\">Policy store schema</a> in the <i>Amazon Verified Permissions User Guide</i>.</p>"
+          "documentation":"<p>A JSON string representation of the schema supported by applications that use this policy store. To delete the schema, run <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_PutSchema.html\">PutSchema</a> with <code>{}</code> for this parameter. For more information, see <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/userguide/schema.html\">Policy store schema</a> in the <i>Amazon Verified Permissions User Guide</i>.</p>"
         }
       },
       "documentation":"<p>Contains a list of principal types, resource types, and actions that can be specified in policies stored in the same policy store. If the validation mode for the policy store is set to <code>STRICT</code>, then policies that can't be validated by this schema are rejected by Verified Permissions and can't be stored in the policy store.</p>",
@@ -2429,7 +2930,6 @@
     },
     "SchemaJson":{
       "type":"string",
-      "max":100000,
       "min":1,
       "sensitive":true
     },
@@ -2451,7 +2951,7 @@
         },
         "serviceCode":{
           "shape":"String",
-          "documentation":"<p>The code for the Amazon Web Service that owns the quota.</p>"
+          "documentation":"<p>The code for the Amazon Web Services service that owns the quota.</p>"
         },
         "quotaCode":{
           "shape":"String",
@@ -2580,7 +3080,7 @@
         "message":{"shape":"String"},
         "serviceCode":{
           "shape":"String",
-          "documentation":"<p>The code for the Amazon Web Service that owns the quota.</p>"
+          "documentation":"<p>The code for the Amazon Web Services service that owns the quota.</p>"
         },
         "quotaCode":{
           "shape":"String",
@@ -2611,7 +3111,7 @@
           "documentation":"<p>The name of the schema entity type that's mapped to the user pool group. Defaults to <code>AWS::CognitoGroup</code>.</p>"
         }
       },
-      "documentation":"<p>A list of user groups and entities from an Amazon Cognito user pool identity source.</p>"
+      "documentation":"<p>The user group entities from an Amazon Cognito user pool identity source.</p>"
     },
     "UpdateCognitoUserPoolConfiguration":{
       "type":"structure",
@@ -2638,9 +3138,13 @@
         "cognitoUserPoolConfiguration":{
           "shape":"UpdateCognitoUserPoolConfiguration",
           "documentation":"<p>Contains configuration details of a Amazon Cognito user pool.</p>"
+        },
+        "openIdConnectConfiguration":{
+          "shape":"UpdateOpenIdConnectConfiguration",
+          "documentation":"<p>Contains configuration details of an OpenID Connect (OIDC) identity provider, or identity source, that Verified Permissions can use to generate entities from authenticated identities. It specifies the issuer URL, token type that you want to use, and policy store entity details.</p>"
         }
       },
-      "documentation":"<p>Contains an updated configuration to replace the configuration in an existing identity source.</p> <note> <p>At this time, the only valid member of this structure is a Amazon Cognito user pool configuration.</p> <p>You must specify a <code>userPoolArn</code>, and optionally, a <code>ClientId</code>.</p> </note>",
+      "documentation":"<p>Contains an update to replace the configuration in an existing identity source.</p>",
       "union":true
     },
     "UpdateIdentitySourceInput":{
@@ -2661,7 +3165,7 @@
         },
         "updateConfiguration":{
           "shape":"UpdateConfiguration",
-          "documentation":"<p>Specifies the details required to communicate with the identity provider (IdP) associated with this identity source.</p> <note> <p>At this time, the only valid member of this structure is a Amazon Cognito user pool configuration.</p> <p>You must specify a <code>userPoolArn</code>, and optionally, a <code>ClientId</code>.</p> </note>"
+          "documentation":"<p>Specifies the details required to communicate with the identity provider (IdP) associated with this identity source.</p>"
         },
         "principalEntityType":{
           "shape":"PrincipalEntityType",
@@ -2695,6 +3199,93 @@
           "documentation":"<p>The ID of the policy store that contains the updated identity source.</p>"
         }
       }
+    },
+    "UpdateOpenIdConnectAccessTokenConfiguration":{
+      "type":"structure",
+      "members":{
+        "principalIdClaim":{
+          "shape":"Claim",
+          "documentation":"<p>The claim that determines the principal in OIDC access tokens. For example, <code>sub</code>.</p>"
+        },
+        "audiences":{
+          "shape":"Audiences",
+          "documentation":"<p>The access token <code>aud</code> claim values that you want to accept in your policy store. For example, <code>https://myapp.example.com, https://myapp2.example.com</code>.</p>"
+        }
+      },
+      "documentation":"<p>The configuration of an OpenID Connect (OIDC) identity source for handling access token claims. Contains the claim that you want to identify as the principal in an authorization request, and the values of the <code>aud</code> claim, or audiences, that you want to accept.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_UpdateOpenIdConnectTokenSelection.html\">UpdateOpenIdConnectTokenSelection</a> structure, which is a parameter to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_UpdateIdentitySource.html\">UpdateIdentitySource</a>.</p>"
+    },
+    "UpdateOpenIdConnectConfiguration":{
+      "type":"structure",
+      "required":[
+        "issuer",
+        "tokenSelection"
+      ],
+      "members":{
+        "issuer":{
+          "shape":"Issuer",
+          "documentation":"<p>The issuer URL of an OIDC identity provider. This URL must have an OIDC discovery endpoint at the path <code>.well-known/openid-configuration</code>.</p>"
+        },
+        "entityIdPrefix":{
+          "shape":"EntityIdPrefix",
+          "documentation":"<p>A descriptive string that you want to prefix to user entities from your OIDC identity provider. For example, if you set an <code>entityIdPrefix</code> of <code>MyOIDCProvider</code>, you can reference principals in your policies in the format <code>MyCorp::User::MyOIDCProvider|Carlos</code>.</p>"
+        },
+        "groupConfiguration":{
+          "shape":"UpdateOpenIdConnectGroupConfiguration",
+          "documentation":"<p>The claim in OIDC identity provider tokens that indicates a user's group membership, and the entity type that you want to map it to. For example, this object can map the contents of a <code>groups</code> claim to <code>MyCorp::UserGroup</code>.</p>"
+        },
+        "tokenSelection":{
+          "shape":"UpdateOpenIdConnectTokenSelection",
+          "documentation":"<p>The token type that you want to process from your OIDC identity provider. Your policy store can process either identity (ID) or access tokens from a given OIDC identity source.</p>"
+        }
+      },
+      "documentation":"<p>Contains configuration details of an OpenID Connect (OIDC) identity provider, or identity source, that Verified Permissions can use to generate entities from authenticated identities. It specifies the issuer URL, token type that you want to use, and policy store entity details.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_UpdateConfiguration.html\">UpdateConfiguration</a> structure, which is a parameter to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_UpdateIdentitySource.html\">UpdateIdentitySource</a>.</p>"
+    },
+    "UpdateOpenIdConnectGroupConfiguration":{
+      "type":"structure",
+      "required":[
+        "groupClaim",
+        "groupEntityType"
+      ],
+      "members":{
+        "groupClaim":{
+          "shape":"Claim",
+          "documentation":"<p>The token claim that you want Verified Permissions to interpret as group membership. For example, <code>groups</code>.</p>"
+        },
+        "groupEntityType":{
+          "shape":"GroupEntityType",
+          "documentation":"<p>The policy store entity type that you want to map your users' group claim to. For example, <code>MyCorp::UserGroup</code>. A group entity type is an entity that can have a user entity type as a member.</p>"
+        }
+      },
+      "documentation":"<p>The claim in OIDC identity provider tokens that indicates a user's group membership, and the entity type that you want to map it to. For example, this object can map the contents of a <code>groups</code> claim to <code>MyCorp::UserGroup</code>.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_UpdateOpenIdConnectConfiguration.html\">UpdateOpenIdConnectConfiguration</a> structure, which is a parameter to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_UpdateIdentitySource.html\">UpdateIdentitySource</a>.</p>"
+    },
+    "UpdateOpenIdConnectIdentityTokenConfiguration":{
+      "type":"structure",
+      "members":{
+        "principalIdClaim":{
+          "shape":"Claim",
+          "documentation":"<p>The claim that determines the principal in OIDC access tokens. For example, <code>sub</code>.</p>"
+        },
+        "clientIds":{
+          "shape":"ClientIds",
+          "documentation":"<p>The ID token audience, or client ID, claim values that you want to accept in your policy store from an OIDC identity provider. For example, <code>1example23456789, 2example10111213</code>.</p>"
+        }
+      },
+      "documentation":"<p>The configuration of an OpenID Connect (OIDC) identity source for handling identity (ID) token claims. Contains the claim that you want to identify as the principal in an authorization request, and the values of the <code>aud</code> claim, or audiences, that you want to accept.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_UpdateOpenIdConnectTokenSelection.html\">UpdateOpenIdConnectTokenSelection</a> structure, which is a parameter to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_UpdateIdentitySource.html\">UpdateIdentitySource</a>.</p>"
+    },
+    "UpdateOpenIdConnectTokenSelection":{
+      "type":"structure",
+      "members":{
+        "accessTokenOnly":{
+          "shape":"UpdateOpenIdConnectAccessTokenConfiguration",
+          "documentation":"<p>The OIDC configuration for processing access tokens. Contains allowed audience claims, for example <code>https://auth.example.com</code>, and the claim that you want to map to the principal, for example <code>sub</code>.</p>"
+        },
+        "identityTokenOnly":{
+          "shape":"UpdateOpenIdConnectIdentityTokenConfiguration",
+          "documentation":"<p>The OIDC configuration for processing identity (ID) tokens. Contains allowed client ID claims, for example <code>1example23456789</code>, and the claim that you want to map to the principal, for example <code>sub</code>.</p>"
+        }
+      },
+      "documentation":"<p>The token type that you want to process from your OIDC identity provider. Your policy store can process either identity (ID) or access tokens from a given OIDC identity source.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_UpdateOpenIdConnectConfiguration.html\">UpdateOpenIdConnectConfiguration</a> structure, which is a parameter to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_UpdateIdentitySource.html\">UpdateIdentitySource</a>.</p>",
+      "union":true
     },
     "UpdatePolicyDefinition":{
       "type":"structure",
@@ -2759,6 +3350,10 @@
           "shape":"EntityIdentifier",
           "documentation":"<p>The resource specified in the policy's scope. This element isn't included in the response when <code>Resource</code> isn't present in the policy content.</p>"
         },
+        "actions":{
+          "shape":"ActionIdentifierList",
+          "documentation":"<p>The action that a policy permits or forbids. For example, <code>{\"actions\": [{\"actionId\": \"ViewPhoto\", \"actionType\": \"PhotoFlash::Action\"}, {\"entityID\": \"SharePhoto\", \"entityType\": \"PhotoFlash::Action\"}]}</code>.</p>"
+        },
         "createdDate":{
           "shape":"TimestampFormat",
           "documentation":"<p>The date and time that the policy was originally created.</p>"
@@ -2766,6 +3361,10 @@
         "lastUpdatedDate":{
           "shape":"TimestampFormat",
           "documentation":"<p>The date and time that the policy was most recently updated.</p>"
+        },
+        "effect":{
+          "shape":"PolicyEffect",
+          "documentation":"<p>The effect of the decision that a policy returns to an authorization request. For example, <code>\"effect\": \"Permit\"</code>.</p>"
         }
       }
     },

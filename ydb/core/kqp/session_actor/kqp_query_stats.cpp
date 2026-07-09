@@ -32,7 +32,7 @@ template <typename T>
 void CollectQueryStatsImpl(const TActorContext& ctx, const T* queryStats,
     TDuration queryDuration, const TString& queryText,
     const TString& userSID, ui64 parametersSize, const TString& database,
-    const NKikimrKqp::EQueryType type, ui64 requestUnits)
+    const NKikimrKqp::EQueryType type, ui64 requestUnits, const TString& traceId)
 {
     auto collectEv = MakeHolder<NSysView::TEvSysView::TEvCollectQueryStats>();
     collectEv->Database = database;
@@ -78,6 +78,10 @@ void CollectQueryStatsImpl(const TActorContext& ctx, const T* queryStats,
         break;
     }
     stats.SetType(strType);
+
+    if (traceId) {
+        stats.SetTraceId(traceId);
+    }
 
     if (!queryStats || queryStats->GetExecutions().empty()) {
         ctx.Send(NSysView::MakeSysViewServiceID(nodeId), std::move(collectEv));
@@ -152,21 +156,21 @@ void CollectQueryStatsImpl(const TActorContext& ctx, const T* queryStats,
 void CollectQueryStats(const TActorContext& ctx, const NKqpProto::TKqpStatsQuery* queryStats,
     TDuration queryDuration, const TString& queryText,
     const TString& userSID, ui64 parametersSize, const TString& database,
-    const NKikimrKqp::EQueryType type, ui64 requestUnits)
+    const NKikimrKqp::EQueryType type, ui64 requestUnits, const TString& traceId)
 {
     CollectQueryStatsImpl(
         ctx, queryStats, queryDuration, queryText, userSID,
-        parametersSize, database, type, requestUnits);
+        parametersSize, database, type, requestUnits, traceId);
 }
 
 void CollectQueryStats(const TActorContext& ctx, const TKqpQueryStats* queryStats,
     TDuration queryDuration, const TString& queryText,
     const TString& userSID, ui64 parametersSize, const TString& database,
-    const NKikimrKqp::EQueryType type, ui64 requestUnits)
+    const NKikimrKqp::EQueryType type, ui64 requestUnits, const TString& traceId)
 {
     CollectQueryStatsImpl(
         ctx, queryStats, queryDuration, queryText, userSID,
-        parametersSize, database, type, requestUnits);
+        parametersSize, database, type, requestUnits, traceId);
 }
 
 // Attribute LocksBrokenAsVictim to the original query that acquired the locks

@@ -36,7 +36,7 @@ To manage complex SQL pipelines, use the [dbt plugin](../../../integrations/migr
 
 For tasks that require complex logic in programming languages (Python, Scala, Java), integration with ML pipelines, or processing large volumes of data, it is convenient to use external frameworks for distributed processing.
 
-Apache Spark is one of the most popular tools for such tasks, and a [dedicated connector](../../../integrations/ingestion/spark.md) to {{ydb-short-name}} has been developed for it. If your company uses other similar solutions (e.g., Apache Flink), they can also be used to build ETL processes using the [JDBC driver](../../../reference/languages-and-apis/jdbc-driver/index.md).
+Apache Spark is one of the most popular tools for such tasks, and a [dedicated connector](../../../integrations/query-engines/spark.md) to {{ydb-short-name}} has been developed for it. If your company uses other similar solutions (e.g., Apache Flink), they can also be used to build ETL processes using the [JDBC driver](../../../reference/languages-and-apis/jdbc-driver/index.md).
 
 A key advantage of {{ydb-short-name}} when working with such systems is its architecture, which allows for parallel data reading. {{ydb-short-name}} has no dedicated master node for exports, so external tools can read information directly from all storage nodes. This ensures high-speed reads and linear scalability.
 

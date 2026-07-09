@@ -46,7 +46,7 @@ TProgramFactory::TProgramFactory(const TProgramFactoryOptions& options)
     }
 
     FuncRegistry_ = NKikimr::NMiniKQL::CreateFunctionRegistry(
-                        &NYql::NBacktrace::KikimrBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, UDFsPaths)
+                        &NYql::NBacktrace::KikimrBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), /*allowUdfPatch=*/false, UDFsPaths)
                         ->Clone();
 
     NKikimr::NMiniKQL::FillStaticModules(*FuncRegistry_);

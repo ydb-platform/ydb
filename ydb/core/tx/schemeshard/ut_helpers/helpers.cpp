@@ -1126,6 +1126,10 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery)
 
+    // test shard
+    GENERIC_HELPERS(CreateTestShardSet, NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet, &NKikimrSchemeOp::TModifyScheme::MutableCreateTestShardSet)
+    GENERIC_HELPERS(DropTestShardSet, NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS
@@ -1226,6 +1230,18 @@ namespace NSchemeShardUT_Private {
     {
         AsyncAssignBlockStoreVolume(runtime, txId, parentPath, name, mountToken, tokenVersion);
         TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    TString CreateTestShardSetConfig(const TString& name, ui64 count) {
+        return TStringBuilder() << R"(
+                Name: ")" << name << R"("
+                Count: )" << count << R"(
+                StorageConfig {
+                }
+                CmdInitialize {
+                    MaxDataBytes: 1000
+                }
+            )";
     }
 
     TEvSchemeShard::TEvCancelTx *CancelTxRequest(ui64 txId, ui64 targetTxId) {
@@ -2313,7 +2329,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(event);
 
         Cerr << "BUILDINDEX RESPONSE LIST: " << event->ToString() << Endl;
-        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), 400000, event->Record.GetIssues());
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::SUCCESS, event->Record.GetIssues());
         return event->Record;
     }
 
@@ -2332,7 +2348,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(event);
 
         Cerr << "BUILDINDEX RESPONSE Get: " << event->ToString() << Endl;
-        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), 400000, event->Record.GetIssues());
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::SUCCESS, event->Record.GetIssues());
         return event->Record;
     }
 
@@ -3471,12 +3487,17 @@ namespace NSchemeShardUT_Private {
         const TString& dbName,
         const TString& tablePath,
         const TVector<TString>& notNullColumns,
+        const TString& userSID,
         bool skipSettings)
     {
         // We can't do `GetRequest`, because it is not implemented at the time of writing the test
         auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>();
         request->Record.SetTxId(txId);
         request->Record.SetDatabaseName(dbName);
+
+        if (userSID != "") {
+            request->Record.SetUserSID(userSID);
+        }
 
         if (!skipSettings) {
             NKikimrSetColumnConstraint::TSetColumnConstraintSettings settings;
@@ -3497,6 +3518,40 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        ui64 schemeShard,
+        const TString& dbName,
+        const TString& tablePath,
+        const TVector<TString>& notNullColumns)
+    {
+        return TestSetColumnConstraint(runtime, txId, schemeShard, dbName, tablePath, notNullColumns, "", false);
+    }
+
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraintWithoutSettings(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        ui64 schemeShard,
+        const TString& dbName,
+        const TString& tablePath,
+        const TVector<TString>& notNullColumns)
+    {
+        return TestSetColumnConstraint(runtime, txId, schemeShard, dbName, tablePath, notNullColumns, "", true);
+    }
+
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        ui64 schemeShard,
+        const TString& dbName,
+        const TString& tablePath,
+        const TVector<TString>& notNullColumns,
+        const TString& userSID)
+    {
+        return TestSetColumnConstraint(runtime, txId, schemeShard, dbName, tablePath, notNullColumns, userSID, false);
+    }
+
     void AsyncSetColumnConstraint(
         TTestActorRuntime& runtime,
         ui64 txId,
@@ -3514,6 +3569,60 @@ namespace NSchemeShardUT_Private {
         auto sender = runtime.AllocateEdgeActor();
         auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>(txId, dbName, std::move(settings));
         ForwardToTablet(runtime, schemeShard, sender, request.Release());
+    }
+
+    TEvSetColumnConstraint::TEvListRequest* ListSetColumnConstraintRequest(const TString& dbName, ui64 pageSize, const TString& pageToken) {
+        return new TEvSetColumnConstraint::TEvListRequest(dbName, pageSize, pageToken);
+    }
+
+    NKikimrSetColumnConstraint::TEvListResponse TestListSetColumnConstraint(TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName) {
+        return TestListSetColumnConstraint(runtime, schemeShard, dbName, 100, "", Ydb::StatusIds::SUCCESS);
+    }
+
+    NKikimrSetColumnConstraint::TEvListResponse TestListSetColumnConstraint(
+        TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName,
+        ui64 pageSize, const TString& pageToken, Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = ListSetColumnConstraintRequest(dbName, pageSize, pageToken);
+
+        ForwardToTablet(runtime, schemeShard, sender, request);
+
+        TAutoPtr<IEventHandle> handle;
+        TEvSetColumnConstraint::TEvListResponse* event = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvListResponse>(handle);
+        UNIT_ASSERT(event);
+
+        Cerr << "SET COLUMN CONSTRAINT RESPONSE LIST: " << event->ToString() << Endl;
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus, event->Record.GetIssues());
+        return event->Record;
+    }
+
+    NKikimrSetColumnConstraint::TEvForgetResponse TestForgetSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        ui64 txId,
+        const TString& dbName,
+        ui64 operationId,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvSetColumnConstraint::TEvForgetRequest(txId, dbName, operationId));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvForgetResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrSetColumnConstraint::TEvForgetResponse TestForgetSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        const TString& dbName,
+        ui64 operationId,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestForgetSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, txId, dbName, operationId, expectedStatus);
     }
 
     void TestCheckColumnsNotNull(
@@ -3546,3 +3655,4 @@ namespace NSchemeShardUT_Private {
         }
     }
 }
+

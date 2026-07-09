@@ -27,7 +27,8 @@ protected:
     void HandleRequest(
         std::unique_ptr<NRpc::NProto::TRequestHeader> header,
         TSharedRefArray message,
-        NBus::IBusPtr replyBus) override;
+        NBus::IBusPtr replyBus,
+        NYT::NBus::IDirectPlacementTransferPtr requestAttachmentsTransfer) override;
 
 private:
     IOverloadControllerPtr Controller_;

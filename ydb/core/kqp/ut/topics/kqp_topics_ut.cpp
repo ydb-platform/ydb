@@ -630,6 +630,39 @@ Y_UNIT_TEST(DeferredPublication_ValidateRejectsEmptyDestinations) {
     UNIT_ASSERT_EXCEPTION(NTopic::ValidateDeferredPublicationRequest(request), yexception);
 }
 
+Y_UNIT_TEST(DeferredPublication_ValidateRejectsDestinationWithoutPath) {
+    NKikimrKqp::TTopicDeferredPublicationRequest request;
+    request.SetOp(NKikimrKqp::TTopicDeferredPublicationRequest::Publish);
+    request.SetIntPublicationId(1);
+    auto* destination = request.AddDestinations();
+    destination->SetPartitionId(0);
+    destination->SetTabletId(1);
+
+    UNIT_ASSERT_EXCEPTION(NTopic::ValidateDeferredPublicationRequest(request), yexception);
+}
+
+Y_UNIT_TEST(DeferredPublication_ValidateRejectsDestinationWithoutPartitionId) {
+    NKikimrKqp::TTopicDeferredPublicationRequest request;
+    request.SetOp(NKikimrKqp::TTopicDeferredPublicationRequest::Publish);
+    request.SetIntPublicationId(1);
+    auto* destination = request.AddDestinations();
+    destination->SetPath("topic");
+    destination->SetTabletId(1);
+
+    UNIT_ASSERT_EXCEPTION(NTopic::ValidateDeferredPublicationRequest(request), yexception);
+}
+
+Y_UNIT_TEST(DeferredPublication_ValidateRejectsDestinationWithoutTabletId) {
+    NKikimrKqp::TTopicDeferredPublicationRequest request;
+    request.SetOp(NKikimrKqp::TTopicDeferredPublicationRequest::Publish);
+    request.SetIntPublicationId(1);
+    auto* destination = request.AddDestinations();
+    destination->SetPath("topic");
+    destination->SetPartitionId(0);
+
+    UNIT_ASSERT_EXCEPTION(NTopic::ValidateDeferredPublicationRequest(request), yexception);
+}
+
 }
 
 }

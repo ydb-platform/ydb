@@ -884,6 +884,12 @@ void ValidateDeferredPublicationRequest(const NKikimrKqp::TTopicDeferredPublicat
         "DeferredPublication request must specify Publish or Cancel");
     Y_ENSURE(request.HasIntPublicationId());
     Y_ENSURE(!request.GetDestinations().empty(), "DeferredPublication request must have at least one destination");
+
+    for (const auto& destination : request.GetDestinations()) {
+        Y_ENSURE(destination.HasPath(), "DeferredPublication destination must have Path");
+        Y_ENSURE(destination.HasPartitionId(), "DeferredPublication destination must have PartitionId");
+        Y_ENSURE(destination.HasTabletId(), "DeferredPublication destination must have TabletId");
+    }
 }
 
 }

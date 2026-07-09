@@ -476,10 +476,6 @@ void TKqpQueryState::FillDeferredPublicationOperations() {
     TopicOperations.SetTrackProducerId(true);
 
     for (const auto& destination : request.GetDestinations()) {
-        YQL_ENSURE(destination.HasPath());
-        YQL_ENSURE(destination.HasPartitionId());
-        YQL_ENSURE(destination.HasTabletId());
-
         auto path = CanonizePath(NPersQueue::GetFullTopicPath(GetDatabase(), destination.GetPath()));
         TopicOperations.AddDeferredPublicationOperation(
             path,

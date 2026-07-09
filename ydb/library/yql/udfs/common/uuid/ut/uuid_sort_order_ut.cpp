@@ -119,9 +119,6 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
 
         for (ui32 i = 0; i < 10; ++i) {
             generated.push_back(GenerateV7WithFixedRandom(baseTimestampMs + i * 2));
-            if (i + 1 < 10) {
-                Sleep(TDuration::MilliSeconds(2));
-            }
         }
 
         AssertGenerationOrderIsSortOrder(generated);
@@ -134,9 +131,6 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
 
         for (ui32 i = 0; i < 10; ++i) {
             generated.push_back(GenerateV7WithPrefixAndFixedRandom(kTestPrefix, baseTimestampMs + i * 2));
-            if (i + 1 < 10) {
-                Sleep(TDuration::MilliSeconds(2));
-            }
         }
 
         AssertGenerationOrderIsSortOrder(generated);
@@ -149,9 +143,6 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
 
         for (ui32 i = 0; i < 3; ++i) {
             generated.push_back(GenerateV8WithFixedRandom(kTestPrefix, baseEpochSeconds + i));
-            if (i + 1 < 3) {
-                Sleep(TDuration::MilliSeconds(1100));
-            }
         }
 
         AssertGenerationOrderIsSortOrder(generated);

@@ -156,9 +156,6 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
 
         for (ui32 i = 0; i < 10; ++i) {
             generated.push_back(MakeV7Bytes(baseTimestampMs + i * 2));
-            if (i + 1 < 10) {
-                Sleep(TDuration::MilliSeconds(2));
-            }
         }
 
         AssertGenerationOrderIsSortOrder(generated);
@@ -173,9 +170,6 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
 
         for (ui32 i = 0; i < 10; ++i) {
             generated.push_back(MakeV7Bytes(ApplyV7Prefix(baseTimestampMs + i * 2, kTestPrefix)));
-            if (i + 1 < 10) {
-                Sleep(TDuration::MilliSeconds(2));
-            }
         }
 
         AssertGenerationOrderIsSortOrder(generated);

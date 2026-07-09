@@ -464,6 +464,11 @@ public:
     }
 
     void Bootstrap(const TActorContext&) {
+        YDB_LOG_CREATE_CONTEXT(
+            {"selfId", this->SelfId()},
+            {"actorName", "TReplicaSubscriber"},
+            {"actorAction", "bootstrap"},
+        );
         TMonitorableActor<TDerived>::Bootstrap();
 
         this->Send(Replica, new NInternalEvents::TEvSubscribe(Path, DomainOwnerId),
@@ -474,12 +479,9 @@ public:
     STATEFN(StateWork) {
         YDB_LOG_CREATE_CONTEXT(
             {"selfId", this->SelfId()},
-            {"actorClassName", "TReplicaSubscriber"},
-            {"actorState", "StateWork"},
-            {"parentId", Parent},
-            {"replicaId", Replica},
-            {"path", Path},
-            {"domainOwnerId", DomainOwnerId});
+            {"actorName", "TReplicaSubscriber"},
+            {"actorAction", "StateWork"},
+        );
         switch (ev->GetTypeRewrite()) {
             hFunc(NInternalEvents::TEvNotify, Handle);
             hFunc(NInternalEvents::TEvSyncVersionRequest, Handle);
@@ -665,6 +667,11 @@ public:
     }
 
     void Bootstrap(const TActorContext&) {
+        YDB_LOG_CREATE_CONTEXT(
+            {"selfId", this->SelfId()},
+            {"actorName", "TSubscriberProxy"},
+            {"actorAction", "bootstrap"},
+        );
         TMonitorableActor<TDerived>::Bootstrap();
 
         ReplicaSubscriber = this->RegisterWithSameMailbox(new TReplicaDerived(this->SelfId(), Replica, Path, DomainOwnerId));
@@ -672,6 +679,11 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(
+            {"selfId", this->SelfId()},
+            {"actorName", "TSubscriberProxy"},
+            {"actorAction", "StateWork"},
+        );
         switch (ev->GetTypeRewrite()) {
             hFunc(NInternalEvents::TEvNotify, Handle);
             hFunc(NInternalEvents::TEvSyncVersionRequest, Handle);
@@ -1305,6 +1317,11 @@ public:
     }
 
     void Bootstrap(const TActorContext&) {
+        YDB_LOG_CREATE_CONTEXT(
+            {"selfId", this->SelfId()},
+            {"actorName", "TSubscriber"},
+            {"actorAction", "bootstrap"},
+        );
         TMonitorableActor<TDerived>::Bootstrap();
 
         const TActorId proxy = MakeStateStorageProxyID();
@@ -1313,6 +1330,11 @@ public:
     }
 
     STATEFN(StateResolve) {
+        YDB_LOG_CREATE_CONTEXT(
+            {"selfId", this->SelfId()},
+            {"actorName", "TSubscriber"},
+            {"actorAction", "StateResolve"},
+        );
         switch (ev->GetTypeRewrite()) {
             hFunc(NInternalEvents::TEvSyncRequest, EnqueueSyncRequest); // from owner (cache)
 
@@ -1326,6 +1348,11 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(
+            {"selfId", this->SelfId()},
+            {"actorName", "TSubscriber"},
+            {"actorAction", "StateWork"},
+        );
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
 
@@ -1340,6 +1367,11 @@ public:
     }
 
     STATEFN(StateCalm) {
+        YDB_LOG_CREATE_CONTEXT(
+            {"selfId", this->SelfId()},
+            {"actorName", "TSubscriber"},
+            {"actorAction", "StateCalm"},
+        );
         switch (ev->GetTypeRewrite()) {
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 
